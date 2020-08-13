@@ -1,0 +1,31 @@
+[package]
+name = "autocxx"
+version = "0.1.0"
+authors = ["Adrian Taylor <adetaylor@chromium.org>"]
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1.0"
+proc-macro2 = "1.0"
+log = "0.4"
+
+[dependencies.bindgen]
+git = "https://github.com/adetaylor/rust-bindgen"
+branch = "hacks-for-cxxbridge"
+
+[dependencies.syn]
+version = "1.0"
+features = [ "full" ]
+
+[dev-dependencies]
+indoc = "1.0"
+tempfile = "3.1"
+cxx-build = "0.3.4"
+trybuild = "1.0"
+test-env-log = "0.2.2"
+env_logger = "*"
+cxx = "0.3.4"
+rust_info = "0.3.1"
