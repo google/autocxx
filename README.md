@@ -1,5 +1,53 @@
 # Autocxx
 
-This project will contain a framework for interfacing Rust with existing C++ code in a safe but automated fashion.
+This project is a tool for calling C++ from Rust in a heavily automated, but safe, fashion.
+
+The intention is that it has all the fluent safety from [cxx](https://github.com/dtolnay/cxx) whilst generating interfaces automatically from existing C++ headers using a variant of [bindgen](https://docs.rs/bindgen/0.54.1/bindgen/). Think of autocxx as glue which plugs bindgen into cxx.
+
+# Intended eventual interface
+
+It's intended that eventually this exposes a single procedural macro, something like this:
+
+```cpp
+class Bob {
+public:
+    Bob(std::string name);
+    ...
+    void do_a_thing();
+}
+```
+
+```rust
+use autocxx::include_cpp;
+
+include_cpp!(
+    Header("base/bob.h"),
+    Allow("Bob"),
+)
+
+let a = ffi::base::bob::make_unique("hello".into());
+a.do_a_thing();
+```
+
+The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string`.
+
+# Current state of affairs
+
+At present, this macro does not work, because there is no equivalent of the `cxxbridge` tool that knows how to expand the `include_cpp!` macro into a `cxx::bridge` mod.
+
+However, this project does contain test code which does this end-to-end. At present, one of the many tests actually passes, proving that for the simplest imaginable case it is possible to tie `bindgen` into `cxx`.
+
+# Build environment
+
+This crate is not yet on crates.io and currently depends on a hacked-up version of bindgen. It may soon come to depend upon a hacked-up version of cxx as well.
+
+To try it out,
+
+* Fetch the code using git.
+* cargo test
+
+This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency.
+
+# Caveats
 
 This is not an officially supported Google product.
