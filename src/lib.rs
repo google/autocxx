@@ -70,7 +70,8 @@ impl<'a> IncludeCpp<'a> {
         // bindgen such that it can include them in the generated
         // extern "C" section as include!
         // The .hpp below is important so bindgen works in C++ mode
-        let mut builder = bindgen::builder().clang_arg(format!("-I{}", self.inc_dir))
+        let mut builder = bindgen::builder()
+            .clang_arg(format!("-I{}", self.inc_dir))
             .header_contents("example.hpp", &full_header);
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
@@ -108,20 +109,29 @@ pub fn include_cpp(input: TokenStream) -> TokenStream {
     TokenStream::from(ts)
 }
 
+// TODO build a generation executable, autocxxbridge,
+// which
+// (1) Reads an existing .rs file to tokens
+// (2) Finds include_cpp! macros and runs them through include_cpp
+//     above to convert them to cxx::bridge sections
+// (3) Calls cxx_gen::generate_header_and_cc(input) on the resultant
+//     token stream.
+// (4) Writes the output .cc and .h to files.
+
 #[cfg(test)]
 mod tests {
 
-    use crate::{IncludeCpp, CppInclusion};
+    use crate::{CppInclusion, IncludeCpp};
     use indoc::indoc;
+    use log::info;
     use proc_macro2::TokenStream;
     use quote::quote;
-    use std::io::Write;
     use std::fs::File;
-    use tempfile::{tempdir, TempDir};
-    use std::path::PathBuf;
-    use test_env_log::test;
-    use log::info;
+    use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
+    use tempfile::{tempdir, TempDir};
+    use test_env_log::test;
 
     fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
         let path = tdir.path().join(filename);
@@ -178,15 +188,20 @@ mod tests {
         // Step 5: Run cxxbridge over the Rust file (or the programmatic equivalent)
         //         It should emit a .cc and a .h file
 
-        // Step 7: Use the cc crate to build a static library from both .cc files
-        //         ensuring it matches the name you gave in step 2
         info!("Path is {:?}", tdir.path());
         // TODO - find a better way to feed the OUT_DIR to cxx than this.
         let target_dir = tdir.path().join("target");
         std::fs::create_dir(&target_dir).unwrap();
         std::env::set_var("OUT_DIR", &target_dir);
         let target = rust_info::get().target_triple.unwrap();
-        cxx_build::bridge(&rs_path)
+        let (hdr, cc) = cxx_gen::generate_header_and_cc(expanded_rust).unwrap();
+        write_to_file(&tdir, "output.h", std::str::from_utf8(&hdr).unwrap());
+        let gen_cxx_path = write_to_file(&tdir, "output.cxx", std::str::from_utf8(&cc).unwrap());
+
+        // Step 7: Use the cc crate to build a static library from both .cc files
+        //         ensuring it matches the name you gave in step 2
+        cc::Build::new()
+            .file(gen_cxx_path)
             .file(cxx_path)
             .cpp(true)
             .host(&target)
@@ -194,17 +209,22 @@ mod tests {
             .opt_level(1)
             .flag("-std=c++11")
             .include(tdir.path())
-            .compile("autocxx-demo");
+            .try_compile("autocxx-demo")
+            .unwrap();
         // Step 8: use the trybuild crate to build the Rust file.
         // TODO - find a better way to persuade trybuild to link against
         // our static library.
-        let wrapper_path = write_to_file(&tdir, "wrapper.sh", indoc! {"
+        let wrapper_path = write_to_file(
+            &tdir,
+            "wrapper.sh",
+            indoc! {"
             #!/bin/bash
             set -e
             RUSTC=$1
             shift
             $RUSTC -C link-arg=-L$AUTOCXX_LIBRARY_PATH -C link-arg=-lautocxx-demo $@
-            "});
+            "},
+        );
         std::fs::set_permissions(&wrapper_path, PermissionsExt::from_mode(0o755)).unwrap();
         std::env::set_var("AUTOCXX_LIBRARY_PATH", target_dir);
         std::env::set_var("RUSTC_WRAPPER", wrapper_path);
@@ -379,7 +399,7 @@ mod tests {
             struct Bob {
                 uint32_t a;
                 uint32_t b;
-            }
+            };
             Bob give_bob();
         "};
         let rs = quote! {
@@ -471,7 +491,7 @@ mod tests {
             struct Bob {
                 uint32_t a;
                 uint32_t b;
-            }
+            };
             int take_bob(const Bob& a);
         "};
         let rs = quote! {

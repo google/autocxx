@@ -37,20 +37,23 @@ At present, this macro does not work, for two reasons:
 *  because there is no equivalent of the `cxxbridge` tool that knows how to expand the `include_cpp!` macro into a `cxx::bridge` mod (which in turn is then used to generate `.cc` and `.h` files.)
 * lots of nasty hard-coded nonsense around include paths etc.
 
-However, this project does contain test code which does this end-to-end. At present, one of the many tests actually passes, proving that for the simplest imaginable case it is possible to tie `bindgen` into `cxx`.
+However, this project does contain test code which does this end-to-end. At present, three of the many tests actually pass, proving that for the simplest imaginable case it is possible to tie `bindgen` into `cxx`.
 
 # Build environment
 
-This crate is not yet on crates.io and currently depends on a hacked-up version of bindgen. It may soon come to depend upon a hacked-up version of cxx as well.
+This crate is not yet on crates.io and currently depends on a hacked-up version of bindgen
+and a hacked-up version of cxx.
 
 To try it out,
 
 * Fetch the code using git.
 * cargo test
 
-This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency.
+This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency. The same applies to cxx.
 
 At present, many of the tests fail, and thus the test run fails overall. Individual tests can be run, and some pass.
+
+For some reason, more tests fail if they run in parallel, so use `cargo test -- --test-threads=1`.
 
 # Caveats
 
