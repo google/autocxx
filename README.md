@@ -50,6 +50,8 @@ To try it out,
 
 This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency.
 
+At present, many of the tests fail, and thus the test run fails overall. Individual tests can be run, and some pass.
+
 # Caveats
 
 This is not an officially supported Google product.

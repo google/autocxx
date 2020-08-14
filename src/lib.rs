@@ -69,9 +69,9 @@ impl<'a> IncludeCpp<'a> {
         // TODO - pass headers in &self.inclusions into
         // bindgen such that it can include them in the generated
         // extern "C" section as include!
+        // The .hpp below is important so bindgen works in C++ mode
         let mut builder = bindgen::builder().clang_arg(format!("-I{}", self.inc_dir))
-            .header_contents("example.h", &full_header);
-
+            .header_contents("example.hpp", &full_header);
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
         for a in &self.allowlist {
@@ -177,8 +177,6 @@ mod tests {
 
         // Step 5: Run cxxbridge over the Rust file (or the programmatic equivalent)
         //         It should emit a .cc and a .h file
-        //   TODO - can it cope with nested macros? What is required to allow
-        //          cxxbridge to deal with include_cpp generating a cxx::bridge mod?
 
         // Step 7: Use the cc crate to build a static library from both .cc files
         //         ensuring it matches the name you gave in step 2
@@ -187,13 +185,13 @@ mod tests {
         let target_dir = tdir.path().join("target");
         std::fs::create_dir(&target_dir).unwrap();
         std::env::set_var("OUT_DIR", &target_dir);
-        // TODO - oh dear oh dear.
         let target = rust_info::get().target_triple.unwrap();
-        std::env::set_var("TARGET", &target);
-        std::env::set_var("HOST", target);
-        std::env::set_var("OPT_LEVEL", "1");
         cxx_build::bridge(&rs_path)
             .file(cxx_path)
+            .cpp(true)
+            .host(&target)
+            .target(&target)
+            .opt_level(1)
             .flag("-std=c++11")
             .include(tdir.path())
             .compile("autocxx-demo");
@@ -243,7 +241,7 @@ mod tests {
             uint32_t give_int();
         "};
         let rs = quote! {
-            assert_eq!(ffi::give_int(), 7);
+            assert_eq!(ffi::give_int(), 4);
         };
         run_test(cxx, hdr, rs, vec!["give_int"]);
     }
@@ -260,7 +258,7 @@ mod tests {
             uint32_t take_int(uint32_t a);
         "};
         let rs = quote! {
-            assert_eq!(ffi::take_int(3), 7);
+            assert_eq!(ffi::take_int(3), 6);
         };
         run_test(cxx, hdr, rs, vec!["take_int"]);
     }
@@ -406,7 +404,7 @@ mod tests {
             struct Bob {
                 uint32_t a;
                 uint32_t b;
-            }
+            };
             std::unique_ptr<Bob> give_bob();
         "};
         let rs = quote! {
@@ -427,7 +425,7 @@ mod tests {
             struct Bob {
                 uint32_t a;
                 uint32_t b;
-            }
+            };
             int take_bob(Bob a);
         "};
         let rs = quote! {
@@ -449,7 +447,7 @@ mod tests {
             struct Bob {
                 uint32_t a;
                 uint32_t b;
-            }
+            };
             int take_bob(const Bob& a);
         "};
         let rs = quote! {
@@ -495,12 +493,12 @@ mod tests {
             #include <cstdint>
             struct Phil {
                 uint32_t d;
-            }
+            };
             struct Bob {
                 uint32_t a;
                 uint32_t b;
                 Phil c;
-            }
+            };
             int take_bob(Bob a);
         "};
         let rs = quote! {
@@ -528,7 +526,7 @@ mod tests {
             struct Bob {
                 uint32_t a;
                 std::string b;
-            }
+            };
             int take_bob(Bob a);
             std::string get_str();
         "};
@@ -555,7 +553,7 @@ mod tests {
             struct Bob {
                 uint32_t a;
                 std::string b;
-            }
+            };
             int take_bob(const Bob& a);
             std::string get_str();
         "};
