@@ -33,7 +33,9 @@ The existing cxx facilities are used to allow safe ownership of C++ types from R
 
 # Current state of affairs
 
-At present, this macro does not work, because there is no equivalent of the `cxxbridge` tool that knows how to expand the `include_cpp!` macro into a `cxx::bridge` mod.
+At present, this macro does not work, for two reasons:
+*  because there is no equivalent of the `cxxbridge` tool that knows how to expand the `include_cpp!` macro into a `cxx::bridge` mod (which in turn is then used to generate `.cc` and `.h` files.)
+* lots of nasty hard-coded nonsense around include paths etc.
 
 However, this project does contain test code which does this end-to-end. At present, one of the many tests actually passes, proving that for the simplest imaginable case it is possible to tie `bindgen` into `cxx`.
 
@@ -51,3 +53,11 @@ This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and 
 # Caveats
 
 This is not an officially supported Google product.
+
+#### License
+
+<sup>
+Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
+2.0</a> or <a href="LICENSE-MIT">MIT license</a> at your option.
+</sup>
+
