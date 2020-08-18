@@ -1,0 +1,8 @@
+[package]
+name = "autocxx-demo"
+version = "0.1.0"
+authors = ["Adrian Taylor <adetaylor@chromium.org>"]
+edition = "2018"
+
+[dependencies]
+autocxx-macro = { path = "../macro" }
