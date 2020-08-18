@@ -12,12 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod engine;
+#![feature(proc_macro_diagnostic)]
+
+use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
+
+use quote::ToTokens;
+use syn::parse::{Parse, ParseStream, Result};
+
+use syn::{parse_macro_input, ItemMod};
+
+use log::debug;
+
+
+#[proc_macro]
+pub fn include_cpp(input: TokenStream) -> TokenStream {
+    let include_cpp = parse_macro_input!(input as IncludeCpp);
+
+    let ts = include_cpp.run();
+    // TODO: consider that this quoted section invokes a different procedural
+    // macro and what that means.
+    TokenStream::from(ts)
+}
+
+// TODO build a generation executable, autocxxbridge,
+// which
+// (1) Reads an existing .rs file to tokens
+// (2) Finds include_cpp! macros and runs them through include_cpp
+//     above to convert them to cxx::bridge sections
+// (3) Calls cxx_gen::generate_header_and_cc(input) on the resultant
+//     token stream.
+// (4) Writes the output .cc and .h to files.
 
 #[cfg(test)]
 mod tests {
 
-    use super::engine::{CppInclusion, IncludeCpp};
+    use crate::{CppInclusion, IncludeCpp};
     use indoc::indoc;
     use log::info;
     use proc_macro2::TokenStream;
@@ -59,10 +89,11 @@ mod tests {
         // to make a #[cxx::bridge] mod. Because that's not currently
         // possible, there's no way that any of this can work outside
         // of this test code environment. Yet.
-        let incl_cpp = IncludeCpp::new(
-            vec![CppInclusion::Header("input.h".to_string())],
-            allowed_funcs,
-            tdir.path().to_str().unwrap());
+        let incl_cpp = IncludeCpp {
+            inclusions: vec![CppInclusion::Header("input.h".to_string())],
+            allowlist: allowed_funcs,
+            inc_dir: tdir.path().to_str().unwrap(),
+        };
         let bindings = incl_cpp.run();
         let expanded_rust = quote! {
             #bindings
