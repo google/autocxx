@@ -1,3 +1,5 @@
-inline int DoMath(int a) {
-    return 3 * a;
+int DoMath(int a);
+
+int DoMath(int a) {
+    return a * 3;
 }

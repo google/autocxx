@@ -50,8 +50,9 @@ impl Parse for IncludeCpp {
         // some external configuration.
         // TODO the syntax above is insane.
         let full_header_name = format!("{}.h", hdr.to_string());
-        let sourcedir = hdr.span().unwrap().source_file().path().parent().unwrap().to_path_buf();
+        let sourcedir = hdr.span().unwrap().source_file().path().parent().unwrap().to_path_buf().canonicalize().unwrap();
         debug!("Including dir {:?}", sourcedir);
+        println!("Allowlist {}", allow.to_string());
         Ok(IncludeCpp {
             inclusions: vec![CppInclusion::Header(full_header_name)],
             allowlist: vec![allow.to_string()],
@@ -86,7 +87,8 @@ impl IncludeCpp {
 
     fn make_builder(&self) -> bindgen::Builder {
         let full_header = self.build_header();
-        debug!("Full header: {}", full_header);
+        println!("Full header: {}", full_header);
+        println!("Inc dir: {}", self.inc_dir.display());
 
         // TODO - pass headers in &self.inclusions into
         // bindgen such that it can include them in the generated
@@ -114,7 +116,7 @@ impl IncludeCpp {
         // 1. Builds an overall C++ header with all those #defines and #includes
         // 2. Passes it to bindgen::Builder::header
         let bindings = self.make_builder().generate().unwrap().to_string();
-        debug!("Bindings: {}", bindings);
+        println!("Bindings: {}", bindings);
         let bindings = syn::parse_str::<ItemMod>(&bindings).unwrap();
         let mut ts = TokenStream2::new();
         bindings.to_tokens(&mut ts);
