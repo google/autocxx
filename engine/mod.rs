@@ -17,7 +17,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result};
 
-use syn::{parse_macro_input, ItemMod};
+use syn::ItemMod;
 
 use log::debug;
 
