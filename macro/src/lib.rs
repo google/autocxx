@@ -13,6 +13,8 @@
 // limitations under the License.
 
 #![feature(proc_macro_diagnostic)]
+#![feature(proc_macro_span)]
+
 
 mod engine;
 

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use proc_macro2::TokenStream as TokenStream2;
+use std::path::PathBuf;
 
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result};
@@ -26,31 +27,44 @@ pub enum CppInclusion {
     Header(String),
 }
 
-pub struct IncludeCpp<'a> {
+pub struct IncludeCpp {
     inclusions: Vec<CppInclusion>,
-    allowlist: Vec<&'a str>,
-    inc_dir: &'a str, // TODO make more versatile
+    allowlist: Vec<String>,
+    inc_dir: PathBuf, // TODO make more versatile
 }
 
-impl<'a> Parse for IncludeCpp<'a> {
-    fn parse(_input: ParseStream) -> Result<Self> {
+impl Parse for IncludeCpp {
+    fn parse(input: ParseStream) -> Result<Self> {
+        input.parse::<syn::Token![<]>()?;
+        let hdr = input.parse::<syn::Ident>()?;
+        input.parse::<syn::Token![>]>()?;
+        input.parse::<syn::Token![,]>()?;
+        input.parse::<syn::Token![<]>()?;
+        let allow = input.parse::<syn::Ident>()?;
+        input.parse::<syn::Token![>]>()?;
         // TODO: Takes as inputs:
         // 1. List of headers to include
         // 2. List of #defines to include
         // 3. Allowlist
+        // TODO don't do this include dir nonsense. Take it from
+        // some external configuration.
+        // TODO the syntax above is insane.
+        let full_header_name = format!("{}.h", hdr.to_string());
+        let sourcedir = hdr.span().unwrap().source_file().path().parent().unwrap().to_path_buf();
+        debug!("Including dir {:?}", sourcedir);
         Ok(IncludeCpp {
-            inclusions: vec![],
-            allowlist: vec![],
-            inc_dir: "",
+            inclusions: vec![CppInclusion::Header(full_header_name)],
+            allowlist: vec![allow.to_string()],
+            inc_dir: sourcedir,
         })
     }
 }
 
-impl<'a> IncludeCpp<'a> {
+impl IncludeCpp {
     #[cfg(test)]
     pub fn new(inclusions: Vec<CppInclusion>,
-        allowlist: Vec<&'a str>,
-        inc_dir: &'a str) -> Self {
+        allowlist: Vec<String>,
+        inc_dir: PathBuf) -> Self {
         IncludeCpp {
             inclusions,
             allowlist,
@@ -78,8 +92,9 @@ impl<'a> IncludeCpp<'a> {
         // bindgen such that it can include them in the generated
         // extern "C" section as include!
         // The .hpp below is important so bindgen works in C++ mode
+        // TODO work with OsStrs here to avoid the .display()
         let mut builder = bindgen::builder()
-            .clang_arg(format!("-I{}", self.inc_dir))
+            .clang_arg(format!("-I{}", self.inc_dir.display()))
             .header_contents("example.hpp", &full_header);
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
