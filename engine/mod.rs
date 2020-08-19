@@ -124,9 +124,4 @@ impl IncludeCpp {
         bindings.to_tokens(&mut ts);
         ts
     }
-
-    pub fn run_and_expand(self) -> TokenStream2 {
-        let ts = TokenStream::from(self.run());
-        bridge(TokenStream::new(), ts)
-    }
 }

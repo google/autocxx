@@ -28,7 +28,7 @@ use engine::IncludeCpp;
 pub fn include_cxx(input: TokenStream) -> TokenStream {
     let include_cpp = parse_macro_input!(input as IncludeCpp);
 
-    let ts = include_cpp.run_and_expand();
+    let ts = include_cpp.run();
 
     TokenStream::from(ts)
 }
