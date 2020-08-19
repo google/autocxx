@@ -51,13 +51,13 @@ mod tests {
         let tdir = tempdir().unwrap();
         write_to_file(&tdir, "input.h", header_code);
         // Step 2: Modify the Rust code to add:
-        //         include_cpp!(path to header, allowlist)
+        //         include_cxx!(path to header, allowlist)
         //         and also #[link(name="foo", kind="static")]
         //         Ensure that the TokenStream passed to us is contained
         //         within a main() function.
         // TODO - at the moment we're expanding this in the test
         // code, which is cheating. In the real world, cxxbridge
-        // would need to know how to expand include_cpp!
+        // would need to know how to expand include_cxx!
         // to make a #[cxx::bridge] mod. Because that's not currently
         // possible, there's no way that any of this can work outside
         // of this test code environment. Yet.

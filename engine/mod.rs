@@ -22,6 +22,8 @@ use syn::ItemMod;
 
 use log::debug;
 
+use cxx::bridge;
+
 pub enum CppInclusion {
     Define(String),
     Header(String),
@@ -121,5 +123,10 @@ impl IncludeCpp {
         let mut ts = TokenStream2::new();
         bindings.to_tokens(&mut ts);
         ts
+    }
+
+    pub fn run_and_expand(self) -> TokenStream2 {
+        let ts = TokenStream::from(self.run());
+        bridge(TokenStream::new(), ts)
     }
 }
