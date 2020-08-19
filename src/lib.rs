@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![feature(proc_macro_span)]
+
 mod engine;
 
 #[cfg(test)]
@@ -41,7 +43,7 @@ mod tests {
         cxx_code: &str,
         header_code: &str,
         rust_code: TokenStream,
-        allowed_funcs: Vec<&str>,
+        allowed_funcs: &[&str],
     ) {
         //println!("C++ is {}, Rust is {}", cxx_code, rust_code);
         // To do...
@@ -59,10 +61,11 @@ mod tests {
         // to make a #[cxx::bridge] mod. Because that's not currently
         // possible, there's no way that any of this can work outside
         // of this test code environment. Yet.
+        let allowed_funcs = allowed_funcs.iter().map(|s| (*s).to_string()).collect();
         let incl_cpp = IncludeCpp::new(
             vec![CppInclusion::Header("input.h".to_string())],
             allowed_funcs,
-            tdir.path().to_str().unwrap());
+            tdir.path().to_path_buf());
         let bindings = incl_cpp.run();
         let expanded_rust = quote! {
             #bindings
@@ -141,7 +144,7 @@ mod tests {
         let rs = quote! {
             ffi::do_nothing();
         };
-        run_test(cxx, hdr, rs, vec!["do_nothing"]);
+        run_test(cxx, hdr, rs, &["do_nothing"]);
     }
 
     #[test]
@@ -158,7 +161,7 @@ mod tests {
         let rs = quote! {
             assert_eq!(ffi::give_int(), 4);
         };
-        run_test(cxx, hdr, rs, vec!["give_int"]);
+        run_test(cxx, hdr, rs, &["give_int"]);
     }
 
     #[test]
@@ -175,7 +178,7 @@ mod tests {
         let rs = quote! {
             assert_eq!(ffi::take_int(3), 6);
         };
-        run_test(cxx, hdr, rs, vec!["take_int"]);
+        run_test(cxx, hdr, rs, &["take_int"]);
     }
 
     #[test]
@@ -193,7 +196,7 @@ mod tests {
         let rs = quote! {
             assert_eq!(ffi::give_up().as_ref().unwrap(), 12);
         };
-        run_test(cxx, hdr, rs, vec!["give_up"]);
+        run_test(cxx, hdr, rs, &["give_up"]);
     }
 
     #[test]
@@ -211,7 +214,7 @@ mod tests {
         let rs = quote! {
             assert_eq!(ffi::give_str_up().as_ref().unwrap().to_str().unwrap(), "Bob");
         };
-        run_test(cxx, hdr, rs, vec!["give_str_up"]);
+        run_test(cxx, hdr, rs, &["give_str_up"]);
     }
 
     #[test]
@@ -228,7 +231,7 @@ mod tests {
         let rs = quote! {
             assert_eq!(ffi::give_str_up().to_str().unwrap(), "Bob");
         };
-        run_test(cxx, hdr, rs, vec!["give_str"]);
+        run_test(cxx, hdr, rs, &["give_str"]);
     }
 
     #[test]
@@ -252,7 +255,7 @@ mod tests {
             let s = ffi::give_str();
             assert_eq!(ffi::take_str(s), 3);
         };
-        run_test(cxx, hdr, rs, vec!["give_str_up", "take_str_up"]);
+        run_test(cxx, hdr, rs, &["give_str_up", "take_str_up"]);
     }
 
     #[test]
@@ -275,7 +278,7 @@ mod tests {
             let s = ffi::give_str();
             assert_eq!(ffi::take_str(s), 3);
         };
-        let allowed_funcs = vec!["give_str", "take_str"];
+        let allowed_funcs = &["give_str", "take_str"];
         run_test(cxx, hdr, rs, allowed_funcs);
     }
 
@@ -300,7 +303,7 @@ mod tests {
         let rs = quote! {
             assert_eq!(ffi::give_bob().b, 4);
         };
-        run_test(cxx, hdr, rs, vec!["give_bob", "Bob"]);
+        run_test(cxx, hdr, rs, &["give_bob", "Bob"]);
     }
 
     #[test]
@@ -325,7 +328,7 @@ mod tests {
         let rs = quote! {
             assert_eq!(ffi::give_bob().as_ref().unwrap().b, 4);
         };
-        run_test(cxx, hdr, rs, vec!["give_bob", "Bob"]);
+        run_test(cxx, hdr, rs, &["give_bob", "Bob"]);
     }
 
     #[test]
@@ -347,7 +350,7 @@ mod tests {
             let a = ffi::Bob { a: 12, b: 13 };
             assert_eq!(ffi::take_bob(a), 12);
         };
-        run_test(cxx, hdr, rs, vec!["take_bob", "Bob"]);
+        run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
     }
 
     #[test]
@@ -369,7 +372,7 @@ mod tests {
             let a = ffi::Bob { a: 12, b: 13 };
             assert_eq!(ffi::take_bob(&a), 12);
         };
-        let allowed_funcs = vec!["take_bob", "Bob"];
+        let allowed_funcs = &["take_bob", "Bob"];
         run_test(cxx, hdr, rs, allowed_funcs);
     }
 
@@ -394,7 +397,7 @@ mod tests {
             assert_eq!(ffi::take_bob(&mut a), 12);
             assert_eq!(a.b, 14);
         };
-        run_test(cxx, hdr, rs, vec!["take_bob", "Bob"]);
+        run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
     }
 
     #[test]
@@ -421,7 +424,7 @@ mod tests {
             assert_eq!(ffi::take_bob(a), 12);
         };
         // Should be no need to allowlist Phil below
-        let allowed_funcs = vec!["take_bob", "Bob"];
+        let allowed_funcs = &["take_bob", "Bob"];
         run_test(cxx, hdr, rs, allowed_funcs);
     }
 
@@ -449,7 +452,7 @@ mod tests {
             let a = ffi::Bob { a: 12, b: ffi::get_str() };
             assert_eq!(ffi::take_bob(a), 12);
         };
-        run_test(cxx, hdr, rs, vec!["take_bob", "Bob", "get_str"]);
+        run_test(cxx, hdr, rs, &["take_bob", "Bob", "get_str"]);
     }
 
     #[test]
@@ -476,7 +479,7 @@ mod tests {
             let a = ffi::Bob { a: 12, b: ffi::get_str() };
             assert_eq!(ffi::take_bob(&a), 12);
         };
-        run_test(cxx, hdr, rs, vec!["take_bob", "Bob", "get_str"]);
+        run_test(cxx, hdr, rs, &["take_bob", "Bob", "get_str"]);
     }
 
     #[test]
@@ -497,7 +500,7 @@ mod tests {
             let a = ffi::Bob::make_unique();
             assert_eq!(a.as_ref().unwrap().a, 3);
         };
-        run_test(cxx, hdr, rs, vec!["Bob"]);
+        run_test(cxx, hdr, rs, &["Bob"]);
     }
 
     #[test]
@@ -518,7 +521,7 @@ mod tests {
             let a = ffi::Bob::make_unique(3);
             assert_eq!(a.as_ref().unwrap().b, 3);
         };
-        run_test(cxx, hdr, rs, vec!["Bob"]);
+        run_test(cxx, hdr, rs, &["Bob"]);
     }
 
     // Yet to test:
