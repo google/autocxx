@@ -19,3 +19,4 @@ authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2018"
 
 [dependencies]
+autocxx-engine = { path="../../engine" }

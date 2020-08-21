@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![feature(proc_macro_span)]
+
 use proc_macro2::TokenStream as TokenStream2;
 use std::path::PathBuf;
 
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result};
 
-use syn::ItemMod;
+use syn::{ItemMod, ItemMacro};
 
 use log::debug;
-
-use cxx::bridge;
 
 pub enum CppInclusion {
     Define(String),
@@ -75,6 +75,15 @@ impl IncludeCpp {
         }
     }
 
+    pub fn fromSyn(mac: ItemMacro) -> Self {
+        // TODO populate fields
+        IncludeCpp {
+            inclusions: vec![],
+            allowlist: vec![],
+            inc_dir: PathBuf::new(),
+        }
+    }
+
     fn build_header(&self) -> String {
         let mut s = String::new();
         for incl in &self.inclusions {
@@ -123,5 +132,9 @@ impl IncludeCpp {
         let mut ts = TokenStream2::new();
         bindings.to_tokens(&mut ts);
         ts
+    }
+
+    pub fn generate(self) -> std::result::Result<(Vec<u8>, Vec<u8>),String> {
+        cxx_gen::generate_header_and_cc(self.run())
     }
 }

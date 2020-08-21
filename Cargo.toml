@@ -27,6 +27,7 @@ categories = ["development-tools::ffi", "api-bindings"]
 quote = "1.0"
 proc-macro2 = "1.0"
 log = "0.4"
+autocxx-engine = { path="engine" }
 
 [dependencies.bindgen]
 git = "https://github.com/adetaylor/rust-bindgen"
@@ -54,4 +55,4 @@ rust_info = "0.3.1"
 cc = "1.0"
 
 [workspace]
-members = ["macro", "gen/cmd", "gen/build", "demo"]
+members = ["engine", "macro", "gen/cmd", "gen/build", "demo"]

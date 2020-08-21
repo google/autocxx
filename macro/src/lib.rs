@@ -15,14 +15,11 @@
 #![feature(proc_macro_diagnostic)]
 #![feature(proc_macro_span)]
 
-
-mod engine;
-
 use proc_macro::TokenStream;
 
 use syn::parse_macro_input;
 
-use engine::IncludeCpp;
+use autocxx_engine::IncludeCpp;
 
 #[proc_macro]
 pub fn include_cxx(input: TokenStream) -> TokenStream {
