@@ -29,7 +29,8 @@ let a = ffi::base::bob::make_unique("hello".into());
 a.do_a_thing();
 ```
 
-The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string`.
+The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string` - so the Rust code should
+not typically require use of unsafe code, unlike with normal `bindgen` bindings.
 
 # How it works
 
@@ -79,6 +80,17 @@ For some reason, more tests fail if they run in parallel, hence why you should u
   files from an `include_cxx` section.
 * `gen/cmd` - a command-line tool which does the same. Except this isn't written yet.
 * `src` - currently, test code.
+
+# Next steps
+
+Plans:
+
+* Rationalize the test code so it uses more of the facilities from `engine` (which didn't
+  mostly exist when I wrote the test code)
+* Upstream the `cxx` change if possible.
+* Fix a few of the annoying TODOs (the oddest one being in `demo/build.rs`)
+* Then, start working on the `bindgen` fork to add support for more C++ types and see
+  how far we can get through the test suite.
 
 #### License and usage notes
 

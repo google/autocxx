@@ -35,12 +35,7 @@ mod tests {
         path
     }
 
-    fn run_test(
-        cxx_code: &str,
-        header_code: &str,
-        rust_code: TokenStream,
-        allowed_funcs: &[&str],
-    ) {
+    fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_funcs: &[&str]) {
         //println!("C++ is {}, Rust is {}", cxx_code, rust_code);
         // To do...
         // Step 1: Write the C++ header snippet to a temp file
@@ -61,7 +56,8 @@ mod tests {
         let incl_cpp = IncludeCpp::new(
             vec![CppInclusion::Header("input.h".to_string())],
             allowed_funcs,
-            tdir.path().to_path_buf());
+            tdir.path().to_path_buf(),
+        );
         let bindings = incl_cpp.generate_rs();
         let expanded_rust = quote! {
             #bindings

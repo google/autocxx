@@ -47,13 +47,11 @@ impl Parse for IncludeCpp {
 }
 
 impl IncludeCpp {
-    pub fn new(inclusions: Vec<CppInclusion>,
-        allowlist: Vec<String>,
-        inc_dir: PathBuf) -> Self {
+    pub fn new(inclusions: Vec<CppInclusion>, allowlist: Vec<String>, inc_dir: PathBuf) -> Self {
         IncludeCpp {
             inclusions,
             allowlist,
-            inc_dir
+            inc_dir,
         }
     }
 
@@ -138,7 +136,7 @@ impl IncludeCpp {
         ts
     }
 
-    pub fn generate_h_and_cxx(self) -> std::result::Result<(Vec<u8>, Vec<u8>),String> {
+    pub fn generate_h_and_cxx(self) -> std::result::Result<(Vec<u8>, Vec<u8>), String> {
         cxx_gen::generate_header_and_cc(self.generate_rs())
     }
 

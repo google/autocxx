@@ -1,4 +1,3 @@
-
 // Copyright 2020 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::path::{Path, PathBuf};
 use std::fs;
 use std::fs::File;
 use std::io::Write;
-use tempfile::{tempdir, TempDir};
+use std::path::{Path, PathBuf};
 use syn::Item;
+use tempfile::{tempdir, TempDir};
 
 /// Errors returned during creation of a cc::Build from an include_cxx
 /// macro.
@@ -57,6 +56,10 @@ pub struct Builder {
 impl Builder {
     /// Construct a Builder.
     pub fn new(rs_file: impl AsRef<Path>) -> Result<Self, Error> {
+        // TODO - we have taken a different approach here from cxx.
+        // cxx jumps through many (probably very justifiable) hoops
+        // to generate .h and .cxx files in the Cargo out directory
+        // (I think). We cheat and just make a temp dir. We shouldn't.
         let tdir = tempdir().map_err(|e| Error::TempDirCreationFailed(e))?;
         let mut builder = cc::Build::new();
         builder.cpp(true);
@@ -69,12 +72,16 @@ impl Builder {
         for item in source.items {
             if let Item::Macro(mac) = item {
                 if mac.mac.path.is_ident("include_cxx") {
-                    let include_cpp = autocxx_engine::IncludeCpp::new_from_syn(mac.mac).map_err(|e| Error::MacroParseFail(e))?;
+                    let include_cpp = autocxx_engine::IncludeCpp::new_from_syn(mac.mac)
+                        .map_err(|e| Error::MacroParseFail(e))?;
                     builder.include(include_cpp.include_dir());
-                    let (_, cxx) = include_cpp.generate_h_and_cxx().map_err(|e| Error::InvalidCxx(e))?;
+                    let (_, cxx) = include_cpp
+                        .generate_h_and_cxx()
+                        .map_err(|e| Error::InvalidCxx(e))?;
                     let fname = format!("gen{}.cxx", counter);
                     counter += 1;
-                    let gen_cxx_path = Self::write_to_file(&tdir, &fname, &cxx).map_err(|e| Error::FileWriteFail(e))?;
+                    let gen_cxx_path = Self::write_to_file(&tdir, &fname, &cxx)
+                        .map_err(|e| Error::FileWriteFail(e))?;
                     builder.file(gen_cxx_path);
                 }
             }

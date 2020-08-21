@@ -16,8 +16,6 @@ fn main() {
     println!("Hello, world!");
 }
 
-
-
 // TODO build a generation executable, autocxxbridge,
 // which
 // (1) Reads an existing .rs file to tokens
