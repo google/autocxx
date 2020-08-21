@@ -50,7 +50,7 @@ There is an example of this macro working within the `demo` directory. It's not 
 quite the above syntax, since my macro-parsing fu needs to be improved. And, at the moment,
 it will work with only the very simplest functions.
 
-However, this project does contain test code which does this end-to-end. At present, three of the many tests actually pass, proving that for the simplest imaginable case it is possible to tie `bindgen` into `cxx`.
+The project also contains test code which does this end-to-end, for all sorts of C++ types and constructs which we eventually would like to support. They nearly all fail :)
 
 # Build environment
 
