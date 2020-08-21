@@ -37,7 +37,7 @@ pub enum Error {
     FileWriteFail(std::io::Error),
     /// No `include_cxx` macro was found anywhere.
     NoIncludeCxxMacrosFound,
-    /// Unable to parse the macro.
+    /// Unable to parse the include_cxx macro.
     MacroParseFail(syn::Error),
 }
 
@@ -46,6 +46,9 @@ pub enum Error {
 /// This structure owns a temporary directory containing
 /// the generated C++ code, as well as owning the cc::Build
 /// which knows how to build it.
+/// Typically you'd use this from a build.rs file by
+/// using `new` and then using `builder` to fetch the `cc::Build`
+/// object and asking the resultant `cc::Build` to compile the code.
 pub struct Builder {
     build: cc::Build,
     _tdir: TempDir,
@@ -58,19 +61,21 @@ impl Builder {
         let mut builder = cc::Build::new();
         builder.cpp(true);
         let source = fs::read_to_string(rs_file).map_err(|e| Error::FileReadError(e))?;
+        // TODO - put this macro-finding code into the 'engine'
+        // directory such that it can be shared with gen/cmd.
+        // However, the use of cc::Build is unique to gen/build.
         let source = syn::parse_file(&source).map_err(|e| Error::Syntax(e))?;
         let mut counter = 0;
         for item in source.items {
             if let Item::Macro(mac) = item {
-                if let Some(ref name) = mac.ident {
-                    if name.to_string() == "include_cxx" {
-                        let include_cpp = autocxx_engine::IncludeCpp::new_from_syn(mac).map_err(|e| Error::MacroParseFail(e))?;
-                        let (cxx, _) = include_cpp.generate().map_err(|e| Error::InvalidCxx(e))?;
-                        let fname = format!("gen{}.cxx", counter);
-                        counter += 1;
-                        let gen_cxx_path = Self::write_to_file(&tdir, &fname, &cxx).map_err(|e| Error::FileWriteFail(e))?;
-                        builder.file(gen_cxx_path);
-                    }
+                if mac.mac.path.is_ident("include_cxx") {
+                    let include_cpp = autocxx_engine::IncludeCpp::new_from_syn(mac.mac).map_err(|e| Error::MacroParseFail(e))?;
+                    builder.include(include_cpp.include_dir());
+                    let (_, cxx) = include_cpp.generate_h_and_cxx().map_err(|e| Error::InvalidCxx(e))?;
+                    let fname = format!("gen{}.cxx", counter);
+                    counter += 1;
+                    let gen_cxx_path = Self::write_to_file(&tdir, &fname, &cxx).map_err(|e| Error::FileWriteFail(e))?;
+                    builder.file(gen_cxx_path);
                 }
             }
         }
@@ -84,6 +89,7 @@ impl Builder {
         }
     }
 
+    /// Fetch the cc::Build from this.
     pub fn builder(&mut self) -> &mut cc::Build {
         &mut self.build
     }

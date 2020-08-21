@@ -26,3 +26,5 @@ fn main() {
 // (3) Calls cxx_gen::generate_header_and_cc(input) on the resultant
 //     token stream.
 // (4) Writes the output .cc and .h to files.
+// Using the existing facilities within the IncludeCpp engine
+// as far as possible.

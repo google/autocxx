@@ -16,16 +16,12 @@
 #![feature(proc_macro_span)]
 
 use proc_macro::TokenStream;
-
 use syn::parse_macro_input;
-
 use autocxx_engine::IncludeCpp;
 
 #[proc_macro]
 pub fn include_cxx(input: TokenStream) -> TokenStream {
     let include_cpp = parse_macro_input!(input as IncludeCpp);
-
-    let ts = include_cpp.run();
-
+    let ts = include_cpp.generate_rs();
     TokenStream::from(ts)
 }

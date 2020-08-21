@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result};
 
-use syn::{ItemMod, ItemMacro};
+use syn::{ItemMod, Macro};
 
 use log::debug;
 
@@ -47,7 +47,6 @@ impl Parse for IncludeCpp {
 }
 
 impl IncludeCpp {
-    #[cfg(test)]
     pub fn new(inclusions: Vec<CppInclusion>,
         allowlist: Vec<String>,
         inc_dir: PathBuf) -> Self {
@@ -70,13 +69,14 @@ impl IncludeCpp {
         // 1. List of headers to include
         // 2. List of #defines to include
         // 3. Allowlist
-        // TODO don't do this include dir nonsense. Take it from
-        // some external configuration.
+        // TODO AUTOCXX_INC handling should not panic, and
+        // we probably want better behavior
         // TODO the syntax above is insane.
         let full_header_name = format!("{}.h", hdr.to_string());
-        let sourcedir = hdr.span().unwrap().source_file().path().parent().unwrap().to_path_buf().canonicalize().unwrap();
+        let sourcedir: PathBuf = std::env::var_os("AUTOCXX_INC").unwrap().into();
+
+        let sourcedir = sourcedir.canonicalize().unwrap();
         debug!("Including dir {:?}", sourcedir);
-        println!("Allowlist {}", allow.to_string());
         Ok(IncludeCpp {
             inclusions: vec![CppInclusion::Header(full_header_name)],
             allowlist: vec![allow.to_string()],
@@ -84,8 +84,8 @@ impl IncludeCpp {
         })
     }
 
-    pub fn new_from_syn(mac: ItemMacro) -> Result<Self> {
-        syn::parse2::<Self>(mac.into_token_stream())
+    pub fn new_from_syn(mac: Macro) -> Result<Self> {
+        mac.parse_body::<IncludeCpp>()
     }
 
     fn build_header(&self) -> String {
@@ -102,8 +102,8 @@ impl IncludeCpp {
 
     fn make_builder(&self) -> bindgen::Builder {
         let full_header = self.build_header();
-        println!("Full header: {}", full_header);
-        println!("Inc dir: {}", self.inc_dir.display());
+        debug!("Full header: {}", full_header);
+        debug!("Inc dir: {}", self.inc_dir.display());
 
         // TODO - pass headers in &self.inclusions into
         // bindgen such that it can include them in the generated
@@ -123,7 +123,7 @@ impl IncludeCpp {
         builder
     }
 
-    pub fn run(self) -> TokenStream2 {
+    pub fn generate_rs(self) -> TokenStream2 {
         // TODO:
         // 4. (also respects environment variables to pick up more headers,
         //     include paths and #defines)
@@ -131,14 +131,18 @@ impl IncludeCpp {
         // 1. Builds an overall C++ header with all those #defines and #includes
         // 2. Passes it to bindgen::Builder::header
         let bindings = self.make_builder().generate().unwrap().to_string();
-        println!("Bindings: {}", bindings);
+        debug!("Bindings: {}", bindings);
         let bindings = syn::parse_str::<ItemMod>(&bindings).unwrap();
         let mut ts = TokenStream2::new();
         bindings.to_tokens(&mut ts);
         ts
     }
 
-    pub fn generate(self) -> std::result::Result<(Vec<u8>, Vec<u8>),String> {
-        cxx_gen::generate_header_and_cc(self.run())
+    pub fn generate_h_and_cxx(self) -> std::result::Result<(Vec<u8>, Vec<u8>),String> {
+        cxx_gen::generate_header_and_cc(self.generate_rs())
+    }
+
+    pub fn include_dir(&self) -> &PathBuf {
+        &self.inc_dir
     }
 }

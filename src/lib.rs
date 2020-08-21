@@ -62,7 +62,7 @@ mod tests {
             vec![CppInclusion::Header("input.h".to_string())],
             allowed_funcs,
             tdir.path().to_path_buf());
-        let bindings = incl_cpp.run();
+        let bindings = incl_cpp.generate_rs();
         let expanded_rust = quote! {
             #bindings
 
@@ -83,6 +83,7 @@ mod tests {
         //         It should emit a .cc and a .h file
 
         info!("Path is {:?}", tdir.path());
+        // TODO replace nearly all the following code with code from gen/build
         // TODO - find a better way to feed the OUT_DIR to cxx than this.
         let target_dir = tdir.path().join("target");
         std::fs::create_dir(&target_dir).unwrap();
