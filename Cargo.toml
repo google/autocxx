@@ -54,4 +54,4 @@ rust_info = "0.3.1"
 cc = "1.0"
 
 [workspace]
-members = ["macro", "gen", "demo"]
+members = ["macro", "gen/cmd", "gen/build", "demo"]
