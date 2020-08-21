@@ -1,5 +1,5 @@
 fn main() {
-    let mut b = autocxx_build::Builder::new("main.rs").unwrap();
+    let mut b = autocxx_build::Builder::new("src/main.rs").unwrap();
     b.builder().file("demo.cc")
         .flag_if_supported("-std=c++14")
         .compile("autocxx-demo");

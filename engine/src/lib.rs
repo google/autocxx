@@ -29,6 +29,11 @@ pub enum CppInclusion {
     Header(String),
 }
 
+/// Core of the autocxx engine.
+/// TODO - consider merging this 'engine' sub-crate with the main crate.
+/// TODO - consider whether this 'engine' crate should actually be a
+/// directory of source symlinked from all the other sub-crates, so that
+/// we avoid exposing an external interface from this code.
 pub struct IncludeCpp {
     inclusions: Vec<CppInclusion>,
     allowlist: Vec<String>,
@@ -37,6 +42,23 @@ pub struct IncludeCpp {
 
 impl Parse for IncludeCpp {
     fn parse(input: ParseStream) -> Result<Self> {
+        Self::new_from_parse_stream(input)
+    }
+}
+
+impl IncludeCpp {
+    #[cfg(test)]
+    pub fn new(inclusions: Vec<CppInclusion>,
+        allowlist: Vec<String>,
+        inc_dir: PathBuf) -> Self {
+        IncludeCpp {
+            inclusions,
+            allowlist,
+            inc_dir
+        }
+    }
+
+    fn new_from_parse_stream(input: ParseStream) -> Result<Self> {
         input.parse::<syn::Token![<]>()?;
         let hdr = input.parse::<syn::Ident>()?;
         input.parse::<syn::Token![>]>()?;
@@ -61,27 +83,9 @@ impl Parse for IncludeCpp {
             inc_dir: sourcedir,
         })
     }
-}
 
-impl IncludeCpp {
-    #[cfg(test)]
-    pub fn new(inclusions: Vec<CppInclusion>,
-        allowlist: Vec<String>,
-        inc_dir: PathBuf) -> Self {
-        IncludeCpp {
-            inclusions,
-            allowlist,
-            inc_dir
-        }
-    }
-
-    pub fn fromSyn(mac: ItemMacro) -> Self {
-        // TODO populate fields
-        IncludeCpp {
-            inclusions: vec![],
-            allowlist: vec![],
-            inc_dir: PathBuf::new(),
-        }
+    pub fn new_from_syn(mac: ItemMacro) -> Result<Self> {
+        syn::parse2::<Self>(mac.into_token_stream())
     }
 
     fn build_header(&self) -> String {
