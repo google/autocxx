@@ -61,13 +61,20 @@ and a hacked-up version of cxx.
 To try it out,
 
 * Fetch the code using git.
-* `cargo test ---- --test-threads=1`.
+* `cargo update`
+* `cargo test --all -- --test-threads=1`.
 
 This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency. The same applies to cxx.
 
 At present, many of the tests fail, and thus the test run fails overall. Individual tests can be run, and some pass.
 
-More tests fail if they run in parallel, hence why you should use `cargo test --all -- --test-threads=1`.
+Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
+
+* It requires Rust nightly due to `#[proc_macro_span]`
+* Tests fail if they run in parallel, hence why you should use `cargo test --all -- --test-threads=1`. Looks perhaps like `bindgen` has global state.
+* On Linux including any system header: `bindgen` generates `pub type __uint32_t = ::std::os::raw::c_uint;` which `cxx` can't cope with. This is just a matter of munging `bindgen` more. This currently stops the demo building on my Linux box, and prevents all but one test passing.
+* On Linux using `cargo` 1.47 nightly: `trybuild` is unable to pull in dependencies from git repositories because it's in offline mode. Running `cargo update` first seems to solve this.
+* (Fixed, I think: On Linux: tests fail: `cc` can't link because it can't find `__gxx_personality_v0`; resolved by adding another `-lstdc++` argument at the end of the `rustc` linker line.)
 
 # Directory structure
 
