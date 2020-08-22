@@ -125,7 +125,9 @@ impl IncludeCpp {
         let mut inc_dir_paths = Vec::new();
         for inc_dir in inc_dirs {
             let p: PathBuf = inc_dir.into();
-            let p = p.canonicalize().map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p))?;
+            let p = p
+                .canonicalize()
+                .map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p))?;
             inc_dir_paths.push(p);
         }
         Ok(inc_dir_paths)
@@ -186,7 +188,6 @@ impl IncludeCpp {
     }
 }
 
-
 /// This outermost crate currently just contains integration tests
 /// for all the other crates. That's a bit of an odd arrangement, and
 /// maybe needs revisiting.
@@ -199,7 +200,6 @@ mod tests {
     use quote::quote;
     use std::fs::File;
     use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
     use tempfile::{tempdir, TempDir};
     use test_env_log::test;
@@ -220,8 +220,10 @@ mod tests {
         //         program including include_cxx!
         // TODO - we're not quoting #s below (in the "" sense), and it's not entirely
         // clear how we're getting away with it, but quoting it doesn't work.
-        let allowed_funcs = allowed_funcs.iter().map(|s| quote! {
-            Allow(#s)
+        let allowed_funcs = allowed_funcs.iter().map(|s| {
+            quote! {
+                Allow(#s)
+            }
         });
         let expanded_rust = quote! {
             use autocxx_macro::include_cxx;
