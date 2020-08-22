@@ -25,7 +25,7 @@ include_cxx!(
     Allow("Bob"),
 )
 
-let a = ffi::base::bob::make_unique("hello".into());
+let a = ffi::base::Bob::make_unique("hello".into());
 a.do_a_thing();
 ```
 
