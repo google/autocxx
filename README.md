@@ -84,8 +84,6 @@ For some reason, more tests fail if they run in parallel, hence why you should u
 
 Plans:
 
-* Rationalize the test code so it uses more of the facilities from `engine` (which didn't
-  mostly exist when I wrote the test code)
 * Upstream the `cxx` change if possible.
 * Fix a few of the annoying TODOs (the oddest one being in `demo/build.rs`)
 * Then, start working on the `bindgen` fork to add support for more C++ types and see

@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/// This outermost crate currently just contains integration tests
+/// for all the other crates. That's a bit of an odd arrangement, and
+/// maybe needs revisiting.
 #[cfg(test)]
 mod tests {
 
-    use autocxx_engine::{CppInclusion, IncludeCpp};
     use indoc::indoc;
     use log::info;
     use proc_macro2::TokenStream;
@@ -36,31 +38,23 @@ mod tests {
     }
 
     fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_funcs: &[&str]) {
-        //println!("C++ is {}, Rust is {}", cxx_code, rust_code);
-        // To do...
         // Step 1: Write the C++ header snippet to a temp file
         let tdir = tempdir().unwrap();
         write_to_file(&tdir, "input.h", header_code);
-        // Step 2: Modify the Rust code to add:
-        //         include_cxx!(path to header, allowlist)
-        //         and also #[link(name="foo", kind="static")]
-        //         Ensure that the TokenStream passed to us is contained
-        //         within a main() function.
-        // TODO - at the moment we're expanding this in the test
-        // code, which is cheating. In the real world, cxxbridge
-        // would need to know how to expand include_cxx!
-        // to make a #[cxx::bridge] mod. Because that's not currently
-        // possible, there's no way that any of this can work outside
-        // of this test code environment. Yet.
-        let allowed_funcs = allowed_funcs.iter().map(|s| (*s).to_string()).collect();
-        let incl_cpp = IncludeCpp::new(
-            vec![CppInclusion::Header("input.h".to_string())],
-            allowed_funcs,
-            tdir.path().to_path_buf(),
-        );
-        let bindings = incl_cpp.generate_rs();
+        // Step 2: Expand the snippet of Rust code into an entire
+        //         program including include_cxx!
+        // TODO - we're not quoting #s below (in the "" sense), and it's not entirely
+        // clear how we're getting away with it, but quoting it doesn't work.
+        let allowed_funcs = allowed_funcs.iter().map(|s| quote! {
+            Allow(#s)
+        });
         let expanded_rust = quote! {
-            #bindings
+            use autocxx_macro::include_cxx;
+
+            include_cxx!(
+                Header("input.h"),
+                #(#allowed_funcs),*
+            );
 
             fn main() {
                 #rust_code
@@ -75,26 +69,16 @@ mod tests {
         let cxx_code = format!("#include \"{}\"\n{}", "input.h", cxx_code);
         let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
 
-        // Step 5: Run cxxbridge over the Rust file (or the programmatic equivalent)
-        //         It should emit a .cc and a .h file
-
         info!("Path is {:?}", tdir.path());
-        // TODO replace nearly all the following code with code from gen/build
         // TODO - find a better way to feed the OUT_DIR to cxx than this.
         let target_dir = tdir.path().join("target");
         std::fs::create_dir(&target_dir).unwrap();
         std::env::set_var("OUT_DIR", &target_dir);
+        std::env::set_var("AUTOCXX_INC", tdir.path());
         let target = rust_info::get().target_triple.unwrap();
-        let (hdr, cc) = cxx_gen::generate_header_and_cc(expanded_rust).unwrap();
-        write_to_file(&tdir, "output.h", std::str::from_utf8(&hdr).unwrap());
-        let gen_cxx_path = write_to_file(&tdir, "output.cxx", std::str::from_utf8(&cc).unwrap());
-
-        // Step 7: Use the cc crate to build a static library from both .cc files
-        //         ensuring it matches the name you gave in step 2
-        cc::Build::new()
-            .file(gen_cxx_path)
+        let mut b = autocxx_build::Builder::new(&rs_path).unwrap();
+        b.builder()
             .file(cxx_path)
-            .cpp(true)
             .host(&target)
             .target(&target)
             .opt_level(1)
