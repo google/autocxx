@@ -56,28 +56,44 @@ impl IncludeCpp {
     }
 
     fn new_from_parse_stream(input: ParseStream) -> Result<Self> {
-        input.parse::<syn::Token![<]>()?;
-        let hdr = input.parse::<syn::Ident>()?;
-        input.parse::<syn::Token![>]>()?;
-        input.parse::<syn::Token![,]>()?;
-        input.parse::<syn::Token![<]>()?;
-        let allow = input.parse::<syn::Ident>()?;
-        input.parse::<syn::Token![>]>()?;
         // TODO: Takes as inputs:
         // 1. List of headers to include
         // 2. List of #defines to include
         // 3. Allowlist
+
+        let mut inclusions = Vec::new();
+        let mut allowlist = Vec::new();
+
+        while !input.is_empty() {
+            let ident: syn::Ident = input.parse()?;
+            if ident == "Header" {
+                let args;
+                syn::parenthesized!(args in input);
+                let hdr: syn::LitStr = args.parse()?;
+                inclusions.push(CppInclusion::Header(hdr.value()));
+            } else if ident == "Allow" {
+                let args;
+                syn::parenthesized!(args in input);
+                let allow: syn::LitStr = args.parse()?;
+                allowlist.push(allow.value());
+            } else {
+                return Err(syn::Error::new(ident.span(), "expected Header or Allow"));
+            }
+            if input.is_empty() {
+                break;
+            }
+            input.parse::<syn::Token![,]>()?;
+        }
+
         // TODO AUTOCXX_INC handling should not panic, and
         // we probably want better behavior
-        // TODO the syntax above is insane.
-        let full_header_name = format!("{}.h", hdr.to_string());
         let sourcedir: PathBuf = std::env::var_os("AUTOCXX_INC").unwrap().into();
 
         let sourcedir = sourcedir.canonicalize().unwrap();
         debug!("Including dir {:?}", sourcedir);
         Ok(IncludeCpp {
-            inclusions: vec![CppInclusion::Header(full_header_name)],
-            allowlist: vec![allow.to_string()],
+            inclusions,
+            allowlist,
             inc_dir: sourcedir,
         })
     }
