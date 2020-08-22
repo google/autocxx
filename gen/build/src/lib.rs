@@ -60,28 +60,28 @@ impl Builder {
         // cxx jumps through many (probably very justifiable) hoops
         // to generate .h and .cxx files in the Cargo out directory
         // (I think). We cheat and just make a temp dir. We shouldn't.
-        let tdir = tempdir().map_err(|e| Error::TempDirCreationFailed(e))?;
+        let tdir = tempdir().map_err(Error::TempDirCreationFailed)?;
         let mut builder = cc::Build::new();
         builder.cpp(true);
-        let source = fs::read_to_string(rs_file).map_err(|e| Error::FileReadError(e))?;
+        let source = fs::read_to_string(rs_file).map_err(Error::FileReadError)?;
         // TODO - put this macro-finding code into the 'engine'
         // directory such that it can be shared with gen/cmd.
         // However, the use of cc::Build is unique to gen/build.
-        let source = syn::parse_file(&source).map_err(|e| Error::Syntax(e))?;
+        let source = syn::parse_file(&source).map_err(Error::Syntax)?;
         let mut counter = 0;
         for item in source.items {
             if let Item::Macro(mac) = item {
                 if mac.mac.path.is_ident("include_cxx") {
                     let include_cpp = autocxx_engine::IncludeCpp::new_from_syn(mac.mac)
-                        .map_err(|e| Error::MacroParseFail(e))?;
+                        .map_err(Error::MacroParseFail)?;
                     builder.include(include_cpp.include_dir());
                     let (_, cxx) = include_cpp
                         .generate_h_and_cxx()
-                        .map_err(|e| Error::InvalidCxx(e))?;
+                        .map_err(Error::InvalidCxx)?;
                     let fname = format!("gen{}.cxx", counter);
                     counter += 1;
                     let gen_cxx_path = Self::write_to_file(&tdir, &fname, &cxx)
-                        .map_err(|e| Error::FileWriteFail(e))?;
+                        .map_err(Error::FileWriteFail)?;
                     builder.file(gen_cxx_path);
                 }
             }
