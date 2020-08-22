@@ -53,6 +53,7 @@ autocxx-build = { path="../gen/build" }
 # This is necessary for building the projects created
 # by the trybuild test system...
 autocxx-macro = { path="../macro" }
+link-cplusplus = "1.0"
 
 # ... and this too.
 [dev-dependencies.cxx]
