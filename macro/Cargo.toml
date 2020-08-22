@@ -28,6 +28,7 @@ proc-macro = true
 
 [dependencies]
 autocxx-engine = { path="../engine" }
+proc-macro-error = "1.0"
 
 [dependencies.syn]
 version = "1.0"
