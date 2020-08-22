@@ -65,7 +65,7 @@ This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and 
 
 At present, many of the tests fail, and thus the test run fails overall. Individual tests can be run, and some pass.
 
-For some reason, more tests fail if they run in parallel, hence why you should use `cargo test -- --test-threads=1`.
+More tests fail if they run in parallel, hence why you should use `cargo test -- --test-threads=1`.
 
 # Directory structure
 
@@ -75,7 +75,7 @@ For some reason, more tests fail if they run in parallel, hence why you should u
   into all the other sub-crates. All the following three sub-crates are thin wrappers
   for part of this engine.
 * `macro` - the procedural macro `include_cxx` as described above.
-* `gen/build` - an object to be used from `build.rs` scripts to generate .cc and .h
+* `gen/build` - a library to be used from `build.rs` scripts to generate .cc and .h
   files from an `include_cxx` section.
 * `gen/cmd` - a command-line tool which does the same. Except this isn't written yet.
 * `src` - currently, test code.

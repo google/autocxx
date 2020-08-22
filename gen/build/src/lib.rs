@@ -39,6 +39,9 @@ pub enum Error {
     NoIncludeCxxMacrosFound,
     /// Unable to parse the include_cxx macro.
     MacroParseFail(EngineError),
+    /// Problem converting the `AUTOCXX_INC` environment variable
+    /// to a set of canonical paths.
+    IncludeDirProblem(EngineError),
 }
 
 /// Structure for use in a build.rs file to aid with conversion
@@ -49,6 +52,8 @@ pub enum Error {
 /// Typically you'd use this from a build.rs file by
 /// using `new` and then using `builder` to fetch the `cc::Build`
 /// object and asking the resultant `cc::Build` to compile the code.
+/// You'll also need to set the `AUTOCXX_INC` environment variable
+/// to specify the path for finding header files.
 pub struct Builder {
     build: cc::Build,
     _tdir: TempDir,
@@ -75,7 +80,9 @@ impl Builder {
                 if mac.mac.path.is_ident("include_cxx") {
                     let include_cpp = autocxx_engine::IncludeCpp::new_from_syn(mac.mac)
                         .map_err(Error::MacroParseFail)?;
-                    builder.include(include_cpp.include_dir());
+                    for inc_dir in include_cpp.include_dirs().map_err(Error::IncludeDirProblem)? {
+                        builder.include(inc_dir);
+                    }
                     let generated_code = include_cpp
                         .generate_h_and_cxx()
                         .map_err(Error::InvalidCxx)?;

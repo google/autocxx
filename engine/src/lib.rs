@@ -24,6 +24,7 @@ use cxx_gen::GeneratedCode;
 use syn::{ItemMod, Macro};
 
 use log::debug;
+use osstrtools::OsStrTools;
 
 #[derive(Debug)]
 pub enum Error {
@@ -31,6 +32,8 @@ pub enum Error {
     Bindgen(()),
     CxxGen(cxx_gen::Error),
     Parsing(syn::Error),
+    NoAutoCxxInc,
+    CouldNotCanoncalizeIncludeDir(PathBuf),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -48,7 +51,6 @@ pub enum CppInclusion {
 pub struct IncludeCpp {
     inclusions: Vec<CppInclusion>,
     allowlist: Vec<String>,
-    inc_dir: PathBuf, // TODO make more versatile
 }
 
 impl Parse for IncludeCpp {
@@ -58,16 +60,6 @@ impl Parse for IncludeCpp {
 }
 
 impl IncludeCpp {
-    /// Only used from test code, but as the test code is not currently
-    /// in this binary, we can't use #cfg(test). TODO - fix by moving test code to here.
-    pub fn new(inclusions: Vec<CppInclusion>, allowlist: Vec<String>, inc_dir: PathBuf) -> Self {
-        IncludeCpp {
-            inclusions,
-            allowlist,
-            inc_dir,
-        }
-    }
-
     fn new_from_parse_stream(input: ParseStream) -> syn::Result<Self> {
         // TODO: Takes as inputs:
         // 1. List of headers to include
@@ -98,16 +90,9 @@ impl IncludeCpp {
             input.parse::<syn::Token![,]>()?;
         }
 
-        // TODO AUTOCXX_INC handling should not panic, and
-        // we probably want better behavior
-        // Multiple include dirs will of course be necessary too.
-        let sourcedir: PathBuf = std::env::var_os("AUTOCXX_INC").unwrap().into();
-        let sourcedir = sourcedir.canonicalize().unwrap();
-        debug!("Including dir {:?}", sourcedir);
         Ok(IncludeCpp {
             inclusions,
             allowlist,
-            inc_dir: sourcedir,
         })
     }
 
@@ -127,19 +112,43 @@ impl IncludeCpp {
         s
     }
 
-    fn make_bindgen_builder(&self) -> bindgen::Builder {
+    fn determine_incdirs(&self) -> Result<Vec<PathBuf>> {
+        let inc_dirs = std::env::var_os("AUTOCXX_INC").ok_or(Error::NoAutoCxxInc)?;
+        // TODO consider if we can or should look up the include path automatically
+        // instead of requiring callers always to set AUTOCXX_INC.
+        let multi_path_separator = if std::path::MAIN_SEPARATOR == '/' {
+            b':'
+        } else {
+            b';'
+        }; // there's probably a crate for this
+        let splitter = [multi_path_separator];
+        let inc_dirs = inc_dirs.split(&splitter[0..1]);
+        let mut inc_dir_paths = Vec::new();
+        for inc_dir in inc_dirs {
+            let p: PathBuf = inc_dir.into();
+            let p = p.canonicalize().map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p))?;
+            inc_dir_paths.push(p);
+        }
+        Ok(inc_dir_paths)
+    }
+
+    fn make_bindgen_builder(&self) -> Result<bindgen::Builder> {
+        let inc_dirs = self.determine_incdirs()?;
+
         let full_header = self.build_header();
         debug!("Full header: {}", full_header);
-        debug!("Inc dir: {}", self.inc_dir.display());
+        debug!("Inc dir: {:?}", inc_dirs);
 
         // TODO - pass headers in &self.inclusions into
         // bindgen such that it can include them in the generated
         // extern "C" section as include!
         // The .hpp below is important so bindgen works in C++ mode
         // TODO work with OsStrs here to avoid the .display()
-        let mut builder = bindgen::builder()
-            .clang_arg(format!("-I{}", self.inc_dir.display()))
-            .header_contents("example.hpp", &full_header);
+        let mut builder = bindgen::builder();
+        for inc_dir in inc_dirs {
+            builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
+        }
+        builder = builder.header_contents("example.hpp", &full_header);
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
         for a in &self.allowlist {
@@ -147,7 +156,7 @@ impl IncludeCpp {
             builder = builder.whitelist_type(a);
             builder = builder.whitelist_function(a);
         }
-        builder
+        Ok(builder)
     }
 
     pub fn generate_rs(self) -> Result<TokenStream2> {
@@ -158,7 +167,7 @@ impl IncludeCpp {
         // 1. Builds an overall C++ header with all those #defines and #includes
         // 2. Passes it to bindgen::Builder::header
         let bindings = self
-            .make_bindgen_builder()
+            .make_bindgen_builder()?
             .generate()
             .map_err(Error::Bindgen)?;
         // TODO see what that type is and whether we can avoid reparsing.
@@ -175,7 +184,7 @@ impl IncludeCpp {
         cxx_gen::generate_header_and_cc(rs).map_err(Error::CxxGen)
     }
 
-    pub fn include_dir(&self) -> &PathBuf {
-        &self.inc_dir
+    pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
+        self.determine_incdirs()
     }
 }
