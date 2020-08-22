@@ -61,13 +61,13 @@ and a hacked-up version of cxx.
 To try it out,
 
 * Fetch the code using git.
-* `cargo test -- --test-threads=1`.
+* `cargo test ---- --test-threads=1`.
 
 This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency. The same applies to cxx.
 
 At present, many of the tests fail, and thus the test run fails overall. Individual tests can be run, and some pass.
 
-More tests fail if they run in parallel, hence why you should use `cargo test -- --test-threads=1`.
+More tests fail if they run in parallel, hence why you should use `cargo test --all -- --test-threads=1`.
 
 # Directory structure
 
@@ -75,12 +75,12 @@ More tests fail if they run in parallel, hence why you should use `cargo test --
 * `engine` - all the core code. Currently a Rust library, but we wouldn't want to support
   these APIs for external users, so maybe it needs to be a directory of code symlinked
   into all the other sub-crates. All the following three sub-crates are thin wrappers
-  for part of this engine.
+  for part of this engine. This also contains the test code.
 * `macro` - the procedural macro `include_cxx` as described above.
 * `gen/build` - a library to be used from `build.rs` scripts to generate .cc and .h
   files from an `include_cxx` section.
 * `gen/cmd` - a command-line tool which does the same. Except this isn't written yet.
-* `src` - currently, test code.
+* `src` - currently, nothing.
 
 # Next steps
 

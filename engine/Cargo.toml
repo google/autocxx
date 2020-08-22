@@ -40,3 +40,21 @@ branch = "cxx-embedding-lib"
 [dependencies.syn]
 version = "1.0"
 features = [ "full" ]
+
+[dev-dependencies]
+indoc = "1.0"
+tempfile = "3.1"
+trybuild = "1.0"
+test-env-log = "0.2.2"
+env_logger = "*"
+rust_info = "0.3.1"
+cc = "1.0"
+autocxx-build = { path="../gen/build" }
+# This is necessary for building the projects created
+# by the trybuild test system...
+autocxx-macro = { path="../macro" }
+
+# ... and this too.
+[dev-dependencies.cxx]
+git = "https://github.com/adetaylor/cxx"
+branch = "cxx-embedding-lib"
