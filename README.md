@@ -29,8 +29,10 @@ let a = ffi::base::Bob::make_unique("hello".into());
 a.do_a_thing();
 ```
 
-The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string` - so the Rust code should
-not typically require use of unsafe code, unlike with normal `bindgen` bindings.
+The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string` - so the Rust code should not typically require use of unsafe code, unlike with normal `bindgen` bindings.
+
+The macro and code generator will both need to know the include path to be passed to bindgen. At the moment, this is passed in via an
+environment variable, `AUTOCXX_INC`. See the `demo/build.rs` file for details.
 
 # How it works
 
@@ -47,7 +49,7 @@ The same code can be passed through tools that generate .cc and .h bindings too:
 # Current state of affairs
 
 There is an example of this macro working within the `demo` directory. At the
-moment, it will work with only the very simplest functions.
+moment, it will work with only the very simplest functions (ints and voids only)!
 
 The project also contains test code which does this end-to-end, for all sorts of C++ types and constructs which we eventually would like to support. They nearly all fail :)
 
