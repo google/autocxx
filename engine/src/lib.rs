@@ -145,7 +145,8 @@ impl IncludeCpp {
         // extern "C" section as include!
         // The .hpp below is important so bindgen works in C++ mode
         // TODO work with OsStrs here to avoid the .display()
-        let mut builder = bindgen::builder();
+        let mut builder = bindgen::builder()
+            .clang_args(&["-x", "c++", "-std=c++14"]);
         for inc_dir in inc_dirs {
             builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
         }

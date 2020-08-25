@@ -71,10 +71,10 @@ At present, many of the tests fail, and thus the test run fails overall. Individ
 Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
 
 * It requires Rust nightly due to `#[proc_macro_span]`
+* It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/print.html#requirements)
 * Tests fail if they run in parallel, hence why you should use `cargo test --all -- --test-threads=1`. Looks perhaps like `bindgen` has global state.
 * On Linux including any system header: `bindgen` generates `pub type __uint32_t = ::std::os::raw::c_uint;` which `cxx` can't cope with. This is just a matter of munging `bindgen` more. This currently stops the demo building on my Linux box, and prevents all but one test passing.
 * On Linux using `cargo` 1.47 nightly: `trybuild` is unable to pull in dependencies from git repositories because it's in offline mode. Running `cargo update` first seems to solve this.
-* (Fixed, I think: On Linux: tests fail: `cc` can't link because it can't find `__gxx_personality_v0`; resolved by adding another `-lstdc++` argument at the end of the `rustc` linker line.)
 
 # Directory structure
 
