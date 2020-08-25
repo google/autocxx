@@ -187,7 +187,7 @@ impl IncludeCpp {
             .generate()
             .map_err(Error::Bindgen)?;
         let bindings = bindings.to_string();
-        println!("Bindings: {}", bindings);
+        debug!("Bindings: {}", bindings);
         let bindings = syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)?;
         let mut ts = TokenStream2::new();
         bindings.to_tokens(&mut ts);
@@ -196,7 +196,14 @@ impl IncludeCpp {
 
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCode> {
         let rs = self.generate_rs()?;
-        cxx_gen::generate_header_and_cc(rs).map_err(Error::CxxGen)
+        let mut opt = cxx_gen::Opt::default();
+        opt.omit_type_definitions = true;
+        let results = cxx_gen::generate_header_and_cc(rs, opt).map_err(Error::CxxGen);
+        if let Ok(ref gen) = results {
+            debug!("CXX: {}", String::from_utf8(gen.cxx.clone()).unwrap());
+            debug!("header: {}", String::from_utf8(gen.header.clone()).unwrap());
+        }
+        results
     }
 
     pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
