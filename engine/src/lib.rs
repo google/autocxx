@@ -146,7 +146,10 @@ impl IncludeCpp {
         // TODO work with OsStrs here to avoid the .display()
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14"])
-            .cxx_bridge(true);
+            .cxx_bridge(true)
+            .derive_copy(false)
+            .derive_debug(false)
+            .layout_tests(false); // TODO revisit later
         for incl in &self.inclusions {
             match incl {
                 CppInclusion::Header(ref hdr) => {
@@ -184,7 +187,7 @@ impl IncludeCpp {
             .generate()
             .map_err(Error::Bindgen)?;
         let bindings = bindings.to_string();
-        debug!("Bindings: {}", bindings);
+        println!("Bindings: {}", bindings);
         let bindings = syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)?;
         let mut ts = TokenStream2::new();
         bindings.to_tokens(&mut ts);
