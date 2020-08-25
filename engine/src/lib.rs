@@ -23,7 +23,7 @@ use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use cxx_gen::GeneratedCode;
 use syn::{ItemMod, Macro};
 
-use log::debug;
+use log::{debug, warn};
 use osstrtools::OsStrTools;
 
 #[derive(Debug)]
@@ -143,10 +143,22 @@ impl IncludeCpp {
         // TODO - pass headers in &self.inclusions into
         // bindgen such that it can include them in the generated
         // extern "C" section as include!
-        // The .hpp below is important so bindgen works in C++ mode
         // TODO work with OsStrs here to avoid the .display()
         let mut builder = bindgen::builder()
-            .clang_args(&["-x", "c++", "-std=c++14"]);
+            .clang_args(&["-x", "c++", "-std=c++14"])
+            .cxx_bridge(true);
+        for incl in &self.inclusions {
+            match incl {
+                CppInclusion::Header(ref hdr) => {
+                    builder = builder.cxx_bridge_extern_c_line(hdr);
+                }
+                CppInclusion::Define(ref def) => {
+                    warn!("Not currently able to inform cxx about #define {}", def);
+                    // TODO consider enhancing cxx here
+                }
+            }
+        }
+
         for inc_dir in inc_dirs {
             builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
         }
@@ -273,8 +285,6 @@ mod tests {
         std::env::set_var("RUSTFLAGS", format!("-L {}", target_dir.to_str().unwrap()));
         let t = trybuild::TestCases::new();
         t.pass(rs_path);
-
-        // Details: the allowlist might need to be split into functions/types/etc. TBD
     }
 
     #[test]

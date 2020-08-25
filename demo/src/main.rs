@@ -15,8 +15,6 @@
 
 use autocxx_macro::include_cxx;
 
-// input.h is currently hardcoded in our hacky fork of bindgen, so don't
-// attempt to change it!
 include_cxx!(
     Header("input.h"),
     Allow("DoMath"),
