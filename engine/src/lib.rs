@@ -150,7 +150,7 @@ impl IncludeCpp {
         for incl in &self.inclusions {
             match incl {
                 CppInclusion::Header(ref hdr) => {
-                    builder = builder.cxx_bridge_extern_c_line(hdr);
+                    builder = builder.cxx_bridge_include(hdr);
                 }
                 CppInclusion::Define(ref def) => {
                     warn!("Not currently able to inform cxx about #define {}", def);
