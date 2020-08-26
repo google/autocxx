@@ -577,7 +577,7 @@ mod tests {
                 uint32_t a;
                 uint32_t b;
             };
-            int take_bob(Bob a);
+            uint32_t take_bob(Bob a);
         "};
         let rs = quote! {
             let a = ffi::Bob { a: 12, b: 13 };
