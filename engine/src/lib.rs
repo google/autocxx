@@ -23,7 +23,7 @@ use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use cxx_gen::GeneratedCode;
 use syn::{ItemMod, Macro};
 
-use log::{debug, warn};
+use log::{debug, warn, info};
 use osstrtools::OsStrTools;
 
 #[derive(Debug)]
@@ -196,7 +196,7 @@ impl IncludeCpp {
             .generate()
             .map_err(Error::Bindgen)?;
         let bindings = bindings.to_string();
-        debug!("Bindings: {}", bindings);
+        info!("Bindings: {}", bindings);
         let bindings = syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)?;
         let mut ts = TokenStream2::new();
         bindings.to_tokens(&mut ts);
@@ -209,8 +209,8 @@ impl IncludeCpp {
         opt.omit_type_definitions = true;
         let results = cxx_gen::generate_header_and_cc(rs, opt).map_err(Error::CxxGen);
         if let Ok(ref gen) = results {
-            debug!("CXX: {}", String::from_utf8(gen.cxx.clone()).unwrap());
-            debug!("header: {}", String::from_utf8(gen.header.clone()).unwrap());
+            info!("CXX: {}", String::from_utf8(gen.cxx.clone()).unwrap());
+            info!("header: {}", String::from_utf8(gen.header.clone()).unwrap());
         }
         results
     }
