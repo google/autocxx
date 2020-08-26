@@ -223,9 +223,46 @@ mod tests {
     use quote::quote;
     use std::fs::File;
     use std::io::Write;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
     use tempfile::{tempdir, TempDir};
     use test_env_log::test;
+
+    lazy_static::lazy_static! {
+        static ref BUILDER: Mutex<LinkableTryBuilder> = Mutex::new(LinkableTryBuilder::new());
+    }
+
+    /// TryBuild which maintains a directory of libraries to link.
+    /// This is desirable because otherwise, if we alter the RUSTFLAGS
+    /// then trybuild rebuilds *everything* including all the dev-dependencies.
+    /// This object exists purely so that we use the same RUSTFLAGS for every
+    /// test case.
+    struct LinkableTryBuilder {
+        /// Directory in which we'll keep any linkable libraries
+        temp_dir: TempDir,
+    }
+
+    impl LinkableTryBuilder {
+        fn new() -> Self {
+            LinkableTryBuilder {
+                temp_dir: tempdir().unwrap(),
+            }
+        }
+
+        fn build<P1: AsRef<Path>, P2: AsRef<Path>>(&self, library_path: &P1, rs_path: &P2) {
+            let dest_lib = self
+                .temp_dir
+                .path()
+                .join(library_path.as_ref().file_name().unwrap());
+            std::fs::copy(library_path, dest_lib).unwrap();
+            std::env::set_var(
+                "RUSTFLAGS",
+                format!("-L {}", self.temp_dir.path().to_str().unwrap()),
+            );
+            let t = trybuild::TestCases::new();
+            t.pass(rs_path)
+        }
+    }
 
     fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
         let path = tdir.path().join(filename);
@@ -292,9 +329,10 @@ mod tests {
         // Step 8: use the trybuild crate to build the Rust file.
         // Annoyingly, setting this flag results in trybuild replicating a ton of work
         // for each test case. TODO - solve.
-        std::env::set_var("RUSTFLAGS", format!("-L {}", target_dir.to_str().unwrap()));
-        let t = trybuild::TestCases::new();
-        t.pass(rs_path);
+        BUILDER
+            .lock()
+            .unwrap()
+            .build(&target_dir.join("libautocxx-demo.a"), &rs_path);
     }
 
     #[test]

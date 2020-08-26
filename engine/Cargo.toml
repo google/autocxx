@@ -28,6 +28,7 @@ log = "0.4"
 proc-macro2 = "1.0"
 quote = "1.0"
 osstrtools = "0.2"
+lazy_static = "1.4"
 
 [dependencies.bindgen]
 git = "https://github.com/adetaylor/rust-bindgen"
