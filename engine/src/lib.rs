@@ -344,12 +344,13 @@ mod tests {
         info!("Path is {:?}", tdir.path());
         let target_dir = tdir.path().join("target");
         std::fs::create_dir(&target_dir).unwrap();
-        std::env::set_var("OUT_DIR", &target_dir);
-        std::env::set_var("AUTOCXX_INC", tdir.path());
         let target = rust_info::get().target_triple.unwrap();
-        let mut b = autocxx_build::Builder::new(&rs_path, Some(self.temp_dir.path()), tdir.path()).unwrap();
+        let mut b =
+            autocxx_build::Builder::new(&rs_path, tdir.path().to_str().unwrap())
+                .unwrap();
         b.builder()
             .file(cxx_path)
+            .out_dir(&target_dir)
             .host(&target)
             .target(&target)
             .opt_level(1)

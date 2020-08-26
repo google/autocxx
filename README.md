@@ -62,17 +62,16 @@ To try it out,
 
 * Fetch the code using git.
 * `cargo update`
-* `cargo test --all -- --test-threads=1`.
+* `cargo test --all`
 
 This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency. The same applies to cxx.
 
-At present, many of the tests fail, and thus the test run fails overall. Individual tests can be run, and some pass.
+At present, four of the tests pass.
 
 Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
 
 * It requires Rust nightly due to `#[proc_macro_span]`
 * It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/print.html#requirements)
-* Tests fail if they run in parallel, hence why you should use `cargo test --all -- --test-threads=1`. Looks perhaps like `bindgen` has global state.
 * On Linux including any system header: `bindgen` generates `pub type __uint32_t = ::std::os::raw::c_uint;` which `cxx` can't cope with. This is just a matter of munging `bindgen` more. This currently stops the demo building on my Linux box, and prevents all but one test passing.
 * On Linux using `cargo` 1.47 nightly: `trybuild` is unable to pull in dependencies from git repositories because it's in offline mode. Running `cargo update` first seems to solve this.
 
@@ -94,7 +93,6 @@ Because this uses `bindgen`, and `bindgen` may depend on the state of your syste
 Plans:
 
 * Upstream the `cxx` change if possible.
-* Fix a few of the annoying TODOs (the oddest one being in `demo/build.rs`)
 * Then, start working on the `bindgen` fork to add support for more C++ types and see
   how far we can get through the test suite.
 

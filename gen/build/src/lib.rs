@@ -61,7 +61,7 @@ pub struct Builder {
 
 impl Builder {
     /// Construct a Builder.
-    pub fn new(rs_file: impl AsRef<Path>) -> Result<Self, Error> {
+    pub fn new<P1: AsRef<Path>>(rs_file: P1, autocxx_inc: &str) -> Result<Self, Error> {
         // TODO - we have taken a different approach here from cxx.
         // cxx jumps through many (probably very justifiable) hoops
         // to generate .h and .cxx files in the Cargo out directory
@@ -78,8 +78,9 @@ impl Builder {
         for item in source.items {
             if let Item::Macro(mac) = item {
                 if mac.mac.path.is_ident("include_cxx") {
-                    let include_cpp = autocxx_engine::IncludeCpp::new_from_syn(mac.mac)
+                    let mut include_cpp = autocxx_engine::IncludeCpp::new_from_syn(mac.mac)
                         .map_err(Error::MacroParseFail)?;
+                    include_cpp.set_include_dirs(autocxx_inc);
                     for inc_dir in include_cpp.include_dirs().map_err(Error::IncludeDirProblem)? {
                         builder.include(inc_dir);
                     }

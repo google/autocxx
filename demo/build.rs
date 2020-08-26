@@ -17,8 +17,7 @@ fn main() {
     // C++ codegen and the macro codegen appears to be run from different
     // working directories.
     let path = std::path::PathBuf::from("src").canonicalize().unwrap();
-    std::env::set_var("AUTOCXX_INC", &path);
-    let mut b = autocxx_build::Builder::new("src/main.rs").unwrap();
+    let mut b = autocxx_build::Builder::new("src/main.rs", &path.to_str().unwrap()).unwrap();
     b.builder()
         .flag_if_supported("-std=c++14")
         .compile("autocxx-demo");
