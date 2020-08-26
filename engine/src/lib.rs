@@ -240,12 +240,14 @@ mod tests {
     struct LinkableTryBuilder {
         /// Directory in which we'll keep any linkable libraries
         temp_dir: TempDir,
+        test_cases: trybuild::TestCases,
     }
 
     impl LinkableTryBuilder {
         fn new() -> Self {
             LinkableTryBuilder {
                 temp_dir: tempdir().unwrap(),
+                test_cases: trybuild::TestCases::new(),
             }
         }
 
@@ -281,8 +283,7 @@ mod tests {
                 "RUSTFLAGS",
                 format!("-L {}", self.temp_dir.path().to_str().unwrap()),
             );
-            let t = trybuild::TestCases::new();
-            t.pass(rs_path)
+            self.test_cases.pass(rs_path)
         }
     }
 
