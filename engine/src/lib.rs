@@ -50,6 +50,7 @@ pub enum CppInclusion {
 pub struct IncludeCpp {
     inclusions: Vec<CppInclusion>,
     allowlist: Vec<String>,
+    preconfigured_inc_dirs: Option<std::ffi::OsString>,
 }
 
 impl Parse for IncludeCpp {
@@ -92,11 +93,16 @@ impl IncludeCpp {
         Ok(IncludeCpp {
             inclusions,
             allowlist,
+            preconfigured_inc_dirs: None,
         })
     }
 
     pub fn new_from_syn(mac: Macro) -> Result<Self> {
         mac.parse_body::<IncludeCpp>().map_err(Error::Parsing)
+    }
+
+    pub fn set_include_dirs<P: AsRef<std::ffi::OsStr>>(&mut self, include_dirs: P) {
+        self.preconfigured_inc_dirs = Some(include_dirs.as_ref().into());
     }
 
     fn build_header(&self) -> String {
@@ -112,7 +118,10 @@ impl IncludeCpp {
     }
 
     fn determine_incdirs(&self) -> Result<Vec<PathBuf>> {
-        let inc_dirs = std::env::var_os("AUTOCXX_INC").ok_or(Error::NoAutoCxxInc)?;
+        let inc_dirs = match &self.preconfigured_inc_dirs {
+            Some(d) => d.clone(),
+            None => std::env::var_os("AUTOCXX_INC").ok_or(Error::NoAutoCxxInc)?,
+        };
         // TODO consider if we can or should look up the include path automatically
         // instead of requiring callers always to set AUTOCXX_INC.
         let multi_path_separator = if std::path::MAIN_SEPARATOR == '/' {
@@ -333,13 +342,12 @@ mod tests {
         let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
 
         info!("Path is {:?}", tdir.path());
-        // TODO - find a better way to feed the OUT_DIR to cxx than this.
         let target_dir = tdir.path().join("target");
         std::fs::create_dir(&target_dir).unwrap();
         std::env::set_var("OUT_DIR", &target_dir);
         std::env::set_var("AUTOCXX_INC", tdir.path());
         let target = rust_info::get().target_triple.unwrap();
-        let mut b = autocxx_build::Builder::new(&rs_path).unwrap();
+        let mut b = autocxx_build::Builder::new(&rs_path, Some(self.temp_dir.path()), tdir.path()).unwrap();
         b.builder()
             .file(cxx_path)
             .host(&target)
