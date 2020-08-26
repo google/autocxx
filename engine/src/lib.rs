@@ -249,12 +249,34 @@ mod tests {
             }
         }
 
-        fn build<P1: AsRef<Path>, P2: AsRef<Path>>(&self, library_path: &P1, rs_path: &P2) {
-            let dest_lib = self
-                .temp_dir
-                .path()
-                .join(library_path.as_ref().file_name().unwrap());
-            std::fs::copy(library_path, dest_lib).unwrap();
+        fn copy_libraries_into_temp_dir<P1: AsRef<Path>>(
+            &self,
+            library_path: &P1,
+            library_name: &str,
+        ) {
+            for item in std::fs::read_dir(library_path).unwrap() {
+                let item = item.unwrap();
+                if item
+                    .file_name()
+                    .into_string()
+                    .unwrap()
+                    .contains(library_name)
+                {
+                    let dest_lib = self.temp_dir.path().join(item.file_name());
+                    std::fs::copy(item.path(), dest_lib).unwrap();
+                }
+            }
+        }
+
+        fn build<P1: AsRef<Path>, P2: AsRef<Path>>(
+            &self,
+            library_path: &P1,
+            library_name: &str,
+            rs_path: &P2,
+        ) {
+            // Copy all items from the source dir into our temporary dir if their name matches
+            // the pattern given in `library_name`.
+            self.copy_libraries_into_temp_dir(library_path, library_name);
             std::env::set_var(
                 "RUSTFLAGS",
                 format!("-L {}", self.temp_dir.path().to_str().unwrap()),
@@ -327,12 +349,10 @@ mod tests {
             .try_compile("autocxx-demo")
             .unwrap();
         // Step 8: use the trybuild crate to build the Rust file.
-        // Annoyingly, setting this flag results in trybuild replicating a ton of work
-        // for each test case. TODO - solve.
         BUILDER
             .lock()
             .unwrap()
-            .build(&target_dir.join("libautocxx-demo.a"), &rs_path);
+            .build(&target_dir, "autocxx-demo", &rs_path);
     }
 
     #[test]
