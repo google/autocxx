@@ -22,6 +22,7 @@ use syn::parse::{Parse, ParseStream, Result as ParseResult};
 
 use cxx_gen::GeneratedCode;
 use syn::{ItemMod, Macro};
+use indoc::indoc;
 
 use log::{debug, warn, info};
 use osstrtools::OsStrTools;
@@ -59,9 +60,26 @@ impl Parse for IncludeCpp {
     }
 }
 
+/// Prelude of C++ for squirting into bindgen. This configures
+/// bindgen to output simpler types to replace some STL types
+/// that bindgen just can't cope with. Although we then replace
+/// those types with cxx types (e.g. UniquePtr), this intermediate
+/// step is still necessary because bindgen can't otherwise
+/// give us the templated types (e.g. when faced with the STL
+/// unique_ptr, bindgen would normally give us std_unique_ptr
+/// as opposed to std_unique_ptr<T>.)
+static PRELUDE: &str = indoc! {"
+    /**
+    * <div rustbindgen=\"true\" replaces=\"std::unique_ptr\">
+    */
+    template<typename T> class UniquePtr {
+        T* ptr;
+    };
+    \n"};
+
 impl IncludeCpp {
     fn new_from_parse_stream(input: ParseStream) -> syn::Result<Self> {
-        // TODO: Takes as inputs:
+        // Takes as inputs:
         // 1. List of headers to include
         // 2. List of #defines to include
         // 3. Allowlist
@@ -106,7 +124,7 @@ impl IncludeCpp {
     }
 
     fn build_header(&self) -> String {
-        let mut s = String::new();
+        let mut s = PRELUDE.to_string();
         for incl in &self.inclusions {
             let text = match incl {
                 CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
@@ -156,6 +174,8 @@ impl IncludeCpp {
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14"])
             .cxx_bridge(true)
+            .blacklist_item(".*default.*")
+            .blacklist_item(".*unique_ptr.*")
             .derive_copy(false)
             .derive_debug(false)
             .layout_tests(false); // TODO revisit later
@@ -217,6 +237,24 @@ impl IncludeCpp {
 
     pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
         self.determine_incdirs()
+    }
+}
+
+#[derive(Debug)]
+struct CxxBridgeParseCallbacks;
+
+impl bindgen::callbacks::ParseCallbacks for CxxBridgeParseCallbacks {
+    fn item_name(&self, original_item_name: &str) -> Option<String> {
+        println!("Item: {}", original_item_name);
+        if original_item_name == "basic_string" {
+            Some("CxxString".to_string())
+        } else if original_item_name == "unique_ptr" {
+            Some("UniquePtr".to_string())
+        } else if original_item_name == "default_delete" {
+            Some("FISH".to_string())
+        } else {
+            None
+        }
     }
 }
 
@@ -415,7 +453,7 @@ mod tests {
     }
 
     #[test]
-    fn test_give_up() {
+    fn test_give_up_int() {
         let cxx = indoc! {"
             std::unique_ptr<uint32_t> give_up() {
                 return std::make_unique<uint32_t>(12);
@@ -451,7 +489,7 @@ mod tests {
     }
 
     #[test]
-    fn test_give_string() {
+    fn test_give_string_plain() {
         let cxx = indoc! {"
             std::string give_str() {
                 return std::string(\"Bob\");
@@ -514,6 +552,7 @@ mod tests {
         let allowed_funcs = &["give_str", "take_str"];
         run_test(cxx, hdr, rs, allowed_funcs);
     }
+    // TODO add equivalents for std::string& and const std::string&
 
     #[test]
     fn test_give_pod_by_value() {

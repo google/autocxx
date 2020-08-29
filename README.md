@@ -53,6 +53,18 @@ moment, it will work with only the very simplest functions (ints and voids only)
 
 The project also contains test code which does this end-to-end, for all sorts of C++ types and constructs which we eventually would like to support. They nearly all fail :)
 
+| Type | Status |
+| ---- | ------ |
+| Primitives (u8, etc.) | Works |
+| Plain-old-data structs | Works |
+| UniquePtr | Not yet but getting close |
+| CxxString | - |
+| #defines | - |
+| Constants | - |
+| Enums | - |
+| Structs containing UniquePtr | - |
+| Structs containing strings | - |
+
 # Build environment
 
 This crate is not yet on crates.io and currently depends on a hacked-up version of bindgen
