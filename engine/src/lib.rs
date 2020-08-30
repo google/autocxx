@@ -15,11 +15,9 @@
 #![feature(proc_macro_span)]
 
 use proc_macro2::TokenStream as TokenStream2;
-use proc_macro2::TokenTree as TokenTree2;
 use std::path::PathBuf;
 
 use quote::ToTokens;
-use quote::TokenStreamExt;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 
 use cxx_gen::GeneratedCode;
@@ -30,6 +28,8 @@ use lazy_static::lazy_static;
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use std::collections::HashMap;
+
+mod ident_replacer;
 
 #[derive(Debug)]
 pub enum Error {
@@ -89,6 +89,8 @@ static PRELUDE: &str = indoc! {"
     \n"};
 
 lazy_static! {
+    /// Substitutions from the names constructed by bindgen into those
+    /// which cxx uses.
     static ref IDENT_REPLACEMENTS: HashMap<&'static str, String> = {
         let mut map = HashMap::new();
         map.insert("std_unique_ptr", "UniquePtr".to_string());
@@ -243,33 +245,6 @@ impl IncludeCpp {
         Ok(builder)
     }
 
-    fn post_process_tokentree(&self, bindings: TokenTree2) -> TokenTree2 {
-        match bindings {
-            TokenTree2::Ident(i) => {
-                let name = i.to_string();
-                let e = IDENT_REPLACEMENTS.get(name.as_str());
-                match e {
-                    Some(s) => TokenTree2::Ident(proc_macro2::Ident::new(s, i.span())),
-                    None => TokenTree2::Ident(i),
-                }
-            }
-            TokenTree2::Punct(p) => TokenTree2::Punct(p),
-            TokenTree2::Literal(l) => TokenTree2::Literal(l),
-            TokenTree2::Group(g) => {
-                let delim = g.delimiter();
-                let replacement_tokens = self.post_process_tokenstream(g.stream());
-                TokenTree2::Group(proc_macro2::Group::new(delim, replacement_tokens))
-            }
-        }
-    }
-
-    fn post_process_tokenstream(&self, bindings: TokenStream2) -> TokenStream2 {
-        let mut new_ts = TokenStream2::new();
-        for t in bindings {
-            new_ts.append(self.post_process_tokentree(t));
-        }
-        new_ts
-    }
 
     pub fn generate_rs(self) -> Result<TokenStream2> {
         // 4. (also respects environment variables to pick up more headers,
@@ -290,7 +265,8 @@ impl IncludeCpp {
         // types, e.g. std_unique_ptr -> UniquePtr. It may be that there are
         // ways to use bindgen facilities to do this more efficiently, so this should
         // be considered a hack.
-        let new_bindings = self.post_process_tokenstream(ts);
+        let replacer = ident_replacer::IdentReplacer::new(&IDENT_REPLACEMENTS);
+        let new_bindings = replacer.replace_in_tokenstream(ts);
         info!("New bindings: {}", new_bindings.to_string());
         Ok(new_bindings)
     }
