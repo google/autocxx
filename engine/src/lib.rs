@@ -481,6 +481,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // because cxx doesn't support unique_ptrs to primitives.
     fn test_give_up_int() {
         let cxx = indoc! {"
             std::unique_ptr<uint32_t> give_up() {
@@ -517,6 +518,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // because we don't yet support std::string by value
     fn test_give_string_plain() {
         let cxx = indoc! {"
             std::string give_str() {
@@ -558,6 +560,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // because we don't yet support std::string by value
     fn test_cycle_string() {
         let cxx = indoc! {"
             std::string give_str() {
@@ -729,6 +732,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // because we don't yet support strings in PODs.
     fn test_cycle_pod_with_str_by_value() {
         let cxx = indoc! {"
             uint32_t take_bob(Bob a) {
@@ -745,7 +749,7 @@ mod tests {
                 uint32_t a;
                 std::string b;
             };
-            int take_bob(Bob a);
+            uint32_t take_bob(Bob a);
             std::string get_str();
         "};
         let rs = quote! {
@@ -756,6 +760,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // because we don't yet support strings in PODs.
     fn test_cycle_pod_with_str_by_ref() {
         let cxx = indoc! {"
             uint32_t take_bob(const Bob& a) {
@@ -772,7 +777,7 @@ mod tests {
                 uint32_t a;
                 std::string b;
             };
-            int take_bob(const Bob& a);
+            uint32_t take_bob(const Bob& a);
             std::string get_str();
         "};
         let rs = quote! {
