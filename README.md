@@ -79,7 +79,7 @@ To try it out,
 * `cargo update`
 * `cargo test --all`
 
-This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency. The same applies to cxx.
+This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency. The same applies to cxx. See "next steps" below for the plans to unfork these.
 
 At present, eight of the tests pass.
 
@@ -108,9 +108,12 @@ Because this uses `bindgen`, and `bindgen` may depend on the state of your syste
 
 Plans:
 
-* Upstream the `cxx` change if possible.
-* Then, start working on the `bindgen` fork to add support for more C++ types and see
-  how far we can get through the test suite.
+* Revert to using standard `bindgen` by upgrading the `bridge_converter` to post-process the
+  standard bindgen bindings to turn them into `cxx` bindings.
+* Then, revert to standard `cxx`. dtolnay has kindly accepted the cxx submission, but our
+  tokenstream conversion needs to be a bit more sophisticated before we can adopt upstream
+  `cxx`.
+* Then, work on more types and constructs per the above list.
 
 #### License and usage notes
 
