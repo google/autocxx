@@ -16,18 +16,27 @@ use std::collections::HashMap;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro2::TokenTree as TokenTree2;
 use quote::TokenStreamExt;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    /// Substitutions from the names constructed by bindgen into those
+    /// which cxx uses.
+    static ref IDENT_REPLACEMENTS: HashMap<&'static str, String> = {
+        let mut map = HashMap::new();
+        map.insert("std_unique_ptr", "UniquePtr".to_string());
+        map.insert("std_string", "CxxString".to_string());
+        map
+    };
+}
 
 /// Substitutes given idents in a `TokenStream2`.
 /// It also replaces 'const *' with '&' and '*' with '& mut'
-pub(crate) struct BridgeConverter<'a, 'b> {
-    replacements: &'a HashMap<&'b str, String>,
+pub(crate) struct BridgeConverter {
 }
 
-impl<'a, 'b> BridgeConverter<'a, 'b> {
-    pub fn new(replacements: &'a HashMap<&'b str, String>) -> Self {
-        Self {
-            replacements
-        }
+impl BridgeConverter {
+    pub fn new() -> Self {
+        Self { }
     }
 
     /// Replace certain `Ident`s in a `TokenStream2`.
@@ -38,7 +47,7 @@ impl<'a, 'b> BridgeConverter<'a, 'b> {
                 TokenTree2::Ident(i) if i.to_string() == "const" => None,
                 TokenTree2::Ident(i) => {
                     let name = i.to_string();
-                    let e = self.replacements.get(name.as_str());
+                    let e = IDENT_REPLACEMENTS.get(name.as_str());
                     Some(match e {
                         Some(s) => TokenTree2::Ident(proc_macro2::Ident::new(s, i.span())),
                         None => TokenTree2::Ident(i),
@@ -51,7 +60,7 @@ impl<'a, 'b> BridgeConverter<'a, 'b> {
                 TokenTree2::Literal(l) => Some(TokenTree2::Literal(l)),
                 TokenTree2::Group(g) => {
                     let delim = g.delimiter();
-                    let replacement_tokens = self.replace_in_tokenstream(g.stream());
+                    let replacement_tokens = self.convert(g.stream());
                     Some(TokenTree2::Group(proc_macro2::Group::new(delim, replacement_tokens)))
                 }
             };

@@ -24,10 +24,8 @@ use cxx_gen::GeneratedCode;
 use indoc::indoc;
 use syn::{ItemMod, Macro};
 
-use lazy_static::lazy_static;
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
-use std::collections::HashMap;
 
 mod bridge_converter;
 
@@ -88,16 +86,7 @@ static PRELUDE: &str = indoc! {"
     };
     \n"};
 
-lazy_static! {
-    /// Substitutions from the names constructed by bindgen into those
-    /// which cxx uses.
-    static ref IDENT_REPLACEMENTS: HashMap<&'static str, String> = {
-        let mut map = HashMap::new();
-        map.insert("std_unique_ptr", "UniquePtr".to_string());
-        map.insert("std_string", "CxxString".to_string());
-        map
-    };
-}
+
 
 impl IncludeCpp {
     fn new_from_parse_stream(input: ParseStream) -> syn::Result<Self> {
@@ -261,7 +250,7 @@ impl IncludeCpp {
         let bindings = syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)?;
         let mut ts = TokenStream2::new();
         bindings.to_tokens(&mut ts);
-        let converter = bridge_converter::BridgeConverter::new(&IDENT_REPLACEMENTS);
+        let converter = bridge_converter::BridgeConverter::new();
         let new_bindings = converter.convert(ts);
         info!("New bindings: {}", new_bindings.to_string());
         Ok(new_bindings)
