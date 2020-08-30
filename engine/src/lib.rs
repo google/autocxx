@@ -288,24 +288,6 @@ impl IncludeCpp {
     }
 }
 
-#[derive(Debug)]
-struct CxxBridgeParseCallbacks;
-
-impl bindgen::callbacks::ParseCallbacks for CxxBridgeParseCallbacks {
-    fn item_name(&self, original_item_name: &str) -> Option<String> {
-        println!("Item: {}", original_item_name);
-        if original_item_name == "basic_string" {
-            Some("CxxString".to_string())
-        } else if original_item_name == "unique_ptr" {
-            Some("UniquePtr".to_string())
-        } else if original_item_name == "default_delete" {
-            Some("FISH".to_string())
-        } else {
-            None
-        }
-    }
-}
-
 /// This outermost crate currently just contains integration tests
 /// for all the other crates. That's a bit of an odd arrangement, and
 /// maybe needs revisiting.
@@ -684,7 +666,7 @@ mod tests {
                 uint32_t a;
                 uint32_t b;
             };
-            int take_bob(const Bob& a);
+            uint32_t take_bob(const Bob& a);
         "};
         let rs = quote! {
             let a = ffi::Bob { a: 12, b: 13 };
@@ -708,7 +690,7 @@ mod tests {
                 uint32_t a;
                 uint32_t b;
             };
-            int take_bob(const Bob& a);
+            uint32_t take_bob(const Bob& a);
         "};
         let rs = quote! {
             let mut a = ffi::Bob { a: 12, b: 13 };
@@ -735,7 +717,7 @@ mod tests {
                 uint32_t b;
                 Phil c;
             };
-            int take_bob(Bob a);
+            uint32_t take_bob(Bob a);
         "};
         let rs = quote! {
             let a = ffi::Bob { a: 12, b: 13, c: ffi::Phil { d: 4 } };
@@ -801,6 +783,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // because we have yet to implement make_unique
     fn test_make_up() {
         let cxx = indoc! {"
             Bob::Bob() : a(3) {
@@ -822,6 +805,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // because we have yet to implement make_unique
     fn test_make_up_int() {
         let cxx = indoc! {"
             Bob::Bob(uint32_t a) : b(a) {
