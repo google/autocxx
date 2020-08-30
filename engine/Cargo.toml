@@ -30,10 +30,7 @@ quote = "1.0"
 osstrtools = "0.2"
 lazy_static = "1.4"
 indoc = "1.0"
-
-[dependencies.bindgen]
-git = "https://github.com/adetaylor/rust-bindgen"
-branch = "hacks-for-cxxbridge2"
+bindgen = "0.55"
 
 [dependencies.cxx-gen]
 git = "https://github.com/adetaylor/cxx"

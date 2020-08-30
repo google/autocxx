@@ -36,15 +36,17 @@ environment variable, `AUTOCXX_INC`. See the `demo/build.rs` file for details.
 
 # How it works
 
-It is effectively a two-stage procedural macro, which:
+It is effectively a three-stage procedural macro, which:
 
-* First, runs `bindgen` to generate some bindings suitable for `cxx::bridge`
-* Second, runs `cxx::bridge` to convert them to Rust code.
+* First, runs `bindgen` to generate some bindings (with all the usual `unsafe`, `#[repr(C)]` etc.)
+* Second, interprets and converts them to bindings suitable for `cxx::bridge`.
+* Thirdly, runs `cxx::bridge` to convert them to Rust code.
 
 The same code can be passed through tools that generate .cc and .h bindings too:
 
-* First, runs `bindgen` to generate some bindings suitable for `cxx::bridge` (in exactly the same way as above)
-* Second, runs the codegen code from `cxx` to generate .cc and .h files
+* First, runs `bindgen` to generate some bindings (with all the usual `unsafe`, `#[repr(C)]` etc.) - in exactly the same way as above.
+* Second, interprets and converts them to bindings suitable for `cxx::bridge` - in the same way as above.
+* Thirdly, runs the codegen code from `cxx` to generate .cc and .h files
 
 # Current state of affairs
 
@@ -70,8 +72,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 
 # Build environment
 
-This crate is not yet on crates.io and currently depends on a hacked-up version of bindgen
-and a hacked-up version of cxx.
+This crate is not yet on crates.io and currently depends on a hacked-up version of cxx.
 
 To try it out,
 
@@ -79,17 +80,25 @@ To try it out,
 * `cargo update`
 * `cargo test --all`
 
-This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency. The same applies to cxx. See "next steps" below for the plans to unfork these.
+This will fetch a specific fork of cxx (see the Cargo.toml for the repo and branch) and use that as the dependency. See "next steps" below for the plans to unfork this.
 
-At present, eight of the tests pass.
+At present, eight of the tests pass. The rest are ignored.
 
 Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
 
 * It requires Rust nightly due to `#[proc_macro_span]`
 * It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/print.html#requirements)
-* On Linux including any system header: `bindgen` generates `pub type __uint32_t = ::std::os::raw::c_uint;` which `cxx` can't cope with. This is just a matter of munging `bindgen` more. This currently stops the demo building on my Linux box, and prevents all but one test passing.
+* On Linux including any system header: `bindgen` generates `pub type __uint32_t = ::std::os::raw::c_uint;` which `cxx` can't cope with. This is just a matter of munging `bindgen` output more. This currently stops the demo building on my Linux box, and prevents all but one test passing.
 * On Linux using `cargo` 1.47 nightly: `trybuild` is unable to pull in dependencies from git repositories because it's in offline mode. Running `cargo update` first seems to solve this.
 * There's a big blocklist of STL types hard-coded. That may be quite OSX-specific or otherwise subject to different STL implementations.
+
+# Configuring the build
+
+This runs `bindgen` within a procedural macro. There are limited opportunities to pass information into procedural macros, yet bindgen needs to know a lot about the build environment.
+
+The plan is:
+* The Rust code itself will specify the include file(s) and allowlist by passing them into the macro. This is the sort of thing that developers within an existing C++ codebase would specify in C++ (give or take) so it makes sense for it to be specific in the Rust code.
+* However, all build settings (e.g. bindgen compiler configuration, include path etc.) will be passed into the macro by means of environment variables. The build environment should set these before building the code. (An alternative means will be provided to pass these into the C++ code generator tools.)
 
 # Directory structure
 
@@ -108,9 +117,7 @@ Because this uses `bindgen`, and `bindgen` may depend on the state of your syste
 
 Plans:
 
-* Revert to using standard `bindgen` by upgrading the `bridge_converter` to post-process the
-  standard bindgen bindings to turn them into `cxx` bindings.
-* Then, revert to standard `cxx`. dtolnay has kindly accepted the cxx submission, but our
+* Revert to standard `cxx`. dtolnay has kindly accepted the cxx submission, but our
   tokenstream conversion needs to be a bit more sophisticated before we can adopt upstream
   `cxx`.
 * Then, work on more types and constructs per the above list.

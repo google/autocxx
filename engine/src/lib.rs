@@ -37,6 +37,7 @@ pub enum Error {
     Parsing(syn::Error),
     NoAutoCxxInc,
     CouldNotCanoncalizeIncludeDir(PathBuf),
+    Conversion(bridge_converter::ConvertError),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -85,8 +86,6 @@ static PRELUDE: &str = indoc! {"
         char* str_data;
     };
     \n"};
-
-
 
 impl IncludeCpp {
     fn new_from_parse_stream(input: ParseStream) -> syn::Result<Self> {
@@ -190,7 +189,6 @@ impl IncludeCpp {
         // this list less hard-coded and nasty as best we can - TODO.
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14"])
-            .cxx_bridge(true)
             .blacklist_item(".*default.*")
             .blacklist_item(".*unique_ptr.*")
             .blacklist_item(".*string.*")
@@ -208,17 +206,6 @@ impl IncludeCpp {
             .derive_copy(false)
             .derive_debug(false)
             .layout_tests(false); // TODO revisit later
-        for incl in &self.inclusions {
-            match incl {
-                CppInclusion::Header(ref hdr) => {
-                    builder = builder.cxx_bridge_include(hdr);
-                }
-                CppInclusion::Define(ref def) => {
-                    warn!("Not currently able to inform cxx about #define {}", def);
-                    // TODO consider enhancing cxx here
-                }
-            }
-        }
 
         for inc_dir in inc_dirs {
             builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
@@ -234,7 +221,6 @@ impl IncludeCpp {
         Ok(builder)
     }
 
-
     pub fn generate_rs(self) -> Result<TokenStream2> {
         // 4. (also respects environment variables to pick up more headers,
         //     include paths and #defines)
@@ -246,12 +232,26 @@ impl IncludeCpp {
             .generate()
             .map_err(Error::Bindgen)?;
         let bindings = bindings.to_string();
+        // Manually add the mod ffi {} so that we can ask syn to parse
+        // into a single construct.
+        let bindings = format!("mod ffi {{ {} }}", bindings);
         info!("Bindings: {}", bindings);
         let bindings = syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)?;
         let mut ts = TokenStream2::new();
         bindings.to_tokens(&mut ts);
-        let converter = bridge_converter::BridgeConverter::new();
-        let new_bindings = converter.convert(ts);
+
+        let mut include_list = Vec::new();
+        for incl in &self.inclusions {
+            match incl {
+                CppInclusion::Header(ref hdr) => {
+                    include_list.push(hdr.clone());
+                }
+                CppInclusion::Define(_) => warn!("Currently no way to define! within cxx"),
+            }
+        }
+
+        let converter = bridge_converter::BridgeConverter::new(include_list);
+        let new_bindings = converter.convert(ts).map_err(Error::Conversion)?;
         info!("New bindings: {}", new_bindings.to_string());
         Ok(new_bindings)
     }
