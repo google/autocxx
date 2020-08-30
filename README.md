@@ -48,8 +48,7 @@ The same code can be passed through tools that generate .cc and .h bindings too:
 
 # Current state of affairs
 
-There is an example of this macro working within the `demo` directory. At the
-moment, it will work with only the very simplest functions (ints and voids only)!
+There is an example of this macro working within the `demo` directory.
 
 The project also contains test code which does this end-to-end, for all sorts of C++ types and constructs which we eventually would like to support. They nearly all fail :)
 
