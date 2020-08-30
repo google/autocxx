@@ -57,8 +57,10 @@ The project also contains test code which does this end-to-end, for all sorts of
 | ---- | ------ |
 | Primitives (u8, etc.) | Works |
 | Plain-old-data structs | Works |
-| UniquePtr | Not yet but getting close |
-| CxxString | - |
+| std::unique_ptr of POD | Works |
+| std::unique_ptr of opaque types | - |
+| std::string | - |
+| Methods | - |
 | #defines | - |
 | Constants | - |
 | Enums | - |
