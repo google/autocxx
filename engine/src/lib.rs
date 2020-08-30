@@ -29,7 +29,7 @@ use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use std::collections::HashMap;
 
-mod ident_replacer;
+mod bridge_converter;
 
 #[derive(Debug)]
 pub enum Error {
@@ -261,12 +261,8 @@ impl IncludeCpp {
         let bindings = syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)?;
         let mut ts = TokenStream2::new();
         bindings.to_tokens(&mut ts);
-        // For now, we are going to post-process the TokenStream to replace certain
-        // types, e.g. std_unique_ptr -> UniquePtr. It may be that there are
-        // ways to use bindgen facilities to do this more efficiently, so this should
-        // be considered a hack.
-        let replacer = ident_replacer::IdentReplacer::new(&IDENT_REPLACEMENTS);
-        let new_bindings = replacer.replace_in_tokenstream(ts);
+        let converter = bridge_converter::BridgeConverter::new(&IDENT_REPLACEMENTS);
+        let new_bindings = converter.convert(ts);
         info!("New bindings: {}", new_bindings.to_string());
         Ok(new_bindings)
     }

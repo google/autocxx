@@ -19,11 +19,11 @@ use quote::TokenStreamExt;
 
 /// Substitutes given idents in a `TokenStream2`.
 /// It also replaces 'const *' with '&' and '*' with '& mut'
-pub(crate) struct IdentReplacer<'a, 'b> {
+pub(crate) struct BridgeConverter<'a, 'b> {
     replacements: &'a HashMap<&'b str, String>,
 }
 
-impl<'a, 'b> IdentReplacer<'a, 'b> {
+impl<'a, 'b> BridgeConverter<'a, 'b> {
     pub fn new(replacements: &'a HashMap<&'b str, String>) -> Self {
         Self {
             replacements
@@ -31,7 +31,7 @@ impl<'a, 'b> IdentReplacer<'a, 'b> {
     }
 
     /// Replace certain `Ident`s in a `TokenStream2`.
-    pub(crate) fn replace_in_tokenstream(&self, bindings: TokenStream2) -> TokenStream2 {
+    pub(crate) fn convert(&self, bindings: TokenStream2) -> TokenStream2 {
         let mut new_ts = TokenStream2::new();
         for t in bindings {
             let replacement = match t {
