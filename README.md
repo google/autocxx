@@ -60,7 +60,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | std::unique_ptr of std::string | Works |
 | std::unique_ptr of opaque types | - |
 | Reference to POD | Works |
-
+| Reference to std::string | Works |
 | Methods | - |
 | #defines | - |
 | Constants | - |
