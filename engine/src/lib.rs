@@ -79,6 +79,13 @@ static PRELUDE: &str = indoc! {"
     template<typename T> class UniquePtr {
         T* ptr;
     };
+
+    /**
+    * <div rustbindgen=\"true\" replaces=\"std::string\">
+    */
+    class CxxString {
+        char* str_data;
+    };
     \n"};
 
 lazy_static! {
@@ -184,11 +191,29 @@ impl IncludeCpp {
         // bindgen such that it can include them in the generated
         // extern "C" section as include!
         // TODO work with OsStrs here to avoid the .display()
+        // TODO get rid of this huge blocklist. It exists because
+        // even if we replace a given STL type (per the PRELUDE, above)
+        // bindgen still recurses into all the other definitions it needs.
+        // It's probably desirable to fix this in bindgen, though I expect
+        // the current behavior is there for a reason. Meanwhile, make
+        // this list less hard-coded and nasty as best we can - TODO.
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14"])
             .cxx_bridge(true)
             .blacklist_item(".*default.*")
             .blacklist_item(".*unique_ptr.*")
+            .blacklist_item(".*string.*")
+            .blacklist_item(".*std_.*")
+            .blacklist_item("std_.*")
+            .blacklist_item("std.*")
+            .blacklist_item(".*compressed_pair.*")
+            .blacklist_item(".*allocator.*")
+            .blacklist_item(".*wrap_iter.*")
+            .blacklist_item(".*reverse_iterator.*")
+            .blacklist_item(".*propagate_on_container.*")
+            .blacklist_item(".*char_traits.*")
+            .blacklist_item(".*size_t.*")
+            .blacklist_item(".*mbstate_t.*")
             .derive_copy(false)
             .derive_debug(false)
             .layout_tests(false); // TODO revisit later

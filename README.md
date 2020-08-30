@@ -58,8 +58,8 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Primitives (u8, etc.) | Works |
 | Plain-old-data structs | Works |
 | std::unique_ptr of POD | Works |
+| std::unique_ptr of std::string | Works |
 | std::unique_ptr of opaque types | - |
-| std::string | - |
 | Methods | - |
 | #defines | - |
 | Constants | - |
@@ -80,7 +80,7 @@ To try it out,
 
 This will fetch a specific fork of bindgen (see the Cargo.toml for the repo and branch) and use that as the dependency. The same applies to cxx.
 
-At present, four of the tests pass.
+At present, eight of the tests pass.
 
 Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
 
@@ -88,6 +88,7 @@ Because this uses `bindgen`, and `bindgen` may depend on the state of your syste
 * It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/print.html#requirements)
 * On Linux including any system header: `bindgen` generates `pub type __uint32_t = ::std::os::raw::c_uint;` which `cxx` can't cope with. This is just a matter of munging `bindgen` more. This currently stops the demo building on my Linux box, and prevents all but one test passing.
 * On Linux using `cargo` 1.47 nightly: `trybuild` is unable to pull in dependencies from git repositories because it's in offline mode. Running `cargo update` first seems to solve this.
+* There's a big blocklist of STL types hard-coded. That may be quite OSX-specific or otherwise subject to different STL implementations.
 
 # Directory structure
 
