@@ -583,7 +583,54 @@ mod tests {
         let allowed_funcs = &["give_str", "take_str"];
         run_test(cxx, hdr, rs, allowed_funcs);
     }
-    // TODO add equivalents for std::string& and const std::string&
+
+    #[test]
+    fn test_cycle_string_by_ref() {
+        let cxx = indoc! {"
+            std::unique_ptr<std::string> give_str() {
+                return std::make_unique<std::string>(\"Bob\");
+            }
+            uint32_t take_str(const std::string& a) {
+                return a.length();
+            }
+        "};
+        let hdr = indoc! {"
+            #include <string>
+            #include <cstdint>
+            std::unique_ptr<std::string> give_str();
+            uint32_t take_str(const std::string& a);
+        "};
+        let rs = quote! {
+            let s = ffi::give_str();
+            assert_eq!(ffi::take_str(s.as_ref()), 3);
+        };
+        let allowed_funcs = &["give_str", "take_str"];
+        run_test(cxx, hdr, rs, allowed_funcs);
+    }
+
+    #[test]
+    fn test_cycle_string_by_mut_ref() {
+        let cxx = indoc! {"
+            std::unique_ptr<std::string> give_str() {
+                return std::make_unique<std::string>(\"Bob\");
+            }
+            uint32_t take_str(std::string& a) {
+                return a.length();
+            }
+        "};
+        let hdr = indoc! {"
+            #include <string>
+            #include <cstdint>
+            std::unique_ptr<std::string> give_str();
+            uint32_t take_str(std::string& a);
+        "};
+        let rs = quote! {
+            let s = ffi::give_str();
+            assert_eq!(ffi::take_str(s.as_ref()), 3);
+        };
+        let allowed_funcs = &["give_str", "take_str"];
+        run_test(cxx, hdr, rs, allowed_funcs);
+    }
 
     #[test]
     fn test_give_pod_by_value() {

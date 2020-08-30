@@ -18,8 +18,9 @@ use proc_macro2::TokenTree as TokenTree2;
 use quote::TokenStreamExt;
 
 /// Substitutes given idents in a `TokenStream2`.
+/// It also replaces 'const *' with '&' and '*' with '& mut'
 pub(crate) struct IdentReplacer<'a, 'b> {
-    replacements: &'a HashMap<&'b str, String>
+    replacements: &'a HashMap<&'b str, String>,
 }
 
 impl<'a, 'b> IdentReplacer<'a, 'b> {
@@ -29,31 +30,34 @@ impl<'a, 'b> IdentReplacer<'a, 'b> {
         }
     }
 
-    fn replace_in_tokentree(&self, bindings: TokenTree2) -> TokenTree2 {
-        match bindings {
-            TokenTree2::Ident(i) => {
-                let name = i.to_string();
-                let e = self.replacements.get(name.as_str());
-                match e {
-                    Some(s) => TokenTree2::Ident(proc_macro2::Ident::new(s, i.span())),
-                    None => TokenTree2::Ident(i),
-                }
-            }
-            TokenTree2::Punct(p) => TokenTree2::Punct(p),
-            TokenTree2::Literal(l) => TokenTree2::Literal(l),
-            TokenTree2::Group(g) => {
-                let delim = g.delimiter();
-                let replacement_tokens = self.replace_in_tokenstream(g.stream());
-                TokenTree2::Group(proc_macro2::Group::new(delim, replacement_tokens))
-            }
-        }
-    }
-
     /// Replace certain `Ident`s in a `TokenStream2`.
     pub(crate) fn replace_in_tokenstream(&self, bindings: TokenStream2) -> TokenStream2 {
         let mut new_ts = TokenStream2::new();
         for t in bindings {
-            new_ts.append(self.replace_in_tokentree(t));
+            let replacement = match t {
+                TokenTree2::Ident(i) if i.to_string() == "const" => None,
+                TokenTree2::Ident(i) => {
+                    let name = i.to_string();
+                    let e = self.replacements.get(name.as_str());
+                    Some(match e {
+                        Some(s) => TokenTree2::Ident(proc_macro2::Ident::new(s, i.span())),
+                        None => TokenTree2::Ident(i),
+                    })
+                }
+                TokenTree2::Punct(p) if p.as_char() == '*' => {
+                    Some(TokenTree2::Punct(proc_macro2::Punct::new('&', p.spacing())))
+                },
+                TokenTree2::Punct(p) => Some(TokenTree2::Punct(p)),
+                TokenTree2::Literal(l) => Some(TokenTree2::Literal(l)),
+                TokenTree2::Group(g) => {
+                    let delim = g.delimiter();
+                    let replacement_tokens = self.replace_in_tokenstream(g.stream());
+                    Some(TokenTree2::Group(proc_macro2::Group::new(delim, replacement_tokens)))
+                }
+            };
+            if let Some (repl) = replacement {
+                new_ts.append(repl);
+            }
         }
         new_ts
     }
