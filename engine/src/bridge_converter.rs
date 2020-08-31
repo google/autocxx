@@ -73,7 +73,8 @@ const OUTPUT_TOKENS: bool = false;
 /// * Adds #[cxx::bridge]
 /// At the moment this is almost certainly not using the best practice for parsing
 /// stuff. It's multiple simple-but-yucky state machines. Can undoubtedly be
-/// simplified and made less error-prone: TODO.
+/// simplified and made less error-prone: TODO. Probably the right thing to do
+/// is just manipulate the syn types directly.
 pub(crate) struct BridgeConverter {
     include_list: Vec<String>,
 }
