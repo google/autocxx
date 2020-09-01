@@ -89,7 +89,7 @@ impl Builder {
                         .map_err(Error::InvalidCxx)?;
                     let fname = format!("gen{}.cxx", counter);
                     counter += 1;
-                    let gen_cxx_path = Self::write_to_file(&tdir, &fname, &generated_code.cxx)
+                    let gen_cxx_path = Self::write_to_file(&tdir, &fname, &generated_code.implementation)
                         .map_err(Error::FileWriteFail)?;
                     builder.file(gen_cxx_path);
                 }

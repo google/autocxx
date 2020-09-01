@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use cxx_gen::GeneratedCode;
 use indoc::indoc;
-use quote::quote;
+use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{ItemMod, Macro};
 
@@ -221,6 +221,10 @@ impl IncludeCpp {
     }
 
     pub fn generate_rs(self) -> Result<TokenStream2> {
+        self.do_generation(true)
+    }
+
+    fn do_generation(self, old_rust: bool) -> Result<TokenStream2> {
         // 4. (also respects environment variables to pick up more headers,
         //     include paths and #defines)
         // Then:
@@ -248,21 +252,23 @@ impl IncludeCpp {
         }
 
         let converter = bridge_converter::BridgeConverter::new(include_list);
-        let new_bindings = converter.convert(bindings).map_err(Error::Conversion)?;
-        let new_bindings_ts = quote! {
-            #new_bindings
-        };
-        info!("New bindings: {}", new_bindings_ts.to_string());
-        Ok(new_bindings_ts)
+        let new_bindings = converter
+            .convert(bindings, old_rust)
+            .map_err(Error::Conversion)?;
+        let new_bindings = new_bindings.to_token_stream();
+        info!("New bindings: {}", new_bindings.to_string());
+        Ok(new_bindings)
     }
 
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCode> {
-        let rs = self.generate_rs()?;
-        let mut opt = cxx_gen::Opt::default();
-        opt.omit_type_definitions = true;
-        let results = cxx_gen::generate_header_and_cc(rs, opt).map_err(Error::CxxGen);
+        let rs = self.do_generation(false)?;
+        let opt = cxx_gen::Opt::default();
+        let results = cxx_gen::generate_header_and_cc(rs, &opt).map_err(Error::CxxGen);
         if let Ok(ref gen) = results {
-            info!("CXX: {}", String::from_utf8(gen.cxx.clone()).unwrap());
+            info!(
+                "CXX: {}",
+                String::from_utf8(gen.implementation.clone()).unwrap()
+            );
             info!("header: {}", String::from_utf8(gen.header.clone()).unwrap());
         }
         results

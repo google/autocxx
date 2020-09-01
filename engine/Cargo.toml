@@ -31,13 +31,10 @@ osstrtools = "0.2"
 lazy_static = "1.4"
 indoc = "1.0"
 bindgen = "0.55"
-
-[dependencies.cxx-gen]
-git = "https://github.com/adetaylor/cxx"
-branch = "cxx-embedding-lib"
+cxx-gen = "0.0.1"
 
 [dependencies.syn]
-version = "1.0"
+version = "1.0.39"
 features = [ "full" ]
 
 [dev-dependencies]
@@ -52,8 +49,4 @@ autocxx-build = { path="../gen/build" }
 # by the trybuild test system...
 autocxx-macro = { path="../macro" }
 link-cplusplus = "1.0"
-
-# ... and this too.
-[dev-dependencies.cxx]
-git = "https://github.com/adetaylor/cxx"
-branch = "cxx-embedding-lib"
+cxx = "0.3.7"

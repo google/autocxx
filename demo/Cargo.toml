@@ -18,12 +18,9 @@ version = "0.1.0"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2018"
 
-[build-dependencies]
-autocxx-build = { path = "../gen/build" }
-
 [dependencies]
+cxx = "0.3.7"
 autocxx-macro = { path = "../macro" }
 
-[dependencies.cxx]
-git = "https://github.com/adetaylor/cxx"
-branch = "cxx-embedding-lib"
+[build-dependencies]
+autocxx-build = { path = "../gen/build" }

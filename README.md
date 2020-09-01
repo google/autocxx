@@ -69,20 +69,13 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Enums | - |
 | Structs containing UniquePtr | - |
 | Structs containing strings | - |
+| make_unique | - |
 
 # Build environment
 
-This crate is not yet on crates.io and currently depends on a hacked-up version of cxx.
+This crate is not yet on crates.io.
 
-To try it out,
-
-* Fetch the code using git.
-* `cargo update`
-* `cargo test --all`
-
-This will fetch a specific fork of cxx (see the Cargo.toml for the repo and branch) and use that as the dependency. See "next steps" below for the plans to unfork this.
-
-At present, eight of the tests pass. The rest are ignored.
+At present, thirteen of the tests pass. The rest are ignored.
 
 Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
 
@@ -115,12 +108,11 @@ The plan is:
 
 # Next steps
 
-Plans:
+The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, e.g. strings embedded in structs, and it's not at all clear that a plan will present itself. Until we are much further, I don't advise using htis for anything in production.
 
-* Revert to standard `cxx`. dtolnay has kindly accepted the cxx submission, but our
-  tokenstream conversion needs to be a bit more sophisticated before we can adopt upstream
-  `cxx`.
-* Then, work on more types and constructs per the above list.
+# Credits
+
+David Tolnay did much of the hard work here, by inventing the underlying cxx crate, and in fact nearly all of the parsing infrastructure on which this crate depends.
 
 #### License and usage notes
 

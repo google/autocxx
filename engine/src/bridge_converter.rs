@@ -14,6 +14,7 @@
 
 use lazy_static::lazy_static;
 use proc_macro2::Span;
+use quote::quote;
 use std::collections::HashMap;
 use syn::punctuated::Punctuated;
 use syn::Token;
@@ -63,18 +64,39 @@ impl BridgeConverter {
 
     /// Convert a TokenStream of bindgen-generated bindings to a form
     /// suitable for cxx.
-    pub(crate) fn convert(&self, bindings: ItemMod) -> Result<ItemMod, ConvertError> {
+    pub(crate) fn convert(
+        &self,
+        bindings: ItemMod,
+        old_rust: bool,
+    ) -> Result<ItemMod, ConvertError> {
         match bindings.content {
             None => Err(ConvertError::NoContent),
             Some((brace, items)) => {
                 let mut new_items = Vec::new();
                 for item in items {
-                    new_items.push(match item {
+                    new_items.append(&mut match item {
                         Item::ForeignMod(fm) => {
-                            self.convert_foreign_mod(fm).map(Item::ForeignMod)?
+                            vec![self.convert_foreign_mod(fm).map(Item::ForeignMod)?]
                         }
-                        Item::Struct(s) => self.convert_struct(s).map(Item::Struct)?,
-                        _ => item, // TODO - consider rejecting
+                        Item::Struct(s) => {
+                            let structname = s.ident.clone();
+                            let new_struct_def = self.convert_struct(s).map(Item::Struct)?;
+                            let new_extern_wotsit = Item::Verbatim(if old_rust {
+                                quote! {
+                                    extern "C++" {
+                                        type #structname;
+                                    }
+                                }
+                            } else {
+                                quote! {
+                                    unsafe extern "C++" {
+                                        type #structname;
+                                    }
+                                }
+                            });
+                            vec![new_struct_def, new_extern_wotsit]
+                        }
+                        _ => vec![item], // TODO - consider rejecting
                     });
                 }
                 Ok(ItemMod {
