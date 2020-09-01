@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(proc_macro_diagnostic)]
-#![feature(proc_macro_span)]
-
 use autocxx_engine::IncludeCpp;
 use proc_macro::TokenStream;
 use proc_macro_error::{proc_macro_error, abort_call_site};

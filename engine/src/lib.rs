@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(proc_macro_span)]
-
 use proc_macro2::TokenStream as TokenStream2;
 use std::path::PathBuf;
 
