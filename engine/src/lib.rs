@@ -17,11 +17,10 @@
 use proc_macro2::TokenStream as TokenStream2;
 use std::path::PathBuf;
 
-use quote::ToTokens;
-use syn::parse::{Parse, ParseStream, Result as ParseResult};
-
 use cxx_gen::GeneratedCode;
 use indoc::indoc;
+use quote::quote;
+use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{ItemMod, Macro};
 
 use log::{debug, info, warn};
@@ -234,11 +233,9 @@ impl IncludeCpp {
         let bindings = bindings.to_string();
         // Manually add the mod ffi {} so that we can ask syn to parse
         // into a single construct.
-        let bindings = format!("mod ffi {{ {} }}", bindings);
+        let bindings = format!("#[cxx::bridge] mod ffi {{ {} }}", bindings);
         info!("Bindings: {}", bindings);
         let bindings = syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)?;
-        let mut ts = TokenStream2::new();
-        bindings.to_tokens(&mut ts);
 
         let mut include_list = Vec::new();
         for incl in &self.inclusions {
@@ -251,9 +248,12 @@ impl IncludeCpp {
         }
 
         let converter = bridge_converter::BridgeConverter::new(include_list);
-        let new_bindings = converter.convert(ts).map_err(Error::Conversion)?;
-        info!("New bindings: {}", new_bindings.to_string());
-        Ok(new_bindings)
+        let new_bindings = converter.convert(bindings).map_err(Error::Conversion)?;
+        let new_bindings_ts = quote! {
+            #new_bindings
+        };
+        info!("New bindings: {}", new_bindings_ts.to_string());
+        Ok(new_bindings_ts)
     }
 
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCode> {
