@@ -107,7 +107,7 @@ The plan is:
 
 # Next steps
 
-The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, e.g. strings embedded in structs, and it's not at all clear that a plan will present itself. Until we are much further, I don't advise using htis for anything in production.
+The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, e.g. strings embedded in structs, and it's not at all clear that a plan will present itself. Until we are much further, I don't advise using this for anything in production.
 
 # Credits
 
