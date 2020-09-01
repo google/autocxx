@@ -65,7 +65,7 @@ impl BridgeConverter {
     /// suitable for cxx.
     pub(crate) fn convert(&self, bindings: ItemMod) -> Result<ItemMod, ConvertError> {
         match bindings.content {
-            None => return Err(ConvertError::NoContent),
+            None => Err(ConvertError::NoContent),
             Some((brace, items)) => {
                 let mut new_items = Vec::new();
                 for item in items {
@@ -83,7 +83,7 @@ impl BridgeConverter {
                     semi: bindings.semi,
                     mod_token: bindings.mod_token,
                     vis: bindings.vis,
-                    content: Some((brace.clone(), new_items)),
+                    content: Some((brace, new_items)),
                 })
             }
         }
@@ -147,10 +147,7 @@ impl BridgeConverter {
             .into_iter()
             .filter(|a| {
                 let i = a.path.get_ident();
-                match i {
-                    Some(i2) if i2.to_string() == to_strip => false,
-                    _ => true,
-                }
+                !matches!(i, Some(i2) if *i2 == to_strip)
             })
             .collect::<Vec<Attribute>>()
     }
@@ -228,7 +225,7 @@ impl BridgeConverter {
                         Some(replacement) => Ident::new(replacement, s.ident.span()),
                     };
                     PathSegment {
-                        ident: ident,
+                        ident,
                         arguments: args,
                     }
                 })
