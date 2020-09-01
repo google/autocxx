@@ -99,11 +99,10 @@ The plan is:
   these APIs for external users, so maybe it needs to be a directory of code symlinked
   into all the other sub-crates. All the following three sub-crates are thin wrappers
   for part of this engine. This also contains the test code.
-* `macro` - the procedural macro `include_cxx` as described above.
 * `gen/build` - a library to be used from `build.rs` scripts to generate .cc and .h
   files from an `include_cxx` section.
 * `gen/cmd` - a command-line tool which does the same. Except this isn't written yet.
-* `src` - currently, nothing.
+* `src` (outermost project)- the procedural macro `include_cxx` as described above.
 
 # Next steps
 

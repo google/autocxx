@@ -20,7 +20,7 @@ edition = "2018"
 
 [dependencies]
 cxx = "0.3.7"
-autocxx-macro = { path = "../macro" }
+autocxx = { path = ".." }
 
 [build-dependencies]
 autocxx-build = { path = "../gen/build" }

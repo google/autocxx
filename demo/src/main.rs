@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-use autocxx_macro::include_cxx;
+use autocxx::include_cxx;
 
 include_cxx!(
     Header("input.h"),

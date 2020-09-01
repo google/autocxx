@@ -12,6 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This outermost crate is empty. The "engine" mod contains the main actual
-// functionality, but it's not intended for use by consumers outside the
-// autocxx crate, so that's why it's a bit buried.
+use autocxx_engine::IncludeCpp;
+use proc_macro::TokenStream;
+use proc_macro_error::{proc_macro_error, abort_call_site};
+use syn::parse_macro_input;
+
+#[proc_macro_error]
+#[proc_macro]
+pub fn include_cxx(input: TokenStream) -> TokenStream {
+    let include_cpp = parse_macro_input!(input as IncludeCpp);
+    match include_cpp.generate_rs() {
+        Ok(ts) => TokenStream::from(ts),
+        Err(e) => abort_call_site!(format!("{:?}", e))
+    }
+}

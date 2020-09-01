@@ -47,6 +47,6 @@ cc = "1.0"
 autocxx-build = { path="../gen/build" }
 # This is necessary for building the projects created
 # by the trybuild test system...
-autocxx-macro = { path="../macro" }
+autocxx = { path=".." }
 link-cplusplus = "1.0"
 cxx = "0.3.7"
