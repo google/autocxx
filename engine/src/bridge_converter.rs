@@ -20,7 +20,7 @@ use syn::punctuated::Punctuated;
 use syn::Token;
 use syn::{
     parse_quote, AngleBracketedGenericArguments, Attribute, FnArg, ForeignItem, ForeignItemFn,
-    GenericArgument, Ident, Item, ItemForeignMod, ItemMod, ItemStruct, PatType, Path,
+    GenericArgument, Ident, Item, ItemEnum, ItemForeignMod, ItemMod, ItemStruct, PatType, Path,
     PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr, TypeReference,
 };
 
@@ -55,20 +55,36 @@ pub enum ConvertError {
 /// is just manipulate the syn types directly.
 pub(crate) struct BridgeConverter {
     include_list: Vec<String>,
+    old_rust: bool,
 }
 
 impl BridgeConverter {
-    pub fn new(include_list: Vec<String>) -> Self {
-        Self { include_list }
+    pub fn new(include_list: Vec<String>, old_rust: bool) -> Self {
+        Self {
+            include_list,
+            old_rust,
+        }
+    }
+
+    fn generate_cpp_definition_squasher(&self, ident: Ident) -> Item {
+        Item::Verbatim(if self.old_rust {
+            quote! {
+                extern "C++" {
+                    type #ident;
+                }
+            }
+        } else {
+            quote! {
+                unsafe extern "C++" {
+                    type #ident;
+                }
+            }
+        })
     }
 
     /// Convert a TokenStream of bindgen-generated bindings to a form
     /// suitable for cxx.
-    pub(crate) fn convert(
-        &self,
-        bindings: ItemMod,
-        old_rust: bool,
-    ) -> Result<ItemMod, ConvertError> {
+    pub(crate) fn convert(&self, bindings: ItemMod) -> Result<ItemMod, ConvertError> {
         match bindings.content {
             None => Err(ConvertError::NoContent),
             Some((brace, items)) => {
@@ -79,22 +95,16 @@ impl BridgeConverter {
                             vec![self.convert_foreign_mod(fm).map(Item::ForeignMod)?]
                         }
                         Item::Struct(s) => {
-                            let structname = s.ident.clone();
+                            let tyname = s.ident.clone();
                             let new_struct_def = self.convert_struct(s).map(Item::Struct)?;
-                            let new_extern_wotsit = Item::Verbatim(if old_rust {
-                                quote! {
-                                    extern "C++" {
-                                        type #structname;
-                                    }
-                                }
-                            } else {
-                                quote! {
-                                    unsafe extern "C++" {
-                                        type #structname;
-                                    }
-                                }
-                            });
-                            vec![new_struct_def, new_extern_wotsit]
+                            let squasher = self.generate_cpp_definition_squasher(tyname);
+                            vec![new_struct_def, squasher]
+                        }
+                        Item::Enum(e) => {
+                            let tyname = e.ident.clone();
+                            let new_enum_def = self.convert_enum(e).map(Item::Enum)?;
+                            let squasher = self.generate_cpp_definition_squasher(tyname);
+                            vec![new_enum_def, squasher]
                         }
                         _ => vec![item], // TODO - consider rejecting
                     });
@@ -164,6 +174,18 @@ impl BridgeConverter {
         })
     }
 
+    fn convert_enum(&self, ty: ItemEnum) -> Result<ItemEnum, ConvertError> {
+        Ok(ItemEnum {
+            // TODO tidy next line
+            attrs: self.strip_attr(self.strip_attr(ty.attrs, "repr"), "derive"),
+            vis: ty.vis,
+            enum_token: ty.enum_token,
+            generics: ty.generics,
+            variants: ty.variants,
+            brace_token: ty.brace_token,
+            ident: ty.ident,
+        })
+    }
     fn strip_attr(&self, attrs: Vec<Attribute>, to_strip: &str) -> Vec<Attribute> {
         attrs
             .into_iter()

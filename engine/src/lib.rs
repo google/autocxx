@@ -204,6 +204,9 @@ impl IncludeCpp {
             .blacklist_item(".*mbstate_t.*")
             .derive_copy(false)
             .derive_debug(false)
+            .default_enum_style(bindgen::EnumVariation::Rust {
+                non_exhaustive: false,
+            })
             .layout_tests(false); // TODO revisit later
 
         for inc_dir in inc_dirs {
@@ -251,10 +254,8 @@ impl IncludeCpp {
             }
         }
 
-        let converter = bridge_converter::BridgeConverter::new(include_list);
-        let new_bindings = converter
-            .convert(bindings, old_rust)
-            .map_err(Error::Conversion)?;
+        let converter = bridge_converter::BridgeConverter::new(include_list, old_rust);
+        let new_bindings = converter.convert(bindings).map_err(Error::Conversion)?;
         let new_bindings = new_bindings.to_token_stream();
         info!("New bindings: {}", new_bindings.to_string());
         Ok(new_bindings)
@@ -865,6 +866,49 @@ mod tests {
         let rs = quote! {
             let a = ffi::Bob::make_unique(3);
             assert_eq!(a.as_ref().unwrap().b, 3);
+        };
+        run_test(cxx, hdr, rs, &["Bob"]);
+    }
+
+    #[test]
+    #[ignore] // because enums are the wrong size
+    fn test_enum() {
+        let cxx = indoc! {"
+            Bob give_bob() {
+                return Bob::BOB_VALUE_2;
+            }
+        "};
+        let hdr = indoc! {"
+            #include <cstdint>
+            enum Bob {
+                BOB_VALUE_1,
+                BOB_VALUE_2,
+            };
+            Bob give_bob();
+        "};
+        let rs = quote! {
+            let a = ffi::Bob::BOB_VALUE_2;
+            let b = ffi::give_bob();
+            assert_eq!(a, b);
+        };
+        run_test(cxx, hdr, rs, &["Bob", "give_bob"]);
+    }
+
+    #[test]
+    #[ignore] // because currently we do not !include the header unless there are functions
+    fn test_enum_no_funcs() {
+        let cxx = indoc! {"
+        "};
+        let hdr = indoc! {"
+            enum Bob {
+                BOB_VALUE_1,
+                BOB_VALUE_2,
+            };
+        "};
+        let rs = quote! {
+            let a = ffi::Bob::BOB_VALUE_1;
+            let b = ffi::Bob::BOB_VALUE_2;
+            assert_ne!(a, b);
         };
         run_test(cxx, hdr, rs, &["Bob"]);
     }
