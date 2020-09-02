@@ -17,6 +17,32 @@ use proc_macro::TokenStream;
 use proc_macro_error::{proc_macro_error, abort_call_site};
 use syn::parse_macro_input;
 
+/// Include some C++ headers in your Rust project.
+///
+/// This macro allows you to include one or more C++ headers within
+/// your Rust code, and call their functions fairly naturally.
+///
+/// # Examples
+///
+/// ```text
+/// #include <cstdint>
+///
+/// uint32_t do_math(uint32_t a);
+/// ```
+///
+/// ```
+/// # use autocxx::include_cxx;
+/// include_cxx!(
+/// #   ParseOnly,
+///     Header("input.h"),
+///     Allow("do_math"),
+/// );
+///
+/// # mod ffi { pub fn do_math(a: u32) -> u32 { a+3 } }
+/// # fn main() {
+/// ffi::do_math(3);
+/// # }
+/// ```
 #[proc_macro_error]
 #[proc_macro]
 pub fn include_cxx(input: TokenStream) -> TokenStream {

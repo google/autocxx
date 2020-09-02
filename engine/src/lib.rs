@@ -52,6 +52,7 @@ pub struct IncludeCpp {
     inclusions: Vec<CppInclusion>,
     allowlist: Vec<String>,
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
+    parse_only: bool,
 }
 
 impl Parse for IncludeCpp {
@@ -93,6 +94,7 @@ impl IncludeCpp {
 
         let mut inclusions = Vec::new();
         let mut allowlist = Vec::new();
+        let mut parse_only = false;
 
         while !input.is_empty() {
             let ident: syn::Ident = input.parse()?;
@@ -106,6 +108,8 @@ impl IncludeCpp {
                 syn::parenthesized!(args in input);
                 let allow: syn::LitStr = args.parse()?;
                 allowlist.push(allow.value());
+            } else if ident == "ParseOnly" {
+                parse_only = true;
             } else {
                 return Err(syn::Error::new(ident.span(), "expected Header or Allow"));
             }
@@ -119,6 +123,7 @@ impl IncludeCpp {
             inclusions,
             allowlist,
             preconfigured_inc_dirs: None,
+            parse_only,
         })
     }
 
@@ -226,6 +231,12 @@ impl IncludeCpp {
     }
 
     fn do_generation(self, old_rust: bool) -> Result<TokenStream2> {
+        // If we are in parse only mode, do nothing. This is used for
+        // doc tests to ensure the parsing is valid, but we can't expect
+        // valid C++ header files or linkers to allow a complete build.
+        if self.parse_only {
+            return Ok(TokenStream2::new());
+        }
         // 4. (also respects environment variables to pick up more headers,
         //     include paths and #defines)
         // Then:
