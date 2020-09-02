@@ -81,7 +81,10 @@ impl Builder {
                     let mut include_cpp = autocxx_engine::IncludeCpp::new_from_syn(mac.mac)
                         .map_err(Error::MacroParseFail)?;
                     include_cpp.set_include_dirs(autocxx_inc);
-                    for inc_dir in include_cpp.include_dirs().map_err(Error::IncludeDirProblem)? {
+                    for inc_dir in include_cpp
+                        .include_dirs()
+                        .map_err(Error::IncludeDirProblem)?
+                    {
                         builder.include(inc_dir);
                     }
                     let generated_code = include_cpp
@@ -89,8 +92,9 @@ impl Builder {
                         .map_err(Error::InvalidCxx)?;
                     let fname = format!("gen{}.cxx", counter);
                     counter += 1;
-                    let gen_cxx_path = Self::write_to_file(&tdir, &fname, &generated_code.implementation)
-                        .map_err(Error::FileWriteFail)?;
+                    let gen_cxx_path =
+                        Self::write_to_file(&tdir, &fname, &generated_code.implementation)
+                            .map_err(Error::FileWriteFail)?;
                     builder.file(gen_cxx_path);
                 }
             }

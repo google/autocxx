@@ -14,7 +14,7 @@
 
 use autocxx_engine::IncludeCpp;
 use proc_macro::TokenStream;
-use proc_macro_error::{proc_macro_error, abort_call_site};
+use proc_macro_error::{abort_call_site, proc_macro_error};
 use syn::parse_macro_input;
 
 /// Include some C++ headers in your Rust project.
@@ -69,6 +69,6 @@ pub fn include_cxx(input: TokenStream) -> TokenStream {
     let include_cpp = parse_macro_input!(input as IncludeCpp);
     match include_cpp.generate_rs() {
         Ok(ts) => TokenStream::from(ts),
-        Err(e) => abort_call_site!(format!("{:?}", e))
+        Err(e) => abort_call_site!(format!("{:?}", e)),
     }
 }
