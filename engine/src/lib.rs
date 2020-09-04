@@ -922,6 +922,74 @@ mod tests {
         run_test(cxx, hdr, rs, &["Bob"]);
     }
 
+    #[test]
+    fn test_take_pod_class_by_value() {
+        let cxx = indoc! {"
+            uint32_t take_bob(Bob a) {
+                return a.a;
+            }
+        "};
+        let hdr = indoc! {"
+            #include <cstdint>
+            class Bob {
+            public:
+                uint32_t a;
+                uint32_t b;
+            };
+            uint32_t take_bob(Bob a);
+        "};
+        let rs = quote! {
+            let a = ffi::Bob { a: 12, b: 13 };
+            assert_eq!(ffi::take_bob(a), 12);
+        };
+        run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+    }
+
+    #[test]
+    fn test_pod_method() {
+        let cxx = indoc! {"
+            uint32_t Bob::get_bob() const {
+                return a;
+            }
+        "};
+        let hdr = indoc! {"
+            #include <cstdint>
+            class Bob {
+            public:
+                uint32_t a;
+                uint32_t b;
+                uint32_t get_bob() const;
+            };
+        "};
+        let rs = quote! {
+            let a = ffi::Bob { a: 12, b: 13 };
+            assert_eq!(a.get_bob(), 12);
+        };
+        run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+    }
+
+    #[test]
+    fn test_pod_mut_method() {
+        let cxx = indoc! {"
+            uint32_t Bob::get_bob() {
+                return a;
+            }
+        "};
+        let hdr = indoc! {"
+            #include <cstdint>
+            class Bob {
+            public:
+                uint32_t a;
+                uint32_t b;
+                uint32_t get_bob();
+            };
+        "};
+        let rs = quote! {
+            let a = ffi::Bob { a: 12, b: 13 };
+            assert_eq!(a.get_bob(), 12);
+        };
+        run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+    }
     // Yet to test:
     // 1. Make UniquePtr<CxxStrings> in Rust
     // 2. Enums

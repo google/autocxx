@@ -105,7 +105,8 @@ impl BridgeConverter {
                             let new_enum_def = self.convert_enum(e).map(Item::Enum)?;
                             let squasher = self.generate_cpp_definition_squasher(tyname);
                             vec![new_enum_def, squasher]
-                        }
+                        },
+                        Item::Impl(_) => vec![],
                         _ => vec![item], // TODO - consider rejecting
                     });
                 }
@@ -198,12 +199,26 @@ impl BridgeConverter {
 
     fn convert_fn_arg(&self, arg: FnArg) -> FnArg {
         match arg {
-            FnArg::Typed(pt) => FnArg::Typed(PatType {
-                attrs: pt.attrs,
-                pat: pt.pat,
-                colon_token: pt.colon_token,
-                ty: self.convert_boxed_type(pt.ty),
-            }),
+            FnArg::Typed(pt) => {
+                let old_pat = *pt.pat;
+                let new_pat = match old_pat {
+                    syn::Pat::Ident(pp) if pp.ident.to_string() == "this" => {
+                        return FnArg::Receiver(syn::Receiver {
+                            attrs: pp.attrs,
+                            mutability: pp.mutability,
+                            self_token: Token![self](Span::call_site()),
+                            reference: Some((Token![&](Span::call_site()), None))
+                        })
+                    }
+                    _ => old_pat,
+                };
+                FnArg::Typed(PatType {
+                    attrs: pt.attrs,
+                    pat: Box::new(new_pat),
+                    colon_token: pt.colon_token,
+                    ty: self.convert_boxed_type(pt.ty),
+                })
+            },
             _ => arg,
         }
     }
