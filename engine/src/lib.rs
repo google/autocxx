@@ -263,7 +263,7 @@ impl IncludeCpp {
             }
         }
 
-        let converter = bridge_converter::BridgeConverter::new(include_list, old_rust);
+        let mut converter = bridge_converter::BridgeConverter::new(include_list, old_rust);
         let new_bindings = converter.convert(bindings).map_err(Error::Conversion)?;
         let new_bindings = new_bindings.to_token_stream();
         info!("New bindings: {}", new_bindings.to_string());

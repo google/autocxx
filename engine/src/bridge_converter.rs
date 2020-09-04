@@ -15,7 +15,7 @@
 use lazy_static::lazy_static;
 use proc_macro2::Span;
 use quote::quote;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use syn::punctuated::Punctuated;
 use syn::Token;
 use syn::{
@@ -56,6 +56,7 @@ pub enum ConvertError {
 pub(crate) struct BridgeConverter {
     include_list: Vec<String>,
     old_rust: bool,
+    class_names_discovered: HashSet<String>,
 }
 
 impl BridgeConverter {
@@ -63,6 +64,7 @@ impl BridgeConverter {
         Self {
             include_list,
             old_rust,
+            class_names_discovered: HashSet::new(),
         }
     }
 
@@ -84,7 +86,7 @@ impl BridgeConverter {
 
     /// Convert a TokenStream of bindgen-generated bindings to a form
     /// suitable for cxx.
-    pub(crate) fn convert(&self, bindings: ItemMod) -> Result<ItemMod, ConvertError> {
+    pub(crate) fn convert(&mut self, bindings: ItemMod) -> Result<ItemMod, ConvertError> {
         match bindings.content {
             None => Err(ConvertError::NoContent),
             Some((brace, items)) => {
@@ -96,7 +98,7 @@ impl BridgeConverter {
                         }
                         Item::Struct(s) => {
                             let tyname = s.ident.clone();
-                            let new_struct_def = self.convert_struct(s).map(Item::Struct)?;
+                            let new_struct_def = Item::Struct(self.convert_struct(s));
                             let squasher = self.generate_cpp_definition_squasher(tyname);
                             vec![new_struct_def, squasher]
                         }
@@ -164,11 +166,13 @@ impl BridgeConverter {
             // with the original name, but we currently discard that impl section.
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
-            // TODO this won't work for class names containing an underscore themselves.
+            // TODO test with class names containing underscores. It should work.
             let old_name = s.ident.to_string();
-            if let Some(pos) = old_name.find('_') {
-                let new_name = &old_name[pos+1..old_name.len()];
-                s.ident = Ident::new(new_name, s.ident.span());
+            for cn in &self.class_names_discovered {
+                if old_name.starts_with(cn) {
+                    s.ident = Ident::new(&old_name[cn.len()+1..], s.ident.span());
+                    break;
+                }
             }
         }
         Ok(ForeignItemFn {
@@ -179,8 +183,9 @@ impl BridgeConverter {
         })
     }
 
-    fn convert_struct(&self, ty: ItemStruct) -> Result<ItemStruct, ConvertError> {
-        Ok(ItemStruct {
+    fn convert_struct(&mut self, ty: ItemStruct) -> ItemStruct {
+        self.class_names_discovered.insert(ty.ident.to_string());
+        ItemStruct {
             attrs: self.strip_attr(ty.attrs, "repr"),
             vis: ty.vis,
             struct_token: ty.struct_token,
@@ -188,7 +193,7 @@ impl BridgeConverter {
             fields: ty.fields,
             semi_token: ty.semi_token,
             ident: ty.ident,
-        })
+        }
     }
 
     fn convert_enum(&self, ty: ItemEnum) -> Result<ItemEnum, ConvertError> {
@@ -203,6 +208,7 @@ impl BridgeConverter {
             ident: ty.ident,
         })
     }
+
     fn strip_attr(&self, attrs: Vec<Attribute>, to_strip: &str) -> Vec<Attribute> {
         attrs
             .into_iter()

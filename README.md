@@ -64,14 +64,13 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Reference to POD | Works |
 | Reference to std::string | Works |
 | Methods | Works, with some warnings and issues |
-| Constructors | - |
-| Destructors | Works via cxx `UniquePtr` already |
 | #defines | - |
 | Constants | - |
 | Enums | In progress; doesn't work yet |
 | Structs containing UniquePtr | - |
 | Structs containing strings | - |
-| make_unique | - |
+| Constructors/make_unique | - |
+| Destructors | Works via cxx `UniquePtr` already |
 
 # Build environment
 
