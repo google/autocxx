@@ -63,10 +63,12 @@ The project also contains test code which does this end-to-end, for all sorts of
 | std::unique_ptr of opaque types | - |
 | Reference to POD | Works |
 | Reference to std::string | Works |
-| Methods | - |
+| Methods | Works, with some warnings and issues |
+| Constructors | - |
+| Destructors | Works via cxx `UniquePtr` already |
 | #defines | - |
 | Constants | - |
-| Enums | - |
+| Enums | In progress; doesn't work yet |
 | Structs containing UniquePtr | - |
 | Structs containing strings | - |
 | make_unique | - |

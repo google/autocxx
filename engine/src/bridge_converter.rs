@@ -150,11 +150,27 @@ impl BridgeConverter {
     fn convert_foreign_fn(&self, fun: ForeignItemFn) -> Result<ForeignItemFn, ConvertError> {
         let mut s = fun.sig.clone();
         s.output = self.convert_return_type(s.output);
-        s.inputs = s
+        let (new_params, any_this): (Punctuated<_,_>, Vec<_>) = fun.sig
             .inputs
             .into_iter()
             .map(|i| self.convert_fn_arg(i))
-            .collect();
+            .unzip();
+        s.inputs = new_params;
+        let is_a_method = any_this.iter().any(|b| *b);
+        if is_a_method {
+            // bindgen generates methods with the name:
+            // {class}_{method name}
+            // It then generates an impl section for the Rust type
+            // with the original name, but we currently discard that impl section.
+            // We want to feed cxx methods with just the method name, so let's
+            // strip off the class name.
+            // TODO this won't work for class names containing an underscore themselves.
+            let old_name = s.ident.to_string();
+            if let Some(pos) = old_name.find('_') {
+                let new_name = &old_name[pos+1..old_name.len()];
+                s.ident = Ident::new(new_name, s.ident.span());
+            }
+        }
         Ok(ForeignItemFn {
             attrs: self.strip_attr(fun.attrs, "link_name"),
             vis: fun.vis,
@@ -197,29 +213,34 @@ impl BridgeConverter {
             .collect::<Vec<Attribute>>()
     }
 
-    fn convert_fn_arg(&self, arg: FnArg) -> FnArg {
+    /// Returns additionally a Boolean indicating whether an argument was
+    /// 'this'
+    fn convert_fn_arg(&self, arg: FnArg) -> (FnArg, bool) {
         match arg {
             FnArg::Typed(pt) => {
+                let mut found_this = false;
                 let old_pat = *pt.pat;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(pp) if pp.ident.to_string() == "this" => {
-                        return FnArg::Receiver(syn::Receiver {
+                        found_this = true;
+                        syn::Pat::Ident(syn::PatIdent {
                             attrs: pp.attrs,
+                            by_ref: pp.by_ref,
                             mutability: pp.mutability,
-                            self_token: Token![self](Span::call_site()),
-                            reference: Some((Token![&](Span::call_site()), None))
+                            subpat: pp.subpat,
+                            ident: Ident::new("self", pp.ident.span())
                         })
                     }
                     _ => old_pat,
                 };
-                FnArg::Typed(PatType {
+                (FnArg::Typed(PatType {
                     attrs: pt.attrs,
                     pat: Box::new(new_pat),
                     colon_token: pt.colon_token,
                     ty: self.convert_boxed_type(pt.ty),
-                })
+                }), found_this)
             },
-            _ => arg,
+            _ => (arg, false),
         }
     }
 
