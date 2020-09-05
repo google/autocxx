@@ -658,6 +658,32 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // works, but gives compile warnings
+    fn test_give_pod_class_by_value() {
+        let cxx = indoc! {"
+            Bob give_bob() {
+                Bob a;
+                a.a = 3;
+                a.b = 4;
+                return a;
+            }
+        "};
+        let hdr = indoc! {"
+            #include <cstdint>
+            class Bob {
+            public:
+                uint32_t a;
+                uint32_t b;
+            };
+            Bob give_bob();
+        "};
+        let rs = quote! {
+            assert_eq!(ffi::give_bob().b, 4);
+        };
+        run_test(cxx, hdr, rs, &["give_bob", "Bob"]);
+    }
+
+    #[test]
     fn test_give_pod_by_up() {
         let cxx = indoc! {"
             std::unique_ptr<Bob> give_bob() {
@@ -923,6 +949,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // works, but causes compile warnings
     fn test_take_pod_class_by_value() {
         let cxx = indoc! {"
             uint32_t take_bob(Bob a) {
@@ -954,7 +981,7 @@ mod tests {
         "};
         let hdr = indoc! {"
             #include <cstdint>
-            class Bob {
+            struct Bob {
             public:
                 uint32_t a;
                 uint32_t b;
@@ -977,7 +1004,7 @@ mod tests {
         "};
         let hdr = indoc! {"
             #include <cstdint>
-            class Bob {
+            struct Bob {
             public:
                 uint32_t a;
                 uint32_t b;
