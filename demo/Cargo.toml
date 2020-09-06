@@ -20,7 +20,7 @@ edition = "2018"
 
 [dependencies]
 cxx = "0.3.7"
-autocxx = { path = ".." }
+autocxx = { path = "..", version="0.1" }
 
 [build-dependencies]
-autocxx-build = { path = "../gen/build" }
+autocxx-build = { path = "../gen/build", version="0.1" }
