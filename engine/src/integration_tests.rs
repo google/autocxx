@@ -1,0 +1,751 @@
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use indoc::indoc;
+use log::info;
+use proc_macro2::TokenStream;
+use quote::quote;
+use std::fs::File;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use tempfile::{tempdir, TempDir};
+use test_env_log::test;
+
+lazy_static::lazy_static! {
+    static ref BUILDER: Mutex<LinkableTryBuilder> = Mutex::new(LinkableTryBuilder::new());
+}
+
+/// TryBuild which maintains a directory of libraries to link.
+/// This is desirable because otherwise, if we alter the RUSTFLAGS
+/// then trybuild rebuilds *everything* including all the dev-dependencies.
+/// This object exists purely so that we use the same RUSTFLAGS for every
+/// test case.
+struct LinkableTryBuilder {
+    /// Directory in which we'll keep any linkable libraries
+    temp_dir: TempDir,
+    test_cases: trybuild::TestCases,
+}
+
+impl LinkableTryBuilder {
+    fn new() -> Self {
+        LinkableTryBuilder {
+            temp_dir: tempdir().unwrap(),
+            test_cases: trybuild::TestCases::new(),
+        }
+    }
+
+    fn copy_libraries_into_temp_dir<P1: AsRef<Path>>(
+        &self,
+        library_path: &P1,
+        library_name: &str,
+    ) {
+        for item in std::fs::read_dir(library_path).unwrap() {
+            let item = item.unwrap();
+            if item
+                .file_name()
+                .into_string()
+                .unwrap()
+                .contains(library_name)
+            {
+                let dest_lib = self.temp_dir.path().join(item.file_name());
+                std::fs::copy(item.path(), dest_lib).unwrap();
+            }
+        }
+    }
+
+    fn build<P1: AsRef<Path>, P2: AsRef<Path>>(
+        &self,
+        library_path: &P1,
+        library_name: &str,
+        rs_path: &P2,
+    ) {
+        // Copy all items from the source dir into our temporary dir if their name matches
+        // the pattern given in `library_name`.
+        self.copy_libraries_into_temp_dir(library_path, library_name);
+        std::env::set_var(
+            "RUSTFLAGS",
+            format!("-L {}", self.temp_dir.path().to_str().unwrap()),
+        );
+        self.test_cases.pass(rs_path)
+    }
+}
+
+fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
+    let path = tdir.path().join(filename);
+    let mut f = File::create(&path).unwrap();
+    info!("Writing to {:?}: {}", path, content);
+    f.write_all(content.as_bytes()).unwrap();
+    path
+}
+
+fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_funcs: &[&str]) {
+    // Step 1: Write the C++ header snippet to a temp file
+    let tdir = tempdir().unwrap();
+    write_to_file(&tdir, "input.h", header_code);
+    // Step 2: Expand the snippet of Rust code into an entire
+    //         program including include_cxx!
+    // TODO - we're not quoting #s below (in the "" sense), and it's not entirely
+    // clear how we're getting away with it, but quoting it doesn't work.
+    let allowed_funcs = allowed_funcs.iter().map(|s| {
+        quote! {
+            Allow(#s)
+        }
+    });
+    let expanded_rust = quote! {
+        use autocxx_macro::include_cxx;
+
+        include_cxx!(
+            Header("input.h"),
+            #(#allowed_funcs),*
+        );
+
+        fn main() {
+            #rust_code
+        }
+
+        #[link(name="autocxx-demo")]
+        extern {}
+    };
+    // Step 3: Write the Rust code to a temp file
+    let rs_code = format!("{}", expanded_rust);
+    let rs_path = write_to_file(&tdir, "input.rs", &rs_code);
+
+    // Step 4: Write the C++ code snippet to a .cc file, along with a #include
+    //         of the header emitted in step 5.
+    let cxx_code = format!("#include \"{}\"\n{}", "input.h", cxx_code);
+    let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
+
+    info!("Path is {:?}", tdir.path());
+    let target_dir = tdir.path().join("target");
+    std::fs::create_dir(&target_dir).unwrap();
+    let target = rust_info::get().target_triple.unwrap();
+    let mut b = autocxx_build::Builder::new(&rs_path, tdir.path().to_str().unwrap()).unwrap();
+    b.builder()
+        .file(cxx_path)
+        .out_dir(&target_dir)
+        .host(&target)
+        .target(&target)
+        .opt_level(1)
+        .flag("-std=c++14")
+        .include(tdir.path())
+        .try_compile("autocxx-demo")
+        .unwrap();
+    // Step 8: use the trybuild crate to build the Rust file.
+    BUILDER
+        .lock()
+        .unwrap()
+        .build(&target_dir, "autocxx-demo", &rs_path);
+}
+
+#[test]
+fn test_return_void() {
+    let cxx = indoc! {"
+        void do_nothing() {
+        }
+    "};
+    let hdr = indoc! {"
+        void do_nothing();
+    "};
+    let rs = quote! {
+        ffi::do_nothing();
+    };
+    run_test(cxx, hdr, rs, &["do_nothing"]);
+}
+
+#[test]
+fn test_return_i32() {
+    let cxx = indoc! {"
+        uint32_t give_int() {
+            return 4;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        uint32_t give_int();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_int(), 4);
+    };
+    run_test(cxx, hdr, rs, &["give_int"]);
+}
+
+#[test]
+fn test_take_i32() {
+    let cxx = indoc! {"
+        uint32_t take_int(uint32_t a) {
+            return a + 3;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        uint32_t take_int(uint32_t a);
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::take_int(3), 6);
+    };
+    run_test(cxx, hdr, rs, &["take_int"]);
+}
+
+#[test]
+#[ignore] // because cxx doesn't support unique_ptrs to primitives.
+fn test_give_up_int() {
+    let cxx = indoc! {"
+        std::unique_ptr<uint32_t> give_up() {
+            return std::make_unique<uint32_t>(12);
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        std::unique_ptr<uint32_t> give_up();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_up().as_ref().unwrap(), 12);
+    };
+    run_test(cxx, hdr, rs, &["give_up"]);
+}
+
+#[test]
+fn test_give_string_up() {
+    let cxx = indoc! {"
+        std::unique_ptr<std::string> give_str_up() {
+            return std::make_unique<std::string>(\"Bob\");
+        }
+    "};
+    let hdr = indoc! {"
+        #include <memory>
+        #include <string>
+        std::unique_ptr<std::string> give_str_up();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_str_up().as_ref().unwrap().to_str().unwrap(), "Bob");
+    };
+    run_test(cxx, hdr, rs, &["give_str_up"]);
+}
+
+#[test]
+#[ignore] // because we don't yet support std::string by value
+fn test_give_string_plain() {
+    let cxx = indoc! {"
+        std::string give_str() {
+            return std::string(\"Bob\");
+        }
+    "};
+    let hdr = indoc! {"
+        #include <string>
+        std::string give_str();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_str_up().to_str().unwrap(), "Bob");
+    };
+    run_test(cxx, hdr, rs, &["give_str"]);
+}
+
+#[test]
+fn test_cycle_string_up() {
+    let cxx = indoc! {"
+        std::unique_ptr<std::string> give_str_up() {
+            return std::make_unique<std::string>(\"Bob\");
+        }
+        uint32_t take_str_up(std::unique_ptr<std::string> a) {
+            return a->length();
+        }
+    "};
+    let hdr = indoc! {"
+        #include <memory>
+        #include <string>
+        #include <cstdint>
+        std::unique_ptr<std::string> give_str_up();
+        uint32_t take_str_up(std::unique_ptr<std::string> a);
+    "};
+    let rs = quote! {
+        let s = ffi::give_str();
+        assert_eq!(ffi::take_str(s), 3);
+    };
+    run_test(cxx, hdr, rs, &["give_str_up", "take_str_up"]);
+}
+
+#[test]
+#[ignore] // because we don't yet support std::string by value
+fn test_cycle_string() {
+    let cxx = indoc! {"
+        std::string give_str() {
+            return std::string(\"Bob\");
+        }
+        uint32_t take_str(std::string a) {
+            return a.length();
+        }
+    "};
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        std::string give_str();
+        uint32_t take_str(std::string a);
+    "};
+    let rs = quote! {
+        let s = ffi::give_str();
+        assert_eq!(ffi::take_str(s), 3);
+    };
+    let allowed_funcs = &["give_str", "take_str"];
+    run_test(cxx, hdr, rs, allowed_funcs);
+}
+
+#[test]
+fn test_cycle_string_by_ref() {
+    let cxx = indoc! {"
+        std::unique_ptr<std::string> give_str() {
+            return std::make_unique<std::string>(\"Bob\");
+        }
+        uint32_t take_str(const std::string& a) {
+            return a.length();
+        }
+    "};
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        std::unique_ptr<std::string> give_str();
+        uint32_t take_str(const std::string& a);
+    "};
+    let rs = quote! {
+        let s = ffi::give_str();
+        assert_eq!(ffi::take_str(s.as_ref()), 3);
+    };
+    let allowed_funcs = &["give_str", "take_str"];
+    run_test(cxx, hdr, rs, allowed_funcs);
+}
+
+#[test]
+fn test_cycle_string_by_mut_ref() {
+    let cxx = indoc! {"
+        std::unique_ptr<std::string> give_str() {
+            return std::make_unique<std::string>(\"Bob\");
+        }
+        uint32_t take_str(std::string& a) {
+            return a.length();
+        }
+    "};
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        std::unique_ptr<std::string> give_str();
+        uint32_t take_str(std::string& a);
+    "};
+    let rs = quote! {
+        let s = ffi::give_str();
+        assert_eq!(ffi::take_str(s.as_ref()), 3);
+    };
+    let allowed_funcs = &["give_str", "take_str"];
+    run_test(cxx, hdr, rs, allowed_funcs);
+}
+
+#[test]
+fn test_give_pod_by_value() {
+    let cxx = indoc! {"
+        Bob give_bob() {
+            Bob a;
+            a.a = 3;
+            a.b = 4;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        Bob give_bob();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_bob().b, 4);
+    };
+    run_test(cxx, hdr, rs, &["give_bob", "Bob"]);
+}
+
+#[test]
+#[ignore] // works, but gives compile warnings
+fn test_give_pod_class_by_value() {
+    let cxx = indoc! {"
+        Bob give_bob() {
+            Bob a;
+            a.a = 3;
+            a.b = 4;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        class Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+        };
+        Bob give_bob();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_bob().b, 4);
+    };
+    run_test(cxx, hdr, rs, &["give_bob", "Bob"]);
+}
+
+#[test]
+fn test_give_pod_by_up() {
+    let cxx = indoc! {"
+        std::unique_ptr<Bob> give_bob() {
+            auto a = std::make_unique<Bob>();
+            a->a = 3;
+            a->b = 4;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        std::unique_ptr<Bob> give_bob();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_bob().as_ref().unwrap().b, 4);
+    };
+    run_test(cxx, hdr, rs, &["give_bob", "Bob"]);
+}
+
+#[test]
+fn test_take_pod_by_value() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+}
+
+#[test]
+fn test_take_pod_by_ref() {
+    let cxx = indoc! {"
+        uint32_t take_bob(const Bob& a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        uint32_t take_bob(const Bob& a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob(&a), 12);
+    };
+    let allowed_funcs = &["take_bob", "Bob"];
+    run_test(cxx, hdr, rs, allowed_funcs);
+}
+
+#[test]
+fn test_take_pod_by_mut_ref() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob& a) {
+            a.b = 14;
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        uint32_t take_bob(const Bob& a);
+    "};
+    let rs = quote! {
+        let mut a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob(&mut a), 12);
+        assert_eq!(a.b, 14);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+}
+
+#[test]
+fn test_take_nested_pod_by_value() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Phil {
+            uint32_t d;
+        };
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+            Phil c;
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13, c: ffi::Phil { d: 4 } };
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    // Should be no need to allowlist Phil below
+    let allowed_funcs = &["take_bob", "Bob"];
+    run_test(cxx, hdr, rs, allowed_funcs);
+}
+
+#[test]
+#[ignore] // because we don't yet support strings in PODs.
+fn test_cycle_pod_with_str_by_value() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+        std::string get_str() {
+            return \"hello\";
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Bob {
+            uint32_t a;
+            std::string b;
+        };
+        uint32_t take_bob(Bob a);
+        std::string get_str();
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: ffi::get_str() };
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob", "get_str"]);
+}
+
+#[test]
+#[ignore] // because we don't yet support strings in PODs.
+fn test_cycle_pod_with_str_by_ref() {
+    let cxx = indoc! {"
+        uint32_t take_bob(const Bob& a) {
+            return a.a;
+        }
+        std::string get_str() {
+            return \"hello\";
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Bob {
+            uint32_t a;
+            std::string b;
+        };
+        uint32_t take_bob(const Bob& a);
+        std::string get_str();
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: ffi::get_str() };
+        assert_eq!(ffi::take_bob(&a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob", "get_str"]);
+}
+
+#[test]
+#[ignore] // because we have yet to implement make_unique
+fn test_make_up() {
+    let cxx = indoc! {"
+        Bob::Bob() : a(3) {
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        class Bob {
+        public:
+            Bob();
+            uint32_t a;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::Bob::make_unique();
+        assert_eq!(a.as_ref().unwrap().a, 3);
+    };
+    run_test(cxx, hdr, rs, &["Bob"]);
+}
+
+#[test]
+#[ignore] // because we have yet to implement make_unique
+fn test_make_up_int() {
+    let cxx = indoc! {"
+        Bob::Bob(uint32_t a) : b(a) {
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        class Bob {
+        public:
+            Bob(uint32_t a);
+            uint32_t b;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::Bob::make_unique(3);
+        assert_eq!(a.as_ref().unwrap().b, 3);
+    };
+    run_test(cxx, hdr, rs, &["Bob"]);
+}
+
+#[test]
+#[ignore] // because enums are the wrong size
+fn test_enum() {
+    let cxx = indoc! {"
+        Bob give_bob() {
+            return Bob::BOB_VALUE_2;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        enum Bob {
+            BOB_VALUE_1,
+            BOB_VALUE_2,
+        };
+        Bob give_bob();
+    "};
+    let rs = quote! {
+        let a = ffi::Bob::BOB_VALUE_2;
+        let b = ffi::give_bob();
+        assert_eq!(a, b);
+    };
+    run_test(cxx, hdr, rs, &["Bob", "give_bob"]);
+}
+
+#[test]
+#[ignore] // because currently we do not !include the header unless there are functions
+fn test_enum_no_funcs() {
+    let cxx = indoc! {"
+    "};
+    let hdr = indoc! {"
+        enum Bob {
+            BOB_VALUE_1,
+            BOB_VALUE_2,
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::Bob::BOB_VALUE_1;
+        let b = ffi::Bob::BOB_VALUE_2;
+        assert_ne!(a, b);
+    };
+    run_test(cxx, hdr, rs, &["Bob"]);
+}
+
+#[test]
+#[ignore] // works, but causes compile warnings
+fn test_take_pod_class_by_value() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        class Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+}
+
+#[test]
+fn test_pod_method() {
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob() const {
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob() const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(a.get_bob(), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+}
+
+#[test]
+fn test_pod_mut_method() {
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob() {
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob();
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(a.get_bob(), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+}
+// Yet to test:
+// 1. Make UniquePtr<CxxStrings> in Rust
+// 2. Enums
+// 3. Constants
+// 4. Call methods
+// 5. Templated stuff
+// 6. Preprocessor directives
+// 7. Out params
+// 8. Opaque type handling
+// 9. Multiple functions in one header
+// Stuff which requires much more thought:
+// 1. Shared pointers
+// Negative tests:
+// 1. Private methods
+// 2. Private fields
