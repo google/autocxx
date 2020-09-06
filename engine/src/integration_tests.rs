@@ -165,6 +165,25 @@ fn test_return_void() {
 }
 
 #[test]
+fn test_two_funcs() {
+    let cxx = indoc! {"
+        void do_nothing1() {
+        }
+        void do_nothing2() {
+        }
+    "};
+    let hdr = indoc! {"
+        void do_nothing1();
+        void do_nothing2();
+    "};
+    let rs = quote! {
+        ffi::do_nothing1();
+        ffi::do_nothing2();
+    };
+    run_test(cxx, hdr, rs, &["do_nothing1", "do_nothing2"]);
+}
+
+#[test]
 fn test_return_i32() {
     let cxx = indoc! {"
         uint32_t give_int() {
