@@ -57,6 +57,9 @@ impl PreprocessorDefinitions {
 /// Callbacks for bindgen.
 #[derive(Debug)]
 pub(crate) struct PreprocessorParseCallbacks {
+    // We use a mutex rather than a RefCell not because we need thread
+    // safety, but because we need poisoning in order to avoid problems
+    // with UnwindSafe.
     definitions: Rc<Mutex<PreprocessorDefinitions>>,
 }
 
