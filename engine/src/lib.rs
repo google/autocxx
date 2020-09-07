@@ -239,8 +239,7 @@ impl IncludeCpp {
 
     pub fn generate_rs(self) -> Result<TokenStream2> {
         let another_ref = self.preprocessor_definiitions.clone();
-        let mg = another_ref.try_lock().unwrap();
-        let ppdefs = mg.to_tokenstream();
+        let ppdefs = another_ref.try_lock().unwrap().to_tokenstream();
         
         let mut ts = self.do_generation(true)?;
         ts.extend(ppdefs);

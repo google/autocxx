@@ -78,6 +78,7 @@ impl LinkableTryBuilder {
             "RUSTFLAGS",
             format!("-L {}", self.temp_dir.path().to_str().unwrap()),
         );
+        println!("Building!!");
         self.test_cases.pass(rs_path)
     }
 }
@@ -118,6 +119,7 @@ fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_f
         #[link(name="autocxx-demo")]
         extern {}
     };
+    info!("Expanded Rust: {}", expanded_rust);
     // Step 3: Write the Rust code to a temp file
     let rs_code = format!("{}", expanded_rust);
     let rs_path = write_to_file(&tdir, "input.rs", &rs_code);
@@ -187,7 +189,7 @@ fn test_two_funcs() {
 fn test_return_i32() {
     let cxx = indoc! {"
         uint32_t give_int() {
-            return 4;
+            return 5;
         }
     "};
     let hdr = indoc! {"
@@ -770,6 +772,26 @@ fn test_define_int() {
     };
     run_test(cxx, hdr, rs, &["do_nothing"]);
 }
+
+
+#[test]
+fn test_define_str() {
+    // TODO - remove function definitions when no longer needed
+    let cxx = indoc! {"
+        void do_nothing() {
+        }
+    "};
+    let hdr = indoc! {"
+        #define BOB \"foo\"
+        void do_nothing();
+    "};
+    let rs = quote! {
+        ffi::do_nothing();
+        assert_eq!(ffi::def::BOB, "foo");
+    };
+    run_test(cxx, hdr, rs, &["do_nothing"]);
+}
+
 
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust

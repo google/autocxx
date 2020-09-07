@@ -73,7 +73,7 @@ impl PreprocessorParseCallbacks {
 
 impl ParseCallbacks for PreprocessorParseCallbacks {
     fn int_macro(&self, name: &str, value: i64) -> Option<IntKind> {
-        let mut mg = self.definitions.try_lock().unwrap();
+        let mut mg = self.definitions.try_lock().expect("would block whilst adding int macro");
         mg.insert_int_macro(name, value);
         None
     }
