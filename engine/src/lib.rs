@@ -12,6 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+mod bridge_converter;
+mod preprocessor_parse_callbacks;
+
+#[cfg(test)]
+mod integration_tests;
+
 use proc_macro2::TokenStream as TokenStream2;
 use std::path::PathBuf;
 
@@ -23,11 +30,9 @@ use syn::{ItemMod, Macro};
 
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
-
-mod bridge_converter;
-
-#[cfg(test)]
-mod integration_tests;
+use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
+use std::sync::Mutex;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum Error {
@@ -56,6 +61,7 @@ pub struct IncludeCpp {
     allowlist: Vec<String>,
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
     parse_only: bool,
+    preprocessor_definiitions: Rc<Mutex<PreprocessorDefinitions>>,
 }
 
 impl Parse for IncludeCpp {
@@ -127,6 +133,7 @@ impl IncludeCpp {
             allowlist,
             preconfigured_inc_dirs: None,
             parse_only,
+            preprocessor_definiitions: Rc::new(Mutex::new(PreprocessorDefinitions::new())),
         })
     }
 
@@ -210,6 +217,7 @@ impl IncludeCpp {
             .blacklist_item(".*mbstate_t.*")
             .derive_copy(false)
             .derive_debug(false)
+            .parse_callbacks(Box::new(PreprocessorParseCallbacks::new(self.preprocessor_definiitions.clone())))
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
             })
@@ -230,7 +238,13 @@ impl IncludeCpp {
     }
 
     pub fn generate_rs(self) -> Result<TokenStream2> {
-        self.do_generation(true)
+        let another_ref = self.preprocessor_definiitions.clone();
+        let mg = another_ref.try_lock().unwrap();
+        let ppdefs = mg.to_tokenstream();
+        
+        let mut ts = self.do_generation(true)?;
+        ts.extend(ppdefs);
+        Ok(ts)
     }
 
     fn do_generation(self, old_rust: bool) -> Result<TokenStream2> {

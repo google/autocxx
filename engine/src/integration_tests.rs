@@ -394,7 +394,6 @@ fn test_give_pod_by_value() {
 }
 
 #[test]
-#[ignore] // works, but gives compile warnings
 fn test_give_pod_class_by_value() {
     let cxx = indoc! {"
         Bob give_bob() {
@@ -753,6 +752,25 @@ fn test_pod_mut_method() {
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
 }
+
+#[test]
+fn test_define_int() {
+    // TODO - remove function definitions when no longer needed
+    let cxx = indoc! {"
+        void do_nothing() {
+        }
+    "};
+    let hdr = indoc! {"
+        #define BOB 3
+        void do_nothing();
+    "};
+    let rs = quote! {
+        ffi::do_nothing();
+        assert_eq!(ffi::def::BOB, 3);
+    };
+    run_test(cxx, hdr, rs, &["do_nothing"]);
+}
+
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
 // 2. Enums
