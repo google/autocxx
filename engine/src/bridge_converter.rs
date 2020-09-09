@@ -107,7 +107,7 @@ impl BridgeConverter {
                             let new_enum_def = self.convert_enum(e).map(Item::Enum)?;
                             let squasher = self.generate_cpp_definition_squasher(tyname);
                             vec![new_enum_def, squasher]
-                        },
+                        }
                         Item::Impl(_) => vec![],
                         _ => vec![item], // TODO - consider rejecting
                     });
@@ -152,7 +152,8 @@ impl BridgeConverter {
     fn convert_foreign_fn(&self, fun: ForeignItemFn) -> Result<ForeignItemFn, ConvertError> {
         let mut s = fun.sig.clone();
         s.output = self.convert_return_type(s.output);
-        let (new_params, any_this): (Punctuated<_,_>, Vec<_>) = fun.sig
+        let (new_params, any_this): (Punctuated<_, _>, Vec<_>) = fun
+            .sig
             .inputs
             .into_iter()
             .map(|i| self.convert_fn_arg(i))
@@ -170,7 +171,7 @@ impl BridgeConverter {
             let old_name = s.ident.to_string();
             for cn in &self.class_names_discovered {
                 if old_name.starts_with(cn) {
-                    s.ident = Ident::new(&old_name[cn.len()+1..], s.ident.span());
+                    s.ident = Ident::new(&old_name[cn.len() + 1..], s.ident.span());
                     break;
                 }
             }
@@ -234,18 +235,21 @@ impl BridgeConverter {
                             by_ref: pp.by_ref,
                             mutability: pp.mutability,
                             subpat: pp.subpat,
-                            ident: Ident::new("self", pp.ident.span())
+                            ident: Ident::new("self", pp.ident.span()),
                         })
                     }
                     _ => old_pat,
                 };
-                (FnArg::Typed(PatType {
-                    attrs: pt.attrs,
-                    pat: Box::new(new_pat),
-                    colon_token: pt.colon_token,
-                    ty: self.convert_boxed_type(pt.ty),
-                }), found_this)
-            },
+                (
+                    FnArg::Typed(PatType {
+                        attrs: pt.attrs,
+                        pat: Box::new(new_pat),
+                        colon_token: pt.colon_token,
+                        ty: self.convert_boxed_type(pt.ty),
+                    }),
+                    found_this,
+                )
+            }
             _ => (arg, false),
         }
     }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 mod bridge_converter;
 mod preprocessor_parse_callbacks;
 
@@ -31,8 +30,8 @@ use syn::{ItemMod, Macro};
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
-use std::sync::Mutex;
 use std::rc::Rc;
+use std::sync::Mutex;
 
 #[derive(Debug)]
 pub enum Error {
@@ -217,7 +216,9 @@ impl IncludeCpp {
             .blacklist_item(".*mbstate_t.*")
             .derive_copy(false)
             .derive_debug(false)
-            .parse_callbacks(Box::new(PreprocessorParseCallbacks::new(self.preprocessor_definiitions.clone())))
+            .parse_callbacks(Box::new(PreprocessorParseCallbacks::new(
+                self.preprocessor_definiitions.clone(),
+            )))
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
             })
@@ -240,7 +241,7 @@ impl IncludeCpp {
     pub fn generate_rs(self) -> Result<TokenStream2> {
         let another_ref = self.preprocessor_definiitions.clone();
         let ppdefs = another_ref.try_lock().unwrap().to_tokenstream();
-        
+
         let mut ts = self.do_generation(true)?;
         ts.extend(ppdefs);
         Ok(ts)

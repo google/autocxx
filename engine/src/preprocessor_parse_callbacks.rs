@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::rc::Rc;
-use std::sync::Mutex;
-use std::collections::HashMap;
-use bindgen::callbacks::{ParseCallbacks, IntKind};
+use bindgen::callbacks::{IntKind, ParseCallbacks};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::Mutex;
 
 /// Keeps track of all known preprocessor invocations.
-#[derive(Debug,Default)]
+#[derive(Debug, Default)]
 pub(crate) struct PreprocessorDefinitions {
     integral: HashMap<String, i64>,
 }
@@ -40,10 +40,12 @@ impl PreprocessorDefinitions {
         if self.integral.is_empty() {
             TokenStream2::new()
         } else {
-            let defs= self.integral.iter().map(|(k, v)| quote!{
-                const #k = #v;
+            let defs = self.integral.iter().map(|(k, v)| {
+                quote! {
+                    const #k = #v;
+                }
             });
-            quote!{
+            quote! {
                 mod ffi {
                     mod cpp {
                         #(#defs)*
@@ -65,15 +67,16 @@ pub(crate) struct PreprocessorParseCallbacks {
 
 impl PreprocessorParseCallbacks {
     pub fn new(definitions: Rc<Mutex<PreprocessorDefinitions>>) -> Self {
-        PreprocessorParseCallbacks {
-            definitions
-        }
+        PreprocessorParseCallbacks { definitions }
     }
 }
 
 impl ParseCallbacks for PreprocessorParseCallbacks {
     fn int_macro(&self, name: &str, value: i64) -> Option<IntKind> {
-        let mut mg = self.definitions.try_lock().expect("would block whilst adding int macro");
+        let mut mg = self
+            .definitions
+            .try_lock()
+            .expect("would block whilst adding int macro");
         mg.insert_int_macro(name, value);
         None
     }
