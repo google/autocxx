@@ -20,6 +20,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::panic::RefUnwindSafe;
 use tempfile::{tempdir, TempDir};
 use test_env_log::test;
 
@@ -35,14 +36,12 @@ lazy_static::lazy_static! {
 struct LinkableTryBuilder {
     /// Directory in which we'll keep any linkable libraries
     temp_dir: TempDir,
-    test_cases: trybuild::TestCases,
 }
 
 impl LinkableTryBuilder {
     fn new() -> Self {
         LinkableTryBuilder {
             temp_dir: tempdir().unwrap(),
-            test_cases: trybuild::TestCases::new(),
         }
     }
 
@@ -65,12 +64,12 @@ impl LinkableTryBuilder {
         }
     }
 
-    fn build<P1: AsRef<Path>, P2: AsRef<Path>>(
+    fn build<P1: AsRef<Path>, P2: AsRef<Path> + RefUnwindSafe>(
         &self,
         library_path: &P1,
         library_name: &str,
         rs_path: &P2,
-    ) {
+    ) -> std::thread::Result<()> {
         // Copy all items from the source dir into our temporary dir if their name matches
         // the pattern given in `library_name`.
         self.copy_libraries_into_temp_dir(library_path, library_name);
@@ -79,7 +78,10 @@ impl LinkableTryBuilder {
             format!("-L {}", self.temp_dir.path().to_str().unwrap()),
         );
         println!("Building!!");
-        self.test_cases.pass(rs_path)
+        std::panic::catch_unwind(|| {
+            let test_cases = trybuild::TestCases::new();
+            test_cases.pass(rs_path)
+        })
     }
 }
 
@@ -145,10 +147,11 @@ fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_f
         .try_compile("autocxx-demo")
         .unwrap();
     // Step 8: use the trybuild crate to build the Rust file.
-    BUILDER
+    let r = BUILDER
         .lock()
         .unwrap()
         .build(&target_dir, "autocxx-demo", &rs_path);
+    r.unwrap()
 }
 
 #[test]
