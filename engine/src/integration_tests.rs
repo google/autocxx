@@ -18,9 +18,9 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use std::fs::File;
 use std::io::Write;
+use std::panic::RefUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::panic::RefUnwindSafe;
 use tempfile::{tempdir, TempDir};
 use test_env_log::test;
 
@@ -45,38 +45,33 @@ impl LinkableTryBuilder {
         }
     }
 
-    fn copy_libraries_into_temp_dir<P1: AsRef<Path>>(
-        &self,
-        library_path: &P1,
-        library_name: &str,
-    ) {
-        for item in std::fs::read_dir(library_path).unwrap() {
+    fn copy_items_into_temp_dir<P1: AsRef<Path>>(&self, src_path: &P1, pattern: &str) {
+        for item in std::fs::read_dir(src_path).unwrap() {
             let item = item.unwrap();
-            if item
-                .file_name()
-                .into_string()
-                .unwrap()
-                .contains(library_name)
-            {
-                let dest_lib = self.temp_dir.path().join(item.file_name());
-                std::fs::copy(item.path(), dest_lib).unwrap();
+            if item.file_name().into_string().unwrap().contains(pattern) {
+                let dest = self.temp_dir.path().join(item.file_name());
+                std::fs::copy(item.path(), dest).unwrap();
             }
         }
     }
 
-    fn build<P1: AsRef<Path>, P2: AsRef<Path> + RefUnwindSafe>(
+    fn build<P1: AsRef<Path>, P2: AsRef<Path>, P3: AsRef<Path> + RefUnwindSafe>(
         &self,
         library_path: &P1,
         library_name: &str,
-        rs_path: &P2,
+        header_path: &P2,
+        header_name: &str,
+        rs_path: &P3,
     ) -> std::thread::Result<()> {
         // Copy all items from the source dir into our temporary dir if their name matches
         // the pattern given in `library_name`.
-        self.copy_libraries_into_temp_dir(library_path, library_name);
+        self.copy_items_into_temp_dir(library_path, library_name);
+        self.copy_items_into_temp_dir(header_path, header_name);
         std::env::set_var(
             "RUSTFLAGS",
             format!("-L {}", self.temp_dir.path().to_str().unwrap()),
         );
+        std::env::set_var("AUTOCXX_INC", self.temp_dir.path().to_str().unwrap());
         println!("Building!!");
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();
@@ -147,10 +142,13 @@ fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_f
         .try_compile("autocxx-demo")
         .unwrap();
     // Step 8: use the trybuild crate to build the Rust file.
-    let r = BUILDER
-        .lock()
-        .unwrap()
-        .build(&target_dir, "autocxx-demo", &rs_path);
+    let r = BUILDER.lock().unwrap().build(
+        &target_dir,
+        "autocxx-demo",
+        &tdir.path(),
+        "input.h",
+        &rs_path,
+    );
     r.unwrap()
 }
 
@@ -776,7 +774,6 @@ fn test_define_int() {
     run_test(cxx, hdr, rs, &["do_nothing"]);
 }
 
-
 #[test]
 fn test_define_str() {
     // TODO - remove function definitions when no longer needed
@@ -794,7 +791,6 @@ fn test_define_str() {
     };
     run_test(cxx, hdr, rs, &["do_nothing"]);
 }
-
 
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
