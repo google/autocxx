@@ -67,12 +67,9 @@ impl LinkableTryBuilder {
         // the pattern given in `library_name`.
         self.copy_items_into_temp_dir(library_path, library_name);
         self.copy_items_into_temp_dir(header_path, header_name);
-        std::env::set_var(
-            "RUSTFLAGS",
-            format!("-L {}", self.temp_dir.path().to_str().unwrap()),
-        );
-        std::env::set_var("AUTOCXX_INC", self.temp_dir.path().to_str().unwrap());
-        println!("Building!!");
+        let temp_path = self.temp_dir.path().to_str().unwrap();
+        std::env::set_var("RUSTFLAGS", format!("-L {}", temp_path));
+        std::env::set_var("AUTOCXX_INC", temp_path);
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();
             test_cases.pass(rs_path)
@@ -198,7 +195,7 @@ fn test_return_i32() {
         uint32_t give_int();
     "};
     let rs = quote! {
-        assert_eq!(ffi::give_int(), 4);
+        assert_eq!(ffi::give_int(), 5);
     };
     run_test(cxx, hdr, rs, &["give_int"]);
 }
