@@ -107,7 +107,7 @@ fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_f
         }
     });
     let expanded_rust = quote! {
-        use autocxx_macro::include_cxx;
+        use autocxx::include_cxx;
 
         include_cxx!(
             Header("input.h"),
