@@ -24,7 +24,7 @@ use std::sync::Mutex;
 use tempfile::{tempdir, TempDir};
 use test_env_log::test;
 
-const KEEP_TEMPDIRS: bool = true;
+const KEEP_TEMPDIRS: bool = false;
 
 lazy_static::lazy_static! {
     static ref BUILDER: Mutex<LinkableTryBuilder> = Mutex::new(LinkableTryBuilder::new());
