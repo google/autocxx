@@ -367,8 +367,8 @@ fn test_cycle_string_by_mut_ref() {
         uint32_t take_str(std::string& a);
     "};
     let rs = quote! {
-        let s = ffi::give_str();
-        assert_eq!(ffi::take_str(s.as_ref().unwrap()), 3);
+        let mut s = ffi::give_str();
+        assert_eq!(ffi::take_str(s.as_mut().unwrap()), 3);
     };
     let allowed_funcs = &["give_str", "take_str"];
     run_test(cxx, hdr, rs, allowed_funcs);
