@@ -24,6 +24,8 @@ use std::sync::Mutex;
 use tempfile::{tempdir, TempDir};
 use test_env_log::test;
 
+const KEEP_TEMPDIRS: bool = true;
+
 lazy_static::lazy_static! {
     static ref BUILDER: Mutex<LinkableTryBuilder> = Mutex::new(LinkableTryBuilder::new());
 }
@@ -146,6 +148,9 @@ fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_f
         "input.h",
         &rs_path,
     );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tdir.into_path().to_str());
+    }
     r.unwrap()
 }
 

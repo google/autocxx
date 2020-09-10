@@ -31,7 +31,7 @@ osstrtools = "0.2"
 lazy_static = "1.4"
 indoc = "1.0"
 bindgen = "0.55"
-cxx-gen = "0.0.1"
+cxx-gen = { version="0.0.1", path="../../cxx/gen/lib" }
 
 [dependencies.syn]
 version = "1.0.39"
@@ -49,4 +49,4 @@ autocxx-build = { path="../gen/build" }
 # by the trybuild test system...
 autocxx = { path=".." }
 link-cplusplus = "1.0"
-cxx = "0.3.7"
+cxx = { version="0.4.4", path="../../cxx" }
