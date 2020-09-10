@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod bridge_converter;
+mod cpp_postprocessor;
 mod preprocessor_parse_callbacks;
 
 #[cfg(test)]
@@ -32,6 +33,11 @@ use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
 use std::rc::Rc;
 use std::sync::Mutex;
+
+/// Turn off and remove this constant when
+/// https://github.com/rust-lang/rust/pull/75857 is fixed.
+/// This should allow removal of the entire cpp_postprocessor module.
+const TEMPORARY_HACK_TO_AVOID_REDEFINITIONS: bool = true;
 
 #[derive(Debug)]
 pub enum Error {
@@ -67,6 +73,18 @@ impl Parse for IncludeCpp {
     fn parse(input: ParseStream) -> ParseResult<Self> {
         Self::new_from_parse_stream(input)
     }
+}
+
+fn dump_generated_code(gen: GeneratedCode) -> Result<GeneratedCode> {
+    info!(
+        "CXX:\n{}",
+        String::from_utf8(gen.implementation.clone()).unwrap()
+    );
+    info!(
+        "header:\n{}",
+        String::from_utf8(gen.header.clone()).unwrap()
+    );
+    Ok(gen)
 }
 
 /// Prelude of C++ for squirting into bindgen. This configures
@@ -242,17 +260,17 @@ impl IncludeCpp {
         let another_ref = self.preprocessor_definiitions.clone();
         let ppdefs = another_ref.try_lock().unwrap().to_tokenstream();
 
-        let mut ts = self.do_generation(true)?;
+        let (mut ts, _) = self.do_generation()?;
         ts.extend(ppdefs);
         Ok(ts)
     }
 
-    fn do_generation(self, old_rust: bool) -> Result<TokenStream2> {
+    fn do_generation(self) -> Result<(TokenStream2, Vec<String>)> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
         if self.parse_only {
-            return Ok(TokenStream2::new());
+            return Ok((TokenStream2::new(), Vec::new()));
         }
         // 4. (also respects environment variables to pick up more headers,
         //     include paths and #defines)
@@ -280,25 +298,38 @@ impl IncludeCpp {
             }
         }
 
-        let mut converter = bridge_converter::BridgeConverter::new(include_list, old_rust);
-        let new_bindings = converter.convert(bindings).map_err(Error::Conversion)?;
+        let mut converter = bridge_converter::BridgeConverter::new(
+            include_list,
+            TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
+        );
+        let results = converter.convert(bindings).map_err(Error::Conversion)?;
+        let new_bindings = results.output;
+        let types_encountered = results.types_encountered;
         let new_bindings = new_bindings.to_token_stream();
         info!("New bindings: {}", new_bindings.to_string());
-        Ok(new_bindings)
+        Ok((new_bindings, types_encountered))
     }
 
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCode> {
-        let rs = self.do_generation(false)?;
+        let (rs, types_encountered) = self.do_generation()?;
         let opt = cxx_gen::Opt::default();
-        let results = cxx_gen::generate_header_and_cc(rs, &opt).map_err(Error::CxxGen);
-        if let Ok(ref gen) = results {
-            info!(
-                "CXX: {}",
-                String::from_utf8(gen.implementation.clone()).unwrap()
-            );
-            info!("header: {}", String::from_utf8(gen.header.clone()).unwrap());
-        }
-        results
+        cxx_gen::generate_header_and_cc(rs, &opt)
+            .map_err(Error::CxxGen)
+            .and_then(dump_generated_code)
+            .and_then(|gen| {
+                if TEMPORARY_HACK_TO_AVOID_REDEFINITIONS {
+                    Ok(GeneratedCode {
+                        header: cpp_postprocessor::disable_types(gen.header, &types_encountered),
+                        implementation: cpp_postprocessor::disable_types(
+                            gen.implementation,
+                            &types_encountered,
+                        ),
+                    })
+                } else {
+                    Ok(gen)
+                }
+            })
+            .and_then(dump_generated_code)
     }
 
     pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
