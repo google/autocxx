@@ -295,8 +295,8 @@ fn test_cycle_string_up() {
         uint32_t take_str_up(std::unique_ptr<std::string> a);
     "};
     let rs = quote! {
-        let s = ffi::give_str();
-        assert_eq!(ffi::take_str(s), 3);
+        let s = ffi::give_str_up();
+        assert_eq!(ffi::take_str_up(s), 3);
     };
     run_test(cxx, hdr, rs, &["give_str_up", "take_str_up"]);
 }
@@ -344,7 +344,7 @@ fn test_cycle_string_by_ref() {
     "};
     let rs = quote! {
         let s = ffi::give_str();
-        assert_eq!(ffi::take_str(s.as_ref()), 3);
+        assert_eq!(ffi::take_str(s.as_ref().unwrap()), 3);
     };
     let allowed_funcs = &["give_str", "take_str"];
     run_test(cxx, hdr, rs, allowed_funcs);
@@ -368,7 +368,7 @@ fn test_cycle_string_by_mut_ref() {
     "};
     let rs = quote! {
         let s = ffi::give_str();
-        assert_eq!(ffi::take_str(s.as_ref()), 3);
+        assert_eq!(ffi::take_str(s.as_ref().unwrap()), 3);
     };
     let allowed_funcs = &["give_str", "take_str"];
     run_test(cxx, hdr, rs, allowed_funcs);
@@ -507,7 +507,7 @@ fn test_take_pod_by_mut_ref() {
             uint32_t a;
             uint32_t b;
         };
-        uint32_t take_bob(const Bob& a);
+        uint32_t take_bob(Bob& a);
     "};
     let rs = quote! {
         let mut a = ffi::Bob { a: 12, b: 13 };
@@ -752,7 +752,7 @@ fn test_pod_mut_method() {
         };
     "};
     let rs = quote! {
-        let a = ffi::Bob { a: 12, b: 13 };
+        let mut a = ffi::Bob { a: 12, b: 13 };
         assert_eq!(a.get_bob(), 12);
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
