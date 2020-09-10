@@ -66,7 +66,7 @@ pub struct IncludeCpp {
     allowlist: Vec<String>,
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
     parse_only: bool,
-    preprocessor_definiitions: Rc<Mutex<PreprocessorDefinitions>>,
+    preprocessor_definitions: Rc<Mutex<PreprocessorDefinitions>>,
 }
 
 impl Parse for IncludeCpp {
@@ -150,7 +150,7 @@ impl IncludeCpp {
             allowlist,
             preconfigured_inc_dirs: None,
             parse_only,
-            preprocessor_definiitions: Rc::new(Mutex::new(PreprocessorDefinitions::new())),
+            preprocessor_definitions: Rc::new(Mutex::new(PreprocessorDefinitions::new())),
         })
     }
 
@@ -235,7 +235,7 @@ impl IncludeCpp {
             .derive_copy(false)
             .derive_debug(false)
             .parse_callbacks(Box::new(PreprocessorParseCallbacks::new(
-                self.preprocessor_definiitions.clone(),
+                self.preprocessor_definitions.clone(),
             )))
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
@@ -256,16 +256,15 @@ impl IncludeCpp {
         Ok(builder)
     }
 
-    pub fn generate_rs(self) -> Result<TokenStream2> {
-        let another_ref = self.preprocessor_definiitions.clone();
-        let ppdefs = another_ref.try_lock().unwrap().to_tokenstream();
-
+    pub fn generate_rs(&self) -> Result<TokenStream2> {
         let (mut ts, _) = self.do_generation()?;
+        let another_ref = self.preprocessor_definitions.clone();
+        let ppdefs = another_ref.try_lock().unwrap().to_tokenstream();
         ts.extend(ppdefs);
         Ok(ts)
     }
 
-    fn do_generation(self) -> Result<(TokenStream2, Vec<String>)> {
+    fn do_generation(&self) -> Result<(TokenStream2, Vec<String>)> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.

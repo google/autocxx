@@ -63,6 +63,22 @@ use syn::parse_macro_input;
 /// * *Header(filename)*: a header filename to parse and include
 /// * *Allow(type or function name)*: a type or function name whose declaration
 ///   should be made available to C++.
+///
+/// # Generated code
+///
+/// You will find that this macro expands to the equivalent of:
+///
+/// ```
+/// mod ffi {
+///     pub fn do_math(a: u32) -> u32
+/// #    { a+3 }
+/// }
+///
+/// mod ffidefs {
+///     pub const MY_PREPROCESSOR_DEFINITION: i64 = 3i64;
+/// }
+/// ```
+
 #[proc_macro_error]
 #[proc_macro]
 pub fn include_cxx(input: TokenStream) -> TokenStream {

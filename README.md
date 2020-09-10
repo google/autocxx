@@ -65,7 +65,9 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Reference to std::string | Works |
 | Classes | Works, but with warnings |
 | Methods | Works (classes give warnings) |
-| #defines | In progress; doesn't work yet |
+| Int #defines | Works |
+| String #defines | - |
+| #ifdef | - |
 | Constants | - |
 | Enums | In progress; doesn't work yet |
 | Structs containing UniquePtr | - |

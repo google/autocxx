@@ -18,6 +18,7 @@ use quote::quote;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
+use proc_macro2::Span;
 
 /// Keeps track of all known preprocessor invocations.
 #[derive(Debug, Default)]
@@ -41,17 +42,17 @@ impl PreprocessorDefinitions {
             TokenStream2::new()
         } else {
             let defs = self.integral.iter().map(|(k, v)| {
+                let k = syn::Ident::new(k, Span::call_site());
                 quote! {
-                    const #k = #v;
+                    pub const #k: i64 = #v;
                 }
             });
-            quote! {
-                mod ffi {
-                    mod cpp {
-                        #(#defs)*
-                    }
+            let r = quote! {
+                mod ffidefs {
+                    #(#defs)*
                 }
-            }
+            };
+            r
         }
     }
 }

@@ -771,7 +771,7 @@ fn test_define_int() {
     "};
     let rs = quote! {
         ffi::do_nothing();
-        assert_eq!(ffi::def::BOB, 3);
+        assert_eq!(ffidefs::BOB, 3);
     };
     run_test(cxx, hdr, rs, &["do_nothing"]);
 }
@@ -789,7 +789,7 @@ fn test_define_str() {
     "};
     let rs = quote! {
         ffi::do_nothing();
-        assert_eq!(ffi::def::BOB, "foo");
+        assert_eq!(ffidefs::BOB, "foo");
     };
     run_test(cxx, hdr, rs, &["do_nothing"]);
 }
