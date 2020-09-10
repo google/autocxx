@@ -57,15 +57,15 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Type | Status |
 | ---- | ------ |
 | Primitives (u8, etc.) | Works |
-| Plain-old-data structs | Works |
-| std::unique_ptr of POD | Works |
-| std::unique_ptr of std::string | Works |
+| Plain-old-data structs | Implemented but still work to do |
+| std::unique_ptr of POD | Implemented but still work to do |
+| std::unique_ptr of std::string | Implemented but still work to do |
 | std::unique_ptr of opaque types | - |
-| Reference to POD | Works |
-| Reference to std::string | Works |
-| Classes | Works but produced warnings |
-| Methods | Works |
-| #defines | - |
+| Reference to POD | Implemented but still work to do |
+| Reference to std::string | Implemented but still work to do |
+| Classes | Implemented but still work to do; produces warnings |
+| Methods | Implemented but still work to do |
+| #defines | In progress; doesn't work yet |
 | Constants | - |
 | Enums | In progress; doesn't work yet |
 | Structs containing UniquePtr | - |
