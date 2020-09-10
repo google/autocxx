@@ -52,19 +52,19 @@ The same code can be passed through tools that generate .cc and .h bindings too:
 
 There is an example of this macro working within the `demo` directory.
 
-The project also contains test code which does this end-to-end, for all sorts of C++ types and constructs which we eventually would like to support. They nearly all fail :)
+The project also contains test code which does this end-to-end, for all sorts of C++ types and constructs which we eventually would like to support.
 
 | Type | Status |
 | ---- | ------ |
 | Primitives (u8, etc.) | Works |
-| Plain-old-data structs | Implemented but still work to do |
-| std::unique_ptr of POD | Implemented but still work to do |
-| std::unique_ptr of std::string | Implemented but still work to do |
+| Plain-old-data structs | Works |
+| std::unique_ptr of POD | Works |
+| std::unique_ptr of std::string | Works |
 | std::unique_ptr of opaque types | - |
-| Reference to POD | Implemented but still work to do |
-| Reference to std::string | Implemented but still work to do |
-| Classes | Implemented but still work to do; produces warnings |
-| Methods | Implemented but still work to do |
+| Reference to POD | Works |
+| Reference to std::string | Works |
+| Classes | Works, but with warnings |
+| Methods | Works (classes give warnings) |
 | #defines | In progress; doesn't work yet |
 | Constants | - |
 | Enums | In progress; doesn't work yet |
