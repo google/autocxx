@@ -13,23 +13,25 @@
 // limitations under the License.
 
 use bindgen::callbacks::{IntKind, ParseCallbacks};
+use proc_macro2::Span;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
-use proc_macro2::Span;
 
 /// Keeps track of all known preprocessor invocations.
 #[derive(Debug, Default)]
 pub(crate) struct PreprocessorDefinitions {
     integral: HashMap<String, i64>,
+    string: HashMap<String, Vec<u8>>,
 }
 
 impl PreprocessorDefinitions {
     pub fn new() -> Self {
         PreprocessorDefinitions {
             integral: HashMap::new(),
+            string: HashMap::new(),
         }
     }
 
@@ -37,19 +39,34 @@ impl PreprocessorDefinitions {
         self.integral.insert(name.to_string(), val);
     }
 
+    fn insert_str_macro(&mut self, name: &str, val: &[u8]) {
+        self.string.insert(name.to_string(), val.to_vec());
+    }
+
     pub fn to_tokenstream(&self) -> TokenStream2 {
-        if self.integral.is_empty() {
+        if self.integral.is_empty() && self.string.is_empty() {
             TokenStream2::new()
         } else {
-            let defs = self.integral.iter().map(|(k, v)| {
-                let k = syn::Ident::new(k, Span::call_site());
+            let span = Span::call_site();
+            let idefs = self.integral.iter().map(|(k, v)| {
+                let k = syn::Ident::new(k, span);
                 quote! {
                     pub const #k: i64 = #v;
                 }
             });
+            let sdefs = self.string.iter().filter_map(|(k, v)| {
+                let k = syn::Ident::new(k, span);
+                // TODO _consider_ doing something with non-UTF8 string values. I'm not sure what.
+                String::from_utf8(v.clone()).ok().and_then(|v| {
+                    Some(quote! {
+                        pub const #k: &'static str = #v;
+                    })
+                })
+            });
             let r = quote! {
                 mod ffidefs {
-                    #(#defs)*
+                    #(#idefs)*
+                    #(#sdefs)*
                 }
             };
             r
@@ -70,15 +87,21 @@ impl PreprocessorParseCallbacks {
     pub fn new(definitions: Rc<Mutex<PreprocessorDefinitions>>) -> Self {
         PreprocessorParseCallbacks { definitions }
     }
+
+    fn get_defs(&self) -> std::sync::MutexGuard<PreprocessorDefinitions> {
+        self.definitions
+            .try_lock()
+            .expect("would block whilst adding macro")
+    }
 }
 
 impl ParseCallbacks for PreprocessorParseCallbacks {
     fn int_macro(&self, name: &str, value: i64) -> Option<IntKind> {
-        let mut mg = self
-            .definitions
-            .try_lock()
-            .expect("would block whilst adding int macro");
-        mg.insert_int_macro(name, value);
+        self.get_defs().insert_int_macro(name, value);
         None
+    }
+
+    fn str_macro(&self, name: &str, value: &[u8]) {
+        self.get_defs().insert_str_macro(name, value)
     }
 }

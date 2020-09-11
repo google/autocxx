@@ -66,7 +66,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Classes | Works, but with warnings |
 | Methods | Works (classes give warnings) |
 | Int #defines | Works |
-| String #defines | - |
+| String #defines | Works |
 | #ifdef | - |
 | Constants | - |
 | Enums | In progress; doesn't work yet |
