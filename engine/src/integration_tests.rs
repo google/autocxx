@@ -669,7 +669,6 @@ fn test_enum() {
 }
 
 #[test]
-#[ignore] // because currently we do not !include the header unless there are functions
 fn test_enum_no_funcs() {
     let cxx = indoc! {"
     "};
@@ -682,7 +681,7 @@ fn test_enum_no_funcs() {
     let rs = quote! {
         let a = ffi::cxxbridge::Bob::BOB_VALUE_1;
         let b = ffi::cxxbridge::Bob::BOB_VALUE_2;
-        assert_ne!(a, b);
+        assert!(a != b);
     };
     run_test(cxx, hdr, rs, &["Bob"]);
 }
@@ -761,55 +760,43 @@ fn test_pod_mut_method() {
 fn test_define_int() {
     // TODO - remove function definitions when no longer needed
     let cxx = indoc! {"
-        void do_nothing() {
-        }
     "};
     let hdr = indoc! {"
         #define BOB 3
-        void do_nothing();
     "};
     let rs = quote! {
-        ffi::cxxbridge::do_nothing();
         assert_eq!(ffi::defs::BOB, 3);
     };
-    run_test(cxx, hdr, rs, &["do_nothing"]);
+    run_test(cxx, hdr, rs, &[]);
 }
 
 #[test]
 fn test_define_str() {
     // TODO - remove function definitions when no longer needed
     let cxx = indoc! {"
-        void do_nothing() {
-        }
     "};
     let hdr = indoc! {"
         #define BOB \"foo\"
-        void do_nothing();
     "};
     let rs = quote! {
-        ffi::cxxbridge::do_nothing();
         assert_eq!(ffi::defs::BOB, "foo");
     };
-    run_test(cxx, hdr, rs, &["do_nothing"]);
+    run_test(cxx, hdr, rs, &[]);
 }
 
 #[test]
 fn test_i32_const() {
     // TODO - remove function definitions when no longer needed
     let cxx = indoc! {"
-        void do_nothing() {
-        }
     "};
     let hdr = indoc! {"
         #include <cstdint>  
         const uint32_t BOB = 3;
-        void do_nothing();
     "};
     let rs = quote! {
-        ffi::cxxbridge::do_nothing();
         assert_eq!(ffi::BOB, 3);
     };
-    run_test(cxx, hdr, rs, &["do_nothing", "BOB"]);
+    run_test(cxx, hdr, rs, &["BOB"]);
 }
 
 // Yet to test:
