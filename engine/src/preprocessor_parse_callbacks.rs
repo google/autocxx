@@ -14,11 +14,11 @@
 
 use bindgen::callbacks::{IntKind, ParseCallbacks};
 use proc_macro2::Span;
-use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
+use syn::{parse_quote, ItemMod};
 
 /// Keeps track of all known preprocessor invocations.
 #[derive(Debug, Default)]
@@ -43,9 +43,9 @@ impl PreprocessorDefinitions {
         self.string.insert(name.to_string(), val.to_vec());
     }
 
-    pub fn to_tokenstream(&self) -> TokenStream2 {
+    pub fn to_mod(&self) -> Option<ItemMod> {
         if self.integral.is_empty() && self.string.is_empty() {
-            TokenStream2::new()
+            None
         } else {
             let span = Span::call_site();
             let idefs = self.integral.iter().map(|(k, v)| {
@@ -63,12 +63,12 @@ impl PreprocessorDefinitions {
                     })
                 })
             });
-            quote! {
-                mod ffidefs {
+            Some(parse_quote! {
+                pub mod defs {
                     #(#idefs)*
                     #(#sdefs)*
                 }
-            }
+            })
         }
     }
 }

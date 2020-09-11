@@ -42,7 +42,7 @@ pub enum ConvertError {
 }
 
 pub(crate) struct BridgeConversionResults {
-    pub output: ItemMod,
+    pub items: Vec<Item>,
     pub types_encountered: Vec<EncounteredType>,
 }
 
@@ -94,12 +94,13 @@ impl BridgeConverter {
         bindings: ItemMod,
     ) -> Result<BridgeConversionResults, ConvertError> {
         let mut types_encountered = Vec::new();
+        let mut all_items: Vec<Item> = Vec::new();
         match bindings.content {
             None => Err(ConvertError::NoContent),
-            Some((brace, items)) => {
-                let mut new_items = Vec::new();
+            Some((_, items)) => {
+                let mut bridge_items = Vec::new();
                 for item in items {
-                    new_items.append(&mut match item {
+                    bridge_items.append(&mut match item {
                         Item::ForeignMod(fm) => {
                             vec![self.convert_foreign_mod(fm).map(Item::ForeignMod)?]
                         }
@@ -122,18 +123,20 @@ impl BridgeConverter {
                             self.append_cpp_definition_squasher(tyname, new_enum_def)
                         }
                         Item::Impl(_) => vec![],
-                        _ => vec![item], // TODO - consider rejecting
+                        _ => {
+                            all_items.push(item);
+                            vec![]
+                        }
                     });
                 }
+                all_items.push(parse_quote! {
+                    #[cxx::bridge]
+                    pub mod cxxbridge {
+                        #(#bridge_items)*
+                    }
+                });
                 Ok(BridgeConversionResults {
-                    output: ItemMod {
-                        attrs: bindings.attrs,
-                        ident: bindings.ident,
-                        semi: bindings.semi,
-                        mod_token: bindings.mod_token,
-                        vis: bindings.vis,
-                        content: Some((brace, new_items)),
-                    },
+                    items: all_items,
                     types_encountered,
                 })
             }

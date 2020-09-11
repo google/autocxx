@@ -68,6 +68,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Int #defines | Works |
 | String #defines | Works |
 | #ifdef | - |
+| Typedefs | - |
 | Constants | - |
 | Enums | Works |
 | Structs containing UniquePtr | - |

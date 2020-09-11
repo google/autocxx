@@ -26,7 +26,7 @@ use cxx_gen::GeneratedCode;
 use indoc::indoc;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
-use syn::{ItemMod, Macro};
+use syn::{parse_quote, ItemMod, Macro};
 
 use cpp_postprocessor::EncounteredType;
 use log::{debug, info, warn};
@@ -251,26 +251,31 @@ impl IncludeCpp {
         //    to --output-style=cxx --allowlist=<as passed in>
         for a in &self.allowlist {
             // TODO - allowlist type/functions/separately
-            builder = builder.whitelist_type(a);
-            builder = builder.whitelist_function(a);
+            builder = builder
+                .whitelist_type(a)
+                .whitelist_function(a)
+                .whitelist_var(a);
         }
         Ok(builder)
     }
 
     pub fn generate_rs(&self) -> Result<TokenStream2> {
-        let (mut ts, _) = self.do_generation()?;
-        let another_ref = self.preprocessor_definitions.clone();
-        let ppdefs = another_ref.try_lock().unwrap().to_tokenstream();
-        ts.extend(ppdefs);
-        Ok(ts)
+        let (itemmod, _) = self.do_generation()?;
+        Ok(itemmod.to_token_stream())
     }
 
-    fn do_generation(&self) -> Result<(TokenStream2, Vec<EncounteredType>)> {
+    fn get_preprocessor_defs_mod(&self) -> Option<ItemMod> {
+        let another_ref = self.preprocessor_definitions.clone();
+        let m = another_ref.try_lock().unwrap().to_mod();
+        m
+    }
+
+    fn do_generation(&self) -> Result<(Option<ItemMod>, Vec<EncounteredType>)> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
         if self.parse_only {
-            return Ok((TokenStream2::new(), Vec::new()));
+            return Ok((None, Vec::new()));
         }
         // 4. (also respects environment variables to pick up more headers,
         //     include paths and #defines)
@@ -281,10 +286,13 @@ impl IncludeCpp {
             .make_bindgen_builder()?
             .generate()
             .map_err(Error::Bindgen)?;
+        // This bindings object is actually a TokenStream internally and we're wasting
+        // effort converting to and from string. We could enhance the bindgen API
+        // in future.
         let bindings = bindings.to_string();
         // Manually add the mod ffi {} so that we can ask syn to parse
         // into a single construct.
-        let bindings = format!("#[cxx::bridge] mod ffi {{ {} }}", bindings);
+        let bindings = format!("mod ffi {{ {} }}", bindings);
         info!("Bindings: {}", bindings);
         let bindings = syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)?;
 
@@ -303,15 +311,29 @@ impl IncludeCpp {
             TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
         );
         let results = converter.convert(bindings).map_err(Error::Conversion)?;
-        let new_bindings = results.output;
+        let mut items = results.items;
         let types_encountered = results.types_encountered;
-        let new_bindings = new_bindings.to_token_stream();
-        info!("New bindings: {}", new_bindings.to_string());
-        Ok((new_bindings, types_encountered))
+        if let Some(itemmod) = self.get_preprocessor_defs_mod() {
+            items.push(syn::Item::Mod(itemmod));
+        }
+        let new_bindings: ItemMod = parse_quote! {
+            mod ffi {
+                #(#items)*
+            }
+        };
+        info!(
+            "New bindings: {}",
+            new_bindings.to_token_stream().to_string()
+        );
+        Ok((Some(new_bindings), types_encountered))
     }
 
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCode> {
         let (rs, types_encountered) = self.do_generation()?;
+        let rs = match rs {
+            Some(itemmod) => itemmod.into_token_stream(),
+            None => TokenStream2::new(),
+        };
         let opt = cxx_gen::Opt::default();
         cxx_gen::generate_header_and_cc(rs, &opt)
             .map_err(Error::CxxGen)

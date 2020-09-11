@@ -40,9 +40,9 @@ use syn::parse_macro_input;
 ///     Allow("do_math"),
 /// );
 ///
-/// # mod ffi { pub fn do_math(a: u32) -> u32 { a+3 } }
+/// # mod ffi { pub mod cxxbridge { pub fn do_math(a: u32) -> u32 { a+3 } } }
 /// # fn main() {
-/// ffi::do_math(3);
+/// ffi::cxxbridge::do_math(3);
 /// # }
 /// ```
 ///
@@ -70,12 +70,16 @@ use syn::parse_macro_input;
 ///
 /// ```
 /// mod ffi {
-///     pub fn do_math(a: u32) -> u32
-/// #    { a+3 }
-/// }
+///     pub mod cxxbridge {
+///         pub fn do_math(a: u32) -> u32
+/// #       { a+3 }
+///     }
 ///
-/// mod ffidefs {
-///     pub const MY_PREPROCESSOR_DEFINITION: i64 = 3i64;
+///      pub const kMyCxxConst: i32 = 3;
+///
+///      pub mod defs {
+///          pub const MY_PREPROCESSOR_DEFINITION: i64 = 3i64;
+///      }
 /// }
 /// ```
 
