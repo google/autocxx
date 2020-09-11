@@ -14,15 +14,26 @@
 
 const CXXBRIDGE_GENERATION: usize = 4;
 
+pub enum EncounteredTypeKind {
+    Struct,
+    Enum,
+}
+
+pub struct EncounteredType(pub EncounteredTypeKind, pub String);
+
 /// Edits the generated C++ to insert #defines to disable certain C++
 /// type definitions. A nasty temporary hack - see
-pub(crate) fn disable_types(mut input: Vec<u8>, types: &Vec<String>) -> Vec<u8> {
+pub(crate) fn disable_types(mut input: Vec<u8>, types: &Vec<EncounteredType>) -> Vec<u8> {
     let mut out = Vec::new();
     for t in types {
+        let label = match t.0 {
+            EncounteredTypeKind::Struct => "STRUCT",
+            EncounteredTypeKind::Enum => "ENUM",
+        };
         out.extend_from_slice(
             format!(
-                "#define CXXBRIDGE{:02}_STRUCT_{}\n",
-                CXXBRIDGE_GENERATION, t
+                "#define CXXBRIDGE{:02}_{}_{}\n",
+                CXXBRIDGE_GENERATION, label, t.1
             )
             .as_bytes(),
         );
@@ -38,12 +49,15 @@ pub(crate) fn disable_types(mut input: Vec<u8>, types: &Vec<String>) -> Vec<u8> 
 mod tests {
     #[test]
     fn test_type_disabler() {
-        let types = vec!["foo".to_string(), "bar".to_string()];
+        let types = vec![
+            super::EncounteredType(super::EncounteredTypeKind::Enum, "foo".to_string()),
+            super::EncounteredType(super::EncounteredTypeKind::Struct, "bar".to_string()),
+        ];
         let input = "fish\n\n".as_bytes().to_vec();
         let output = super::disable_types(input, &types);
         assert_eq!(
             String::from_utf8(output).unwrap(),
-            "#define CXXBRIDGE04_STRUCT_foo\n#define CXXBRIDGE04_STRUCT_bar\n\nfish\n\n"
+            "#define CXXBRIDGE04_ENUM_foo\n#define CXXBRIDGE04_STRUCT_bar\n\nfish\n\n"
         );
     }
 }

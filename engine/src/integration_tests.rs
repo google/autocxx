@@ -646,7 +646,6 @@ fn test_make_up_int() {
 }
 
 #[test]
-#[ignore] // because enums are the wrong size
 fn test_enum() {
     let cxx = indoc! {"
         Bob give_bob() {
@@ -664,7 +663,7 @@ fn test_enum() {
     let rs = quote! {
         let a = ffi::Bob::BOB_VALUE_2;
         let b = ffi::give_bob();
-        assert_eq!(a, b);
+        assert!(a == b);
     };
     run_test(cxx, hdr, rs, &["Bob", "give_bob"]);
 }

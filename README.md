@@ -69,7 +69,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | String #defines | Works |
 | #ifdef | - |
 | Constants | - |
-| Enums | In progress; doesn't work yet |
+| Enums | Works |
 | Structs containing UniquePtr | - |
 | Structs containing strings | - |
 | Constructors/make_unique | - |

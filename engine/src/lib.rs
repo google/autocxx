@@ -28,6 +28,7 @@ use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{ItemMod, Macro};
 
+use cpp_postprocessor::EncounteredType;
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
@@ -264,7 +265,7 @@ impl IncludeCpp {
         Ok(ts)
     }
 
-    fn do_generation(&self) -> Result<(TokenStream2, Vec<String>)> {
+    fn do_generation(&self) -> Result<(TokenStream2, Vec<EncounteredType>)> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
