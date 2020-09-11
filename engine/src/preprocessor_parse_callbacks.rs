@@ -63,13 +63,12 @@ impl PreprocessorDefinitions {
                     })
                 })
             });
-            let r = quote! {
+            quote! {
                 mod ffidefs {
                     #(#idefs)*
                     #(#sdefs)*
                 }
-            };
-            r
+            }
         }
     }
 }
