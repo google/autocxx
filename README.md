@@ -67,13 +67,17 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Methods | Works (classes give warnings) |
 | Int #defines | Works |
 | String #defines | Works |
-| #ifdef | - |
+| Primitive constants | Works |
+| Enums | Works, though more thought needed |
+| #ifdef, #if etc. | - |
 | Typedefs | - |
-| Constants | - |
-| Enums | Works |
 | Structs containing UniquePtr | - |
 | Structs containing strings | - |
 | Constructors/make_unique | - |
+| Reference counting | - |
+| std::optional | - |
+| Function pointers | - |
+| Inheritance from pure virtual classes | - |
 | Destructors | Works via cxx `UniquePtr` already |
 
 # Build environment
