@@ -27,24 +27,27 @@ impl ByValueChecker {
         results.insert("UniquePtr".to_owned(), true);
         results.insert("i32".to_owned(), true);
         results.insert("i64".to_owned(), true);
+        results.insert("u32".to_owned(), true);
+        results.insert("u64".to_owned(), true);
         // TODO expand with all primitives, or find a better way.
-        ByValueChecker {
-            results
-        }
+        ByValueChecker { results }
     }
 
     /// Can this C++ type be passed safely by value to/from Rust?
-    pub fn type_is_safe_for_pass_by_value(&mut self, def: ItemStruct) -> bool {
+    pub fn type_is_safe_for_pass_by_value(&mut self, def: &ItemStruct) -> bool {
         let id = def.ident.to_string();
         let mut type_representable_as_pod = true;
-        for f in def.fields {
-            let fty = f.ty;
+        for f in &def.fields {
+            let fty = &f.ty;
             let field_representable_as_pod = match fty {
                 Type::Path(p) => {
                     // TODO better handle generics
                     let ty_id = p.path.segments.last().unwrap().ident.to_string();
-                    *self.results.get(&ty_id).expect("Not yet encountered type")
-                },
+                    *self
+                        .results
+                        .get(&ty_id)
+                        .expect(&format!("Not yet encountered type: {}", ty_id))
+                }
                 // TODO handle anything else which bindgen might spit out, e.g. arrays?
                 _ => false,
             };
@@ -52,7 +55,7 @@ impl ByValueChecker {
                 type_representable_as_pod = false;
                 break;
             }
-        };
+        }
         self.results.insert(id, type_representable_as_pod);
         type_representable_as_pod
     }
@@ -72,7 +75,7 @@ mod tests {
                 b: i64,
             }
         };
-        assert!(bvc.type_is_safe_for_pass_by_value(t));
+        assert!(bvc.type_is_safe_for_pass_by_value(&t));
     }
 
     #[test]
@@ -84,14 +87,14 @@ mod tests {
                 b: i64,
             }
         };
-        bvc.type_is_safe_for_pass_by_value(t);
+        bvc.type_is_safe_for_pass_by_value(&t);
         let t: ItemStruct = parse_quote! {
             struct Bar {
                 a: Foo,
                 b: i64,
             }
         };
-        assert!(bvc.type_is_safe_for_pass_by_value(t));
+        assert!(bvc.type_is_safe_for_pass_by_value(&t));
     }
 
     #[test]
@@ -103,7 +106,7 @@ mod tests {
                 b: i64,
             }
         };
-        assert!(bvc.type_is_safe_for_pass_by_value(t));
+        assert!(bvc.type_is_safe_for_pass_by_value(&t));
     }
 
     #[test]
@@ -115,6 +118,6 @@ mod tests {
                 b: i64,
             }
         };
-        assert!(!bvc.type_is_safe_for_pass_by_value(t));
+        assert!(!bvc.type_is_safe_for_pass_by_value(&t));
     }
 }

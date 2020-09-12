@@ -13,9 +13,9 @@
 // limitations under the License.
 
 mod bridge_converter;
+mod byvalue_checker;
 mod cpp_postprocessor;
 mod preprocessor_parse_callbacks;
-mod byvalue_checker;
 
 #[cfg(test)]
 mod integration_tests;
@@ -41,10 +41,7 @@ use std::sync::Mutex;
 /// This should allow removal of the entire cpp_postprocessor module.
 const TEMPORARY_HACK_TO_AVOID_REDEFINITIONS: bool = true;
 
-const BINDGEN_BLOCKLIST: &[&str] = &[
-    "std.*",
-    ".*mbstate_t.*",
-];
+const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
 
 #[derive(Debug)]
 pub enum Error {
@@ -71,6 +68,7 @@ pub enum CppInclusion {
 pub struct IncludeCpp {
     inclusions: Vec<CppInclusion>,
     allowlist: Vec<String>,
+    pod_types: Vec<String>,
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
     parse_only: bool,
     preprocessor_definitions: Rc<Mutex<PreprocessorDefinitions>>,
@@ -127,6 +125,7 @@ impl IncludeCpp {
 
         let mut inclusions = Vec::new();
         let mut allowlist = Vec::new();
+        let mut pod_types = Vec::new();
         let mut parse_only = false;
 
         while !input.is_empty() {
@@ -136,15 +135,21 @@ impl IncludeCpp {
                 syn::parenthesized!(args in input);
                 let hdr: syn::LitStr = args.parse()?;
                 inclusions.push(CppInclusion::Header(hdr.value()));
-            } else if ident == "Allow" {
+            } else if ident == "Allow" || ident == "AllowPOD" {
                 let args;
                 syn::parenthesized!(args in input);
                 let allow: syn::LitStr = args.parse()?;
                 allowlist.push(allow.value());
+                if ident == "AllowPOD" {
+                    pod_types.push(allow.value());
+                }
             } else if ident == "ParseOnly" {
                 parse_only = true;
             } else {
-                return Err(syn::Error::new(ident.span(), "expected Header or Allow"));
+                return Err(syn::Error::new(
+                    ident.span(),
+                    "expected Header, Allow or AllowPOD",
+                ));
             }
             if input.is_empty() {
                 break;
@@ -155,6 +160,7 @@ impl IncludeCpp {
         Ok(IncludeCpp {
             inclusions,
             allowlist,
+            pod_types,
             preconfigured_inc_dirs: None,
             parse_only,
             preprocessor_definitions: Rc::new(Mutex::new(PreprocessorDefinitions::new())),
@@ -295,6 +301,7 @@ impl IncludeCpp {
 
         let mut converter = bridge_converter::BridgeConverter::new(
             include_list,
+            self.pod_types.clone(), // TODO take self by value to avoid clone.
             TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
         );
         let results = converter.convert(bindings).map_err(Error::Conversion)?;

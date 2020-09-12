@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::byvalue_checker::ByValueChecker;
 use crate::cpp_postprocessor::{EncounteredType, EncounteredTypeKind};
 use lazy_static::lazy_static;
 use proc_macro2::Span;
@@ -39,6 +40,7 @@ lazy_static! {
 #[derive(Debug)]
 pub enum ConvertError {
     NoContent,
+    UnsafePODType(String),
 }
 
 pub(crate) struct BridgeConversionResults {
@@ -61,16 +63,20 @@ pub(crate) struct BridgeConversionResults {
 /// is just manipulate the syn types directly.
 pub(crate) struct BridgeConverter {
     include_list: Vec<String>,
+    pod_types: Vec<String>,
     old_rust: bool,
     class_names_discovered: HashSet<String>,
+    byvalue_checker: ByValueChecker,
 }
 
 impl BridgeConverter {
-    pub fn new(include_list: Vec<String>, old_rust: bool) -> Self {
+    pub fn new(include_list: Vec<String>, pod_types: Vec<String>, old_rust: bool) -> Self {
         Self {
             include_list,
+            pod_types,
             old_rust,
             class_names_discovered: HashSet::new(),
+            byvalue_checker: ByValueChecker::new(),
         }
     }
 
@@ -87,31 +93,79 @@ impl BridgeConverter {
         out
     }
 
+    fn should_be_pod(&mut self, ty: &ItemStruct) -> Result<bool, ConvertError> {
+        let safe_to_pod = self.byvalue_checker.type_is_safe_for_pass_by_value(ty);
+        let tyname = ty.ident.to_string();
+        let pod_requested = self.pod_types.contains(&tyname);
+        if !pod_requested {
+            return Ok(false);
+        }
+        if !safe_to_pod {
+            return Err(ConvertError::UnsafePODType(tyname));
+        }
+        Ok(true)
+    }
+
+    fn generate_extern_type_impl(&self, tyname: &Ident) -> Item {
+        let cxx_name = tyname.to_string();
+        parse_quote! {
+            unsafe impl cxx::ExternType for #tyname {
+                type Id = cxx::type_id!(#cxx_name);
+            }
+        }
+    }
+
+    fn generate_type_alias(&self, tyname: &Ident) -> Item {
+        parse_quote! {
+            extern "C" {
+                type #tyname = super::#tyname;
+            }
+        }
+    }
+
     /// Convert a TokenStream of bindgen-generated bindings to a form
     /// suitable for cxx.
     pub(crate) fn convert(
         &mut self,
         bindings: ItemMod,
     ) -> Result<BridgeConversionResults, ConvertError> {
-        let mut types_encountered = Vec::new();
-        let mut all_items: Vec<Item> = Vec::new();
         match bindings.content {
             None => Err(ConvertError::NoContent),
             Some((_, items)) => {
+                let mut types_encountered = Vec::new();
+                let mut all_items: Vec<Item> = Vec::new();
                 let mut bridge_items = Vec::new();
                 for item in items {
-                    bridge_items.append(&mut match item {
+                    match item {
                         Item::ForeignMod(fm) => {
-                            vec![self.convert_foreign_mod(fm).map(Item::ForeignMod)?]
+                            bridge_items.push(self.convert_foreign_mod(fm).map(Item::ForeignMod)?);
                         }
                         Item::Struct(s) => {
                             let tyname = s.ident.clone();
-                            types_encountered.push(EncounteredType(
-                                EncounteredTypeKind::Struct,
-                                tyname.to_string().to_owned(),
-                            ));
-                            let new_struct_def = Item::Struct(self.convert_struct(s));
-                            self.append_cpp_definition_squasher(tyname, new_struct_def)
+                            let should_be_pod = self.should_be_pod(&s)?;
+                            if should_be_pod {
+                                // Pass this type through to cxx, such that it can
+                                // generate full bindings and Rust code can treat this as
+                                // a transparent type with actual field access.
+                                types_encountered.push(EncounteredType(
+                                    EncounteredTypeKind::Struct,
+                                    tyname.to_string().to_owned(),
+                                ));
+                                let new_struct_def = self.convert_struct(s);
+                                bridge_items.extend(
+                                    self.append_cpp_definition_squasher(tyname, new_struct_def),
+                                );
+                            } else {
+                                // Retain the original bindgen definition, and
+                                // teach cxx that this is an opaque type.
+                                // Pass-by-value into Rust won't be possible.
+                                // Field access won't be possible from Rust, but
+                                // this allows handling of (for instance) structs
+                                // containing self-referential pointers.
+                                all_items.push(Item::Struct(s));
+                                all_items.push(self.generate_extern_type_impl(&tyname));
+                                bridge_items.push(self.generate_type_alias(&tyname));
+                            }
                         }
                         Item::Enum(e) => {
                             let tyname = e.ident.clone();
@@ -119,15 +173,15 @@ impl BridgeConverter {
                                 EncounteredTypeKind::Enum,
                                 tyname.to_string().to_owned(),
                             ));
-                            let new_enum_def = self.convert_enum(e).map(Item::Enum)?;
-                            self.append_cpp_definition_squasher(tyname, new_enum_def)
+                            let new_enum_def = self.convert_enum(e);
+                            bridge_items
+                                .extend(self.append_cpp_definition_squasher(tyname, new_enum_def));
                         }
-                        Item::Impl(_) => vec![],
+                        Item::Impl(_) => {}
                         _ => {
                             all_items.push(item);
-                            vec![]
                         }
-                    });
+                    }
                 }
                 all_items.push(parse_quote! {
                     #[cxx::bridge]
@@ -203,9 +257,9 @@ impl BridgeConverter {
         })
     }
 
-    fn convert_struct(&mut self, ty: ItemStruct) -> ItemStruct {
+    fn convert_struct(&mut self, ty: ItemStruct) -> Item {
         self.class_names_discovered.insert(ty.ident.to_string());
-        ItemStruct {
+        Item::Struct(ItemStruct {
             attrs: self.strip_attr(ty.attrs, "repr"),
             vis: ty.vis,
             struct_token: ty.struct_token,
@@ -213,11 +267,11 @@ impl BridgeConverter {
             fields: ty.fields,
             semi_token: ty.semi_token,
             ident: ty.ident,
-        }
+        })
     }
 
-    fn convert_enum(&self, ty: ItemEnum) -> Result<ItemEnum, ConvertError> {
-        Ok(ItemEnum {
+    fn convert_enum(&self, ty: ItemEnum) -> Item {
+        Item::Enum(ItemEnum {
             // TODO tidy next line
             attrs: self.strip_attr(self.strip_attr(ty.attrs, "repr"), "derive"),
             vis: ty.vis,
