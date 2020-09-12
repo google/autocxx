@@ -15,6 +15,7 @@
 mod bridge_converter;
 mod cpp_postprocessor;
 mod preprocessor_parse_callbacks;
+mod byvalue_checker;
 
 #[cfg(test)]
 mod integration_tests;
