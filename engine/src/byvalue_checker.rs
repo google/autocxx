@@ -15,6 +15,11 @@
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
+/// Type which is able to check whether it's safe to make a type
+/// fully representable by cxx. For instance if it is a struct containing
+/// a struct containing a std::string, the answer is no, because that
+/// std::string contains a self-referential pointer. Exact logic here
+/// is TBD.
 pub struct ByValueChecker {
     // Mapping from type name to whether it is POD
     results: HashMap<String, bool>,
