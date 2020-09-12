@@ -40,6 +40,11 @@ use std::sync::Mutex;
 /// This should allow removal of the entire cpp_postprocessor module.
 const TEMPORARY_HACK_TO_AVOID_REDEFINITIONS: bool = true;
 
+const BINDGEN_BLOCKLIST: &[&str] = &[
+    "std.*",
+    ".*mbstate_t.*",
+];
+
 #[derive(Debug)]
 pub enum Error {
     Io(std::io::Error),
@@ -219,20 +224,6 @@ impl IncludeCpp {
         // this list less hard-coded and nasty as best we can - TODO.
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14"])
-            .blacklist_item(".*default.*")
-            .blacklist_item(".*unique_ptr.*")
-            .blacklist_item(".*string.*")
-            .blacklist_item(".*std_.*")
-            .blacklist_item("std_.*")
-            .blacklist_item("std.*")
-            .blacklist_item(".*compressed_pair.*")
-            .blacklist_item(".*allocator.*")
-            .blacklist_item(".*wrap_iter.*")
-            .blacklist_item(".*reverse_iterator.*")
-            .blacklist_item(".*propagate_on_container.*")
-            .blacklist_item(".*char_traits.*")
-            .blacklist_item(".*size_t.*")
-            .blacklist_item(".*mbstate_t.*")
             .derive_copy(false)
             .derive_debug(false)
             .parse_callbacks(Box::new(PreprocessorParseCallbacks::new(
@@ -242,6 +233,9 @@ impl IncludeCpp {
                 non_exhaustive: false,
             })
             .layout_tests(false); // TODO revisit later
+        for item in BINDGEN_BLOCKLIST.iter() {
+            builder = builder.blacklist_item(*item);
+        }
 
         for inc_dir in inc_dirs {
             builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
