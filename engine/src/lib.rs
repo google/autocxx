@@ -212,16 +212,7 @@ impl IncludeCpp {
         debug!("Full header: {}", full_header);
         debug!("Inc dir: {:?}", inc_dirs);
 
-        // TODO - pass headers in &self.inclusions into
-        // bindgen such that it can include them in the generated
-        // extern "C" section as include!
         // TODO work with OsStrs here to avoid the .display()
-        // TODO get rid of this huge blocklist. It exists because
-        // even if we replace a given STL type (per the PRELUDE, above)
-        // bindgen still recurses into all the other definitions it needs.
-        // It's probably desirable to fix this in bindgen, though I expect
-        // the current behavior is there for a reason. Meanwhile, make
-        // this list less hard-coded and nasty as best we can - TODO.
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14"])
             .derive_copy(false)
