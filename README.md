@@ -1,5 +1,7 @@
 # Autocxx
 
+[Docs.rs](https://docs.rs/autocxx) [Crates.io](https://crates.io/autocxx)
+
 This project is a tool for calling C++ from Rust in a heavily automated, but safe, fashion.
 
 The intention is that it has all the fluent safety from [cxx](https://github.com/dtolnay/cxx) whilst generating interfaces automatically from existing C++ headers using a variant of [bindgen](https://docs.rs/bindgen/0.54.1/bindgen/). Think of autocxx as glue which plugs bindgen into cxx.
@@ -29,10 +31,12 @@ let a = ffi::base::Bob::make_unique("hello".into());
 a.do_a_thing();
 ```
 
+See [demo/src/main.rs](demo/src/main.rs) for a real example.
+
 The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string` - so the Rust code should not typically require use of unsafe code, unlike with normal `bindgen` bindings.
 
 The macro and code generator will both need to know the include path to be passed to bindgen. At the moment, this is passed in via an
-environment variable, `AUTOCXX_INC`. See the `demo/build.rs` file for details.
+environment variable, `AUTOCXX_INC`. See the [demo/build.rs](demo/build.rs) file for details.
 
 # How it works
 
@@ -80,9 +84,9 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Inheritance from pure virtual classes | - |
 | Destructors | Works via cxx `UniquePtr` already |
 
-# Build environment
+The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, e.g. strings embedded in structs, and it's not at all clear that a plan will present itself. Until we are much further, I don't advise using this for anything in production.
 
-This crate is not yet on crates.io.
+# Build environment
 
 At present, thirteen of the tests pass. The rest are ignored.
 
@@ -113,13 +117,9 @@ The plan is:
 * `gen/cmd` - a command-line tool which does the same. Except this isn't written yet.
 * `src` (outermost project)- the procedural macro `include_cxx` as described above.
 
-# Next steps
-
-The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, e.g. strings embedded in structs, and it's not at all clear that a plan will present itself. Until we are much further, I don't advise using this for anything in production.
-
 # Credits
 
-David Tolnay did much of the hard work here, by inventing the underlying cxx crate, and in fact nearly all of the parsing infrastructure on which this crate depends.
+David Tolnay did much of the hard work here, by inventing the underlying cxx crate, and in fact nearly all of the parsing infrastructure on which this crate depends. `bindgen` is also awesome. This crate stands on the shoulders of giants!
 
 #### License and usage notes
 
