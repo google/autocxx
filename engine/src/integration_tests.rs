@@ -758,7 +758,6 @@ fn test_pod_mut_method() {
 
 #[test]
 fn test_define_int() {
-    // TODO - remove function definitions when no longer needed
     let cxx = indoc! {"
     "};
     let hdr = indoc! {"
@@ -772,7 +771,6 @@ fn test_define_int() {
 
 #[test]
 fn test_define_str() {
-    // TODO - remove function definitions when no longer needed
     let cxx = indoc! {"
     "};
     let hdr = indoc! {"
@@ -786,7 +784,6 @@ fn test_define_str() {
 
 #[test]
 fn test_i32_const() {
-    // TODO - remove function definitions when no longer needed
     let cxx = indoc! {"
     "};
     let hdr = indoc! {"
