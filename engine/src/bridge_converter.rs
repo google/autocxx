@@ -63,20 +63,20 @@ pub(crate) struct BridgeConversionResults {
 /// is just manipulate the syn types directly.
 pub(crate) struct BridgeConverter {
     include_list: Vec<String>,
-    pod_types: Vec<String>,
+    pod_requests: Vec<String>,
     old_rust: bool,
     class_names_discovered: HashSet<String>,
     byvalue_checker: ByValueChecker,
 }
 
 impl BridgeConverter {
-    pub fn new(include_list: Vec<String>, pod_types: Vec<String>, old_rust: bool) -> Self {
+    pub fn new(include_list: Vec<String>, pod_requests: Vec<String>, old_rust: bool) -> Self {
         Self {
             include_list,
-            pod_types,
             old_rust,
             class_names_discovered: HashSet::new(),
             byvalue_checker: ByValueChecker::new(),
+            pod_requests,
         }
     }
 
@@ -93,34 +93,38 @@ impl BridgeConverter {
         out
     }
 
-    fn should_be_pod(&mut self, ty: &ItemStruct) -> Result<bool, ConvertError> {
-        let safe_to_pod = self.byvalue_checker.type_is_safe_for_pass_by_value(ty);
-        let tyname = ty.ident.to_string();
-        let pod_requested = self.pod_types.contains(&tyname);
-        if !pod_requested {
-            return Ok(false);
-        }
-        if !safe_to_pod {
-            return Err(ConvertError::UnsafePODType(tyname));
-        }
-        Ok(true)
-    }
-
-    fn generate_extern_type_impl(&self, tyname: &Ident) -> Item {
-        let cxx_name = tyname.to_string();
-        parse_quote! {
-            unsafe impl cxx::ExternType for #tyname {
-                type Id = cxx::type_id!(#cxx_name);
+    fn find_nested_pod_types(&mut self, items: &Vec<Item>) -> Result<(), ConvertError> {
+        for item in items {
+            match item {
+                Item::Struct(s) => {
+                    self.byvalue_checker.ingest_struct(s);
+                }
+                _ => {}
             }
         }
+        self.byvalue_checker
+            .satisfy_requests(self.pod_requests.clone())
+            .map_err(ConvertError::UnsafePODType)
     }
 
-    fn generate_type_alias(&self, tyname: &Ident) -> Item {
-        parse_quote! {
-            extern "C" {
-                type #tyname = super::#tyname;
-            }
-        }
+    fn generate_type_alias(&self, tyname: &Ident) -> [Item; 2] {
+        let nonsense_struct_name = Ident::new(
+            &format!("{}ContainingStruct", tyname.to_string()),
+            Span::call_site(),
+        );
+        [
+            parse_quote! {
+                extern "C" {
+                    type #tyname;
+                }
+            },
+            // Due to https://github.com/dtolnay/cxx/issues/236 - TODO
+            parse_quote! {
+                struct #nonsense_struct_name {
+                    _0: UniquePtr<#tyname>,
+                }
+            },
+        ]
     }
 
     /// Convert a TokenStream of bindgen-generated bindings to a form
@@ -132,6 +136,7 @@ impl BridgeConverter {
         match bindings.content {
             None => Err(ConvertError::NoContent),
             Some((_, items)) => {
+                self.find_nested_pod_types(&items)?;
                 let mut types_encountered = Vec::new();
                 let mut all_items: Vec<Item> = Vec::new();
                 let mut bridge_items = Vec::new();
@@ -142,7 +147,7 @@ impl BridgeConverter {
                         }
                         Item::Struct(s) => {
                             let tyname = s.ident.clone();
-                            let should_be_pod = self.should_be_pod(&s)?;
+                            let should_be_pod = self.byvalue_checker.is_pod(&tyname.to_string());
                             if should_be_pod {
                                 // Pass this type through to cxx, such that it can
                                 // generate full bindings and Rust code can treat this as
@@ -156,16 +161,21 @@ impl BridgeConverter {
                                     self.append_cpp_definition_squasher(tyname, new_struct_def),
                                 );
                             } else {
-                                // Retain the original bindgen definition, and
-                                // teach cxx that this is an opaque type.
+                                // Teach cxx that this is an opaque type.
                                 // Pass-by-value into Rust won't be possible.
                                 // Field access won't be possible from Rust, but
                                 // this allows handling of (for instance) structs
                                 // containing self-referential pointers.
-                                all_items.push(Item::Struct(s));
-                                all_items.push(self.generate_extern_type_impl(&tyname));
-                                bridge_items.push(self.generate_type_alias(&tyname));
+                                bridge_items.extend_from_slice(&self.generate_type_alias(&tyname));
                             }
+                            // A third permutation would be possible here in future - using cxx's
+                            // ExternType facilities:
+                            // https://docs.rs/cxx/0.4.4/cxx/trait.ExternType.html
+                            // This would allow us to use the type within cxx, whilst pointing it
+                            // at the definition already created by bindgen. This might (*might*)
+                            // be better than the method we're using for 'should_be_pod = true'
+                            // where we are rewriting the definition from bindgen format to cxx
+                            // format.
                         }
                         Item::Enum(e) => {
                             let tyname = e.ident.clone();

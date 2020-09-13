@@ -15,54 +15,139 @@
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
+enum PODState {
+    UnsafeToBePOD(String),
+    SafeToBePOD,
+    IsPOD,
+}
+
+struct StructDetails {
+    state: PODState,
+    dependent_structs: Vec<String>,
+}
+
+impl StructDetails {
+    fn new(state: PODState) -> Self {
+        StructDetails {
+            state,
+            dependent_structs: Vec::new(),
+        }
+    }
+}
+
 /// Type which is able to check whether it's safe to make a type
 /// fully representable by cxx. For instance if it is a struct containing
 /// a struct containing a std::string, the answer is no, because that
 /// std::string contains a self-referential pointer. Exact logic here
 /// is TBD.
 pub struct ByValueChecker {
-    // Mapping from type name to whether it is POD
-    results: HashMap<String, bool>,
+    // Mapping from type name to whether it is safe to be POD
+    results: HashMap<String, StructDetails>,
 }
 
 impl ByValueChecker {
     pub fn new() -> Self {
         let mut results = HashMap::new();
-        results.insert("CxxString".to_owned(), false);
-        results.insert("UniquePtr".to_owned(), true);
-        results.insert("i32".to_owned(), true);
-        results.insert("i64".to_owned(), true);
-        results.insert("u32".to_owned(), true);
-        results.insert("u64".to_owned(), true);
+        results.insert(
+            "CxxString".to_owned(),
+            StructDetails::new(PODState::UnsafeToBePOD(
+                "std::string has a self-referential pointer.".to_string(),
+            )),
+        );
+        results.insert(
+            "UniquePtr".to_owned(),
+            StructDetails::new(PODState::SafeToBePOD),
+        );
+        results.insert("i32".to_owned(), StructDetails::new(PODState::SafeToBePOD));
+        results.insert("i64".to_owned(), StructDetails::new(PODState::SafeToBePOD));
+        results.insert("u32".to_owned(), StructDetails::new(PODState::SafeToBePOD));
+        results.insert("u64".to_owned(), StructDetails::new(PODState::SafeToBePOD));
         // TODO expand with all primitives, or find a better way.
         ByValueChecker { results }
     }
 
-    /// Can this C++ type be passed safely by value to/from Rust?
-    pub fn type_is_safe_for_pass_by_value(&mut self, def: &ItemStruct) -> bool {
-        let id = def.ident.to_string();
-        let mut type_representable_as_pod = true;
-        for f in &def.fields {
-            let fty = &f.ty;
-            let field_representable_as_pod = match fty {
-                Type::Path(p) => {
-                    // TODO better handle generics
-                    let ty_id = p.path.segments.last().unwrap().ident.to_string();
-                    *self
-                        .results
-                        .get(&ty_id)
-                        .expect(&format!("Not yet encountered type: {}", ty_id))
+    pub fn ingest_struct(&mut self, def: &ItemStruct) {
+        // For this struct, work out whether it _could_ be safe as a POD.
+        let tyname = def.ident.to_string();
+        let mut field_safety_problem = PODState::SafeToBePOD;
+        let fieldlist = self.get_field_types(def);
+        for ty_id in &fieldlist {
+            match self.results.get(ty_id) {
+                None => {
+                    field_safety_problem = PODState::UnsafeToBePOD(format!(
+                        "Type {} could not be POD because its dependent type {} isn't known",
+                        tyname, ty_id
+                    ));
+                    break;
                 }
-                // TODO handle anything else which bindgen might spit out, e.g. arrays?
-                _ => false,
-            };
-            if !field_representable_as_pod {
-                type_representable_as_pod = false;
-                break;
+                Some(deets) => match &deets.state {
+                    PODState::UnsafeToBePOD(reason) => {
+                        let new_reason = format!("Type {} could not be POD because its dependent type {} isn't safe to be POD. Because: {}", tyname, ty_id, reason);
+                        field_safety_problem = PODState::UnsafeToBePOD(new_reason);
+                        break;
+                    }
+                    _ => {}
+                },
             }
         }
-        self.results.insert(id, type_representable_as_pod);
-        type_representable_as_pod
+        let mut my_details = StructDetails::new(field_safety_problem);
+        my_details.dependent_structs = fieldlist;
+        self.results.insert(tyname, my_details);
+    }
+
+    pub fn satisfy_requests(&mut self, mut requests: Vec<String>) -> Result<(), String> {
+        while !requests.is_empty() {
+            let ty_id = requests.remove(requests.len() - 1);
+            let deets = self.results.get_mut(&ty_id);
+            match deets {
+                None => {
+                    return Err(format!(
+                        "Unable to make {} POD because we never saw a struct definition",
+                        ty_id
+                    ))
+                }
+                Some(deets) => match &deets.state {
+                    PODState::UnsafeToBePOD(error_msg) => return Err(error_msg.clone()),
+                    PODState::IsPOD => {}
+                    PODState::SafeToBePOD => {
+                        deets.state = PODState::IsPOD;
+                        requests.extend_from_slice(&deets.dependent_structs);
+                    }
+                },
+            }
+        }
+        Ok(())
+    }
+
+    pub fn is_pod(&self, ty_id: &str) -> bool {
+        match self
+            .results
+            .get(ty_id)
+            .expect("Type not known to byvalue_checker")
+        {
+            StructDetails {
+                state: PODState::IsPOD,
+                dependent_structs: _,
+            } => true,
+            _ => false,
+        }
+    }
+
+    fn get_field_types(&self, def: &ItemStruct) -> Vec<String> {
+        let mut results = Vec::new();
+        for f in &def.fields {
+            let fty = &f.ty;
+            match fty {
+                Type::Path(p) => {
+                    // TODO better handle generics, multi-segment paths, etc.
+                    let ty_id = p.path.segments.last().unwrap().ident.to_string();
+                    results.push(ty_id);
+                }
+                // TODO handle anything else which bindgen might spit out, e.g. arrays?
+                _ => {}
+            }
+        }
+        results
     }
 }
 
@@ -80,7 +165,10 @@ mod tests {
                 b: i64,
             }
         };
-        assert!(bvc.type_is_safe_for_pass_by_value(&t));
+        let t_id = t.ident.to_string();
+        bvc.ingest_struct(&t);
+        bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
+        assert!(bvc.is_pod(&t_id));
     }
 
     #[test]
@@ -92,14 +180,17 @@ mod tests {
                 b: i64,
             }
         };
-        bvc.type_is_safe_for_pass_by_value(&t);
+        bvc.ingest_struct(&t);
         let t: ItemStruct = parse_quote! {
             struct Bar {
                 a: Foo,
                 b: i64,
             }
         };
-        assert!(bvc.type_is_safe_for_pass_by_value(&t));
+        let t_id = t.ident.to_string();
+        bvc.ingest_struct(&t);
+        bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
+        assert!(bvc.is_pod(&t_id));
     }
 
     #[test]
@@ -111,7 +202,10 @@ mod tests {
                 b: i64,
             }
         };
-        assert!(bvc.type_is_safe_for_pass_by_value(&t));
+        let t_id = t.ident.to_string();
+        bvc.ingest_struct(&t);
+        bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
+        assert!(bvc.is_pod(&t_id));
     }
 
     #[test]
@@ -123,6 +217,8 @@ mod tests {
                 b: i64,
             }
         };
-        assert!(!bvc.type_is_safe_for_pass_by_value(&t));
+        let t_id = t.ident.to_string();
+        bvc.ingest_struct(&t);
+        assert!(bvc.satisfy_requests(vec![t_id.clone()]).is_err());
     }
 }
