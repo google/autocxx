@@ -77,6 +77,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Typedefs | - |
 | Structs containing UniquePtr | Works |
 | Structs containing strings | Works (opaque only) |
+| Passing opaque structs (owned by UniquePtr) into C++ APIs which take them by value | - |
 | Constructors/make_unique | - |
 | Reference counting | - |
 | std::optional | - |
@@ -85,11 +86,23 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Destructors | Works via cxx `UniquePtr` already |
 | Namespaces | - |
 
-The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, e.g. strings embedded in structs, and it's not at all clear that a plan will present itself. Until we are much further, I don't advise using this for anything in production.
+The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, and it's not at all clear that a plan will present itself. In particular, some will require that C++ structs are owned by `UniquePtr` yet passed to C++ by value. It's not clear how ergonomic the results will be. Until we are much further, I don't advise using this for anything in production.
+
+# On safety
+
+This crate mostly intends to follow the lead of the `cxx` crate in where and when `unsafe` is required (it doesn't currently do that, because `cxx` has recently changed policy). But, this crate is opinionated. It believes some unsafety requires more careful review than other bits, along the following spectrum:
+
+* Rust unsafe code (requires most review)
+* Rust code calling C++ with raw pointers
+* Rust code calling C++ with shared pointers, or anything else where there can be concurrent mutation
+* Rust code calling C++ with unique pointers, where the Rust single-owner model nearly always applies (but we can't _prove_ that the C++ developer isn't doing something weird)
+* Rust safe code (requires least review)
+
+If your project is 90% Rust code, with small bits of C++, don't use this crate. You need something where all C++ interaction is marked with big red "this is terrifying" flags. This crate is aimed at cases where there's 90% C++ and small bits of Rust, and so we want the Rust code to be pragmatically reviewable without the signal:noise ratio of `unsafe` in the Rust code becoming so bad that `unsafe` loses all value.
+
+It's not clear yet how this opinion will play out in practice. Perhaps we will get something like `unsafe(ffi)` or `might_be_a_bit_unsafe` (joking!) All that is yet to be determined.
 
 # Build environment
-
-At present, thirteen of the tests pass. The rest are ignored.
 
 Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
 
