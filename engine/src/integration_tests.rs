@@ -635,7 +635,7 @@ fn test_cycle_nonpod_with_str_by_ref() {
     "};
     let rs = quote! {
         let a = ffi::cxxbridge::make_bob();
-        assert_eq!(ffi::cxxbridge::take_bob(a.as_ref()), 32);
+        assert_eq!(ffi::cxxbridge::take_bob(a.as_ref().unwrap()), 32);
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
