@@ -610,31 +610,34 @@ fn test_cycle_nonpod_with_str_by_value() {
 }
 
 #[test]
-#[ignore] // because we don't yet support strings in PODs.
 fn test_cycle_nonpod_with_str_by_ref() {
     let cxx = indoc! {"
         uint32_t take_bob(const Bob& a) {
             return a.a;
         }
-        std::string get_str() {
-            return \"hello\";
+        std::unique_ptr<Bob> make_bob() {
+            auto a = std::make_unique<Bob>();
+            a->a = 32;
+            a->b = \"hello\";
+            return a;
         }
     "};
     let hdr = indoc! {"
         #include <cstdint>
         #include <string>
+        #include <memory>
         struct Bob {
             uint32_t a;
             std::string b;
         };
         uint32_t take_bob(const Bob& a);
-        std::string get_str();
+        std::unique_ptr<Bob> make_bob();
     "};
     let rs = quote! {
-        let a = ffi::cxxbridge::Bob { a: 12, b: ffi::cxxbridge::get_str() };
-        assert_eq!(ffi::cxxbridge::take_bob(&a), 12);
+        let a = ffi::cxxbridge::make_bob();
+        assert_eq!(ffi::cxxbridge::take_bob(a.as_ref()), 32);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob", "get_str"], &[]);
+    run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
 #[test]
