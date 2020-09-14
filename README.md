@@ -75,14 +75,15 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Enums | Works, though more thought needed |
 | #ifdef, #if etc. | - |
 | Typedefs | - |
-| Structs containing UniquePtr | - |
-| Structs containing strings | - |
+| Structs containing UniquePtr | Works |
+| Structs containing strings | Works (opaque only) |
 | Constructors/make_unique | - |
 | Reference counting | - |
 | std::optional | - |
 | Function pointers | - |
 | Inheritance from pure virtual classes | - |
 | Destructors | Works via cxx `UniquePtr` already |
+| Namespaces | - |
 
 The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, e.g. strings embedded in structs, and it's not at all clear that a plan will present itself. Until we are much further, I don't advise using this for anything in production.
 
