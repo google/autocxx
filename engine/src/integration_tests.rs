@@ -201,6 +201,32 @@ fn test_two_funcs() {
 }
 
 #[test]
+fn test_two_funcs_with_definition() {
+    // Test to ensure C++ header isn't included twice
+    let cxx = indoc! {"
+        void do_nothing1() {
+        }
+        void do_nothing2() {
+        }
+    "};
+    let hdr = indoc! {"
+        struct Bob {
+            int a;
+        }
+        void do_nothing1();
+        void do_nothing2();
+    "};
+    let rs = quote! {
+        ffi::cxxbridge::do_nothing1();
+        ffi::cxxbridge::do_nothing2();
+    };
+    println!("Here");
+
+    info!("Here2");
+    run_test(cxx, hdr, rs, &["do_nothing1", "do_nothing2"], &[]);
+}
+
+#[test]
 fn test_return_i32() {
     let cxx = indoc! {"
         uint32_t give_int() {
