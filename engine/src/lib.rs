@@ -384,3 +384,16 @@ impl IncludeCpp {
         self.determine_incdirs()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::TypeName;
+
+    #[test]
+    fn test_typename() {
+        let s = proc_macro2::Span::call_site();
+        let id = syn::Ident::new("Bob", s);
+        let tn = TypeName::from_ident(&id);
+        assert_eq!(tn.to_ident(), id);
+    }
+}
