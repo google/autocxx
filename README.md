@@ -79,9 +79,11 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Structs containing strings | Works (opaque only) |
 | Passing opaque structs (owned by UniquePtr) into C++ APIs which take them by value | - |
 | Constructors/make_unique | - |
+| Field access to opaque objects via UniquePtr | - |
 | Reference counting | - |
 | std::optional | - |
 | Function pointers | - |
+| Unique ptrs to primitives | - |
 | Inheritance from pure virtual classes | - |
 | Destructors | Works via cxx `UniquePtr` already |
 | Namespaces | - |
