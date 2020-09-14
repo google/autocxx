@@ -20,14 +20,15 @@ mod preprocessor_parse_callbacks;
 #[cfg(test)]
 mod integration_tests;
 
+use proc_macro2::Span;
 use proc_macro2::TokenStream as TokenStream2;
-use std::path::PathBuf;
+use std::{fmt::Display, path::PathBuf};
 
 use cxx_gen::GeneratedCode;
 use indoc::indoc;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
-use syn::{parse_quote, ItemMod, Macro};
+use syn::{parse_quote, Ident, ItemMod, Macro, TypePath};
 
 use cpp_postprocessor::EncounteredType;
 use log::{debug, info, warn};
@@ -42,6 +43,37 @@ use std::sync::Mutex;
 const TEMPORARY_HACK_TO_AVOID_REDEFINITIONS: bool = true;
 
 const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
+
+/// Any time we store a type name, we should use this.
+/// At the moment it's just a string, but one day it will need to become
+/// sufficiently intelligent to handle namespaces.
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
+pub struct TypeName(String);
+
+impl TypeName {
+    fn from_ident(id: &Ident) -> Self {
+        TypeName(id.to_string())
+    }
+
+    fn from_type_path(p: &TypePath) -> Self {
+        // TODO better handle generics, multi-segment paths, etc.
+        TypeName::from_ident(&p.path.segments.last().unwrap().ident)
+    }
+
+    fn new(id: &str) -> Self {
+        TypeName(id.to_string())
+    }
+
+    fn to_ident(&self) -> Ident {
+        Ident::new(&self.0, Span::call_site())
+    }
+}
+
+impl Display for TypeName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 #[derive(Debug)]
 pub enum Error {
@@ -67,8 +99,8 @@ pub enum CppInclusion {
 /// we avoid exposing an external interface from this code.
 pub struct IncludeCpp {
     inclusions: Vec<CppInclusion>,
-    allowlist: Vec<String>,
-    pod_types: Vec<String>,
+    allowlist: Vec<String>, // not TypeName as it may be functions or whatever.
+    pod_types: Vec<TypeName>,
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
     parse_only: bool,
     preprocessor_definitions: Rc<Mutex<PreprocessorDefinitions>>,
@@ -141,7 +173,7 @@ impl IncludeCpp {
                 let allow: syn::LitStr = args.parse()?;
                 allowlist.push(allow.value());
                 if ident == "AllowPOD" {
-                    pod_types.push(allow.value());
+                    pod_types.push(TypeName::new(&allow.value()));
                 }
             } else if ident == "ParseOnly" {
                 parse_only = true;

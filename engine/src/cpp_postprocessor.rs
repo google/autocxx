@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::TypeName;
+
 const CXXBRIDGE_GENERATION: usize = 4;
 
 pub enum EncounteredTypeKind {
@@ -19,7 +21,7 @@ pub enum EncounteredTypeKind {
     Enum,
 }
 
-pub struct EncounteredType(pub EncounteredTypeKind, pub String);
+pub struct EncounteredType(pub EncounteredTypeKind, pub TypeName);
 
 /// Edits the generated C++ to insert #defines to disable certain C++
 /// type definitions. A nasty temporary hack - see
@@ -47,11 +49,13 @@ pub(crate) fn disable_types(mut input: Vec<u8>, types: &Vec<EncounteredType>) ->
 
 #[cfg(test)]
 mod tests {
+    use crate::TypeName;
+
     #[test]
     fn test_type_disabler() {
         let types = vec![
-            super::EncounteredType(super::EncounteredTypeKind::Enum, "foo".to_string()),
-            super::EncounteredType(super::EncounteredTypeKind::Struct, "bar".to_string()),
+            super::EncounteredType(super::EncounteredTypeKind::Enum, TypeName::new("foo")),
+            super::EncounteredType(super::EncounteredTypeKind::Struct, TypeName::new("bar")),
         ];
         let input = "fish\n\n".as_bytes().to_vec();
         let output = super::disable_types(input, &types);

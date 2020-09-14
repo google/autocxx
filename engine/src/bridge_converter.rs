@@ -14,6 +14,7 @@
 
 use crate::byvalue_checker::ByValueChecker;
 use crate::cpp_postprocessor::{EncounteredType, EncounteredTypeKind};
+use crate::TypeName;
 use lazy_static::lazy_static;
 use proc_macro2::Span;
 use quote::quote;
@@ -29,10 +30,10 @@ use syn::{
 lazy_static! {
     /// Substitutions from the names constructed by bindgen into those
     /// which cxx uses.
-    static ref IDENT_REPLACEMENTS: HashMap<&'static str, String> = {
+    static ref IDENT_REPLACEMENTS: HashMap<TypeName, TypeName> = {
         let mut map = HashMap::new();
-        map.insert("std_unique_ptr", "UniquePtr".to_string());
-        map.insert("std_string", "CxxString".to_string());
+        map.insert(TypeName::new("std_unique_ptr"), TypeName::new("UniquePtr"));
+        map.insert(TypeName::new("std_string"), TypeName::new("CxxString"));
         map
     };
 }
@@ -64,14 +65,14 @@ pub(crate) struct BridgeConversionResults {
 /// is just manipulate the syn types directly.
 pub(crate) struct BridgeConverter {
     include_list: Vec<String>,
-    pod_requests: Vec<String>,
+    pod_requests: Vec<TypeName>,
     old_rust: bool,
-    class_names_discovered: HashSet<String>,
+    class_names_discovered: HashSet<TypeName>,
     byvalue_checker: ByValueChecker,
 }
 
 impl BridgeConverter {
-    pub fn new(include_list: Vec<String>, pod_requests: Vec<String>, old_rust: bool) -> Self {
+    pub fn new(include_list: Vec<String>, pod_requests: Vec<TypeName>, old_rust: bool) -> Self {
         Self {
             include_list,
             old_rust,
@@ -173,19 +174,18 @@ impl BridgeConverter {
                                 .extend(self.convert_foreign_mod_items(fm.items)?);
                         }
                         Item::Struct(s) => {
-                            let tyname = s.ident.clone();
-                            let should_be_pod = self.byvalue_checker.is_pod(&tyname.to_string());
+                            let tyident = s.ident.clone();
+                            let tyname = TypeName::from_ident(&tyident);
+                            let should_be_pod = self.byvalue_checker.is_pod(&tyname);
                             if should_be_pod {
                                 // Pass this type through to cxx, such that it can
                                 // generate full bindings and Rust code can treat this as
                                 // a transparent type with actual field access.
-                                types_encountered.push(EncounteredType(
-                                    EncounteredTypeKind::Struct,
-                                    tyname.to_string().to_owned(),
-                                ));
+                                types_encountered
+                                    .push(EncounteredType(EncounteredTypeKind::Struct, tyname));
                                 let new_struct_def = self.convert_struct(s);
                                 bridge_items.extend(
-                                    self.append_cpp_definition_squasher(tyname, new_struct_def),
+                                    self.append_cpp_definition_squasher(tyident, new_struct_def),
                                 );
                             } else {
                                 // Teach cxx that this is an opaque type.
@@ -193,7 +193,7 @@ impl BridgeConverter {
                                 // Field access won't be possible from Rust, but
                                 // this allows handling of (for instance) structs
                                 // containing self-referential pointers.
-                                bridge_items.extend_from_slice(&self.generate_type_alias(&tyname));
+                                bridge_items.extend_from_slice(&self.generate_type_alias(&tyident));
                             }
                             // A third permutation would be possible here in future - using cxx's
                             // ExternType facilities:
@@ -205,14 +205,13 @@ impl BridgeConverter {
                             // format.
                         }
                         Item::Enum(e) => {
-                            let tyname = e.ident.clone();
-                            types_encountered.push(EncounteredType(
-                                EncounteredTypeKind::Enum,
-                                tyname.to_string().to_owned(),
-                            ));
+                            let tyident = e.ident.clone();
+                            let tyname = TypeName::from_ident(&tyident);
+                            types_encountered
+                                .push(EncounteredType(EncounteredTypeKind::Enum, tyname));
                             let new_enum_def = self.convert_enum(e);
                             bridge_items
-                                .extend(self.append_cpp_definition_squasher(tyname, new_enum_def));
+                                .extend(self.append_cpp_definition_squasher(tyident, new_enum_def));
                         }
                         Item::Impl(_) => {}
                         _ => {
@@ -273,8 +272,8 @@ impl BridgeConverter {
             // TODO test with class names containing underscores. It should work.
             let old_name = s.ident.to_string();
             for cn in &self.class_names_discovered {
-                if old_name.starts_with(cn) {
-                    s.ident = Ident::new(&old_name[cn.len() + 1..], s.ident.span());
+                if old_name.starts_with(&cn.0) {
+                    s.ident = Ident::new(&old_name[cn.0.len() + 1..], s.ident.span());
                     break;
                 }
             }
@@ -288,7 +287,8 @@ impl BridgeConverter {
     }
 
     fn convert_struct(&mut self, ty: ItemStruct) -> Item {
-        self.class_names_discovered.insert(ty.ident.to_string());
+        self.class_names_discovered
+            .insert(TypeName::from_ident(&ty.ident));
         Item::Struct(ItemStruct {
             attrs: self.strip_attr(ty.attrs, "repr"),
             vis: ty.vis,
@@ -401,7 +401,7 @@ impl BridgeConverter {
                 .segments
                 .into_iter()
                 .map(|s| {
-                    let old_ident = s.ident.to_string();
+                    let old_ident = TypeName::from_ident(&s.ident);
                     let args = match s.arguments {
                         PathArguments::AngleBracketed(ab) => {
                             PathArguments::AngleBracketed(AngleBracketedGenericArguments {
@@ -413,9 +413,9 @@ impl BridgeConverter {
                         }
                         _ => s.arguments,
                     };
-                    let ident = match IDENT_REPLACEMENTS.get(old_ident.as_str()) {
+                    let ident = match IDENT_REPLACEMENTS.get(&old_ident) {
                         None => s.ident,
-                        Some(replacement) => Ident::new(replacement, s.ident.span()),
+                        Some(replacement) => replacement.to_ident(),
                     };
                     PathSegment {
                         ident,

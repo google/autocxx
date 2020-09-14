@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::TypeName;
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
@@ -23,7 +24,7 @@ enum PODState {
 
 struct StructDetails {
     state: PODState,
-    dependent_structs: Vec<String>,
+    dependent_structs: Vec<TypeName>,
 }
 
 impl StructDetails {
@@ -42,33 +43,45 @@ impl StructDetails {
 /// is TBD.
 pub struct ByValueChecker {
     // Mapping from type name to whether it is safe to be POD
-    results: HashMap<String, StructDetails>,
+    results: HashMap<TypeName, StructDetails>,
 }
 
 impl ByValueChecker {
     pub fn new() -> Self {
         let mut results = HashMap::new();
         results.insert(
-            "CxxString".to_owned(),
+            TypeName::new("CxxString"),
             StructDetails::new(PODState::UnsafeToBePOD(
                 "std::string has a self-referential pointer.".to_string(),
             )),
         );
         results.insert(
-            "UniquePtr".to_owned(),
+            TypeName::new("UniquePtr"),
             StructDetails::new(PODState::SafeToBePOD),
         );
-        results.insert("i32".to_owned(), StructDetails::new(PODState::SafeToBePOD));
-        results.insert("i64".to_owned(), StructDetails::new(PODState::SafeToBePOD));
-        results.insert("u32".to_owned(), StructDetails::new(PODState::SafeToBePOD));
-        results.insert("u64".to_owned(), StructDetails::new(PODState::SafeToBePOD));
+        results.insert(
+            TypeName::new("i32"),
+            StructDetails::new(PODState::SafeToBePOD),
+        );
+        results.insert(
+            TypeName::new("i64"),
+            StructDetails::new(PODState::SafeToBePOD),
+        );
+        results.insert(
+            TypeName::new("u32"),
+            StructDetails::new(PODState::SafeToBePOD),
+        );
+        results.insert(
+            TypeName::new("u64"),
+            StructDetails::new(PODState::SafeToBePOD),
+        );
         // TODO expand with all primitives, or find a better way.
         ByValueChecker { results }
     }
 
     pub fn ingest_struct(&mut self, def: &ItemStruct) {
         // For this struct, work out whether it _could_ be safe as a POD.
-        let tyname = def.ident.to_string();
+        let tyname = TypeName::from_ident(&def.ident);
         let mut field_safety_problem = PODState::SafeToBePOD;
         let fieldlist = self.get_field_types(def);
         for ty_id in &fieldlist {
@@ -95,7 +108,7 @@ impl ByValueChecker {
         self.results.insert(tyname, my_details);
     }
 
-    pub fn satisfy_requests(&mut self, mut requests: Vec<String>) -> Result<(), String> {
+    pub fn satisfy_requests(&mut self, mut requests: Vec<TypeName>) -> Result<(), String> {
         while !requests.is_empty() {
             let ty_id = requests.remove(requests.len() - 1);
             let deets = self.results.get_mut(&ty_id);
@@ -119,7 +132,7 @@ impl ByValueChecker {
         Ok(())
     }
 
-    pub fn is_pod(&self, ty_id: &str) -> bool {
+    pub fn is_pod(&self, ty_id: &TypeName) -> bool {
         match self
             .results
             .get(ty_id)
@@ -133,16 +146,12 @@ impl ByValueChecker {
         }
     }
 
-    fn get_field_types(&self, def: &ItemStruct) -> Vec<String> {
+    fn get_field_types(&self, def: &ItemStruct) -> Vec<TypeName> {
         let mut results = Vec::new();
         for f in &def.fields {
             let fty = &f.ty;
             match fty {
-                Type::Path(p) => {
-                    // TODO better handle generics, multi-segment paths, etc.
-                    let ty_id = p.path.segments.last().unwrap().ident.to_string();
-                    results.push(ty_id);
-                }
+                Type::Path(p) => results.push(TypeName::from_type_path(&p)),
                 // TODO handle anything else which bindgen might spit out, e.g. arrays?
                 _ => {}
             }
@@ -154,6 +163,7 @@ impl ByValueChecker {
 #[cfg(test)]
 mod tests {
     use super::ByValueChecker;
+    use crate::TypeName;
     use syn::{parse_quote, ItemStruct};
 
     #[test]
@@ -165,7 +175,7 @@ mod tests {
                 b: i64,
             }
         };
-        let t_id = t.ident.to_string();
+        let t_id = TypeName::from_ident(&t.ident);
         bvc.ingest_struct(&t);
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
@@ -187,7 +197,7 @@ mod tests {
                 b: i64,
             }
         };
-        let t_id = t.ident.to_string();
+        let t_id = TypeName::from_ident(&t.ident);
         bvc.ingest_struct(&t);
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
@@ -202,7 +212,7 @@ mod tests {
                 b: i64,
             }
         };
-        let t_id = t.ident.to_string();
+        let t_id = TypeName::from_ident(&t.ident);
         bvc.ingest_struct(&t);
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
@@ -217,7 +227,7 @@ mod tests {
                 b: i64,
             }
         };
-        let t_id = t.ident.to_string();
+        let t_id = TypeName::from_ident(&t.ident);
         bvc.ingest_struct(&t);
         assert!(bvc.satisfy_requests(vec![t_id.clone()]).is_err());
     }
