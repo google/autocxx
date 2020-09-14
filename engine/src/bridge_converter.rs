@@ -41,6 +41,7 @@ lazy_static! {
 pub enum ConvertError {
     NoContent,
     UnsafePODType(String),
+    UnknownForeignItem,
 }
 
 pub(crate) struct BridgeConversionResults {
@@ -140,10 +141,36 @@ impl BridgeConverter {
                 let mut types_encountered = Vec::new();
                 let mut all_items: Vec<Item> = Vec::new();
                 let mut bridge_items = Vec::new();
+                let mut extern_c_mod = None;
                 for item in items {
                     match item {
                         Item::ForeignMod(fm) => {
-                            bridge_items.push(self.convert_foreign_mod(fm).map(Item::ForeignMod)?);
+                            if extern_c_mod.is_none() {
+                                // We'll use the first 'extern "C"' mod we come
+                                // across for attributes, spans etc. but we'll stuff
+                                // the contents of all bindgen 'extern "C"' mods into this
+                                // one.
+                                let items = self
+                                    .include_list
+                                    .iter()
+                                    .map(|inc| {
+                                        ForeignItem::Macro(parse_quote! {
+                                            include!(#inc);
+                                        })
+                                    })
+                                    .collect();
+                                extern_c_mod = Some(ItemForeignMod {
+                                    attrs: fm.attrs,
+                                    abi: fm.abi,
+                                    brace_token: fm.brace_token,
+                                    items,
+                                });
+                            }
+                            extern_c_mod
+                                .as_mut()
+                                .unwrap()
+                                .items
+                                .extend(self.convert_foreign_mod_items(fm.items)?);
                         }
                         Item::Struct(s) => {
                             let tyname = s.ident.clone();
@@ -193,6 +220,9 @@ impl BridgeConverter {
                         }
                     }
                 }
+                if let Some(extern_c_mod) = extern_c_mod.take() {
+                    bridge_items.push(Item::ForeignMod(extern_c_mod));
+                }
                 all_items.push(parse_quote! {
                     #[cxx::bridge]
                     pub mod cxxbridge {
@@ -207,29 +237,19 @@ impl BridgeConverter {
         }
     }
 
-    fn convert_foreign_mod(
+    fn convert_foreign_mod_items(
         &self,
-        foreign_mod: ItemForeignMod,
-    ) -> Result<ItemForeignMod, ConvertError> {
+        foreign_mod_items: Vec<ForeignItem>,
+    ) -> Result<Vec<ForeignItem>, ConvertError> {
         let mut new_items = Vec::new();
-        for inc in &self.include_list {
-            let new_bit = parse_quote! {
-                include!(#inc);
-            };
-            new_items.push(ForeignItem::Macro(new_bit));
-        }
-        for i in foreign_mod.items {
+
+        for i in foreign_mod_items {
             new_items.push(match i {
-                ForeignItem::Fn(f) => self.convert_foreign_fn(f).map(ForeignItem::Fn)?,
-                _ => i,
+                ForeignItem::Fn(f) => ForeignItem::Fn(self.convert_foreign_fn(f)?),
+                _ => return Err(ConvertError::UnknownForeignItem),
             })
         }
-        Ok(ItemForeignMod {
-            attrs: foreign_mod.attrs,
-            abi: foreign_mod.abi,
-            brace_token: foreign_mod.brace_token,
-            items: new_items,
-        })
+        Ok(new_items)
     }
 
     fn convert_foreign_fn(&self, fun: ForeignItemFn) -> Result<ForeignItemFn, ConvertError> {
