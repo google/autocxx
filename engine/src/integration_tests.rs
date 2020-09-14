@@ -584,6 +584,110 @@ fn test_take_nested_pod_by_value() {
 }
 
 #[test]
+fn test_take_nonpod_by_up() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::cxxbridge::take_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob"], &[]);
+}
+
+#[test]
+#[ignore] // need field access to opaque types; need to pass Rust-side unique pointer
+// into C++ functions which take something by value; need make_unique
+fn test_take_nonpod_by_value() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::Bob::make_unique { a: 12, b: 13 };
+        assert_eq!(ffi::cxxbridge::take_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob"], &[]);
+}
+
+#[test]
+fn test_take_nonpod_by_ref() {
+    let cxx = indoc! {"
+        uint32_t take_bob(const Bob& a) {
+            return a.a;
+        }
+        std::unique_ptr<Bob> make_bob(uint32_t a) {
+            auto b = std::make_unique<Bob>();
+            b->a = a;
+            return b;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+        std::unique_ptr<Bob> make_bob(uint32_t a);
+        uint32_t take_bob(const Bob& a);
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::make_bob(12);
+        assert_eq!(ffi::cxxbridge::take_bob(&a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
+}
+
+#[test]
+fn test_take_nonpod_by_mut_ref() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob& a) {
+            return a.a;
+        }
+        std::unique_ptr<Bob> make_bob(uint32_t a) {
+            auto b = std::make_unique<Bob>();
+            b->a = a;
+            return b;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+        std::unique_ptr<Bob> make_bob(uint32_t a);
+        uint32_t take_bob(Bob& a);
+    "};
+    let rs = quote! {
+        let mut a = ffi::cxxbridge::make_bob(12);
+        assert_eq!(ffi::cxxbridge::take_bob(&mut a), 12);
+    };
+    // TODO confirm that the object really was mutated by C++ in this
+    // and similar tests.
+    run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
+}
+
+#[test]
 #[ignore] // because we don't yet support strings in PODs.
 fn test_cycle_nonpod_with_str_by_value() {
     let cxx = indoc! {"
