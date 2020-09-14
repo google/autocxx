@@ -87,7 +87,13 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
     path
 }
 
-fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_funcs: &[&str]) {
+fn run_test(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code: TokenStream,
+    allowed_funcs: &[&str],
+    allowed_pods: &[&str],
+) {
     // Step 1: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
     write_to_file(&tdir, "input.h", header_code);
@@ -97,7 +103,12 @@ fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_f
     // clear how we're getting away with it, but quoting it doesn't work.
     let allowed_funcs = allowed_funcs.iter().map(|s| {
         quote! {
-            Allow(#s)
+            Allow(#s),
+        }
+    });
+    let allowed_pods = allowed_pods.iter().map(|s| {
+        quote! {
+            AllowPOD(#s),
         }
     });
     let expanded_rust = quote! {
@@ -105,7 +116,8 @@ fn run_test(cxx_code: &str, header_code: &str, rust_code: TokenStream, allowed_f
 
         include_cxx!(
             Header("input.h"),
-            #(#allowed_funcs),*
+            #(#allowed_funcs)*
+            #(#allowed_pods)*
         );
 
         fn main() {
@@ -166,7 +178,7 @@ fn test_return_void() {
     let rs = quote! {
         ffi::cxxbridge::do_nothing();
     };
-    run_test(cxx, hdr, rs, &["do_nothing"]);
+    run_test(cxx, hdr, rs, &["do_nothing"], &[]);
 }
 
 #[test]
@@ -185,7 +197,33 @@ fn test_two_funcs() {
         ffi::cxxbridge::do_nothing1();
         ffi::cxxbridge::do_nothing2();
     };
-    run_test(cxx, hdr, rs, &["do_nothing1", "do_nothing2"]);
+    run_test(cxx, hdr, rs, &["do_nothing1", "do_nothing2"], &[]);
+}
+
+#[test]
+fn test_two_funcs_with_definition() {
+    // Test to ensure C++ header isn't included twice
+    let cxx = indoc! {"
+        void do_nothing1() {
+        }
+        void do_nothing2() {
+        }
+    "};
+    let hdr = indoc! {"
+        struct Bob {
+            int a;
+        };
+        void do_nothing1();
+        void do_nothing2();
+    "};
+    let rs = quote! {
+        ffi::cxxbridge::do_nothing1();
+        ffi::cxxbridge::do_nothing2();
+    };
+    println!("Here");
+
+    info!("Here2");
+    run_test(cxx, hdr, rs, &["do_nothing1", "do_nothing2"], &[]);
 }
 
 #[test]
@@ -202,7 +240,7 @@ fn test_return_i32() {
     let rs = quote! {
         assert_eq!(ffi::cxxbridge::give_int(), 5);
     };
-    run_test(cxx, hdr, rs, &["give_int"]);
+    run_test(cxx, hdr, rs, &["give_int"], &[]);
 }
 
 #[test]
@@ -219,7 +257,7 @@ fn test_take_i32() {
     let rs = quote! {
         assert_eq!(ffi::cxxbridge::take_int(3), 6);
     };
-    run_test(cxx, hdr, rs, &["take_int"]);
+    run_test(cxx, hdr, rs, &["take_int"], &[]);
 }
 
 #[test]
@@ -238,7 +276,7 @@ fn test_give_up_int() {
     let rs = quote! {
         assert_eq!(ffi::cxxbridge::give_up().as_ref().unwrap(), 12);
     };
-    run_test(cxx, hdr, rs, &["give_up"]);
+    run_test(cxx, hdr, rs, &["give_up"], &[]);
 }
 
 #[test]
@@ -256,7 +294,7 @@ fn test_give_string_up() {
     let rs = quote! {
         assert_eq!(ffi::cxxbridge::give_str_up().as_ref().unwrap().to_str().unwrap(), "Bob");
     };
-    run_test(cxx, hdr, rs, &["give_str_up"]);
+    run_test(cxx, hdr, rs, &["give_str_up"], &[]);
 }
 
 #[test]
@@ -274,7 +312,7 @@ fn test_give_string_plain() {
     let rs = quote! {
         assert_eq!(ffi::cxxbridge::give_str_up().to_str().unwrap(), "Bob");
     };
-    run_test(cxx, hdr, rs, &["give_str"]);
+    run_test(cxx, hdr, rs, &["give_str"], &[]);
 }
 
 #[test]
@@ -298,7 +336,7 @@ fn test_cycle_string_up() {
         let s = ffi::cxxbridge::give_str_up();
         assert_eq!(ffi::cxxbridge::take_str_up(s), 3);
     };
-    run_test(cxx, hdr, rs, &["give_str_up", "take_str_up"]);
+    run_test(cxx, hdr, rs, &["give_str_up", "take_str_up"], &[]);
 }
 
 #[test]
@@ -323,7 +361,7 @@ fn test_cycle_string() {
         assert_eq!(ffi::cxxbridge::take_str(s), 3);
     };
     let allowed_funcs = &["give_str", "take_str"];
-    run_test(cxx, hdr, rs, allowed_funcs);
+    run_test(cxx, hdr, rs, allowed_funcs, &[]);
 }
 
 #[test]
@@ -347,7 +385,7 @@ fn test_cycle_string_by_ref() {
         assert_eq!(ffi::cxxbridge::take_str(s.as_ref().unwrap()), 3);
     };
     let allowed_funcs = &["give_str", "take_str"];
-    run_test(cxx, hdr, rs, allowed_funcs);
+    run_test(cxx, hdr, rs, allowed_funcs, &[]);
 }
 
 #[test]
@@ -371,7 +409,7 @@ fn test_cycle_string_by_mut_ref() {
         assert_eq!(ffi::cxxbridge::take_str(s.as_mut().unwrap()), 3);
     };
     let allowed_funcs = &["give_str", "take_str"];
-    run_test(cxx, hdr, rs, allowed_funcs);
+    run_test(cxx, hdr, rs, allowed_funcs, &[]);
 }
 
 #[test]
@@ -395,7 +433,7 @@ fn test_give_pod_by_value() {
     let rs = quote! {
         assert_eq!(ffi::cxxbridge::give_bob().b, 4);
     };
-    run_test(cxx, hdr, rs, &["give_bob", "Bob"]);
+    run_test(cxx, hdr, rs, &["give_bob"], &["Bob"]);
 }
 
 #[test]
@@ -420,7 +458,7 @@ fn test_give_pod_class_by_value() {
     let rs = quote! {
         assert_eq!(ffi::cxxbridge::give_bob().b, 4);
     };
-    run_test(cxx, hdr, rs, &["give_bob", "Bob"]);
+    run_test(cxx, hdr, rs, &["give_bob"], &["Bob"]);
 }
 
 #[test]
@@ -445,7 +483,7 @@ fn test_give_pod_by_up() {
     let rs = quote! {
         assert_eq!(ffi::cxxbridge::give_bob().as_ref().unwrap().b, 4);
     };
-    run_test(cxx, hdr, rs, &["give_bob", "Bob"]);
+    run_test(cxx, hdr, rs, &["give_bob"], &["Bob"]);
 }
 
 #[test]
@@ -467,7 +505,7 @@ fn test_take_pod_by_value() {
         let a = ffi::cxxbridge::Bob { a: 12, b: 13 };
         assert_eq!(ffi::cxxbridge::take_bob(a), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
 #[test]
@@ -489,8 +527,7 @@ fn test_take_pod_by_ref() {
         let a = ffi::cxxbridge::Bob { a: 12, b: 13 };
         assert_eq!(ffi::cxxbridge::take_bob(&a), 12);
     };
-    let allowed_funcs = &["take_bob", "Bob"];
-    run_test(cxx, hdr, rs, allowed_funcs);
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
 #[test]
@@ -514,7 +551,7 @@ fn test_take_pod_by_mut_ref() {
         assert_eq!(ffi::cxxbridge::take_bob(&mut a), 12);
         assert_eq!(a.b, 14);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
 #[test]
@@ -541,13 +578,12 @@ fn test_take_nested_pod_by_value() {
         assert_eq!(ffi::cxxbridge::take_bob(a), 12);
     };
     // Should be no need to allowlist Phil below
-    let allowed_funcs = &["take_bob", "Bob"];
-    run_test(cxx, hdr, rs, allowed_funcs);
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
 #[test]
 #[ignore] // because we don't yet support strings in PODs.
-fn test_cycle_pod_with_str_by_value() {
+fn test_cycle_nonpod_with_str_by_value() {
     let cxx = indoc! {"
         uint32_t take_bob(Bob a) {
             return a.a;
@@ -570,35 +606,38 @@ fn test_cycle_pod_with_str_by_value() {
         let a = ffi::cxxbridge::Bob { a: 12, b: ffi::cxxbridge::get_str() };
         assert_eq!(ffi::cxxbridge::take_bob(a), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob", "get_str"]);
+    run_test(cxx, hdr, rs, &["take_bob", "Bob", "get_str"], &[]);
 }
 
 #[test]
-#[ignore] // because we don't yet support strings in PODs.
-fn test_cycle_pod_with_str_by_ref() {
+fn test_cycle_nonpod_with_str_by_ref() {
     let cxx = indoc! {"
         uint32_t take_bob(const Bob& a) {
             return a.a;
         }
-        std::string get_str() {
-            return \"hello\";
+        std::unique_ptr<Bob> make_bob() {
+            auto a = std::make_unique<Bob>();
+            a->a = 32;
+            a->b = \"hello\";
+            return a;
         }
     "};
     let hdr = indoc! {"
         #include <cstdint>
         #include <string>
+        #include <memory>
         struct Bob {
             uint32_t a;
             std::string b;
         };
         uint32_t take_bob(const Bob& a);
-        std::string get_str();
+        std::unique_ptr<Bob> make_bob();
     "};
     let rs = quote! {
-        let a = ffi::cxxbridge::Bob { a: 12, b: ffi::cxxbridge::get_str() };
-        assert_eq!(ffi::cxxbridge::take_bob(&a), 12);
+        let a = ffi::cxxbridge::make_bob();
+        assert_eq!(ffi::cxxbridge::take_bob(a.as_ref().unwrap()), 32);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob", "get_str"]);
+    run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
 #[test]
@@ -620,7 +659,7 @@ fn test_make_up() {
         let a = ffi::cxxbridge::Bob::make_unique();
         assert_eq!(a.as_ref().unwrap().a, 3);
     };
-    run_test(cxx, hdr, rs, &["Bob"]);
+    run_test(cxx, hdr, rs, &["Bob"], &[]);
 }
 
 #[test]
@@ -642,7 +681,7 @@ fn test_make_up_int() {
         let a = ffi::cxxbridge::Bob::make_unique(3);
         assert_eq!(a.as_ref().unwrap().b, 3);
     };
-    run_test(cxx, hdr, rs, &["Bob"]);
+    run_test(cxx, hdr, rs, &["Bob"], &[]);
 }
 
 #[test]
@@ -665,7 +704,7 @@ fn test_enum() {
         let b = ffi::cxxbridge::give_bob();
         assert!(a == b);
     };
-    run_test(cxx, hdr, rs, &["Bob", "give_bob"]);
+    run_test(cxx, hdr, rs, &["Bob", "give_bob"], &[]);
 }
 
 #[test]
@@ -683,7 +722,7 @@ fn test_enum_no_funcs() {
         let b = ffi::cxxbridge::Bob::BOB_VALUE_2;
         assert!(a != b);
     };
-    run_test(cxx, hdr, rs, &["Bob"]);
+    run_test(cxx, hdr, rs, &["Bob"], &[]);
 }
 
 #[test]
@@ -707,7 +746,7 @@ fn test_take_pod_class_by_value() {
         let a = ffi::cxxbridge::Bob { a: 12, b: 13 };
         assert_eq!(ffi::cxxbridge::take_bob(a), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
 #[test]
@@ -730,7 +769,7 @@ fn test_pod_method() {
         let a = ffi::cxxbridge::Bob { a: 12, b: 13 };
         assert_eq!(a.get_bob(), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
 #[test]
@@ -753,7 +792,7 @@ fn test_pod_mut_method() {
         let mut a = ffi::cxxbridge::Bob { a: 12, b: 13 };
         assert_eq!(a.get_bob(), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob"]);
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
 #[test]
@@ -766,7 +805,7 @@ fn test_define_int() {
     let rs = quote! {
         assert_eq!(ffi::defs::BOB, 3);
     };
-    run_test(cxx, hdr, rs, &[]);
+    run_test(cxx, hdr, rs, &[], &[]);
 }
 
 #[test]
@@ -779,7 +818,7 @@ fn test_define_str() {
     let rs = quote! {
         assert_eq!(ffi::defs::BOB, "foo");
     };
-    run_test(cxx, hdr, rs, &[]);
+    run_test(cxx, hdr, rs, &[], &[]);
 }
 
 #[test]
@@ -793,7 +832,7 @@ fn test_i32_const() {
     let rs = quote! {
         assert_eq!(ffi::BOB, 3);
     };
-    run_test(cxx, hdr, rs, &["BOB"]);
+    run_test(cxx, hdr, rs, &["BOB"], &[]);
 }
 
 // Yet to test:

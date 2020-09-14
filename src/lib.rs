@@ -63,6 +63,26 @@ use syn::parse_macro_input;
 /// * *Header(filename)*: a header filename to parse and include
 /// * *Allow(type or function name)*: a type or function name whose declaration
 ///   should be made available to C++.
+/// * *AllowPOD(type name)*: a struct name whose declaration
+///   should be made available to C++, and whose fields are sufficient simple
+///   that they can allow being passed back and forth by value (POD = 'plain old
+///   data').
+///
+/// # How to allow structs
+///
+/// A C++ struct can be listed under 'Allow' or 'AllowPOD' (or may be implicitly
+/// 'Allowed' because it's a type referenced by something else you've allowed.)
+///
+/// The current plan is to use 'Allow' under normal circumstances, but
+/// 'AllowPOD' only for structs where you absolutely do need to pass them
+/// truly by value and have direct field access.
+/// Some structs can't be represented as POD, e.g. those containing `std::string`
+/// due to self-referential pointers. We will always handle such things using
+/// `UniquePtr` to an opaque type in Rust, but still allow calling existing C++
+/// APIs which take such things by value - we'll aim to generate automatic
+/// unwrappers. This won't work in all cases.
+/// The majority of this paragraph doesn't work at all yet, and it will never work
+/// for some cases. It remains to be seen whether this is good enough in practice.
 ///
 /// # Generated code
 ///
