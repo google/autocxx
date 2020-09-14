@@ -212,7 +212,7 @@ fn test_two_funcs_with_definition() {
     let hdr = indoc! {"
         struct Bob {
             int a;
-        }
+        };
         void do_nothing1();
         void do_nothing2();
     "};
