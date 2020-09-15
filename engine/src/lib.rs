@@ -247,8 +247,6 @@ impl IncludeCpp {
     fn make_bindgen_builder(&self) -> Result<bindgen::Builder> {
         let inc_dirs = self.determine_incdirs()?;
 
-        let full_header = self.build_header();
-        debug!("Full header: {}", full_header);
         debug!("Inc dir: {:?}", inc_dirs);
 
         // TODO support different C++ versions
@@ -271,6 +269,12 @@ impl IncludeCpp {
             // TODO work with OsStrs here to avoid the .display()
             builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
         }
+        Ok(builder)
+    }
+
+    fn inject_original_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
+        let full_header = self.build_header();
+        debug!("Full header: {}", full_header);
         builder = builder.header_contents("example.hpp", &full_header);
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
@@ -281,7 +285,7 @@ impl IncludeCpp {
                 .whitelist_function(a)
                 .whitelist_var(a);
         }
-        Ok(builder)
+        builder
     }
 
     pub fn generate_rs(&self) -> Result<TokenStream2> {
@@ -310,8 +314,9 @@ impl IncludeCpp {
         // Then:
         // 1. Builds an overall C++ header with all those #defines and #includes
         // 2. Passes it to bindgen::Builder::header
-        let bindings = self
-            .make_bindgen_builder()?
+        let builder = self
+            .make_bindgen_builder()?;
+        let bindings = self.inject_original_header_into_bindgen(builder)
             .generate()
             .map_err(Error::Bindgen)?;
         // This bindings object is actually a TokenStream internally and we're wasting
@@ -368,14 +373,10 @@ impl IncludeCpp {
             .map_err(Error::CxxGen)
             .and_then(dump_generated_code)
             .and_then(|gen| {
-                if TEMPORARY_HACK_TO_AVOID_REDEFINITIONS {
-                    Ok(GeneratedCode {
-                        header: cpp_postprocessor.post_process(gen.header),
-                        implementation: cpp_postprocessor.post_process(gen.implementation),
-                    })
-                } else {
-                    Ok(gen)
-                }
+                Ok(GeneratedCode {
+                    header: cpp_postprocessor.post_process(gen.header, false),
+                    implementation: cpp_postprocessor.post_process(gen.implementation, true),
+                })
             })
             .and_then(dump_generated_code)
     }

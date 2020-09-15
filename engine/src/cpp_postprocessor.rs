@@ -18,11 +18,17 @@ const CXXBRIDGE_GENERATION: usize = 4;
 
 pub(crate) struct CppPostprocessor {
     encountered_types: Vec<EncounteredType>,
+    additional_functions: Vec<AdditionalFunction>,
 }
 
 pub enum EncounteredTypeKind {
     Struct,
     Enum,
+}
+
+struct AdditionalFunction {
+    declaration: String,
+    definition: String,
 }
 
 pub struct EncounteredType(pub EncounteredTypeKind, pub TypeName);
@@ -31,6 +37,7 @@ impl CppPostprocessor {
     pub(crate) fn new() -> Self {
         CppPostprocessor {
             encountered_types: Vec::new(),
+            additional_functions: Vec::new(),
         }
     }
 
@@ -38,30 +45,56 @@ impl CppPostprocessor {
         self.encountered_types.push(ty);
     }
 
-    /// Edits the generated C++ to insert #defines to disable certain C++
+    /// Edits the generated C++.
+    /// Does the following:
+    /// * Inserts extra definitions/declarations
+    /// * Inserts #defines to disable certain C++
     /// type definitions. A nasty temporary hack - see
-    pub(crate) fn post_process(&self, mut input: Vec<u8>) -> Vec<u8> {
+    /// `crate::TEMPORARY_HACK_TO_AVOID_REDEFINITIONS`
+    pub(crate) fn post_process(&self, mut input: Vec<u8>, is_implementation: bool) -> Vec<u8> {
         let mut out = Vec::new();
-        for t in &self.encountered_types {
-            let label = match t.0 {
-                EncounteredTypeKind::Struct => "STRUCT",
-                EncounteredTypeKind::Enum => "ENUM",
-            };
-            out.extend_from_slice(
-                format!(
-                    "#define CXXBRIDGE{:02}_{}_{}\n",
-                    CXXBRIDGE_GENERATION, label, t.1
-                )
-                .as_bytes(),
-            );
-        }
-        if !self.encountered_types.is_empty() {
-            out.extend_from_slice("\n".as_bytes());
+        if crate::TEMPORARY_HACK_TO_AVOID_REDEFINITIONS {
+            for t in &self.encountered_types {
+                let label = match t.0 {
+                    EncounteredTypeKind::Struct => "STRUCT",
+                    EncounteredTypeKind::Enum => "ENUM",
+                };
+                out.extend_from_slice(
+                    format!(
+                        "#define CXXBRIDGE{:02}_{}_{}\n",
+                        CXXBRIDGE_GENERATION, label, t.1
+                    )
+                    .as_bytes(),
+                );
+            }
+            if !self.encountered_types.is_empty() {
+                out.extend_from_slice("\n".as_bytes());
+            }
         }
         out.append(&mut input);
         out
     }
+
+    pub(crate) fn additional_items_generated(&self) -> Option<(String, String)> {
+        if self.additional_functions.is_empty() {
+            None
+        } else {
+            let declarations = self.concat_additional_items(|x| &x.declaration);
+            let definitions = self.concat_additional_items(|x| &x.definition);
+            Some((declarations, definitions))
+        }
+    }
+
+    fn concat_additional_items<F>(&self, field_access: F) -> String
+    where
+    F: FnMut(&AdditionalFunction) -> &str {
+        self.additional_functions.iter()
+            .map(field_access)
+            .collect::<Vec<&str>>()
+            .join("\n\n")
+    }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -80,7 +113,7 @@ mod tests {
             TypeName::new("bar"),
         ));
         let input = "fish\n\n".as_bytes().to_vec();
-        let output = preprocessor.post_process(input);
+        let output = preprocessor.post_process(input, false);
         assert_eq!(
             String::from_utf8(output).unwrap(),
             "#define CXXBRIDGE04_ENUM_foo\n#define CXXBRIDGE04_STRUCT_bar\n\nfish\n\n"
