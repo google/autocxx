@@ -29,6 +29,7 @@ pub enum EncounteredTypeKind {
 struct AdditionalFunction {
     declaration: String,
     definition: String,
+    name: String,
 }
 
 pub struct EncounteredType(pub EncounteredTypeKind, pub TypeName);
@@ -75,13 +76,14 @@ impl CppPostprocessor {
         out
     }
 
-    pub(crate) fn additional_items_generated(&self) -> Option<(String, String)> {
+    pub(crate) fn additional_items_generated(&self) -> Option<(String, String, Vec<String>)> {
         if self.additional_functions.is_empty() {
             None
         } else {
             let declarations = self.concat_additional_items(|x| &x.declaration);
             let definitions = self.concat_additional_items(|x| &x.definition);
-            Some((declarations, definitions))
+            let extra_allowlist = self.additional_functions.iter().map(|x| x.name.to_string()).collect();
+            Some((declarations, definitions, extra_allowlist))
         }
     }
 

@@ -269,13 +269,7 @@ impl IncludeCpp {
             // TODO work with OsStrs here to avoid the .display()
             builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
         }
-        Ok(builder)
-    }
 
-    fn inject_original_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
-        let full_header = self.build_header();
-        debug!("Full header: {}", full_header);
-        builder = builder.header_contents("example.hpp", &full_header);
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
         for a in &self.allowlist {
@@ -285,11 +279,30 @@ impl IncludeCpp {
                 .whitelist_function(a)
                 .whitelist_var(a);
         }
+
+        Ok(builder)
+    }
+
+    fn inject_original_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
+        let full_header = self.build_header();
+        debug!("Full header: {}", full_header);
+        builder.header_contents("example.hpp", &full_header)
+    }
+
+    fn inject_enhanced_header_into_bindgen(&self, mut builder: bindgen::Builder, more_decls: String, more_allowlist: Vec<String>) -> bindgen::Builder {
+        let full_header = self.build_header();
+        let full_header = format!("{}\n\n// Extra autocxx insertions:\n\n{}", full_header, more_decls);
+        debug!("Full (enhanced) header: {}", full_header);
+        builder = builder.header_contents("example.hpp", &full_header);
+        for a in more_allowlist {
+            builder = builder
+                .whitelist_function(a);
+        }
         builder
     }
 
     pub fn generate_rs(&self) -> Result<TokenStream2> {
-        let itemmod = self.do_generation(None)?;
+        let itemmod = self.do_generation(&mut CppPostprocessor::new())?;
         Ok(itemmod.to_token_stream())
     }
 
@@ -299,9 +312,34 @@ impl IncludeCpp {
         m
     }
 
+    fn parse_bindings(&self, bindings: bindgen::Bindings) -> Result<ItemMod> {
+        // This bindings object is actually a TokenStream internally and we're wasting
+        // effort converting to and from string. We could enhance the bindgen API
+        // in future.
+        let bindings = bindings.to_string();
+        // Manually add the mod ffi {} so that we can ask syn to parse
+        // into a single construct.
+        let bindings = format!("mod ffi {{ {} }}", bindings);
+        info!("Bindings: {}", bindings);
+        syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)
+    }
+
+    fn generate_include_list(&self) -> Vec<String> {
+        let mut include_list = Vec::new();
+        for incl in &self.inclusions {
+            match incl {
+                CppInclusion::Header(ref hdr) => {
+                    include_list.push(hdr.clone());
+                }
+                CppInclusion::Define(_) => warn!("Currently no way to define! within cxx"),
+            }
+        }
+        include_list
+    }
+
     fn do_generation(
         &self,
-        cpp_postprocessor: Option<&mut CppPostprocessor>,
+        cpp_postprocessor: &mut CppPostprocessor,
     ) -> Result<Option<ItemMod>> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -309,6 +347,7 @@ impl IncludeCpp {
         if self.parse_only {
             return Ok(None);
         }
+
         // 4. (also respects environment variables to pick up more headers,
         //     include paths and #defines)
         // Then:
@@ -319,33 +358,39 @@ impl IncludeCpp {
         let bindings = self.inject_original_header_into_bindgen(builder)
             .generate()
             .map_err(Error::Bindgen)?;
-        // This bindings object is actually a TokenStream internally and we're wasting
-        // effort converting to and from string. We could enhance the bindgen API
-        // in future.
-        let bindings = bindings.to_string();
-        // Manually add the mod ffi {} so that we can ask syn to parse
-        // into a single construct.
-        let bindings = format!("mod ffi {{ {} }}", bindings);
-        info!("Bindings: {}", bindings);
-        let bindings = syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)?;
-
-        let mut include_list = Vec::new();
-        for incl in &self.inclusions {
-            match incl {
-                CppInclusion::Header(ref hdr) => {
-                    include_list.push(hdr.clone());
-                }
-                CppInclusion::Define(_) => warn!("Currently no way to define! within cxx"),
-            }
-        }
+        let bindings = self.parse_bindings(bindings)?;
 
         let mut converter = bridge_converter::BridgeConverter::new(
-            include_list,
+            self.generate_include_list(),
             self.pod_types.clone(), // TODO take self by value to avoid clone.
             cpp_postprocessor,
             TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
         );
+        
         let mut items = converter.convert(bindings).map_err(Error::Conversion)?;
+        let additional_cpp_items = cpp_postprocessor.additional_items_generated();
+        if let Some((additional_declarations, additional_definitions, extra_allowlist)) = additional_cpp_items {
+            // When processing the bindings the first time, we discovered we wanted to add
+            // more C++ (because you can never have too much C++.) Examples are field
+            // accessor methods, or make_unique wrappers.
+            // So, err, let's start all over again. Fun!
+            let builder = self
+                .make_bindgen_builder()?;
+            let bindings = self.inject_enhanced_header_into_bindgen(builder, additional_declarations, extra_allowlist)
+                .generate()
+                .map_err(Error::Bindgen)?;
+            let bindings = self.parse_bindings(bindings)?;
+
+            let mut converter = bridge_converter::BridgeConverter::new(
+                self.generate_include_list(),
+                self.pod_types.clone(), // TODO take self by value to avoid clone.
+                cpp_postprocessor,
+                TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
+            );
+            
+            items = converter.convert(bindings).map_err(Error::Conversion)?;
+        }
+
         if let Some(itemmod) = self.get_preprocessor_defs_mod() {
             items.push(syn::Item::Mod(itemmod));
         }
@@ -363,7 +408,7 @@ impl IncludeCpp {
 
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCode> {
         let mut cpp_postprocessor = CppPostprocessor::new();
-        let rs = self.do_generation(Some(&mut cpp_postprocessor))?;
+        let rs = self.do_generation(&mut cpp_postprocessor)?;
         let rs = match rs {
             Some(itemmod) => itemmod.into_token_stream(),
             None => TokenStream2::new(),

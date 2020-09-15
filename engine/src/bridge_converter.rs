@@ -64,14 +64,14 @@ pub(crate) struct BridgeConverter<'a> {
     old_rust: bool,
     class_names_discovered: HashSet<TypeName>,
     byvalue_checker: ByValueChecker,
-    cpp_postprocessor: Option<&'a mut CppPostprocessor>,
+    cpp_postprocessor: &'a mut CppPostprocessor,
 }
 
 impl<'a> BridgeConverter<'a> {
     pub fn new(
         include_list: Vec<String>,
         pod_requests: Vec<TypeName>,
-        cpp_postprocessor: Option<&'a mut CppPostprocessor>,
+        cpp_postprocessor: &'a mut CppPostprocessor,
         old_rust: bool,
     ) -> Self {
         Self {
@@ -132,10 +132,7 @@ impl<'a> BridgeConverter<'a> {
     }
 
     fn disable_type(&mut self, ty: EncounteredType) {
-        match &mut self.cpp_postprocessor {
-            Some(cpp_postprocessor) => cpp_postprocessor.disable_type(ty),
-            None => {}
-        }
+        self.cpp_postprocessor.disable_type(ty)
     }
 
     /// Convert a TokenStream of bindgen-generated bindings to a form
