@@ -283,20 +283,30 @@ impl IncludeCpp {
         Ok(builder)
     }
 
-    fn inject_original_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
+    fn inject_original_header_into_bindgen(
+        &self,
+        mut builder: bindgen::Builder,
+    ) -> bindgen::Builder {
         let full_header = self.build_header();
         debug!("Full header: {}", full_header);
         builder.header_contents("example.hpp", &full_header)
     }
 
-    fn inject_enhanced_header_into_bindgen(&self, mut builder: bindgen::Builder, more_decls: String, more_allowlist: Vec<String>) -> bindgen::Builder {
+    fn inject_enhanced_header_into_bindgen(
+        &self,
+        mut builder: bindgen::Builder,
+        more_decls: String,
+        more_allowlist: Vec<String>,
+    ) -> bindgen::Builder {
         let full_header = self.build_header();
-        let full_header = format!("{}\n\n// Extra autocxx insertions:\n\n{}", full_header, more_decls);
+        let full_header = format!(
+            "{}\n\n// Extra autocxx insertions:\n\n{}",
+            full_header, more_decls
+        );
         debug!("Full (enhanced) header: {}", full_header);
         builder = builder.header_contents("example.hpp", &full_header);
         for a in more_allowlist {
-            builder = builder
-                .whitelist_function(a);
+            builder = builder.whitelist_function(a);
         }
         builder
     }
@@ -337,10 +347,7 @@ impl IncludeCpp {
         include_list
     }
 
-    fn do_generation(
-        &self,
-        cpp_postprocessor: &mut CppPostprocessor,
-    ) -> Result<Option<ItemMod>> {
+    fn do_generation(&self, cpp_postprocessor: &mut CppPostprocessor) -> Result<Option<ItemMod>> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
@@ -353,9 +360,9 @@ impl IncludeCpp {
         // Then:
         // 1. Builds an overall C++ header with all those #defines and #includes
         // 2. Passes it to bindgen::Builder::header
-        let builder = self
-            .make_bindgen_builder()?;
-        let bindings = self.inject_original_header_into_bindgen(builder)
+        let builder = self.make_bindgen_builder()?;
+        let bindings = self
+            .inject_original_header_into_bindgen(builder)
             .generate()
             .map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
@@ -366,17 +373,23 @@ impl IncludeCpp {
             cpp_postprocessor,
             TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
         );
-        
+
         let mut items = converter.convert(bindings).map_err(Error::Conversion)?;
         let additional_cpp_items = cpp_postprocessor.additional_items_generated();
-        if let Some((additional_declarations, additional_definitions, extra_allowlist)) = additional_cpp_items {
+        if let Some((additional_declarations, additional_definitions, extra_allowlist)) =
+            additional_cpp_items
+        {
             // When processing the bindings the first time, we discovered we wanted to add
             // more C++ (because you can never have too much C++.) Examples are field
             // accessor methods, or make_unique wrappers.
             // So, err, let's start all over again. Fun!
-            let builder = self
-                .make_bindgen_builder()?;
-            let bindings = self.inject_enhanced_header_into_bindgen(builder, additional_declarations, extra_allowlist)
+            let builder = self.make_bindgen_builder()?;
+            let bindings = self
+                .inject_enhanced_header_into_bindgen(
+                    builder,
+                    additional_declarations,
+                    extra_allowlist,
+                )
                 .generate()
                 .map_err(Error::Bindgen)?;
             let bindings = self.parse_bindings(bindings)?;
@@ -387,7 +400,7 @@ impl IncludeCpp {
                 cpp_postprocessor,
                 TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
             );
-            
+
             items = converter.convert(bindings).map_err(Error::Conversion)?;
         }
 

@@ -82,21 +82,26 @@ impl CppPostprocessor {
         } else {
             let declarations = self.concat_additional_items(|x| &x.declaration);
             let definitions = self.concat_additional_items(|x| &x.definition);
-            let extra_allowlist = self.additional_functions.iter().map(|x| x.name.to_string()).collect();
+            let extra_allowlist = self
+                .additional_functions
+                .iter()
+                .map(|x| x.name.to_string())
+                .collect();
             Some((declarations, definitions, extra_allowlist))
         }
     }
 
     fn concat_additional_items<F>(&self, field_access: F) -> String
     where
-    F: FnMut(&AdditionalFunction) -> &str {
-        self.additional_functions.iter()
+        F: FnMut(&AdditionalFunction) -> &str,
+    {
+        self.additional_functions
+            .iter()
             .map(field_access)
             .collect::<Vec<&str>>()
             .join("\n\n")
     }
 }
-
 
 #[cfg(test)]
 mod tests {
