@@ -585,7 +585,7 @@ fn test_take_nested_pod_by_value() {
 
 #[test]
 #[ignore] // need field access to opaque types; need to pass Rust-side unique pointer
-// into C++ functions which take something by value; need make_unique
+          // into C++ functions which take something by value; need make_unique
 fn test_take_nonpod_by_value() {
     let cxx = indoc! {"
         uint32_t take_bob(Bob a) {

@@ -16,6 +16,10 @@ use crate::TypeName;
 
 const CXXBRIDGE_GENERATION: usize = 4;
 
+pub(crate) struct CppPostprocessor {
+    encountered_types: Vec<EncounteredType>,
+}
+
 pub enum EncounteredTypeKind {
     Struct,
     Enum,
@@ -23,42 +27,60 @@ pub enum EncounteredTypeKind {
 
 pub struct EncounteredType(pub EncounteredTypeKind, pub TypeName);
 
-/// Edits the generated C++ to insert #defines to disable certain C++
-/// type definitions. A nasty temporary hack - see
-pub(crate) fn disable_types(mut input: Vec<u8>, types: &Vec<EncounteredType>) -> Vec<u8> {
-    let mut out = Vec::new();
-    for t in types {
-        let label = match t.0 {
-            EncounteredTypeKind::Struct => "STRUCT",
-            EncounteredTypeKind::Enum => "ENUM",
-        };
-        out.extend_from_slice(
-            format!(
-                "#define CXXBRIDGE{:02}_{}_{}\n",
-                CXXBRIDGE_GENERATION, label, t.1
-            )
-            .as_bytes(),
-        );
+impl CppPostprocessor {
+    pub(crate) fn new() -> Self {
+        CppPostprocessor {
+            encountered_types: Vec::new(),
+        }
     }
-    if !types.is_empty() {
-        out.extend_from_slice("\n".as_bytes());
+
+    pub(crate) fn disable_type(&mut self, ty: EncounteredType) {
+        self.encountered_types.push(ty);
     }
-    out.append(&mut input);
-    out
+
+    /// Edits the generated C++ to insert #defines to disable certain C++
+    /// type definitions. A nasty temporary hack - see
+    pub(crate) fn post_process(&self, mut input: Vec<u8>) -> Vec<u8> {
+        let mut out = Vec::new();
+        for t in &self.encountered_types {
+            let label = match t.0 {
+                EncounteredTypeKind::Struct => "STRUCT",
+                EncounteredTypeKind::Enum => "ENUM",
+            };
+            out.extend_from_slice(
+                format!(
+                    "#define CXXBRIDGE{:02}_{}_{}\n",
+                    CXXBRIDGE_GENERATION, label, t.1
+                )
+                .as_bytes(),
+            );
+        }
+        if !self.encountered_types.is_empty() {
+            out.extend_from_slice("\n".as_bytes());
+        }
+        out.append(&mut input);
+        out
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::{CppPostprocessor, EncounteredType, EncounteredTypeKind};
     use crate::TypeName;
 
     #[test]
     fn test_type_disabler() {
-        let types = vec![
-            super::EncounteredType(super::EncounteredTypeKind::Enum, TypeName::new("foo")),
-            super::EncounteredType(super::EncounteredTypeKind::Struct, TypeName::new("bar")),
-        ];
+        let mut preprocessor = CppPostprocessor::new();
+        preprocessor.disable_type(EncounteredType(
+            EncounteredTypeKind::Enum,
+            TypeName::new("foo"),
+        ));
+        preprocessor.disable_type(EncounteredType(
+            EncounteredTypeKind::Struct,
+            TypeName::new("bar"),
+        ));
         let input = "fish\n\n".as_bytes().to_vec();
-        let output = super::disable_types(input, &types);
+        let output = preprocessor.post_process(input);
         assert_eq!(
             String::from_utf8(output).unwrap(),
             "#define CXXBRIDGE04_ENUM_foo\n#define CXXBRIDGE04_STRUCT_bar\n\nfish\n\n"

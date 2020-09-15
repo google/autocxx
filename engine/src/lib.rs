@@ -30,7 +30,7 @@ use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, Ident, ItemMod, Macro, TypePath};
 
-use cpp_postprocessor::EncounteredType;
+use cpp_postprocessor::CppPostprocessor;
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
@@ -285,7 +285,7 @@ impl IncludeCpp {
     }
 
     pub fn generate_rs(&self) -> Result<TokenStream2> {
-        let (itemmod, _) = self.do_generation()?;
+        let itemmod = self.do_generation(None)?;
         Ok(itemmod.to_token_stream())
     }
 
@@ -295,12 +295,15 @@ impl IncludeCpp {
         m
     }
 
-    fn do_generation(&self) -> Result<(Option<ItemMod>, Vec<EncounteredType>)> {
+    fn do_generation(
+        &self,
+        cpp_postprocessor: Option<&mut CppPostprocessor>,
+    ) -> Result<Option<ItemMod>> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
         if self.parse_only {
-            return Ok((None, Vec::new()));
+            return Ok(None);
         }
         // 4. (also respects environment variables to pick up more headers,
         //     include paths and #defines)
@@ -334,11 +337,10 @@ impl IncludeCpp {
         let mut converter = bridge_converter::BridgeConverter::new(
             include_list,
             self.pod_types.clone(), // TODO take self by value to avoid clone.
+            cpp_postprocessor,
             TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
         );
-        let results = converter.convert(bindings).map_err(Error::Conversion)?;
-        let mut items = results.items;
-        let types_encountered = results.types_encountered;
+        let mut items = converter.convert(bindings).map_err(Error::Conversion)?;
         if let Some(itemmod) = self.get_preprocessor_defs_mod() {
             items.push(syn::Item::Mod(itemmod));
         }
@@ -351,11 +353,12 @@ impl IncludeCpp {
             "New bindings: {}",
             new_bindings.to_token_stream().to_string()
         );
-        Ok((Some(new_bindings), types_encountered))
+        Ok(Some(new_bindings))
     }
 
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCode> {
-        let (rs, types_encountered) = self.do_generation()?;
+        let mut cpp_postprocessor = CppPostprocessor::new();
+        let rs = self.do_generation(Some(&mut cpp_postprocessor))?;
         let rs = match rs {
             Some(itemmod) => itemmod.into_token_stream(),
             None => TokenStream2::new(),
@@ -367,11 +370,8 @@ impl IncludeCpp {
             .and_then(|gen| {
                 if TEMPORARY_HACK_TO_AVOID_REDEFINITIONS {
                     Ok(GeneratedCode {
-                        header: cpp_postprocessor::disable_types(gen.header, &types_encountered),
-                        implementation: cpp_postprocessor::disable_types(
-                            gen.implementation,
-                            &types_encountered,
-                        ),
+                        header: cpp_postprocessor.post_process(gen.header),
+                        implementation: cpp_postprocessor.post_process(gen.implementation),
                     })
                 } else {
                     Ok(gen)
