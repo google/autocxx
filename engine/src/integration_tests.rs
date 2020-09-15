@@ -584,28 +584,6 @@ fn test_take_nested_pod_by_value() {
 }
 
 #[test]
-fn test_take_nonpod_by_up() {
-    let cxx = indoc! {"
-        uint32_t take_bob(Bob a) {
-            return a.a;
-        }
-    "};
-    let hdr = indoc! {"
-        #include <cstdint>
-        struct Bob {
-            uint32_t a;
-            uint32_t b;
-        };
-        uint32_t take_bob(Bob a);
-    "};
-    let rs = quote! {
-        let a = ffi::cxxbridge::Bob { a: 12, b: 13 };
-        assert_eq!(ffi::cxxbridge::take_bob(a), 12);
-    };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob"], &[]);
-}
-
-#[test]
 #[ignore] // need field access to opaque types; need to pass Rust-side unique pointer
 // into C++ functions which take something by value; need make_unique
 fn test_take_nonpod_by_value() {
