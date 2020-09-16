@@ -31,6 +31,7 @@ osstrtools = "0.2"
 lazy_static = "1.4"
 indoc = "1.0"
 bindgen = "0.55"
+itertools = "0.9"
 cxx-gen = { version="0.4.0", path="../../cxx/gen/lib" }
 
 [dependencies.syn]

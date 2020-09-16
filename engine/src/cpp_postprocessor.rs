@@ -18,18 +18,11 @@ const CXXBRIDGE_GENERATION: usize = 4;
 
 pub(crate) struct CppPostprocessor {
     encountered_types: Vec<EncounteredType>,
-    additional_functions: Vec<AdditionalFunction>,
 }
 
 pub enum EncounteredTypeKind {
     Struct,
     Enum,
-}
-
-struct AdditionalFunction {
-    declaration: String,
-    definition: String,
-    name: String,
 }
 
 pub struct EncounteredType(pub EncounteredTypeKind, pub TypeName);
@@ -38,7 +31,6 @@ impl CppPostprocessor {
     pub(crate) fn new() -> Self {
         CppPostprocessor {
             encountered_types: Vec::new(),
-            additional_functions: Vec::new(),
         }
     }
 
@@ -52,7 +44,7 @@ impl CppPostprocessor {
     /// * Inserts #defines to disable certain C++
     /// type definitions. A nasty temporary hack - see
     /// `crate::TEMPORARY_HACK_TO_AVOID_REDEFINITIONS`
-    pub(crate) fn post_process(&self, mut input: Vec<u8>, is_implementation: bool) -> Vec<u8> {
+    pub(crate) fn post_process(&self, mut input: Vec<u8>) -> Vec<u8> {
         let mut out = Vec::new();
         if crate::TEMPORARY_HACK_TO_AVOID_REDEFINITIONS {
             for t in &self.encountered_types {
@@ -73,33 +65,8 @@ impl CppPostprocessor {
             }
         }
         out.append(&mut input);
+
         out
-    }
-
-    pub(crate) fn additional_items_generated(&self) -> Option<(String, String, Vec<String>)> {
-        if self.additional_functions.is_empty() {
-            None
-        } else {
-            let declarations = self.concat_additional_items(|x| &x.declaration);
-            let definitions = self.concat_additional_items(|x| &x.definition);
-            let extra_allowlist = self
-                .additional_functions
-                .iter()
-                .map(|x| x.name.to_string())
-                .collect();
-            Some((declarations, definitions, extra_allowlist))
-        }
-    }
-
-    fn concat_additional_items<F>(&self, field_access: F) -> String
-    where
-        F: FnMut(&AdditionalFunction) -> &str,
-    {
-        self.additional_functions
-            .iter()
-            .map(field_access)
-            .collect::<Vec<&str>>()
-            .join("\n\n")
     }
 }
 
@@ -120,7 +87,7 @@ mod tests {
             TypeName::new("bar"),
         ));
         let input = "fish\n\n".as_bytes().to_vec();
-        let output = preprocessor.post_process(input, false);
+        let output = preprocessor.post_process(input);
         assert_eq!(
             String::from_utf8(output).unwrap(),
             "#define CXXBRIDGE04_ENUM_foo\n#define CXXBRIDGE04_STRUCT_bar\n\nfish\n\n"

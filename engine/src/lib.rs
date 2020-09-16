@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
 mod cpp_postprocessor;
@@ -30,7 +31,8 @@ use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, Ident, ItemMod, Macro, TypePath};
 
-use cpp_postprocessor::CppPostprocessor;
+use additional_cpp_generator::AdditionalCppGenerator;
+use cpp_postprocessor::{CppPostprocessor, EncounteredType};
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
@@ -66,6 +68,15 @@ impl TypeName {
 
     fn to_ident(&self) -> Ident {
         Ident::new(&self.0, Span::call_site())
+    }
+
+    fn to_cxx_name(&self) -> &str {
+        // A few hard coded rules for now. Eventually we need to figure
+        // out a central database of types.
+        if self.0 == "u32" {
+            return "uint32_t";
+        }
+        &self.0
     }
 }
 
@@ -283,10 +294,7 @@ impl IncludeCpp {
         Ok(builder)
     }
 
-    fn inject_original_header_into_bindgen(
-        &self,
-        mut builder: bindgen::Builder,
-    ) -> bindgen::Builder {
+    fn inject_original_header_into_bindgen(&self, builder: bindgen::Builder) -> bindgen::Builder {
         let full_header = self.build_header();
         debug!("Full header: {}", full_header);
         builder.header_contents("example.hpp", &full_header)
@@ -300,10 +308,10 @@ impl IncludeCpp {
     ) -> bindgen::Builder {
         let full_header = self.build_header();
         let full_header = format!(
-            "{}\n\n// Extra autocxx insertions:\n\n{}",
-            full_header, more_decls
+            "#include <memory>\n\n// Extra autocxx insertions:\n\n{}\n\n{}",
+            more_decls, full_header,
         );
-        debug!("Full (enhanced) header: {}", full_header);
+        info!("Full (enhanced) header: {}", full_header);
         builder = builder.header_contents("example.hpp", &full_header);
         for a in more_allowlist {
             builder = builder.whitelist_function(a);
@@ -312,8 +320,11 @@ impl IncludeCpp {
     }
 
     pub fn generate_rs(&self) -> Result<TokenStream2> {
-        let itemmod = self.do_generation(&mut CppPostprocessor::new())?;
-        Ok(itemmod.to_token_stream())
+        let results = self.do_generation()?;
+        Ok(match results {
+            Some((itemmod, _, _)) => itemmod.to_token_stream(),
+            None => TokenStream2::new(),
+        })
     }
 
     fn get_preprocessor_defs_mod(&self) -> Option<ItemMod> {
@@ -347,7 +358,9 @@ impl IncludeCpp {
         include_list
     }
 
-    fn do_generation(&self, cpp_postprocessor: &mut CppPostprocessor) -> Result<Option<ItemMod>> {
+    fn do_generation(
+        &self,
+    ) -> Result<Option<(ItemMod, AdditionalCppGenerator, Vec<EncounteredType>)>> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
@@ -370,13 +383,14 @@ impl IncludeCpp {
         let mut converter = bridge_converter::BridgeConverter::new(
             self.generate_include_list(),
             self.pod_types.clone(), // TODO take self by value to avoid clone.
-            cpp_postprocessor,
             TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
         );
 
-        let mut items = converter.convert(bindings).map_err(Error::Conversion)?;
-        let additional_cpp_items = cpp_postprocessor.additional_items_generated();
-        if let Some((additional_declarations, additional_definitions, extra_allowlist)) =
+        let mut conversion = converter.convert(bindings).map_err(Error::Conversion)?;
+        let mut additional_cpp_generator = AdditionalCppGenerator::new();
+        additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
+        let additional_cpp_items = additional_cpp_generator.generate();
+        if let Some((additional_declarations, _additional_definitions, extra_allowlist)) =
             additional_cpp_items
         {
             // When processing the bindings the first time, we discovered we wanted to add
@@ -397,13 +411,13 @@ impl IncludeCpp {
             let mut converter = bridge_converter::BridgeConverter::new(
                 self.generate_include_list(),
                 self.pod_types.clone(), // TODO take self by value to avoid clone.
-                cpp_postprocessor,
                 TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
             );
 
-            items = converter.convert(bindings).map_err(Error::Conversion)?;
+            conversion = converter.convert(bindings).map_err(Error::Conversion)?;
         }
 
+        let mut items = conversion.items;
         if let Some(itemmod) = self.get_preprocessor_defs_mod() {
             items.push(syn::Item::Mod(itemmod));
         }
@@ -416,24 +430,34 @@ impl IncludeCpp {
             "New bindings: {}",
             new_bindings.to_token_stream().to_string()
         );
-        Ok(Some(new_bindings))
+        Ok(Some((
+            new_bindings,
+            additional_cpp_generator,
+            conversion.types_to_disable,
+        )))
     }
 
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCode> {
         let mut cpp_postprocessor = CppPostprocessor::new();
-        let rs = self.do_generation(&mut cpp_postprocessor)?;
-        let rs = match rs {
-            Some(itemmod) => itemmod.into_token_stream(),
+        let generation = self.do_generation()?;
+        let rs = match generation {
+            Some((itemmod, _additional_cpp_generator, types_to_disable)) => {
+                for a in types_to_disable {
+                    cpp_postprocessor.disable_type(a);
+                }
+                itemmod.into_token_stream()
+            }
             None => TokenStream2::new(),
         };
+        // TODO use additional_cpp_generator
         let opt = cxx_gen::Opt::default();
         cxx_gen::generate_header_and_cc(rs, &opt)
             .map_err(Error::CxxGen)
             .and_then(dump_generated_code)
             .and_then(|gen| {
                 Ok(GeneratedCode {
-                    header: cpp_postprocessor.post_process(gen.header, false),
-                    implementation: cpp_postprocessor.post_process(gen.implementation, true),
+                    header: cpp_postprocessor.post_process(gen.header),
+                    implementation: cpp_postprocessor.post_process(gen.implementation),
                 })
             })
             .and_then(dump_generated_code)
