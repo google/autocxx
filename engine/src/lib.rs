@@ -25,7 +25,6 @@ use proc_macro2::Span;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{fmt::Display, path::PathBuf};
 
-use cxx_gen::GeneratedCode;
 use indoc::indoc;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
@@ -45,6 +44,13 @@ use std::sync::Mutex;
 const TEMPORARY_HACK_TO_AVOID_REDEFINITIONS: bool = true;
 
 const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
+
+pub struct CppFilePair {
+    pub header: Vec<u8>,
+    pub implementation: Vec<u8>,
+}
+
+pub struct GeneratedCpp(pub Vec<CppFilePair>);
 
 /// Any time we store a type name, we should use this.
 /// At the moment it's just a string, but one day it will need to become
@@ -123,7 +129,7 @@ impl Parse for IncludeCpp {
     }
 }
 
-fn dump_generated_code(gen: GeneratedCode) -> Result<GeneratedCode> {
+fn dump_generated_code(gen: cxx_gen::GeneratedCode) -> Result<cxx_gen::GeneratedCode> {
     info!(
         "CXX:\n{}",
         String::from_utf8(gen.implementation.clone()).unwrap()
@@ -437,30 +443,45 @@ impl IncludeCpp {
         )))
     }
 
-    pub fn generate_h_and_cxx(self) -> Result<GeneratedCode> {
+    pub fn generate_h_and_cxx(self) -> Result<GeneratedCpp> {
         let mut cpp_postprocessor = CppPostprocessor::new();
         let generation = self.do_generation()?;
-        let rs = match generation {
-            Some((itemmod, _additional_cpp_generator, types_to_disable)) => {
+        let mut files = Vec::new();
+        match generation {
+            None => {}
+            Some((itemmod, additional_cpp_generator, types_to_disable)) => {
                 for a in types_to_disable {
                     cpp_postprocessor.disable_type(a);
                 }
-                itemmod.into_token_stream()
+                let rs = itemmod.into_token_stream();
+                let opt = cxx_gen::Opt::default();
+                let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)
+                    .map_err(Error::CxxGen)
+                    .and_then(dump_generated_code)
+                    .and_then(|gen| {
+                        Ok(cxx_gen::GeneratedCode {
+                            header: cpp_postprocessor.post_process(gen.header),
+                            implementation: cpp_postprocessor.post_process(gen.implementation),
+                        })
+                    })
+                    .and_then(dump_generated_code)?;
+                files.push(CppFilePair {
+                    header: cxx_generated.header,
+                    implementation: cxx_generated.implementation,
+                });
+
+                match additional_cpp_generator.generate() {
+                    None => {}
+                    Some((header, implementation, _)) => {
+                        files.push(CppFilePair {
+                            header: header.as_bytes().to_vec(),
+                            implementation: implementation.as_bytes().to_vec(),
+                        });
+                    }
+                }
             }
-            None => TokenStream2::new(),
         };
-        // TODO use additional_cpp_generator
-        let opt = cxx_gen::Opt::default();
-        cxx_gen::generate_header_and_cc(rs, &opt)
-            .map_err(Error::CxxGen)
-            .and_then(dump_generated_code)
-            .and_then(|gen| {
-                Ok(GeneratedCode {
-                    header: cpp_postprocessor.post_process(gen.header),
-                    implementation: cpp_postprocessor.post_process(gen.implementation),
-                })
-            })
-            .and_then(dump_generated_code)
+        Ok(GeneratedCpp(files))
     }
 
     pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {

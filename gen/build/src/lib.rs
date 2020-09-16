@@ -90,12 +90,14 @@ impl Builder {
                     let generated_code = include_cpp
                         .generate_h_and_cxx()
                         .map_err(Error::InvalidCxx)?;
-                    let fname = format!("gen{}.cxx", counter);
-                    counter += 1;
-                    let gen_cxx_path =
-                        Self::write_to_file(&tdir, &fname, &generated_code.implementation)
-                            .map_err(Error::FileWriteFail)?;
-                    builder.file(gen_cxx_path);
+                    for filepair in generated_code.0 {
+                        let fname = format!("gen{}.cxx", counter);
+                        counter += 1;
+                        let gen_cxx_path =
+                            Self::write_to_file(&tdir, &fname, &filepair.implementation)
+                                .map_err(Error::FileWriteFail)?;
+                        builder.file(gen_cxx_path);    
+                    }
                 }
             }
         }
