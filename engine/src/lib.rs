@@ -48,6 +48,7 @@ const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
 pub struct CppFilePair {
     pub header: Vec<u8>,
     pub implementation: Vec<u8>,
+    pub header_name: String,
 }
 
 pub struct GeneratedCpp(pub Vec<CppFilePair>);
@@ -392,7 +393,9 @@ impl IncludeCpp {
             TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
         );
 
-        let mut conversion = converter.convert(bindings).map_err(Error::Conversion)?;
+        let mut conversion = converter
+            .convert(bindings, None)
+            .map_err(Error::Conversion)?;
         let mut additional_cpp_generator = AdditionalCppGenerator::new();
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
         let additional_cpp_items = additional_cpp_generator.generate();
@@ -414,13 +417,9 @@ impl IncludeCpp {
                 .map_err(Error::Bindgen)?;
             let bindings = self.parse_bindings(bindings)?;
 
-            let mut converter = bridge_converter::BridgeConverter::new(
-                self.generate_include_list(),
-                self.pod_types.clone(), // TODO take self by value to avoid clone.
-                TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
-            );
-
-            conversion = converter.convert(bindings).map_err(Error::Conversion)?;
+            conversion = converter
+                .convert(bindings, Some("autocxxgen.h"))
+                .map_err(Error::Conversion)?;
         }
 
         let mut items = conversion.items;
@@ -467,6 +466,7 @@ impl IncludeCpp {
                     .and_then(dump_generated_code)?;
                 files.push(CppFilePair {
                     header: cxx_generated.header,
+                    header_name: "cxxgen.h".to_string(),
                     implementation: cxx_generated.implementation,
                 });
 
@@ -475,6 +475,7 @@ impl IncludeCpp {
                     Some((header, implementation, _)) => {
                         files.push(CppFilePair {
                             header: header.as_bytes().to_vec(),
+                            header_name: "autocxxgen.h".to_string(),
                             implementation: implementation.as_bytes().to_vec(),
                         });
                     }

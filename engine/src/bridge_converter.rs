@@ -134,7 +134,11 @@ impl<'a> BridgeConverter {
 
     /// Convert a TokenStream of bindgen-generated bindings to a form
     /// suitable for cxx.
-    pub(crate) fn convert(&mut self, bindings: ItemMod) -> Result<BridgeConversion, ConvertError> {
+    pub(crate) fn convert(
+        &mut self,
+        bindings: ItemMod,
+        extra_inclusion: Option<&str>,
+    ) -> Result<BridgeConversion, ConvertError> {
         match bindings.content {
             None => Err(ConvertError::NoContent),
             Some((_, items)) => {
@@ -152,8 +156,11 @@ impl<'a> BridgeConverter {
                                 // across for attributes, spans etc. but we'll stuff
                                 // the contents of all bindgen 'extern "C"' mods into this
                                 // one.
-                                let items = self
-                                    .include_list
+                                let mut full_include_list = self.include_list.clone();
+                                if let Some(extra_inclusion) = extra_inclusion {
+                                    full_include_list.push(extra_inclusion.to_string());
+                                }
+                                let items = full_include_list
                                     .iter()
                                     .map(|inc| {
                                         ForeignItem::Macro(parse_quote! {

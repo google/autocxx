@@ -49,7 +49,9 @@ impl AdditionalCppGenerator {
             None
         } else {
             let declarations = self.concat_additional_items(|x| &x.declaration);
+            let declarations = format!("#include <memory>\n{}", declarations);
             let definitions = self.concat_additional_items(|x| &x.definition);
+            let definitions = format!("#include \"autocxxgen.h\"\n{}", definitions);
             println!("Generated additional C++ declarations:\n{}", declarations);
             println!("Generated additional C++ definitions:\n{}", definitions);
             let extra_allowlist = self
