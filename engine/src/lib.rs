@@ -237,6 +237,22 @@ impl IncludeCpp {
         s
     }
 
+    fn build_header_no_prelude(&self) -> String {
+        // TODO think about where best to put the prelude such that we can remove
+        // the duplication between this and the previous function. (Obviously we can
+        // abstract out the commonality, but it shouldn't be necessary to have two
+        // in the first place - some thought required.)
+        let mut s = String::new();
+        for incl in &self.inclusions {
+            let text = match incl {
+                CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
+                CppInclusion::Header(path) => format!("#include \"{}\"\n", path),
+            };
+            s.push_str(&text);
+        }
+        s
+    }
+
     fn determine_incdirs(&self) -> Result<Vec<PathBuf>> {
         let inc_dirs = match &self.preconfigured_inc_dirs {
             Some(d) => d.clone(),
@@ -396,7 +412,8 @@ impl IncludeCpp {
         let mut conversion = converter
             .convert(bindings, None)
             .map_err(Error::Conversion)?;
-        let mut additional_cpp_generator = AdditionalCppGenerator::new();
+        let mut additional_cpp_generator =
+            AdditionalCppGenerator::new(self.build_header_no_prelude());
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
         let additional_cpp_items = additional_cpp_generator.generate();
         if let Some((additional_declarations, _additional_definitions, extra_allowlist)) =

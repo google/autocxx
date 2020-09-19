@@ -96,7 +96,7 @@ fn run_test(
 ) {
     // Step 1: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
-    write_to_file(&tdir, "input.h", header_code);
+    write_to_file(&tdir, "input.h", &format!("#pragma once\n{}", header_code));
     // Step 2: Expand the snippet of Rust code into an entire
     //         program including include_cxx!
     // TODO - we're not quoting #s below (in the "" sense), and it's not entirely
@@ -729,6 +729,9 @@ fn test_make_up() {
     let cxx = indoc! {"
         Bob::Bob() : a(3) {
         }
+        uint32_t take_bob(const Bob& a) {
+            return a.a;
+        }
     "};
     let hdr = indoc! {"
         #include <cstdint>
@@ -737,12 +740,14 @@ fn test_make_up() {
             Bob();
             uint32_t a;
         };
+        uint32_t take_bob(const Bob& a);
     "};
+    // TODO rename Bob_make_unique to Bob::make_unique
     let rs = quote! {
-        let a = ffi::cxxbridge::Bob::make_unique();
-        assert_eq!(a.as_ref().unwrap().a, 3);
+        let a = ffi::cxxbridge::Bob_make_unique(); // TODO test with all sorts of arguments.
+        assert_eq!(ffi::cxxbridge::take_bob(a.as_ref().unwrap()), 3);
     };
-    run_test(cxx, hdr, rs, &["Bob"], &[]);
+    run_test(cxx, hdr, rs, &["Bob", "take_bob"], &[]);
 }
 
 #[test]
