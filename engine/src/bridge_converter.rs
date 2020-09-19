@@ -227,9 +227,7 @@ impl<'a> BridgeConverter {
                             Some(ty) => {
                                 for item in i.items {
                                     match item {
-                                        syn::ImplItem::Method(m)
-                                            if m.sig.ident.to_string() == "new" =>
-                                        {
+                                        syn::ImplItem::Method(m) if m.sig.ident == "new" => {
                                             let constructor_args = m
                                                 .sig
                                                 .inputs
@@ -395,7 +393,7 @@ impl<'a> BridgeConverter {
                 let mut found_this = false;
                 let old_pat = *pt.pat;
                 let new_pat = match old_pat {
-                    syn::Pat::Ident(pp) if pp.ident.to_string() == "this" => {
+                    syn::Pat::Ident(pp) if pp.ident == "this" => {
                         found_this = true;
                         syn::Pat::Ident(syn::PatIdent {
                             attrs: pp.attrs,

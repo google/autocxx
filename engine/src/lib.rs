@@ -448,11 +448,9 @@ impl IncludeCpp {
                 let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)
                     .map_err(Error::CxxGen)
                     .and_then(dump_generated_code)
-                    .and_then(|gen| {
-                        Ok(cxx_gen::GeneratedCode {
-                            header: cpp_postprocessor.post_process(gen.header),
-                            implementation: cpp_postprocessor.post_process(gen.implementation),
-                        })
+                    .map(|gen| cxx_gen::GeneratedCode {
+                        header: cpp_postprocessor.post_process(gen.header),
+                        implementation: cpp_postprocessor.post_process(gen.implementation),
                     })
                     .and_then(dump_generated_code)?;
                 files.push(CppFilePair {

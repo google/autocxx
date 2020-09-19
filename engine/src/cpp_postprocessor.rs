@@ -61,7 +61,7 @@ impl CppPostprocessor {
                 );
             }
             if !self.encountered_types.is_empty() {
-                out.extend_from_slice("\n".as_bytes());
+                out.extend_from_slice(b"\n");
             }
         }
         out.append(&mut input);
@@ -86,7 +86,7 @@ mod tests {
             EncounteredTypeKind::Struct,
             TypeName::new("bar"),
         ));
-        let input = "fish\n\n".as_bytes().to_vec();
+        let input = b"fish\n\n".to_vec();
         let output = preprocessor.post_process(input);
         assert_eq!(
             String::from_utf8(output).unwrap(),

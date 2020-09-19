@@ -133,17 +133,13 @@ impl ByValueChecker {
     }
 
     pub fn is_pod(&self, ty_id: &TypeName) -> bool {
-        match self
-            .results
-            .get(ty_id)
-            .expect("Type not known to byvalue_checker")
-        {
-            StructDetails {
-                state: PODState::IsPOD,
-                dependent_structs: _,
-            } => true,
-            _ => false,
-        }
+        matches!(self
+        .results
+        .get(ty_id)
+        .expect("Type not known to byvalue_checker"), StructDetails {
+            state: PODState::IsPOD,
+            dependent_structs: _,
+        })
     }
 
     fn get_field_types(&self, def: &ItemStruct) -> Vec<TypeName> {
@@ -229,6 +225,6 @@ mod tests {
         };
         let t_id = TypeName::from_ident(&t.ident);
         bvc.ingest_struct(&t);
-        assert!(bvc.satisfy_requests(vec![t_id.clone()]).is_err());
+        assert!(bvc.satisfy_requests(vec![t_id]).is_err());
     }
 }
