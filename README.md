@@ -93,9 +93,7 @@ At present, thirteen of the tests pass. The rest are ignored.
 Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
 
 * It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/print.html#requirements)
-* On Linux including any system header: `bindgen` generates `pub type __uint32_t = ::std::os::raw::c_uint;` which `cxx` can't cope with. This is just a matter of munging `bindgen` output more. This currently stops the demo building on my Linux box, and prevents all but one test passing.
-* On Linux using `cargo` 1.47 nightly: `trybuild` is unable to pull in dependencies from git repositories because it's in offline mode. Running `cargo update` first seems to solve this.
-* There's a big blocklist of STL types hard-coded. That may be quite OSX-specific or otherwise subject to different STL implementations.
+* Two of the tests fail when built against some STLs due to a problem where bindgen generates `type-parameter-0-0` which is not a valid identifier.
 
 # Configuring the build
 
