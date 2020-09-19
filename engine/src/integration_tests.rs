@@ -725,7 +725,6 @@ fn test_cycle_nonpod_with_str_by_ref() {
 }
 
 #[test]
-#[ignore] // because we have yet to implement make_unique
 fn test_make_up() {
     let cxx = indoc! {"
         Bob::Bob() : a(3) {

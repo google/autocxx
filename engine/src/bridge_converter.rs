@@ -148,6 +148,7 @@ impl<'a> BridgeConverter {
                 let mut extern_c_mod = None;
                 let mut additional_cpp_needs = Vec::new();
                 let mut types_to_disable = Vec::new();
+                let mut types_found = Vec::new();
                 for item in items {
                     match item {
                         Item::ForeignMod(fm) => {
@@ -179,11 +180,12 @@ impl<'a> BridgeConverter {
                                 .as_mut()
                                 .unwrap()
                                 .items
-                                .extend(self.convert_foreign_mod_items(fm.items)?);
+                                .extend(self.convert_foreign_mod_items(&types_found, fm.items)?);
                         }
                         Item::Struct(s) => {
                             let tyident = s.ident.clone();
                             let tyname = TypeName::from_ident(&tyident);
+                            types_found.push(tyname.clone());
                             let should_be_pod = self.byvalue_checker.is_pod(&tyname);
                             if should_be_pod {
                                 // Pass this type through to cxx, such that it can
@@ -282,21 +284,40 @@ impl<'a> BridgeConverter {
 
     fn convert_foreign_mod_items(
         &self,
+        encountered_types: &Vec<TypeName>,
         foreign_mod_items: Vec<ForeignItem>,
     ) -> Result<Vec<ForeignItem>, ConvertError> {
         let mut new_items = Vec::new();
 
         for i in foreign_mod_items {
-            new_items.push(match i {
-                ForeignItem::Fn(f) => ForeignItem::Fn(self.convert_foreign_fn(f)?),
+            match i {
+                ForeignItem::Fn(f) => {
+                    let maybe_foreign_item = self.convert_foreign_fn(encountered_types, f)?;
+                    if let Some(foreign_item) = maybe_foreign_item {
+                        new_items.push(ForeignItem::Fn(foreign_item));
+                    }
+                }
                 _ => return Err(ConvertError::UnknownForeignItem),
-            })
+            }
         }
         Ok(new_items)
     }
 
-    fn convert_foreign_fn(&self, fun: ForeignItemFn) -> Result<ForeignItemFn, ConvertError> {
+    fn convert_foreign_fn(
+        &self,
+        encountered_types: &Vec<TypeName>,
+        fun: ForeignItemFn,
+    ) -> Result<Option<ForeignItemFn>, ConvertError> {
         let mut s = fun.sig.clone();
+        let old_name = s.ident.to_string();
+        // See if it's a constructor, in which case skip it.
+        // We instead pass onto cxx an alternative make_unique implementation later.
+        for ty in encountered_types {
+            let constructor_name = format!("{}_{}", ty, ty);
+            if old_name == constructor_name {
+                return Ok(None);
+            }
+        }
         s.output = self.convert_return_type(s.output);
         let (new_params, any_this): (Punctuated<_, _>, Vec<_>) = fun
             .sig
@@ -314,7 +335,6 @@ impl<'a> BridgeConverter {
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
             // TODO test with class names containing underscores. It should work.
-            let old_name = s.ident.to_string();
             for cn in &self.class_names_discovered {
                 if old_name.starts_with(&cn.0) {
                     s.ident = Ident::new(&old_name[cn.0.len() + 1..], s.ident.span());
@@ -322,12 +342,12 @@ impl<'a> BridgeConverter {
                 }
             }
         }
-        Ok(ForeignItemFn {
+        Ok(Some(ForeignItemFn {
             attrs: self.strip_attr(fun.attrs, "link_name"),
             vis: fun.vis,
             sig: s,
             semi_token: fun.semi_token,
-        })
+        }))
     }
 
     fn convert_struct(&mut self, ty: ItemStruct) -> Item {
