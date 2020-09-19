@@ -15,6 +15,7 @@
 use crate::TypeName;
 use itertools::Itertools;
 
+/// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
     MakeUnique(TypeName, Vec<TypeName>),
 }
@@ -23,6 +24,13 @@ struct AdditionalFunction {
     declaration: String,
     definition: String,
     name: String,
+}
+
+/// Details of additional generated C++.
+pub(crate) struct AdditionalCpp {
+    pub(crate) declarations: String,
+    pub(crate) definitions: String,
+    pub(crate) extra_allowlist: Vec<String>,
 }
 
 /// Generates additional C++ glue functions needed by autocxx.
@@ -54,7 +62,7 @@ impl AdditionalCppGenerator {
         }
     }
 
-    pub(crate) fn generate(&self) -> Option<(String, String, Vec<String>)> {
+    pub(crate) fn generate(&self) -> Option<AdditionalCpp> {
         if self.additional_functions.is_empty() {
             None
         } else {
@@ -73,7 +81,11 @@ impl AdditionalCppGenerator {
                 .iter()
                 .map(|x| x.name.to_string())
                 .collect();
-            Some((declarations, definitions, extra_allowlist))
+            Some(AdditionalCpp {
+                declarations,
+                definitions,
+                extra_allowlist,
+            })
         }
     }
 

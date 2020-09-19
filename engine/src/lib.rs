@@ -30,14 +30,14 @@ use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, Ident, ItemMod, Macro, TypePath};
 
-use additional_cpp_generator::AdditionalCppGenerator;
+use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator};
 use cpp_postprocessor::{CppPostprocessor, EncounteredType};
+use itertools::join;
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
 use std::rc::Rc;
 use std::sync::Mutex;
-use itertools::join;
 
 /// Turn off and remove this constant when
 /// https://github.com/rust-lang/rust/pull/75857 is fixed.
@@ -227,12 +227,13 @@ impl IncludeCpp {
     }
 
     fn build_header(&self) -> String {
-        join(self.inclusions.iter().map(|incl| {
-            match incl {
+        join(
+            self.inclusions.iter().map(|incl| match incl {
                 CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
                 CppInclusion::Header(path) => format!("#include \"{}\"\n", path),
-            }
-        }), "")
+            }),
+            "",
+        )
     }
 
     fn determine_incdirs(&self) -> Result<Vec<PathBuf>> {
@@ -299,29 +300,29 @@ impl IncludeCpp {
         Ok(builder)
     }
 
-    fn inject_original_header_into_bindgen(&self, builder: bindgen::Builder) -> bindgen::Builder {
-        let full_header = self.build_header();
-        let full_header = format!("{}\n{}", PRELUDE, full_header);
-        debug!("Full header: {}", full_header);
-        builder.header_contents("example.hpp", &full_header)
-    }
-
-    fn inject_enhanced_header_into_bindgen(
+    fn inject_header_into_bindgen(
         &self,
         mut builder: bindgen::Builder,
-        more_decls: String,
-        more_allowlist: Vec<String>,
+        additional_cpp: Option<AdditionalCpp>,
     ) -> bindgen::Builder {
         let full_header = self.build_header();
+        let more_decls = if let Some(additional_cpp) = additional_cpp {
+            for a in additional_cpp.extra_allowlist {
+                builder = builder.whitelist_function(a);
+            }
+            format!(
+                "#include <memory>\n\n// Extra autocxx insertions:\n\n{}\n\n",
+                additional_cpp.declarations
+            )
+        } else {
+            String::new()
+        };
         let full_header = format!(
-            "{}\n#include <memory>\n\n// Extra autocxx insertions:\n\n{}\n\n{}",
+            "{}{}\n\n{}",
             PRELUDE, more_decls, full_header,
         );
-        info!("Full (enhanced) header: {}", full_header);
+        info!("Full header: {}", full_header);
         builder = builder.header_contents("example.hpp", &full_header);
-        for a in more_allowlist {
-            builder = builder.whitelist_function(a);
-        }
         builder
     }
 
@@ -381,7 +382,7 @@ impl IncludeCpp {
         // 2. Passes it to bindgen::Builder::header
         let builder = self.make_bindgen_builder()?;
         let bindings = self
-            .inject_original_header_into_bindgen(builder)
+            .inject_header_into_bindgen(builder, None)
             .generate()
             .map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
@@ -395,24 +396,17 @@ impl IncludeCpp {
         let mut conversion = converter
             .convert(bindings, None)
             .map_err(Error::Conversion)?;
-        let mut additional_cpp_generator =
-            AdditionalCppGenerator::new(self.build_header());
+        let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
         let additional_cpp_items = additional_cpp_generator.generate();
-        if let Some((additional_declarations, _additional_definitions, extra_allowlist)) =
-            additional_cpp_items
-        {
+        if let Some(additional_cpp_items) = additional_cpp_items {
             // When processing the bindings the first time, we discovered we wanted to add
             // more C++ (because you can never have too much C++.) Examples are field
             // accessor methods, or make_unique wrappers.
             // So, err, let's start all over again. Fun!
             let builder = self.make_bindgen_builder()?;
             let bindings = self
-                .inject_enhanced_header_into_bindgen(
-                    builder,
-                    additional_declarations,
-                    extra_allowlist,
-                )
+                .inject_header_into_bindgen(builder, Some(additional_cpp_items))
                 .generate()
                 .map_err(Error::Bindgen)?;
             let bindings = self.parse_bindings(bindings)?;
@@ -472,11 +466,11 @@ impl IncludeCpp {
 
                 match additional_cpp_generator.generate() {
                     None => {}
-                    Some((header, implementation, _)) => {
+                    Some(additional_cpp) => {
                         files.push(CppFilePair {
-                            header: header.as_bytes().to_vec(),
+                            header: additional_cpp.declarations.as_bytes().to_vec(),
                             header_name: "autocxxgen.h".to_string(),
-                            implementation: implementation.as_bytes().to_vec(),
+                            implementation: additional_cpp.definitions.as_bytes().to_vec(),
                         });
                     }
                 }
