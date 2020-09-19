@@ -93,14 +93,11 @@ impl ByValueChecker {
                     ));
                     break;
                 }
-                Some(deets) => match &deets.state {
-                    PODState::UnsafeToBePOD(reason) => {
-                        let new_reason = format!("Type {} could not be POD because its dependent type {} isn't safe to be POD. Because: {}", tyname, ty_id, reason);
-                        field_safety_problem = PODState::UnsafeToBePOD(new_reason);
-                        break;
-                    }
-                    _ => {}
-                },
+                Some(deets) => if let PODState::UnsafeToBePOD(reason) = &deets.state {
+                    let new_reason = format!("Type {} could not be POD because its dependent type {} isn't safe to be POD. Because: {}", tyname, ty_id, reason);
+                    field_safety_problem = PODState::UnsafeToBePOD(new_reason);
+                    break;
+                }
             }
         }
         let mut my_details = StructDetails::new(field_safety_problem);
@@ -146,11 +143,10 @@ impl ByValueChecker {
         let mut results = Vec::new();
         for f in &def.fields {
             let fty = &f.ty;
-            match fty {
-                Type::Path(p) => results.push(TypeName::from_type_path(&p)),
-                // TODO handle anything else which bindgen might spit out, e.g. arrays?
-                _ => {}
+            if let Type::Path(p) = fty {
+                results.push(TypeName::from_type_path(&p));
             }
+            // TODO handle anything else which bindgen might spit out, e.g. arrays?
         }
         results
     }

@@ -98,13 +98,10 @@ impl<'a> BridgeConverter {
         out
     }
 
-    fn find_nested_pod_types(&mut self, items: &Vec<Item>) -> Result<(), ConvertError> {
+    fn find_nested_pod_types(&mut self, items: &[Item]) -> Result<(), ConvertError> {
         for item in items {
-            match item {
-                Item::Struct(s) => {
-                    self.byvalue_checker.ingest_struct(s);
-                }
-                _ => {}
+            if let Item::Struct(s) = item {
+                self.byvalue_checker.ingest_struct(s);
             }
         }
         self.byvalue_checker
@@ -223,33 +220,30 @@ impl<'a> BridgeConverter {
                             bridge_items
                                 .extend(self.append_cpp_definition_squasher(tyident, new_enum_def));
                         }
-                        Item::Impl(i) => match self.type_to_typename(&i.self_ty) {
-                            Some(ty) => {
-                                for item in i.items {
-                                    match item {
-                                        syn::ImplItem::Method(m) if m.sig.ident == "new" => {
-                                            let constructor_args = m
-                                                .sig
-                                                .inputs
-                                                .iter()
-                                                .filter_map(|x| match x {
-                                                    FnArg::Typed(ty) => {
-                                                        self.type_to_typename(&ty.ty)
-                                                    }
-                                                    FnArg::Receiver(_) => None,
-                                                })
-                                                .collect::<Vec<TypeName>>();
-                                            additional_cpp_needs.push(AdditionalNeed::MakeUnique(
-                                                ty.clone(),
-                                                constructor_args.clone(),
-                                            ));
-                                        }
-                                        _ => {}
+                        Item::Impl(i) => if let Some(ty) = self.type_to_typename(&i.self_ty) {
+                            for item in i.items {
+                                match item {
+                                    syn::ImplItem::Method(m) if m.sig.ident == "new" => {
+                                        let constructor_args = m
+                                            .sig
+                                            .inputs
+                                            .iter()
+                                            .filter_map(|x| match x {
+                                                FnArg::Typed(ty) => {
+                                                    self.type_to_typename(&ty.ty)
+                                                }
+                                                FnArg::Receiver(_) => None,
+                                            })
+                                            .collect::<Vec<TypeName>>();
+                                        additional_cpp_needs.push(AdditionalNeed::MakeUnique(
+                                            ty.clone(),
+                                            constructor_args.clone(),
+                                        ));
                                     }
+                                    _ => {}
                                 }
                             }
-                            _ => {}
-                        },
+                        }
                         _ => {
                             all_items.push(item);
                         }
@@ -273,8 +267,8 @@ impl<'a> BridgeConverter {
         }
     }
 
-    fn type_to_typename(&self, ty: &Box<Type>) -> Option<TypeName> {
-        match ty.as_ref() {
+    fn type_to_typename(&self, ty: &Type) -> Option<TypeName> {
+        match ty {
             Type::Path(pn) => Some(TypeName::from_type_path(pn)),
             _ => None,
         }
@@ -282,7 +276,7 @@ impl<'a> BridgeConverter {
 
     fn convert_foreign_mod_items(
         &self,
-        encountered_types: &Vec<TypeName>,
+        encountered_types: &[TypeName],
         foreign_mod_items: Vec<ForeignItem>,
     ) -> Result<Vec<ForeignItem>, ConvertError> {
         let mut new_items = Vec::new();
@@ -303,7 +297,7 @@ impl<'a> BridgeConverter {
 
     fn convert_foreign_fn(
         &self,
-        encountered_types: &Vec<TypeName>,
+        encountered_types: &[TypeName],
         fun: ForeignItemFn,
     ) -> Result<Option<ForeignItemFn>, ConvertError> {
         let mut s = fun.sig.clone();
