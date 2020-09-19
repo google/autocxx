@@ -25,12 +25,20 @@ struct AdditionalFunction {
     name: String,
 }
 
+/// Generates additional C++ glue functions needed by autocxx.
+/// At the moment, the only use here is for generating an ability
+/// to do `make_unique` but more uses are expected in future.
+/// In some ways it would be preferable to be able to pass snippets
+/// of C++ through to `cxx` for inclusion in the C++ file which it
+/// generates, and perhaps we'll explore that in future. But for now,
+/// autocxx generates its own _additional_ C++ files which therefore
+/// need to be built and included in linking procedures.
 pub(crate) struct AdditionalCppGenerator {
     additional_functions: Vec<AdditionalFunction>,
     inclusions: String,
 }
 
-impl<'a> AdditionalCppGenerator {
+impl AdditionalCppGenerator {
     pub(crate) fn new(inclusions: String) -> Self {
         AdditionalCppGenerator {
             additional_functions: Vec::new(),

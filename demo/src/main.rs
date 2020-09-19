@@ -17,5 +17,8 @@ use autocxx::include_cxx;
 include_cxx!(Header("input.h"), Allow("DoMath"),);
 
 fn main() {
-    println!("Hello, world! - C++ math should say 12={}", ffi::cxxbridge::DoMath(4));
+    println!(
+        "Hello, world! - C++ math should say 12={}",
+        ffi::cxxbridge::DoMath(4)
+    );
 }

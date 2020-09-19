@@ -37,6 +37,7 @@ use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
 use std::rc::Rc;
 use std::sync::Mutex;
+use itertools::join;
 
 /// Turn off and remove this constant when
 /// https://github.com/rust-lang/rust/pull/75857 is fixed.
@@ -226,31 +227,12 @@ impl IncludeCpp {
     }
 
     fn build_header(&self) -> String {
-        let mut s = PRELUDE.to_string();
-        for incl in &self.inclusions {
-            let text = match incl {
+        join(self.inclusions.iter().map(|incl| {
+            match incl {
                 CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
                 CppInclusion::Header(path) => format!("#include \"{}\"\n", path),
-            };
-            s.push_str(&text);
-        }
-        s
-    }
-
-    fn build_header_no_prelude(&self) -> String {
-        // TODO think about where best to put the prelude such that we can remove
-        // the duplication between this and the previous function. (Obviously we can
-        // abstract out the commonality, but it shouldn't be necessary to have two
-        // in the first place - some thought required.)
-        let mut s = String::new();
-        for incl in &self.inclusions {
-            let text = match incl {
-                CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
-                CppInclusion::Header(path) => format!("#include \"{}\"\n", path),
-            };
-            s.push_str(&text);
-        }
-        s
+            }
+        }), "")
     }
 
     fn determine_incdirs(&self) -> Result<Vec<PathBuf>> {
@@ -319,6 +301,7 @@ impl IncludeCpp {
 
     fn inject_original_header_into_bindgen(&self, builder: bindgen::Builder) -> bindgen::Builder {
         let full_header = self.build_header();
+        let full_header = format!("{}\n{}", PRELUDE, full_header);
         debug!("Full header: {}", full_header);
         builder.header_contents("example.hpp", &full_header)
     }
@@ -331,8 +314,8 @@ impl IncludeCpp {
     ) -> bindgen::Builder {
         let full_header = self.build_header();
         let full_header = format!(
-            "#include <memory>\n\n// Extra autocxx insertions:\n\n{}\n\n{}",
-            more_decls, full_header,
+            "{}\n#include <memory>\n\n// Extra autocxx insertions:\n\n{}\n\n{}",
+            PRELUDE, more_decls, full_header,
         );
         info!("Full (enhanced) header: {}", full_header);
         builder = builder.header_contents("example.hpp", &full_header);
@@ -413,7 +396,7 @@ impl IncludeCpp {
             .convert(bindings, None)
             .map_err(Error::Conversion)?;
         let mut additional_cpp_generator =
-            AdditionalCppGenerator::new(self.build_header_no_prelude());
+            AdditionalCppGenerator::new(self.build_header());
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
         let additional_cpp_items = additional_cpp_generator.generate();
         if let Some((additional_declarations, _additional_definitions, extra_allowlist)) =

@@ -99,7 +99,7 @@ impl Builder {
                         builder.file(gen_cxx_path);
 
                         Self::write_to_file(&tdir, &filepair.header_name, &filepair.header)
-                                .map_err(Error::FileWriteFail)?;
+                            .map_err(Error::FileWriteFail)?;
                     }
                 }
             }
