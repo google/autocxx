@@ -317,10 +317,7 @@ impl IncludeCpp {
         } else {
             String::new()
         };
-        let full_header = format!(
-            "{}{}\n\n{}",
-            PRELUDE, more_decls, full_header,
-        );
+        let full_header = format!("{}{}\n\n{}", PRELUDE, more_decls, full_header,);
         info!("Full header: {}", full_header);
         builder = builder.header_contents("example.hpp", &full_header);
         builder
