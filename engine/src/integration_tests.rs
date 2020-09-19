@@ -376,6 +376,7 @@ fn test_cycle_string_by_ref() {
     "};
     let hdr = indoc! {"
         #include <string>
+        #include <memory>
         #include <cstdint>
         std::unique_ptr<std::string> give_str();
         uint32_t take_str(const std::string& a);
@@ -400,6 +401,7 @@ fn test_cycle_string_by_mut_ref() {
     "};
     let hdr = indoc! {"
         #include <string>
+        #include <memory>
         #include <cstdint>
         std::unique_ptr<std::string> give_str();
         uint32_t take_str(std::string& a);
