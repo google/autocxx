@@ -747,6 +747,7 @@ fn test_make_up() {
 }
 
 #[test]
+#[ignore] // because we don't support unique_ptrs to primitives
 fn test_make_up_int() {
     let cxx = indoc! {"
         Bob::Bob(uint32_t a) : b(a) {
