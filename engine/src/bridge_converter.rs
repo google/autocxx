@@ -217,24 +217,17 @@ impl<'a> BridgeConverter {
                         }
                         Item::Impl(i) => {
                             if let Some(ty) = self.type_to_typename(&i.self_ty) {
-                                for item in i.items {
+                                for item in i.items.clone() {
                                     match item {
                                         syn::ImplItem::Method(m) if m.sig.ident == "new" => {
-                                            let constructor_args = m
-                                                .sig
-                                                .inputs
-                                                .iter()
-                                                .filter_map(|x| match x {
-                                                    FnArg::Typed(ty) => {
-                                                        self.type_to_typename(&ty.ty)
-                                                    }
-                                                    FnArg::Receiver(_) => None,
-                                                })
-                                                .collect::<Vec<TypeName>>();
-                                            additional_cpp_needs.push(AdditionalNeed::MakeUnique(
-                                                ty.clone(),
-                                                constructor_args.clone(),
-                                            ));
+                                            if let Some(new_item_impl) = self.convert_new_method(
+                                                m,
+                                                &mut additional_cpp_needs,
+                                                &ty,
+                                                &i,
+                                            ) {
+                                                bindgen_items.push(new_item_impl);
+                                            }
                                         }
                                         _ => {}
                                     }
@@ -278,6 +271,67 @@ impl<'a> BridgeConverter {
                 })
             }
         }
+    }
+
+    fn convert_new_method(
+        &self,
+        m: syn::ImplItemMethod,
+        additional_cpp_needs: &mut Vec<AdditionalNeed>,
+        ty: &TypeName,
+        i: &syn::ItemImpl,
+    ) -> Option<Item> {
+        let (arrow, oldreturntype) = match &m.sig.output {
+            ReturnType::Type(arrow, ty) => (arrow, ty),
+            ReturnType::Default => return None,
+        };
+        let constructor_args = m.sig.inputs.iter().filter_map(|x| match x {
+            FnArg::Typed(pt) => {
+                self.type_to_typename(&pt.ty)
+                    .and_then(|x| match *(pt.pat.clone()) {
+                        syn::Pat::Ident(pti) => Some((x, pti.ident)),
+                        _ => None,
+                    })
+            }
+            FnArg::Receiver(_) => None,
+        });
+        let (arg_types, arg_names): (Vec<_>, Vec<_>) = constructor_args.unzip();
+        additional_cpp_needs.push(AdditionalNeed::MakeUnique(ty.clone(), arg_types));
+        // Create a function which calls Bob_make_unique
+        // from Bob::make_unique.
+        let call_name = Ident::new(
+            &format!("{}_make_unique", ty.to_string()),
+            Span::call_site(),
+        );
+        let new_block: syn::Block = parse_quote!( {
+            super::cxxbridge::#call_name(
+                #(#arg_names),*
+            )
+        });
+        let mut new_sig = m.sig.clone();
+        new_sig.ident = Ident::new("make_unique", Span::call_site());
+        let new_return_type: TypePath = parse_quote! {
+            cxx::UniquePtr < #oldreturntype >
+        };
+        new_sig.unsafety = None;
+        new_sig.output = ReturnType::Type(*arrow, Box::new(Type::Path(new_return_type)));
+        let new_impl_method = syn::ImplItem::Method(syn::ImplItemMethod {
+            attrs: Vec::new(),
+            vis: m.vis,
+            defaultness: m.defaultness,
+            block: new_block,
+            sig: new_sig,
+        });
+        Some(Item::Impl(syn::ItemImpl {
+            attrs: Vec::new(),
+            defaultness: i.defaultness,
+            generics: i.generics.clone(),
+            trait_: i.trait_.clone(),
+            unsafety: None,
+            impl_token: i.impl_token,
+            self_ty: i.self_ty.clone(),
+            brace_token: i.brace_token,
+            items: vec![new_impl_method],
+        }))
     }
 
     fn get_blank_extern_c_mod(&self) -> ItemForeignMod {
