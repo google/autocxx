@@ -16,6 +16,7 @@ mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
 mod cpp_postprocessor;
+mod known_types;
 mod preprocessor_parse_callbacks;
 
 #[cfg(test)]
@@ -45,7 +46,6 @@ use std::sync::Mutex;
 const TEMPORARY_HACK_TO_AVOID_REDEFINITIONS: bool = true;
 
 const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
-
 pub struct CppFilePair {
     pub header: Vec<u8>,
     pub implementation: Vec<u8>,
@@ -79,12 +79,13 @@ impl TypeName {
     }
 
     fn to_cxx_name(&self) -> &str {
-        // A few hard coded rules for now. Eventually we need to figure
-        // out a central database of types.
-        if self.0 == "u32" {
-            return "uint32_t";
+        match crate::known_types::KNOWN_TYPES
+            .get(&self)
+            .and_then(|x| x.cxx_name.as_ref())
+        {
+            None => &self.0,
+            Some(replacement) => &replacement.as_str(),
         }
-        &self.0
     }
 }
 

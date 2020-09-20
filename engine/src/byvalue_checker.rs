@@ -93,10 +93,12 @@ impl ByValueChecker {
                     ));
                     break;
                 }
-                Some(deets) => if let PODState::UnsafeToBePOD(reason) = &deets.state {
-                    let new_reason = format!("Type {} could not be POD because its dependent type {} isn't safe to be POD. Because: {}", tyname, ty_id, reason);
-                    field_safety_problem = PODState::UnsafeToBePOD(new_reason);
-                    break;
+                Some(deets) => {
+                    if let PODState::UnsafeToBePOD(reason) = &deets.state {
+                        let new_reason = format!("Type {} could not be POD because its dependent type {} isn't safe to be POD. Because: {}", tyname, ty_id, reason);
+                        field_safety_problem = PODState::UnsafeToBePOD(new_reason);
+                        break;
+                    }
                 }
             }
         }

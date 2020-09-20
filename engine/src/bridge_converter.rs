@@ -16,10 +16,9 @@ use crate::additional_cpp_generator::AdditionalNeed;
 use crate::byvalue_checker::ByValueChecker;
 use crate::cpp_postprocessor::{EncounteredType, EncounteredTypeKind};
 use crate::TypeName;
-use lazy_static::lazy_static;
 use proc_macro2::Span;
 use quote::quote;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use syn::punctuated::Punctuated;
 use syn::Token;
 use syn::{
@@ -27,17 +26,6 @@ use syn::{
     GenericArgument, Ident, Item, ItemEnum, ItemForeignMod, ItemMod, ItemStruct, PatType, Path,
     PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr, TypeReference,
 };
-
-lazy_static! {
-    /// Substitutions from the names constructed by bindgen into those
-    /// which cxx uses.
-    static ref IDENT_REPLACEMENTS: HashMap<TypeName, TypeName> = {
-        let mut map = HashMap::new();
-        map.insert(TypeName::new("std_unique_ptr"), TypeName::new("UniquePtr"));
-        map.insert(TypeName::new("std_string"), TypeName::new("CxxString"));
-        map
-    };
-}
 
 #[derive(Debug)]
 pub enum ConvertError {
@@ -220,27 +208,29 @@ impl<'a> BridgeConverter {
                             bridge_items
                                 .extend(self.append_cpp_definition_squasher(tyident, new_enum_def));
                         }
-                        Item::Impl(i) => if let Some(ty) = self.type_to_typename(&i.self_ty) {
-                            for item in i.items {
-                                match item {
-                                    syn::ImplItem::Method(m) if m.sig.ident == "new" => {
-                                        let constructor_args = m
-                                            .sig
-                                            .inputs
-                                            .iter()
-                                            .filter_map(|x| match x {
-                                                FnArg::Typed(ty) => {
-                                                    self.type_to_typename(&ty.ty)
-                                                }
-                                                FnArg::Receiver(_) => None,
-                                            })
-                                            .collect::<Vec<TypeName>>();
-                                        additional_cpp_needs.push(AdditionalNeed::MakeUnique(
-                                            ty.clone(),
-                                            constructor_args.clone(),
-                                        ));
+                        Item::Impl(i) => {
+                            if let Some(ty) = self.type_to_typename(&i.self_ty) {
+                                for item in i.items {
+                                    match item {
+                                        syn::ImplItem::Method(m) if m.sig.ident == "new" => {
+                                            let constructor_args = m
+                                                .sig
+                                                .inputs
+                                                .iter()
+                                                .filter_map(|x| match x {
+                                                    FnArg::Typed(ty) => {
+                                                        self.type_to_typename(&ty.ty)
+                                                    }
+                                                    FnArg::Receiver(_) => None,
+                                                })
+                                                .collect::<Vec<TypeName>>();
+                                            additional_cpp_needs.push(AdditionalNeed::MakeUnique(
+                                                ty.clone(),
+                                                constructor_args.clone(),
+                                            ));
+                                        }
+                                        _ => {}
                                     }
-                                    _ => {}
                                 }
                             }
                         }
@@ -469,7 +459,10 @@ impl<'a> BridgeConverter {
                         }
                         _ => s.arguments,
                     };
-                    let ident = match IDENT_REPLACEMENTS.get(&old_ident) {
+                    let ident = match crate::known_types::KNOWN_TYPES
+                        .get(&old_ident)
+                        .and_then(|x| x.cxx_replacement.as_ref())
+                    {
                         None => s.ident,
                         Some(replacement) => replacement.to_ident(),
                     };
