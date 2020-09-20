@@ -120,7 +120,7 @@ impl AdditionalCppGenerator {
             "{} {{ return std::make_unique<{}>({}); }}",
             declaration, ty, arg_list
         );
-        let declaration = format!("struct {};\n{};", ty.to_cxx_name(), declaration);
+        let declaration = format!("{};", declaration);
         self.additional_functions.push(AdditionalFunction {
             name,
             declaration,

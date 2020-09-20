@@ -766,7 +766,7 @@ fn test_make_up_int() {
         };
     "};
     let rs = quote! {
-        let a = ffi::cxxbridge::Bob_make_unique(3);
+        let a = ffi::cxxbridge::Bob::make_unique(3);
         assert_eq!(a.as_ref().unwrap().b, 3);
     };
     run_test(cxx, hdr, rs, &["Bob"], &[]);
