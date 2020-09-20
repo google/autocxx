@@ -463,8 +463,10 @@ impl IncludeCpp {
                 match additional_cpp_generator.generate() {
                     None => {}
                     Some(additional_cpp) => {
+                        // TODO should probably replace pragma once below with traditional include guards.
+                        let declarations = format!("#pragma once\n{}", additional_cpp.declarations);
                         files.push(CppFilePair {
-                            header: additional_cpp.declarations.as_bytes().to_vec(),
+                            header: declarations.as_bytes().to_vec(),
                             header_name: "autocxxgen.h".to_string(),
                             implementation: additional_cpp.definitions.as_bytes().to_vec(),
                         });

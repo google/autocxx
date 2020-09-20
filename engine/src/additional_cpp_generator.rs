@@ -66,16 +66,10 @@ impl AdditionalCppGenerator {
         if self.additional_functions.is_empty() {
             None
         } else {
-            // TODO should probably replace pragma once below with traditional include guards.
             let declarations = self.concat_additional_items(|x| &x.declaration);
-            let declarations = format!(
-                "#pragma once\n#include <memory>\n{}\n{}",
-                self.inclusions, declarations
-            );
+            let declarations = format!("#include <memory>\n{}\n{}", self.inclusions, declarations);
             let definitions = self.concat_additional_items(|x| &x.definition);
             let definitions = format!("#include \"autocxxgen.h\"\n{}", definitions);
-            println!("Generated additional C++ declarations:\n{}", declarations);
-            println!("Generated additional C++ definitions:\n{}", definitions);
             let extra_allowlist = self
                 .additional_functions
                 .iter()
