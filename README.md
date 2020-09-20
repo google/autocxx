@@ -78,7 +78,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Structs containing UniquePtr | Works |
 | Structs containing strings | Works (opaque only) |
 | Passing opaque structs (owned by UniquePtr) into C++ APIs which take them by value | - |
-| Constructors/make_unique | - |
+| Constructors/make_unique | Sort of. A function called {type}_make_unique is generated which is not the eventual intended syntax. |
 | Field access to opaque objects via UniquePtr | - |
 | Reference counting | - |
 | std::optional | - |
