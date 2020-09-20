@@ -585,9 +585,11 @@ fn test_take_nested_pod_by_value() {
 
 #[test]
 #[ignore] // need field access to opaque types; need to pass Rust-side unique pointer
-          // into C++ functions which take something by value; need make_unique
+          // into C++ functions which take something by value
 fn test_take_nonpod_by_value() {
     let cxx = indoc! {"
+        Bob::Bob(uint32_t a0, uint32_t b0)
+           : a(a0), b(b0) {}
         uint32_t take_bob(Bob a) {
             return a.a;
         }
@@ -595,13 +597,14 @@ fn test_take_nonpod_by_value() {
     let hdr = indoc! {"
         #include <cstdint>
         struct Bob {
+            Bob(uint32_t a, uint32_t b);
             uint32_t a;
             uint32_t b;
         };
         uint32_t take_bob(Bob a);
     "};
     let rs = quote! {
-        let a = ffi::cxxbridge::Bob::make_unique { a: 12, b: 13 };
+        let a = ffi::cxxbridge::Bob_make_unique(12, 13);
         assert_eq!(ffi::cxxbridge::take_bob(a), 12);
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob"], &[]);
@@ -666,7 +669,7 @@ fn test_take_nonpod_by_mut_ref() {
 }
 
 #[test]
-#[ignore] // because we don't yet support strings in PODs.
+#[ignore] // because we don't yet support std::string by value
 fn test_cycle_nonpod_with_str_by_value() {
     let cxx = indoc! {"
         uint32_t take_bob(Bob a) {
@@ -748,6 +751,31 @@ fn test_make_up() {
         assert_eq!(ffi::cxxbridge::take_bob(a.as_ref().unwrap()), 3);
     };
     run_test(cxx, hdr, rs, &["Bob", "take_bob"], &[]);
+}
+
+#[test]
+fn test_make_up_with_args() {
+    let cxx = indoc! {"
+        Bob::Bob(uint32_t a0, uint32_t b0)
+           : a(a0), b(b0) {}
+        uint32_t take_bob(const Bob& a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            Bob(uint32_t a, uint32_t b);
+            uint32_t a;
+            uint32_t b;
+        };
+        uint32_t take_bob(const Bob& a);
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::Bob_make_unique(12, 13);
+        assert_eq!(ffi::cxxbridge::take_bob(a.as_ref().unwrap()), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob"], &[]);
 }
 
 #[test]
