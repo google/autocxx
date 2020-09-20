@@ -750,7 +750,7 @@ fn test_make_up() {
     "};
     // TODO rename Bob_make_unique to Bob::make_unique
     let rs = quote! {
-        let a = ffi::cxxbridge::Bob_make_unique(); // TODO test with all sorts of arguments.
+        let a = ffi::cxxbridge::Bob::make_unique(); // TODO test with all sorts of arguments.
         assert_eq!(ffi::cxxbridge::take_bob(a.as_ref().unwrap()), 3);
     };
     run_test(cxx, hdr, rs, &["Bob", "take_bob"], &[]);

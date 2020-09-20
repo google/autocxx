@@ -228,6 +228,39 @@ impl<'a> BridgeConverter {
                                                 ty.clone(),
                                                 constructor_args.clone(),
                                             ));
+                                            // Create a function which calls Bob_make_unique
+                                            // from Bob::make_unique.
+                                            let call_name = Ident::new(
+                                                &format!("{}_make_unique", ty.to_string()),
+                                                Span::call_site(),
+                                            );
+                                            let new_block: syn::Block = parse_quote!( {
+                                                #call_name()
+                                            });
+                                            let mut new_sig = m.sig.clone();
+                                            new_sig.ident =
+                                                Ident::new("make_unique", Span::call_site());
+                                            new_sig.unsafety = None;
+                                            // TODO get arguments into the above
+                                            let new_impl_method =
+                                                syn::ImplItem::Method(syn::ImplItemMethod {
+                                                    attrs: Vec::new(),
+                                                    vis: m.vis,
+                                                    defaultness: m.defaultness,
+                                                    block: new_block,
+                                                    sig: new_sig,
+                                                });
+                                            all_items.push(Item::Impl(syn::ItemImpl {
+                                                attrs: Vec::new(),
+                                                defaultness: i.defaultness,
+                                                generics: i.generics.clone(),
+                                                trait_: i.trait_.clone(),
+                                                unsafety: None,
+                                                impl_token: i.impl_token,
+                                                self_ty: i.self_ty.clone(),
+                                                brace_token: i.brace_token,
+                                                items: vec![new_impl_method],
+                                            }));
                                         }
                                         _ => {}
                                     }
