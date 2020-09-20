@@ -38,27 +38,34 @@ impl CppPostprocessor {
         self.encountered_types.push(ty);
     }
 
-    /// Edits the generated C++ to insert #defines to disable certain C++
+    /// Edits the generated C++.
+    /// Does the following:
+    /// * Inserts extra definitions/declarations
+    /// * Inserts #defines to disable certain C++
     /// type definitions. A nasty temporary hack - see
+    /// `crate::TEMPORARY_HACK_TO_AVOID_REDEFINITIONS`
     pub(crate) fn post_process(&self, mut input: Vec<u8>) -> Vec<u8> {
         let mut out = Vec::new();
-        for t in &self.encountered_types {
-            let label = match t.0 {
-                EncounteredTypeKind::Struct => "STRUCT",
-                EncounteredTypeKind::Enum => "ENUM",
-            };
-            out.extend_from_slice(
-                format!(
-                    "#define CXXBRIDGE{:02}_{}_{}\n",
-                    CXXBRIDGE_GENERATION, label, t.1
-                )
-                .as_bytes(),
-            );
-        }
-        if !self.encountered_types.is_empty() {
-            out.extend_from_slice("\n".as_bytes());
+        if crate::TEMPORARY_HACK_TO_AVOID_REDEFINITIONS {
+            for t in &self.encountered_types {
+                let label = match t.0 {
+                    EncounteredTypeKind::Struct => "STRUCT",
+                    EncounteredTypeKind::Enum => "ENUM",
+                };
+                out.extend_from_slice(
+                    format!(
+                        "#define CXXBRIDGE{:02}_{}_{}\n",
+                        CXXBRIDGE_GENERATION, label, t.1
+                    )
+                    .as_bytes(),
+                );
+            }
+            if !self.encountered_types.is_empty() {
+                out.extend_from_slice(b"\n");
+            }
         }
         out.append(&mut input);
+
         out
     }
 }
@@ -79,7 +86,7 @@ mod tests {
             EncounteredTypeKind::Struct,
             TypeName::new("bar"),
         ));
-        let input = "fish\n\n".as_bytes().to_vec();
+        let input = b"fish\n\n".to_vec();
         let output = preprocessor.post_process(input);
         assert_eq!(
             String::from_utf8(output).unwrap(),

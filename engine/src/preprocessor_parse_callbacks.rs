@@ -57,10 +57,10 @@ impl PreprocessorDefinitions {
             let sdefs = self.string.iter().filter_map(|(k, v)| {
                 let k = syn::Ident::new(k, span);
                 // TODO _consider_ doing something with non-UTF8 string values. I'm not sure what.
-                String::from_utf8(v.clone()).ok().and_then(|v| {
-                    Some(quote! {
+                String::from_utf8(v.clone()).ok().map(|v| {
+                    quote! {
                         pub const #k: &'static str = #v;
-                    })
+                    }
                 })
             });
             Some(parse_quote! {

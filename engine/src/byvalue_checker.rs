@@ -93,14 +93,13 @@ impl ByValueChecker {
                     ));
                     break;
                 }
-                Some(deets) => match &deets.state {
-                    PODState::UnsafeToBePOD(reason) => {
+                Some(deets) => {
+                    if let PODState::UnsafeToBePOD(reason) = &deets.state {
                         let new_reason = format!("Type {} could not be POD because its dependent type {} isn't safe to be POD. Because: {}", tyname, ty_id, reason);
                         field_safety_problem = PODState::UnsafeToBePOD(new_reason);
                         break;
                     }
-                    _ => {}
-                },
+                }
             }
         }
         let mut my_details = StructDetails::new(field_safety_problem);
@@ -133,28 +132,23 @@ impl ByValueChecker {
     }
 
     pub fn is_pod(&self, ty_id: &TypeName) -> bool {
-        match self
-            .results
-            .get(ty_id)
-            .expect("Type not known to byvalue_checker")
-        {
-            StructDetails {
-                state: PODState::IsPOD,
-                dependent_structs: _,
-            } => true,
-            _ => false,
-        }
+        matches!(self
+        .results
+        .get(ty_id)
+        .expect("Type not known to byvalue_checker"), StructDetails {
+            state: PODState::IsPOD,
+            dependent_structs: _,
+        })
     }
 
     fn get_field_types(&self, def: &ItemStruct) -> Vec<TypeName> {
         let mut results = Vec::new();
         for f in &def.fields {
             let fty = &f.ty;
-            match fty {
-                Type::Path(p) => results.push(TypeName::from_type_path(&p)),
-                // TODO handle anything else which bindgen might spit out, e.g. arrays?
-                _ => {}
+            if let Type::Path(p) = fty {
+                results.push(TypeName::from_type_path(&p));
             }
+            // TODO handle anything else which bindgen might spit out, e.g. arrays?
         }
         results
     }
@@ -229,6 +223,6 @@ mod tests {
         };
         let t_id = TypeName::from_ident(&t.ident);
         bvc.ingest_struct(&t);
-        assert!(bvc.satisfy_requests(vec![t_id.clone()]).is_err());
+        assert!(bvc.satisfy_requests(vec![t_id]).is_err());
     }
 }

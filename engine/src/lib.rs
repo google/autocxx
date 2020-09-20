@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
 mod cpp_postprocessor;
+mod known_types;
 mod preprocessor_parse_callbacks;
 
 #[cfg(test)]
@@ -24,13 +26,14 @@ use proc_macro2::Span;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{fmt::Display, path::PathBuf};
 
-use cxx_gen::GeneratedCode;
 use indoc::indoc;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, Ident, ItemMod, Macro, TypePath};
 
-use cpp_postprocessor::CppPostprocessor;
+use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator};
+use cpp_postprocessor::{CppPostprocessor, EncounteredType};
+use itertools::join;
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
@@ -43,6 +46,13 @@ use std::sync::Mutex;
 const TEMPORARY_HACK_TO_AVOID_REDEFINITIONS: bool = true;
 
 const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
+pub struct CppFilePair {
+    pub header: Vec<u8>,
+    pub implementation: Vec<u8>,
+    pub header_name: String,
+}
+
+pub struct GeneratedCpp(pub Vec<CppFilePair>);
 
 /// Any time we store a type name, we should use this.
 /// At the moment it's just a string, but one day it will need to become
@@ -66,6 +76,16 @@ impl TypeName {
 
     fn to_ident(&self) -> Ident {
         Ident::new(&self.0, Span::call_site())
+    }
+
+    fn to_cxx_name(&self) -> &str {
+        match crate::known_types::KNOWN_TYPES
+            .get(&self)
+            .and_then(|x| x.cxx_name.as_ref())
+        {
+            None => &self.0,
+            Some(replacement) => &replacement.as_str(),
+        }
     }
 }
 
@@ -112,7 +132,7 @@ impl Parse for IncludeCpp {
     }
 }
 
-fn dump_generated_code(gen: GeneratedCode) -> Result<GeneratedCode> {
+fn dump_generated_code(gen: cxx_gen::GeneratedCode) -> Result<cxx_gen::GeneratedCode> {
     info!(
         "CXX:\n{}",
         String::from_utf8(gen.implementation.clone()).unwrap()
@@ -208,15 +228,13 @@ impl IncludeCpp {
     }
 
     fn build_header(&self) -> String {
-        let mut s = PRELUDE.to_string();
-        for incl in &self.inclusions {
-            let text = match incl {
+        join(
+            self.inclusions.iter().map(|incl| match incl {
                 CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
                 CppInclusion::Header(path) => format!("#include \"{}\"\n", path),
-            };
-            s.push_str(&text);
-        }
-        s
+            }),
+            "",
+        )
     }
 
     fn determine_incdirs(&self) -> Result<Vec<PathBuf>> {
@@ -247,8 +265,6 @@ impl IncludeCpp {
     fn make_bindgen_builder(&self) -> Result<bindgen::Builder> {
         let inc_dirs = self.determine_incdirs()?;
 
-        let full_header = self.build_header();
-        debug!("Full header: {}", full_header);
         debug!("Inc dir: {:?}", inc_dirs);
 
         // TODO support different C++ versions
@@ -271,7 +287,7 @@ impl IncludeCpp {
             // TODO work with OsStrs here to avoid the .display()
             builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
         }
-        builder = builder.header_contents("example.hpp", &full_header);
+
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
         for a in &self.allowlist {
@@ -281,12 +297,39 @@ impl IncludeCpp {
                 .whitelist_function(a)
                 .whitelist_var(a);
         }
+
         Ok(builder)
     }
 
+    fn inject_header_into_bindgen(
+        &self,
+        mut builder: bindgen::Builder,
+        additional_cpp: Option<AdditionalCpp>,
+    ) -> bindgen::Builder {
+        let full_header = self.build_header();
+        let more_decls = if let Some(additional_cpp) = additional_cpp {
+            for a in additional_cpp.extra_allowlist {
+                builder = builder.whitelist_function(a);
+            }
+            format!(
+                "#include <memory>\n\n// Extra autocxx insertions:\n\n{}\n\n",
+                additional_cpp.declarations
+            )
+        } else {
+            String::new()
+        };
+        let full_header = format!("{}{}\n\n{}", PRELUDE, more_decls, full_header,);
+        info!("Full header: {}", full_header);
+        builder = builder.header_contents("example.hpp", &full_header);
+        builder
+    }
+
     pub fn generate_rs(&self) -> Result<TokenStream2> {
-        let itemmod = self.do_generation(None)?;
-        Ok(itemmod.to_token_stream())
+        let results = self.do_generation()?;
+        Ok(match results {
+            Some((itemmod, _, _)) => itemmod.to_token_stream(),
+            None => TokenStream2::new(),
+        })
     }
 
     fn get_preprocessor_defs_mod(&self) -> Option<ItemMod> {
@@ -295,25 +338,7 @@ impl IncludeCpp {
         m
     }
 
-    fn do_generation(
-        &self,
-        cpp_postprocessor: Option<&mut CppPostprocessor>,
-    ) -> Result<Option<ItemMod>> {
-        // If we are in parse only mode, do nothing. This is used for
-        // doc tests to ensure the parsing is valid, but we can't expect
-        // valid C++ header files or linkers to allow a complete build.
-        if self.parse_only {
-            return Ok(None);
-        }
-        // 4. (also respects environment variables to pick up more headers,
-        //     include paths and #defines)
-        // Then:
-        // 1. Builds an overall C++ header with all those #defines and #includes
-        // 2. Passes it to bindgen::Builder::header
-        let bindings = self
-            .make_bindgen_builder()?
-            .generate()
-            .map_err(Error::Bindgen)?;
+    fn parse_bindings(&self, bindings: bindgen::Bindings) -> Result<ItemMod> {
         // This bindings object is actually a TokenStream internally and we're wasting
         // effort converting to and from string. We could enhance the bindgen API
         // in future.
@@ -322,8 +347,10 @@ impl IncludeCpp {
         // into a single construct.
         let bindings = format!("mod ffi {{ {} }}", bindings);
         info!("Bindings: {}", bindings);
-        let bindings = syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)?;
+        syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)
+    }
 
+    fn generate_include_list(&self) -> Vec<String> {
         let mut include_list = Vec::new();
         for incl in &self.inclusions {
             match incl {
@@ -333,14 +360,61 @@ impl IncludeCpp {
                 CppInclusion::Define(_) => warn!("Currently no way to define! within cxx"),
             }
         }
+        include_list
+    }
+
+    fn do_generation(
+        &self,
+    ) -> Result<Option<(ItemMod, AdditionalCppGenerator, Vec<EncounteredType>)>> {
+        // If we are in parse only mode, do nothing. This is used for
+        // doc tests to ensure the parsing is valid, but we can't expect
+        // valid C++ header files or linkers to allow a complete build.
+        if self.parse_only {
+            return Ok(None);
+        }
+
+        // 4. (also respects environment variables to pick up more headers,
+        //     include paths and #defines)
+        // Then:
+        // 1. Builds an overall C++ header with all those #defines and #includes
+        // 2. Passes it to bindgen::Builder::header
+        let builder = self.make_bindgen_builder()?;
+        let bindings = self
+            .inject_header_into_bindgen(builder, None)
+            .generate()
+            .map_err(Error::Bindgen)?;
+        let bindings = self.parse_bindings(bindings)?;
 
         let mut converter = bridge_converter::BridgeConverter::new(
-            include_list,
+            self.generate_include_list(),
             self.pod_types.clone(), // TODO take self by value to avoid clone.
-            cpp_postprocessor,
             TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
         );
-        let mut items = converter.convert(bindings).map_err(Error::Conversion)?;
+
+        let mut conversion = converter
+            .convert(bindings, None)
+            .map_err(Error::Conversion)?;
+        let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
+        additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
+        let additional_cpp_items = additional_cpp_generator.generate();
+        if let Some(additional_cpp_items) = additional_cpp_items {
+            // When processing the bindings the first time, we discovered we wanted to add
+            // more C++ (because you can never have too much C++.) Examples are field
+            // accessor methods, or make_unique wrappers.
+            // So, err, let's start all over again. Fun!
+            let builder = self.make_bindgen_builder()?;
+            let bindings = self
+                .inject_header_into_bindgen(builder, Some(additional_cpp_items))
+                .generate()
+                .map_err(Error::Bindgen)?;
+            let bindings = self.parse_bindings(bindings)?;
+
+            conversion = converter
+                .convert(bindings, Some("autocxxgen.h"))
+                .map_err(Error::Conversion)?;
+        }
+
+        let mut items = conversion.items;
         if let Some(itemmod) = self.get_preprocessor_defs_mod() {
             items.push(syn::Item::Mod(itemmod));
         }
@@ -353,31 +427,54 @@ impl IncludeCpp {
             "New bindings: {}",
             new_bindings.to_token_stream().to_string()
         );
-        Ok(Some(new_bindings))
+        Ok(Some((
+            new_bindings,
+            additional_cpp_generator,
+            conversion.types_to_disable,
+        )))
     }
 
-    pub fn generate_h_and_cxx(self) -> Result<GeneratedCode> {
+    pub fn generate_h_and_cxx(self) -> Result<GeneratedCpp> {
         let mut cpp_postprocessor = CppPostprocessor::new();
-        let rs = self.do_generation(Some(&mut cpp_postprocessor))?;
-        let rs = match rs {
-            Some(itemmod) => itemmod.into_token_stream(),
-            None => TokenStream2::new(),
-        };
-        let opt = cxx_gen::Opt::default();
-        cxx_gen::generate_header_and_cc(rs, &opt)
-            .map_err(Error::CxxGen)
-            .and_then(dump_generated_code)
-            .and_then(|gen| {
-                if TEMPORARY_HACK_TO_AVOID_REDEFINITIONS {
-                    Ok(GeneratedCode {
+        let generation = self.do_generation()?;
+        let mut files = Vec::new();
+        match generation {
+            None => {}
+            Some((itemmod, additional_cpp_generator, types_to_disable)) => {
+                for a in types_to_disable {
+                    cpp_postprocessor.disable_type(a);
+                }
+                let rs = itemmod.into_token_stream();
+                let opt = cxx_gen::Opt::default();
+                let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)
+                    .map_err(Error::CxxGen)
+                    .and_then(dump_generated_code)
+                    .map(|gen| cxx_gen::GeneratedCode {
                         header: cpp_postprocessor.post_process(gen.header),
                         implementation: cpp_postprocessor.post_process(gen.implementation),
                     })
-                } else {
-                    Ok(gen)
+                    .and_then(dump_generated_code)?;
+                files.push(CppFilePair {
+                    header: cxx_generated.header,
+                    header_name: "cxxgen.h".to_string(),
+                    implementation: cxx_generated.implementation,
+                });
+
+                match additional_cpp_generator.generate() {
+                    None => {}
+                    Some(additional_cpp) => {
+                        // TODO should probably replace pragma once below with traditional include guards.
+                        let declarations = format!("#pragma once\n{}", additional_cpp.declarations);
+                        files.push(CppFilePair {
+                            header: declarations.as_bytes().to_vec(),
+                            header_name: "autocxxgen.h".to_string(),
+                            implementation: additional_cpp.definitions.as_bytes().to_vec(),
+                        });
+                    }
                 }
-            })
-            .and_then(dump_generated_code)
+            }
+        };
+        Ok(GeneratedCpp(files))
     }
 
     pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
