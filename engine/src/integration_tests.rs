@@ -47,12 +47,15 @@ impl LinkableTryBuilder {
         }
     }
 
-    fn copy_items_into_temp_dir<P1: AsRef<Path>>(&self, src_path: &P1, pattern: &str) {
+    fn move_items_into_temp_dir<P1: AsRef<Path>>(&self, src_path: &P1, pattern: &str) {
         for item in std::fs::read_dir(src_path).unwrap() {
             let item = item.unwrap();
             if item.file_name().into_string().unwrap().contains(pattern) {
                 let dest = self.temp_dir.path().join(item.file_name());
-                std::fs::copy(item.path(), dest).unwrap();
+                if dest.exists() {
+                    std::fs::remove_file(&dest).unwrap();
+                }
+                std::fs::rename(item.path(), dest).unwrap();
             }
         }
     }
@@ -67,8 +70,8 @@ impl LinkableTryBuilder {
     ) -> std::thread::Result<()> {
         // Copy all items from the source dir into our temporary dir if their name matches
         // the pattern given in `library_name`.
-        self.copy_items_into_temp_dir(library_path, library_name);
-        self.copy_items_into_temp_dir(header_path, header_name);
+        self.move_items_into_temp_dir(library_path, library_name);
+        self.move_items_into_temp_dir(header_path, header_name);
         let temp_path = self.temp_dir.path().to_str().unwrap();
         std::env::set_var("RUSTFLAGS", format!("-L {}", temp_path));
         std::env::set_var("AUTOCXX_INC", temp_path);
