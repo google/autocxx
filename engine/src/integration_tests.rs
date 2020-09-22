@@ -748,7 +748,6 @@ fn test_make_up() {
         };
         uint32_t take_bob(const Bob& a);
     "};
-    // TODO rename Bob_make_unique to Bob::make_unique
     let rs = quote! {
         let a = ffi::cxxbridge::Bob::make_unique(); // TODO test with all sorts of arguments.
         assert_eq!(ffi::cxxbridge::take_bob(a.as_ref().unwrap()), 3);
