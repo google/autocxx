@@ -18,6 +18,7 @@ mod byvalue_checker;
 mod cpp_postprocessor;
 mod known_types;
 mod preprocessor_parse_callbacks;
+mod rust_pretty_printer;
 
 #[cfg(test)]
 mod integration_tests;
@@ -425,7 +426,7 @@ impl IncludeCpp {
         };
         info!(
             "New bindings: {}",
-            new_bindings.to_token_stream().to_string()
+            rust_pretty_printer::pretty_print(&new_bindings.to_token_stream())
         );
         Ok(Some((
             new_bindings,
