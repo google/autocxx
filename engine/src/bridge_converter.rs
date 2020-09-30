@@ -173,7 +173,6 @@ impl<'a> BridgeConverter {
                                 // across for attributes, spans etc. but we'll stuff
                                 // the contents of all bindgen 'extern "C"' mods into this
                                 // one.
-
                                 extern_c_mod = Some(ItemForeignMod {
                                     attrs: fm.attrs,
                                     abi: fm.abi,
@@ -248,21 +247,8 @@ impl<'a> BridgeConverter {
                 // We will always create an extern "C" mod even if bindgen
                 // didn't generate one, e.g. because it only generated types.
                 // We still want cxx to know about those types.
-                let mut extern_c_mod = match extern_c_mod {
-                    None => ItemForeignMod {
-                        attrs: Vec::new(),
-                        abi: syn::Abi {
-                            extern_token: Token![extern](Span::call_site()),
-                            name: Some(syn::LitStr::new("C", Span::call_site())),
-                        },
-                        brace_token: syn::token::Brace {
-                            span: Span::call_site(),
-                        },
-                        items: Vec::new(),
-                    },
-                    Some(md) => md,
-                };
-
+                let mut extern_c_mod =
+                    extern_c_mod.unwrap_or_else(|| self.get_blank_extern_c_mod());
                 extern_c_mod.items.append(&mut extern_c_mod_items);
                 bridge_items.push(Item::ForeignMod(extern_c_mod));
                 bindgen_mod
@@ -289,6 +275,20 @@ impl<'a> BridgeConverter {
                     additional_cpp_needs,
                 })
             }
+        }
+    }
+
+    fn get_blank_extern_c_mod(&self) -> ItemForeignMod {
+        ItemForeignMod {
+            attrs: Vec::new(),
+            abi: syn::Abi {
+                extern_token: Token![extern](Span::call_site()),
+                name: Some(syn::LitStr::new("C", Span::call_site())),
+            },
+            brace_token: syn::token::Brace {
+                span: Span::call_site(),
+            },
+            items: Vec::new(),
         }
     }
 
