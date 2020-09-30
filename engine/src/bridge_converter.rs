@@ -14,6 +14,7 @@
 
 use crate::additional_cpp_generator::AdditionalNeed;
 use crate::byvalue_checker::ByValueChecker;
+use crate::known_types::KNOWN_TYPES;
 use crate::TypeName;
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use std::collections::HashSet;
@@ -199,7 +200,7 @@ impl<'a> BridgeConverter {
                                 .as_mut()
                                 .unwrap()
                                 .1
-                                .push(Item::Struct(s));
+                                .push(Item::Struct(self.convert_struct(s)));
                             all_items.push(type_alias.for_anywhere);
                         }
                         Item::Enum(e) => {
@@ -555,5 +556,37 @@ impl<'a> BridgeConverter {
             });
         }
         new_pun
+    }
+
+    /// Renames std_string within structs to CxxString, etc. This should be done
+    /// by bindgen because of the PRELUDE we give it, but it doesn't appear to
+    /// replace types within structs, so we do it.
+    /// This may run the risk of altering the size/structure/ABI of the struct,
+    /// but that's OK, because this is only ever applied to opaque types which
+    /// will only be passed by UniquePtr/reference within Rust, never by value.
+    fn convert_struct(&self, mut strct: syn::ItemStruct) -> syn::ItemStruct {
+        for f in &mut strct.fields {
+            self.convert_struct_field_type(&mut f.ty);
+        }
+        strct
+    }
+
+    fn convert_struct_field_type(&self, ty: &mut Type) {
+        match ty {
+            Type::Path(ty) => {
+                // O(n*m) but m is small.
+                for (type_name, type_details) in KNOWN_TYPES.iter() {
+                    if ty.path.is_ident(&type_name.to_string()) {
+                        if let Some(replacement) = &type_details.cxx_replacement {
+                            let replacement = replacement.to_ident();
+                            ty.path = parse_quote! {
+                                cxx:: #replacement
+                            };
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 }
