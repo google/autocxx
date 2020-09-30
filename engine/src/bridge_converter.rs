@@ -87,26 +87,28 @@ impl<'a> BridgeConverter {
 
     fn generate_type_alias(&self, tyname: &TypeName, should_be_pod: bool) -> TypeAliasResults {
         let tyident = tyname.to_ident();
-        let kind_item: Ident = Ident::new(if should_be_pod {
-            "Trivial"
-        } else {
-            "Opaque"
-        }, Span::call_site());
+        let kind_item: Ident = Ident::new(
+            if should_be_pod { "Trivial" } else { "Opaque" },
+            Span::call_site(),
+        );
         let tynamestring = tyname.to_cxx_name();
         let mut for_extern_c_ts = TokenStream2::new();
-        for_extern_c_ts.extend([
-            TokenTree::Ident(Ident::new("type", Span::call_site())),
-            TokenTree::Ident(tyident.clone()),
-            TokenTree::Punct(proc_macro2::Punct::new('=', proc_macro2::Spacing::Alone)),
-            TokenTree::Ident(Ident::new("super", Span::call_site())),
-            TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-            TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-            TokenTree::Ident(Ident::new("bindgen", Span::call_site())),
-            TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-            TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-            TokenTree::Ident(tyident.clone()),
-            TokenTree::Punct(proc_macro2::Punct::new(';', proc_macro2::Spacing::Alone)),
-        ].to_vec());
+        for_extern_c_ts.extend(
+            [
+                TokenTree::Ident(Ident::new("type", Span::call_site())),
+                TokenTree::Ident(tyident.clone()),
+                TokenTree::Punct(proc_macro2::Punct::new('=', proc_macro2::Spacing::Alone)),
+                TokenTree::Ident(Ident::new("super", Span::call_site())),
+                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                TokenTree::Ident(Ident::new("bindgen", Span::call_site())),
+                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                TokenTree::Ident(tyident.clone()),
+                TokenTree::Punct(proc_macro2::Punct::new(';', proc_macro2::Spacing::Alone)),
+            ]
+            .to_vec(),
+        );
         TypeAliasResults {
             for_extern_c: ForeignItem::Verbatim(for_extern_c_ts),
             for_bridge: Item::Impl(parse_quote! {
@@ -117,7 +119,7 @@ impl<'a> BridgeConverter {
                     type Id = cxx::type_id!(#tynamestring);
                     type Kind = cxx::#kind_item;
                 }
-            })
+            }),
         }
     }
 
@@ -168,7 +170,6 @@ impl<'a> BridgeConverter {
                                 // across for attributes, spans etc. but we'll stuff
                                 // the contents of all bindgen 'extern "C"' mods into this
                                 // one.
-
                                 extern_c_mod = Some(ItemForeignMod {
                                     attrs: fm.attrs,
                                     abi: fm.abi,
@@ -188,7 +189,7 @@ impl<'a> BridgeConverter {
                             types_found.push(tyname.clone());
                             self.class_names_discovered.insert(tyname.clone());
                             let should_be_pod = self.byvalue_checker.is_pod(&tyname);
-                            let type_alias = self.generate_type_alias(&tyname,should_be_pod);
+                            let type_alias = self.generate_type_alias(&tyname, should_be_pod);
                             bridge_items.push(type_alias.for_bridge);
                             extern_c_mod_items.push(type_alias.for_extern_c);
                             bindgen_mod
@@ -206,12 +207,7 @@ impl<'a> BridgeConverter {
                             let type_alias = self.generate_type_alias(&tyname, true);
                             bridge_items.push(type_alias.for_bridge);
                             extern_c_mod_items.push(type_alias.for_extern_c);
-                            bindgen_mod
-                                .content
-                                .as_mut()
-                                .unwrap()
-                                .1
-                                .push(Item::Enum(e));
+                            bindgen_mod.content.as_mut().unwrap().1.push(Item::Enum(e));
                             all_items.push(type_alias.for_anywhere);
                         }
                         Item::Impl(i) => {
@@ -223,22 +219,20 @@ impl<'a> BridgeConverter {
                                                 ReturnType::Type(arrow, ty) => (arrow, ty),
                                                 ReturnType::Default => continue,
                                             };
-                                            let constructor_args = m
-                                                .sig
-                                                .inputs
-                                                .iter()
-                                                .filter_map(|x| match x {
-                                                    FnArg::Typed(pt) => {
-                                                        self.type_to_typename(&pt.ty).and_then(|x| {
-                                                            match *(pt.pat.clone()) {
-                                                                syn::Pat::Ident(pti) => Some((x, pti.ident)),
-                                                                _ => None,
+                                            let constructor_args =
+                                                m.sig.inputs.iter().filter_map(|x| match x {
+                                                    FnArg::Typed(pt) => self
+                                                        .type_to_typename(&pt.ty)
+                                                        .and_then(|x| match *(pt.pat.clone()) {
+                                                            syn::Pat::Ident(pti) => {
+                                                                Some((x, pti.ident))
                                                             }
-                                                        })
-                                                    },
+                                                            _ => None,
+                                                        }),
                                                     FnArg::Receiver(_) => None,
                                                 });
-                                            let (arg_types, arg_names): (Vec<_>, Vec<_>) = constructor_args.unzip();
+                                            let (arg_types, arg_names): (Vec<_>, Vec<_>) =
+                                                constructor_args.unzip();
                                             additional_cpp_needs.push(AdditionalNeed::MakeUnique(
                                                 ty.clone(),
                                                 arg_types,
@@ -261,7 +255,10 @@ impl<'a> BridgeConverter {
                                                 cxx::UniquePtr < #oldreturntype >
                                             };
                                             new_sig.unsafety = None;
-                                            new_sig.output = ReturnType::Type(*arrow, Box::new(Type::Path(new_return_type)));
+                                            new_sig.output = ReturnType::Type(
+                                                *arrow,
+                                                Box::new(Type::Path(new_return_type)),
+                                            );
                                             let new_impl_method =
                                                 syn::ImplItem::Method(syn::ImplItemMethod {
                                                     attrs: Vec::new(),
@@ -296,37 +293,48 @@ impl<'a> BridgeConverter {
                 // We will always create an extern "C" mod even if bindgen
                 // didn't generate one, e.g. because it only generated types.
                 // We still want cxx to know about those types.
-                let mut extern_c_mod = match extern_c_mod {
-                    None => ItemForeignMod {
-                        attrs: Vec::new(),
-                        abi: syn::Abi {
-                            extern_token: Token![extern](Span::call_site()),
-                            name: Some(syn::LitStr::new("C", Span::call_site())),
-                        },
-                        brace_token: syn::token::Brace {
-                            span: Span::call_site()
-                        },
-                        items: Vec::new(),
-                    },
-                    Some(md) => md,
-                };
-
+                let mut extern_c_mod =
+                    extern_c_mod.unwrap_or_else(|| self.get_blank_extern_c_mod());
                 extern_c_mod.items.append(&mut extern_c_mod_items);
                 bridge_items.push(Item::ForeignMod(extern_c_mod));
-                bindgen_mod.content.as_mut().unwrap().1.append(&mut bindgen_items);
+                bindgen_mod
+                    .content
+                    .as_mut()
+                    .unwrap()
+                    .1
+                    .append(&mut bindgen_items);
                 all_items.push(Item::Mod(bindgen_mod));
                 let mut bridge_mod: ItemMod = parse_quote! {
                     #[cxx::bridge]
                     pub mod cxxbridge {
                     }
                 };
-                bridge_mod.content.as_mut().unwrap().1.append(&mut bridge_items);
+                bridge_mod
+                    .content
+                    .as_mut()
+                    .unwrap()
+                    .1
+                    .append(&mut bridge_items);
                 all_items.push(Item::Mod(bridge_mod));
                 Ok(BridgeConversion {
                     items: all_items,
                     additional_cpp_needs,
                 })
             }
+        }
+    }
+
+    fn get_blank_extern_c_mod(&self) -> ItemForeignMod {
+        ItemForeignMod {
+            attrs: Vec::new(),
+            abi: syn::Abi {
+                extern_token: Token![extern](Span::call_site()),
+                name: Some(syn::LitStr::new("C", Span::call_site())),
+            },
+            brace_token: syn::token::Brace {
+                span: Span::call_site(),
+            },
+            items: Vec::new(),
         }
     }
 

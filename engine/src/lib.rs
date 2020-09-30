@@ -357,9 +357,7 @@ impl IncludeCpp {
         include_list
     }
 
-    fn do_generation(
-        &self,
-    ) -> Result<Option<(ItemMod, AdditionalCppGenerator)>> {
+    fn do_generation(&self) -> Result<Option<(ItemMod, AdditionalCppGenerator)>> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
@@ -416,15 +414,15 @@ impl IncludeCpp {
             }
         };
         new_bindings.content.as_mut().unwrap().1.append(&mut items);
-        info!("New bindings unprettied: {}", new_bindings.to_token_stream().to_string());
+        info!(
+            "New bindings unprettied: {}",
+            new_bindings.to_token_stream().to_string()
+        );
         info!(
             "New bindings:\n{}",
             rust_pretty_printer::pretty_print(&new_bindings.to_token_stream())
         );
-        Ok(Some((
-            new_bindings,
-            additional_cpp_generator,
-        )))
+        Ok(Some((new_bindings, additional_cpp_generator)))
     }
 
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCpp> {
