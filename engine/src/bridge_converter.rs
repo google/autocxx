@@ -231,6 +231,10 @@ impl<'a> BridgeConverter {
                                 for item in i.items {
                                     match item {
                                         syn::ImplItem::Method(m) if m.sig.ident == "new" => {
+                                            let (arrow, oldreturntype) = match &m.sig.output {
+                                                ReturnType::Type(arrow, ty) => (arrow, ty),
+                                                ReturnType::Default => continue,
+                                            };
                                             let constructor_args = m
                                                 .sig
                                                 .inputs
@@ -242,6 +246,20 @@ impl<'a> BridgeConverter {
                                                     FnArg::Receiver(_) => None,
                                                 })
                                                 .collect::<Vec<TypeName>>();
+                                            let arg_names = m
+                                                .sig
+                                                .inputs
+                                                .iter()
+                                                .filter_map(|x| match x {
+                                                    FnArg::Typed(pt) => {
+                                                        match *(pt.pat.clone()) {
+                                                            syn::Pat::Ident(pti) => Some(pti.ident),
+                                                            _ => None,
+                                                        }
+                                                    }
+                                                    FnArg::Receiver(_) => None,
+                                                })
+                                                .collect::<Vec<Ident>>();
                                             additional_cpp_needs.push(AdditionalNeed::MakeUnique(
                                                 ty.clone(),
                                                 constructor_args.clone(),
@@ -253,12 +271,18 @@ impl<'a> BridgeConverter {
                                                 Span::call_site(),
                                             );
                                             let new_block: syn::Block = parse_quote!( {
-                                                super::cxxbridge::#call_name()
+                                                super::cxxbridge::#call_name(
+                                                    #(#arg_names),*
+                                                )
                                             });
                                             let mut new_sig = m.sig.clone();
                                             new_sig.ident =
                                                 Ident::new("make_unique", Span::call_site());
+                                            let new_return_type: TypePath = parse_quote! {
+                                                cxx::UniquePtr < #oldreturntype >
+                                            };
                                             new_sig.unsafety = None;
+                                            new_sig.output = ReturnType::Type(*arrow, Box::new(Type::Path(new_return_type)));
                                             // TODO get arguments into the above
                                             let new_impl_method =
                                                 syn::ImplItem::Method(syn::ImplItemMethod {
