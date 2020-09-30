@@ -16,15 +16,16 @@ use crate::additional_cpp_generator::AdditionalNeed;
 use crate::byvalue_checker::ByValueChecker;
 use crate::cpp_postprocessor::{EncounteredType, EncounteredTypeKind};
 use crate::TypeName;
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
+use quote::ToTokens;
 use std::collections::HashSet;
 use syn::punctuated::Punctuated;
 use syn::Token;
 use syn::{
     parse_quote, AngleBracketedGenericArguments, Attribute, FnArg, ForeignItem, ForeignItemFn,
-    GenericArgument, Ident, Item, ItemEnum, ItemForeignMod, ItemMod, ItemStruct, PatType, Path,
-    PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr, TypeReference,
+    GenericArgument, Ident, Item, ItemEnum, ItemForeignMod, ItemMod, PatType, Path, PathArguments,
+    PathSegment, ReturnType, Type, TypePath, TypePtr, TypeReference,
 };
 
 #[derive(Debug)]
@@ -62,6 +63,12 @@ pub(crate) struct BridgeConverter {
     byvalue_checker: ByValueChecker,
 }
 
+struct TypeAliasResults {
+    for_extern_c: ForeignItem,
+    for_bridge: Item,
+    for_anywhere: Item,
+}
+
 impl<'a> BridgeConverter {
     pub fn new(include_list: Vec<String>, pod_requests: Vec<TypeName>, old_rust: bool) -> Self {
         Self {
@@ -97,24 +104,40 @@ impl<'a> BridgeConverter {
             .map_err(ConvertError::UnsafePODType)
     }
 
-    fn generate_type_alias(&self, tyname: &Ident) -> [Item; 2] {
-        let nonsense_struct_name = Ident::new(
-            &format!("{}ContainingStruct", tyname.to_string()),
-            Span::call_site(),
-        );
-        [
-            parse_quote! {
-                extern "C" {
-                    type #tyname;
+    fn generate_type_alias(&self, tyname: &TypeName, should_be_pod: bool) -> TypeAliasResults {
+        let tyident = tyname.to_ident();
+        let kind_item: Ident = Ident::new(if should_be_pod {
+            "Trivial"
+        } else {
+            "Opaque"
+        }, Span::call_site());
+        let tynamestring = tyname.to_cxx_name();
+        let mut for_extern_c_ts = TokenStream2::new();
+        for_extern_c_ts.extend([
+            TokenTree::Ident(Ident::new("type", Span::call_site())),
+            TokenTree::Ident(tyident.clone()),
+            TokenTree::Punct(proc_macro2::Punct::new('=', proc_macro2::Spacing::Alone)),
+            TokenTree::Ident(Ident::new("super", Span::call_site())),
+            TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+            TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+            TokenTree::Ident(Ident::new("bindgen", Span::call_site())),
+            TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+            TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+            TokenTree::Ident(tyident.clone()),
+            TokenTree::Punct(proc_macro2::Punct::new(';', proc_macro2::Spacing::Alone)),
+        ].to_vec());
+        TypeAliasResults {
+            for_extern_c: ForeignItem::Verbatim(for_extern_c_ts),
+            for_bridge: Item::Impl(parse_quote! {
+                impl UniquePtrTarget for #tyident {}
+            }),
+            for_anywhere: Item::Impl(parse_quote! {
+                unsafe impl cxx::ExternType for bindgen::#tyident {
+                    type Id = cxx::type_id!(#tynamestring);
+                    type Kind = cxx::#kind_item;
                 }
-            },
-            // Due to https://github.com/dtolnay/cxx/issues/236 - TODO
-            parse_quote! {
-                struct #nonsense_struct_name {
-                    _0: UniquePtr<#tyname>,
-                }
-            },
-        ]
+            })
+        }
     }
 
     /// Convert a TokenStream of bindgen-generated bindings to a form
@@ -126,14 +149,24 @@ impl<'a> BridgeConverter {
     ) -> Result<BridgeConversion, ConvertError> {
         match bindings.content {
             None => Err(ConvertError::NoContent),
-            Some((_, items)) => {
+            Some((brace, items)) => {
                 self.find_nested_pod_types(&items)?;
                 let mut all_items: Vec<Item> = Vec::new();
+                let mut bindgen_mod = ItemMod {
+                    attrs: bindings.attrs,
+                    vis: bindings.vis,
+                    ident: bindings.ident,
+                    mod_token: bindings.mod_token,
+                    content: Some((brace, Vec::new())),
+                    semi: bindings.semi,
+                };
                 let mut bridge_items = Vec::new();
                 let mut extern_c_mod = None;
+                let mut extern_c_mod_items = Vec::new();
                 let mut additional_cpp_needs = Vec::new();
                 let mut types_to_disable = Vec::new();
                 let mut types_found = Vec::new();
+                let mut bindgen_items = Vec::new();
                 for item in items {
                     match item {
                         Item::ForeignMod(fm) => {
@@ -171,33 +204,18 @@ impl<'a> BridgeConverter {
                             let tyident = s.ident.clone();
                             let tyname = TypeName::from_ident(&tyident);
                             types_found.push(tyname.clone());
+                            self.class_names_discovered.insert(tyname.clone());
                             let should_be_pod = self.byvalue_checker.is_pod(&tyname);
-                            if should_be_pod {
-                                // Pass this type through to cxx, such that it can
-                                // generate full bindings and Rust code can treat this as
-                                // a transparent type with actual field access.
-                                types_to_disable
-                                    .push(EncounteredType(EncounteredTypeKind::Struct, tyname));
-                                let new_struct_def = self.convert_struct(s);
-                                bridge_items.extend(
-                                    self.append_cpp_definition_squasher(tyident, new_struct_def),
-                                );
-                            } else {
-                                // Teach cxx that this is an opaque type.
-                                // Pass-by-value into Rust won't be possible.
-                                // Field access won't be possible from Rust, but
-                                // this allows handling of (for instance) structs
-                                // containing self-referential pointers.
-                                bridge_items.extend_from_slice(&self.generate_type_alias(&tyident));
-                            }
-                            // A third permutation would be possible here in future - using cxx's
-                            // ExternType facilities:
-                            // https://docs.rs/cxx/0.4.4/cxx/trait.ExternType.html
-                            // This would allow us to use the type within cxx, whilst pointing it
-                            // at the definition already created by bindgen. This might (*might*)
-                            // be better than the method we're using for 'should_be_pod = true'
-                            // where we are rewriting the definition from bindgen format to cxx
-                            // format.
+                            let type_alias = self.generate_type_alias(&tyname,should_be_pod);
+                            bridge_items.push(type_alias.for_bridge);
+                            extern_c_mod_items.push(type_alias.for_extern_c);
+                            bindgen_mod
+                                .content
+                                .as_mut()
+                                .unwrap()
+                                .1
+                                .push(Item::Struct(s));
+                            all_items.push(type_alias.for_anywhere);
                         }
                         Item::Enum(e) => {
                             let tyident = e.ident.clone();
@@ -235,7 +253,7 @@ impl<'a> BridgeConverter {
                                                 Span::call_site(),
                                             );
                                             let new_block: syn::Block = parse_quote!( {
-                                                #call_name()
+                                                super::cxxbridge::#call_name()
                                             });
                                             let mut new_sig = m.sig.clone();
                                             new_sig.ident =
@@ -250,7 +268,7 @@ impl<'a> BridgeConverter {
                                                     block: new_block,
                                                     sig: new_sig,
                                                 });
-                                            all_items.push(Item::Impl(syn::ItemImpl {
+                                            let new_impl_item = Item::Impl(syn::ItemImpl {
                                                 attrs: Vec::new(),
                                                 defaultness: i.defaultness,
                                                 generics: i.generics.clone(),
@@ -260,7 +278,8 @@ impl<'a> BridgeConverter {
                                                 self_ty: i.self_ty.clone(),
                                                 brace_token: i.brace_token,
                                                 items: vec![new_impl_method],
-                                            }));
+                                            });
+                                            bindgen_items.push(new_impl_item);
                                         }
                                         _ => {}
                                     }
@@ -272,15 +291,22 @@ impl<'a> BridgeConverter {
                         }
                     }
                 }
-                if let Some(extern_c_mod) = extern_c_mod.take() {
+                if let Some(mut extern_c_mod) = extern_c_mod.take() {
+                    extern_c_mod.items.append(&mut extern_c_mod_items);
                     bridge_items.push(Item::ForeignMod(extern_c_mod));
                 }
-                all_items.push(parse_quote! {
+                bindgen_mod.content.as_mut().unwrap().1.append(&mut bindgen_items);
+                all_items.push(Item::Mod(bindgen_mod));
+                let mut bridge_mod: ItemMod = parse_quote! {
                     #[cxx::bridge]
                     pub mod cxxbridge {
-                        #(#bridge_items)*
                     }
-                });
+                };
+                bridge_mod.content.as_mut().unwrap().1.append(&mut bridge_items);
+                let mut ts = TokenStream2::new();
+                bridge_mod.to_tokens(&mut ts);
+                println!("Bridge mod now {}", ts.to_string());
+                all_items.push(Item::Mod(bridge_mod));
                 Ok(BridgeConversion {
                     items: all_items,
                     types_to_disable,
@@ -363,20 +389,6 @@ impl<'a> BridgeConverter {
             sig: s,
             semi_token: fun.semi_token,
         }))
-    }
-
-    fn convert_struct(&mut self, ty: ItemStruct) -> Item {
-        self.class_names_discovered
-            .insert(TypeName::from_ident(&ty.ident));
-        Item::Struct(ItemStruct {
-            attrs: self.strip_attr(ty.attrs, "repr"),
-            vis: ty.vis,
-            struct_token: ty.struct_token,
-            generics: ty.generics,
-            fields: ty.fields,
-            semi_token: ty.semi_token,
-            ident: ty.ident,
-        })
     }
 
     fn convert_enum(&self, ty: ItemEnum) -> Item {

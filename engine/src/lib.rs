@@ -346,7 +346,7 @@ impl IncludeCpp {
         let bindings = bindings.to_string();
         // Manually add the mod ffi {} so that we can ask syn to parse
         // into a single construct.
-        let bindings = format!("mod ffi {{ {} }}", bindings);
+        let bindings = format!("mod bindgen {{ {} }}", bindings);
         info!("Bindings: {}", bindings);
         syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)
     }
@@ -419,11 +419,14 @@ impl IncludeCpp {
         if let Some(itemmod) = self.get_preprocessor_defs_mod() {
             items.push(syn::Item::Mod(itemmod));
         }
-        let new_bindings: ItemMod = parse_quote! {
+        let mut new_bindings: ItemMod = parse_quote! {
             mod ffi {
-                #(#items)*
             }
         };
+        new_bindings.content.as_mut().unwrap().1.append(&mut items);
+        let mut ts = TokenStream2::new();
+        new_bindings.to_tokens(&mut ts);
+        println!("NB mod now {}", ts.to_string());
         info!(
             "New bindings: {}",
             rust_pretty_printer::pretty_print(&new_bindings.to_token_stream())
