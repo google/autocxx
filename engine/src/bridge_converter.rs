@@ -240,29 +240,20 @@ impl<'a> BridgeConverter {
                                                 .inputs
                                                 .iter()
                                                 .filter_map(|x| match x {
-                                                    FnArg::Typed(ty) => {
-                                                        self.type_to_typename(&ty.ty)
-                                                    }
-                                                    FnArg::Receiver(_) => None,
-                                                })
-                                                .collect::<Vec<TypeName>>();
-                                            let arg_names = m
-                                                .sig
-                                                .inputs
-                                                .iter()
-                                                .filter_map(|x| match x {
                                                     FnArg::Typed(pt) => {
-                                                        match *(pt.pat.clone()) {
-                                                            syn::Pat::Ident(pti) => Some(pti.ident),
-                                                            _ => None,
-                                                        }
-                                                    }
+                                                        self.type_to_typename(&pt.ty).and_then(|x| {
+                                                            match *(pt.pat.clone()) {
+                                                                syn::Pat::Ident(pti) => Some((x, pti.ident)),
+                                                                _ => None,
+                                                            }
+                                                        })
+                                                    },
                                                     FnArg::Receiver(_) => None,
-                                                })
-                                                .collect::<Vec<Ident>>();
+                                                });
+                                            let (arg_types, arg_names): (Vec<_>, Vec<_>) = constructor_args.unzip();
                                             additional_cpp_needs.push(AdditionalNeed::MakeUnique(
                                                 ty.clone(),
-                                                constructor_args.clone(),
+                                                arg_types,
                                             ));
                                             // Create a function which calls Bob_make_unique
                                             // from Bob::make_unique.
