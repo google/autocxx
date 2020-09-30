@@ -803,7 +803,7 @@ fn test_make_up_int() {
 }
 
 #[test]
-fn test_enum() {
+fn test_enum_with_funcs() {
     let cxx = indoc! {"
         Bob give_bob() {
             return Bob::BOB_VALUE_2;
