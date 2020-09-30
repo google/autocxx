@@ -126,6 +126,21 @@ impl<'a> BridgeConverter {
         }
     }
 
+    fn build_include_foreign_items(&self, extra_inclusion: Option<&str>) -> Vec<ForeignItem> {
+        let mut full_include_list = self.include_list.clone();
+        if let Some(extra_inclusion) = extra_inclusion {
+            full_include_list.push(extra_inclusion.to_string());
+        }
+        full_include_list
+            .iter()
+            .map(|inc| {
+                ForeignItem::Macro(parse_quote! {
+                    include!(#inc);
+                })
+            })
+            .collect()
+    }
+
     /// Convert a TokenStream of bindgen-generated bindings to a form
     /// suitable for cxx.
     pub(crate) fn convert(
@@ -148,20 +163,7 @@ impl<'a> BridgeConverter {
                 };
                 let mut bridge_items = Vec::new();
                 let mut extern_c_mod = None;
-
-                let mut full_include_list = self.include_list.clone();
-                if let Some(extra_inclusion) = extra_inclusion {
-                    full_include_list.push(extra_inclusion.to_string());
-                }
-                let mut extern_c_mod_items: Vec<ForeignItem> = full_include_list
-                    .iter()
-                    .map(|inc| {
-                        ForeignItem::Macro(parse_quote! {
-                            include!(#inc);
-                        })
-                    })
-                    .collect();
-
+                let mut extern_c_mod_items = self.build_include_foreign_items(extra_inclusion);
                 let mut additional_cpp_needs = Vec::new();
                 let mut types_found = Vec::new();
                 let mut bindgen_items = Vec::new();
