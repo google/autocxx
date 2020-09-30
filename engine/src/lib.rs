@@ -424,9 +424,6 @@ impl IncludeCpp {
             }
         };
         new_bindings.content.as_mut().unwrap().1.append(&mut items);
-        let mut ts = TokenStream2::new();
-        new_bindings.to_tokens(&mut ts);
-        println!("NB mod now {}", ts.to_string());
         info!(
             "New bindings: {}",
             rust_pretty_printer::pretty_print(&new_bindings.to_token_stream())

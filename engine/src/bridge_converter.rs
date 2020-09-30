@@ -18,7 +18,6 @@ use crate::cpp_postprocessor::{EncounteredType, EncounteredTypeKind};
 use crate::TypeName;
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
-use quote::ToTokens;
 use std::collections::HashSet;
 use syn::punctuated::Punctuated;
 use syn::Token;
@@ -318,9 +317,6 @@ impl<'a> BridgeConverter {
                     }
                 };
                 bridge_mod.content.as_mut().unwrap().1.append(&mut bridge_items);
-                let mut ts = TokenStream2::new();
-                bridge_mod.to_tokens(&mut ts);
-                println!("Bridge mod now {}", ts.to_string());
                 all_items.push(Item::Mod(bridge_mod));
                 Ok(BridgeConversion {
                     items: all_items,
