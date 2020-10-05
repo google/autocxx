@@ -116,12 +116,6 @@ struct BridgeConversion<'a> {
 }
 
 impl<'a> BridgeConversion<'a> {
-    fn to_results(self) -> BridgeConversionResults {
-        BridgeConversionResults {
-            items: self.all_items,
-            additional_cpp_needs: self.additional_cpp_needs,
-        }
-    }
 
     fn find_nested_pod_types(&mut self, items: &[Item]) -> Result<(), ConvertError> {
         for item in items {
@@ -134,8 +128,7 @@ impl<'a> BridgeConversion<'a> {
             .map_err(ConvertError::UnsafePODType)
     }
 
-    fn generate_type_alias(&mut self, tyname: &TypeName, should_be_pod: bool) {
-        self.types_found.push(tyname.clone());
+    fn generate_type_alias(&mut self, tyname: TypeName, should_be_pod: bool) {
         let tyident = tyname.to_ident();
         let kind_item: Ident = Ident::new(
             if should_be_pod { "Trivial" } else { "Opaque" },
@@ -172,6 +165,7 @@ impl<'a> BridgeConversion<'a> {
                 type Kind = cxx::kind::#kind_item;
             }
         }));
+        self.types_found.push(tyname);
     }
 
     fn build_include_foreign_items(&self, extra_inclusion: Option<&str>) -> Vec<ForeignItem> {
@@ -214,13 +208,13 @@ impl<'a> BridgeConversion<'a> {
                 Item::Struct(s) => {
                     let tyname = TypeName::from_ident(&s.ident);
                     let should_be_pod = self.byvalue_checker.is_pod(&tyname);
-                    self.generate_type_alias(&tyname, should_be_pod);
+                    self.generate_type_alias(tyname, should_be_pod);
                     self.bindgen_items
                         .push(Item::Struct(self.convert_struct(s)));
                 }
                 Item::Enum(e) => {
                     let tyname = TypeName::from_ident(&e.ident);
-                    self.generate_type_alias(&tyname, true);
+                    self.generate_type_alias(tyname, true);
                     self.bindgen_items.push(Item::Enum(e));
                 }
                 Item::Impl(i) => {
@@ -268,7 +262,10 @@ impl<'a> BridgeConversion<'a> {
             .1
             .append(&mut self.bridge_items);
         self.all_items.push(Item::Mod(bridge_mod));
-        Ok(self.to_results())
+        Ok(BridgeConversionResults {
+            items: self.all_items,
+            additional_cpp_needs: self.additional_cpp_needs,
+        })
     }
 
     fn convert_new_method(&mut self, m: syn::ImplItemMethod, ty: &TypeName, i: &syn::ItemImpl) {
