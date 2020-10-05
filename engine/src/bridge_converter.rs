@@ -116,7 +116,6 @@ struct BridgeConversion<'a> {
 }
 
 impl<'a> BridgeConversion<'a> {
-
     fn find_nested_pod_types(&mut self, items: &[Item]) -> Result<(), ConvertError> {
         for item in items {
             if let Item::Struct(s) = item {
@@ -169,7 +168,7 @@ impl<'a> BridgeConversion<'a> {
     }
 
     fn build_include_foreign_items(&self, extra_inclusion: Option<&str>) -> Vec<ForeignItem> {
-        let extra_owned = extra_inclusion.and_then(|x| Some(x.to_owned()));
+        let extra_owned = extra_inclusion.map(|x| x.to_owned());
         let chained = self.include_list.iter().chain(extra_owned.iter());
         chained
             .map(|inc| {
@@ -564,21 +563,18 @@ impl<'a> BridgeConversion<'a> {
     }
 
     fn convert_struct_field_type(&self, ty: &mut Type) {
-        match ty {
-            Type::Path(ty) => {
-                // O(n*m) but m is small.
-                for (type_name, type_details) in KNOWN_TYPES.iter() {
-                    if ty.path.is_ident(&type_name.to_string()) {
-                        if let Some(replacement) = &type_details.cxx_replacement {
-                            let replacement = replacement.to_ident();
-                            ty.path = parse_quote! {
-                                cxx:: #replacement
-                            };
-                        }
+        if let Type::Path(ty) = ty {
+            // O(n*m) but m is small.
+            for (type_name, type_details) in KNOWN_TYPES.iter() {
+                if ty.path.is_ident(&type_name.to_string()) {
+                    if let Some(replacement) = &type_details.cxx_replacement {
+                        let replacement = replacement.to_ident();
+                        ty.path = parse_quote! {
+                            cxx:: #replacement
+                        };
                     }
                 }
             }
-            _ => {}
         }
     }
 }
