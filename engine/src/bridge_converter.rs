@@ -127,12 +127,9 @@ impl<'a> BridgeConverter {
     }
 
     fn build_include_foreign_items(&self, extra_inclusion: Option<&str>) -> Vec<ForeignItem> {
-        let mut full_include_list = self.include_list.clone();
-        if let Some(extra_inclusion) = extra_inclusion {
-            full_include_list.push(extra_inclusion.to_string());
-        }
-        full_include_list
-            .iter()
+        let extra_owned = extra_inclusion.and_then(|x| Some(x.to_owned()));
+        let chained = self.include_list.iter().chain(extra_owned.iter());
+        chained
             .map(|inc| {
                 ForeignItem::Macro(parse_quote! {
                     include!(#inc);
