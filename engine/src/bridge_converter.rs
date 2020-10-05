@@ -21,9 +21,9 @@ use std::collections::HashSet;
 use syn::punctuated::Punctuated;
 use syn::Token;
 use syn::{
-    parse_quote, AngleBracketedGenericArguments, Attribute, FnArg, ForeignItem, ForeignItemFn,
-    GenericArgument, Ident, Item, ItemForeignMod, ItemMod, PatType, Path, PathArguments,
-    PathSegment, ReturnType, Type, TypePath, TypePtr, TypeReference,
+    parse_quote, AngleBracketedGenericArguments, Attribute, FnArg, ForeignItem,
+    ForeignItemFn, GenericArgument, Ident, Item, ItemForeignMod, ItemMod, PatType, Path,
+    PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr, TypeReference,
 };
 
 #[derive(Debug)]
@@ -151,9 +151,7 @@ impl<'a> BridgeConverter {
         match bindings.content {
             None => Err(ConvertError::NoContent),
             Some((brace, items)) => {
-                self.find_nested_pod_types(&items)?;
-                let mut all_items: Vec<Item> = Vec::new();
-                let mut bindgen_mod = ItemMod {
+                let bindgen_mod = ItemMod {
                     attrs: bindings.attrs,
                     vis: bindings.vis,
                     ident: bindings.ident,
@@ -161,116 +159,126 @@ impl<'a> BridgeConverter {
                     content: Some((brace, Vec::new())),
                     semi: bindings.semi,
                 };
-                let mut bridge_items = Vec::new();
-                let mut extern_c_mod = None;
-                let mut extern_c_mod_items = self.build_include_foreign_items(extra_inclusion);
-                let mut additional_cpp_needs = Vec::new();
-                let mut types_found = Vec::new();
-                let mut bindgen_items = Vec::new();
-                for item in items {
-                    match item {
-                        Item::ForeignMod(fm) => {
-                            if extern_c_mod.is_none() {
-                                // We'll use the first 'extern "C"' mod we come
-                                // across for attributes, spans etc. but we'll stuff
-                                // the contents of all bindgen 'extern "C"' mods into this
-                                // one.
-                                extern_c_mod = Some(ItemForeignMod {
-                                    attrs: fm.attrs,
-                                    abi: fm.abi,
-                                    brace_token: fm.brace_token,
-                                    items: Vec::new(),
-                                });
-                            }
-                            extern_c_mod
-                                .as_mut()
-                                .unwrap()
-                                .items
-                                .extend(self.convert_foreign_mod_items(&types_found, fm.items)?);
-                        }
-                        Item::Struct(s) => {
-                            let tyident = s.ident.clone();
-                            let tyname = TypeName::from_ident(&tyident);
-                            types_found.push(tyname.clone());
-                            self.class_names_discovered.insert(tyname.clone());
-                            let should_be_pod = self.byvalue_checker.is_pod(&tyname);
-                            let type_alias = self.generate_type_alias(&tyname, should_be_pod);
-                            bridge_items.push(type_alias.for_bridge);
-                            extern_c_mod_items.push(type_alias.for_extern_c);
-                            bindgen_mod
-                                .content
-                                .as_mut()
-                                .unwrap()
-                                .1
-                                .push(Item::Struct(self.convert_struct(s)));
-                            all_items.push(type_alias.for_anywhere);
-                        }
-                        Item::Enum(e) => {
-                            let tyident = e.ident.clone();
-                            let tyname = TypeName::from_ident(&tyident);
-                            types_found.push(tyname.clone());
-                            let type_alias = self.generate_type_alias(&tyname, true);
-                            bridge_items.push(type_alias.for_bridge);
-                            extern_c_mod_items.push(type_alias.for_extern_c);
-                            bindgen_mod.content.as_mut().unwrap().1.push(Item::Enum(e));
-                            all_items.push(type_alias.for_anywhere);
-                        }
-                        Item::Impl(i) => {
-                            if let Some(ty) = self.type_to_typename(&i.self_ty) {
-                                for item in i.items.clone() {
-                                    match item {
-                                        syn::ImplItem::Method(m) if m.sig.ident == "new" => {
-                                            if let Some(new_item_impl) = self.convert_new_method(
-                                                m,
-                                                &mut additional_cpp_needs,
-                                                &ty,
-                                                &i,
-                                            ) {
-                                                bindgen_items.push(new_item_impl);
-                                            }
-                                        }
-                                        _ => {}
+                self.convert_items(bindgen_mod, items, extra_inclusion)
+            },
+        }
+    }
+
+    fn convert_items(
+        &mut self,
+        mut bindgen_mod: ItemMod,
+        items: Vec<Item>,
+        extra_inclusion: Option<&str>,
+    ) -> Result<BridgeConversion, ConvertError> {
+        self.find_nested_pod_types(&items)?;
+        let mut all_items: Vec<Item> = Vec::new();
+        let mut bridge_items = Vec::new();
+        let mut extern_c_mod = None;
+        let mut extern_c_mod_items = self.build_include_foreign_items(extra_inclusion);
+        let mut additional_cpp_needs = Vec::new();
+        let mut types_found = Vec::new();
+        let mut bindgen_items = Vec::new();
+        for item in items {
+            match item {
+                Item::ForeignMod(fm) => {
+                    if extern_c_mod.is_none() {
+                        // We'll use the first 'extern "C"' mod we come
+                        // across for attributes, spans etc. but we'll stuff
+                        // the contents of all bindgen 'extern "C"' mods into this
+                        // one.
+                        extern_c_mod = Some(ItemForeignMod {
+                            attrs: fm.attrs,
+                            abi: fm.abi,
+                            brace_token: fm.brace_token,
+                            items: Vec::new(),
+                        });
+                    }
+                    extern_c_mod
+                        .as_mut()
+                        .unwrap()
+                        .items
+                        .extend(self.convert_foreign_mod_items(&types_found, fm.items)?);
+                }
+                Item::Struct(s) => {
+                    let tyident = s.ident.clone();
+                    let tyname = TypeName::from_ident(&tyident);
+                    types_found.push(tyname.clone());
+                    self.class_names_discovered.insert(tyname.clone());
+                    let should_be_pod = self.byvalue_checker.is_pod(&tyname);
+                    let type_alias = self.generate_type_alias(&tyname, should_be_pod);
+                    bridge_items.push(type_alias.for_bridge);
+                    extern_c_mod_items.push(type_alias.for_extern_c);
+                    bindgen_mod
+                        .content
+                        .as_mut()
+                        .unwrap()
+                        .1
+                        .push(Item::Struct(self.convert_struct(s)));
+                    all_items.push(type_alias.for_anywhere);
+                }
+                Item::Enum(e) => {
+                    let tyident = e.ident.clone();
+                    let tyname = TypeName::from_ident(&tyident);
+                    types_found.push(tyname.clone());
+                    let type_alias = self.generate_type_alias(&tyname, true);
+                    bridge_items.push(type_alias.for_bridge);
+                    extern_c_mod_items.push(type_alias.for_extern_c);
+                    bindgen_mod.content.as_mut().unwrap().1.push(Item::Enum(e));
+                    all_items.push(type_alias.for_anywhere);
+                }
+                Item::Impl(i) => {
+                    if let Some(ty) = self.type_to_typename(&i.self_ty) {
+                        for item in i.items.clone() {
+                            match item {
+                                syn::ImplItem::Method(m) if m.sig.ident == "new" => {
+                                    if let Some(new_item_impl) = self.convert_new_method(
+                                        m,
+                                        &mut additional_cpp_needs,
+                                        &ty,
+                                        &i,
+                                    ) {
+                                        bindgen_items.push(new_item_impl);
                                     }
                                 }
+                                _ => {}
                             }
-                        }
-                        _ => {
-                            all_items.push(item);
                         }
                     }
                 }
-                // We will always create an extern "C" mod even if bindgen
-                // didn't generate one, e.g. because it only generated types.
-                // We still want cxx to know about those types.
-                let mut extern_c_mod =
-                    extern_c_mod.unwrap_or_else(|| self.get_blank_extern_c_mod());
-                extern_c_mod.items.append(&mut extern_c_mod_items);
-                bridge_items.push(Item::ForeignMod(extern_c_mod));
-                bindgen_mod
-                    .content
-                    .as_mut()
-                    .unwrap()
-                    .1
-                    .append(&mut bindgen_items);
-                all_items.push(Item::Mod(bindgen_mod));
-                let mut bridge_mod: ItemMod = parse_quote! {
-                    #[cxx::bridge]
-                    pub mod cxxbridge {
-                    }
-                };
-                bridge_mod
-                    .content
-                    .as_mut()
-                    .unwrap()
-                    .1
-                    .append(&mut bridge_items);
-                all_items.push(Item::Mod(bridge_mod));
-                Ok(BridgeConversion {
-                    items: all_items,
-                    additional_cpp_needs,
-                })
+                _ => {
+                    all_items.push(item);
+                }
             }
         }
+        // We will always create an extern "C" mod even if bindgen
+        // didn't generate one, e.g. because it only generated types.
+        // We still want cxx to know about those types.
+        let mut extern_c_mod = extern_c_mod.unwrap_or_else(|| self.get_blank_extern_c_mod());
+        extern_c_mod.items.append(&mut extern_c_mod_items);
+        bridge_items.push(Item::ForeignMod(extern_c_mod));
+        bindgen_mod
+            .content
+            .as_mut()
+            .unwrap()
+            .1
+            .append(&mut bindgen_items);
+        all_items.push(Item::Mod(bindgen_mod));
+        let mut bridge_mod: ItemMod = parse_quote! {
+            #[cxx::bridge]
+            pub mod cxxbridge {
+            }
+        };
+        bridge_mod
+            .content
+            .as_mut()
+            .unwrap()
+            .1
+            .append(&mut bridge_items);
+        all_items.push(Item::Mod(bridge_mod));
+        Ok(BridgeConversion {
+            items: all_items,
+            additional_cpp_needs,
+        })
     }
 
     fn convert_new_method(
