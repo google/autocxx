@@ -34,7 +34,7 @@ pub enum ConvertError {
 }
 
 /// Results of a conversion.
-pub(crate) struct BridgeConversion {
+pub(crate) struct BridgeConversionResults {
     pub items: Vec<Item>,
     pub additional_cpp_needs: Vec<AdditionalNeed>,
 }
@@ -144,7 +144,7 @@ impl<'a> BridgeConverter {
         &mut self,
         bindings: ItemMod,
         extra_inclusion: Option<&str>,
-    ) -> Result<BridgeConversion, ConvertError> {
+    ) -> Result<BridgeConversionResults, ConvertError> {
         match bindings.content {
             None => Err(ConvertError::NoContent),
             Some((brace, items)) => {
@@ -166,7 +166,7 @@ impl<'a> BridgeConverter {
         mut bindgen_mod: ItemMod,
         items: Vec<Item>,
         extra_inclusion: Option<&str>,
-    ) -> Result<BridgeConversion, ConvertError> {
+    ) -> Result<BridgeConversionResults, ConvertError> {
         self.find_nested_pod_types(&items)?;
         let mut all_items: Vec<Item> = Vec::new();
         let mut bridge_items = Vec::new();
@@ -270,7 +270,7 @@ impl<'a> BridgeConverter {
             .1
             .append(&mut bridge_items);
         all_items.push(Item::Mod(bridge_mod));
-        Ok(BridgeConversion {
+        Ok(BridgeConversionResults {
             items: all_items,
             additional_cpp_needs,
         })
