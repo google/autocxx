@@ -200,8 +200,7 @@ impl<'a> BridgeConverter {
                         .extend(self.convert_foreign_mod_items(&types_found, fm.items)?);
                 }
                 Item::Struct(s) => {
-                    let tyident = s.ident.clone();
-                    let tyname = TypeName::from_ident(&tyident);
+                    let tyname = TypeName::from_ident(&s.ident);
                     types_found.push(tyname.clone());
                     self.class_names_discovered.insert(tyname.clone());
                     let should_be_pod = self.byvalue_checker.is_pod(&tyname);
@@ -217,8 +216,7 @@ impl<'a> BridgeConverter {
                     all_items.push(type_alias.for_anywhere);
                 }
                 Item::Enum(e) => {
-                    let tyident = e.ident.clone();
-                    let tyname = TypeName::from_ident(&tyident);
+                    let tyname = TypeName::from_ident(&e.ident);
                     types_found.push(tyname.clone());
                     let type_alias = self.generate_type_alias(&tyname, true);
                     bridge_items.push(type_alias.for_bridge);
