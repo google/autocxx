@@ -586,8 +586,7 @@ fn test_take_nested_pod_by_value() {
     run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
-#[test]// need field access to opaque types; need to pass Rust-side unique pointer
-          // into C++ functions which take something by value
+#[test]
 fn test_take_nonpod_by_value() {
     let cxx = indoc! {"
         Bob::Bob(uint32_t a0, uint32_t b0)
@@ -672,16 +671,13 @@ fn test_take_nonpod_by_mut_ref() {
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
-
-#[test]   // need to pass Rust-side unique pointer
-          // into C++ functions which take something by value
+#[test]
 fn test_return_nonpod_by_value() {
     let cxx = indoc! {"
         Bob::Bob(uint32_t a0, uint32_t b0)
            : a(a0), b(b0) {}
         Bob give_bob(uint32_t a) {
-            Bob c;
-            c.a = a;
+            Bob c(a, 44);
             return c;
         }
         uint32_t take_bob(std::unique_ptr<Bob> a) {
@@ -690,12 +686,13 @@ fn test_return_nonpod_by_value() {
     "};
     let hdr = indoc! {"
         #include <cstdint>
+        #include <memory>
         struct Bob {
             Bob(uint32_t a, uint32_t b);
             uint32_t a;
             uint32_t b;
         };
-        Bob give_bob(uint32_a);
+        Bob give_bob(uint32_t a);
         uint32_t take_bob(std::unique_ptr<Bob> a);
     "};
     let rs = quote! {
@@ -704,7 +701,6 @@ fn test_return_nonpod_by_value() {
     };
     run_test(cxx, hdr, rs, &["take_bob", "give_bob", "Bob"], &[]);
 }
-
 
 #[test]
 #[ignore] // because we don't yet support std::string by value

@@ -14,16 +14,98 @@
 
 use crate::TypeName;
 use itertools::Itertools;
+use std::collections::HashMap;
+use syn::{Ident, Type};
+
+enum ArgumentConversionType {
+    None,
+    FromUniquePtrToValue,
+    FromValueToUniquePtr,
+}
+
+pub(crate) struct ArgumentConversion {
+    unwrapped_type: Type,
+    conversion: ArgumentConversionType,
+}
+
+impl ArgumentConversion {
+    pub(crate) fn unconverted(ty: Type) -> Self {
+        ArgumentConversion {
+            unwrapped_type: ty,
+            conversion: ArgumentConversionType::None,
+        }
+    }
+
+    pub(crate) fn to_unique_ptr(ty: Type) -> Self {
+        ArgumentConversion {
+            unwrapped_type: ty,
+            conversion: ArgumentConversionType::FromValueToUniquePtr,
+        }
+    }
+
+    pub(crate) fn from_unique_ptr(ty: Type) -> Self {
+        ArgumentConversion {
+            unwrapped_type: ty,
+            conversion: ArgumentConversionType::FromUniquePtrToValue,
+        }
+    }
+
+    pub(crate) fn work_needed(&self) -> bool {
+        match self.conversion {
+            ArgumentConversionType::None => false,
+            _ => true,
+        }
+    }
+
+    fn unconverted_type(&self) -> String {
+        match self.conversion {
+            ArgumentConversionType::FromUniquePtrToValue => self.wrapped_type(),
+            _ => self.unwrapped_type_as_string(),
+        }
+    }
+
+    fn converted_type(&self) -> String {
+        match self.conversion {
+            ArgumentConversionType::FromValueToUniquePtr => self.wrapped_type(),
+            _ => self.unwrapped_type_as_string(),
+        }
+    }
+
+    fn unwrapped_type_as_string(&self) -> String {
+        TypeName::from_type(&self.unwrapped_type)
+            .to_cxx_name()
+            .to_string()
+    }
+
+    fn wrapped_type(&self) -> String {
+        format!("std::unique_ptr<{}>", self.unwrapped_type_as_string())
+    }
+
+    fn conversion(&self, var_name: &str) -> String {
+        match self.conversion {
+            ArgumentConversionType::None => var_name.to_string(),
+            ArgumentConversionType::FromUniquePtrToValue => format!("std::move(*{})", var_name),
+            ArgumentConversionType::FromValueToUniquePtr => format!(
+                "std::make_unique<{}>({})",
+                self.unconverted_type(),
+                var_name
+            ),
+        }
+    }
+}
 
 /// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
     MakeUnique(TypeName, Vec<TypeName>),
+    ByValueWrapper(Ident, Option<ArgumentConversion>, Vec<ArgumentConversion>),
 }
 
 struct AdditionalFunction {
     declaration: String,
     definition: String,
     name: String,
+    suppress_older: Option<String>,
+    rename: Option<(String, String)>,
 }
 
 /// Details of additional generated C++.
@@ -31,6 +113,8 @@ pub(crate) struct AdditionalCpp {
     pub(crate) declarations: String,
     pub(crate) definitions: String,
     pub(crate) extra_allowlist: Vec<String>,
+    pub(crate) extra_blocklist: Vec<String>,
+    pub(crate) renames: HashMap<String, String>,
 }
 
 /// Generates additional C++ glue functions needed by autocxx.
@@ -58,6 +142,9 @@ impl AdditionalCppGenerator {
         for need in additions {
             match need {
                 AdditionalNeed::MakeUnique(ty, args) => self.generate_make_unique(&ty, &args),
+                AdditionalNeed::ByValueWrapper(id, ret, tys) => {
+                    self.generate_by_value_wrapper(&id, &ret, &tys)
+                }
             }
         }
     }
@@ -75,10 +162,22 @@ impl AdditionalCppGenerator {
                 .iter()
                 .map(|x| x.name.to_string())
                 .collect();
+            let extra_blocklist = self
+                .additional_functions
+                .iter()
+                .filter_map(|x| x.suppress_older.clone())
+                .collect();
+            let renames = self
+                .additional_functions
+                .iter()
+                .filter_map(|x| x.rename.clone())
+                .collect();
             Some(AdditionalCpp {
                 declarations,
                 definitions,
                 extra_allowlist,
+                extra_blocklist,
+                renames,
             })
         }
     }
@@ -119,6 +218,45 @@ impl AdditionalCppGenerator {
             name,
             declaration,
             definition,
+            suppress_older: None,
+            rename: None,
+        })
+    }
+
+    fn generate_by_value_wrapper(
+        &mut self,
+        ident: &Ident,
+        ret: &Option<ArgumentConversion>,
+        arg_types: &[ArgumentConversion],
+    ) {
+        let name = format!("{}_up_wrapper", ident.to_string());
+        let args = arg_types
+            .iter()
+            .enumerate()
+            .map(|(counter, ty)| format!("{} arg{}", ty.unconverted_type(), counter))
+            .join(", ");
+        let ret_type = ret
+            .as_ref()
+            .map_or("void".to_string(), |x| x.converted_type());
+        let declaration = format!("{} {}({})", ret_type, name, args);
+        let arg_list = arg_types
+            .iter()
+            .enumerate()
+            .map(|(counter, conv)| conv.conversion(&format!("arg{}", counter)))
+            .join(", ");
+        let underlying_function_call = format!("{}({})", ident.to_string(), arg_list);
+        let underlying_function_call = match ret {
+            None => underlying_function_call,
+            Some(ret) => format!("return {}", ret.conversion(&underlying_function_call)),
+        };
+        let definition = format!("{} {{ {}; }}", declaration, underlying_function_call,);
+        let declaration = format!("{};", declaration);
+        self.additional_functions.push(AdditionalFunction {
+            name: name.clone(),
+            declaration,
+            definition,
+            suppress_older: Some(ident.to_string()),
+            rename: Some((name, ident.to_string())),
         })
     }
 }

@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::additional_cpp_generator::AdditionalNeed;
+use crate::additional_cpp_generator::{AdditionalNeed, ArgumentConversion};
 use crate::byvalue_checker::ByValueChecker;
 use crate::known_types::KNOWN_TYPES;
 use crate::TypeName;
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
+use std::collections::HashMap;
 use syn::punctuated::Punctuated;
 use syn::Token;
 use syn::{
@@ -70,6 +71,7 @@ impl BridgeConverter {
         &mut self,
         bindings: ItemMod,
         extra_inclusion: Option<&str>,
+        renames: &HashMap<String, String>,
     ) -> Result<BridgeConversionResults, ConvertError> {
         match bindings.content {
             None => Err(ConvertError::NoContent),
@@ -94,6 +96,7 @@ impl BridgeConverter {
                     byvalue_checker: ByValueChecker::new(),
                     pod_requests: &self.pod_requests,
                     include_list: &self.include_list,
+                    renames,
                 };
                 conversion.convert_items(items, extra_inclusion)
             }
@@ -113,13 +116,18 @@ struct BridgeConversion<'a> {
     byvalue_checker: ByValueChecker,
     pod_requests: &'a Vec<TypeName>,
     include_list: &'a Vec<String>,
+    renames: &'a HashMap<String, String>,
 }
 
 impl<'a> BridgeConversion<'a> {
     fn find_nested_pod_types(&mut self, items: &[Item]) -> Result<(), ConvertError> {
         for item in items {
-            if let Item::Struct(s) = item {
-                self.byvalue_checker.ingest_struct(s);
+            match item {
+                Item::Struct(s) => self.byvalue_checker.ingest_struct(s),
+                Item::Enum(e) => self
+                    .byvalue_checker
+                    .ingest_pod_type(TypeName::from_ident(&e.ident)),
+                _ => {}
             }
         }
         self.byvalue_checker
@@ -201,8 +209,7 @@ impl<'a> BridgeConversion<'a> {
                             items: Vec::new(),
                         });
                     }
-                    let fm_items = self.convert_foreign_mod_items(&self.types_found, fm.items)?;
-                    self.extern_c_mod.as_mut().unwrap().items.extend(fm_items);
+                    self.convert_foreign_mod_items(fm.items)?;
                 }
                 Item::Struct(s) => {
                     let tyname = TypeName::from_ident(&s.ident);
@@ -345,50 +352,41 @@ impl<'a> BridgeConversion<'a> {
     }
 
     fn convert_foreign_mod_items(
-        &self,
-        encountered_types: &[TypeName],
+        &mut self,
         foreign_mod_items: Vec<ForeignItem>,
-    ) -> Result<Vec<ForeignItem>, ConvertError> {
-        let mut new_items = Vec::new();
-
+    ) -> Result<(), ConvertError> {
         for i in foreign_mod_items {
             match i {
                 ForeignItem::Fn(f) => {
-                    let maybe_foreign_item = self.convert_foreign_fn(encountered_types, f)?;
-                    if let Some(foreign_item) = maybe_foreign_item {
-                        new_items.push(ForeignItem::Fn(foreign_item));
-                    }
+                    self.convert_foreign_fn(f)?;
                 }
                 _ => return Err(ConvertError::UnknownForeignItem),
             }
         }
-        Ok(new_items)
+        Ok(())
     }
 
-    fn convert_foreign_fn(
-        &self,
-        encountered_types: &[TypeName],
-        fun: ForeignItemFn,
-    ) -> Result<Option<ForeignItemFn>, ConvertError> {
+    fn convert_foreign_fn(&mut self, fun: ForeignItemFn) -> Result<(), ConvertError> {
         let mut s = fun.sig.clone();
         let old_name = s.ident.to_string();
         // See if it's a constructor, in which case skip it.
         // We instead pass onto cxx an alternative make_unique implementation later.
-        for ty in encountered_types {
+        for ty in &self.types_found {
             let constructor_name = format!("{}_{}", ty, ty);
             if old_name == constructor_name {
-                return Ok(None);
+                return Ok(());
             }
         }
         s.output = self.convert_return_type(s.output);
-        let (new_params, any_this): (Punctuated<_, _>, Vec<_>) = fun
+        let (new_params, param_details): (Punctuated<_, _>, Vec<_>) = fun
             .sig
             .inputs
             .into_iter()
             .map(|i| self.convert_fn_arg(i))
             .unzip();
         s.inputs = new_params;
-        let is_a_method = any_this.iter().any(|b| *b);
+        let is_a_method = param_details.iter().any(|b| b.was_self);
+
         if is_a_method {
             // bindgen generates methods with the name:
             // {class}_{method name}
@@ -404,12 +402,57 @@ impl<'a> BridgeConversion<'a> {
                 }
             }
         }
-        Ok(Some(ForeignItemFn {
-            attrs: self.strip_attr(fun.attrs, "link_name"),
+
+        let unique_ptr_wrapper_needed = param_details.iter().any(|b| b.conversion.work_needed());
+        let ret_type_conversion = self.unwrap_return_type(s.output.clone());
+        let ret_type_conversion_needed = ret_type_conversion
+            .as_ref()
+            .map_or(false, |x| x.work_needed());
+        if unique_ptr_wrapper_needed || ret_type_conversion_needed {
+            let a = AdditionalNeed::ByValueWrapper(
+                s.ident.clone(),
+                ret_type_conversion,
+                param_details.into_iter().map(|d| d.conversion).collect(),
+            );
+            self.additional_cpp_needs.push(a);
+        }
+
+        let mut attrs = self.strip_attr(fun.attrs, "link_name");
+        let new_name = self.renames.get(&old_name);
+        if let Some(new_name) = new_name {
+            attrs.push(parse_quote!(
+                #[rust_name = #new_name]
+            ));
+        }
+
+        let new_item = ForeignItemFn {
+            attrs,
             vis: fun.vis,
             sig: s,
             semi_token: fun.semi_token,
-        }))
+        };
+        self.extern_c_mod
+            .as_mut()
+            .unwrap()
+            .items
+            .push(ForeignItem::Fn(new_item));
+        Ok(())
+    }
+
+    fn unwrap_return_type(&self, ret_type: ReturnType) -> Option<ArgumentConversion> {
+        match ret_type {
+            ReturnType::Type(_, boxed_type) => Some(
+                if !self
+                    .byvalue_checker
+                    .is_pod(&TypeName::from_type(&*boxed_type))
+                {
+                    ArgumentConversion::to_unique_ptr(*boxed_type)
+                } else {
+                    ArgumentConversion::unconverted(*boxed_type)
+                },
+            ),
+            ReturnType::Default => None,
+        }
     }
 
     fn strip_attr(&self, attrs: Vec<Attribute>, to_strip: &str) -> Vec<Attribute> {
@@ -423,8 +466,9 @@ impl<'a> BridgeConversion<'a> {
     }
 
     /// Returns additionally a Boolean indicating whether an argument was
-    /// 'this'
-    fn convert_fn_arg(&self, arg: FnArg) -> (FnArg, bool) {
+    /// 'this' and another one indicating whether we took a type by value
+    /// and that type was non-trivial.
+    fn convert_fn_arg(&self, arg: FnArg) -> (FnArg, ArgumentAnalysis) {
         match arg {
             FnArg::Typed(pt) => {
                 let mut found_this = false;
@@ -442,17 +486,35 @@ impl<'a> BridgeConversion<'a> {
                     }
                     _ => old_pat,
                 };
+                let new_ty = self.convert_boxed_type(pt.ty);
+                let conversion = self.conversion_required(&new_ty);
                 (
                     FnArg::Typed(PatType {
                         attrs: pt.attrs,
                         pat: Box::new(new_pat),
                         colon_token: pt.colon_token,
-                        ty: self.convert_boxed_type(pt.ty),
+                        ty: new_ty,
                     }),
-                    found_this,
+                    ArgumentAnalysis {
+                        was_self: found_this,
+                        conversion,
+                    },
                 )
             }
-            _ => (arg, false),
+            _ => panic!("FnArg::Receiver not yet handled"),
+        }
+    }
+
+    fn conversion_required(&self, ty: &Type) -> ArgumentConversion {
+        match ty {
+            Type::Path(p) => {
+                if self.byvalue_checker.is_pod(&TypeName::from_type_path(p)) {
+                    ArgumentConversion::unconverted(ty.clone())
+                } else {
+                    ArgumentConversion::from_unique_ptr(ty.clone())
+                }
+            }
+            _ => ArgumentConversion::unconverted(ty.clone()),
         }
     }
 
@@ -577,4 +639,9 @@ impl<'a> BridgeConversion<'a> {
             }
         }
     }
+}
+
+struct ArgumentAnalysis {
+    conversion: ArgumentConversion,
+    was_self: bool,
 }

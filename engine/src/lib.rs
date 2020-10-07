@@ -29,13 +29,14 @@ use std::{fmt::Display, path::PathBuf};
 use indoc::indoc;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
-use syn::{parse_quote, Ident, ItemMod, Macro, TypePath};
+use syn::{parse_quote, Ident, ItemMod, Macro, Type, TypePath};
 
 use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator};
 use itertools::join;
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
 
@@ -62,6 +63,13 @@ impl TypeName {
     fn from_type_path(p: &TypePath) -> Self {
         // TODO better handle generics, multi-segment paths, etc.
         TypeName::from_ident(&p.path.segments.last().unwrap().ident)
+    }
+
+    fn from_type(ty: &Type) -> Self {
+        match ty {
+            Type::Path(typ) => TypeName::from_type_path(typ),
+            _ => panic!("Stringifying unknown type, not yet supported"), // TODO
+        }
     }
 
     fn new(id: &str) -> Self {
@@ -383,7 +391,7 @@ impl IncludeCpp {
         );
 
         let mut conversion = converter
-            .convert(bindings, None)
+            .convert(bindings, None, &HashMap::new())
             .map_err(Error::Conversion)?;
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
@@ -393,15 +401,19 @@ impl IncludeCpp {
             // more C++ (because you can never have too much C++.) Examples are field
             // accessor methods, or make_unique wrappers.
             // So, err, let's start all over again. Fun!
-            let builder = self.make_bindgen_builder()?;
+            let mut builder = self.make_bindgen_builder()?;
+            for x in &additional_cpp_items.extra_blocklist {
+                builder = builder.blacklist_item(x);
+            }
+            // TODO this clone is tedious
+            let renames = additional_cpp_items.renames.clone();
             let bindings = self
                 .inject_header_into_bindgen(builder, Some(additional_cpp_items))
                 .generate()
                 .map_err(Error::Bindgen)?;
             let bindings = self.parse_bindings(bindings)?;
-
             conversion = converter
-                .convert(bindings, Some("autocxxgen.h"))
+                .convert(bindings, Some("autocxxgen.h"), &renames)
                 .map_err(Error::Conversion)?;
         }
 
