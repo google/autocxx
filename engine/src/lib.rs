@@ -15,7 +15,6 @@
 mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
-mod cpp_postprocessor;
 mod known_types;
 mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
@@ -33,18 +32,12 @@ use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, Ident, ItemMod, Macro, TypePath};
 
 use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator};
-use cpp_postprocessor::{CppPostprocessor, EncounteredType};
 use itertools::join;
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
 use std::rc::Rc;
 use std::sync::Mutex;
-
-/// Turn off and remove this constant when
-/// https://github.com/rust-lang/rust/pull/75857 is fixed.
-/// This should allow removal of the entire cpp_postprocessor module.
-const TEMPORARY_HACK_TO_AVOID_REDEFINITIONS: bool = true;
 
 const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
 pub struct CppFilePair {
@@ -328,7 +321,7 @@ impl IncludeCpp {
     pub fn generate_rs(&self) -> Result<TokenStream2> {
         let results = self.do_generation()?;
         Ok(match results {
-            Some((itemmod, _, _)) => itemmod.to_token_stream(),
+            Some((itemmod, _)) => itemmod.to_token_stream(),
             None => TokenStream2::new(),
         })
     }
@@ -346,7 +339,7 @@ impl IncludeCpp {
         let bindings = bindings.to_string();
         // Manually add the mod ffi {} so that we can ask syn to parse
         // into a single construct.
-        let bindings = format!("mod ffi {{ {} }}", bindings);
+        let bindings = format!("mod bindgen {{ {} }}", bindings);
         info!("Bindings: {}", bindings);
         syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)
     }
@@ -364,9 +357,7 @@ impl IncludeCpp {
         include_list
     }
 
-    fn do_generation(
-        &self,
-    ) -> Result<Option<(ItemMod, AdditionalCppGenerator, Vec<EncounteredType>)>> {
+    fn do_generation(&self) -> Result<Option<(ItemMod, AdditionalCppGenerator)>> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
@@ -389,7 +380,6 @@ impl IncludeCpp {
         let mut converter = bridge_converter::BridgeConverter::new(
             self.generate_include_list(),
             self.pod_types.clone(), // TODO take self by value to avoid clone.
-            TEMPORARY_HACK_TO_AVOID_REDEFINITIONS,
         );
 
         let mut conversion = converter
@@ -419,41 +409,32 @@ impl IncludeCpp {
         if let Some(itemmod) = self.get_preprocessor_defs_mod() {
             items.push(syn::Item::Mod(itemmod));
         }
-        let new_bindings: ItemMod = parse_quote! {
+        let mut new_bindings: ItemMod = parse_quote! {
             mod ffi {
-                #(#items)*
             }
         };
+        new_bindings.content.as_mut().unwrap().1.append(&mut items);
         info!(
-            "New bindings: {}",
+            "New bindings unprettied: {}",
+            new_bindings.to_token_stream().to_string()
+        );
+        info!(
+            "New bindings:\n{}",
             rust_pretty_printer::pretty_print(&new_bindings.to_token_stream())
         );
-        Ok(Some((
-            new_bindings,
-            additional_cpp_generator,
-            conversion.types_to_disable,
-        )))
+        Ok(Some((new_bindings, additional_cpp_generator)))
     }
 
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCpp> {
-        let mut cpp_postprocessor = CppPostprocessor::new();
         let generation = self.do_generation()?;
         let mut files = Vec::new();
         match generation {
             None => {}
-            Some((itemmod, additional_cpp_generator, types_to_disable)) => {
-                for a in types_to_disable {
-                    cpp_postprocessor.disable_type(a);
-                }
+            Some((itemmod, additional_cpp_generator)) => {
                 let rs = itemmod.into_token_stream();
                 let opt = cxx_gen::Opt::default();
                 let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)
                     .map_err(Error::CxxGen)
-                    .and_then(dump_generated_code)
-                    .map(|gen| cxx_gen::GeneratedCode {
-                        header: cpp_postprocessor.post_process(gen.header),
-                        implementation: cpp_postprocessor.post_process(gen.implementation),
-                    })
                     .and_then(dump_generated_code)?;
                 files.push(CppFilePair {
                     header: cxx_generated.header,
