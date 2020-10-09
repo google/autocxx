@@ -15,21 +15,20 @@
 mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
-mod known_types;
 mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
+mod types;
 
 #[cfg(test)]
 mod integration_tests;
 
-use proc_macro2::Span;
 use proc_macro2::TokenStream as TokenStream2;
-use std::{fmt::Display, path::PathBuf};
+use std::path::PathBuf;
 
 use indoc::indoc;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
-use syn::{parse_quote, Ident, ItemMod, Macro, Type, TypePath};
+use syn::{parse_quote, ItemMod, Macro};
 
 use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator};
 use itertools::join;
@@ -39,6 +38,7 @@ use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCal
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
+use types::TypeName;
 
 const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
 pub struct CppFilePair {
@@ -48,54 +48,6 @@ pub struct CppFilePair {
 }
 
 pub struct GeneratedCpp(pub Vec<CppFilePair>);
-
-/// Any time we store a type name, we should use this.
-/// At the moment it's just a string, but one day it will need to become
-/// sufficiently intelligent to handle namespaces.
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
-pub struct TypeName(String);
-
-impl TypeName {
-    fn from_ident(id: &Ident) -> Self {
-        TypeName(id.to_string())
-    }
-
-    fn from_type_path(p: &TypePath) -> Self {
-        // TODO better handle generics, multi-segment paths, etc.
-        TypeName::from_ident(&p.path.segments.last().unwrap().ident)
-    }
-
-    fn from_type(ty: &Type) -> Self {
-        match ty {
-            Type::Path(typ) => TypeName::from_type_path(typ),
-            _ => panic!("Stringifying unknown type, not yet supported"), // TODO
-        }
-    }
-
-    fn new(id: &str) -> Self {
-        TypeName(id.to_string())
-    }
-
-    fn to_ident(&self) -> Ident {
-        Ident::new(&self.0, Span::call_site())
-    }
-
-    fn to_cxx_name(&self) -> &str {
-        match crate::known_types::KNOWN_TYPES
-            .get(&self)
-            .and_then(|x| x.cxx_name.as_ref())
-        {
-            None => &self.0,
-            Some(replacement) => &replacement.as_str(),
-        }
-    }
-}
-
-impl Display for TypeName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
 
 #[derive(Debug)]
 pub enum Error {

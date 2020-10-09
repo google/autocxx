@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::known_types::KNOWN_TYPES;
-use crate::TypeName;
+use crate::types::TypeName;
+use crate::types::KNOWN_TYPES;
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
@@ -51,17 +51,12 @@ impl ByValueChecker {
     pub fn new() -> Self {
         let mut results = HashMap::new();
         for (tn, td) in KNOWN_TYPES.iter() {
-            let canonical_name = if let Some(rust_name) = td.cxx_replacement.as_ref() {
-                rust_name.clone()
-            } else {
-                tn.clone()
-            };
             let safety = if td.by_value_safe {
                 PODState::IsPOD
             } else {
-                PODState::UnsafeToBePOD("type is not safe for POD".to_owned())
+                PODState::UnsafeToBePOD(format!("type {} is not safe for POD", tn))
             };
-            results.insert(canonical_name, StructDetails::new(safety));
+            results.insert(tn.clone(), StructDetails::new(safety));
         }
         ByValueChecker { results }
     }

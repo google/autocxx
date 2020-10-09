@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::TypeName;
+use crate::types::TypeName;
 use itertools::Itertools;
 use std::collections::HashMap;
 use syn::{Ident, Type};
@@ -73,7 +73,7 @@ impl ArgumentConversion {
 
     fn unwrapped_type_as_string(&self) -> String {
         TypeName::from_type(&self.unwrapped_type)
-            .to_cxx_name()
+            .to_cpp_name()
             .to_string()
     }
 
@@ -197,11 +197,11 @@ impl AdditionalCppGenerator {
     }
 
     fn generate_make_unique(&mut self, ty: &TypeName, constructor_arg_types: &[TypeName]) {
-        let name = format!("{}_make_unique", ty.to_cxx_name());
+        let name = format!("{}_make_unique", ty.to_cpp_name());
         let constructor_args = constructor_arg_types
             .iter()
             .enumerate()
-            .map(|(counter, ty)| format!("{} arg{}", ty.to_cxx_name(), counter))
+            .map(|(counter, ty)| format!("{} arg{}", ty.to_cpp_name(), counter))
             .join(", ");
         let declaration = format!("std::unique_ptr<{}> {}({})", ty, name, constructor_args);
         let arg_list = constructor_arg_types

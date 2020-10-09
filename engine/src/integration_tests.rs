@@ -703,31 +703,38 @@ fn test_return_nonpod_by_value() {
 }
 
 #[test]
-#[ignore] // because we don't yet support std::string by value
-fn test_cycle_nonpod_with_str_by_value() {
+fn test_get_str_by_up() {
     let cxx = indoc! {"
-        uint32_t take_bob(Bob a) {
-            return a.a;
+    std::unique_ptr<std::string> get_str() {
+            return std::make_unique<std::string>(\"hello\");
         }
+    "};
+    let hdr = indoc! {"
+        #include <string>
+        #include <memory>
+        std::unique_ptr<std::string> get_str();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::cxxbridge::get_str().as_ref().unwrap(), "hello");
+    };
+    run_test(cxx, hdr, rs, &["get_str"], &[]);
+}
+
+#[test]
+fn test_get_str_by_value() {
+    let cxx = indoc! {"
         std::string get_str() {
             return \"hello\";
         }
     "};
     let hdr = indoc! {"
-        #include <cstdint>
         #include <string>
-        struct Bob {
-            uint32_t a;
-            std::string b;
-        };
-        uint32_t take_bob(Bob a);
         std::string get_str();
     "};
     let rs = quote! {
-        let a = ffi::cxxbridge::Bob { a: 12, b: ffi::cxxbridge::get_str() };
-        assert_eq!(ffi::cxxbridge::take_bob(a), 12);
+        assert_eq!(ffi::cxxbridge::get_str().as_ref().unwrap(), "hello");
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob", "get_str"], &[]);
+    run_test(cxx, hdr, rs, &["get_str"], &[]);
 }
 
 #[test]

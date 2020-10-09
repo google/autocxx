@@ -14,8 +14,7 @@
 
 use crate::additional_cpp_generator::{AdditionalNeed, ArgumentConversion};
 use crate::byvalue_checker::ByValueChecker;
-use crate::known_types::KNOWN_TYPES;
-use crate::TypeName;
+use crate::types::TypeName;
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use std::collections::HashMap;
 use syn::punctuated::Punctuated;
@@ -141,7 +140,7 @@ impl<'a> BridgeConversion<'a> {
             if should_be_pod { "Trivial" } else { "Opaque" },
             Span::call_site(),
         );
-        let tynamestring = tyname.to_cxx_name();
+        let tynamestring = tyname.to_cpp_name();
         let mut for_extern_c_ts = TokenStream2::new();
         // TODO - add #[rustfmt::skip] here until
         // https://github.com/rust-lang/rustfmt/issues/4159 is fixed.
@@ -396,8 +395,8 @@ impl<'a> BridgeConversion<'a> {
             // strip off the class name.
             // TODO test with class names containing underscores. It should work.
             for cn in &self.types_found {
-                if old_name.starts_with(&cn.0) {
-                    s.ident = Ident::new(&old_name[cn.0.len() + 1..], s.ident.span());
+                if let Some(suffix) = cn.prefixes(&old_name) {
+                    s.ident = Ident::new(suffix, s.ident.span());
                     break;
                 }
             }
@@ -562,7 +561,10 @@ impl<'a> BridgeConversion<'a> {
                 .segments
                 .into_iter()
                 .map(|s| {
-                    let old_ident = TypeName::from_ident(&s.ident);
+                    let ident = TypeName::from_ident(&s.ident);
+                    // May replace non-canonical names e.g. std_string
+                    // with canonical equivalents, e.g. CxxString
+                    let ident = ident.to_ident();
                     let args = match s.arguments {
                         PathArguments::AngleBracketed(ab) => {
                             PathArguments::AngleBracketed(AngleBracketedGenericArguments {
@@ -573,13 +575,6 @@ impl<'a> BridgeConversion<'a> {
                             })
                         }
                         _ => s.arguments,
-                    };
-                    let ident = match crate::known_types::KNOWN_TYPES
-                        .get(&old_ident)
-                        .and_then(|x| x.cxx_replacement.as_ref())
-                    {
-                        None => s.ident,
-                        Some(replacement) => replacement.to_ident(),
                     };
                     PathSegment {
                         ident,
@@ -626,16 +621,8 @@ impl<'a> BridgeConversion<'a> {
 
     fn convert_struct_field_type(&self, ty: &mut Type) {
         if let Type::Path(ty) = ty {
-            // O(n*m) but m is small.
-            for (type_name, type_details) in KNOWN_TYPES.iter() {
-                if ty.path.is_ident(&type_name.to_string()) {
-                    if let Some(replacement) = &type_details.cxx_replacement {
-                        let replacement = replacement.to_ident();
-                        ty.path = parse_quote! {
-                            cxx:: #replacement
-                        };
-                    }
-                }
+            if let Some(typ) = TypeName::get_replacement_type_path(&ty) {
+                ty.path = typ;
             }
         }
     }
