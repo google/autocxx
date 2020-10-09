@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::TypeName;
+use crate::known_types::KNOWN_TYPES;
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
@@ -49,33 +50,19 @@ pub struct ByValueChecker {
 impl ByValueChecker {
     pub fn new() -> Self {
         let mut results = HashMap::new();
-        results.insert(
-            TypeName::new("CxxString"),
-            StructDetails::new(PODState::UnsafeToBePOD(
-                "std::string has a self-referential pointer.".to_string(),
-            )),
-        );
-        results.insert(
-            TypeName::new("UniquePtr"),
-            StructDetails::new(PODState::SafeToBePOD),
-        );
-        results.insert(
-            TypeName::new("i32"),
-            StructDetails::new(PODState::SafeToBePOD),
-        );
-        results.insert(
-            TypeName::new("i64"),
-            StructDetails::new(PODState::SafeToBePOD),
-        );
-        results.insert(
-            TypeName::new("u32"),
-            StructDetails::new(PODState::SafeToBePOD),
-        );
-        results.insert(
-            TypeName::new("u64"),
-            StructDetails::new(PODState::SafeToBePOD),
-        );
-        // TODO expand with all primitives, or find a better way.
+        for (tn, td) in KNOWN_TYPES.iter() {
+            let canonical_name = if let Some(rust_name) = td.cxx_replacement.as_ref() {
+                rust_name.clone()
+            } else {
+                tn.clone()
+            };
+            let safety = if td.by_value_safe {
+                PODState::SafeToBePOD
+            } else {
+                PODState::UnsafeToBePOD("type is not safe for POD".to_owned())
+            };
+            results.insert(canonical_name, StructDetails::new(safety));
+        }
         ByValueChecker { results }
     }
 

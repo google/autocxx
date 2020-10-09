@@ -17,10 +17,10 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 enum Error {
-    RunError(std::io::Error),
-    WriteError(std::io::Error),
-    Utf8Error(std::string::FromUtf8Error),
-    WaitError(std::io::Error),
+    Run(std::io::Error),
+    Write(std::io::Error),
+    Utf8(std::string::FromUtf8Error),
+    Wait(std::io::Error),
 }
 
 pub(crate) fn pretty_print(ts: &TokenStream) -> String {
@@ -39,8 +39,8 @@ fn reformat(text: impl std::fmt::Display) -> Result<String, Error> {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
-        .map_err(Error::RunError)?;
-    write!(rustfmt.stdin.take().unwrap(), "{}", text).map_err(Error::WriteError)?;
-    let output = rustfmt.wait_with_output().map_err(Error::WaitError)?;
-    String::from_utf8(output.stdout).map_err(Error::Utf8Error)
+        .map_err(Error::Run)?;
+    write!(rustfmt.stdin.take().unwrap(), "{}", text).map_err(Error::Write)?;
+    let output = rustfmt.wait_with_output().map_err(Error::Wait)?;
+    String::from_utf8(output.stdout).map_err(Error::Utf8)
 }

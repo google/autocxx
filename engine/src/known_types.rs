@@ -23,13 +23,16 @@ pub(crate) struct TypeDetails {
     pub(crate) cxx_replacement: Option<TypeName>,
     /// C++ equivalent name for a Rust type.
     pub(crate) cxx_name: Option<String>,
+    /// Whether this can be safely represented by value.
+    pub(crate) by_value_safe: bool,
 }
 
 impl TypeDetails {
-    fn new(cxx_replacement: Option<TypeName>, cxx_name: Option<String>) -> Self {
+    fn new(cxx_replacement: Option<TypeName>, cxx_name: Option<String>, by_value_safe: bool) -> Self {
         TypeDetails {
             cxx_replacement,
             cxx_name,
+            by_value_safe,
         }
     }
 }
@@ -39,11 +42,11 @@ lazy_static! {
         let mut map = HashMap::new();
         map.insert(
             TypeName::new("std_unique_ptr"),
-            TypeDetails::new(Some(TypeName::new("UniquePtr")), None),
+            TypeDetails::new(Some(TypeName::new("UniquePtr")), None, true),
         );
         map.insert(
             TypeName::new("std_string"),
-            TypeDetails::new(Some(TypeName::new("CxxString")), None),
+            TypeDetails::new(Some(TypeName::new("CxxString")), None, false),
         );
         for (cpp_type, rust_type) in (3..7)
             .map(|x| 2i32.pow(x))
@@ -57,7 +60,7 @@ lazy_static! {
         {
             map.insert(
                 TypeName::new(&rust_type),
-                TypeDetails::new(None, Some(cpp_type)),
+                TypeDetails::new(None, Some(cpp_type), true),
             );
         }
         map
