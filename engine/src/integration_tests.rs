@@ -586,8 +586,7 @@ fn test_take_nested_pod_by_value() {
     run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
-#[test]
-#[ignore] // need field access to opaque types; need to pass Rust-side unique pointer
+#[test]// need field access to opaque types; need to pass Rust-side unique pointer
           // into C++ functions which take something by value
 fn test_take_nonpod_by_value() {
     let cxx = indoc! {"
@@ -599,10 +598,12 @@ fn test_take_nonpod_by_value() {
     "};
     let hdr = indoc! {"
         #include <cstdint>
+        #include <string>
         struct Bob {
             Bob(uint32_t a, uint32_t b);
             uint32_t a;
             uint32_t b;
+            std::string reason_why_this_is_nonpod;
         };
         uint32_t take_bob(Bob a);
     "};
@@ -670,6 +671,40 @@ fn test_take_nonpod_by_mut_ref() {
     // and similar tests.
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
+
+
+#[test]   // need to pass Rust-side unique pointer
+          // into C++ functions which take something by value
+fn test_return_nonpod_by_value() {
+    let cxx = indoc! {"
+        Bob::Bob(uint32_t a0, uint32_t b0)
+           : a(a0), b(b0) {}
+        Bob give_bob(uint32_t a) {
+            Bob c;
+            c.a = a;
+            return c;
+        }
+        uint32_t take_bob(std::unique_ptr<Bob> a) {
+            return a->a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            Bob(uint32_t a, uint32_t b);
+            uint32_t a;
+            uint32_t b;
+        };
+        Bob give_bob(uint32_a);
+        uint32_t take_bob(std::unique_ptr<Bob> a);
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::give_bob(13);
+        assert_eq!(ffi::cxxbridge::take_bob(a), 13);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "give_bob", "Bob"], &[]);
+}
+
 
 #[test]
 #[ignore] // because we don't yet support std::string by value
@@ -843,8 +878,7 @@ fn test_enum_no_funcs() {
     run_test(cxx, hdr, rs, &["Bob"], &[]);
 }
 
-#[test]
-#[ignore] // works, but causes compile warnings
+#[test] // works, but causes compile warnings
 fn test_take_pod_class_by_value() {
     let cxx = indoc! {"
         uint32_t take_bob(Bob a) {
