@@ -14,7 +14,7 @@
 
 [package]
 name = "autocxx-gen"
-version = "0.2.0"
+version = "0.3.1"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
