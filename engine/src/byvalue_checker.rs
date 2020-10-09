@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::TypeName;
 use crate::known_types::KNOWN_TYPES;
+use crate::TypeName;
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 

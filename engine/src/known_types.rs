@@ -28,7 +28,11 @@ pub(crate) struct TypeDetails {
 }
 
 impl TypeDetails {
-    fn new(cxx_replacement: Option<TypeName>, cxx_name: Option<String>, by_value_safe: bool) -> Self {
+    fn new(
+        cxx_replacement: Option<TypeName>,
+        cxx_name: Option<String>,
+        by_value_safe: bool,
+    ) -> Self {
         TypeDetails {
             cxx_replacement,
             cxx_name,
