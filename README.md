@@ -108,7 +108,7 @@ It's not clear yet how this opinion will play out in practice. Perhaps we will g
 
 Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
 
-* It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/print.html#requirements)
+* It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html)
 * Two of the tests fail when built against some STLs due to a problem where bindgen generates `type-parameter-0-0` which is not a valid identifier.
 
 # Configuring the build
