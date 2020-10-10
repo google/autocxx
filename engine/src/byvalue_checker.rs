@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::TypeName;
-use crate::known_types::KNOWN_TYPES;
+use crate::types::TypeName;
+use crate::types::KNOWN_TYPES;
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
@@ -51,17 +51,12 @@ impl ByValueChecker {
     pub fn new() -> Self {
         let mut results = HashMap::new();
         for (tn, td) in KNOWN_TYPES.iter() {
-            let canonical_name = if let Some(rust_name) = td.cxx_replacement.as_ref() {
-                rust_name.clone()
-            } else {
-                tn.clone()
-            };
             let safety = if td.by_value_safe {
-                PODState::SafeToBePOD
+                PODState::IsPOD
             } else {
-                PODState::UnsafeToBePOD("type is not safe for POD".to_owned())
+                PODState::UnsafeToBePOD(format!("type {} is not safe for POD", tn))
             };
-            results.insert(canonical_name, StructDetails::new(safety));
+            results.insert(tn.clone(), StructDetails::new(safety));
         }
         ByValueChecker { results }
     }
@@ -94,6 +89,11 @@ impl ByValueChecker {
         self.results.insert(tyname, my_details);
     }
 
+    pub fn ingest_pod_type(&mut self, tyname: TypeName) {
+        self.results
+            .insert(tyname, StructDetails::new(PODState::IsPOD));
+    }
+
     pub fn satisfy_requests(&mut self, mut requests: Vec<TypeName>) -> Result<(), String> {
         while !requests.is_empty() {
             let ty_id = requests.remove(requests.len() - 1);
@@ -122,7 +122,7 @@ impl ByValueChecker {
         matches!(self
         .results
         .get(ty_id)
-        .expect("Type not known to byvalue_checker"), StructDetails {
+        .expect(&format!("Type {} not known to byvalue_checker", ty_id.to_string())), StructDetails {
             state: PODState::IsPOD,
             dependent_structs: _,
         })
@@ -146,6 +146,13 @@ mod tests {
     use super::ByValueChecker;
     use crate::TypeName;
     use syn::{parse_quote, ItemStruct};
+
+    #[test]
+    fn test_primitive_by_itself() {
+        let bvc = ByValueChecker::new();
+        let t_id = TypeName::new("u32");
+        assert!(bvc.is_pod(&t_id));
+    }
 
     #[test]
     fn test_primitives() {

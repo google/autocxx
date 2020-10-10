@@ -15,29 +15,30 @@
 mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
-mod known_types;
 mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
+mod types;
 
 #[cfg(test)]
 mod integration_tests;
 
-use proc_macro2::Span;
 use proc_macro2::TokenStream as TokenStream2;
-use std::{fmt::Display, path::PathBuf};
+use std::path::PathBuf;
 
 use indoc::indoc;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
-use syn::{parse_quote, Ident, ItemMod, Macro, TypePath};
+use syn::{parse_quote, ItemMod, Macro};
 
 use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator};
 use itertools::join;
 use log::{debug, info, warn};
 use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
+use types::TypeName;
 
 const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
 pub struct CppFilePair {
@@ -47,47 +48,6 @@ pub struct CppFilePair {
 }
 
 pub struct GeneratedCpp(pub Vec<CppFilePair>);
-
-/// Any time we store a type name, we should use this.
-/// At the moment it's just a string, but one day it will need to become
-/// sufficiently intelligent to handle namespaces.
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
-pub struct TypeName(String);
-
-impl TypeName {
-    fn from_ident(id: &Ident) -> Self {
-        TypeName(id.to_string())
-    }
-
-    fn from_type_path(p: &TypePath) -> Self {
-        // TODO better handle generics, multi-segment paths, etc.
-        TypeName::from_ident(&p.path.segments.last().unwrap().ident)
-    }
-
-    fn new(id: &str) -> Self {
-        TypeName(id.to_string())
-    }
-
-    fn to_ident(&self) -> Ident {
-        Ident::new(&self.0, Span::call_site())
-    }
-
-    fn to_cxx_name(&self) -> &str {
-        match crate::known_types::KNOWN_TYPES
-            .get(&self)
-            .and_then(|x| x.cxx_name.as_ref())
-        {
-            None => &self.0,
-            Some(replacement) => &replacement.as_str(),
-        }
-    }
-}
-
-impl Display for TypeName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
 
 #[derive(Debug)]
 pub enum Error {
@@ -383,7 +343,7 @@ impl IncludeCpp {
         );
 
         let mut conversion = converter
-            .convert(bindings, None)
+            .convert(bindings, None, &HashMap::new())
             .map_err(Error::Conversion)?;
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
@@ -393,15 +353,19 @@ impl IncludeCpp {
             // more C++ (because you can never have too much C++.) Examples are field
             // accessor methods, or make_unique wrappers.
             // So, err, let's start all over again. Fun!
-            let builder = self.make_bindgen_builder()?;
+            let mut builder = self.make_bindgen_builder()?;
+            for x in &additional_cpp_items.extra_blocklist {
+                builder = builder.blacklist_item(x);
+            }
+            // TODO this clone is tedious
+            let renames = additional_cpp_items.renames.clone();
             let bindings = self
                 .inject_header_into_bindgen(builder, Some(additional_cpp_items))
                 .generate()
                 .map_err(Error::Bindgen)?;
             let bindings = self.parse_bindings(bindings)?;
-
             conversion = converter
-                .convert(bindings, Some("autocxxgen.h"))
+                .convert(bindings, Some("autocxxgen.h"), &renames)
                 .map_err(Error::Conversion)?;
         }
 

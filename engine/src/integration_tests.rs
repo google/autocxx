@@ -587,8 +587,6 @@ fn test_take_nested_pod_by_value() {
 }
 
 #[test]
-#[ignore] // need field access to opaque types; need to pass Rust-side unique pointer
-          // into C++ functions which take something by value
 fn test_take_nonpod_by_value() {
     let cxx = indoc! {"
         Bob::Bob(uint32_t a0, uint32_t b0)
@@ -599,10 +597,12 @@ fn test_take_nonpod_by_value() {
     "};
     let hdr = indoc! {"
         #include <cstdint>
+        #include <string>
         struct Bob {
             Bob(uint32_t a, uint32_t b);
             uint32_t a;
             uint32_t b;
+            std::string reason_why_this_is_nonpod;
         };
         uint32_t take_bob(Bob a);
     "};
@@ -672,31 +672,69 @@ fn test_take_nonpod_by_mut_ref() {
 }
 
 #[test]
-#[ignore] // because we don't yet support std::string by value
-fn test_cycle_nonpod_with_str_by_value() {
+fn test_return_nonpod_by_value() {
     let cxx = indoc! {"
-        uint32_t take_bob(Bob a) {
-            return a.a;
+        Bob::Bob(uint32_t a0, uint32_t b0)
+           : a(a0), b(b0) {}
+        Bob give_bob(uint32_t a) {
+            Bob c(a, 44);
+            return c;
         }
+        uint32_t take_bob(std::unique_ptr<Bob> a) {
+            return a->a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            Bob(uint32_t a, uint32_t b);
+            uint32_t a;
+            uint32_t b;
+        };
+        Bob give_bob(uint32_t a);
+        uint32_t take_bob(std::unique_ptr<Bob> a);
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::give_bob(13);
+        assert_eq!(ffi::cxxbridge::take_bob(a), 13);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "give_bob", "Bob"], &[]);
+}
+
+#[test]
+fn test_get_str_by_up() {
+    let cxx = indoc! {"
+    std::unique_ptr<std::string> get_str() {
+            return std::make_unique<std::string>(\"hello\");
+        }
+    "};
+    let hdr = indoc! {"
+        #include <string>
+        #include <memory>
+        std::unique_ptr<std::string> get_str();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::cxxbridge::get_str().as_ref().unwrap(), "hello");
+    };
+    run_test(cxx, hdr, rs, &["get_str"], &[]);
+}
+
+#[test]
+fn test_get_str_by_value() {
+    let cxx = indoc! {"
         std::string get_str() {
             return \"hello\";
         }
     "};
     let hdr = indoc! {"
-        #include <cstdint>
         #include <string>
-        struct Bob {
-            uint32_t a;
-            std::string b;
-        };
-        uint32_t take_bob(Bob a);
         std::string get_str();
     "};
     let rs = quote! {
-        let a = ffi::cxxbridge::Bob { a: 12, b: ffi::cxxbridge::get_str() };
-        assert_eq!(ffi::cxxbridge::take_bob(a), 12);
+        assert_eq!(ffi::cxxbridge::get_str().as_ref().unwrap(), "hello");
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Bob", "get_str"], &[]);
+    run_test(cxx, hdr, rs, &["get_str"], &[]);
 }
 
 #[test]
@@ -843,8 +881,7 @@ fn test_enum_no_funcs() {
     run_test(cxx, hdr, rs, &["Bob"], &[]);
 }
 
-#[test]
-#[ignore] // works, but causes compile warnings
+#[test] // works, but causes compile warnings
 fn test_take_pod_class_by_value() {
     let cxx = indoc! {"
         uint32_t take_bob(Bob a) {
