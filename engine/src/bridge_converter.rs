@@ -210,12 +210,14 @@ impl<'a> BridgeConversion<'a> {
                     }
                     self.convert_foreign_mod_items(fm.items)?;
                 }
-                Item::Struct(s) => {
+                Item::Struct(mut s) => {
                     let tyname = TypeName::from_ident(&s.ident);
                     let should_be_pod = self.byvalue_checker.is_pod(&tyname);
                     self.generate_type_alias(tyname, should_be_pod);
-                    self.bindgen_items
-                        .push(Item::Struct(self.convert_struct(s)));
+                    if !should_be_pod {
+                        s.fields = syn::Fields::Unit;
+                    }
+                    self.bindgen_items.push(Item::Struct(s));
                 }
                 Item::Enum(e) => {
                     let tyname = TypeName::from_ident(&e.ident);
@@ -604,27 +606,6 @@ impl<'a> BridgeConversion<'a> {
             });
         }
         new_pun
-    }
-
-    /// Renames std_string within structs to CxxString, etc. This should be done
-    /// by bindgen because of the PRELUDE we give it, but it doesn't appear to
-    /// replace types within structs, so we do it.
-    /// This may run the risk of altering the size/structure/ABI of the struct,
-    /// but that's OK, because this is only ever applied to opaque types which
-    /// will only be passed by UniquePtr/reference within Rust, never by value.
-    fn convert_struct(&self, mut strct: syn::ItemStruct) -> syn::ItemStruct {
-        for f in &mut strct.fields {
-            self.convert_struct_field_type(&mut f.ty);
-        }
-        strct
-    }
-
-    fn convert_struct_field_type(&self, ty: &mut Type) {
-        if let Type::Path(ty) = ty {
-            if let Some(typ) = TypeName::get_replacement_type_path(&ty) {
-                ty.path = typ;
-            }
-        }
     }
 }
 
