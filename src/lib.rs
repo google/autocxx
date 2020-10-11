@@ -81,8 +81,6 @@ use syn::parse_macro_input;
 /// `UniquePtr` to an opaque type in Rust, but still allow calling existing C++
 /// APIs which take such things by value - we'll aim to generate automatic
 /// unwrappers. This won't work in all cases.
-/// The majority of this paragraph doesn't work at all yet, and it will never work
-/// for some cases. It remains to be seen whether this is good enough in practice.
 ///
 /// # Generated code
 ///
