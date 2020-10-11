@@ -195,20 +195,17 @@ impl<'a> BridgeConversion<'a> {
         self.extern_c_mod_items = self.build_include_foreign_items(extra_inclusion);
         for item in items {
             match item {
-                Item::ForeignMod(fm) => {
+                Item::ForeignMod(mut fm) => {
+                    let items = fm.items;
+                    fm.items = Vec::new();
                     if self.extern_c_mod.is_none() {
+                        self.extern_c_mod = Some(fm);
                         // We'll use the first 'extern "C"' mod we come
                         // across for attributes, spans etc. but we'll stuff
                         // the contents of all bindgen 'extern "C"' mods into this
                         // one.
-                        self.extern_c_mod = Some(ItemForeignMod {
-                            attrs: fm.attrs,
-                            abi: fm.abi,
-                            brace_token: fm.brace_token,
-                            items: Vec::new(),
-                        });
                     }
-                    self.convert_foreign_mod_items(fm.items)?;
+                    self.convert_foreign_mod_items(items)?;
                 }
                 Item::Struct(mut s) => {
                     let tyname = TypeName::from_ident(&s.ident);
