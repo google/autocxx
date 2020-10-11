@@ -14,11 +14,10 @@
 
 use autocxx::include_cxx;
 
-include_cxx!(Header("input.h"), Allow("DoMath"),);
+include_cxx!(Header("input.h"), Allow("S"));
 
 fn main() {
-    println!(
-        "Hello, world! - C++ math should say 12={}",
-        ffi::cxxbridge::DoMath(4)
-    );
+    let s = ffi::cxxbridge::S_make_unique(1);
+    println!("Rust:{}", (&s.i as *const _ as usize) - (&*s as *const _ as usize));
+    println!("{}", s.i);
 }

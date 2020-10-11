@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
 #include <cstdint>
-
-uint32_t DoMath(uint32_t a);
-
-uint32_t DoMath(uint32_t a) {
-    return a * 3;
-}
+#include <string>
+struct S {
+  explicit S(uint32_t i);
+  std::string s;
+  uint32_t i;
+};

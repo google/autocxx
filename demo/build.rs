@@ -19,10 +19,12 @@ fn main() {
     let path = std::path::PathBuf::from("src").canonicalize().unwrap();
     let mut b = autocxx_build::Builder::new("src/main.rs", &path.to_str().unwrap()).unwrap();
     b.builder()
+        .file("src/input.cc")
         .flag_if_supported("-std=c++14")
         .compile("autocxx-demo");
 
     println!("cargo:rerun-if-changed=src/main.rs");
     println!("cargo:rerun-if-changed=src/input.h");
+    println!("cargo:rerun-if-changed=src/input.cc");
     println!("cargo:rustc-env=AUTOCXX_INC={}", path.to_str().unwrap());
 }
