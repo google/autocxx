@@ -272,7 +272,7 @@ impl<'a> BridgeConversion<'a> {
         })
     }
 
-    fn convert_new_method(&mut self, m: syn::ImplItemMethod, ty: &TypeName, i: &syn::ItemImpl) {
+    fn convert_new_method(&mut self, mut m: syn::ImplItemMethod, ty: &TypeName, i: &syn::ItemImpl) {
         let (arrow, oldreturntype) = match &m.sig.output {
             ReturnType::Type(arrow, ty) => (arrow, ty),
             ReturnType::Default => return,
@@ -308,13 +308,9 @@ impl<'a> BridgeConversion<'a> {
         };
         new_sig.unsafety = None;
         new_sig.output = ReturnType::Type(*arrow, Box::new(Type::Path(new_return_type)));
-        let new_impl_method = syn::ImplItem::Method(syn::ImplItemMethod {
-            attrs: Vec::new(),
-            vis: m.vis,
-            defaultness: m.defaultness,
-            block: new_block,
-            sig: new_sig,
-        });
+        m.block = new_block;
+        m.sig = new_sig;
+        let new_impl_method = syn::ImplItem::Method(m);
         self.bindgen_items.push(Item::Impl(syn::ItemImpl {
             attrs: Vec::new(),
             defaultness: i.defaultness,
