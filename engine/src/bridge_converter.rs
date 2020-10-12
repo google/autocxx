@@ -447,31 +447,23 @@ impl<'a> BridgeConversion<'a> {
     /// and that type was non-trivial.
     fn convert_fn_arg(&self, arg: FnArg) -> (FnArg, ArgumentAnalysis) {
         match arg {
-            FnArg::Typed(pt) => {
+            FnArg::Typed(mut pt) => {
                 let mut found_this = false;
                 let old_pat = *pt.pat;
                 let new_pat = match old_pat {
-                    syn::Pat::Ident(pp) if pp.ident == "this" => {
+                    syn::Pat::Ident(mut pp) if pp.ident == "this" => {
                         found_this = true;
-                        syn::Pat::Ident(syn::PatIdent {
-                            attrs: pp.attrs,
-                            by_ref: pp.by_ref,
-                            mutability: pp.mutability,
-                            subpat: pp.subpat,
-                            ident: Ident::new("self", pp.ident.span()),
-                        })
+                        pp.ident = Ident::new("self", pp.ident.span());
+                        syn::Pat::Ident(pp)
                     }
                     _ => old_pat,
                 };
                 let new_ty = self.convert_boxed_type(pt.ty);
                 let conversion = self.conversion_required(&new_ty);
+                pt.pat = Box::new(new_pat);
+                pt.ty = new_ty;
                 (
-                    FnArg::Typed(PatType {
-                        attrs: pt.attrs,
-                        pat: Box::new(new_pat),
-                        colon_token: pt.colon_token,
-                        ty: new_ty,
-                    }),
+                    FnArg::Typed(pt),
                     ArgumentAnalysis {
                         was_self: found_this,
                         conversion,
