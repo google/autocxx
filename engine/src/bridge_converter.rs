@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use syn::punctuated::Punctuated;
 use syn::{
     parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
-    ItemForeignMod, ItemMod, Path, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
+    ItemForeignMod, ItemMod, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
     TypeReference,
 };
 
@@ -519,33 +519,27 @@ impl<'a> BridgeConversion<'a> {
         }
     }
 
-    fn convert_type_path(&self, typ: TypePath) -> TypePath {
-        let p = typ.path;
-        let new_p = Path {
-            leading_colon: p.leading_colon,
-            segments: p
-                .segments
-                .into_iter()
-                .map(|s| -> PathSegment {
-                    let ident = TypeName::from_ident(&s.ident);
-                    // May replace non-canonical names e.g. std_string
-                    // with canonical equivalents, e.g. CxxString
-                    let ident = ident.to_ident();
-                    let args = match s.arguments {
-                        PathArguments::AngleBracketed(mut ab) => {
-                            ab.args = self.convert_punctuated(ab.args);
-                            PathArguments::AngleBracketed(ab)
-                        }
-                        _ => s.arguments,
-                    };
-                    parse_quote!( #ident #args )
-                })
-                .collect(),
-        };
-        TypePath {
-            qself: typ.qself,
-            path: new_p,
-        }
+    fn convert_type_path(&self, mut typ: TypePath) -> TypePath {
+        typ.path.segments = typ
+            .path
+            .segments
+            .into_iter()
+            .map(|s| -> PathSegment {
+                let ident = TypeName::from_ident(&s.ident);
+                // May replace non-canonical names e.g. std_string
+                // with canonical equivalents, e.g. CxxString
+                let ident = ident.to_ident();
+                let args = match s.arguments {
+                    PathArguments::AngleBracketed(mut ab) => {
+                        ab.args = self.convert_punctuated(ab.args);
+                        PathArguments::AngleBracketed(ab)
+                    }
+                    _ => s.arguments,
+                };
+                parse_quote!( #ident #args )
+            })
+            .collect();
+        typ
     }
 
     fn convert_punctuated<P>(
