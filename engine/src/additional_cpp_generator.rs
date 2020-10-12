@@ -69,9 +69,23 @@ impl ArgumentConversion {
     }
 
     fn unwrapped_type_as_string(&self) -> String {
-        TypeName::from_type(&self.unwrapped_type)
-            .to_cpp_name()
-            .to_string()
+        match self.unwrapped_type {
+            Type::Path(ref typ) => TypeName::from_type_path(typ).to_cpp_name().to_string(),
+            Type::Reference(ref typr) => {
+                let const_bit = match typr.mutability {
+                    None => "const ",
+                    Some(_) => "",
+                };
+                format!(
+                    "{}{}&",
+                    const_bit,
+                    TypeName::from_type(typr.elem.as_ref())
+                        .to_cpp_name()
+                        .to_string()
+                )
+            }
+            _ => unimplemented!(),
+        }
     }
 
     fn wrapped_type(&self) -> String {
@@ -91,17 +105,25 @@ impl ArgumentConversion {
     }
 }
 
+pub(crate) struct ByValueWrapper {
+    pub(crate) id: Ident,
+    pub(crate) return_conversion: Option<ArgumentConversion>,
+    pub(crate) argument_conversion: Vec<ArgumentConversion>,
+    pub(crate) extra_blocklist: Option<String>,
+    pub(crate) is_a_method: bool,
+}
+
 /// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
     MakeUnique(TypeName, Vec<TypeName>),
-    ByValueWrapper(Ident, Option<ArgumentConversion>, Vec<ArgumentConversion>),
+    ByValueWrapper(ByValueWrapper),
 }
 
 struct AdditionalFunction {
     declaration: String,
     definition: String,
     name: String,
-    suppress_older: Option<String>,
+    suppress_older: Vec<String>,
     rename: Option<(String, String)>,
 }
 
@@ -139,8 +161,8 @@ impl AdditionalCppGenerator {
         for need in additions {
             match need {
                 AdditionalNeed::MakeUnique(ty, args) => self.generate_make_unique(&ty, &args),
-                AdditionalNeed::ByValueWrapper(id, ret, tys) => {
-                    self.generate_by_value_wrapper(&id, &ret, &tys)
+                AdditionalNeed::ByValueWrapper(by_value_wrapper) => {
+                    self.generate_by_value_wrapper(by_value_wrapper)
                 }
             }
         }
@@ -162,7 +184,8 @@ impl AdditionalCppGenerator {
             let extra_blocklist = self
                 .additional_functions
                 .iter()
-                .filter_map(|x| x.suppress_older.clone())
+                .map(|x| x.suppress_older.clone())
+                .flatten()
                 .collect();
             let renames = self
                 .additional_functions
@@ -215,44 +238,62 @@ impl AdditionalCppGenerator {
             name,
             declaration,
             definition,
-            suppress_older: None,
+            suppress_older: Vec::new(),
             rename: None,
         })
     }
 
-    fn generate_by_value_wrapper(
-        &mut self,
-        ident: &Ident,
-        ret: &Option<ArgumentConversion>,
-        arg_types: &[ArgumentConversion],
-    ) {
+    fn generate_by_value_wrapper(&mut self, details: ByValueWrapper) {
+        let ident = details.id;
+        let is_a_method = details.is_a_method;
         let name = format!("{}_up_wrapper", ident.to_string());
-        let args = arg_types
+        let get_arg_name = |counter: usize| -> String {
+            if is_a_method && counter == 0 {
+                // For method calls that we generate, the first
+                // argument name needs to be such that we recognize
+                // it as a method in the second invocation of
+                // bridge_converter after it's flowed again through
+                // bindgen.
+                "autocxx_gen_this".to_string()
+            } else {
+                format!("arg{}", counter)
+            }
+        };
+        let args = details
+            .argument_conversion
             .iter()
             .enumerate()
-            .map(|(counter, ty)| format!("{} arg{}", ty.unconverted_type(), counter))
+            .map(|(counter, ty)| format!("{} {}", ty.unconverted_type(), get_arg_name(counter)))
             .join(", ");
-        let ret_type = ret
+        let ret_type = details
+            .return_conversion
             .as_ref()
             .map_or("void".to_string(), |x| x.converted_type());
         let declaration = format!("{} {}({})", ret_type, name, args);
-        let arg_list = arg_types
+        let mut arg_list = details
+            .argument_conversion
             .iter()
             .enumerate()
-            .map(|(counter, conv)| conv.conversion(&format!("arg{}", counter)))
-            .join(", ");
-        let underlying_function_call = format!("{}({})", ident.to_string(), arg_list);
-        let underlying_function_call = match ret {
-            None => underlying_function_call,
-            Some(ret) => format!("return {}", ret.conversion(&underlying_function_call)),
+            .map(|(counter, conv)| conv.conversion(&get_arg_name(counter)));
+        let receiver = if is_a_method { arg_list.next() } else { None };
+        let arg_list = arg_list.join(", ");
+        let mut underlying_function_call = format!("{}({})", ident.to_string(), arg_list);
+        if let Some(receiver) = receiver {
+            underlying_function_call = format!("{}.{}", receiver, underlying_function_call);
+        }
+        if let Some(ret) = details.return_conversion {
+            underlying_function_call =
+                format!("return {}", ret.conversion(&underlying_function_call));
         };
         let definition = format!("{} {{ {}; }}", declaration, underlying_function_call,);
         let declaration = format!("{};", declaration);
+        let mut suppress_older = vec![ident.to_string()];
+        suppress_older.extend(details.extra_blocklist.iter().cloned());
         self.additional_functions.push(AdditionalFunction {
             name: name.clone(),
             declaration,
             definition,
-            suppress_older: Some(ident.to_string()),
+            suppress_older,
             rename: Some((name, ident.to_string())),
         })
     }

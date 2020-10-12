@@ -354,6 +354,10 @@ impl IncludeCpp {
             // accessor methods, or make_unique wrappers.
             // So, err, let's start all over again. Fun!
             let mut builder = self.make_bindgen_builder()?;
+            info!(
+                "Extra blocklist: {:?}",
+                additional_cpp_items.extra_blocklist
+            );
             for x in &additional_cpp_items.extra_blocklist {
                 builder = builder.blacklist_item(x);
             }

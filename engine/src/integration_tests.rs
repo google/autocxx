@@ -1103,6 +1103,297 @@ fn test_negative_make_nonpod() {
     run_test_expect_fail(cxx, hdr, rs3, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
+#[test]
+fn test_method_pass_pod_by_value() {
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob(Anna z) const {
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Anna {
+            uint32_t a;
+        };
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob(Anna a) const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::Anna { a: 14 };
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(b.get_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+}
+
+#[test]
+fn test_method_pass_pod_by_reference() {
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob(const Anna&) const {
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Anna {
+            uint32_t a;
+        };
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob(const Anna& a) const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::Anna { a: 14 };
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(b.get_bob(&a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+}
+
+#[test]
+fn test_method_pass_pod_by_mut_reference() {
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob(Anna&) const {
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Anna {
+            uint32_t a;
+        };
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob(Anna& a) const;
+        };
+    "};
+    let rs = quote! {
+        let mut a = ffi::cxxbridge::Anna { a: 14 };
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(b.get_bob(&mut a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+}
+
+#[test]
+fn test_method_pass_pod_by_up() {
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob(std::unique_ptr<Anna>) const {
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Anna {
+            uint32_t a;
+        };
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob(std::unique_ptr<Anna> z) const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::Anna { a: 14 };
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(b.get_bob(cxx::UniquePtr::new(a)), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+}
+
+// ===
+
+#[test]
+fn test_method_pass_nonpod_by_value() {
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob(Anna) const {
+            return a;
+        }
+        Anna give_anna() {
+            Anna a;
+            a.a = 10;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Anna {
+            uint32_t a;
+            std::string b;
+        };
+        Anna give_anna();
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob(Anna a) const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::give_anna();
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::cxxbridge::get_bob(&b, a), 12);
+        // assert_eq!(b.get_bob(a), 12); // eventual goal
+    };
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &["take_bob", "Anna", "give_anna", "get_bob"],
+        &["Bob"],
+    );
+}
+
+#[test]
+fn test_method_pass_nonpod_by_reference() {
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob(const Anna&) const {
+            return a;
+        }
+        Anna give_anna() {
+            Anna a;
+            a.a = 10;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Anna {
+            uint32_t a;
+            std::string b;
+        };
+        Anna give_anna();
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob(const Anna& a) const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::give_anna();
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(b.get_bob(a.as_ref().unwrap()), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Anna", "give_anna"], &["Bob"]);
+}
+
+#[test]
+fn test_method_pass_nonpod_by_mut_reference() {
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob(Anna&) const {
+            return a;
+        }
+        Anna give_anna() {
+            Anna a;
+            a.a = 10;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Anna {
+            uint32_t a;
+            std::string b;
+        };
+        Anna give_anna();
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob(Anna& a) const;
+        };
+    "};
+    let rs = quote! {
+        let mut a = ffi::cxxbridge::give_anna();
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(b.get_bob(a.as_mut().unwrap()), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Anna", "give_anna"], &["Bob"]);
+}
+
+#[test]
+fn test_method_pass_nonpod_by_up() {
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob(std::unique_ptr<Anna>) const {
+            return a;
+        }
+        Anna give_anna() {
+            Anna a;
+            a.a = 10;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        #include <string>
+        struct Anna {
+            uint32_t a;
+            std::string b;
+        };
+        Anna give_anna();
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob(std::unique_ptr<Anna> z) const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::give_anna();
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(b.get_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "give_anna"], &["Bob"]);
+}
+
+#[test]
+fn test_method_return_nonpod_by_value() {
+    let cxx = indoc! {"
+        Anna Bob::get_anna() const {
+            Anna a;
+            a.a = 12;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Anna {
+            uint32_t a;
+            std::string b;
+        };
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            Anna get_anna() const;
+        };
+    "};
+    let rs = quote! {
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        // let a = b.get_bob(); // eventual goal
+        let a = ffi::cxxbridge::get_anna(&b);
+        assert!(!a.is_null());
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Anna", "get_anna"], &["Bob"]);
+}
+
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
 // 3. Constants
