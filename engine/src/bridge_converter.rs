@@ -19,9 +19,9 @@ use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use std::collections::HashMap;
 use syn::punctuated::Punctuated;
 use syn::{
-    parse_quote, AngleBracketedGenericArguments, Attribute, FnArg, ForeignItem, ForeignItemFn,
-    GenericArgument, Ident, Item, ItemForeignMod, ItemMod, Path, PathArguments,
-    PathSegment, ReturnType, Type, TypePath, TypePtr, TypeReference,
+    parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
+    ItemForeignMod, ItemMod, Path, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
+    TypeReference,
 };
 
 #[derive(Debug)]
@@ -526,26 +526,19 @@ impl<'a> BridgeConversion<'a> {
             segments: p
                 .segments
                 .into_iter()
-                .map(|s| {
+                .map(|s| -> PathSegment {
                     let ident = TypeName::from_ident(&s.ident);
                     // May replace non-canonical names e.g. std_string
                     // with canonical equivalents, e.g. CxxString
                     let ident = ident.to_ident();
                     let args = match s.arguments {
-                        PathArguments::AngleBracketed(ab) => {
-                            PathArguments::AngleBracketed(AngleBracketedGenericArguments {
-                                colon2_token: ab.colon2_token,
-                                lt_token: ab.lt_token,
-                                gt_token: ab.gt_token,
-                                args: self.convert_punctuated(ab.args),
-                            })
+                        PathArguments::AngleBracketed(mut ab) => {
+                            ab.args = self.convert_punctuated(ab.args);
+                            PathArguments::AngleBracketed(ab)
                         }
                         _ => s.arguments,
                     };
-                    PathSegment {
-                        ident,
-                        arguments: args,
-                    }
+                    parse_quote!( #ident #args )
                 })
                 .collect(),
         };
