@@ -18,10 +18,9 @@ use crate::types::TypeName;
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use std::collections::HashMap;
 use syn::punctuated::Punctuated;
-use syn::Token;
 use syn::{
     parse_quote, AngleBracketedGenericArguments, Attribute, FnArg, ForeignItem, ForeignItemFn,
-    GenericArgument, Ident, Item, ItemForeignMod, ItemMod, PatType, Path, PathArguments,
+    GenericArgument, Ident, Item, ItemForeignMod, ItemMod, Path, PathArguments,
     PathSegment, ReturnType, Type, TypePath, TypePtr, TypeReference,
 };
 
@@ -503,23 +502,20 @@ impl<'a> BridgeConversion<'a> {
     fn convert_type(&self, ty: Type) -> Type {
         match ty {
             Type::Path(p) => Type::Path(self.convert_type_path(p)),
-            Type::Reference(r) => Type::Reference(TypeReference {
-                and_token: r.and_token,
-                lifetime: r.lifetime,
-                mutability: r.mutability,
-                elem: self.convert_boxed_type(r.elem),
-            }),
+            Type::Reference(mut r) => {
+                r.elem = self.convert_boxed_type(r.elem);
+                Type::Reference(r)
+            }
             Type::Ptr(ptr) => Type::Reference(self.convert_ptr_to_reference(ptr)),
             _ => ty,
         }
     }
 
     fn convert_ptr_to_reference(&self, ptr: TypePtr) -> TypeReference {
-        TypeReference {
-            and_token: Token![&](Span::call_site()),
-            lifetime: None,
-            mutability: ptr.mutability,
-            elem: self.convert_boxed_type(ptr.elem),
+        let mutability = ptr.mutability;
+        let elem = self.convert_boxed_type(ptr.elem);
+        parse_quote! {
+            & #mutability #elem
         }
     }
 
