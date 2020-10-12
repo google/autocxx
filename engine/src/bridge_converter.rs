@@ -422,9 +422,9 @@ impl<'a> BridgeConversion<'a> {
                     .byvalue_checker
                     .is_pod(&TypeName::from_type(&*boxed_type))
                 {
-                    ArgumentConversion::to_unique_ptr(*boxed_type)
+                    ArgumentConversion::new_to_unique_ptr(*boxed_type)
                 } else {
-                    ArgumentConversion::unconverted(*boxed_type)
+                    ArgumentConversion::new_unconverted(*boxed_type)
                 },
             ),
             ReturnType::Default => None,
@@ -477,12 +477,12 @@ impl<'a> BridgeConversion<'a> {
         match ty {
             Type::Path(p) => {
                 if self.byvalue_checker.is_pod(&TypeName::from_type_path(p)) {
-                    ArgumentConversion::unconverted(ty.clone())
+                    ArgumentConversion::new_unconverted(ty.clone())
                 } else {
-                    ArgumentConversion::from_unique_ptr(ty.clone())
+                    ArgumentConversion::new_from_unique_ptr(ty.clone())
                 }
             }
-            _ => ArgumentConversion::unconverted(ty.clone()),
+            _ => ArgumentConversion::new_unconverted(ty.clone()),
         }
     }
 
