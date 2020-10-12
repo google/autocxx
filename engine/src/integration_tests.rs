@@ -90,6 +90,7 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
     path
 }
 
+/// A positive test, we expect to pass.
 fn run_test(
     cxx_code: &str,
     header_code: &str,
@@ -97,6 +98,48 @@ fn run_test(
     allowed_funcs: &[&str],
     allowed_pods: &[&str],
 ) {
+    do_run_test(
+        cxx_code,
+        header_code,
+        rust_code,
+        allowed_funcs,
+        allowed_pods,
+    )
+    .unwrap()
+}
+
+fn run_test_expect_fail(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code: TokenStream,
+    allowed_funcs: &[&str],
+    allowed_pods: &[&str],
+) {
+    do_run_test(
+        cxx_code,
+        header_code,
+        rust_code,
+        allowed_funcs,
+        allowed_pods,
+    )
+    .expect_err("Unexpected success");
+}
+
+/// In the future maybe the tests will distinguish the exact type of failure expected.
+#[derive(Debug)]
+enum TestError {
+    AutoCxx(autocxx_build::Error),
+    CppBuild(cc::Error),
+    RsBuild,
+}
+
+fn do_run_test(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code: TokenStream,
+    allowed_funcs: &[&str],
+    allowed_pods: &[&str],
+) -> Result<(), TestError> {
     // Step 1: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
     write_to_file(&tdir, "input.h", &format!("#pragma once\n{}", header_code));
@@ -144,7 +187,8 @@ fn run_test(
     let target_dir = tdir.path().join("target");
     std::fs::create_dir(&target_dir).unwrap();
     let target = rust_info::get().target_triple.unwrap();
-    let mut b = autocxx_build::Builder::new(&rs_path, tdir.path().to_str().unwrap()).unwrap();
+    let mut b = autocxx_build::Builder::new(&rs_path, tdir.path().to_str().unwrap())
+        .map_err(TestError::AutoCxx)?;
     b.builder()
         .file(cxx_path)
         .out_dir(&target_dir)
@@ -154,7 +198,7 @@ fn run_test(
         .flag("-std=c++14")
         .include(tdir.path())
         .try_compile("autocxx-demo")
-        .unwrap();
+        .map_err(TestError::CppBuild)?;
     // Step 8: use the trybuild crate to build the Rust file.
     let r = BUILDER.lock().unwrap().build(
         &target_dir,
@@ -163,10 +207,14 @@ fn run_test(
         "input.h",
         &rs_path,
     );
+    if r.is_err() {
+        return Err(TestError::RsBuild); // details of Rust panic are a bit messy to include, and
+                                        // not important at the moment.
+    }
     if KEEP_TEMPDIRS {
         println!("Tempdir: {:?}", tdir.into_path().to_str());
     }
-    r.unwrap()
+    Ok(())
 }
 
 #[test]
@@ -988,6 +1036,36 @@ fn test_i32_const() {
         assert_eq!(ffi::BOB, 3);
     };
     run_test(cxx, hdr, rs, &["BOB"], &[]);
+}
+
+#[test]
+fn test_negative_rs_nonsense() {
+    // Really just testing the test infrastructure.
+    let cxx = indoc! {"
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>  
+        const uint32_t BOB = 3;
+    "};
+    let rs = quote! {
+        foo bar
+    };
+    run_test_expect_fail(cxx, hdr, rs, &["BOB"], &[]);
+}
+
+#[test]
+fn test_negative_cpp_nonsense() {
+    // Really just testing the test infrastructure.
+    let cxx = indoc! {"
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>  
+        const uint32_t BOB = CAT;
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::BOB, 3);
+    };
+    run_test_expect_fail(cxx, hdr, rs, &["BOB"], &[]);
 }
 
 // Yet to test:
