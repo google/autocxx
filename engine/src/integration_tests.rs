@@ -1096,7 +1096,7 @@ fn test_negative_make_nonpod() {
         ffi::cxxbridge::Bob { a: 12 };
     };
     let rs3 = quote! {
-        ffi::cxxbridge::Bob { do_not_attempt_to_allocate_nonpod_types: 12 };
+        ffi::cxxbridge::Bob { do_not_attempt_to_allocate_nonpod_types: [] };
     };
     run_test_expect_fail(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
     run_test_expect_fail(cxx, hdr, rs2, &["take_bob", "Bob", "make_bob"], &[]);

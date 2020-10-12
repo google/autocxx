@@ -211,9 +211,11 @@ impl<'a> BridgeConversion<'a> {
                     let should_be_pod = self.byvalue_checker.is_pod(&tyname);
                     self.generate_type_alias(tyname, should_be_pod);
                     if !should_be_pod {
+                        // See cxx's opaque::Opaque for rationale for this type... in
+                        // short, it's to avoid being Send/Sync.
                         s.fields = syn::Fields::Named(parse_quote! {
                             {
-                                do_not_attempt_to_allocate_nonpod_types: u8,
+                                do_not_attempt_to_allocate_nonpod_types: [*const u8; 0],
                             }
                         });
                     }
