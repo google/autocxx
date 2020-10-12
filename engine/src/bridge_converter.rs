@@ -316,17 +316,9 @@ impl<'a> BridgeConversion<'a> {
     }
 
     fn get_blank_extern_c_mod(&self) -> ItemForeignMod {
-        ItemForeignMod {
-            attrs: Vec::new(),
-            abi: syn::Abi {
-                extern_token: Token![extern](Span::call_site()),
-                name: Some(syn::LitStr::new("C", Span::call_site())),
-            },
-            brace_token: syn::token::Brace {
-                span: Span::call_site(),
-            },
-            items: Vec::new(),
-        }
+        parse_quote!(
+            extern "C" {}
+        )
     }
 
     fn type_to_typename(&self, ty: &Type) -> Option<TypeName> {
