@@ -122,7 +122,7 @@ impl ByValueChecker {
         matches!(self
         .results
         .get(ty_id)
-        .expect(&format!("Type {} not known to byvalue_checker", ty_id.to_string())), StructDetails {
+        .unwrap_or_else(|| panic!("Type {} not known to byvalue_checker", ty_id.to_string())), StructDetails {
             state: PODState::IsPOD,
             dependent_structs: _,
         })

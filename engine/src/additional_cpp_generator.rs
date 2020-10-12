@@ -29,21 +29,21 @@ pub(crate) struct ArgumentConversion {
 }
 
 impl ArgumentConversion {
-    pub(crate) fn unconverted(ty: Type) -> Self {
+    pub(crate) fn new_unconverted(ty: Type) -> Self {
         ArgumentConversion {
             unwrapped_type: ty,
             conversion: ArgumentConversionType::None,
         }
     }
 
-    pub(crate) fn to_unique_ptr(ty: Type) -> Self {
+    pub(crate) fn new_to_unique_ptr(ty: Type) -> Self {
         ArgumentConversion {
             unwrapped_type: ty,
             conversion: ArgumentConversionType::FromValueToUniquePtr,
         }
     }
 
-    pub(crate) fn from_unique_ptr(ty: Type) -> Self {
+    pub(crate) fn new_from_unique_ptr(ty: Type) -> Self {
         ArgumentConversion {
             unwrapped_type: ty,
             conversion: ArgumentConversionType::FromUniquePtrToValue,
@@ -51,10 +51,7 @@ impl ArgumentConversion {
     }
 
     pub(crate) fn work_needed(&self) -> bool {
-        match self.conversion {
-            ArgumentConversionType::None => false,
-            _ => true,
-        }
+        !matches!(self.conversion, ArgumentConversionType::None)
     }
 
     fn unconverted_type(&self) -> String {

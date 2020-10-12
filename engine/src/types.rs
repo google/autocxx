@@ -16,7 +16,7 @@ use lazy_static::lazy_static;
 use proc_macro2::Span;
 use std::collections::HashMap;
 use std::fmt::Display;
-use syn::{parse_quote, Ident, Path, Type, TypePath};
+use syn::{Ident, Type, TypePath};
 
 /// Any time we store a type name, we should use this.
 /// At the moment it's just a string, but one day it will need to become
@@ -77,19 +77,6 @@ impl TypeName {
 
     fn parse_type_path(p: &TypePath) -> &Ident {
         &p.path.segments.last().unwrap().ident
-    }
-
-    pub(crate) fn get_replacement_type_path(id: &TypePath) -> Option<Path> {
-        let id = TypeName::parse_type_path(id).to_string();
-        let canonical_name = DEADNAME_MAP.get(&id);
-        if let Some(canonical_name) = canonical_name {
-            let ident = TypeName::new(&canonical_name).to_ident();
-            Some(parse_quote! {
-                ::cxx::#ident
-            })
-        } else {
-            None
-        }
     }
 }
 

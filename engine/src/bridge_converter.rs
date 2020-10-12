@@ -18,11 +18,10 @@ use crate::types::TypeName;
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use std::collections::HashMap;
 use syn::punctuated::Punctuated;
-use syn::Token;
 use syn::{
-    parse_quote, AngleBracketedGenericArguments, Attribute, FnArg, ForeignItem, ForeignItemFn,
-    GenericArgument, Ident, Item, ItemForeignMod, ItemMod, PatType, Path, PathArguments,
-    PathSegment, ReturnType, Type, TypePath, TypePtr, TypeReference,
+    parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
+    ItemForeignMod, ItemMod, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
+    TypeReference,
 };
 
 #[derive(Debug)]
@@ -195,20 +194,17 @@ impl<'a> BridgeConversion<'a> {
         self.extern_c_mod_items = self.build_include_foreign_items(extra_inclusion);
         for item in items {
             match item {
-                Item::ForeignMod(fm) => {
+                Item::ForeignMod(mut fm) => {
+                    let items = fm.items;
+                    fm.items = Vec::new();
                     if self.extern_c_mod.is_none() {
+                        self.extern_c_mod = Some(fm);
                         // We'll use the first 'extern "C"' mod we come
                         // across for attributes, spans etc. but we'll stuff
                         // the contents of all bindgen 'extern "C"' mods into this
                         // one.
-                        self.extern_c_mod = Some(ItemForeignMod {
-                            attrs: fm.attrs,
-                            abi: fm.abi,
-                            brace_token: fm.brace_token,
-                            items: Vec::new(),
-                        });
                     }
-                    self.convert_foreign_mod_items(fm.items)?;
+                    self.convert_foreign_mod_items(items)?;
                 }
                 Item::Struct(mut s) => {
                     let tyname = TypeName::from_ident(&s.ident);
@@ -275,7 +271,7 @@ impl<'a> BridgeConversion<'a> {
         })
     }
 
-    fn convert_new_method(&mut self, m: syn::ImplItemMethod, ty: &TypeName, i: &syn::ItemImpl) {
+    fn convert_new_method(&mut self, mut m: syn::ImplItemMethod, ty: &TypeName, i: &syn::ItemImpl) {
         let (arrow, oldreturntype) = match &m.sig.output {
             ReturnType::Type(arrow, ty) => (arrow, ty),
             ReturnType::Default => return,
@@ -299,50 +295,29 @@ impl<'a> BridgeConversion<'a> {
             &format!("{}_make_unique", ty.to_string()),
             Span::call_site(),
         );
-        let new_block: syn::Block = parse_quote!( {
+        m.block = parse_quote!( {
             super::cxxbridge::#call_name(
                 #(#arg_names),*
             )
         });
-        let mut new_sig = m.sig.clone();
-        new_sig.ident = Ident::new("make_unique", Span::call_site());
+        m.sig.ident = Ident::new("make_unique", Span::call_site());
         let new_return_type: TypePath = parse_quote! {
             cxx::UniquePtr < #oldreturntype >
         };
-        new_sig.unsafety = None;
-        new_sig.output = ReturnType::Type(*arrow, Box::new(Type::Path(new_return_type)));
-        let new_impl_method = syn::ImplItem::Method(syn::ImplItemMethod {
-            attrs: Vec::new(),
-            vis: m.vis,
-            defaultness: m.defaultness,
-            block: new_block,
-            sig: new_sig,
-        });
-        self.bindgen_items.push(Item::Impl(syn::ItemImpl {
-            attrs: Vec::new(),
-            defaultness: i.defaultness,
-            generics: i.generics.clone(),
-            trait_: i.trait_.clone(),
-            unsafety: None,
-            impl_token: i.impl_token,
-            self_ty: i.self_ty.clone(),
-            brace_token: i.brace_token,
-            items: vec![new_impl_method],
-        }));
+        m.sig.unsafety = None;
+        m.sig.output = ReturnType::Type(*arrow, Box::new(Type::Path(new_return_type)));
+        let new_impl_method = syn::ImplItem::Method(m);
+        let mut new_item_impl = i.clone();
+        new_item_impl.attrs = Vec::new();
+        new_item_impl.unsafety = None;
+        new_item_impl.items = vec![new_impl_method];
+        self.bindgen_items.push(Item::Impl(new_item_impl));
     }
 
     fn get_blank_extern_c_mod(&self) -> ItemForeignMod {
-        ItemForeignMod {
-            attrs: Vec::new(),
-            abi: syn::Abi {
-                extern_token: Token![extern](Span::call_site()),
-                name: Some(syn::LitStr::new("C", Span::call_site())),
-            },
-            brace_token: syn::token::Brace {
-                span: Span::call_site(),
-            },
-            items: Vec::new(),
-        }
+        parse_quote!(
+            extern "C" {}
+        )
     }
 
     fn type_to_typename(&self, ty: &Type) -> Option<TypeName> {
@@ -447,9 +422,9 @@ impl<'a> BridgeConversion<'a> {
                     .byvalue_checker
                     .is_pod(&TypeName::from_type(&*boxed_type))
                 {
-                    ArgumentConversion::to_unique_ptr(*boxed_type)
+                    ArgumentConversion::new_to_unique_ptr(*boxed_type)
                 } else {
-                    ArgumentConversion::unconverted(*boxed_type)
+                    ArgumentConversion::new_unconverted(*boxed_type)
                 },
             ),
             ReturnType::Default => None,
@@ -471,31 +446,23 @@ impl<'a> BridgeConversion<'a> {
     /// and that type was non-trivial.
     fn convert_fn_arg(&self, arg: FnArg) -> (FnArg, ArgumentAnalysis) {
         match arg {
-            FnArg::Typed(pt) => {
+            FnArg::Typed(mut pt) => {
                 let mut found_this = false;
                 let old_pat = *pt.pat;
                 let new_pat = match old_pat {
-                    syn::Pat::Ident(pp) if pp.ident == "this" => {
+                    syn::Pat::Ident(mut pp) if pp.ident == "this" => {
                         found_this = true;
-                        syn::Pat::Ident(syn::PatIdent {
-                            attrs: pp.attrs,
-                            by_ref: pp.by_ref,
-                            mutability: pp.mutability,
-                            subpat: pp.subpat,
-                            ident: Ident::new("self", pp.ident.span()),
-                        })
+                        pp.ident = Ident::new("self", pp.ident.span());
+                        syn::Pat::Ident(pp)
                     }
                     _ => old_pat,
                 };
                 let new_ty = self.convert_boxed_type(pt.ty);
                 let conversion = self.conversion_required(&new_ty);
+                pt.pat = Box::new(new_pat);
+                pt.ty = new_ty;
                 (
-                    FnArg::Typed(PatType {
-                        attrs: pt.attrs,
-                        pat: Box::new(new_pat),
-                        colon_token: pt.colon_token,
-                        ty: new_ty,
-                    }),
+                    FnArg::Typed(pt),
                     ArgumentAnalysis {
                         was_self: found_this,
                         conversion,
@@ -510,12 +477,12 @@ impl<'a> BridgeConversion<'a> {
         match ty {
             Type::Path(p) => {
                 if self.byvalue_checker.is_pod(&TypeName::from_type_path(p)) {
-                    ArgumentConversion::unconverted(ty.clone())
+                    ArgumentConversion::new_unconverted(ty.clone())
                 } else {
-                    ArgumentConversion::from_unique_ptr(ty.clone())
+                    ArgumentConversion::new_from_unique_ptr(ty.clone())
                 }
             }
-            _ => ArgumentConversion::unconverted(ty.clone()),
+            _ => ArgumentConversion::new_unconverted(ty.clone()),
         }
     }
 
@@ -535,60 +502,44 @@ impl<'a> BridgeConversion<'a> {
     fn convert_type(&self, ty: Type) -> Type {
         match ty {
             Type::Path(p) => Type::Path(self.convert_type_path(p)),
-            Type::Reference(r) => Type::Reference(TypeReference {
-                and_token: r.and_token,
-                lifetime: r.lifetime,
-                mutability: r.mutability,
-                elem: self.convert_boxed_type(r.elem),
-            }),
+            Type::Reference(mut r) => {
+                r.elem = self.convert_boxed_type(r.elem);
+                Type::Reference(r)
+            }
             Type::Ptr(ptr) => Type::Reference(self.convert_ptr_to_reference(ptr)),
             _ => ty,
         }
     }
 
     fn convert_ptr_to_reference(&self, ptr: TypePtr) -> TypeReference {
-        TypeReference {
-            and_token: Token![&](Span::call_site()),
-            lifetime: None,
-            mutability: ptr.mutability,
-            elem: self.convert_boxed_type(ptr.elem),
+        let mutability = ptr.mutability;
+        let elem = self.convert_boxed_type(ptr.elem);
+        parse_quote! {
+            & #mutability #elem
         }
     }
 
-    fn convert_type_path(&self, typ: TypePath) -> TypePath {
-        let p = typ.path;
-        let new_p = Path {
-            leading_colon: p.leading_colon,
-            segments: p
-                .segments
-                .into_iter()
-                .map(|s| {
-                    let ident = TypeName::from_ident(&s.ident);
-                    // May replace non-canonical names e.g. std_string
-                    // with canonical equivalents, e.g. CxxString
-                    let ident = ident.to_ident();
-                    let args = match s.arguments {
-                        PathArguments::AngleBracketed(ab) => {
-                            PathArguments::AngleBracketed(AngleBracketedGenericArguments {
-                                colon2_token: ab.colon2_token,
-                                lt_token: ab.lt_token,
-                                gt_token: ab.gt_token,
-                                args: self.convert_punctuated(ab.args),
-                            })
-                        }
-                        _ => s.arguments,
-                    };
-                    PathSegment {
-                        ident,
-                        arguments: args,
+    fn convert_type_path(&self, mut typ: TypePath) -> TypePath {
+        typ.path.segments = typ
+            .path
+            .segments
+            .into_iter()
+            .map(|s| -> PathSegment {
+                let ident = TypeName::from_ident(&s.ident);
+                // May replace non-canonical names e.g. std_string
+                // with canonical equivalents, e.g. CxxString
+                let ident = ident.to_ident();
+                let args = match s.arguments {
+                    PathArguments::AngleBracketed(mut ab) => {
+                        ab.args = self.convert_punctuated(ab.args);
+                        PathArguments::AngleBracketed(ab)
                     }
-                })
-                .collect(),
-        };
-        TypePath {
-            qself: typ.qself,
-            path: new_p,
-        }
+                    _ => s.arguments,
+                };
+                parse_quote!( #ident #args )
+            })
+            .collect();
+        typ
     }
 
     fn convert_punctuated<P>(
