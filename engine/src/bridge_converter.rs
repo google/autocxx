@@ -296,32 +296,23 @@ impl<'a> BridgeConversion<'a> {
             &format!("{}_make_unique", ty.to_string()),
             Span::call_site(),
         );
-        let new_block: syn::Block = parse_quote!( {
+        m.block = parse_quote!( {
             super::cxxbridge::#call_name(
                 #(#arg_names),*
             )
         });
-        let mut new_sig = m.sig.clone();
-        new_sig.ident = Ident::new("make_unique", Span::call_site());
+        m.sig.ident = Ident::new("make_unique", Span::call_site());
         let new_return_type: TypePath = parse_quote! {
             cxx::UniquePtr < #oldreturntype >
         };
-        new_sig.unsafety = None;
-        new_sig.output = ReturnType::Type(*arrow, Box::new(Type::Path(new_return_type)));
-        m.block = new_block;
-        m.sig = new_sig;
+        m.sig.unsafety = None;
+        m.sig.output = ReturnType::Type(*arrow, Box::new(Type::Path(new_return_type)));
         let new_impl_method = syn::ImplItem::Method(m);
-        self.bindgen_items.push(Item::Impl(syn::ItemImpl {
-            attrs: Vec::new(),
-            defaultness: i.defaultness,
-            generics: i.generics.clone(),
-            trait_: i.trait_.clone(),
-            unsafety: None,
-            impl_token: i.impl_token,
-            self_ty: i.self_ty.clone(),
-            brace_token: i.brace_token,
-            items: vec![new_impl_method],
-        }));
+        let mut new_item_impl = i.clone();
+        new_item_impl.attrs = Vec::new();
+        new_item_impl.unsafety = None;
+        new_item_impl.items = vec![new_impl_method];
+        self.bindgen_items.push(Item::Impl(new_item_impl));
     }
 
     fn get_blank_extern_c_mod(&self) -> ItemForeignMod {
