@@ -1068,6 +1068,41 @@ fn test_negative_cpp_nonsense() {
     run_test_expect_fail(cxx, hdr, rs, &["BOB"], &[]);
 }
 
+#[test]
+fn test_negative_make_nonpod() {
+    let cxx = indoc! {"
+        uint32_t take_bob(const Bob& a) {
+            return a.a;
+        }
+        std::unique_ptr<Bob> make_bob(uint32_t a) {
+            auto b = std::make_unique<Bob>();
+            b->a = a;
+            return b;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+        std::unique_ptr<Bob> make_bob(uint32_t a);
+        uint32_t take_bob(const Bob& a);
+    "};
+    let rs = quote! {
+        ffi::cxxbridge::Bob {};
+    };
+    let rs2 = quote! {
+        ffi::cxxbridge::Bob { a: 12 };
+    };
+    let rs3 = quote! {
+        ffi::cxxbridge::Bob { do_not_attempt_to_allocate_nonpod_types: 12 };
+    };
+    run_test_expect_fail(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
+    run_test_expect_fail(cxx, hdr, rs2, &["take_bob", "Bob", "make_bob"], &[]);
+    run_test_expect_fail(cxx, hdr, rs3, &["take_bob", "Bob", "make_bob"], &[]);
+}
+
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
 // 3. Constants

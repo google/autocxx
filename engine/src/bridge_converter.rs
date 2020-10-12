@@ -211,7 +211,11 @@ impl<'a> BridgeConversion<'a> {
                     let should_be_pod = self.byvalue_checker.is_pod(&tyname);
                     self.generate_type_alias(tyname, should_be_pod);
                     if !should_be_pod {
-                        s.fields = syn::Fields::Unit;
+                        s.fields = syn::Fields::Named(parse_quote! {
+                            {
+                                do_not_attempt_to_allocate_nonpod_types: u8,
+                            }
+                        });
                     }
                     self.bindgen_items.push(Item::Struct(s));
                 }
