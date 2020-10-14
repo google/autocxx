@@ -27,7 +27,6 @@ categories = ["development-tools::ffi", "api-bindings"]
 log = "0.4"
 proc-macro2 = "1.0"
 quote = "1.0"
-osstrtools = "0.2"
 lazy_static = "1.4"
 indoc = "1.0"
 bindgen = "0.55"
