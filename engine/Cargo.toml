@@ -32,6 +32,7 @@ indoc = "1.0"
 bindgen = "0.55"
 itertools = "0.9"
 cxx-gen = { version="0.5.1", path="../../cxx/gen/lib" }
+dunce = "1.0.1"
 
 [dependencies.syn]
 version = "1.0.39"
