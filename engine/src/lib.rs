@@ -33,7 +33,6 @@ use syn::{parse_quote, ItemMod, Macro};
 use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator};
 use itertools::join;
 use log::{debug, info, warn};
-use osstrtools::OsStrTools;
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -196,24 +195,15 @@ impl IncludeCpp {
             Some(d) => d.clone(),
             None => std::env::var_os("AUTOCXX_INC").ok_or(Error::NoAutoCxxInc)?,
         };
+        let inc_dirs = std::env::split_paths(&inc_dirs);
         // TODO consider if we can or should look up the include path automatically
         // instead of requiring callers always to set AUTOCXX_INC.
-        let multi_path_separator = if std::path::MAIN_SEPARATOR == '/' {
-            b':'
-        } else {
-            b';'
-        }; // there's probably a crate for this
-        let splitter = [multi_path_separator];
-        let inc_dirs = inc_dirs.split(&splitter[0..1]);
-        let mut inc_dir_paths = Vec::new();
-        for inc_dir in inc_dirs {
-            let p: PathBuf = inc_dir.into();
-            let p = p
-                .canonicalize()
-                .map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p))?;
-            inc_dir_paths.push(p);
-        }
-        Ok(inc_dir_paths)
+        inc_dirs
+            .map(|p| {
+                p.canonicalize()
+                    .map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p))
+            })
+            .collect()
     }
 
     fn make_bindgen_builder(&self) -> Result<bindgen::Builder> {
