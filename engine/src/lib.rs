@@ -373,10 +373,6 @@ impl IncludeCpp {
         };
         new_bindings.content.as_mut().unwrap().1.append(&mut items);
         info!(
-            "New bindings unprettied: {}",
-            new_bindings.to_token_stream().to_string()
-        );
-        info!(
             "New bindings:\n{}",
             rust_pretty_printer::pretty_print(&new_bindings.to_token_stream())
         );
