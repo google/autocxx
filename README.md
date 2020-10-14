@@ -77,7 +77,8 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Typedefs | - |
 | Structs containing UniquePtr | Works |
 | Structs containing strings | Works (opaque only) |
-| Passing opaque structs (owned by UniquePtr) into C++ APIs which take them by value | Works |
+| Passing opaque structs (owned by UniquePtr) into C++ functions which take them by value | Works |
+| Passing opaque structs (owned by UniquePtr) into C++ methods which take them by value | Works, but with non-ideal syntax |
 | Constructors/make_unique | Works, though probably many problems |
 | Field access to opaque objects via UniquePtr | - |
 | Reference counting | - |
