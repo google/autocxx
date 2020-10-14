@@ -218,6 +218,17 @@ impl<'a> BridgeConversion<'a> {
                                 do_not_attempt_to_allocate_nonpod_types: [*const u8; 0],
                             }
                         });
+                        // Thanks to dtolnay@ for this explanation of why the following
+                        // is needed:
+                        // If the real alignment of the C++ type is smaller and a reference
+                        // is returned from C++ to Rust, mere existence of an insufficiently
+                        // aligned reference in Rust causes UB even if never dereferenced
+                        // by Rust code
+                        // (see https://doc.rust-lang.org/1.47.0/reference/behavior-considered-undefined.html).
+                        // Rustc can use least-significant bits of the reference for other storage.
+                        s.attrs.push(parse_quote!(
+                            #[repr(C, packed)]
+                        ));
                     }
                     self.bindgen_items.push(Item::Struct(s));
                 }
