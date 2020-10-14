@@ -1394,6 +1394,111 @@ fn test_method_return_nonpod_by_value() {
     run_test(cxx, hdr, rs, &["take_bob", "Anna", "get_anna"], &["Bob"]);
 }
 
+#[test]
+fn test_pass_string_by_value() {
+    let cxx = indoc! {"
+        uint32_t measure_string(std::string z) {
+            return z.length();
+        }
+        std::unique_ptr<std::string> get_msg() {
+            return std::make_unique<std::string>(\"hello\");
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        uint32_t measure_string(std::string a);
+        std::unique_ptr<std::string> get_msg();
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::get_msg();
+        let c = ffi::cxxbridge::measure_string(a);
+        assert_eq!(c, 5);
+    };
+    run_test(cxx, hdr, rs, &["measure_string", "get_msg"], &[]);
+}
+
+#[test]
+fn test_return_string_by_value() {
+    let cxx = indoc! {"
+        std::string get_msg() {
+            return \"hello\";
+        }
+    "};
+    let hdr = indoc! {"
+        #include <string>
+        std::string get_msg();
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::get_msg();
+        assert!(a.as_ref().unwrap() == "hello");
+    };
+    run_test(cxx, hdr, rs, &["get_msg"], &[]);
+}
+
+#[test]
+fn test_method_pass_string_by_value() {
+    let cxx = indoc! {"
+        uint32_t Bob::measure_string(std::string z) const {
+            return z.length();
+        }
+        std::unique_ptr<std::string> get_msg() {
+            return std::make_unique<std::string>(\"hello\");
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t measure_string(std::string a) const;
+        };
+        std::unique_ptr<std::string> get_msg();
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::get_msg();
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        let c = ffi::cxxbridge::measure_string(&b, a);
+        // let c = b.measure_string(a); // eventual goal
+        assert_eq!(c, 5);
+    };
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &["measure_string", "Bob", "get_msg"],
+        &["Bob"],
+    );
+}
+
+#[test]
+fn test_method_return_string_by_value() {
+    let cxx = indoc! {"
+        std::string Bob::get_msg() const {
+            return \"hello\";
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            std::string get_msg() const;
+        };
+    "};
+    let rs = quote! {
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        // let a = b.get_msg(); // eventual goal
+        let a = ffi::cxxbridge::get_msg(&b);
+        assert!(a.as_ref().unwrap() == "hello");
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "get_msg"], &["Bob"]);
+}
+
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
 // 3. Constants
