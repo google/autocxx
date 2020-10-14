@@ -141,8 +141,6 @@ impl<'a> BridgeConversion<'a> {
         );
         let tynamestring = tyname.to_cpp_name();
         let mut for_extern_c_ts = TokenStream2::new();
-        // TODO - add #[rustfmt::skip] here until
-        // https://github.com/rust-lang/rustfmt/issues/4159 is fixed.
         for_extern_c_ts.extend(
             [
                 TokenTree::Ident(Ident::new("type", Span::call_site())),
