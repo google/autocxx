@@ -15,6 +15,7 @@
 mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
+mod parse;
 mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
 mod types;
@@ -38,6 +39,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
 use types::TypeName;
+
+pub use parse::{parse_file, ParseError};
 
 const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
 pub struct CppFilePair {
