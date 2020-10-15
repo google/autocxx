@@ -20,6 +20,7 @@ use syn::Item;
 
 /// Errors which may occur when parsing a Rust source file to discover
 /// and interpret include_cxx macros.
+#[derive(Debug)]
 pub enum ParseError {
     /// Unable to open the source file
     FileOpen(std::io::Error),
