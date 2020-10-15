@@ -205,10 +205,7 @@ impl IncludeCpp {
         // * https://github.com/dtolnay/cxx/pull/41
         // * https://github.com/alexcrichton/cc-rs/issues/169
         inc_dirs
-            .map(|p| {
-                dunce::canonicalize(&p)
-                    .map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p))
-            })
+            .map(|p| dunce::canonicalize(&p).map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p)))
             .collect()
     }
 
