@@ -385,6 +385,7 @@ impl IncludeCpp {
         Ok(Some((new_bindings, additional_cpp_generator)))
     }
 
+    /// Generate C++-side bindings for these APIs.
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCpp> {
         let generation = self.do_generation()?;
         let mut files = Vec::new();
@@ -419,6 +420,7 @@ impl IncludeCpp {
         Ok(GeneratedCpp(files))
     }
 
+    /// Get the configured include directories.
     pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
         self.determine_incdirs()
     }
