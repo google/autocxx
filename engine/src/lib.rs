@@ -198,9 +198,15 @@ impl IncludeCpp {
         let inc_dirs = std::env::split_paths(&inc_dirs);
         // TODO consider if we can or should look up the include path automatically
         // instead of requiring callers always to set AUTOCXX_INC.
+
+        // On Windows, the canonical path begins with a UNC prefix that cannot be passed to
+        // the MSVC compiler, so dunce::canonicalize() is used instead of std::fs::canonicalize()
+        // See:
+        // * https://github.com/dtolnay/cxx/pull/41
+        // * https://github.com/alexcrichton/cc-rs/issues/169
         inc_dirs
             .map(|p| {
-                p.canonicalize()
+                dunce::canonicalize(&p)
                     .map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p))
             })
             .collect()
