@@ -81,6 +81,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Passing opaque structs (owned by UniquePtr) into C++ methods which take them by value | Works, but with non-ideal syntax |
 | Constructors/make_unique | Works, though probably many problems |
 | Field access to opaque objects via UniquePtr | - |
+| Plain-old-data structs containing opaque fields | Impossible by design, but may not be ergonomic so may need more thought |
 | Reference counting | - |
 | std::optional | - |
 | Function pointers | - |
@@ -112,6 +113,11 @@ Because this uses `bindgen`, and `bindgen` may depend on the state of your syste
 * It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html)
 * Two of the tests fail when built against some STLs due to a problem where bindgen generates `type-parameter-0-0` which is not a valid identifier.
 
+As with `cxx`, this generates both Rust and C++ side bindings code. The Rust code is simply
+and transparently generated at build time by the `include_cpp!` procedural macro. But you'll
+need to take steps to generate the C++ code: either by using the `build.rs` integration within
+`autocxx_build`, or the command line utility within `autocxx_gen`.
+
 # Configuring the build
 
 This runs `bindgen` within a procedural macro. There are limited opportunities to pass information into procedural macros, yet bindgen needs to know a lot about the build environment.
@@ -129,7 +135,7 @@ The plan is:
   for part of this engine. This also contains the test code.
 * `gen/build` - a library to be used from `build.rs` scripts to generate .cc and .h
   files from an `include_cxx` section.
-* `gen/cmd` - a command-line tool which does the same. Except this isn't written yet.
+* `gen/cmd` - a command-line tool which does the same.
 * `src` (outermost project)- the procedural macro `include_cxx` as described above.
 
 # Credits
