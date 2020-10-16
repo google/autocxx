@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use indoc::indoc;
 use lazy_static::lazy_static;
 use proc_macro2::Span;
 use std::collections::HashMap;
@@ -145,6 +146,34 @@ lazy_static! {
         map
     };
 }
+
+pub(crate) fn get_prelude() -> String {
+    return PRELUDE.into();
+}
+
+/// Prelude of C++ for squirting into bindgen. This configures
+/// bindgen to output simpler types to replace some STL types
+/// that bindgen just can't cope with. Although we then replace
+/// those types with cxx types (e.g. UniquePtr), this intermediate
+/// step is still necessary because bindgen can't otherwise
+/// give us the templated types (e.g. when faced with the STL
+/// unique_ptr, bindgen would normally give us std_unique_ptr
+/// as opposed to std_unique_ptr<T>.)
+static PRELUDE: &str = indoc! {"
+    /**
+    * <div rustbindgen=\"true\" replaces=\"std::unique_ptr\">
+    */
+    template<typename T> class UniquePtr {
+        T* ptr;
+    };
+
+    /**
+    * <div rustbindgen=\"true\" replaces=\"std::string\">
+    */
+    class CxxString {
+        char* str_data;
+    };
+    \n"};
 
 #[cfg(test)]
 mod tests {
