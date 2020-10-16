@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::types::TypeName;
-use crate::types::KNOWN_TYPES;
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
@@ -50,8 +49,8 @@ pub struct ByValueChecker {
 impl ByValueChecker {
     pub fn new() -> Self {
         let mut results = HashMap::new();
-        for (tn, td) in KNOWN_TYPES.iter() {
-            let safety = if td.by_value_safe {
+        for (tn, by_value_safe) in crate::types::get_pod_safe_types() {
+            let safety = if by_value_safe {
                 PODState::IsPOD
             } else {
                 PODState::UnsafeToBePOD(format!("type {} is not safe for POD", tn))

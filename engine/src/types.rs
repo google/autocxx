@@ -45,13 +45,16 @@ impl TypeName {
     }
 
     pub(crate) fn new(id: &str) -> Self {
-        let canonical_name = DEADNAME_MAP.get(id);
+        let canonical_name = KNOWN_TYPES.by_deadname.get(id);
         if let Some(canonical_name) = canonical_name {
             // This is already a cxx replacement name, e.g. CxxString.
-            TypeName(canonical_name.into())
+            TypeName::new_unchecked(canonical_name)
         } else {
-            TypeName(id.into())
+            TypeName::new_unchecked(id)
         }
+    }
+    fn new_unchecked(id: &str) -> Self {
+        TypeName(id.into())
     }
 
     pub(crate) fn to_ident(&self) -> Ident {
@@ -59,7 +62,7 @@ impl TypeName {
     }
 
     pub(crate) fn to_cpp_name(&self) -> &str {
-        match KNOWN_TYPES.get(&self) {
+        match KNOWN_TYPES.by_cxx_name.get(&self) {
             None => &self.0,
             Some(replacement) => &replacement.cpp_name.as_str(),
         }
@@ -149,53 +152,63 @@ impl TypeDetails {
     }
 }
 
-lazy_static! {
-    pub(crate) static ref KNOWN_TYPES: HashMap<TypeName, TypeDetails> = {
-        let mut map = HashMap::new();
-        map.insert(
-            TypeName::new("UniquePtr"),
-            TypeDetails::new(
-                "UniquePtr".into(),
-                "std::unique_ptr".into(),
-                true,
-                PreludePolicy::IncludeTemplated,
-            ),
-        );
-        map.insert(
-            TypeName::new("CxxString"),
-            TypeDetails::new(
-                "CxxString".into(),
-                "std::string".into(),
-                false,
-                PreludePolicy::IncludeNormal,
-            ),
-        );
-        for (cpp_type, rust_type) in (3..7)
-            .map(|x| 2i32.pow(x))
-            .map(|x| {
-                vec![
-                    (format!("uint{}_t", x), format!("u{}", x)),
-                    (format!("int{}_t", x), format!("i{}", x)),
-                ]
-            })
-            .flatten()
-        {
-            map.insert(
-                TypeName::new(&rust_type),
-                TypeDetails::new(rust_type.into(), cpp_type, true, PreludePolicy::Exclude),
-            );
-        }
-        map
-    };
+struct TypeDatabase {
+    by_cxx_name: HashMap<TypeName, TypeDetails>,
+    by_deadname: HashMap<String, String>,
 }
 
 lazy_static! {
-    static ref DEADNAME_MAP: HashMap<String, String> = {
-        let mut map = HashMap::new();
-        map.insert("std_unique_ptr".into(), "UniquePtr".into());
-        map.insert("std_string".into(), "CxxString".into());
-        map
-    };
+    static ref KNOWN_TYPES: TypeDatabase = create_type_database();
+}
+
+fn create_type_database() -> TypeDatabase {
+    let mut by_cxx_name = HashMap::new();
+    by_cxx_name.insert(
+        TypeName::new_unchecked("UniquePtr"),
+        TypeDetails::new(
+            "UniquePtr".into(),
+            "std::unique_ptr".into(),
+            true,
+            PreludePolicy::IncludeTemplated,
+        ),
+    );
+    by_cxx_name.insert(
+        TypeName::new_unchecked("CxxString"),
+        TypeDetails::new(
+            "CxxString".into(),
+            "std::string".into(),
+            false,
+            PreludePolicy::IncludeNormal,
+        ),
+    );
+    for (cpp_type, rust_type) in (3..7)
+        .map(|x| 2i32.pow(x))
+        .map(|x| {
+            vec![
+                (format!("uint{}_t", x), format!("u{}", x)),
+                (format!("int{}_t", x), format!("i{}", x)),
+            ]
+        })
+        .flatten()
+    {
+        by_cxx_name.insert(
+            TypeName::new_unchecked(&rust_type),
+            TypeDetails::new(rust_type.into(), cpp_type, true, PreludePolicy::Exclude),
+        );
+    }
+
+    let mut by_deadname = HashMap::new();
+    for td in by_cxx_name.values() {
+        let deadname = td.cpp_name.replace("::", "_");
+        if deadname != td.cpp_name {
+            by_deadname.insert(deadname, td.cxx_name.clone());
+        }
+    }
+
+    TypeDatabase {
+        by_cxx_name,
+        by_deadname,
+    }
 }
 
 /// Prelude of C++ for squirting into bindgen. This configures
@@ -208,9 +221,20 @@ lazy_static! {
 /// as opposed to std_unique_ptr<T>.)
 pub(crate) fn get_prelude() -> String {
     itertools::join(
-        KNOWN_TYPES.values().filter_map(|t| t.get_prelude_entry()),
+        KNOWN_TYPES
+            .by_cxx_name
+            .values()
+            .filter_map(|t| t.get_prelude_entry()),
         "\n",
     )
+}
+
+pub(crate) fn get_pod_safe_types() -> Vec<(TypeName, bool)> {
+    KNOWN_TYPES
+        .by_cxx_name
+        .iter()
+        .map(|(tn, td)| (tn.clone(), td.by_value_safe))
+        .collect()
 }
 
 pub(crate) fn to_cpp_name(typ: &Type) -> String {
