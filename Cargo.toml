@@ -37,6 +37,6 @@ features = [ "full" ]
 [workspace]
 members = ["engine", "gen/cmd", "gen/build", "demo"]
 
-[patch.crates-io]
-cxx = { path="../cxx" }
-cxx-gen = { path="../cxx/gen/lib" }
+# [patch.crates-io]
+# cxx = { path="../cxx" }
+# cxx-gen = { path="../cxx/gen/lib" }
