@@ -42,7 +42,7 @@ use types::TypeName;
 
 pub use parse::{parse_file, ParseError};
 
-const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
+const BINDGEN_BLOCKLIST: &[&str] = &["std.*", "__gnu.*", ".*mbstate_t.*"];
 pub struct CppFilePair {
     pub header: Vec<u8>,
     pub implementation: Vec<u8>,
