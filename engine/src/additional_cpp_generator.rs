@@ -14,7 +14,7 @@
 
 use crate::types::TypeName;
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use syn::{Ident, Type};
 
 enum ArgumentConversionType {
@@ -104,12 +104,40 @@ pub(crate) enum AdditionalNeed {
     ByValueWrapper(ByValueWrapper),
 }
 
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
+struct Header {
+    name: &'static str,
+    system: bool,
+}
+
+impl Header {
+    fn system(name: &'static str) -> Self {
+        Header { name, system: true }
+    }
+
+    fn user(name: &'static str) -> Self {
+        Header {
+            name,
+            system: false,
+        }
+    }
+
+    fn include_stmt(&self) -> String {
+        if self.system {
+            format!("#include <{}>", self.name)
+        } else {
+            format!("#include \"{}\"", self.name)
+        }
+    }
+}
+
 struct AdditionalFunction {
     declaration: String,
     definition: String,
     name: String,
     suppress_older: Vec<String>,
     rename: Option<(String, String)>,
+    headers: Vec<Header>,
 }
 
 /// Details of additional generated C++.
@@ -158,8 +186,15 @@ impl AdditionalCppGenerator {
         if self.additional_functions.is_empty() {
             None
         } else {
+            let headers: HashSet<Header> = self
+                .additional_functions
+                .iter()
+                .map(|x| x.headers.iter().cloned())
+                .flatten()
+                .collect();
+            let headers = headers.iter().map(|x| x.include_stmt()).join("\n");
             let declarations = self.concat_additional_items(|x| &x.declaration);
-            let declarations = format!("#include <memory>\n{}\n{}", self.inclusions, declarations);
+            let declarations = format!("{}\n{}\n{}", headers, self.inclusions, declarations);
             let definitions = self.concat_additional_items(|x| &x.definition);
             let definitions = format!("#include \"autocxxgen.h\"\n{}", definitions);
             let extra_allowlist = self
@@ -220,6 +255,11 @@ impl AdditionalCppGenerator {
             definition,
             suppress_older: Vec::new(),
             rename: None,
+            headers: vec![
+                Header::system("memory"),
+                Header::system("string"),
+                Header::user("cxx.h"),
+            ],
         })
     }
 
@@ -247,6 +287,7 @@ impl AdditionalCppGenerator {
             definition,
             suppress_older: Vec::new(),
             rename: None,
+            headers: vec![Header::system("memory")],
         })
     }
 
@@ -302,6 +343,7 @@ impl AdditionalCppGenerator {
             definition,
             suppress_older,
             rename: Some((name, ident.to_string())),
+            headers: vec![Header::system("memory")],
         })
     }
 }
