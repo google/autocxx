@@ -69,23 +69,7 @@ impl ArgumentConversion {
     }
 
     fn unwrapped_type_as_string(&self) -> String {
-        match self.unwrapped_type {
-            Type::Path(ref typ) => TypeName::from_type_path(typ).to_cpp_name().to_string(),
-            Type::Reference(ref typr) => {
-                let const_bit = match typr.mutability {
-                    None => "const ",
-                    Some(_) => "",
-                };
-                format!(
-                    "{}{}&",
-                    const_bit,
-                    TypeName::from_type(typr.elem.as_ref())
-                        .to_cpp_name()
-                        .to_string()
-                )
-            }
-            _ => unimplemented!(),
-        }
+        crate::types::to_cpp_name(&self.unwrapped_type)
     }
 
     fn wrapped_type(&self) -> String {

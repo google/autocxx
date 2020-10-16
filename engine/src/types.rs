@@ -151,6 +151,26 @@ pub(crate) fn get_prelude() -> String {
     return PRELUDE.into();
 }
 
+pub(crate) fn to_cpp_name(typ: &Type) -> String {
+    match typ {
+        Type::Path(ref typ) => TypeName::from_type_path(typ).to_cpp_name().to_string(),
+        Type::Reference(ref typr) => {
+            let const_bit = match typr.mutability {
+                None => "const ",
+                Some(_) => "",
+            };
+            format!(
+                "{}{}&",
+                const_bit,
+                TypeName::from_type(typr.elem.as_ref())
+                    .to_cpp_name()
+                    .to_string()
+            )
+        }
+        _ => unimplemented!(),
+    }
+}
+
 /// Prelude of C++ for squirting into bindgen. This configures
 /// bindgen to output simpler types to replace some STL types
 /// that bindgen just can't cope with. Although we then replace
