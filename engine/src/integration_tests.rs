@@ -1566,6 +1566,7 @@ fn test_pass_rust_str() {
 // 7. Out params
 // 8. Opaque type handling
 // 9. Multiple functions in one header
+// 10. ExcludeUtilities
 // Stuff which requires much more thought:
 // 1. Shared pointers
 // Negative tests:

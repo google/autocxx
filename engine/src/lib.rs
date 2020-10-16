@@ -30,7 +30,7 @@ use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, ItemMod, Macro};
 
-use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator};
+use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator, AdditionalNeed};
 use itertools::join;
 use log::{debug, info, warn};
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
@@ -79,6 +79,7 @@ pub struct IncludeCpp {
     pod_types: Vec<TypeName>,
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
     parse_only: bool,
+    exclude_utilities: bool,
     preprocessor_definitions: Rc<Mutex<PreprocessorDefinitions>>,
 }
 
@@ -111,6 +112,7 @@ impl IncludeCpp {
         let mut allowlist = Vec::new();
         let mut pod_types = Vec::new();
         let mut parse_only = false;
+        let mut exclude_utilities = false;
 
         while !input.is_empty() {
             let ident: syn::Ident = input.parse()?;
@@ -129,10 +131,12 @@ impl IncludeCpp {
                 }
             } else if ident == "ParseOnly" {
                 parse_only = true;
+            } else if ident == "ExcludeUtilities" {
+                exclude_utilities = true;
             } else {
                 return Err(syn::Error::new(
                     ident.span(),
-                    "expected Header, Allow or AllowPOD",
+                    "expected Header, Allow, AllowPOD or ExcludeUtilities",
                 ));
             }
             if input.is_empty() {
@@ -147,6 +151,7 @@ impl IncludeCpp {
             pod_types,
             preconfigured_inc_dirs: None,
             parse_only,
+            exclude_utilities,
             preprocessor_definitions: Rc::new(Mutex::new(PreprocessorDefinitions::new())),
         })
     }
@@ -319,6 +324,14 @@ impl IncludeCpp {
             .map_err(Error::Conversion)?;
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
+        if !self.exclude_utilities {
+            // Unless we've been specifically asked not to do so, we always
+            // generate a 'make_string' function. That pretty much *always* means
+            // we run two passes through bindgen. i.e. the next 'if' is always true,
+            // and we always generate an additional C++ file for our bindings additions,
+            // unless the include_cpp macro has specified ExcludeUtilities.
+            additional_cpp_generator.add_needs(vec![AdditionalNeed::MakeStringConstructor]);
+        }
         let additional_cpp_items = additional_cpp_generator.generate();
         if let Some(additional_cpp_items) = additional_cpp_items {
             // When processing the bindings the first time, we discovered we wanted to add
