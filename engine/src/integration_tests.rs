@@ -1408,6 +1408,7 @@ fn test_pass_string_by_value() {
     let hdr = indoc! {"
         #include <cstdint>
         #include <string>
+        #include <memory>
         uint32_t measure_string(std::string a);
         std::unique_ptr<std::string> get_msg();
     "};
@@ -1450,6 +1451,7 @@ fn test_method_pass_string_by_value() {
     let hdr = indoc! {"
         #include <cstdint>
         #include <string>
+        #include <memory>
         struct Bob {
         public:
             uint32_t a;
