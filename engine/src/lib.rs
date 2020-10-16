@@ -15,6 +15,7 @@
 mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
+mod parse;
 mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
 mod types;
@@ -38,6 +39,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
 use types::TypeName;
+
+pub use parse::{parse_file, ParseError};
 
 const BINDGEN_BLOCKLIST: &[&str] = &["std.*", ".*mbstate_t.*"];
 pub struct CppFilePair {
@@ -205,10 +208,7 @@ impl IncludeCpp {
         // * https://github.com/dtolnay/cxx/pull/41
         // * https://github.com/alexcrichton/cc-rs/issues/169
         inc_dirs
-            .map(|p| {
-                dunce::canonicalize(&p)
-                    .map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p))
-            })
+            .map(|p| dunce::canonicalize(&p).map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p)))
             .collect()
     }
 
@@ -385,6 +385,7 @@ impl IncludeCpp {
         Ok(Some((new_bindings, additional_cpp_generator)))
     }
 
+    /// Generate C++-side bindings for these APIs.
     pub fn generate_h_and_cxx(self) -> Result<GeneratedCpp> {
         let generation = self.do_generation()?;
         let mut files = Vec::new();
@@ -419,6 +420,7 @@ impl IncludeCpp {
         Ok(GeneratedCpp(files))
     }
 
+    /// Get the configured include directories.
     pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
         self.determine_incdirs()
     }
