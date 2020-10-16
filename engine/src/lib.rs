@@ -41,7 +41,8 @@ use types::TypeName;
 
 pub use parse::{parse_file, ParseError};
 
-const BINDGEN_BLOCKLIST: &[&str] = &["std.*", "__gnu.*", ".*mbstate_t.*"];
+pub use cxx_gen::HEADER;
+
 pub struct CppFilePair {
     pub header: Vec<u8>,
     pub implementation: Vec<u8>,
@@ -204,8 +205,8 @@ impl IncludeCpp {
                 non_exhaustive: false,
             })
             .layout_tests(false); // TODO revisit later
-        for item in BINDGEN_BLOCKLIST.iter() {
-            builder = builder.blacklist_item(*item);
+        for item in types::get_initial_blocklist() {
+            builder = builder.blacklist_item(item);
         }
 
         for inc_dir in inc_dirs {

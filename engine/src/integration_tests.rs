@@ -65,13 +65,15 @@ impl LinkableTryBuilder {
         library_path: &P1,
         library_name: &str,
         header_path: &P2,
-        header_name: &str,
+        header_names: &[&str],
         rs_path: &P3,
     ) -> std::thread::Result<()> {
         // Copy all items from the source dir into our temporary dir if their name matches
         // the pattern given in `library_name`.
         self.move_items_into_temp_dir(library_path, library_name);
-        self.move_items_into_temp_dir(header_path, header_name);
+        for header_name in header_names {
+            self.move_items_into_temp_dir(header_path, header_name);
+        }
         let temp_path = self.temp_dir.path().to_str().unwrap();
         std::env::set_var("RUSTFLAGS", format!("-L {}", temp_path));
         std::env::set_var("AUTOCXX_INC", temp_path);
@@ -143,6 +145,7 @@ fn do_run_test(
     // Step 1: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
     write_to_file(&tdir, "input.h", &format!("#pragma once\n{}", header_code));
+    write_to_file(&tdir, "cxx.h", crate::HEADER);
     // Step 2: Expand the snippet of Rust code into an entire
     //         program including include_cxx!
     // TODO - we're not quoting #s below (in the "" sense), and it's not entirely
@@ -204,7 +207,7 @@ fn do_run_test(
         &target_dir,
         "autocxx-demo",
         &tdir.path(),
-        "input.h",
+        &["input.h", "cxx.h"],
         &rs_path,
     );
     if r.is_err() {
@@ -1495,6 +1498,64 @@ fn test_method_return_string_by_value() {
         assert!(a.as_ref().unwrap() == "hello");
     };
     run_test(cxx, hdr, rs, &["take_bob", "get_msg"], &["Bob"]);
+}
+
+#[test]
+fn test_pass_rust_string_by_ref() {
+    let cxx = indoc! {"
+        uint32_t measure_string(const rust::String& z) {
+            return std::string(z).length();
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <cxx.h>
+        uint32_t measure_string(const rust::String& z);
+    "};
+    let rs = quote! {
+        let c = ffi::cxxbridge::measure_string(&"hello".to_string());
+        assert_eq!(c, 5);
+    };
+    run_test(cxx, hdr, rs, &["measure_string"], &[]);
+}
+
+#[test]
+fn test_pass_rust_string_by_value() {
+    let cxx = indoc! {"
+        uint32_t measure_string(rust::String z) {
+            return std::string(z).length();
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <cxx.h>
+        uint32_t measure_string(rust::String z);
+    "};
+    let rs = quote! {
+        let c = ffi::cxxbridge::measure_string("hello".into());
+        assert_eq!(c, 5);
+    };
+    run_test(cxx, hdr, rs, &["measure_string"], &[]);
+}
+
+#[test]
+fn test_pass_rust_str() {
+    // passing by value is the only legal option
+    let cxx = indoc! {"
+        uint32_t measure_string(rust::Str z) {
+            return std::string(z).length();
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <cxx.h>
+        uint32_t measure_string(rust::Str z);
+    "};
+    let rs = quote! {
+        let c = ffi::cxxbridge::measure_string("hello");
+        assert_eq!(c, 5);
+    };
+    run_test(cxx, hdr, rs, &["measure_string"], &[]);
 }
 
 // Yet to test:
