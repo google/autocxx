@@ -26,7 +26,6 @@ mod integration_tests;
 use proc_macro2::TokenStream as TokenStream2;
 use std::path::PathBuf;
 
-use indoc::indoc;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, ItemMod, Macro};
@@ -99,30 +98,6 @@ fn dump_generated_code(gen: cxx_gen::GeneratedCode) -> Result<cxx_gen::Generated
     );
     Ok(gen)
 }
-
-/// Prelude of C++ for squirting into bindgen. This configures
-/// bindgen to output simpler types to replace some STL types
-/// that bindgen just can't cope with. Although we then replace
-/// those types with cxx types (e.g. UniquePtr), this intermediate
-/// step is still necessary because bindgen can't otherwise
-/// give us the templated types (e.g. when faced with the STL
-/// unique_ptr, bindgen would normally give us std_unique_ptr
-/// as opposed to std_unique_ptr<T>.)
-static PRELUDE: &str = indoc! {"
-    /**
-    * <div rustbindgen=\"true\" replaces=\"std::unique_ptr\">
-    */
-    template<typename T> class UniquePtr {
-        T* ptr;
-    };
-
-    /**
-    * <div rustbindgen=\"true\" replaces=\"std::string\">
-    */
-    class CxxString {
-        char* str_data;
-    };
-    \n"};
 
 impl IncludeCpp {
     fn new_from_parse_stream(input: ParseStream) -> syn::Result<Self> {
@@ -268,7 +243,7 @@ impl IncludeCpp {
         } else {
             String::new()
         };
-        let full_header = format!("{}{}\n\n{}", PRELUDE, more_decls, full_header,);
+        let full_header = format!("{}{}\n\n{}", types::get_prelude(), more_decls, full_header,);
         info!("Full header: {}", full_header);
         builder = builder.header_contents("example.hpp", &full_header);
         builder

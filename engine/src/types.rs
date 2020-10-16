@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use indoc::indoc;
 use lazy_static::lazy_static;
 use proc_macro2::Span;
 use std::collections::HashMap;
@@ -44,13 +45,16 @@ impl TypeName {
     }
 
     pub(crate) fn new(id: &str) -> Self {
-        let canonical_name = DEADNAME_MAP.get(id);
+        let canonical_name = KNOWN_TYPES.by_deadname.get(id);
         if let Some(canonical_name) = canonical_name {
             // This is already a cxx replacement name, e.g. CxxString.
-            TypeName(canonical_name.into())
+            TypeName::new_unchecked(canonical_name)
         } else {
-            TypeName(id.into())
+            TypeName::new_unchecked(id)
         }
+    }
+    fn new_unchecked(id: &str) -> Self {
+        TypeName(id.into())
     }
 
     pub(crate) fn to_ident(&self) -> Ident {
@@ -58,9 +62,9 @@ impl TypeName {
     }
 
     pub(crate) fn to_cpp_name(&self) -> &str {
-        match KNOWN_TYPES.get(&self).and_then(|x| x.cpp_name.as_ref()) {
+        match KNOWN_TYPES.by_cxx_name.get(&self) {
             None => &self.0,
-            Some(replacement) => &replacement.as_str(),
+            Some(replacement) => &replacement.cpp_name.as_str(),
         }
     }
 
@@ -87,63 +91,170 @@ impl Display for TypeName {
 }
 
 #[derive(Debug)]
+enum PreludePolicy {
+    Exclude,
+    IncludeNormal,
+    IncludeTemplated,
+}
+
+#[derive(Debug)]
 pub(crate) struct TypeDetails {
-    /// This type may be called this in bindgen-generated code.
-    /// We want to expunge that Bad Old Name as quickly as possible.
-    cpp_deadname: Option<String>,
+    /// The name used by cxx for this type.
+    cxx_name: String,
     /// C++ equivalent name for a Rust type.
-    pub(crate) cpp_name: Option<String>,
+    pub(crate) cpp_name: String,
     /// Whether this can be safely represented by value.
     pub(crate) by_value_safe: bool,
+    /// Whether and how to include this in the prelude given to bindgen.
+    prelude_policy: PreludePolicy,
 }
 
 impl TypeDetails {
-    fn new(cpp_deadname: Option<String>, cpp_name: Option<String>, by_value_safe: bool) -> Self {
+    fn new(
+        cxx_name: String,
+        cpp_name: String,
+        by_value_safe: bool,
+        prelude_policy: PreludePolicy,
+    ) -> Self {
         TypeDetails {
-            cpp_deadname,
+            cxx_name,
             cpp_name,
             by_value_safe,
+            prelude_policy,
+        }
+    }
+
+    fn get_prelude_entry(&self) -> Option<String> {
+        match self.prelude_policy {
+            PreludePolicy::Exclude => None,
+            PreludePolicy::IncludeNormal | PreludePolicy::IncludeTemplated => {
+                let proper_cpp_name = &self.cpp_name;
+                let cxx_name = &self.cxx_name;
+                let (templating, payload) = match self.prelude_policy {
+                    PreludePolicy::IncludeNormal => ("", "char* ptr"),
+                    PreludePolicy::IncludeTemplated => ("template<typename T> ", "T* ptr"),
+                    _ => unreachable!(),
+                };
+                Some(format!(
+                    indoc! {"
+                    /**
+                    * <div rustbindgen=\"true\" replaces=\"{}\">
+                    */
+                    {}class {} {{
+                        {};
+                    }};
+
+                    "},
+                    proper_cpp_name, templating, cxx_name, payload
+                ))
+            }
         }
     }
 }
 
-lazy_static! {
-    pub(crate) static ref KNOWN_TYPES: HashMap<TypeName, TypeDetails> = {
-        let mut map = HashMap::new();
-        map.insert(
-            TypeName::new("UniquePtr"),
-            TypeDetails::new(Some("std_unique_ptr".into()), None, true),
-        );
-        map.insert(
-            TypeName::new("CxxString"),
-            TypeDetails::new(Some("std_string".into()), Some("std::string".into()), false),
-        );
-        for (cpp_type, rust_type) in (3..7)
-            .map(|x| 2i32.pow(x))
-            .map(|x| {
-                vec![
-                    (format!("uint{}_t", x), format!("u{}", x)),
-                    (format!("int{}_t", x), format!("i{}", x)),
-                ]
-            })
-            .flatten()
-        {
-            map.insert(
-                TypeName::new(&rust_type),
-                TypeDetails::new(None, Some(cpp_type), true),
-            );
-        }
-        map
-    };
+struct TypeDatabase {
+    by_cxx_name: HashMap<TypeName, TypeDetails>,
+    by_deadname: HashMap<String, String>,
 }
 
 lazy_static! {
-    static ref DEADNAME_MAP: HashMap<String, String> = {
-        let mut map = HashMap::new();
-        map.insert("std_unique_ptr".into(), "UniquePtr".into());
-        map.insert("std_string".into(), "CxxString".into());
-        map
-    };
+    static ref KNOWN_TYPES: TypeDatabase = create_type_database();
+}
+
+fn create_type_database() -> TypeDatabase {
+    let mut by_cxx_name = HashMap::new();
+
+    let mut do_insert =
+        |td: TypeDetails| by_cxx_name.insert(TypeName::new_unchecked(&td.cxx_name), td);
+
+    do_insert(TypeDetails::new(
+        "UniquePtr".into(),
+        "std::unique_ptr".into(),
+        true,
+        PreludePolicy::IncludeTemplated,
+    ));
+    do_insert(TypeDetails::new(
+        "CxxString".into(),
+        "std::string".into(),
+        false,
+        PreludePolicy::IncludeNormal,
+    ));
+    for (cpp_type, rust_type) in (3..7)
+        .map(|x| 2i32.pow(x))
+        .map(|x| {
+            vec![
+                (format!("uint{}_t", x), format!("u{}", x)),
+                (format!("int{}_t", x), format!("i{}", x)),
+            ]
+        })
+        .flatten()
+    {
+        do_insert(TypeDetails::new(
+            rust_type.into(),
+            cpp_type,
+            true,
+            PreludePolicy::Exclude,
+        ));
+    }
+
+    let mut by_deadname = HashMap::new();
+    for td in by_cxx_name.values() {
+        let deadname = td.cpp_name.replace("::", "_");
+        if deadname != td.cpp_name {
+            by_deadname.insert(deadname, td.cxx_name.clone());
+        }
+    }
+
+    TypeDatabase {
+        by_cxx_name,
+        by_deadname,
+    }
+}
+
+/// Prelude of C++ for squirting into bindgen. This configures
+/// bindgen to output simpler types to replace some STL types
+/// that bindgen just can't cope with. Although we then replace
+/// those types with cxx types (e.g. UniquePtr), this intermediate
+/// step is still necessary because bindgen can't otherwise
+/// give us the templated types (e.g. when faced with the STL
+/// unique_ptr, bindgen would normally give us std_unique_ptr
+/// as opposed to std_unique_ptr<T>.)
+pub(crate) fn get_prelude() -> String {
+    itertools::join(
+        KNOWN_TYPES
+            .by_cxx_name
+            .values()
+            .filter_map(|t| t.get_prelude_entry()),
+        "\n",
+    )
+}
+
+pub(crate) fn get_pod_safe_types() -> Vec<(TypeName, bool)> {
+    KNOWN_TYPES
+        .by_cxx_name
+        .iter()
+        .map(|(tn, td)| (tn.clone(), td.by_value_safe))
+        .collect()
+}
+
+pub(crate) fn to_cpp_name(typ: &Type) -> String {
+    match typ {
+        Type::Path(ref typ) => TypeName::from_type_path(typ).to_cpp_name().to_string(),
+        Type::Reference(ref typr) => {
+            let const_bit = match typr.mutability {
+                None => "const ",
+                Some(_) => "",
+            };
+            format!(
+                "{}{}&",
+                const_bit,
+                TypeName::from_type(typr.elem.as_ref())
+                    .to_cpp_name()
+                    .to_string()
+            )
+        }
+        _ => unimplemented!(),
+    }
 }
 
 #[cfg(test)]
