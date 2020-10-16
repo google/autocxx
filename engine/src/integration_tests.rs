@@ -1185,6 +1185,7 @@ fn test_method_pass_pod_by_mut_reference() {
 }
 
 #[test]
+#[ignore] // pending https://github.com/dtolnay/cxx/pull/361
 fn test_method_pass_pod_by_up() {
     let cxx = indoc! {"
         uint32_t Bob::get_bob(std::unique_ptr<Anna>) const {
