@@ -64,8 +64,17 @@ impl Builder {
         let tdir = tempdir().map_err(Error::TempDirCreationFailed)?;
         let mut builder = cc::Build::new();
         builder.cpp(true);
+        // Write cxx.h to that location, as it may be needed by
+        // some of our generated code.
+        Self::write_to_file(
+            &tdir,
+            "cxx.h",
+            autocxx_engine::HEADER.as_bytes(),
+        )
+        .map_err(Error::FileWriteFail)?;
+        let autocxx_inc = Self::append_extra_path(autocxx_inc, tdir.path().to_path_buf());
         let autocxxes =
-            autocxx_engine::parse_file(rs_file, Some(autocxx_inc)).map_err(Error::ParseError)?;
+            autocxx_engine::parse_file(rs_file, Some(&autocxx_inc)).map_err(Error::ParseError)?;
         let mut counter = 0;
         for include_cpp in autocxxes {
             for inc_dir in include_cpp
@@ -96,6 +105,16 @@ impl Builder {
                 _tdir: tdir,
             })
         }
+    }
+
+    fn append_extra_path(path_list: &str, extra_path: PathBuf) -> String {
+        let mut paths = std::env::split_paths(&path_list).collect::<Vec<_>>();
+        paths.push(extra_path);
+        std::env::join_paths(paths)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
     }
 
     /// Fetch the cc::Build from this.
