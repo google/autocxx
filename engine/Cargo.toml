@@ -31,7 +31,7 @@ lazy_static = "1.4"
 indoc = "1.0"
 bindgen = "0.55"
 itertools = "0.9"
-cxx-gen = "0.5.1"
+cxx-gen = "0.5.2"
 dunce = "1.0.1"
 
 [dependencies.syn]
@@ -50,4 +50,4 @@ autocxx-build = { path="../gen/build" }
 # by the trybuild test system...
 autocxx = { path=".." }
 link-cplusplus = "1.0"
-cxx = "0.5.1"
+cxx = "0.5.2"
