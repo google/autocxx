@@ -349,7 +349,6 @@ fn test_give_string_up() {
 }
 
 #[test]
-#[ignore] // because we don't yet support std::string by value
 fn test_give_string_plain() {
     let cxx = indoc! {"
         std::string give_str() {
@@ -361,7 +360,7 @@ fn test_give_string_plain() {
         std::string give_str();
     "};
     let rs = quote! {
-        assert_eq!(ffi::cxxbridge::give_str_up().to_str().unwrap(), "Bob");
+        assert_eq!(ffi::cxxbridge::give_str().as_ref().unwrap(), "Bob");
     };
     run_test(cxx, hdr, rs, &["give_str"], &[]);
 }
@@ -391,7 +390,6 @@ fn test_cycle_string_up() {
 }
 
 #[test]
-#[ignore] // because we don't yet support std::string by value
 fn test_cycle_string() {
     let cxx = indoc! {"
         std::string give_str() {
