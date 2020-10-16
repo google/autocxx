@@ -99,6 +99,7 @@ pub(crate) struct ByValueWrapper {
 
 /// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
+    MakeStringConstructor,
     MakeUnique(TypeName, Vec<TypeName>),
     ByValueWrapper(ByValueWrapper),
 }
@@ -144,6 +145,7 @@ impl AdditionalCppGenerator {
     pub(crate) fn add_needs(&mut self, additions: Vec<AdditionalNeed>) {
         for need in additions {
             match need {
+                AdditionalNeed::MakeStringConstructor => self.generate_string_constructor(),
                 AdditionalNeed::MakeUnique(ty, args) => self.generate_make_unique(&ty, &args),
                 AdditionalNeed::ByValueWrapper(by_value_wrapper) => {
                     self.generate_by_value_wrapper(by_value_wrapper)
@@ -198,6 +200,27 @@ impl AdditionalCppGenerator {
             .join("\n\n");
         s.push('\n');
         s
+    }
+
+    fn generate_string_constructor(&mut self) {
+        let name = "make_string";
+        let declaration = format!(
+            "std::unique_ptr<std::string> {}(const ::rust::Str& str)",
+            name
+        );
+        let definition = format!(
+            "{} {{ return std::make_unique<std::string>(std::string(str)); }}",
+            declaration
+        );
+        let declaration = format!("{};", declaration);
+
+        self.additional_functions.push(AdditionalFunction {
+            name: name.into(),
+            declaration,
+            definition,
+            suppress_older: Vec::new(),
+            rename: None,
+        })
     }
 
     fn generate_make_unique(&mut self, ty: &TypeName, constructor_arg_types: &[TypeName]) {
