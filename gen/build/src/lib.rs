@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use autocxx_engine::ParseError;
 pub use autocxx_engine::Error as EngineError;
+pub use autocxx_engine::ParseError;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -64,7 +64,8 @@ impl Builder {
         let tdir = tempdir().map_err(Error::TempDirCreationFailed)?;
         let mut builder = cc::Build::new();
         builder.cpp(true);
-        let autocxxes = autocxx_engine::parse_file(rs_file, Some(autocxx_inc)).map_err(Error::ParseError)?;
+        let autocxxes =
+            autocxx_engine::parse_file(rs_file, Some(autocxx_inc)).map_err(Error::ParseError)?;
         let mut counter = 0;
         for include_cpp in autocxxes {
             for inc_dir in include_cpp
@@ -79,9 +80,8 @@ impl Builder {
             for filepair in generated_code.0 {
                 let fname = format!("gen{}.cxx", counter);
                 counter += 1;
-                let gen_cxx_path =
-                    Self::write_to_file(&tdir, &fname, &filepair.implementation)
-                        .map_err(Error::FileWriteFail)?;
+                let gen_cxx_path = Self::write_to_file(&tdir, &fname, &filepair.implementation)
+                    .map_err(Error::FileWriteFail)?;
                 builder.file(gen_cxx_path);
 
                 Self::write_to_file(&tdir, &filepair.header_name, &filepair.header)

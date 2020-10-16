@@ -150,6 +150,15 @@ impl TypeDetails {
             }
         }
     }
+
+    fn deadname(&self) -> Option<String> {
+        let deadname = self.cpp_name.replace("::", "_");
+        if deadname != self.cpp_name {
+            Some(deadname)
+        } else {
+            None
+        }
+    }
 }
 
 struct TypeDatabase {
@@ -179,6 +188,18 @@ fn create_type_database() -> TypeDatabase {
         false,
         PreludePolicy::IncludeNormal,
     ));
+    do_insert(TypeDetails::new(
+        "str".into(),
+        "rust::Str".into(),
+        true,
+        PreludePolicy::IncludeNormal,
+    ));
+    do_insert(TypeDetails::new(
+        "String".into(),
+        "rust::String".into(),
+        true,
+        PreludePolicy::IncludeNormal,
+    ));
     for (cpp_type, rust_type) in (3..7)
         .map(|x| 2i32.pow(x))
         .map(|x| {
@@ -199,8 +220,7 @@ fn create_type_database() -> TypeDatabase {
 
     let mut by_deadname = HashMap::new();
     for td in by_cxx_name.values() {
-        let deadname = td.cpp_name.replace("::", "_");
-        if deadname != td.cpp_name {
+        if let Some(deadname) = td.deadname() {
             by_deadname.insert(deadname, td.cxx_name.clone());
         }
     }
@@ -210,6 +230,8 @@ fn create_type_database() -> TypeDatabase {
         by_deadname,
     }
 }
+
+const BINDGEN_BLOCKLIST: &[&str] = &["std.*", "__gnu.*", ".*mbstate_t.*", "rust.*"];
 
 /// Prelude of C++ for squirting into bindgen. This configures
 /// bindgen to output simpler types to replace some STL types
@@ -255,6 +277,10 @@ pub(crate) fn to_cpp_name(typ: &Type) -> String {
         }
         _ => unimplemented!(),
     }
+}
+
+pub(crate) fn get_initial_blocklist() -> Vec<String> {
+    BINDGEN_BLOCKLIST.iter().map(|s| s.to_string()).collect()
 }
 
 #[cfg(test)]

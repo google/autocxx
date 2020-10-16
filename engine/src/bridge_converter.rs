@@ -550,7 +550,19 @@ impl<'a> BridgeConversion<'a> {
 
     fn convert_type(&self, ty: Type) -> Type {
         match ty {
-            Type::Path(p) => Type::Path(self.convert_type_path(p)),
+            Type::Path(p) => {
+                // Special handling because rust_Str (as emitted by bindgen)
+                // doesn't simply get renamed to a different type _identifier_.
+                // This plain type-by-value (as far as bindgen is concerned)
+                // is actually a &str.
+                if p.path.is_ident("rust_Str") {
+                    Type::Reference(parse_quote! {
+                        &str
+                    })
+                } else {
+                    Type::Path(self.convert_type_path(p))
+                }
+            }
             Type::Reference(mut r) => {
                 r.elem = self.convert_boxed_type(r.elem);
                 Type::Reference(r)
@@ -563,6 +575,10 @@ impl<'a> BridgeConversion<'a> {
     fn convert_ptr_to_reference(&self, ptr: TypePtr) -> TypeReference {
         let mutability = ptr.mutability;
         let elem = self.convert_boxed_type(ptr.elem);
+        // TODO - in the future, we should check if this is a rust::Str and throw
+        // a wobbler if not. rust::Str should only be seen _by value_ in C++
+        // headers; it manifests as &str in Rust but on the C++ side it must
+        // be a plain value. We should detect and abort.
         parse_quote! {
             & #mutability #elem
         }
