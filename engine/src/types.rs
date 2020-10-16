@@ -98,9 +98,6 @@ enum PreludePolicy {
 pub(crate) struct TypeDetails {
     /// The name used by cxx for this type.
     cxx_name: String,
-    /// This type may be called this in bindgen-generated code.
-    /// We want to expunge that Bad Old Name as quickly as possible.
-    cpp_deadname: Option<String>,
     /// C++ equivalent name for a Rust type.
     pub(crate) cpp_name: String,
     /// Whether this can be safely represented by value.
@@ -112,14 +109,12 @@ pub(crate) struct TypeDetails {
 impl TypeDetails {
     fn new(
         cxx_name: String,
-        cpp_deadname: Option<String>,
         cpp_name: String,
         by_value_safe: bool,
         prelude_policy: PreludePolicy,
     ) -> Self {
         TypeDetails {
             cxx_name,
-            cpp_deadname,
             cpp_name,
             by_value_safe,
             prelude_policy,
@@ -161,7 +156,6 @@ lazy_static! {
             TypeName::new("UniquePtr"),
             TypeDetails::new(
                 "UniquePtr".into(),
-                Some("std_unique_ptr".into()),
                 "std::unique_ptr".into(),
                 true,
                 PreludePolicy::IncludeTemplated,
@@ -171,7 +165,6 @@ lazy_static! {
             TypeName::new("CxxString"),
             TypeDetails::new(
                 "CxxString".into(),
-                Some("std_string".into()),
                 "std::string".into(),
                 false,
                 PreludePolicy::IncludeNormal,
@@ -189,13 +182,7 @@ lazy_static! {
         {
             map.insert(
                 TypeName::new(&rust_type),
-                TypeDetails::new(
-                    rust_type.into(),
-                    None,
-                    cpp_type,
-                    true,
-                    PreludePolicy::Exclude,
-                ),
+                TypeDetails::new(rust_type.into(), cpp_type, true, PreludePolicy::Exclude),
             );
         }
         map
