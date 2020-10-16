@@ -163,24 +163,22 @@ lazy_static! {
 
 fn create_type_database() -> TypeDatabase {
     let mut by_cxx_name = HashMap::new();
-    by_cxx_name.insert(
-        TypeName::new_unchecked("UniquePtr"),
-        TypeDetails::new(
-            "UniquePtr".into(),
-            "std::unique_ptr".into(),
-            true,
-            PreludePolicy::IncludeTemplated,
-        ),
-    );
-    by_cxx_name.insert(
-        TypeName::new_unchecked("CxxString"),
-        TypeDetails::new(
-            "CxxString".into(),
-            "std::string".into(),
-            false,
-            PreludePolicy::IncludeNormal,
-        ),
-    );
+
+    let mut do_insert =
+        |td: TypeDetails| by_cxx_name.insert(TypeName::new_unchecked(&td.cxx_name), td);
+
+    do_insert(TypeDetails::new(
+        "UniquePtr".into(),
+        "std::unique_ptr".into(),
+        true,
+        PreludePolicy::IncludeTemplated,
+    ));
+    do_insert(TypeDetails::new(
+        "CxxString".into(),
+        "std::string".into(),
+        false,
+        PreludePolicy::IncludeNormal,
+    ));
     for (cpp_type, rust_type) in (3..7)
         .map(|x| 2i32.pow(x))
         .map(|x| {
@@ -191,10 +189,12 @@ fn create_type_database() -> TypeDatabase {
         })
         .flatten()
     {
-        by_cxx_name.insert(
-            TypeName::new_unchecked(&rust_type),
-            TypeDetails::new(rust_type.into(), cpp_type, true, PreludePolicy::Exclude),
-        );
+        do_insert(TypeDetails::new(
+            rust_type.into(),
+            cpp_type,
+            true,
+            PreludePolicy::Exclude,
+        ));
     }
 
     let mut by_deadname = HashMap::new();
