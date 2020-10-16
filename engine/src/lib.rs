@@ -26,7 +26,6 @@ mod integration_tests;
 use proc_macro2::TokenStream as TokenStream2;
 use std::path::PathBuf;
 
-use indoc::indoc;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, ItemMod, Macro};
