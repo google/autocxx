@@ -24,6 +24,3 @@ autocxx = { path = "..", version="0.3.2" }
 
 [build-dependencies]
 autocxx-build = { path = "../gen/build", version="0.3.2" }
-
-[patch.crates-io]
-cxx = { path="../../cxx" }

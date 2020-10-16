@@ -51,7 +51,3 @@ autocxx-build = { path="../gen/build" }
 autocxx = { path=".." }
 link-cplusplus = "1.0"
 cxx = "0.5.1"
-
-[patch.crates-io]
-cxx = { path="../../cxx" }
-cxx-gen = { path="../../cxx/gen/lib" }
