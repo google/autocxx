@@ -19,8 +19,11 @@ authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2018"
 
 [dependencies]
-cxx = { version="0.5.1", path="../../cxx" }
+cxx = "0.5.1"
 autocxx = { path = "..", version="0.3.2" }
 
 [build-dependencies]
 autocxx-build = { path = "../gen/build", version="0.3.2" }
+
+[patch.crates-io]
+cxx = { path="../../cxx" }

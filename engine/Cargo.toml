@@ -31,7 +31,7 @@ lazy_static = "1.4"
 indoc = "1.0"
 bindgen = "0.55"
 itertools = "0.9"
-cxx-gen = { version="0.5.1", path="../../cxx/gen/lib" }
+cxx-gen = "0.5.1"
 dunce = "1.0.1"
 
 [dependencies.syn]
@@ -50,4 +50,8 @@ autocxx-build = { path="../gen/build" }
 # by the trybuild test system...
 autocxx = { path=".." }
 link-cplusplus = "1.0"
-cxx = { version="0.5.1", path="../../cxx" }
+cxx = "0.5.1"
+
+[patch.crates-io]
+cxx = { path="../../cxx" }
+cxx-gen = { path="../../cxx/gen/lib" }
