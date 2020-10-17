@@ -17,7 +17,6 @@ pub use autocxx_engine::ParseError;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use tempfile::{tempdir, TempDir};
 
 /// Errors returned during creation of a cc::Build from an include_cxx
 /// macro.
@@ -31,12 +30,14 @@ pub enum Error {
     /// We couldn't create a temporary directory to store the c++ code.
     TempDirCreationFailed(std::io::Error),
     /// We couldn't write the c++ code to disk.
-    FileWriteFail(std::io::Error),
+    FileWriteFail(std::io::Error, PathBuf),
     /// No `include_cxx` macro was found anywhere.
     NoIncludeCxxMacrosFound,
     /// Problem converting the `AUTOCXX_INC` environment variable
     /// to a set of canonical paths.
     IncludeDirProblem(EngineError),
+    /// Unable to create one of the directories to which we need to write
+    UnableToCreateDirectory(std::io::Error, PathBuf),
 }
 
 /// Structure for use in a build.rs file to aid with conversion
@@ -51,28 +52,25 @@ pub enum Error {
 /// to specify the path for finding header files.
 pub struct Builder {
     build: cc::Build,
-    _tdir: TempDir,
 }
 
 impl Builder {
     /// Construct a Builder.
     pub fn new<P1: AsRef<Path>>(rs_file: P1, autocxx_inc: &str) -> Result<Self, Error> {
-        // TODO - we have taken a different approach here from cxx.
-        // cxx jumps through many (probably very justifiable) hoops
-        // to generate .h and .cxx files in the Cargo out directory
-        // (I think). We cheat and just make a temp dir. We shouldn't.
-        let tdir = tempdir().map_err(Error::TempDirCreationFailed)?;
+        let gendir = Self::out_dir().join("autocxx-build");
+        let incdir = gendir.join("include");
+        Self::ensure_created(&incdir)?;
+        let cxxdir = gendir.join("cxx");
+        Self::ensure_created(&cxxdir)?;
+        // We are incredibly unsophisticated in our directory arrangement here
+        // compared to cxx. I have no doubt that we will need to replicate just
+        // about everything cxx does, in due course...
         let mut builder = cc::Build::new();
         builder.cpp(true);
         // Write cxx.h to that location, as it may be needed by
         // some of our generated code.
-        Self::write_to_file(
-            &tdir,
-            "cxx.h",
-            autocxx_engine::HEADER.as_bytes(),
-        )
-        .map_err(Error::FileWriteFail)?;
-        let autocxx_inc = Self::append_extra_path(autocxx_inc, tdir.path().to_path_buf());
+        Self::write_to_file(&incdir, "cxx.h", autocxx_engine::HEADER.as_bytes())?;
+        let autocxx_inc = Self::append_extra_path(autocxx_inc, incdir.clone());
         let autocxxes =
             autocxx_engine::parse_file(rs_file, Some(&autocxx_inc)).map_err(Error::ParseError)?;
         let mut counter = 0;
@@ -89,12 +87,10 @@ impl Builder {
             for filepair in generated_code.0 {
                 let fname = format!("gen{}.cxx", counter);
                 counter += 1;
-                let gen_cxx_path = Self::write_to_file(&tdir, &fname, &filepair.implementation)
-                    .map_err(Error::FileWriteFail)?;
+                let gen_cxx_path = Self::write_to_file(&cxxdir, &fname, &filepair.implementation)?;
                 builder.file(gen_cxx_path);
 
-                Self::write_to_file(&tdir, &filepair.header_name, &filepair.header)
-                    .map_err(Error::FileWriteFail)?;
+                Self::write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
             }
         }
         if counter == 0 {
@@ -103,11 +99,16 @@ impl Builder {
             // Configure cargo to give the same set of include paths to autocxx
             // when expanding the macro.
             println!("cargo:rustc-env=AUTOCXX_INC={}", autocxx_inc);
-            Ok(Builder {
-                build: builder,
-                _tdir: tdir,
-            })
+            Ok(Builder { build: builder })
         }
+    }
+
+    fn ensure_created(dir: &PathBuf) -> Result<(), Error> {
+        std::fs::create_dir_all(dir).map_err(|e| Error::UnableToCreateDirectory(e, dir.clone()))
+    }
+
+    fn out_dir() -> PathBuf {
+        std::env::var_os("OUT_DIR").map(PathBuf::from).unwrap()
     }
 
     fn append_extra_path(path_list: &str, extra_path: PathBuf) -> String {
@@ -125,10 +126,15 @@ impl Builder {
         &mut self.build
     }
 
-    fn write_to_file(tdir: &TempDir, filename: &str, content: &[u8]) -> std::io::Result<PathBuf> {
-        let path = tdir.path().join(filename);
-        let mut f = File::create(&path)?;
-        f.write_all(content)?;
+    fn write_to_file(dir: &PathBuf, filename: &str, content: &[u8]) -> Result<PathBuf, Error> {
+        let path = dir.join(filename);
+        Self::try_write_to_file(&path, content)
+            .map_err(|e| Error::FileWriteFail(e, path.clone()))?;
         Ok(path)
+    }
+
+    fn try_write_to_file(path: &PathBuf, content: &[u8]) -> std::io::Result<()> {
+        let mut f = File::create(path)?;
+        f.write_all(content)
     }
 }
