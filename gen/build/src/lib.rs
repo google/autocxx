@@ -14,6 +14,7 @@
 
 pub use autocxx_engine::Error as EngineError;
 pub use autocxx_engine::ParseError;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -42,21 +43,29 @@ pub enum Error {
 
 /// Build autocxx C++ files and return a cc::Build you can use to build
 /// more from a build.rs file.
-/// You need to provide the Rust file path and the list of paths
-/// which should be used as include directories (as a string separated
-/// by the normal path separator on your platform; that may seem weird
-/// but it's because it's passed around as an environment variable.)
-pub fn build<P1: AsRef<Path>>(rs_file: P1, autocxx_inc: &str) -> Result<cc::Build, Error> {
-    build_to_custom_directory(rs_file, autocxx_inc, out_dir())
+/// You need to provide the Rust file path and the iterator of paths
+/// which should be used as include directories.
+pub fn build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> Result<cc::Build, Error>
+where
+    P1: AsRef<Path>,
+    I: IntoIterator<Item = T>,
+    T: AsRef<OsStr>,
+{
+    build_to_custom_directory(rs_file, autocxx_incs, out_dir())
 }
 
 /// Like build, but you can specify the location where files should be generated.
 /// Not generally recommended for use in build scripts.
-pub fn build_to_custom_directory<P1: AsRef<Path>>(
+pub fn build_to_custom_directory<P1, I, T>(
     rs_file: P1,
-    autocxx_inc: &str,
+    autocxx_incs: I,
     outdir: PathBuf,
-) -> Result<cc::Build, Error> {
+) -> Result<cc::Build, Error>
+where
+    P1: AsRef<Path>,
+    I: IntoIterator<Item = T>,
+    T: AsRef<OsStr>,
+{
     let gendir = outdir.join("autocxx-build");
     let incdir = gendir.join("include");
     ensure_created(&incdir)?;
@@ -70,7 +79,7 @@ pub fn build_to_custom_directory<P1: AsRef<Path>>(
     // Write cxx.h to that location, as it may be needed by
     // some of our generated code.
     write_to_file(&incdir, "cxx.h", autocxx_engine::HEADER.as_bytes())?;
-    let autocxx_inc = append_extra_path(autocxx_inc, incdir.clone());
+    let autocxx_inc = build_autocxx_inc(autocxx_incs, &incdir);
     let autocxxes =
         autocxx_engine::parse_file(rs_file, Some(&autocxx_inc)).map_err(Error::ParseError)?;
     let mut counter = 0;
@@ -111,10 +120,17 @@ fn out_dir() -> PathBuf {
     std::env::var_os("OUT_DIR").map(PathBuf::from).unwrap()
 }
 
-fn append_extra_path(path_list: &str, extra_path: PathBuf) -> String {
-    let mut paths = std::env::split_paths(&path_list).collect::<Vec<_>>();
-    paths.push(extra_path);
-    std::env::join_paths(paths)
+fn build_autocxx_inc<I, T>(paths: I, extra_path: &PathBuf) -> String
+where
+    I: IntoIterator<Item = T>,
+    T: AsRef<OsStr>,
+{
+    let mut all_paths: Vec<_> = paths
+        .into_iter()
+        .map(|p| PathBuf::from(p.as_ref()))
+        .collect();
+    all_paths.push(extra_path.clone());
+    std::env::join_paths(all_paths)
         .unwrap()
         .to_str()
         .unwrap()

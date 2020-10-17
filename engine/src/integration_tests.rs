@@ -192,7 +192,7 @@ fn do_run_test(
     let target = rust_info::get().target_triple.unwrap();
     let mut b = autocxx_build::build_to_custom_directory(
         &rs_path,
-        tdir.path().to_str().unwrap(),
+        &[tdir.path()],
         target_dir.clone(),
     )
     .map_err(TestError::AutoCxx)?;
