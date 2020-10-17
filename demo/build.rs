@@ -17,10 +17,8 @@ fn main() {
     // C++ codegen and the macro codegen appears to be run from different
     // working directories.
     let path = std::path::PathBuf::from("src").canonicalize().unwrap();
-    let mut b = autocxx_build::Builder::new("src/main.rs", &path.to_str().unwrap()).unwrap();
-    b.builder()
-        .flag_if_supported("-std=c++14")
-        .compile("autocxx-demo");
+    let mut b = autocxx_build::build("src/main.rs", &path.to_str().unwrap()).unwrap();
+    b.flag_if_supported("-std=c++14").compile("autocxx-demo");
 
     println!("cargo:rerun-if-changed=src/main.rs");
     println!("cargo:rerun-if-changed=src/input.h");

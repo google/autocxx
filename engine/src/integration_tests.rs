@@ -190,9 +190,9 @@ fn do_run_test(
     let target_dir = tdir.path().join("target");
     std::fs::create_dir(&target_dir).unwrap();
     let target = rust_info::get().target_triple.unwrap();
-    let mut b = autocxx_build::Builder::new(&rs_path, tdir.path().to_str().unwrap())
+    let mut b = autocxx_build::build(&rs_path, tdir.path().to_str().unwrap())
         .map_err(TestError::AutoCxx)?;
-    b.builder()
+    b
         .file(cxx_path)
         .out_dir(&target_dir)
         .host(&target)
