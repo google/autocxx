@@ -14,7 +14,7 @@
 
 use crate::types::TypeName;
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use syn::{Ident, Type};
 
 enum ArgumentConversionType {
@@ -99,8 +99,36 @@ pub(crate) struct ByValueWrapper {
 
 /// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
+    MakeStringConstructor,
     MakeUnique(TypeName, Vec<TypeName>),
     ByValueWrapper(ByValueWrapper),
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
+struct Header {
+    name: &'static str,
+    system: bool,
+}
+
+impl Header {
+    fn system(name: &'static str) -> Self {
+        Header { name, system: true }
+    }
+
+    fn user(name: &'static str) -> Self {
+        Header {
+            name,
+            system: false,
+        }
+    }
+
+    fn include_stmt(&self) -> String {
+        if self.system {
+            format!("#include <{}>", self.name)
+        } else {
+            format!("#include \"{}\"", self.name)
+        }
+    }
 }
 
 struct AdditionalFunction {
@@ -109,6 +137,7 @@ struct AdditionalFunction {
     name: String,
     suppress_older: Vec<String>,
     rename: Option<(String, String)>,
+    headers: Vec<Header>,
 }
 
 /// Details of additional generated C++.
@@ -144,6 +173,7 @@ impl AdditionalCppGenerator {
     pub(crate) fn add_needs(&mut self, additions: Vec<AdditionalNeed>) {
         for need in additions {
             match need {
+                AdditionalNeed::MakeStringConstructor => self.generate_string_constructor(),
                 AdditionalNeed::MakeUnique(ty, args) => self.generate_make_unique(&ty, &args),
                 AdditionalNeed::ByValueWrapper(by_value_wrapper) => {
                     self.generate_by_value_wrapper(by_value_wrapper)
@@ -156,8 +186,15 @@ impl AdditionalCppGenerator {
         if self.additional_functions.is_empty() {
             None
         } else {
+            let headers: HashSet<Header> = self
+                .additional_functions
+                .iter()
+                .map(|x| x.headers.iter().cloned())
+                .flatten()
+                .collect();
+            let headers = headers.iter().map(|x| x.include_stmt()).join("\n");
             let declarations = self.concat_additional_items(|x| &x.declaration);
-            let declarations = format!("#include <memory>\n{}\n{}", self.inclusions, declarations);
+            let declarations = format!("{}\n{}\n{}", headers, self.inclusions, declarations);
             let definitions = self.concat_additional_items(|x| &x.definition);
             let definitions = format!("#include \"autocxxgen.h\"\n{}", definitions);
             let extra_allowlist = self
@@ -200,6 +237,32 @@ impl AdditionalCppGenerator {
         s
     }
 
+    fn generate_string_constructor(&mut self) {
+        let name = "make_string";
+        let declaration = format!(
+            "std::unique_ptr<std::string> {}(const ::rust::Str& str)",
+            name
+        );
+        let definition = format!(
+            "{} {{ return std::make_unique<std::string>(std::string(str)); }}",
+            declaration
+        );
+        let declaration = format!("{};", declaration);
+
+        self.additional_functions.push(AdditionalFunction {
+            name: name.into(),
+            declaration,
+            definition,
+            suppress_older: Vec::new(),
+            rename: None,
+            headers: vec![
+                Header::system("memory"),
+                Header::system("string"),
+                Header::user("cxx.h"),
+            ],
+        })
+    }
+
     fn generate_make_unique(&mut self, ty: &TypeName, constructor_arg_types: &[TypeName]) {
         let name = format!("{}_make_unique", ty.to_cpp_name());
         let constructor_args = constructor_arg_types
@@ -224,6 +287,7 @@ impl AdditionalCppGenerator {
             definition,
             suppress_older: Vec::new(),
             rename: None,
+            headers: vec![Header::system("memory")],
         })
     }
 
@@ -279,6 +343,7 @@ impl AdditionalCppGenerator {
             definition,
             suppress_older,
             rename: Some((name, ident.to_string())),
+            headers: vec![Header::system("memory")],
         })
     }
 }
