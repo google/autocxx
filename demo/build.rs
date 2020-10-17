@@ -24,5 +24,4 @@ fn main() {
 
     println!("cargo:rerun-if-changed=src/main.rs");
     println!("cargo:rerun-if-changed=src/input.h");
-    println!("cargo:rustc-env=AUTOCXX_INC={}", path.to_str().unwrap());
 }

@@ -32,7 +32,7 @@ use syn::{parse_quote, ItemMod, Macro};
 
 use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator, AdditionalNeed};
 use itertools::join;
-use log::{debug, info, warn};
+use log::{info, warn};
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -194,10 +194,6 @@ impl IncludeCpp {
     }
 
     fn make_bindgen_builder(&self) -> Result<bindgen::Builder> {
-        let inc_dirs = self.determine_incdirs()?;
-
-        debug!("Inc dir: {:?}", inc_dirs);
-
         // TODO support different C++ versions
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14"])
@@ -214,7 +210,7 @@ impl IncludeCpp {
             builder = builder.blacklist_item(item);
         }
 
-        for inc_dir in inc_dirs {
+        for inc_dir in self.determine_incdirs()? {
             // TODO work with OsStrs here to avoid the .display()
             builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
         }

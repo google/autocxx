@@ -100,6 +100,9 @@ impl Builder {
         if counter == 0 {
             Err(Error::NoIncludeCxxMacrosFound)
         } else {
+            // Configure cargo to give the same set of include paths to autocxx
+            // when expanding the macro.
+            println!("cargo:rustc-env=AUTOCXX_INC={}", autocxx_inc);
             Ok(Builder {
                 build: builder,
                 _tdir: tdir,
