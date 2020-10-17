@@ -46,10 +46,17 @@ pub enum Error {
 /// which should be used as include directories (as a string separated
 /// by the normal path separator on your platform; that may seem weird
 /// but it's because it's passed around as an environment variable.)
-/// You can optionally pass the directory into which you'd like generated
-/// files output, but normally, give None.
-pub fn build<P1: AsRef<Path>>(rs_file: P1, autocxx_inc: &str, optional_out_dir: Option<PathBuf>) -> Result<cc::Build, Error> {
-    let outdir = optional_out_dir.unwrap_or_else(out_dir);
+pub fn build<P1: AsRef<Path>>(rs_file: P1, autocxx_inc: &str) -> Result<cc::Build, Error> {
+    build_to_custom_directory(rs_file, autocxx_inc, out_dir())
+}
+
+/// Like build, but you can specify the location where files should be generated.
+/// Not generally recommended for use in build scripts.
+pub fn build_to_custom_directory<P1: AsRef<Path>>(
+    rs_file: P1,
+    autocxx_inc: &str,
+    outdir: PathBuf,
+) -> Result<cc::Build, Error> {
     let gendir = outdir.join("autocxx-build");
     let incdir = gendir.join("include");
     ensure_created(&incdir)?;
