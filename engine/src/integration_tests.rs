@@ -176,8 +176,22 @@ fn do_run_test(
             AllowPOD(#s),
         }
     });
+
+
+    // After this point we start taking liberties for speed
+    // unless we're testing the full pipeline explicitly.
+    let be_quick = match method {
+        TestMethod::BeQuick => true,
+        TestMethod::UseFullPipeline => false,
+    };
+
+    let include_bit = if be_quick {
+        quote!()
+    } else {
+        quote!(use autocxx::include_cxx;)
+    };
     let unexpanded_rust = quote! {
-        use autocxx::include_cxx;
+        #include_bit
 
         include_cxx!(
             Header("input.h"),
@@ -194,12 +208,6 @@ fn do_run_test(
     };
     info!("Unexpanded Rust: {}", unexpanded_rust);
 
-    // After this point we start taking liberties for speed
-    // unless we're testing the full pipeline explicitly.
-    let be_quick = match method {
-        TestMethod::BeQuick => true,
-        TestMethod::UseFullPipeline => false,
-    };
 
     let mut expanded_rust;
     let rs_path: PathBuf;
