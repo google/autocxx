@@ -240,7 +240,7 @@ impl AdditionalCppGenerator {
     fn generate_string_constructor(&mut self) {
         let name = "make_string";
         let declaration = format!(
-            "std::unique_ptr<std::string> {}(const ::rust::Str& str)",
+            "std::unique_ptr<std::string> {}(::rust::Str str)",
             name
         );
         let definition = format!(
