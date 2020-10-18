@@ -24,7 +24,7 @@ keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
 
 [dependencies]
-autocxx-engine = { version="0.3.2", path="../../engine" }
+autocxx-engine = { version="0.3.2", path="../../engine", features = ["build"] }
 
 [dependencies.syn]
 version = "1.0"

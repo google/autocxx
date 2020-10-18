@@ -14,12 +14,14 @@
 
 mod additional_cpp_generator;
 mod bridge_converter;
-mod builder;
 mod byvalue_checker;
 mod parse;
 mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
-mod types; // TODO make subject to a feature to avoid pulling in cc unnecessarily
+mod types;
+
+#[cfg(feature = "build")]
+mod builder;
 
 #[cfg(test)]
 mod integration_tests;
@@ -40,6 +42,7 @@ use std::rc::Rc;
 use std::sync::Mutex;
 use types::TypeName;
 
+#[cfg(feature = "build")]
 pub use builder::{build, BuilderError};
 pub use parse::{parse_file, parse_token_stream, ParseError, ParsedFile};
 
