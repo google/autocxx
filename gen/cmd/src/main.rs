@@ -43,10 +43,12 @@ fn main() {
         )
         .arg(
             Arg::with_name("outdir")
+                .short("o")
                 .long("outdir")
                 .value_name("PATH")
                 .help("output directory path")
-                .takes_value(true),
+                .takes_value(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("inc")
