@@ -1110,7 +1110,7 @@ fn test_negative_make_nonpod() {
 #[test]
 fn test_method_pass_pod_by_value() {
     let cxx = indoc! {"
-        uint32_t Bob::get_bob(Anna z) const {
+        uint32_t Bob::get_bob(Anna) const {
             return a;
         }
     "};
