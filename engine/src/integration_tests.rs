@@ -16,6 +16,7 @@ use indoc::indoc;
 use log::info;
 use proc_macro2::TokenStream;
 use quote::quote;
+use quote::ToTokens;
 use std::fs::File;
 use std::io::Write;
 use std::panic::RefUnwindSafe;
@@ -92,6 +93,11 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
     path
 }
 
+enum TestMethod {
+    UseFullPipeline,
+    BeQuick,
+}
+
 /// A positive test, we expect to pass.
 fn run_test(
     cxx_code: &str,
@@ -106,6 +112,7 @@ fn run_test(
         rust_code,
         allowed_funcs,
         allowed_pods,
+        TestMethod::BeQuick,
     )
     .unwrap()
 }
@@ -123,6 +130,7 @@ fn run_test_expect_fail(
         rust_code,
         allowed_funcs,
         allowed_pods,
+        TestMethod::BeQuick,
     )
     .expect_err("Unexpected success");
 }
@@ -130,9 +138,10 @@ fn run_test_expect_fail(
 /// In the future maybe the tests will distinguish the exact type of failure expected.
 #[derive(Debug)]
 enum TestError {
-    AutoCxx(autocxx_build::Error),
+    AutoCxx(crate::BuilderError),
     CppBuild(cc::Error),
     RsBuild,
+    IncludeCpp(crate::ParseError),
 }
 
 fn do_run_test(
@@ -141,11 +150,18 @@ fn do_run_test(
     rust_code: TokenStream,
     allowed_funcs: &[&str],
     allowed_pods: &[&str],
+    method: TestMethod,
 ) -> Result<(), TestError> {
     // Step 1: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
     write_to_file(&tdir, "input.h", &format!("#pragma once\n{}", header_code));
     write_to_file(&tdir, "cxx.h", crate::HEADER);
+
+    // Step 4: Write the C++ code snippet to a .cc file, along with a #include
+    //         of the header emitted in step 5.
+    let cxx_code = format!("#include \"{}\"\n{}", "input.h", cxx_code);
+    let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
+
     // Step 2: Expand the snippet of Rust code into an entire
     //         program including include_cxx!
     // TODO - we're not quoting #s below (in the "" sense), and it's not entirely
@@ -160,8 +176,22 @@ fn do_run_test(
             AllowPOD(#s),
         }
     });
-    let expanded_rust = quote! {
-        use autocxx::include_cxx;
+
+
+    // After this point we start taking liberties for speed
+    // unless we're testing the full pipeline explicitly.
+    let be_quick = match method {
+        TestMethod::BeQuick => true,
+        TestMethod::UseFullPipeline => false,
+    };
+
+    let include_bit = if be_quick {
+        quote!()
+    } else {
+        quote!(use autocxx::include_cxx;)
+    };
+    let unexpanded_rust = quote! {
+        #include_bit
 
         include_cxx!(
             Header("input.h"),
@@ -176,26 +206,55 @@ fn do_run_test(
         #[link(name="autocxx-demo")]
         extern {}
     };
-    info!("Expanded Rust: {}", expanded_rust);
-    // Step 3: Write the Rust code to a temp file
-    let rs_code = format!("{}", expanded_rust);
-    let rs_path = write_to_file(&tdir, "input.rs", &rs_code);
+    info!("Unexpanded Rust: {}", unexpanded_rust);
 
-    // Step 4: Write the C++ code snippet to a .cc file, along with a #include
-    //         of the header emitted in step 5.
-    let cxx_code = format!("#include \"{}\"\n{}", "input.h", cxx_code);
-    let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
 
-    info!("Path is {:?}", tdir.path());
+    let mut expanded_rust;
+    let rs_path: PathBuf;
+
+    let write_rust_to_file = |ts: &TokenStream| -> PathBuf {
+        // Step 3: Write the Rust code to a temp file
+        let rs_code = format!("{}", ts);
+        write_to_file(&tdir, "input.rs", &rs_code)
+    };
+
     let target_dir = tdir.path().join("target");
     std::fs::create_dir(&target_dir).unwrap();
-    let target = rust_info::get().target_triple.unwrap();
-    let mut b = autocxx_build::build_to_custom_directory(
-        &rs_path,
-        &[tdir.path()],
-        target_dir.clone(),
-    )
+
+    let mut b = if be_quick {
+        // The speed of this test suite is dictated by how much work needs to be done
+        // when building the final Rust executable using trybuild, because that's single
+        // threaded. In the slow path, we let that final Rust build expand the
+        // include_cxx macro. In the quick path, we'll expand that macro now in this
+        // multithreaded test code.
+        let autocxx_inc = tdir.path().to_str().unwrap();
+        let mut parsed_file = crate::parse_token_stream(unexpanded_rust, Some(autocxx_inc))
+            .map_err(TestError::IncludeCpp)?;
+        parsed_file.resolve_all().map_err(TestError::IncludeCpp)?;
+        let include_cpps = parsed_file.get_autocxxes();
+        assert_eq!(include_cpps.len(), 1);
+        expanded_rust = TokenStream::new();
+        parsed_file.to_tokens(&mut expanded_rust);
+
+        rs_path = write_rust_to_file(&expanded_rust);
+
+        crate::builder::build_with_existing_parsed_file(
+            parsed_file,
+            tdir.path().to_path_buf(),
+            tdir.path().to_path_buf(),
+        )
+    } else {
+        expanded_rust = unexpanded_rust;
+
+        rs_path = write_rust_to_file(&expanded_rust);
+
+        info!("Path is {:?}", tdir.path());
+        crate::builder::build_to_custom_directory(&rs_path, &[tdir.path()], target_dir.clone())
+    }
     .map_err(TestError::AutoCxx)?;
+
+    let target = rust_info::get().target_triple.unwrap();
+
     b.file(cxx_path)
         .out_dir(&target_dir)
         .host(&target)
@@ -221,6 +280,25 @@ fn do_run_test(
         println!("Tempdir: {:?}", tdir.into_path().to_str());
     }
     Ok(())
+}
+
+/// This function runs a test with the full pipeline of build.rs support etc.
+fn run_test_with_full_pipeline(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code: TokenStream,
+    allowed_funcs: &[&str],
+    allowed_pods: &[&str],
+) {
+    do_run_test(
+        cxx_code,
+        header_code,
+        rust_code,
+        allowed_funcs,
+        allowed_pods,
+        TestMethod::UseFullPipeline,
+    )
+    .unwrap();
 }
 
 #[test]
@@ -1559,6 +1637,30 @@ fn test_pass_rust_str() {
         assert_eq!(c, 5);
     };
     run_test(cxx, hdr, rs, &["measure_string"], &[]);
+}
+
+#[test]
+fn test_cycle_string_full_pipeline() {
+    let cxx = indoc! {"
+        std::string give_str() {
+            return std::string(\"Bob\");
+        }
+        uint32_t take_str(std::string a) {
+            return a.length();
+        }
+    "};
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        std::string give_str();
+        uint32_t take_str(std::string a);
+    "};
+    let rs = quote! {
+        let s = ffi::cxxbridge::give_str();
+        assert_eq!(ffi::cxxbridge::take_str(s), 3);
+    };
+    let allowed_funcs = &["give_str", "take_str"];
+    run_test_with_full_pipeline(cxx, hdr, rs, allowed_funcs, &[]);
 }
 
 // Yet to test:

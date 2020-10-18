@@ -14,6 +14,8 @@
 
 use crate::Error as EngineError;
 use crate::IncludeCpp;
+use proc_macro2::TokenStream;
+use quote::ToTokens;
 use std::io::Read;
 use std::path::Path;
 use syn::Item;
@@ -30,29 +32,103 @@ pub enum ParseError {
     Syntax(syn::Error),
     /// The include CPP macro could not be parsed.
     MacroParseFail(EngineError),
+    GenerateRsError(EngineError),
 }
 
+/// Parse a Rust file, and spot any include_cpp macros within it.
 pub fn parse_file<P1: AsRef<Path>>(
     rs_file: P1,
     autocxx_inc: Option<&str>,
-) -> Result<Vec<IncludeCpp>, ParseError> {
+) -> Result<ParsedFile, ParseError> {
     let mut source = String::new();
     let mut file = std::fs::File::open(rs_file).map_err(ParseError::FileOpen)?;
     file.read_to_string(&mut source)
         .map_err(ParseError::FileRead)?;
     let source = syn::parse_file(&source).map_err(ParseError::Syntax)?;
+    parse_file_contents(source, autocxx_inc)
+}
+
+pub fn parse_token_stream(
+    ts: TokenStream,
+    autocxx_inc: Option<&str>,
+) -> Result<ParsedFile, ParseError> {
+    let file = syn::parse2(ts).map_err(ParseError::Syntax)?;
+    parse_file_contents(file, autocxx_inc)
+}
+
+fn parse_file_contents(
+    source: syn::File,
+    autocxx_inc: Option<&str>,
+) -> Result<ParsedFile, ParseError> {
     let mut results = Vec::new();
     for item in source.items {
-        if let Item::Macro(mac) = item {
+        if let Item::Macro(ref mac) = item {
             if mac.mac.path.is_ident("include_cxx") {
-                let mut include_cpp =
-                    crate::IncludeCpp::new_from_syn(mac.mac).map_err(ParseError::MacroParseFail)?;
+                let mut include_cpp = crate::IncludeCpp::new_from_syn(mac.mac.clone())
+                    .map_err(ParseError::MacroParseFail)?;
                 if let Some(autocxx_inc) = autocxx_inc {
                     include_cpp.set_include_dirs(autocxx_inc);
                 }
-                results.push(include_cpp);
+                results.push(Segment::Autocxx(include_cpp));
+                continue;
+            }
+        }
+        results.push(Segment::Other(item));
+    }
+    Ok(ParsedFile(results))
+}
+
+/// A Rust file parsed by autocxx. May contain zero or more autocxx 'engines',
+/// i.e. the `IncludeCpp` class, corresponding to zero or more include_cpp
+/// macros within this file. Also contains `syn::Item` structures for all
+/// the rest of the Rust code, such that it can be reconstituted if necessary.
+pub struct ParsedFile(Vec<Segment>);
+
+enum Segment {
+    Autocxx(IncludeCpp),
+    Other(Item),
+}
+
+impl ParsedFile {
+    /// Get all the autocxxes in this parsed file.
+    pub fn get_autocxxes(&self) -> Vec<&IncludeCpp> {
+        self.0
+            .iter()
+            .filter_map(|s| match s {
+                Segment::Autocxx(includecpp) => Some(includecpp),
+                Segment::Other(_) => None,
+            })
+            .collect()
+    }
+
+    pub fn get_autocxxes_mut(&mut self) -> Vec<&mut IncludeCpp> {
+        self.0
+            .iter_mut()
+            .filter_map(|s| match s {
+                Segment::Autocxx(includecpp) => Some(includecpp),
+                Segment::Other(_) => None,
+            })
+            .collect()
+    }
+
+    pub fn resolve_all(&mut self) -> Result<(), ParseError> {
+        for include_cpp in self.get_autocxxes_mut() {
+            include_cpp.generate().map_err(ParseError::MacroParseFail)?
+        }
+        Ok(())
+    }
+}
+
+impl ToTokens for ParsedFile {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        for seg in &self.0 {
+            match seg {
+                Segment::Other(item) => item.to_tokens(tokens),
+                Segment::Autocxx(autocxx) => {
+                    let these_tokens = autocxx.generate_rs();
+                    tokens.extend(these_tokens);
+                }
             }
         }
     }
-    Ok(results)
 }

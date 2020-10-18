@@ -104,9 +104,9 @@ use syn::parse_macro_input;
 #[proc_macro_error]
 #[proc_macro]
 pub fn include_cxx(input: TokenStream) -> TokenStream {
-    let include_cpp = parse_macro_input!(input as IncludeCpp);
-    match include_cpp.generate_rs() {
-        Ok(ts) => TokenStream::from(ts),
+    let mut include_cpp = parse_macro_input!(input as IncludeCpp);
+    match include_cpp.generate() {
+        Ok(_) => TokenStream::from(include_cpp.generate_rs()),
         Err(e) => abort_call_site!(format!("{:?}", e)),
     }
 }

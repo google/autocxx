@@ -20,6 +20,9 @@ mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
 mod types;
 
+#[cfg(feature = "build")]
+mod builder;
+
 #[cfg(test)]
 mod integration_tests;
 
@@ -39,7 +42,9 @@ use std::rc::Rc;
 use std::sync::Mutex;
 use types::TypeName;
 
-pub use parse::{parse_file, ParseError};
+#[cfg(feature = "build")]
+pub use builder::{build, BuilderError};
+pub use parse::{parse_file, parse_token_stream, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
 
@@ -69,6 +74,13 @@ pub enum CppInclusion {
     Header(String),
 }
 
+enum State {
+    NotGenerated,
+    ParseOnly,
+    NothingGenerated,
+    Generated(ItemMod, AdditionalCppGenerator),
+}
+
 /// Core of the autocxx engine.
 /// TODO - consider whether this 'engine' crate should actually be a
 /// directory of source symlinked from all the other sub-crates, so that
@@ -78,9 +90,9 @@ pub struct IncludeCpp {
     allowlist: Vec<String>, // not TypeName as it may be functions or whatever.
     pod_types: Vec<TypeName>,
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
-    parse_only: bool,
     exclude_utilities: bool,
     preprocessor_definitions: Rc<Mutex<PreprocessorDefinitions>>,
+    state: State,
 }
 
 impl Parse for IncludeCpp {
@@ -150,9 +162,13 @@ impl IncludeCpp {
             allowlist,
             pod_types,
             preconfigured_inc_dirs: None,
-            parse_only,
             exclude_utilities,
             preprocessor_definitions: Rc::new(Mutex::new(PreprocessorDefinitions::new())),
+            state: if parse_only {
+                State::ParseOnly
+            } else {
+                State::NotGenerated
+            },
         })
     }
 
@@ -251,12 +267,13 @@ impl IncludeCpp {
         builder
     }
 
-    pub fn generate_rs(&self) -> Result<TokenStream2> {
-        let results = self.do_generation()?;
-        Ok(match results {
-            Some((itemmod, _)) => itemmod.to_token_stream(),
-            None => TokenStream2::new(),
-        })
+    /// Generate the Rust bindings. Call `generate` first.
+    pub fn generate_rs(&self) -> TokenStream2 {
+        match &self.state {
+            State::NotGenerated => panic!("Call generate() first"),
+            State::Generated(itemmod, _) => itemmod.to_token_stream(),
+            State::NothingGenerated | State::ParseOnly => TokenStream2::new(),
+        }
     }
 
     fn get_preprocessor_defs_mod(&self) -> Option<ItemMod> {
@@ -290,12 +307,17 @@ impl IncludeCpp {
         include_list
     }
 
-    fn do_generation(&self) -> Result<Option<(ItemMod, AdditionalCppGenerator)>> {
+    /// Actually examine the headers to find out what needs generating.
+    /// Most errors occur at this stage as we fail to interpret the C++
+    /// headers properly.
+    pub fn generate(&mut self) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
-        if self.parse_only {
-            return Ok(None);
+        match self.state {
+            State::ParseOnly => return Ok(()),
+            State::NotGenerated => {}
+            State::Generated(_, _) | State::NothingGenerated => panic!("Only call generate once"),
         }
 
         // 4. (also respects environment variables to pick up more headers,
@@ -359,6 +381,10 @@ impl IncludeCpp {
             items.push(syn::Item::Mod(itemmod));
         }
         let mut new_bindings: ItemMod = parse_quote! {
+            #[allow(non_snake_case)]
+            #[allow(dead_code)]
+            #[allow(non_upper_case_globals)]
+            #[allow(non_camel_case_types)]
             mod ffi {
             }
         };
@@ -367,16 +393,18 @@ impl IncludeCpp {
             "New bindings:\n{}",
             rust_pretty_printer::pretty_print(&new_bindings.to_token_stream())
         );
-        Ok(Some((new_bindings, additional_cpp_generator)))
+        self.state = State::Generated(new_bindings, additional_cpp_generator);
+        Ok(())
     }
 
-    /// Generate C++-side bindings for these APIs.
-    pub fn generate_h_and_cxx(self) -> Result<GeneratedCpp> {
-        let generation = self.do_generation()?;
+    /// Generate C++-side bindings for these APIs. Call `generate` first.
+    pub fn generate_h_and_cxx(&self) -> Result<GeneratedCpp> {
         let mut files = Vec::new();
-        match generation {
-            None => {}
-            Some((itemmod, additional_cpp_generator)) => {
+        match &self.state {
+            State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
+            State::NotGenerated => panic!("Call generate() first"),
+            State::NothingGenerated => {}
+            State::Generated(itemmod, additional_cpp_generator) => {
                 let rs = itemmod.into_token_stream();
                 let opt = cxx_gen::Opt::default();
                 let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)
