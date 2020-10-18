@@ -18,6 +18,8 @@ use indoc::indoc;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use proc_macro2::TokenStream;
+use quote::ToTokens;
 
 fn main() {
     let matches = App::new("autocxx-gen")
@@ -86,8 +88,9 @@ fn main() {
         )
         .subcommand(SubCommand::with_name("gen-rs").help("Generate expanded Rust file."))
         .get_matches();
-    let mut include_cxxs = parse_file(matches.value_of("INPUT").unwrap(), matches.value_of("inc"))
+    let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap(), matches.value_of("inc"))
         .expect("Unable to parse Rust file and interpret autocxx macro");
+    parsed_file.resolve_all().expect("Unable to resolve macro");
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
     if let Some(matches) = matches.subcommand_matches("gen-cpp") {
         let pattern = matches.value_of("pattern").unwrap_or("gen");
@@ -96,7 +99,7 @@ fn main() {
             .value_of("generate-exact")
             .map(|s| s.parse::<usize>().unwrap());
         let mut counter = 0usize;
-        for include_cxx in include_cxxs {
+        for include_cxx in parsed_file.get_autocxxes() {
             let generations = include_cxx
                 .generate_h_and_cxx()
                 .expect("Unable to generate header and C++ code");
@@ -120,13 +123,9 @@ fn main() {
             }
         }
     } else if matches.subcommand_matches("gen-rs").is_some() {
-        for (count, include_cxx) in include_cxxs.drain(..).enumerate() {
-            let ts = include_cxx
-                .generate_rs()
-                .expect("Unable to generate Rust TokenStream");
-            let ts = ts.to_string();
-            write_to_file(&outdir, format!("gen{}.rs", count), ts.as_bytes());
-        }
+        let mut ts = TokenStream::new();
+        parsed_file.to_tokens(&mut ts);
+        write_to_file(&outdir, "gen.rs".to_string(), ts.to_string().as_bytes());
     } else {
         panic!("Must specify a subcommand");
     }

@@ -33,6 +33,7 @@ bindgen = "0.55"
 itertools = "0.9"
 cxx-gen = "0.5.2"
 dunce = "1.0.1"
+cc = "1.0"
 
 [dependencies.syn]
 version = "1.0.39"

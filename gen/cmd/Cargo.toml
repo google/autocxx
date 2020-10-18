@@ -27,3 +27,5 @@ categories = ["development-tools::ffi", "api-bindings"]
 autocxx-engine = { version="0.3.2", path="../../engine" }
 clap = "2.33"
 indoc = "1.0"
+quote = "1.0.7"
+proc-macro2 = "1.0"
