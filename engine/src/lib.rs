@@ -264,6 +264,7 @@ impl IncludeCpp {
         builder
     }
 
+    /// Generate the Rust bindings. Call `generate` first.
     pub fn generate_rs(&self) -> TokenStream2 {
         match &self.state {
             State::NotGenerated => panic!("Call generate() first"),
@@ -303,7 +304,9 @@ impl IncludeCpp {
         include_list
     }
 
-    /// Actual examine the headers to find out what needs generating.
+    /// Actually examine the headers to find out what needs generating.
+    /// Most errors occur at this stage as we fail to interpret the C++
+    /// headers properly.
     pub fn generate(&mut self) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -391,7 +394,7 @@ impl IncludeCpp {
         Ok(())
     }
 
-    /// Generate C++-side bindings for these APIs.
+    /// Generate C++-side bindings for these APIs. Call `generate` first.
     pub fn generate_h_and_cxx(&self) -> Result<GeneratedCpp> {
         let mut files = Vec::new();
         match &self.state {
