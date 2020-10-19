@@ -20,7 +20,7 @@ mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
 mod types;
 
-#[cfg(feature = "build")]
+#[cfg(any(test,feature = "build"))]
 mod builder;
 
 #[cfg(test)]
@@ -42,7 +42,7 @@ use std::rc::Rc;
 use std::sync::Mutex;
 use types::TypeName;
 
-#[cfg(feature = "build")]
+#[cfg(any(test,feature = "build"))]
 pub use builder::{build, BuilderError};
 pub use parse::{parse_file, parse_token_stream, ParseError, ParsedFile};
 
