@@ -69,7 +69,21 @@ impl ArgumentConversion {
     }
 
     fn unwrapped_type_as_string(&self) -> String {
-        crate::types::to_cpp_name(&self.unwrapped_type)
+        match self.unwrapped_type {
+            Type::Path(ref typ) => TypeName::from_bindgen_type_path(typ).to_cpp_name(),
+            Type::Reference(ref typr) => {
+                let const_bit = match typr.mutability {
+                    None => "const ",
+                    Some(_) => "",
+                };
+                format!(
+                    "{}{}&",
+                    const_bit,
+                    TypeName::from_bindgen_type(typr.elem.as_ref()).to_cpp_name()
+                )
+            }
+            _ => unimplemented!(),
+        }
     }
 
     fn wrapped_type(&self) -> String {
@@ -239,10 +253,7 @@ impl AdditionalCppGenerator {
 
     fn generate_string_constructor(&mut self) {
         let name = "make_string";
-        let declaration = format!(
-            "std::unique_ptr<std::string> {}(::rust::Str str)",
-            name
-        );
+        let declaration = format!("std::unique_ptr<std::string> {}(::rust::Str str)", name);
         let definition = format!(
             "{} {{ return std::make_unique<std::string>(std::string(str)); }}",
             declaration

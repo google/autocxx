@@ -20,7 +20,7 @@ mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
 mod types;
 
-#[cfg(any(test,feature = "build"))]
+#[cfg(any(test, feature = "build"))]
 mod builder;
 
 #[cfg(test)]
@@ -42,7 +42,7 @@ use std::rc::Rc;
 use std::sync::Mutex;
 use types::TypeName;
 
-#[cfg(any(test,feature = "build"))]
+#[cfg(any(test, feature = "build"))]
 pub use builder::{build, BuilderError};
 pub use parse::{parse_file, parse_token_stream, ParseError, ParsedFile};
 
@@ -139,7 +139,7 @@ impl IncludeCpp {
                 let allow: syn::LitStr = args.parse()?;
                 allowlist.push(allow.value());
                 if ident == "AllowPOD" {
-                    pod_types.push(TypeName::new(&allow.value()));
+                    pod_types.push(TypeName::new_from_user_input(&allow.value()));
                 }
             } else if ident == "ParseOnly" {
                 parse_only = true;
@@ -221,6 +221,7 @@ impl IncludeCpp {
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
             })
+            .enable_cxx_namespaces()
             .layout_tests(false); // TODO revisit later
         for item in types::get_initial_blocklist() {
             builder = builder.blacklist_item(item);
@@ -436,18 +437,5 @@ impl IncludeCpp {
     /// Get the configured include directories.
     pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
         self.determine_incdirs()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::TypeName;
-
-    #[test]
-    fn test_typename() {
-        let s = proc_macro2::Span::call_site();
-        let id = syn::Ident::new("Bob", s);
-        let tn = TypeName::from_ident(&id);
-        assert_eq!(tn.to_ident(), id);
     }
 }
