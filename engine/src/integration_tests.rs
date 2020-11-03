@@ -177,7 +177,6 @@ fn do_run_test(
         }
     });
 
-
     // After this point we start taking liberties for speed
     // unless we're testing the full pipeline explicitly.
     let be_quick = match method {
@@ -188,7 +187,9 @@ fn do_run_test(
     let include_bit = if be_quick {
         quote!()
     } else {
-        quote!(use autocxx::include_cxx;)
+        quote!(
+            use autocxx::include_cxx;
+        )
     };
     let unexpanded_rust = quote! {
         #include_bit
@@ -207,7 +208,6 @@ fn do_run_test(
         extern {}
     };
     info!("Unexpanded Rust: {}", unexpanded_rust);
-
 
     let mut expanded_rust;
     let rs_path: PathBuf;

@@ -55,14 +55,14 @@ impl ByValueChecker {
             } else {
                 PODState::UnsafeToBePOD(format!("type {} is not safe for POD", tn))
             };
-            results.insert(tn.clone(), StructDetails::new(safety));
+            results.insert(tn, StructDetails::new(safety));
         }
         ByValueChecker { results }
     }
 
-    pub fn ingest_struct(&mut self, def: &ItemStruct) {
+    pub fn ingest_struct(&mut self, def: &ItemStruct, ns: &Vec<String>) {
         // For this struct, work out whether it _could_ be safe as a POD.
-        let tyname = TypeName::from_ident(&def.ident);
+        let tyname = TypeName::new(ns, &def.ident.to_string());
         let mut field_safety_problem = PODState::SafeToBePOD;
         let fieldlist = self.get_field_types(def);
         for ty_id in &fieldlist {
@@ -132,7 +132,7 @@ impl ByValueChecker {
         for f in &def.fields {
             let fty = &f.ty;
             if let Type::Path(p) = fty {
-                results.push(TypeName::from_type_path(&p));
+                results.push(TypeName::from_bindgen_type_path(&p));
             }
             // TODO handle anything else which bindgen might spit out, e.g. arrays?
         }
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn test_primitive_by_itself() {
         let bvc = ByValueChecker::new();
-        let t_id = TypeName::new("u32");
+        let t_id = TypeName::new_from_user_input("u32");
         assert!(bvc.is_pod(&t_id));
     }
 
@@ -163,7 +163,7 @@ mod tests {
             }
         };
         let t_id = TypeName::from_ident(&t.ident);
-        bvc.ingest_struct(&t);
+        bvc.ingest_struct(&t, &Vec::new());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
     }
@@ -177,7 +177,7 @@ mod tests {
                 b: i64,
             }
         };
-        bvc.ingest_struct(&t);
+        bvc.ingest_struct(&t, &Vec::new());
         let t: ItemStruct = parse_quote! {
             struct Bar {
                 a: Foo,
@@ -185,7 +185,7 @@ mod tests {
             }
         };
         let t_id = TypeName::from_ident(&t.ident);
-        bvc.ingest_struct(&t);
+        bvc.ingest_struct(&t, &Vec::new());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
     }
@@ -200,7 +200,7 @@ mod tests {
             }
         };
         let t_id = TypeName::from_ident(&t.ident);
-        bvc.ingest_struct(&t);
+        bvc.ingest_struct(&t, &Vec::new());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
     }
@@ -215,7 +215,7 @@ mod tests {
             }
         };
         let t_id = TypeName::from_ident(&t.ident);
-        bvc.ingest_struct(&t);
+        bvc.ingest_struct(&t, &Vec::new());
         assert!(bvc.satisfy_requests(vec![t_id]).is_err());
     }
 }
