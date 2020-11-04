@@ -48,7 +48,7 @@ pub struct ByValueChecker {
 impl ByValueChecker {
     pub fn new() -> Self {
         let mut results = HashMap::new();
-        for (tn, by_value_safe) in crate::types::get_pod_safe_types() {
+        for (tn, by_value_safe) in crate::known_types::get_pod_safe_types() {
             let safety = if by_value_safe {
                 PODState::IsPOD
             } else {

@@ -16,7 +16,7 @@ use crate::byvalue_checker::ByValueChecker;
 use crate::types::TypeName;
 use crate::{
     additional_cpp_generator::{AdditionalNeed, ArgumentConversion, ByValueWrapper},
-    types::{replace_type_path_without_arguments, should_dereference_in_cpp},
+    known_types::{replace_type_path_without_arguments, should_dereference_in_cpp},
 };
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use syn::{
