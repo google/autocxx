@@ -181,7 +181,7 @@ impl<'a> BridgeConversion<'a> {
         }));
         bindgen_root_mod.content.as_mut().unwrap().1 = self.bindgen_root_items;
         self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(bindgen_root_mod)];
-        self.all_items.push(Item::Mod(self.bindgen_mod.clone()));
+        self.all_items.push(Item::Mod(self.bindgen_mod));
         let mut bridge_mod: ItemMod = parse_quote! {
             #[cxx::bridge]
             pub mod cxxbridge {
@@ -324,20 +324,21 @@ impl<'a> BridgeConversion<'a> {
         let tynamestring = tyname.to_cpp_name();
         let mut for_extern_c_ts = TokenStream2::new();
         let mut fulltypath = Vec::new();
+        let colon = TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint));
         for_extern_c_ts.extend(
             [
                 TokenTree::Ident(make_ident("type")),
                 TokenTree::Ident(final_ident.clone()),
                 TokenTree::Punct(proc_macro2::Punct::new('=', proc_macro2::Spacing::Alone)),
                 TokenTree::Ident(make_ident("super")),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                colon.clone(),
+                colon.clone(),
                 TokenTree::Ident(make_ident("bindgen")),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                colon.clone(),
+                colon.clone(),
                 TokenTree::Ident(make_ident("root")),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                colon.clone(),
+                colon.clone(),
             ]
             .to_vec(),
         );
@@ -345,14 +346,8 @@ impl<'a> BridgeConversion<'a> {
         fulltypath.push(make_ident("root"));
         for segment in tyname.ns_segment_iter() {
             let id = make_ident(segment);
-            for_extern_c_ts.extend(
-                [
-                    TokenTree::Ident(id.clone()),
-                    TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                    TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                ]
-                .to_vec(),
-            );
+            for_extern_c_ts
+                .extend([TokenTree::Ident(id.clone()), colon.clone(), colon.clone()].to_vec());
             fulltypath.push(id);
         }
         for_extern_c_ts.extend(
