@@ -126,117 +126,6 @@ fn make_ident(id: &str) -> Ident {
 }
 
 impl<'a> BridgeConversion<'a> {
-    fn find_nested_pod_types(
-        &mut self,
-        items: &[Item],
-        ns: Vec<String>,
-    ) -> Result<(), ConvertError> {
-        for item in items {
-            match item {
-                Item::Struct(s) => self.byvalue_checker.ingest_struct(s, &ns),
-                Item::Enum(e) => self
-                    .byvalue_checker
-                    .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
-                Item::Mod(itm) => {
-                    if let Some((_, nested_items)) = &itm.content {
-                        let mut new_ns = ns.clone();
-                        new_ns.push(itm.ident.to_string());
-                        self.find_nested_pod_types(nested_items, new_ns)?;
-                    }
-                }
-                _ => {}
-            }
-        }
-        self.byvalue_checker
-            .satisfy_requests(self.pod_requests.clone())
-            .map_err(ConvertError::UnsafePODType)
-    }
-
-    fn generate_type_alias(
-        &mut self,
-        tyname: TypeName,
-        should_be_pod: bool,
-    ) -> Result<(), ConvertError> {
-        let final_ident = make_ident(tyname.get_final_ident());
-        if self.types_found.contains(&final_ident) {
-            // At the moment we can only have a single type with a given name,
-            // even in different namespaces. This is a temporary problem.
-            return Err(ConvertError::DuplicateType(final_ident.to_string()));
-        }
-        let kind_item = make_ident(if should_be_pod { "Trivial" } else { "Opaque" });
-        let tynamestring = tyname.to_cpp_name();
-        let mut for_extern_c_ts = TokenStream2::new();
-        let mut fulltypath = Vec::new();
-        for_extern_c_ts.extend(
-            [
-                TokenTree::Ident(make_ident("type")),
-                TokenTree::Ident(final_ident.clone()),
-                TokenTree::Punct(proc_macro2::Punct::new('=', proc_macro2::Spacing::Alone)),
-                TokenTree::Ident(make_ident("super")),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                TokenTree::Ident(make_ident("bindgen")),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                TokenTree::Ident(make_ident("root")),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-            ]
-            .to_vec(),
-        );
-        fulltypath.push(make_ident("bindgen"));
-        fulltypath.push(make_ident("root"));
-        for segment in tyname.ns_segment_iter() {
-            let id = make_ident(segment);
-            for_extern_c_ts.extend(
-                [
-                    TokenTree::Ident(id.clone()),
-                    TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                    TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
-                ]
-                .to_vec(),
-            );
-            fulltypath.push(id);
-        }
-        for_extern_c_ts.extend(
-            [
-                TokenTree::Ident(final_ident.clone()),
-                TokenTree::Punct(proc_macro2::Punct::new(';', proc_macro2::Spacing::Alone)),
-            ]
-            .to_vec(),
-        );
-        fulltypath.push(final_ident.clone());
-        self.extern_c_mod_items
-            .push(ForeignItem::Verbatim(for_extern_c_ts));
-        self.bridge_items.push(Item::Impl(parse_quote! {
-            impl UniquePtr<#final_ident> {}
-        }));
-        self.all_items.push(Item::Impl(parse_quote! {
-            unsafe impl cxx::ExternType for #(#fulltypath)::* {
-                type Id = cxx::type_id!(#tynamestring);
-                type Kind = cxx::kind::#kind_item;
-            }
-        }));
-        self.types_found.push(final_ident);
-        Ok(())
-    }
-
-    fn build_include_foreign_items(&self) -> Vec<ForeignItem> {
-        let extra_inclusion = if self.additional_cpp_needs.is_empty() {
-            None
-        } else {
-            Some("autocxxgen.h".to_string())
-        };
-        let chained = self.include_list.iter().chain(extra_inclusion.iter());
-        chained
-            .map(|inc| {
-                ForeignItem::Macro(parse_quote! {
-                    include!(#inc);
-                })
-            })
-            .collect()
-    }
-
     /// Main function which goes through and performs conversion from
     /// `bindgen`-style Rust output into `cxx::bridge`-style Rust input.
     fn convert_items(
@@ -266,7 +155,8 @@ impl<'a> BridgeConversion<'a> {
                 _ => panic!("Unexpected outer item"),
             }
         }
-        self.extern_c_mod_items.extend(self.build_include_foreign_items());
+        self.extern_c_mod_items
+            .extend(self.build_include_foreign_items());
         // We will always create an extern "C" mod even if bindgen
         // didn't generate one, e.g. because it only generated types.
         // We still want cxx to know about those types.
@@ -384,6 +274,117 @@ impl<'a> BridgeConversion<'a> {
         Ok(())
     }
 
+    fn find_nested_pod_types(
+        &mut self,
+        items: &[Item],
+        ns: Vec<String>,
+    ) -> Result<(), ConvertError> {
+        for item in items {
+            match item {
+                Item::Struct(s) => self.byvalue_checker.ingest_struct(s, &ns),
+                Item::Enum(e) => self
+                    .byvalue_checker
+                    .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
+                Item::Mod(itm) => {
+                    if let Some((_, nested_items)) = &itm.content {
+                        let mut new_ns = ns.clone();
+                        new_ns.push(itm.ident.to_string());
+                        self.find_nested_pod_types(nested_items, new_ns)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.byvalue_checker
+            .satisfy_requests(self.pod_requests.clone())
+            .map_err(ConvertError::UnsafePODType)
+    }
+
+    fn generate_type_alias(
+        &mut self,
+        tyname: TypeName,
+        should_be_pod: bool,
+    ) -> Result<(), ConvertError> {
+        let final_ident = make_ident(tyname.get_final_ident());
+        if self.types_found.contains(&final_ident) {
+            // At the moment we can only have a single type with a given name,
+            // even in different namespaces. This is a temporary problem.
+            return Err(ConvertError::DuplicateType(final_ident.to_string()));
+        }
+        let kind_item = make_ident(if should_be_pod { "Trivial" } else { "Opaque" });
+        let tynamestring = tyname.to_cpp_name();
+        let mut for_extern_c_ts = TokenStream2::new();
+        let mut fulltypath = Vec::new();
+        for_extern_c_ts.extend(
+            [
+                TokenTree::Ident(make_ident("type")),
+                TokenTree::Ident(final_ident.clone()),
+                TokenTree::Punct(proc_macro2::Punct::new('=', proc_macro2::Spacing::Alone)),
+                TokenTree::Ident(make_ident("super")),
+                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                TokenTree::Ident(make_ident("bindgen")),
+                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                TokenTree::Ident(make_ident("root")),
+                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+            ]
+            .to_vec(),
+        );
+        fulltypath.push(make_ident("bindgen"));
+        fulltypath.push(make_ident("root"));
+        for segment in tyname.ns_segment_iter() {
+            let id = make_ident(segment);
+            for_extern_c_ts.extend(
+                [
+                    TokenTree::Ident(id.clone()),
+                    TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                    TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint)),
+                ]
+                .to_vec(),
+            );
+            fulltypath.push(id);
+        }
+        for_extern_c_ts.extend(
+            [
+                TokenTree::Ident(final_ident.clone()),
+                TokenTree::Punct(proc_macro2::Punct::new(';', proc_macro2::Spacing::Alone)),
+            ]
+            .to_vec(),
+        );
+        fulltypath.push(final_ident.clone());
+        self.extern_c_mod_items
+            .push(ForeignItem::Verbatim(for_extern_c_ts));
+        self.bridge_items.push(Item::Impl(parse_quote! {
+            impl UniquePtr<#final_ident> {}
+        }));
+        self.all_items.push(Item::Impl(parse_quote! {
+            unsafe impl cxx::ExternType for #(#fulltypath)::* {
+                type Id = cxx::type_id!(#tynamestring);
+                type Kind = cxx::kind::#kind_item;
+            }
+        }));
+        self.types_found.push(final_ident);
+        Ok(())
+    }
+
+    fn build_include_foreign_items(&self) -> Vec<ForeignItem> {
+        let extra_inclusion = if self.additional_cpp_needs.is_empty() {
+            None
+        } else {
+            Some("autocxxgen.h".to_string())
+        };
+        let chained = self.include_list.iter().chain(extra_inclusion.iter());
+        chained
+            .map(|inc| {
+                ForeignItem::Macro(parse_quote! {
+                    include!(#inc);
+                })
+            })
+            .collect()
+    }
+
     /// Adds items which we always add, cos they're useful.
     fn generate_utilities(&mut self) {
         // Unless we've been specifically asked not to do so, we always
@@ -394,7 +395,8 @@ impl<'a> BridgeConversion<'a> {
         self.extern_c_mod_items.push(ForeignItem::Fn(parse_quote!(
             fn make_string(str_: &str) -> UniquePtr<CxxString>;
         )));
-        self.additional_cpp_needs.push(AdditionalNeed::MakeStringConstructor);
+        self.additional_cpp_needs
+            .push(AdditionalNeed::MakeStringConstructor);
     }
 
     fn convert_new_method(&mut self, mut m: syn::ImplItemMethod, ty: &TypeName, i: &syn::ItemImpl) {
@@ -523,10 +525,7 @@ impl<'a> BridgeConversion<'a> {
             let a = AdditionalNeed::ByValueWrapper(ByValueWrapper {
                 id: s.ident.clone(),
                 return_conversion: ret_type_conversion.clone(),
-                argument_conversion: param_details
-                    .iter()
-                    .map(|d| d.conversion.clone())
-                    .collect(),
+                argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
                 is_a_method,
             });
             self.additional_cpp_needs.push(a);
