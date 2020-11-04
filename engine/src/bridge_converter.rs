@@ -145,9 +145,6 @@ impl<'a> BridgeConversion<'a> {
         if !exclude_utilities {
             self.generate_utilities();
         }
-        let mut bindgen_root_mod = parse_quote! {
-            mod root {}
-        };
         for item in items {
             match item {
                 Item::Mod(root_mod) => {
@@ -155,7 +152,6 @@ impl<'a> BridgeConversion<'a> {
                     // in a mod called 'root'. We don't want to pass that
                     // onto cxx, so jump right into it.
                     assert!(root_mod.ident.to_string() == "root");
-                    bindgen_root_mod = root_mod.clone();
                     if let Some((_, items)) = root_mod.content {
                         self.find_nested_pod_types(&items, Vec::new())?;
                         self.convert_mod_items(items, Vec::new())?;
@@ -179,8 +175,16 @@ impl<'a> BridgeConversion<'a> {
             #[allow(unused_imports)]
             use self::super::super::cxxbridge;
         }));
-        bindgen_root_mod.content.as_mut().unwrap().1 = self.bindgen_root_items;
-        self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(bindgen_root_mod)];
+        // The extensive use of parse_quote here could end up
+        // being a performance bottleneck. If so, we might want
+        // to set the 'contents' field of the ItemMod
+        // structures directly.
+        let bindgen_root_items = &self.bindgen_root_items;
+        self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(parse_quote! {
+            mod root {
+                #(#bindgen_root_items)*
+            }
+        })];
         self.all_items.push(Item::Mod(self.bindgen_mod));
         let bridge_items = &self.bridge_items;
         self.all_items.push(Item::Mod(parse_quote! {
