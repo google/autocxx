@@ -257,9 +257,9 @@ impl<'a> BridgeConversion<'a> {
                         // by Rust code
                         // (see https://doc.rust-lang.org/1.47.0/reference/behavior-considered-undefined.html).
                         // Rustc can use least-significant bits of the reference for other storage.
-                        s.attrs.push(parse_quote!(
+                        s.attrs = vec![parse_quote!(
                             #[repr(C, packed)]
-                        ));
+                        )];
                     }
                     self.bindgen_root_items.push(Item::Struct(s));
                 }
