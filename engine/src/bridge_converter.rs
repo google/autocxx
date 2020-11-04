@@ -204,7 +204,7 @@ impl<'a> BridgeConversion<'a> {
         // structures directly.
         let bindgen_root_items = &self.bindgen_root_items;
         self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(parse_quote! {
-            mod root {
+            pub mod root {
                 #(#bindgen_root_items)*
             }
         })];
