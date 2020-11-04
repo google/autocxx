@@ -227,7 +227,6 @@ impl<'a> BridgeConversion<'a> {
         } else {
             Some("autocxxgen.h".to_string())
         };
-        println!("cargo:warning=Extra include: {:?}", extra_inclusion);
         let chained = self.include_list.iter().chain(extra_inclusion.iter());
         chained
             .map(|inc| {
