@@ -1213,6 +1213,30 @@ fn test_method_pass_pod_by_value() {
 }
 
 #[test]
+fn test_inline_method() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Anna {
+            uint32_t a;
+        };
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob(Anna) const {
+                return a;
+            }
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::Anna { a: 14 };
+        let b = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(b.get_bob(a), 12);
+    };
+    run_test("", hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+}
+
+#[test]
 fn test_method_pass_pod_by_reference() {
     let cxx = indoc! {"
         uint32_t Bob::get_bob(const Anna&) const {
@@ -1661,6 +1685,26 @@ fn test_cycle_string_full_pipeline() {
     };
     let allowed_funcs = &["give_str", "take_str"];
     run_test_with_full_pipeline(cxx, hdr, rs, allowed_funcs, &[]);
+}
+
+#[test]
+fn test_inline_full_pipeline() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        inline std::string give_str() {
+            return std::string(\"Bob\");
+        }
+        inline uint32_t take_str(std::string a) {
+            return a.length();
+        }
+    "};
+    let rs = quote! {
+        let s = ffi::cxxbridge::give_str();
+        assert_eq!(ffi::cxxbridge::take_str(s), 3);
+    };
+    let allowed_funcs = &["give_str", "take_str"];
+    run_test_with_full_pipeline("", hdr, rs, allowed_funcs, &[]);
 }
 
 #[test]
