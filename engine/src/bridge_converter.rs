@@ -182,18 +182,13 @@ impl<'a> BridgeConversion<'a> {
         bindgen_root_mod.content.as_mut().unwrap().1 = self.bindgen_root_items;
         self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(bindgen_root_mod)];
         self.all_items.push(Item::Mod(self.bindgen_mod));
-        let mut bridge_mod: ItemMod = parse_quote! {
+        let bridge_items = &self.bridge_items;
+        self.all_items.push(Item::Mod(parse_quote! {
             #[cxx::bridge]
             pub mod cxxbridge {
+                #(#bridge_items)*
             }
-        };
-        bridge_mod
-            .content
-            .as_mut()
-            .unwrap()
-            .1
-            .append(&mut self.bridge_items);
-        self.all_items.push(Item::Mod(bridge_mod));
+        }));
         Ok(BridgeConversionResults {
             items: self.all_items,
             additional_cpp_needs: self.additional_cpp_needs,
