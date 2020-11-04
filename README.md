@@ -110,10 +110,7 @@ It's not clear yet how this opinion will play out in practice. Perhaps we will g
 
 # Build environment
 
-Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
-
-* It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html)
-* Two of the tests fail when built against some STLs due to a problem where bindgen generates `type-parameter-0-0` which is not a valid identifier.
+Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html)
 
 As with `cxx`, this generates both Rust and C++ side bindings code. The Rust code is simply
 and transparently generated at build time by the `include_cpp!` procedural macro. But you'll
@@ -140,6 +137,16 @@ The plan is:
 * `gen/cmd` - a command-line tool which does the same.
 * `src` (outermost project)- the procedural macro `include_cxx` as described above.
 
+# Where to start reading
+
+The main algorithm is in `engine/src/lib.rs`, in the function `generate()`. This asks
+`bindgen` to generate a heap of Rust code and then passes it into
+`engine/src/bridge_converter.rs` to convert it to be a format suitable for input
+to `cxx`.
+
+However, most of the actual code is indeed in `engine/src/bridge_converter.rs`. Start
+by looking at `convert_items`.
+
 # How to develop
 
 If you're making a change, here's what you need to do to get useful diagnostics etc.
@@ -151,6 +158,9 @@ in the test suite. With suitable options, you can get plenty of output. For inst
 ```
 RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test  integration_tests::test_cycle_string_full_pipeline -- --nocapture
 ```
+
+This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
+in `engine/src/bridge_converter.rs`.
 
 # Credits
 
