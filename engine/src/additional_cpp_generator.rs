@@ -14,15 +14,17 @@
 
 use crate::types::TypeName;
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
-use syn::{Ident, Type};
+use std::collections::HashSet;
+use syn::{parse_quote, Ident, Type};
 
+#[derive(Clone)]
 enum ArgumentConversionType {
     None,
     FromUniquePtrToValue,
     FromValueToUniquePtr,
 }
 
+#[derive(Clone)]
 pub(crate) struct ArgumentConversion {
     unwrapped_type: Type,
     conversion: ArgumentConversionType,
@@ -68,6 +70,30 @@ impl ArgumentConversion {
         }
     }
 
+    pub(crate) fn unconverted_rust_type(&self) -> Type {
+        match self.conversion {
+            ArgumentConversionType::FromValueToUniquePtr => {
+                let orig_ty = &self.unwrapped_type;
+                parse_quote! {
+                    UniquePtr < #orig_ty >
+                }
+            }
+            _ => self.unwrapped_type.clone(),
+        }
+    }
+
+    pub(crate) fn converted_rust_type(&self) -> Type {
+        match self.conversion {
+            ArgumentConversionType::FromUniquePtrToValue => {
+                let orig_ty = &self.unwrapped_type;
+                parse_quote! {
+                    UniquePtr < #orig_ty >
+                }
+            }
+            _ => self.unwrapped_type.clone(),
+        }
+    }
+
     fn unwrapped_type_as_string(&self) -> String {
         match self.unwrapped_type {
             Type::Path(ref typ) => TypeName::from_bindgen_type_path(typ).to_cpp_name(),
@@ -107,7 +133,6 @@ pub(crate) struct ByValueWrapper {
     pub(crate) id: Ident,
     pub(crate) return_conversion: Option<ArgumentConversion>,
     pub(crate) argument_conversion: Vec<ArgumentConversion>,
-    pub(crate) extra_blocklist: Option<String>,
     pub(crate) is_a_method: bool,
 }
 
@@ -148,9 +173,6 @@ impl Header {
 struct AdditionalFunction {
     declaration: String,
     definition: String,
-    name: String,
-    suppress_older: Vec<String>,
-    rename: Option<(String, String)>,
     headers: Vec<Header>,
 }
 
@@ -158,14 +180,9 @@ struct AdditionalFunction {
 pub(crate) struct AdditionalCpp {
     pub(crate) declarations: String,
     pub(crate) definitions: String,
-    pub(crate) extra_allowlist: Vec<String>,
-    pub(crate) extra_blocklist: Vec<String>,
-    pub(crate) renames: HashMap<String, String>,
 }
 
 /// Generates additional C++ glue functions needed by autocxx.
-/// At the moment, the only use here is for generating an ability
-/// to do `make_unique` but more uses are expected in future.
 /// In some ways it would be preferable to be able to pass snippets
 /// of C++ through to `cxx` for inclusion in the C++ file which it
 /// generates, and perhaps we'll explore that in future. But for now,
@@ -211,28 +228,9 @@ impl AdditionalCppGenerator {
             let declarations = format!("{}\n{}\n{}", headers, self.inclusions, declarations);
             let definitions = self.concat_additional_items(|x| &x.definition);
             let definitions = format!("#include \"autocxxgen.h\"\n{}", definitions);
-            let extra_allowlist = self
-                .additional_functions
-                .iter()
-                .map(|x| x.name.to_string())
-                .collect();
-            let extra_blocklist = self
-                .additional_functions
-                .iter()
-                .map(|x| x.suppress_older.clone())
-                .flatten()
-                .collect();
-            let renames = self
-                .additional_functions
-                .iter()
-                .filter_map(|x| x.rename.clone())
-                .collect();
             Some(AdditionalCpp {
                 declarations,
                 definitions,
-                extra_allowlist,
-                extra_blocklist,
-                renames,
             })
         }
     }
@@ -252,20 +250,15 @@ impl AdditionalCppGenerator {
     }
 
     fn generate_string_constructor(&mut self) {
-        let name = "make_string";
-        let declaration = format!("std::unique_ptr<std::string> {}(::rust::Str str)", name);
+        let declaration = "std::unique_ptr<std::string> make_string(::rust::Str str)";
         let definition = format!(
             "{} {{ return std::make_unique<std::string>(std::string(str)); }}",
             declaration
         );
         let declaration = format!("{};", declaration);
-
         self.additional_functions.push(AdditionalFunction {
-            name: name.into(),
             declaration,
             definition,
-            suppress_older: Vec::new(),
-            rename: None,
             headers: vec![
                 Header::system("memory"),
                 Header::system("string"),
@@ -293,11 +286,8 @@ impl AdditionalCppGenerator {
         );
         let declaration = format!("{};", declaration);
         self.additional_functions.push(AdditionalFunction {
-            name,
             declaration,
             definition,
-            suppress_older: Vec::new(),
-            rename: None,
             headers: vec![Header::system("memory")],
         })
     }
@@ -346,14 +336,9 @@ impl AdditionalCppGenerator {
         };
         let definition = format!("{} {{ {}; }}", declaration, underlying_function_call,);
         let declaration = format!("{};", declaration);
-        let mut suppress_older = vec![ident.to_string()];
-        suppress_older.extend(details.extra_blocklist.iter().cloned());
         self.additional_functions.push(AdditionalFunction {
-            name: name.clone(),
             declaration,
             definition,
-            suppress_older,
-            rename: Some((name, ident.to_string())),
             headers: vec![Header::system("memory")],
         })
     }

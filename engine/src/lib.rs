@@ -33,11 +33,10 @@ use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, ItemMod, Macro};
 
-use additional_cpp_generator::{AdditionalCpp, AdditionalCppGenerator, AdditionalNeed};
+use additional_cpp_generator::AdditionalCppGenerator;
 use itertools::join;
 use log::{info, warn};
 use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
 use types::TypeName;
@@ -81,7 +80,8 @@ enum State {
     Generated(ItemMod, AdditionalCppGenerator),
 }
 
-/// Core of the autocxx engine.
+/// Core of the autocxx engine. See `generate` for most details
+/// on how this works.
 /// TODO - consider whether this 'engine' crate should actually be a
 /// directory of source symlinked from all the other sub-crates, so that
 /// we avoid exposing an external interface from this code.
@@ -245,24 +245,9 @@ impl IncludeCpp {
         Ok(builder)
     }
 
-    fn inject_header_into_bindgen(
-        &self,
-        mut builder: bindgen::Builder,
-        additional_cpp: Option<AdditionalCpp>,
-    ) -> bindgen::Builder {
+    fn inject_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
         let full_header = self.build_header();
-        let more_decls = if let Some(additional_cpp) = additional_cpp {
-            for a in additional_cpp.extra_allowlist {
-                builder = builder.whitelist_function(a);
-            }
-            format!(
-                "#include <memory>\n\n// Extra autocxx insertions:\n\n{}\n\n",
-                additional_cpp.declarations
-            )
-        } else {
-            String::new()
-        };
-        let full_header = format!("{}{}\n\n{}", types::get_prelude(), more_decls, full_header,);
+        let full_header = format!("{}\n\n{}", types::get_prelude(), full_header,);
         info!("Full header: {}", full_header);
         builder = builder.header_contents("example.hpp", &full_header);
         builder
@@ -311,6 +296,15 @@ impl IncludeCpp {
     /// Actually examine the headers to find out what needs generating.
     /// Most errors occur at this stage as we fail to interpret the C++
     /// headers properly.
+    ///
+    /// The basic idea is this. We will run `bindgen` which will spit
+    /// out a ton of Rust code corresponding to all the types and functions
+    /// defined in C++. We'll then post-process that bindgen output
+    /// into a form suitable for ingestion by `cxx`.
+    /// (It's the `bridge_converter` mod which does that.)
+    /// Along the way, the `bridge_converter` might tell us of additional
+    /// C++ code which we should generate, e.g. wrappers to move things
+    /// into and out of `UniquePtr`s.
     pub fn generate(&mut self) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -321,14 +315,9 @@ impl IncludeCpp {
             State::Generated(_, _) | State::NothingGenerated => panic!("Only call generate once"),
         }
 
-        // 4. (also respects environment variables to pick up more headers,
-        //     include paths and #defines)
-        // Then:
-        // 1. Builds an overall C++ header with all those #defines and #includes
-        // 2. Passes it to bindgen::Builder::header
         let builder = self.make_bindgen_builder()?;
         let bindings = self
-            .inject_header_into_bindgen(builder, None)
+            .inject_header_into_bindgen(builder)
             .generate()
             .map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
@@ -338,45 +327,11 @@ impl IncludeCpp {
             self.pod_types.clone(), // TODO take self by value to avoid clone.
         );
 
-        let mut conversion = converter
-            .convert(bindings, None, &HashMap::new())
+        let conversion = converter
+            .convert(bindings, self.exclude_utilities)
             .map_err(Error::Conversion)?;
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
-        if !self.exclude_utilities {
-            // Unless we've been specifically asked not to do so, we always
-            // generate a 'make_string' function. That pretty much *always* means
-            // we run two passes through bindgen. i.e. the next 'if' is always true,
-            // and we always generate an additional C++ file for our bindings additions,
-            // unless the include_cpp macro has specified ExcludeUtilities.
-            additional_cpp_generator.add_needs(vec![AdditionalNeed::MakeStringConstructor]);
-        }
-        let additional_cpp_items = additional_cpp_generator.generate();
-        if let Some(additional_cpp_items) = additional_cpp_items {
-            // When processing the bindings the first time, we discovered we wanted to add
-            // more C++ (because you can never have too much C++.) Examples are field
-            // accessor methods, or make_unique wrappers.
-            // So, err, let's start all over again. Fun!
-            let mut builder = self.make_bindgen_builder()?;
-            info!(
-                "Extra blocklist: {:?}",
-                additional_cpp_items.extra_blocklist
-            );
-            for x in &additional_cpp_items.extra_blocklist {
-                builder = builder.blacklist_item(x);
-            }
-            // TODO this clone is tedious
-            let renames = additional_cpp_items.renames.clone();
-            let bindings = self
-                .inject_header_into_bindgen(builder, Some(additional_cpp_items))
-                .generate()
-                .map_err(Error::Bindgen)?;
-            let bindings = self.parse_bindings(bindings)?;
-            conversion = converter
-                .convert(bindings, Some("autocxxgen.h"), &renames)
-                .map_err(Error::Conversion)?;
-        }
-
         let mut items = conversion.items;
         if let Some(itemmod) = self.get_preprocessor_defs_mod() {
             items.push(syn::Item::Mod(itemmod));
