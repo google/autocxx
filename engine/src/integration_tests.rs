@@ -1663,6 +1663,104 @@ fn test_cycle_string_full_pipeline() {
     run_test_with_full_pipeline(cxx, hdr, rs, allowed_funcs, &[]);
 }
 
+#[test]
+fn test_multiple_classes_with_methods() {
+    let hdr = indoc! {"
+        #include <cstdint>
+
+        struct TrivialStruct {
+            uint32_t val = 0;
+        
+            uint32_t get() const;
+            uint32_t inc();
+        };
+        TrivialStruct make_trivial_struct();
+        
+        class TrivialClass {
+          public:
+            uint32_t get() const;
+            uint32_t inc();
+        
+          private:
+            uint32_t val_ = 1;
+        };
+        TrivialClass make_trivial_class();
+
+        struct OpaqueStruct {
+            // ~OpaqueStruct();
+            uint32_t val = 2;
+        
+            uint32_t get() const;
+            uint32_t inc();
+        };
+        OpaqueStruct make_opaque_struct();
+
+        class OpaqueClass {
+          public:
+            // ~OpaqueClass();
+            uint32_t get() const;
+            uint32_t inc();
+        
+          private:
+            uint32_t val_ = 3;
+        };
+        OpaqueClass make_opaque_class();
+    "};
+    let cxx = indoc! {"
+        TrivialStruct make_trivial_struct() { return {}; }
+        TrivialClass make_trivial_class() { return {}; }
+        OpaqueStruct make_opaque_struct() { return {}; }
+        OpaqueClass make_opaque_class() { return {}; }
+
+        uint32_t TrivialStruct::get() const { return val;}
+        uint32_t TrivialClass::get() const { return val_; }
+        uint32_t OpaqueStruct::get() const { return val;}
+        uint32_t OpaqueClass::get() const { return val_; }
+
+        uint32_t TrivialStruct::inc() { return ++val; }
+        uint32_t TrivialClass::inc() { return ++val_; }
+        uint32_t OpaqueStruct::inc() { return ++val; }
+        uint32_t OpaqueClass::inc() { return ++val_; }
+    "};
+    let rs = quote! {
+        use ffi::cxxbridge::*;
+
+        let mut ts: TrivialStruct = make_trivial_struct();
+        assert_eq!(ts.get(), 0);
+        assert_eq!(ts.inc(), 1);
+        assert_eq!(ts.inc(), 2);
+
+        let mut tc: TrivialClass = make_trivial_class();
+        assert_eq!(tc.get(), 1);
+        assert_eq!(tc.inc(), 2);
+        assert_eq!(tc.inc(), 3);
+
+        let mut os: cxx::UniquePtr<OpaqueStruct> = make_opaque_struct();
+        let os:  &mut OpaqueStruct = &mut *os;
+        assert_eq!(os.get(), 2);
+        assert_eq!(os.inc(), 3);
+        assert_eq!(os.inc(), 4);
+
+        let mut oc: cxx::UniquePtr<OpaqueClass> = make_opaque_class();
+        let oc:  &mut OpaqueClass = &mut *oc;
+        assert_eq!(oc.get(), 3);
+        assert_eq!(oc.inc(), 4);
+        assert_eq!(oc.inc(), 5);
+    };
+    run_test_with_full_pipeline(
+        cxx,
+        hdr,
+        rs,
+        &[
+            "make_trivial_struct",
+            "make_trivial_class",
+            "make_opaque_struct",
+            "make_opaque_class",
+        ],
+        &["TrivialStruct", "TrivialClass"],
+    );
+}
+
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
 // 3. Constants
