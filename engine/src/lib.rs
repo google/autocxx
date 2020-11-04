@@ -80,7 +80,8 @@ enum State {
     Generated(ItemMod, AdditionalCppGenerator),
 }
 
-/// Core of the autocxx engine.
+/// Core of the autocxx engine. See `generate` for most details
+/// on how this works.
 /// TODO - consider whether this 'engine' crate should actually be a
 /// directory of source symlinked from all the other sub-crates, so that
 /// we avoid exposing an external interface from this code.
@@ -295,6 +296,15 @@ impl IncludeCpp {
     /// Actually examine the headers to find out what needs generating.
     /// Most errors occur at this stage as we fail to interpret the C++
     /// headers properly.
+    ///
+    /// The basic idea is this. We will run `bindgen` which will spit
+    /// out a ton of Rust code corresponding to all the types and functions
+    /// defined in C++. We'll then post-process that bindgen output
+    /// into a form suitable for ingestion by `cxx`.
+    /// (It's the `bridge_converter` mod which does that.)
+    /// Along the way, the `bridge_converter` might tell us of additional
+    /// C++ code which we should generate, e.g. wrappers to move things
+    /// into and out of `UniquePtr`s.
     pub fn generate(&mut self) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -305,11 +315,6 @@ impl IncludeCpp {
             State::Generated(_, _) | State::NothingGenerated => panic!("Only call generate once"),
         }
 
-        // 4. (also respects environment variables to pick up more headers,
-        //     include paths and #defines)
-        // Then:
-        // 1. Builds an overall C++ header with all those #defines and #includes
-        // 2. Passes it to bindgen::Builder::header
         let builder = self.make_bindgen_builder()?;
         let bindings = self
             .inject_header_into_bindgen(builder)
