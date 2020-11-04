@@ -224,6 +224,7 @@ impl IncludeCpp {
                 non_exhaustive: false,
             })
             .enable_cxx_namespaces()
+            .generate_inline_functions(true)
             .layout_tests(false); // TODO revisit later
         for item in known_types::get_initial_blocklist() {
             builder = builder.blacklist_item(item);

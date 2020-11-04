@@ -81,7 +81,8 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Passing opaque structs (owned by UniquePtr) into C++ methods which take them by value | Works, but with non-ideal syntax |
 | Constructors/make_unique | Works, though probably many problems |
 | Destructors | Works via cxx `UniquePtr` already |
-| Construction of std::unique_ptr<std::string> in Rust | - |
+| Inline functions | Works |
+| Construction of std::unique_ptr<std::string> in Rust | Works |
 | Field access to opaque objects via UniquePtr | - |
 | Plain-old-data structs containing opaque fields | Impossible by design, but may not be ergonomic so may need more thought |
 | Reference counting | - |
@@ -90,7 +91,6 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Unique ptrs to primitives | - |
 | Inheritance from pure virtual classes | - |
 | Namespaces | - |
-| Inline functions | - |
 
 The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, and it's not at all clear that a plan will present itself. In particular, some will require that C++ structs are owned by `UniquePtr` yet passed to C++ by value. It's not clear how ergonomic the results will be. Until we are much further, I don't advise using this for anything in production.
 
