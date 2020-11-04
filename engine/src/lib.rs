@@ -15,6 +15,7 @@
 mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
+mod known_types;
 mod parse;
 mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
@@ -82,6 +83,7 @@ enum State {
 
 /// Core of the autocxx engine. See `generate` for most details
 /// on how this works.
+///
 /// TODO - consider whether this 'engine' crate should actually be a
 /// directory of source symlinked from all the other sub-crates, so that
 /// we avoid exposing an external interface from this code.
@@ -223,7 +225,7 @@ impl IncludeCpp {
             })
             .enable_cxx_namespaces()
             .layout_tests(false); // TODO revisit later
-        for item in types::get_initial_blocklist() {
+        for item in known_types::get_initial_blocklist() {
             builder = builder.blacklist_item(item);
         }
 
@@ -247,7 +249,7 @@ impl IncludeCpp {
 
     fn inject_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
         let full_header = self.build_header();
-        let full_header = format!("{}\n\n{}", types::get_prelude(), full_header,);
+        let full_header = format!("{}\n\n{}", known_types::get_prelude(), full_header,);
         info!("Full header: {}", full_header);
         builder = builder.header_contents("example.hpp", &full_header);
         builder

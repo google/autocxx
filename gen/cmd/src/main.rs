@@ -15,11 +15,11 @@
 use autocxx_engine::parse_file;
 use clap::{crate_authors, crate_version, App, Arg, SubCommand};
 use indoc::indoc;
+use proc_macro2::TokenStream;
+use quote::ToTokens;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use proc_macro2::TokenStream;
-use quote::ToTokens;
 
 fn main() {
     let matches = App::new("autocxx-gen")

@@ -90,6 +90,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Unique ptrs to primitives | - |
 | Inheritance from pure virtual classes | - |
 | Namespaces | - |
+| Inline functions | - |
 
 The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, and it's not at all clear that a plan will present itself. In particular, some will require that C++ structs are owned by `UniquePtr` yet passed to C++ by value. It's not clear how ergonomic the results will be. Until we are much further, I don't advise using this for anything in production.
 
@@ -109,10 +110,7 @@ It's not clear yet how this opinion will play out in practice. Perhaps we will g
 
 # Build environment
 
-Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. The following known build problems exist:
-
-* It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html)
-* Two of the tests fail when built against some STLs due to a problem where bindgen generates `type-parameter-0-0` which is not a valid identifier.
+Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html)
 
 As with `cxx`, this generates both Rust and C++ side bindings code. The Rust code is simply
 and transparently generated at build time by the `include_cpp!` procedural macro. But you'll
@@ -138,6 +136,31 @@ The plan is:
   files from an `include_cxx` section.
 * `gen/cmd` - a command-line tool which does the same.
 * `src` (outermost project)- the procedural macro `include_cxx` as described above.
+
+# Where to start reading
+
+The main algorithm is in `engine/src/lib.rs`, in the function `generate()`. This asks
+`bindgen` to generate a heap of Rust code and then passes it into
+`engine/src/bridge_converter.rs` to convert it to be a format suitable for input
+to `cxx`.
+
+However, most of the actual code is indeed in `engine/src/bridge_converter.rs`. Start
+by looking at `convert_items`.
+
+# How to develop
+
+If you're making a change, here's what you need to do to get useful diagnostics etc.
+First of all, `cargo run` in the `demo` directory. If it breaks, you don't get much
+in the way of useful diagnostics, because `stdout` is swallowed by cargo build scripts.
+So, practically speaking, you would almost always move onto running one of the tests
+in the test suite. With suitable options, you can get plenty of output. For instance:
+
+```
+RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test  integration_tests::test_cycle_string_full_pipeline -- --nocapture
+```
+
+This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
+in `engine/src/bridge_converter.rs`.
 
 # Credits
 

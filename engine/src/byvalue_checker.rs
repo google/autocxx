@@ -39,8 +39,7 @@ impl StructDetails {
 /// Type which is able to check whether it's safe to make a type
 /// fully representable by cxx. For instance if it is a struct containing
 /// a struct containing a std::string, the answer is no, because that
-/// std::string contains a self-referential pointer. Exact logic here
-/// is TBD.
+/// std::string contains a self-referential pointer.
 pub struct ByValueChecker {
     // Mapping from type name to whether it is safe to be POD
     results: HashMap<TypeName, StructDetails>,
@@ -49,7 +48,7 @@ pub struct ByValueChecker {
 impl ByValueChecker {
     pub fn new() -> Self {
         let mut results = HashMap::new();
-        for (tn, by_value_safe) in crate::types::get_pod_safe_types() {
+        for (tn, by_value_safe) in crate::known_types::get_pod_safe_types() {
             let safety = if by_value_safe {
                 PODState::IsPOD
             } else {
