@@ -39,8 +39,7 @@ impl StructDetails {
 /// Type which is able to check whether it's safe to make a type
 /// fully representable by cxx. For instance if it is a struct containing
 /// a struct containing a std::string, the answer is no, because that
-/// std::string contains a self-referential pointer. Exact logic here
-/// is TBD.
+/// std::string contains a self-referential pointer.
 pub struct ByValueChecker {
     // Mapping from type name to whether it is safe to be POD
     results: HashMap<TypeName, StructDetails>,
