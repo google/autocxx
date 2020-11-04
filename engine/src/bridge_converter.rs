@@ -432,13 +432,10 @@ impl<'a> BridgeConversion<'a> {
             ReturnType::Default => return,
         };
         let cpp_constructor_args = m.sig.inputs.iter().filter_map(|x| match x {
-            FnArg::Typed(pt) => {
-                type_to_typename(&pt.ty)
-                    .and_then(|x| match *(pt.pat.clone()) {
-                        syn::Pat::Ident(pti) => Some((x, pti.ident)),
-                        _ => None,
-                    })
-            }
+            FnArg::Typed(pt) => type_to_typename(&pt.ty).and_then(|x| match *(pt.pat.clone()) {
+                syn::Pat::Ident(pti) => Some((x, pti.ident)),
+                _ => None,
+            }),
             FnArg::Receiver(_) => None,
         });
         let (cpp_arg_types, cpp_arg_names): (Vec<_>, Vec<_>) = cpp_constructor_args.unzip();
