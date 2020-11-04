@@ -113,6 +113,33 @@ impl BridgeConverter {
     }
 }
 
+fn make_ident(id: &str) -> Ident {
+    Ident::new(id, Span::call_site())
+}
+
+fn get_blank_extern_c_mod() -> ItemForeignMod {
+    parse_quote!(
+        extern "C" {}
+    )
+}
+
+fn type_to_typename(ty: &Type) -> Option<TypeName> {
+    match ty {
+        Type::Path(pn) => Some(TypeName::from_bindgen_type_path(pn)),
+        _ => None,
+    }
+}
+
+fn strip_attr(attrs: Vec<Attribute>, to_strip: &str) -> Vec<Attribute> {
+    attrs
+        .into_iter()
+        .filter(|a| {
+            let i = a.path.get_ident();
+            !matches!(i, Some(i2) if *i2 == to_strip)
+        })
+        .collect::<Vec<Attribute>>()
+}
+
 /// A particular bridge conversion operation. This can really
 /// be thought of as a ton of parameters which we'd otherwise
 /// need to pass into each individual function within this file.
@@ -128,10 +155,6 @@ struct BridgeConversion<'a> {
     byvalue_checker: ByValueChecker,
     pod_requests: &'a Vec<TypeName>,
     include_list: &'a Vec<String>,
-}
-
-fn make_ident(id: &str) -> Ident {
-    Ident::new(id, Span::call_site())
 }
 
 impl<'a> BridgeConversion<'a> {
@@ -168,7 +191,7 @@ impl<'a> BridgeConversion<'a> {
         let mut extern_c_mod = self
             .extern_c_mod
             .take()
-            .unwrap_or_else(Self::get_blank_extern_c_mod);
+            .unwrap_or_else(get_blank_extern_c_mod);
         extern_c_mod.items.append(&mut self.extern_c_mod_items);
         self.bridge_items.push(Item::ForeignMod(extern_c_mod));
         self.bindgen_root_items.push(Item::Use(parse_quote! {
@@ -246,7 +269,7 @@ impl<'a> BridgeConversion<'a> {
                     self.bindgen_root_items.push(Item::Enum(e));
                 }
                 Item::Impl(i) => {
-                    if let Some(ty) = Self::type_to_typename(&i.self_ty) {
+                    if let Some(ty) = type_to_typename(&i.self_ty) {
                         for item in i.items.clone() {
                             match item {
                                 syn::ImplItem::Method(m) if m.sig.ident == "new" => {
@@ -410,7 +433,7 @@ impl<'a> BridgeConversion<'a> {
         };
         let cpp_constructor_args = m.sig.inputs.iter().filter_map(|x| match x {
             FnArg::Typed(pt) => {
-                Self::type_to_typename(&pt.ty)
+                type_to_typename(&pt.ty)
                     .and_then(|x| match *(pt.pat.clone()) {
                         syn::Pat::Ident(pti) => Some((x, pti.ident)),
                         _ => None,
@@ -448,19 +471,6 @@ impl<'a> BridgeConversion<'a> {
         new_item_impl.unsafety = None;
         new_item_impl.items = vec![new_impl_method];
         self.bindgen_root_items.push(Item::Impl(new_item_impl));
-    }
-
-    fn get_blank_extern_c_mod() -> ItemForeignMod {
-        parse_quote!(
-            extern "C" {}
-        )
-    }
-
-    fn type_to_typename(ty: &Type) -> Option<TypeName> {
-        match ty {
-            Type::Path(pn) => Some(TypeName::from_bindgen_type_path(pn)),
-            _ => None,
-        }
     }
 
     fn convert_foreign_mod_items(
@@ -560,7 +570,7 @@ impl<'a> BridgeConversion<'a> {
                 fn #fn_name ( #(#arg_list),* ) #ret_type;
             )
         } else {
-            let attrs = Self::strip_attr(fun.attrs, "link_name");
+            let attrs = strip_attr(fun.attrs, "link_name");
             ForeignItemFn {
                 attrs,
                 vis: fun.vis,
@@ -586,16 +596,6 @@ impl<'a> BridgeConversion<'a> {
             ),
             ReturnType::Default => None,
         }
-    }
-
-    fn strip_attr(attrs: Vec<Attribute>, to_strip: &str) -> Vec<Attribute> {
-        attrs
-            .into_iter()
-            .filter(|a| {
-                let i = a.path.get_ident();
-                !matches!(i, Some(i2) if *i2 == to_strip)
-            })
-            .collect::<Vec<Attribute>>()
     }
 
     /// Returns additionally a Boolean indicating whether an argument was
