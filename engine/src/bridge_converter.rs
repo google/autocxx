@@ -19,6 +19,8 @@ use crate::{
     known_types::{replace_type_path_without_arguments, should_dereference_in_cpp},
 };
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
+use quote::quote;
+use syn::parse::Parser;
 use syn::{
     parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
     ItemForeignMod, ItemMod, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
@@ -128,16 +130,6 @@ fn type_to_typename(ty: &Type) -> Option<TypeName> {
         Type::Path(pn) => Some(TypeName::from_bindgen_type_path(pn)),
         _ => None,
     }
-}
-
-fn strip_attr(attrs: Vec<Attribute>, to_strip: &str) -> Vec<Attribute> {
-    attrs
-        .into_iter()
-        .filter(|a| {
-            let i = a.path.get_ident();
-            !matches!(i, Some(i2) if *i2 == to_strip)
-        })
-        .collect::<Vec<Attribute>>()
 }
 
 /// A particular bridge conversion operation. This can really
@@ -486,27 +478,34 @@ impl<'a> BridgeConversion<'a> {
     }
 
     fn convert_foreign_fn(&mut self, fun: ForeignItemFn) -> Result<(), ConvertError> {
-        let mut s = fun.sig.clone();
-        let old_name = s.ident.to_string();
+        // This function is one of the most complex parts of bridge_converter.
+        // It needs to consider:
+        // 1. Rejecting constructors entirely.
+        // 2. For methods, we need to strip off the class name.
+        // 3. For anything taking or returning a non-POD type _by value_,
+        //    we need to generate a wrapper function in C++ which wraps and unwraps
+        //    it from a unique_ptr.
         // See if it's a constructor, in which case skip it.
         // We instead pass onto cxx an alternative make_unique implementation later.
         for ty in &self.types_found {
             let constructor_name = format!("{}_{}", ty, ty);
-            if old_name == constructor_name {
+            if fun.sig.ident == constructor_name {
                 return Ok(());
             }
         }
-        s.output = self.convert_return_type(s.output);
-        let (new_params, param_details): (Punctuated<_, _>, Vec<_>) = fun
+        // Now let's analyze all the parameters. We do this first
+        // because we'll use this to determine whether this is a method.
+        let (mut params, param_details): (Punctuated<_, syn::Token![,]>, Vec<_>) = fun
             .sig
             .inputs
             .into_iter()
             .map(|i| self.convert_fn_arg(i))
             .unzip();
-        s.inputs = new_params;
+
         let is_a_method = param_details.iter().any(|b| b.was_self);
 
-        let mut rust_name = old_name.clone();
+        // Work out naming.
+        let mut rust_name = fun.sig.ident.to_string();
         if is_a_method {
             // bindgen generates methods with the name:
             // {class}_{method name}
@@ -517,82 +516,77 @@ impl<'a> BridgeConversion<'a> {
             // TODO test with class names containing underscores. It should work.
             for cn in &self.types_found {
                 let cn = cn.to_string();
-                if old_name.starts_with(&cn) {
-                    rust_name = old_name[cn.len() + 1..].to_string();
-                    s.ident = Ident::new(&rust_name, s.ident.span());
+                if rust_name.starts_with(&cn) {
+                    rust_name = rust_name[cn.len() + 1..].to_string();
                     break;
                 }
             }
         }
 
-        let unique_ptr_wrapper_needed = param_details.iter().any(|b| b.conversion.work_needed());
-        let ret_type_conversion = self.unwrap_return_type(s.output.clone());
+        // When we generate the cxx::bridge fn declaration, we'll need to
+        // put something different into here if we have to do argument or
+        // return type conversion, so get some mutable variables ready.
+        let mut rust_name_attr = Vec::new();
+        let mut cxxbridge_name = make_ident(&rust_name);
+
+        // Analyze the return type, just as we previously did for the
+        // parameters.
+        let (mut ret_type, ret_type_conversion) = self.convert_return_type(fun.sig.output);
+
+        // Do we need to convert either parameters or return type?
+        let param_conversion_needed = param_details.iter().any(|b| b.conversion.work_needed());
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
             .map_or(false, |x| x.work_needed());
-        let new_item = if unique_ptr_wrapper_needed || ret_type_conversion_needed {
+        let wrapper_function_needed = param_conversion_needed | ret_type_conversion_needed;
+
+        if wrapper_function_needed {
+            // Generate a new layer of C++ code to wrap/unwrap parameters
+            // and return values into/out of std::unique_ptrs.
             // First give instructions to generate the additional C++.
+            let cpp_construction_ident = cxxbridge_name;
+            cxxbridge_name = make_ident(&format!("{}_up_wrapper", rust_name));
             let a = AdditionalNeed::ByValueWrapper(ByValueWrapper {
-                id: s.ident.clone(),
+                id: cpp_construction_ident,
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
                 is_a_method,
             });
             self.additional_cpp_needs.push(a);
-            // Now generate the additional Rust line required in the cxx::bridge mod.
-            let fn_name = make_ident(&format!("{}_up_wrapper", s.ident.to_string()));
-            let mut ret_type = s.output.clone();
+            // Now modify the cxx::bridge entry we're going to make.
             if let Some(conversion) = ret_type_conversion {
                 let new_ret_type = conversion.unconverted_rust_type();
                 ret_type = parse_quote!(
                     -> #new_ret_type
                 );
             }
-            let arg_list = param_details
-                .iter()
-                .map(|pd| {
-                    let type_name = pd.conversion.converted_rust_type();
-                    let arg_name = if pd.was_self {
-                        parse_quote!(autocxx_gen_this)
-                    } else {
-                        pd.name.clone()
-                    };
-                    parse_quote!(
-                        #arg_name: #type_name
-                    )
-                })
-                .collect::<Vec<FnArg>>();
-            parse_quote!(
-                #[rust_name = #rust_name]
-                fn #fn_name ( #(#arg_list),* ) #ret_type;
-            )
-        } else {
-            let attrs = strip_attr(fun.attrs, "link_name");
-            ForeignItemFn {
-                attrs,
-                vis: fun.vis,
-                sig: s,
-                semi_token: fun.semi_token,
-            }
-        };
-        self.extern_c_mod_items.push(ForeignItem::Fn(new_item));
-        Ok(())
-    }
-
-    fn unwrap_return_type(&self, ret_type: ReturnType) -> Option<ArgumentConversion> {
-        match ret_type {
-            ReturnType::Type(_, boxed_type) => Some(
-                if !self
-                    .byvalue_checker
-                    .is_pod(&TypeName::from_cxx_type(&*boxed_type))
-                {
-                    ArgumentConversion::new_to_unique_ptr(*boxed_type)
+            params.clear();
+            for pd in param_details {
+                let type_name = pd.conversion.converted_rust_type();
+                let arg_name = if pd.was_self {
+                    parse_quote!(autocxx_gen_this)
                 } else {
-                    ArgumentConversion::new_unconverted(*boxed_type)
-                },
-            ),
-            ReturnType::Default => None,
-        }
+                    pd.name
+                };
+                params.push(parse_quote!(
+                    #arg_name: #type_name
+                ));
+            }
+            // Keep the original Rust name the same so callers don't
+            // need to know about all of these shenanigans.
+            rust_name_attr = Attribute::parse_outer
+                .parse2(quote!(
+                    #[rust_name = #rust_name]
+                ))
+                .unwrap();
+        };
+        // At last, actually generate the cxx::bridge entry.
+        let vis = &fun.vis;
+        self.extern_c_mod_items.push(ForeignItem::Fn(parse_quote!(
+            #(#rust_name_attr)*
+            #vis fn #cxxbridge_name ( #params ) #ret_type;
+        )));
+        Ok(())
     }
 
     /// Returns additionally a Boolean indicating whether an argument was
@@ -674,11 +668,20 @@ impl<'a> BridgeConversion<'a> {
         }
     }
 
-    fn convert_return_type(&self, rt: ReturnType) -> ReturnType {
+    fn convert_return_type(&self, rt: ReturnType) -> (ReturnType, Option<ArgumentConversion>) {
         match rt {
-            ReturnType::Default => ReturnType::Default,
-            ReturnType::Type(rarrow, typebox) => {
-                ReturnType::Type(rarrow, self.convert_boxed_type(typebox))
+            ReturnType::Default => (ReturnType::Default, None),
+            ReturnType::Type(rarrow, boxed_type) => {
+                let boxed_type = self.convert_boxed_type(boxed_type);
+                let conversion = if !self
+                    .byvalue_checker
+                    .is_pod(&TypeName::from_cxx_type(boxed_type.as_ref()))
+                {
+                    ArgumentConversion::new_to_unique_ptr(*boxed_type.clone())
+                } else {
+                    ArgumentConversion::new_unconverted(*boxed_type.clone())
+                };
+                (ReturnType::Type(rarrow, boxed_type), Some(conversion))
             }
         }
     }
@@ -725,7 +728,7 @@ impl<'a> BridgeConversion<'a> {
     }
 
     fn convert_type_path(&self, mut typ: TypePath) -> TypePath {
-        if typ.path.segments.iter().next().unwrap().ident.to_string() == "root" {
+        if typ.path.segments.iter().next().unwrap().ident == "root" {
             typ.path.segments = typ
                 .path
                 .segments
