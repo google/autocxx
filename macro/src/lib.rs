@@ -33,11 +33,11 @@ use syn::parse_macro_input;
 ///
 /// Rust code:
 /// ```
-/// # use autocxx_macro::include_cxx;
-/// include_cxx!(
-/// #   ParseOnly,
-///     Header("input.h"),
-///     Allow("do_math"),
+/// # use autocxx_macro::include_cpp_impl as include_cpp;
+/// include_cpp!(
+/// #   parse_only
+///     #include "input.h"
+///     allow("do_math")
 /// );
 ///
 /// # mod ffi { pub mod cxxbridge { pub fn do_math(a: u32) -> u32 { a+3 } } }
