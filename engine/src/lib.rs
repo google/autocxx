@@ -20,6 +20,7 @@ mod parse;
 mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
 mod types;
+mod unqualify;
 
 #[cfg(any(test, feature = "build"))]
 mod builder;

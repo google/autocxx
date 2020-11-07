@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::TypeName;
+use crate::types::{Namespace, TypeName};
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
@@ -59,7 +59,7 @@ impl ByValueChecker {
         ByValueChecker { results }
     }
 
-    pub fn ingest_struct(&mut self, def: &ItemStruct, ns: &Vec<String>) {
+    pub fn ingest_struct(&mut self, def: &ItemStruct, ns: &Namespace) {
         // For this struct, work out whether it _could_ be safe as a POD.
         let tyname = TypeName::new(ns, &def.ident.to_string());
         let mut field_safety_problem = PODState::SafeToBePOD;
@@ -142,7 +142,7 @@ impl ByValueChecker {
 #[cfg(test)]
 mod tests {
     use super::ByValueChecker;
-    use crate::TypeName;
+    use crate::{types::Namespace, TypeName};
     use syn::{parse_quote, ItemStruct};
 
     #[test]
@@ -162,7 +162,7 @@ mod tests {
             }
         };
         let t_id = TypeName::from_ident(&t.ident);
-        bvc.ingest_struct(&t, &Vec::new());
+        bvc.ingest_struct(&t, &Namespace::new());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
     }
@@ -176,7 +176,7 @@ mod tests {
                 b: i64,
             }
         };
-        bvc.ingest_struct(&t, &Vec::new());
+        bvc.ingest_struct(&t, &Namespace::new());
         let t: ItemStruct = parse_quote! {
             struct Bar {
                 a: Foo,
@@ -184,7 +184,7 @@ mod tests {
             }
         };
         let t_id = TypeName::from_ident(&t.ident);
-        bvc.ingest_struct(&t, &Vec::new());
+        bvc.ingest_struct(&t, &Namespace::new());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
     }
@@ -199,7 +199,7 @@ mod tests {
             }
         };
         let t_id = TypeName::from_ident(&t.ident);
-        bvc.ingest_struct(&t, &Vec::new());
+        bvc.ingest_struct(&t, &Namespace::new());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
     }
@@ -214,7 +214,7 @@ mod tests {
             }
         };
         let t_id = TypeName::from_ident(&t.ident);
-        bvc.ingest_struct(&t, &Vec::new());
+        bvc.ingest_struct(&t, &Namespace::new());
         assert!(bvc.satisfy_requests(vec![t_id]).is_err());
     }
 }

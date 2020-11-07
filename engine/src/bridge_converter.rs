@@ -12,28 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::byvalue_checker::ByValueChecker;
 use crate::types::TypeName;
 use crate::{
     additional_cpp_generator::{AdditionalNeed, ArgumentConversion, ByValueWrapper},
     known_types::{replace_type_path_without_arguments, should_dereference_in_cpp},
 };
+use crate::{
+    byvalue_checker::ByValueChecker,
+    types::Namespace,
+    unqualify::{unqualify_params, unqualify_ret_type},
+};
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::parse::Parser;
+use syn::punctuated::Punctuated;
 use syn::{
     parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
-    ItemForeignMod, ItemMod, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
+    ItemForeignMod, ItemMod, Pat, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
     TypeReference,
 };
-use syn::{punctuated::Punctuated, Pat};
 
 #[derive(Debug)]
 pub enum ConvertError {
     NoContent,
     UnsafePODType(String),
     UnknownForeignItem,
-    DuplicateType(String),
 }
 
 /// Results of a conversion.
@@ -104,7 +107,6 @@ impl BridgeConverter {
                     extern_c_mod_items: Vec::new(),
                     additional_cpp_needs: Vec::new(),
                     types_found: Vec::new(),
-                    bindgen_root_items: Vec::new(),
                     byvalue_checker: ByValueChecker::new(),
                     pod_requests: &self.pod_requests,
                     include_list: &self.include_list,
@@ -143,7 +145,6 @@ struct BridgeConversion<'a> {
     extern_c_mod_items: Vec<ForeignItem>,
     additional_cpp_needs: Vec<AdditionalNeed>,
     types_found: Vec<Ident>,
-    bindgen_root_items: Vec<Item>,
     byvalue_checker: ByValueChecker,
     pod_requests: &'a Vec<TypeName>,
     include_list: &'a Vec<String>,
@@ -160,16 +161,18 @@ impl<'a> BridgeConversion<'a> {
         if !exclude_utilities {
             self.generate_utilities();
         }
+        let mut bindgen_root_items = Vec::new();
         for item in items {
             match item {
                 Item::Mod(root_mod) => {
                     // With namespaces enabled, bindgen always puts everything
                     // in a mod called 'root'. We don't want to pass that
                     // onto cxx, so jump right into it.
-                    assert!(root_mod.ident.to_string() == "root");
+                    assert!(root_mod.ident == "root");
                     if let Some((_, items)) = root_mod.content {
-                        self.find_nested_pod_types(&items, Vec::new())?;
-                        self.convert_mod_items(items, Vec::new())?;
+                        let root_ns = Namespace::new();
+                        self.find_nested_pod_types(&items, &root_ns)?;
+                        self.convert_mod_items(items, root_ns, &mut bindgen_root_items)?;
                     }
                 }
                 _ => panic!("Unexpected outer item"),
@@ -186,7 +189,7 @@ impl<'a> BridgeConversion<'a> {
             .unwrap_or_else(get_blank_extern_c_mod);
         extern_c_mod.items.append(&mut self.extern_c_mod_items);
         self.bridge_items.push(Item::ForeignMod(extern_c_mod));
-        self.bindgen_root_items.push(Item::Use(parse_quote! {
+        bindgen_root_items.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]
             use self::super::super::cxxbridge;
         }));
@@ -194,7 +197,6 @@ impl<'a> BridgeConversion<'a> {
         // being a performance bottleneck. If so, we might want
         // to set the 'contents' field of the ItemMod
         // structures directly.
-        let bindgen_root_items = &self.bindgen_root_items;
         self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(parse_quote! {
             pub mod root {
                 #(#bindgen_root_items)*
@@ -214,7 +216,12 @@ impl<'a> BridgeConversion<'a> {
         })
     }
 
-    fn convert_mod_items(&mut self, items: Vec<Item>, ns: Vec<String>) -> Result<(), ConvertError> {
+    fn convert_mod_items(
+        &mut self,
+        items: Vec<Item>,
+        ns: Namespace,
+        output_items: &mut Vec<Item>,
+    ) -> Result<(), ConvertError> {
         for item in items {
             match item {
                 Item::ForeignMod(mut fm) => {
@@ -227,7 +234,7 @@ impl<'a> BridgeConversion<'a> {
                         // the contents of all bindgen 'extern "C"' mods into this
                         // one.
                     }
-                    self.convert_foreign_mod_items(items)?;
+                    self.convert_foreign_mod_items(items, &ns)?;
                 }
                 Item::Struct(mut s) => {
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
@@ -253,19 +260,19 @@ impl<'a> BridgeConversion<'a> {
                             #[repr(C, packed)]
                         )];
                     }
-                    self.bindgen_root_items.push(Item::Struct(s));
+                    output_items.push(Item::Struct(s));
                 }
                 Item::Enum(e) => {
                     let tyname = TypeName::new(&ns, &e.ident.to_string());
                     self.generate_type_alias(tyname, true)?;
-                    self.bindgen_root_items.push(Item::Enum(e));
+                    output_items.push(Item::Enum(e));
                 }
                 Item::Impl(i) => {
                     if let Some(ty) = type_to_typename(&i.self_ty) {
                         for item in i.items.clone() {
                             match item {
                                 syn::ImplItem::Method(m) if m.sig.ident == "new" => {
-                                    self.convert_new_method(m, &ty, &i)
+                                    self.convert_new_method(m, &ty, &i, output_items)
                                 }
                                 _ => {}
                             }
@@ -273,17 +280,22 @@ impl<'a> BridgeConversion<'a> {
                     }
                 }
                 Item::Mod(itm) => {
+                    let mut new_itm = itm.clone();
                     if let Some((_, items)) = itm.content {
-                        let mut new_ns = ns.clone();
-                        new_ns.push(itm.ident.to_string());
-                        self.convert_mod_items(items, new_ns)?;
+                        let new_ns = ns.push(itm.ident.to_string());
+                        let mut new_items = Vec::new();
+                        self.convert_mod_items(items, new_ns, &mut new_items)?;
+                        new_itm.content.as_mut().unwrap().1 = new_items;
                     }
+                    output_items.push(Item::Mod(new_itm));
                 }
                 Item::Use(_) => {
-                    // Should only appear in the bindgen root. As far as I know...
-                    self.bindgen_root_items.push(item);
+                    output_items.push(item);
                 }
                 Item::Const(_) => {
+                    // TODO consider what to do about constants in namespaces.
+                    // Putting them in the root namespace is no good in case
+                    // there's a conflict.
                     self.all_items.push(item);
                 }
                 _ => {
@@ -300,19 +312,18 @@ impl<'a> BridgeConversion<'a> {
     fn find_nested_pod_types(
         &mut self,
         items: &[Item],
-        ns: Vec<String>,
+        ns: &Namespace,
     ) -> Result<(), ConvertError> {
         for item in items {
             match item {
-                Item::Struct(s) => self.byvalue_checker.ingest_struct(s, &ns),
+                Item::Struct(s) => self.byvalue_checker.ingest_struct(s, ns),
                 Item::Enum(e) => self
                     .byvalue_checker
                     .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
                 Item::Mod(itm) => {
                     if let Some((_, nested_items)) = &itm.content {
-                        let mut new_ns = ns.clone();
-                        new_ns.push(itm.ident.to_string());
-                        self.find_nested_pod_types(nested_items, new_ns)?;
+                        let new_ns = ns.push(itm.ident.to_string());
+                        self.find_nested_pod_types(nested_items, &new_ns)?;
                     }
                 }
                 _ => {}
@@ -329,15 +340,24 @@ impl<'a> BridgeConversion<'a> {
         should_be_pod: bool,
     ) -> Result<(), ConvertError> {
         let final_ident = make_ident(tyname.get_final_ident());
-        if self.types_found.contains(&final_ident) {
-            // At the moment we can only have a single type with a given name,
-            // even in different namespaces. This is a temporary problem.
-            return Err(ConvertError::DuplicateType(final_ident.to_string()));
-        }
         let kind_item = make_ident(if should_be_pod { "Trivial" } else { "Opaque" });
         let tynamestring = tyname.to_cpp_name();
-        let mut for_extern_c_ts = TokenStream2::new();
+        let mut for_extern_c_ts = if tyname.has_namespace() {
+            let ns_string = tyname
+                .ns_segment_iter()
+                .cloned()
+                .collect::<Vec<String>>()
+                .join("::");
+            quote! {
+                #[namespace = #ns_string]
+            }
+        } else {
+            TokenStream2::new()
+        };
+
         let mut fulltypath = Vec::new();
+        // We can't use parse_quote! here because it doesn't support type aliases
+        // at the moment.
         let colon = TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint));
         for_extern_c_ts.extend(
             [
@@ -417,7 +437,13 @@ impl<'a> BridgeConversion<'a> {
             .push(AdditionalNeed::MakeStringConstructor);
     }
 
-    fn convert_new_method(&mut self, mut m: syn::ImplItemMethod, ty: &TypeName, i: &syn::ItemImpl) {
+    fn convert_new_method(
+        &mut self,
+        mut m: syn::ImplItemMethod,
+        ty: &TypeName,
+        i: &syn::ItemImpl,
+        output_items: &mut Vec<Item>,
+    ) {
         let self_ty = i.self_ty.as_ref();
         let (arrow, oldreturntype) = match &m.sig.output {
             ReturnType::Type(arrow, ty) => (arrow, ty),
@@ -459,17 +485,18 @@ impl<'a> BridgeConversion<'a> {
         new_item_impl.attrs = Vec::new();
         new_item_impl.unsafety = None;
         new_item_impl.items = vec![new_impl_method];
-        self.bindgen_root_items.push(Item::Impl(new_item_impl));
+        output_items.push(Item::Impl(new_item_impl));
     }
 
     fn convert_foreign_mod_items(
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
+        ns: &Namespace,
     ) -> Result<(), ConvertError> {
         for i in foreign_mod_items {
             match i {
                 ForeignItem::Fn(f) => {
-                    self.convert_foreign_fn(f)?;
+                    self.convert_foreign_fn(f, ns)?;
                 }
                 _ => return Err(ConvertError::UnknownForeignItem),
             }
@@ -477,7 +504,11 @@ impl<'a> BridgeConversion<'a> {
         Ok(())
     }
 
-    fn convert_foreign_fn(&mut self, fun: ForeignItemFn) -> Result<(), ConvertError> {
+    fn convert_foreign_fn(
+        &mut self,
+        fun: ForeignItemFn,
+        ns: &Namespace,
+    ) -> Result<(), ConvertError> {
         // This function is one of the most complex parts of bridge_converter.
         // It needs to consider:
         // 1. Rejecting constructors entirely.
@@ -580,9 +611,32 @@ impl<'a> BridgeConversion<'a> {
                 ))
                 .unwrap();
         };
+        // Finally - namespace support. All the Types in everything
+        // above this point are fully qualified. We need to unqualify them.
+        // We need to do that _after_ the above wrapper_function_needed
+        // work, because it relies upon spotting fully qualified names like
+        // std::unique_ptr. However, after it's done its job, all such
+        // well-known types should be unqualified already (e.g. just UniquePtr)
+        // and the following code will act to unqualify only those types
+        // which the user has declared.
+        let params = unqualify_params(params);
+        let ret_type = unqualify_ret_type(ret_type);
+        // And we need to make an attribute for the namespace that the function
+        // itself is in.
+        let namespace_attr = if ns.is_empty() {
+            Vec::new()
+        } else {
+            let namespace_string = ns.to_string();
+            Attribute::parse_outer
+                .parse2(quote!(
+                    #[namespace = #namespace_string]
+                ))
+                .unwrap()
+        };
         // At last, actually generate the cxx::bridge entry.
         let vis = &fun.vis;
         self.extern_c_mod_items.push(ForeignItem::Fn(parse_quote!(
+            #(#namespace_attr)*
             #(#rust_name_attr)*
             #vis fn #cxxbridge_name ( #params ) #ret_type;
         )));

@@ -1805,6 +1805,91 @@ fn test_multiple_classes_with_methods() {
     );
 }
 
+#[test]
+fn test_ns_return_struct() {
+    let cxx = indoc! {"
+        A::B::Bob give_bob() {
+            A::B::Bob a;
+            a.a = 3;
+            a.b = 4;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            namespace B {
+                struct Bob {
+                    uint32_t a;
+                    uint32_t b;
+                };
+            }
+        }
+        A::B::Bob give_bob();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::cxxbridge::give_bob().b, 4);
+    };
+    run_test(cxx, hdr, rs, &["give_bob"], &["A::B::Bob"]);
+}
+
+#[test]
+fn test_ns_take_struct() {
+    let cxx = indoc! {"
+    uint32_t take_bob(A::B::Bob a) {
+        return a.a;
+    }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            namespace B {
+                struct Bob {
+                    uint32_t a;
+                    uint32_t b;
+                };
+            }
+        }
+        uint32_t take_bob(A::B::Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::cxxbridge::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::cxxbridge::take_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob"], &["A::B::Bob"]);
+}
+
+#[test]
+fn test_ns_func() {
+    let cxx = indoc! {"
+        using namespace C;
+        A::B::Bob C::give_bob() {
+            A::B::Bob a;
+            a.a = 3;
+            a.b = 4;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            namespace B {
+                struct Bob {
+                    uint32_t a;
+                    uint32_t b;
+                };
+            }
+        }
+        namespace C {
+            ::A::B::Bob give_bob();
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::cxxbridge::give_bob().b, 4);
+    };
+    run_test(cxx, hdr, rs, &["C::give_bob"], &["A::B::Bob"]);
+}
+
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
 // 3. Constants

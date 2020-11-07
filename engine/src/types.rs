@@ -16,6 +16,47 @@ use std::fmt::Display;
 use std::iter::Peekable;
 use syn::{Ident, PathSegment, Type, TypePath};
 
+/// Newtype wrapper for a C++ namespace.
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
+pub struct Namespace(Vec<String>);
+
+impl Namespace {
+    pub(crate) fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    #[must_use]
+    pub(crate) fn push(&self, segment: String) -> Self {
+        let mut bigger = self.0.clone();
+        bigger.push(segment);
+        Namespace(bigger)
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &String> {
+        self.0.iter()
+    }
+}
+
+impl Display for Namespace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0.join("::"))
+    }
+}
+
+impl<'a> IntoIterator for &'a Namespace {
+    type Item = &'a String;
+
+    type IntoIter = std::slice::Iter<'a, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 /// Any time we store a type name, we should use this. Stores the type
 /// and its namespace. Namespaces should be stored without any
 /// 'bindgen::root' prefix; that means a type not in any C++
@@ -27,11 +68,11 @@ use syn::{Ident, PathSegment, Type, TypePath};
 /// from one to the other; `replace_type_path_without_arguments`
 /// does that.
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
-pub struct TypeName(Vec<String>, String);
+pub struct TypeName(Namespace, String);
 
 impl TypeName {
     pub(crate) fn from_ident(id: &Ident) -> Self {
-        Self(Vec::new(), id.to_string())
+        Self(Namespace::new(), id.to_string())
     }
 
     /// From a TypePath which does not start with 'root'.
@@ -44,7 +85,7 @@ impl TypeName {
     pub(crate) fn from_bindgen_type_path(typ: &TypePath) -> Self {
         let mut seg_iter = typ.path.segments.iter().peekable();
         let first_seg = seg_iter.next().unwrap().ident.clone();
-        if first_seg.to_string() == "root" {
+        if first_seg == "root" {
             // This is a C++ type prefixed with a namespace,
             // e.g. std::string or something the user has defined.
             Self::from_segments(seg_iter) // all but 'root'
@@ -56,10 +97,10 @@ impl TypeName {
     }
 
     fn from_segments<'a, T: Iterator<Item = &'a PathSegment>>(mut seg_iter: Peekable<T>) -> Self {
-        let mut ns = Vec::new();
+        let mut ns = Namespace::new();
         while let Some(seg) = seg_iter.next() {
             if seg_iter.peek().is_some() {
-                ns.push(seg.ident.to_string());
+                ns = ns.push(seg.ident.to_string());
             } else {
                 return Self(ns, seg.ident.to_string());
             }
@@ -89,17 +130,17 @@ impl TypeName {
     }
 
     /// Create from a type encountered in the code.
-    pub(crate) fn new(ns: &Vec<String>, id: &str) -> Self {
+    pub(crate) fn new(ns: &Namespace, id: &str) -> Self {
         Self(ns.clone(), id.to_string())
     }
 
     /// Create from user input, e.g. a name in an AllowPOD directive.
     pub(crate) fn new_from_user_input(id: &str) -> Self {
         let mut seg_iter = id.split("::").peekable();
-        let mut ns = Vec::new();
+        let mut ns = Namespace::new();
         while let Some(seg) = seg_iter.next() {
             if seg_iter.peek().is_some() {
-                ns.push(seg.to_string());
+                ns = ns.push(seg.to_string());
             } else {
                 return Self(ns, seg.to_string());
             }
@@ -111,6 +152,10 @@ impl TypeName {
     /// qualification. Avoid unless you have a good reason.
     pub(crate) fn get_final_ident(&self) -> &str {
         &self.1
+    }
+
+    pub(crate) fn has_namespace(&self) -> bool {
+        !self.0.is_empty()
     }
 
     /// Output the fully-qualified C++ name of this type.
