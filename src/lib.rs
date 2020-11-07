@@ -13,6 +13,12 @@
 // limitations under the License.
 
 
+// The crazy macro_rules magic in this file is thanks to dtolnay@
+// and is a way of attaching rustdoc to each of the possible directives
+// within the include_cpp outer macro. None of the directives actually
+// do anything - all the magic is handled entirely by
+// autocxx_macro::include_cpp_impl.
+
 /// Include some C++ headers in your Rust project.
 ///
 /// This macro allows you to include one or more C++ headers within
@@ -54,28 +60,34 @@
 /// # Syntax
 ///
 /// Within the brackets of the `include_cxx!(...)` macro, you should provide
-/// a list of the following:
+/// a list of at least the following:
 ///
 /// * `#include "cpp_header.h"`: a header filename to parse and include
 /// * `allow("type_or_function_name")`: a type or function name whose declaration
 ///   should be made available to C++.
 ///
-/// Other declarations are possible and documentation is provided for those items
-/// as macros in the autocxx crate.
+/// Other directives are possible as documented in this crate.
 ///
 /// # How to allow structs
 ///
-/// A C++ struct can be listed under [allow] or [allow_pod] (or may be implicitly
-/// allowed because it's a type referenced by something else you've allowed.)
+/// All C++ types can be owned within a [UniquePtr][autocxx_engine::cxx::UniquePtr]
+/// within Rust. To let this be possible, simply pass the names of these
+/// types within [allow] (or just [allow] any function which requires these types).
 ///
-/// The current plan is to use [allow] under normal circumstances, but
-/// [allow_pod] only for structs where you absolutely do need to pass them
-/// truly by value and have direct field access.
-/// Some structs can't be represented as POD, e.g. those containing `std::string`
-/// due to self-referential pointers. We will always handle such things using
-/// [UniquePtr][autocxx_engine::cxx::UniquePtr] to an opaque type in Rust, but still allow calling existing C++
-/// APIs which take such things by value - we generate automatic
-/// unwrappers. This won't work in all cases.
+/// However, only _some_ C++ `struct`s can be owned _by value_ within Rust. Those
+/// types must be freely byte-copyable, because Rust is free to do that at
+/// any time. If you believe your `struct` meets those criteria, you can
+/// use [allow_pod] instead.
+///
+/// Use [allow] under normal circumstances, but [allow_pod] only for structs
+/// where you absolutely do need to pass them truly by value and have direct field access.
+///
+/// This doesn't just make a difference to the generated code for the type;
+/// it also makes a difference to any functions which take or return that type.
+/// If there's a C++ function which takes a struct by value, but that struct
+/// is not declared as POD-safe, then we'll generate wrapper functions to move
+/// that type into and out of [UniquePtr][autocxx_engine::cxx::UniquePtr]s.
+/// 
 ///
 /// # Generated code
 ///
@@ -134,6 +146,7 @@ macro_rules! allow {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// Generate as "plain old data".
 /// Generate Rust bindings for the given C++ type such that
 /// it can be passed and owned by value in Rust. This only works
 /// for C++ types which have trivial move constructors and no
