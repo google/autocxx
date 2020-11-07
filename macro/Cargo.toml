@@ -13,7 +13,7 @@
 # limitations under the License.
 
 [package]
-name = "autocxx"
+name = "autocxx-macro"
 version = "0.3.3"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 license = "MIT OR Apache-2.0"
@@ -23,13 +23,13 @@ edition = "2018"
 keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
 
+[lib]
+proc-macro = true
+
 [dependencies]
-autocxx-engine = { path="engine", version="0.3.3" }
-autocxx-macro = { path="macro", version="0.3.3" }
+autocxx-engine = { path="../engine", version="0.3.3" }
+proc-macro-error = "1.0"
 
-[workspace]
-members = ["engine", "gen/cmd", "gen/build", "macro", "demo"]
-
-# [patch.crates-io]
-# cxx = { path="../cxx" }
-# cxx-gen = { path="../cxx/gen/lib" }
+[dependencies.syn]
+version = "1.0"
+features = [ "full" ]
