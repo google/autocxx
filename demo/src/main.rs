@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx::include_cxx;
+use autocxx::include_cpp;
 
-include_cxx!(Header("input.h"), Allow("DoMath"),);
+include_cpp! {
+    #include "input.h"
+    allow!("DoMath")
+}
 
 fn main() {
     println!(

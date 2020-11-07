@@ -63,7 +63,7 @@ fn parse_file_contents(
     let mut results = Vec::new();
     for item in source.items {
         if let Item::Macro(ref mac) = item {
-            if mac.mac.path.is_ident("include_cxx") {
+            if mac.mac.path.is_ident("include_cpp") {
                 let mut include_cpp = crate::IncludeCpp::new_from_syn(mac.mac.clone())
                     .map_err(ParseError::MacroParseFail)?;
                 if let Some(autocxx_inc) = autocxx_inc {

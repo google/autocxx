@@ -130,34 +130,41 @@ impl IncludeCpp {
         let mut exclude_utilities = false;
 
         while !input.is_empty() {
-            let ident: syn::Ident = input.parse()?;
-            if ident == "Header" {
-                let args;
-                syn::parenthesized!(args in input);
-                let hdr: syn::LitStr = args.parse()?;
-                inclusions.push(CppInclusion::Header(hdr.value()));
-            } else if ident == "Allow" || ident == "AllowPOD" {
-                let args;
-                syn::parenthesized!(args in input);
-                let allow: syn::LitStr = args.parse()?;
-                allowlist.push(allow.value());
-                if ident == "AllowPOD" {
-                    pod_types.push(TypeName::new_from_user_input(&allow.value()));
+            if input.parse::<Option<syn::Token![#]>>()?.is_some() {
+                let ident: syn::Ident = input.parse()?;
+                if ident != "include" {
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        "expected include",
+                    ));
                 }
-            } else if ident == "ParseOnly" {
-                parse_only = true;
-            } else if ident == "ExcludeUtilities" {
-                exclude_utilities = true;
+                let hdr: syn::LitStr = input.parse()?;
+                inclusions.push(CppInclusion::Header(hdr.value()));
             } else {
-                return Err(syn::Error::new(
-                    ident.span(),
-                    "expected Header, Allow, AllowPOD or ExcludeUtilities",
-                ));
+                let ident: syn::Ident = input.parse()?;
+                input.parse::<Option<syn::Token![!]>>()?;
+                if ident == "allow" || ident == "allow_pod" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let allow: syn::LitStr = args.parse()?;
+                    allowlist.push(allow.value());
+                    if ident == "allow_pod" {
+                        pod_types.push(TypeName::new_from_user_input(&allow.value()));
+                    }
+                } else if ident == "parse_only" {
+                    parse_only = true;
+                } else if ident == "exclude_utilities" {
+                    exclude_utilities = true;
+                } else {
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        "expected allow, allow_pod or exclude_utilities",
+                    ));
+                }
             }
             if input.is_empty() {
                 break;
             }
-            input.parse::<syn::Token![,]>()?;
         }
 
         Ok(IncludeCpp {
