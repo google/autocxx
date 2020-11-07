@@ -49,6 +49,13 @@ pub use parse::{parse_file, parse_token_stream, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
 
+/// Re-export cxx such that clients can use the same version as
+/// us. This doesn't enable clients to avoid depending on the cxx
+/// crate too, unfortunately, since generated cxx::bridge code
+/// refers explicitly to ::cxx. See
+/// https://github.com/google/autocxx/issues/36
+pub use cxx;
+
 pub struct CppFilePair {
     pub header: Vec<u8>,
     pub implementation: Vec<u8>,
