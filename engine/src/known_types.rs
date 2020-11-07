@@ -144,7 +144,7 @@ fn create_type_database() -> TypeDatabase {
         .flatten()
     {
         do_insert(TypeDetails::new(
-            rust_type.into(),
+            rust_type,
             cpp_type,
             true,
             PreludePolicy::Exclude,
@@ -238,7 +238,7 @@ pub(crate) fn replace_type_path_without_arguments(typ: TypePath) -> TypePath {
                 #id
             }
         }
-        None => typ.clone(),
+        None => typ,
     }
 }
 

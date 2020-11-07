@@ -79,7 +79,7 @@ use syn::parse_macro_input;
 /// Some structs can't be represented as POD, e.g. those containing `std::string`
 /// due to self-referential pointers. We will always handle such things using
 /// `UniquePtr` to an opaque type in Rust, but still allow calling existing C++
-/// APIs which take such things by value - we'll aim to generate automatic
+/// APIs which take such things by value - we generate automatic
 /// unwrappers. This won't work in all cases.
 ///
 /// # Generated code
@@ -100,6 +100,14 @@ use syn::parse_macro_input;
 ///      }
 /// }
 /// ```
+///
+/// # Namespaces
+///
+/// At present, C++ namespaces are partially handled. autocxx will understand
+/// and generate Rust code from C++ code which has namespaces, but a flat structure
+/// will be generated on the Rust side. That means that you can't have two
+/// types or two functions with the same name within different namespaces. This
+/// is a temporary restriction.
 
 #[proc_macro_error]
 #[proc_macro]
