@@ -203,6 +203,9 @@ impl<'a> BridgeConversion<'a> {
             }
         })];
         self.all_items.push(Item::Mod(self.bindgen_mod));
+        self.all_items.push(Item::Use(parse_quote! {
+            use autocxx::cxx;
+        }));
         let bridge_items = &self.bridge_items;
         self.all_items.push(Item::Mod(parse_quote! {
             #[cxx::bridge]

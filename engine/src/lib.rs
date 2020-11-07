@@ -31,7 +31,7 @@ mod integration_tests;
 use proc_macro2::TokenStream as TokenStream2;
 use std::path::PathBuf;
 
-use quote::ToTokens;
+use quote::{ToTokens, quote};
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, ItemMod, Macro};
 
@@ -48,6 +48,7 @@ pub use builder::{build, BuilderError};
 pub use parse::{parse_file, parse_token_stream, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
+pub use cxx;
 
 pub struct CppFilePair {
     pub header: Vec<u8>,
@@ -261,7 +262,14 @@ impl IncludeCpp {
     pub fn generate_rs(&self) -> TokenStream2 {
         match &self.state {
             State::NotGenerated => panic!("Call generate() first"),
-            State::Generated(itemmod, _) => itemmod.to_token_stream(),
+            State::Generated(itemmod, _) => {
+                quote! {
+                    pub mod cxx {
+                        pub use autocxx::cxx::*;
+                    }
+                    #itemmod
+                }
+            }
             State::NothingGenerated | State::ParseOnly => TokenStream2::new(),
         }
     }

@@ -13,3 +13,4 @@
 // limitations under the License.
 
 pub use autocxx_macro::include_cxx;
+pub use autocxx_engine::cxx;
