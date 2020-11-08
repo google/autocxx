@@ -69,6 +69,12 @@ pub enum Error {
     NoAutoCxxInc,
     CouldNotCanoncalizeIncludeDir(PathBuf),
     Conversion(bridge_converter::ConvertError),
+    /// No 'allow' or 'allow_pod' was specified.
+    /// It might be that in future we can simply let things work
+    /// without any allowlist, in which case bindgen should generate
+    /// bindings for everything. That just seems very unlikely to work
+    /// in the common case right now.
+    NoAllowlist,
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -313,6 +319,10 @@ impl IncludeCpp {
             State::ParseOnly => return Ok(()),
             State::NotGenerated => {}
             State::Generated(_, _) | State::NothingGenerated => panic!("Only call generate once"),
+        }
+
+        if self.allowlist.is_empty() {
+            return Err(Error::NoAllowlist);
         }
 
         let builder = self.make_bindgen_builder()?;

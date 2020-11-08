@@ -1092,7 +1092,7 @@ fn test_define_int() {
     let rs = quote! {
         assert_eq!(ffi::BOB, 3);
     };
-    run_test(cxx, hdr, rs, &[], &[]);
+    run_test(cxx, hdr, rs, &["BOB"], &[]);
 }
 
 #[test]
@@ -1105,7 +1105,7 @@ fn test_define_str() {
     let rs = quote! {
         assert_eq!(std::str::from_utf8(ffi::BOB).unwrap().trim_end_matches(char::from(0)), "foo");
     };
-    run_test(cxx, hdr, rs, &[], &[]);
+    run_test(cxx, hdr, rs, &["BOB"], &[]);
 }
 
 #[test]
