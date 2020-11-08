@@ -343,10 +343,6 @@ impl IncludeCpp {
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
         let mut items = conversion.items;
-        //{
-        //    let local_lock = self.preprocessor_definitions.try_lock().unwrap();
-        //    items.extend(local_lock.to_items());
-        //}
         let mut new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]
             #[allow(dead_code)]
