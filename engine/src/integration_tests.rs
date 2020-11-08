@@ -14,9 +14,10 @@
 
 use indoc::indoc;
 use log::info;
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use quote::ToTokens;
+use syn::Token;
 use std::fs::File;
 use std::io::Write;
 use std::panic::RefUnwindSafe;
@@ -168,12 +169,12 @@ fn do_run_test(
     // clear how we're getting away with it, but quoting it doesn't work.
     let allowed_funcs = allowed_funcs.iter().map(|s| {
         quote! {
-            Allow(#s),
+            allow!(#s)
         }
     });
     let allowed_pods = allowed_pods.iter().map(|s| {
         quote! {
-            AllowPOD(#s),
+            allow_pod!(#s)
         }
     });
 
@@ -188,14 +189,15 @@ fn do_run_test(
         quote!()
     } else {
         quote!(
-            use autocxx::include_cxx;
+            use autocxx::include_cpp;
         )
     };
+    let hexathorpe = Token![#](Span::call_site());
     let unexpanded_rust = quote! {
         #include_bit
 
-        include_cxx!(
-            Header("input.h"),
+        include_cpp!(
+            #hexathorpe include "input.h"
             #(#allowed_funcs)*
             #(#allowed_pods)*
         );
