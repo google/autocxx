@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // The crazy macro_rules magic in this file is thanks to dtolnay@
 // and is a way of attaching rustdoc to each of the possible directives
 // within the include_cpp outer macro. None of the directives actually
@@ -42,9 +41,9 @@
 ///     allow("do_math")
 /// );
 ///
-/// # mod ffi { pub mod cxxbridge { pub fn do_math(a: u32) -> u32 { a+3 } } }
+/// # mod ffi { pub fn do_math(a: u32) -> u32 { a+3 } }
 /// # fn main() {
-/// ffi::cxxbridge::do_math(3);
+/// ffi::do_math(3);
 /// # }
 /// ```
 ///
@@ -87,25 +86,71 @@
 /// If there's a C++ function which takes a struct by value, but that struct
 /// is not declared as POD-safe, then we'll generate wrapper functions to move
 /// that type into and out of [UniquePtr][autocxx_engine::cxx::UniquePtr]s.
-/// 
+///
 ///
 /// # Generated code
 ///
 /// You will find that this macro expands to the equivalent of:
 ///
+/// ```no_run
+/// mod ffi {
+///     pub fn do_math(a: u32) -> u32
+/// #   { a+3 }
+///     pub const kMyCxxConst: i32 = 3;
+///     pub const MY_PREPROCESSOR_DEFINITION: i64 = 3i64;
+/// }
+/// ```
+///
+/// # Built-in types
+///
+/// The generated code uses `cxx` for interop: see that crate for many important
+/// considerations including safety and the list of built-in types, for example
+/// [UniquePtr][autocxx_engine::cxx::UniquePtr] and
+/// [CxxString][autocxx_engine::cxx::CxxString].
+///
+/// # Making strings
+///
+/// Unless you use [exclude_utilities], you will find a function
+/// called `make_string` exists inside the generated `ffi` block:
+///
+/// ```no_run
+/// mod ffi {
+/// # use autocxx_engine::cxx::UniquePtr;
+/// # use autocxx_engine::cxx::CxxString;
+///     pub fn make_string(str_: &str) -> UniquePtr<CxxString>
+/// #   { unreachable!() }
+/// }
+/// ```
+///
+/// # Making other C++ types
+///
+/// Types gain a `_make_unique` function. At present this is not
+/// an associated function; it's simply the type name followed by
+/// that suffix.
+///
 /// ```
 /// mod ffi {
-///     pub mod cxxbridge {
-///         pub fn do_math(a: u32) -> u32
-/// #       { a+3 }
+/// # struct UniquePtr<T>(T);
+///     struct Bob {
+///         a: u32,
 ///     }
-///
-///      pub const kMyCxxConst: i32 = 3;
-///
-///      pub mod defs {
-///          pub const MY_PREPROCESSOR_DEFINITION: i64 = 3i64;
-///      }
+///     pub fn Bob_make_unique() -> UniquePtr<Bob>
+/// #   { unreachable!() }
 /// }
+/// ```
+/// # Preprocessor symbols
+///
+/// `#define` and other preprocessor symbols will appear as constants.
+/// For integers this is straightforward; for strings they appear
+/// as `[u8]` with a null terminator. To get a string, do this:
+///
+/// ```cpp
+/// #define BOB "Hello"
+/// ```
+///
+/// ```
+/// # mod ffi { pub static BOB: [u8; 6] = [72u8, 101u8, 108u8, 108u8, 111u8, 0u8]; }
+/// assert_eq!(std::str::from_utf8(&ffi::BOB).unwrap().trim_end_matches(char::from(0)), "Hello");
 /// ```
 ///
 /// # Namespaces

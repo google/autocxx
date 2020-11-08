@@ -17,7 +17,6 @@ mod bridge_converter;
 mod byvalue_checker;
 mod known_types;
 mod parse;
-mod preprocessor_parse_callbacks;
 mod rust_pretty_printer;
 mod types;
 mod unqualify;
@@ -38,9 +37,6 @@ use syn::{parse_quote, ItemMod, Macro};
 use additional_cpp_generator::AdditionalCppGenerator;
 use itertools::join;
 use log::{info, warn};
-use preprocessor_parse_callbacks::{PreprocessorDefinitions, PreprocessorParseCallbacks};
-use std::rc::Rc;
-use std::sync::Mutex;
 use types::TypeName;
 
 #[cfg(any(test, feature = "build"))]
@@ -73,6 +69,12 @@ pub enum Error {
     NoAutoCxxInc,
     CouldNotCanoncalizeIncludeDir(PathBuf),
     Conversion(bridge_converter::ConvertError),
+    /// No 'allow' or 'allow_pod' was specified.
+    /// It might be that in future we can simply let things work
+    /// without any allowlist, in which case bindgen should generate
+    /// bindings for everything. That just seems very unlikely to work
+    /// in the common case right now.
+    NoAllowlist,
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -101,7 +103,6 @@ pub struct IncludeCpp {
     pod_types: Vec<TypeName>,
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
     exclude_utilities: bool,
-    preprocessor_definitions: Rc<Mutex<PreprocessorDefinitions>>,
     state: State,
 }
 
@@ -140,10 +141,7 @@ impl IncludeCpp {
             if input.parse::<Option<syn::Token![#]>>()?.is_some() {
                 let ident: syn::Ident = input.parse()?;
                 if ident != "include" {
-                    return Err(syn::Error::new(
-                        ident.span(),
-                        "expected include",
-                    ));
+                    return Err(syn::Error::new(ident.span(), "expected include"));
                 }
                 let hdr: syn::LitStr = input.parse()?;
                 inclusions.push(CppInclusion::Header(hdr.value()));
@@ -180,7 +178,6 @@ impl IncludeCpp {
             pod_types,
             preconfigured_inc_dirs: None,
             exclude_utilities,
-            preprocessor_definitions: Rc::new(Mutex::new(PreprocessorDefinitions::new())),
             state: if parse_only {
                 State::ParseOnly
             } else {
@@ -232,9 +229,6 @@ impl IncludeCpp {
             .clang_args(&["-x", "c++", "-std=c++14"])
             .derive_copy(false)
             .derive_debug(false)
-            .parse_callbacks(Box::new(PreprocessorParseCallbacks::new(
-                self.preprocessor_definitions.clone(),
-            )))
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
             })
@@ -278,12 +272,6 @@ impl IncludeCpp {
             State::Generated(itemmod, _) => itemmod.to_token_stream(),
             State::NothingGenerated | State::ParseOnly => TokenStream2::new(),
         }
-    }
-
-    fn get_preprocessor_defs_mod(&self) -> Option<ItemMod> {
-        let another_ref = self.preprocessor_definitions.clone();
-        let m = another_ref.try_lock().unwrap().to_mod();
-        m
     }
 
     fn parse_bindings(&self, bindings: bindgen::Bindings) -> Result<ItemMod> {
@@ -333,6 +321,10 @@ impl IncludeCpp {
             State::Generated(_, _) | State::NothingGenerated => panic!("Only call generate once"),
         }
 
+        if self.allowlist.is_empty() {
+            return Err(Error::NoAllowlist);
+        }
+
         let builder = self.make_bindgen_builder()?;
         let bindings = self
             .inject_header_into_bindgen(builder)
@@ -351,9 +343,10 @@ impl IncludeCpp {
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
         let mut items = conversion.items;
-        if let Some(itemmod) = self.get_preprocessor_defs_mod() {
-            items.push(syn::Item::Mod(itemmod));
-        }
+        //{
+        //    let local_lock = self.preprocessor_definitions.try_lock().unwrap();
+        //    items.extend(local_lock.to_items());
+        //}
         let mut new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]
             #[allow(dead_code)]

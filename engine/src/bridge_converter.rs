@@ -293,9 +293,6 @@ impl<'a> BridgeConversion<'a> {
                     output_items.push(item);
                 }
                 Item::Const(_) => {
-                    // TODO consider what to do about constants in namespaces.
-                    // Putting them in the root namespace is no good in case
-                    // there's a conflict.
                     self.all_items.push(item);
                 }
                 _ => {
@@ -403,6 +400,7 @@ impl<'a> BridgeConversion<'a> {
                 type Kind = cxx::kind::#kind_item;
             }
         }));
+        self.add_use(&final_ident);
         self.types_found.push(final_ident);
         Ok(())
     }
@@ -423,6 +421,12 @@ impl<'a> BridgeConversion<'a> {
             .collect()
     }
 
+    fn add_use(&mut self, id: &Ident) {
+        self.all_items.push(Item::Use(parse_quote!(
+            pub use cxxbridge:: #id;
+        )));
+    }
+
     /// Adds items which we always add, cos they're useful.
     fn generate_utilities(&mut self) {
         // Unless we've been specifically asked not to do so, we always
@@ -433,6 +437,7 @@ impl<'a> BridgeConversion<'a> {
         self.extern_c_mod_items.push(ForeignItem::Fn(parse_quote!(
             fn make_string(str_: &str) -> UniquePtr<CxxString>;
         )));
+        self.add_use(&make_ident("make_string"));
         self.additional_cpp_needs
             .push(AdditionalNeed::MakeStringConstructor);
     }
@@ -466,6 +471,7 @@ impl<'a> BridgeConversion<'a> {
             &format!("{}_make_unique", ty.to_string()),
             Span::call_site(),
         );
+        self.add_use(&call_name);
         self.extern_c_mod_items.push(ForeignItem::Fn(parse_quote! {
             pub fn #call_name ( #rs_args ) -> UniquePtr< #self_ty >;
         }));
@@ -558,7 +564,8 @@ impl<'a> BridgeConversion<'a> {
         // put something different into here if we have to do argument or
         // return type conversion, so get some mutable variables ready.
         let mut rust_name_attr = Vec::new();
-        let mut cxxbridge_name = make_ident(&rust_name);
+        let rust_name_ident = make_ident(&rust_name);
+        let mut cxxbridge_name = rust_name_ident.clone();
 
         // Analyze the return type, just as we previously did for the
         // parameters.
@@ -640,6 +647,9 @@ impl<'a> BridgeConversion<'a> {
             #(#rust_name_attr)*
             #vis fn #cxxbridge_name ( #params ) #ret_type;
         )));
+        if !is_a_method || wrapper_function_needed {
+            self.add_use(&rust_name_ident);
+        }
         Ok(())
     }
 
