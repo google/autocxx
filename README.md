@@ -11,20 +11,22 @@ The intention is that it has all the fluent safety from [cxx](https://github.com
 It's intended that eventually this exposes a single procedural macro, something like this:
 
 ```cpp
-class Bob {
-public:
-    Bob(std::string name);
-    ...
-    void do_a_thing();
+namespace base {
+  class Bob {
+  public:
+      Bob(std::string name);
+      ...
+      void do_a_thing();
+  };
 }
 ```
 
 ```rust
-use autocxx::include_cxx;
+use autocxx::include_cpp;
 
-include_cxx!(
-    Header("base/bob.h"),
-    Allow("Bob"),
+include_cpp!(
+    #include "base/bob.h"
+    allow("Bob")
 )
 
 let a = ffi::base::Bob::make_unique("hello".into());
@@ -83,7 +85,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Destructors | Works via cxx `UniquePtr` already |
 | Inline functions | Works |
 | Construction of std::unique_ptr<std::string> in Rust | Works |
-| Namespaces | Works, but generated code flat in Rust |
+| Namespaces | Works, but a known limitation |
 | Field access to opaque objects via UniquePtr | - |
 | Plain-old-data structs containing opaque fields | Impossible by design, but may not be ergonomic so may need more thought |
 | Reference counting | - |

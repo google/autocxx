@@ -155,11 +155,10 @@
 ///
 /// # Namespaces
 ///
-/// At present, C++ namespaces are partially handled. autocxx will understand
-/// and generate Rust code from C++ code which has namespaces, but a flat structure
-/// will be generated on the Rust side. That means that you can't have two
-/// types or two functions with the same name within different namespaces. This
-/// is a temporary restriction.
+/// The C++ namespace structure is reflected in mods within the generated
+/// ffi mod. However, at present there is an internal limitation that
+/// autocxx can't handle multiple symbols with the same identifier, even
+/// if they're in different namespaces. This will be fixed in future.
 #[macro_export]
 macro_rules! include_cpp {
     (
