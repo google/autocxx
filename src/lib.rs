@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // The crazy macro_rules magic in this file is thanks to dtolnay@
 // and is a way of attaching rustdoc to each of the possible directives
 // within the include_cpp outer macro. None of the directives actually
@@ -87,7 +86,7 @@
 /// If there's a C++ function which takes a struct by value, but that struct
 /// is not declared as POD-safe, then we'll generate wrapper functions to move
 /// that type into and out of [UniquePtr][autocxx_engine::cxx::UniquePtr]s.
-/// 
+///
 ///
 /// # Generated code
 ///
@@ -95,16 +94,10 @@
 ///
 /// ```
 /// mod ffi {
-///     pub mod cxxbridge {
-///         pub fn do_math(a: u32) -> u32
-/// #       { a+3 }
-///     }
-///
-///      pub const kMyCxxConst: i32 = 3;
-///
-///      pub mod defs {
-///          pub const MY_PREPROCESSOR_DEFINITION: i64 = 3i64;
-///      }
+///     pub fn do_math(a: u32) -> u32
+/// #   { a+3 }
+///     pub const kMyCxxConst: i32 = 3;
+///     pub const MY_PREPROCESSOR_DEFINITION: i64 = 3i64;
 /// }
 /// ```
 ///
