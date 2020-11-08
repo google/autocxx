@@ -39,6 +39,11 @@ impl Namespace {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &String> {
         self.0.iter()
     }
+
+    #[cfg(test)]
+    pub(crate) fn from_user_input(input: &str) -> Self {
+        Self(input.split("::").map(|x| x.to_string()).collect())
+    }
 }
 
 impl Display for Namespace {
@@ -156,6 +161,10 @@ impl TypeName {
 
     pub(crate) fn has_namespace(&self) -> bool {
         !self.0.is_empty()
+    }
+
+    pub(crate) fn get_namespace(&self) -> &Namespace {
+        &self.0
     }
 
     /// Output the fully-qualified C++ name of this type.

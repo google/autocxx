@@ -16,6 +16,7 @@ mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
 mod known_types;
+mod namespace_organizer;
 mod parse;
 mod rust_pretty_printer;
 mod types;

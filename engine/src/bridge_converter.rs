@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::TypeName;
 use crate::{
     additional_cpp_generator::{AdditionalNeed, ArgumentConversion, ByValueWrapper},
     known_types::{replace_type_path_without_arguments, should_dereference_in_cpp},
@@ -21,6 +20,10 @@ use crate::{
     byvalue_checker::ByValueChecker,
     types::Namespace,
     unqualify::{unqualify_params, unqualify_ret_type},
+};
+use crate::{
+    namespace_organizer::{NamespaceEntries, Use},
+    types::TypeName,
 };
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
@@ -110,6 +113,7 @@ impl BridgeConverter {
                     byvalue_checker: ByValueChecker::new(),
                     pod_requests: &self.pod_requests,
                     include_list: &self.include_list,
+                    final_uses: Vec::new(),
                 };
                 conversion.convert_items(items, exclude_utilities)
             }
@@ -148,6 +152,7 @@ struct BridgeConversion<'a> {
     byvalue_checker: ByValueChecker,
     pod_requests: &'a Vec<TypeName>,
     include_list: &'a Vec<String>,
+    final_uses: Vec<Use>,
 }
 
 impl<'a> BridgeConversion<'a> {
@@ -202,6 +207,7 @@ impl<'a> BridgeConversion<'a> {
                 #(#bindgen_root_items)*
             }
         })];
+        self.generate_final_use_statements();
         self.all_items.push(Item::Mod(self.bindgen_mod));
         let bridge_items = &self.bridge_items;
         self.all_items.push(Item::Mod(parse_quote! {
@@ -400,7 +406,7 @@ impl<'a> BridgeConversion<'a> {
                 type Kind = cxx::kind::#kind_item;
             }
         }));
-        self.add_use(&final_ident);
+        self.add_use(tyname.get_namespace(), &final_ident);
         self.types_found.push(final_ident);
         Ok(())
     }
@@ -421,10 +427,11 @@ impl<'a> BridgeConversion<'a> {
             .collect()
     }
 
-    fn add_use(&mut self, id: &Ident) {
-        self.all_items.push(Item::Use(parse_quote!(
-            pub use cxxbridge:: #id;
-        )));
+    fn add_use(&mut self, ns: &Namespace, id: &Ident) {
+        self.final_uses.push(Use {
+            ns: ns.clone(),
+            id: id.clone(),
+        });
     }
 
     /// Adds items which we always add, cos they're useful.
@@ -437,7 +444,7 @@ impl<'a> BridgeConversion<'a> {
         self.extern_c_mod_items.push(ForeignItem::Fn(parse_quote!(
             fn make_string(str_: &str) -> UniquePtr<CxxString>;
         )));
-        self.add_use(&make_ident("make_string"));
+        self.add_use(&Namespace::new(), &make_ident("make_string"));
         self.additional_cpp_needs
             .push(AdditionalNeed::MakeStringConstructor);
     }
@@ -471,7 +478,7 @@ impl<'a> BridgeConversion<'a> {
             &format!("{}_make_unique", ty.to_string()),
             Span::call_site(),
         );
-        self.add_use(&call_name);
+        self.add_use(&ty.get_namespace(), &call_name);
         self.extern_c_mod_items.push(ForeignItem::Fn(parse_quote! {
             pub fn #call_name ( #rs_args ) -> UniquePtr< #self_ty >;
         }));
@@ -648,7 +655,7 @@ impl<'a> BridgeConversion<'a> {
             #vis fn #cxxbridge_name ( #params ) #ret_type;
         )));
         if !is_a_method || wrapper_function_needed {
-            self.add_use(&rust_name_ident);
+            self.add_use(&ns, &rust_name_ident);
         }
         Ok(())
     }
@@ -852,6 +859,35 @@ impl<'a> BridgeConversion<'a> {
             });
         }
         new_pun
+    }
+
+    /// Generate lots of 'use' statements to pull cxxbridge items into the output
+    /// mod hierarchy according to C++ namespaces.
+    fn generate_final_use_statements(&mut self) {
+        let ns_entries = NamespaceEntries::new(&self.final_uses);
+        Self::append_child_namespace(&ns_entries, &mut self.all_items);
+    }
+
+    fn append_child_namespace(ns_entries: &NamespaceEntries, output_items: &mut Vec<Item>) {
+        for item in ns_entries.entries() {
+            let id = &item.id;
+            output_items.push(Item::Use(parse_quote!(
+                pub use cxxbridge :: #id;
+            )));
+        }
+        for (child_name, child_ns_entries) in ns_entries.children() {
+            let child_id = make_ident(child_name);
+            let mut new_mod: ItemMod = parse_quote!(
+                pub mod #child_id {
+                    use super::cxxbridge;
+                }
+            );
+            Self::append_child_namespace(
+                child_ns_entries,
+                &mut new_mod.content.as_mut().unwrap().1,
+            );
+            output_items.push(Item::Mod(new_mod));
+        }
     }
 }
 

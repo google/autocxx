@@ -1,27 +1,47 @@
-use crate::syntax::Api;
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use proc_macro2::Ident;
 use std::collections::BTreeMap;
 
+use crate::types::Namespace;
+
+pub(crate) struct Use {
+    pub(crate) ns: Namespace,
+    pub(crate) id: Ident,
+}
+
 pub struct NamespaceEntries<'a> {
-    entries: Vec<&'a Api>,
-    children: BTreeMap<&'a Ident, NamespaceEntries<'a>>,
+    entries: Vec<&'a Use>,
+    children: BTreeMap<&'a String, NamespaceEntries<'a>>,
 }
 
 impl<'a> NamespaceEntries<'a> {
-    pub fn new(apis: &'a [Api]) -> Self {
+    pub(crate) fn new(apis: &'a [Use]) -> Self {
         let api_refs = apis.iter().collect::<Vec<_>>();
         Self::sort_by_inner_namespace(api_refs, 0)
     }
 
-    pub fn entries(&self) -> &[&'a Api] {
+    pub(crate) fn entries(&self) -> &[&'a Use] {
         &self.entries
     }
 
-    pub fn children(&self) -> impl Iterator<Item = (&&Ident, &NamespaceEntries)> {
+    pub(crate) fn children(&self) -> impl Iterator<Item = (&&String, &NamespaceEntries)> {
         self.children.iter()
     }
 
-    fn sort_by_inner_namespace(apis: Vec<&'a Api>, depth: usize) -> Self {
+    fn sort_by_inner_namespace(apis: Vec<&'a Use>, depth: usize) -> Self {
         let mut root = NamespaceEntries {
             entries: Vec::new(),
             children: BTreeMap::new(),
@@ -29,13 +49,13 @@ impl<'a> NamespaceEntries<'a> {
 
         let mut kids_by_child_ns = BTreeMap::new();
         for api in apis {
-            if let Some(ns) = api.get_namespace() {
-                let first_ns_elem = ns.iter().nth(depth);
-                if let Some(first_ns_elem) = first_ns_elem {
-                    let list = kids_by_child_ns.entry(first_ns_elem).or_insert(Vec::new());
-                    list.push(api);
-                    continue;
-                }
+            let first_ns_elem = api.ns.iter().nth(depth);
+            if let Some(first_ns_elem) = first_ns_elem {
+                let list = kids_by_child_ns
+                    .entry(first_ns_elem)
+                    .or_insert_with(Vec::new);
+                list.push(api);
+                continue;
             }
             root.entries.push(api);
         }
@@ -52,10 +72,9 @@ impl<'a> NamespaceEntries<'a> {
 #[cfg(test)]
 mod tests {
     use super::NamespaceEntries;
-    use crate::syntax::namespace::Namespace;
-    use crate::syntax::{Api, Doc, ExternType, Pair};
+    use super::Use;
+    use crate::types::Namespace;
     use proc_macro2::{Ident, Span};
-    use syn::Token;
 
     #[test]
     fn test_ns_entries_sort() {
@@ -103,26 +122,18 @@ mod tests {
         assert_ident(k_nse_entries[1], "M");
     }
 
-    fn assert_ident(api: &Api, expected: &str) {
-        if let Api::CxxType(cxx_type) = api {
-            assert_eq!(cxx_type.ident.cxx.ident.to_string(), expected);
-        } else {
-            unreachable!()
-        }
+    fn assert_ident(api: &Use, expected: &str) {
+        assert_eq!(api.id.to_string(), expected);
     }
 
-    fn make_api(ns: Option<&str>, ident: &str) -> Api {
+    fn make_api(ns: Option<&str>, id: &str) -> Use {
         let ns = match ns {
-            Some(st) => Namespace::from_str(st),
-            None => Namespace::none(),
+            Some(st) => Namespace::from_user_input(st),
+            None => Namespace::new(),
         };
-        let ident = Pair::new(ns, Ident::new(ident, Span::call_site()));
-        Api::CxxType(ExternType {
-            doc: Doc::new(),
-            type_token: Token![type](Span::call_site()),
-            ident,
-            semi_token: Token![;](Span::call_site()),
-            trusted: true,
-        })
+        Use {
+            ns,
+            id: Ident::new(id, Span::call_site()),
+        }
     }
 }

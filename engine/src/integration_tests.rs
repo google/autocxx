@@ -1855,7 +1855,7 @@ fn test_ns_take_struct() {
         uint32_t take_bob(A::B::Bob a);
     "};
     let rs = quote! {
-        let a = ffi::Bob { a: 12, b: 13 };
+        let a = ffi::A::B::Bob { a: 12, b: 13 };
         assert_eq!(ffi::take_bob(a), 12);
     };
     run_test(cxx, hdr, rs, &["take_bob"], &["A::B::Bob"]);
@@ -1887,7 +1887,7 @@ fn test_ns_func() {
         }
     "};
     let rs = quote! {
-        assert_eq!(ffi::give_bob().b, 4);
+        assert_eq!(ffi::C::give_bob().b, 4);
     };
     run_test(cxx, hdr, rs, &["C::give_bob"], &["A::B::Bob"]);
 }
