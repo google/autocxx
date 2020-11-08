@@ -140,7 +140,7 @@ pub(crate) struct ByValueWrapper {
 pub(crate) enum AdditionalNeed {
     MakeStringConstructor,
     MakeUnique(TypeName, Vec<TypeName>),
-    ByValueWrapper(ByValueWrapper),
+    ByValueWrapper(Box<ByValueWrapper>),
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -207,7 +207,7 @@ impl AdditionalCppGenerator {
                 AdditionalNeed::MakeStringConstructor => self.generate_string_constructor(),
                 AdditionalNeed::MakeUnique(ty, args) => self.generate_make_unique(&ty, &args),
                 AdditionalNeed::ByValueWrapper(by_value_wrapper) => {
-                    self.generate_by_value_wrapper(by_value_wrapper)
+                    self.generate_by_value_wrapper(*by_value_wrapper)
                 }
             }
         }

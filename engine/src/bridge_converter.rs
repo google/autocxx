@@ -591,12 +591,12 @@ impl<'a> BridgeConversion<'a> {
             // First give instructions to generate the additional C++.
             let cpp_construction_ident = cxxbridge_name;
             cxxbridge_name = make_ident(&format!("{}_up_wrapper", rust_name));
-            let a = AdditionalNeed::ByValueWrapper(ByValueWrapper {
+            let a = AdditionalNeed::ByValueWrapper(Box::new(ByValueWrapper {
                 id: cpp_construction_ident,
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
                 is_a_method,
-            });
+            }));
             self.additional_cpp_needs.push(a);
             // Now modify the cxx::bridge entry we're going to make.
             if let Some(conversion) = ret_type_conversion {

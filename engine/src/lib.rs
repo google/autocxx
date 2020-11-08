@@ -85,6 +85,7 @@ pub enum CppInclusion {
     Header(String),
 }
 
+#[allow(clippy::large_enum_variant)] // because this is only used once
 enum State {
     NotGenerated,
     ParseOnly,
