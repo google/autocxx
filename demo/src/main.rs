@@ -16,7 +16,7 @@ use autocxx::include_cpp;
 
 include_cpp! {
     #include "input.h"
-    allow!("DoMath")
+    generate!("DoMath")
 }
 
 fn main() {

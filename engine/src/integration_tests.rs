@@ -104,15 +104,15 @@ fn run_test(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
-    allowed_funcs: &[&str],
-    allowed_pods: &[&str],
+    generate: &[&str],
+    generate_pods: &[&str],
 ) {
     do_run_test(
         cxx_code,
         header_code,
         rust_code,
-        allowed_funcs,
-        allowed_pods,
+        generate,
+        generate_pods,
         TestMethod::BeQuick,
     )
     .unwrap()
@@ -122,15 +122,15 @@ fn run_test_expect_fail(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
-    allowed_funcs: &[&str],
-    allowed_pods: &[&str],
+    generate: &[&str],
+    generate_pods: &[&str],
 ) {
     do_run_test(
         cxx_code,
         header_code,
         rust_code,
-        allowed_funcs,
-        allowed_pods,
+        generate,
+        generate_pods,
         TestMethod::BeQuick,
     )
     .expect_err("Unexpected success");
@@ -149,8 +149,8 @@ fn do_run_test(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
-    allowed_funcs: &[&str],
-    allowed_pods: &[&str],
+    generate: &[&str],
+    generate_pods: &[&str],
     method: TestMethod,
 ) -> Result<(), TestError> {
     // Step 1: Write the C++ header snippet to a temp file
@@ -167,14 +167,14 @@ fn do_run_test(
     //         program including include_cxx!
     // TODO - we're not quoting #s below (in the "" sense), and it's not entirely
     // clear how we're getting away with it, but quoting it doesn't work.
-    let allowed_funcs = allowed_funcs.iter().map(|s| {
+    let generate = generate.iter().map(|s| {
         quote! {
-            allow!(#s)
+            generate!(#s)
         }
     });
-    let allowed_pods = allowed_pods.iter().map(|s| {
+    let generate_pods = generate_pods.iter().map(|s| {
         quote! {
-            allow_pod!(#s)
+            generate_pod!(#s)
         }
     });
 
@@ -198,8 +198,8 @@ fn do_run_test(
 
         include_cpp!(
             #hexathorpe include "input.h"
-            #(#allowed_funcs)*
-            #(#allowed_pods)*
+            #(#generate)*
+            #(#generate_pods)*
         );
 
         fn main() {
@@ -289,15 +289,15 @@ fn run_test_with_full_pipeline(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
-    allowed_funcs: &[&str],
-    allowed_pods: &[&str],
+    generate: &[&str],
+    generate_pods: &[&str],
 ) {
     do_run_test(
         cxx_code,
         header_code,
         rust_code,
-        allowed_funcs,
-        allowed_pods,
+        generate,
+        generate_pods,
         TestMethod::UseFullPipeline,
     )
     .unwrap();
@@ -495,8 +495,8 @@ fn test_cycle_string() {
         let s = ffi::give_str();
         assert_eq!(ffi::take_str(s), 3);
     };
-    let allowed_funcs = &["give_str", "take_str"];
-    run_test(cxx, hdr, rs, allowed_funcs, &[]);
+    let generate = &["give_str", "take_str"];
+    run_test(cxx, hdr, rs, generate, &[]);
 }
 
 #[test]
@@ -520,8 +520,8 @@ fn test_cycle_string_by_ref() {
         let s = ffi::give_str();
         assert_eq!(ffi::take_str(s.as_ref().unwrap()), 3);
     };
-    let allowed_funcs = &["give_str", "take_str"];
-    run_test(cxx, hdr, rs, allowed_funcs, &[]);
+    let generate = &["give_str", "take_str"];
+    run_test(cxx, hdr, rs, generate, &[]);
 }
 
 #[test]
@@ -545,8 +545,8 @@ fn test_cycle_string_by_mut_ref() {
         let mut s = ffi::give_str();
         assert_eq!(ffi::take_str(s.as_mut().unwrap()), 3);
     };
-    let allowed_funcs = &["give_str", "take_str"];
-    run_test(cxx, hdr, rs, allowed_funcs, &[]);
+    let generate = &["give_str", "take_str"];
+    run_test(cxx, hdr, rs, generate, &[]);
 }
 
 #[test]
@@ -1685,8 +1685,8 @@ fn test_cycle_string_full_pipeline() {
         let s = ffi::give_str();
         assert_eq!(ffi::take_str(s), 3);
     };
-    let allowed_funcs = &["give_str", "take_str"];
-    run_test_with_full_pipeline(cxx, hdr, rs, allowed_funcs, &[]);
+    let generate = &["give_str", "take_str"];
+    run_test_with_full_pipeline(cxx, hdr, rs, generate, &[]);
 }
 
 #[test]
@@ -1705,8 +1705,8 @@ fn test_inline_full_pipeline() {
         let s = ffi::give_str();
         assert_eq!(ffi::take_str(s), 3);
     };
-    let allowed_funcs = &["give_str", "take_str"];
-    run_test_with_full_pipeline("", hdr, rs, allowed_funcs, &[]);
+    let generate = &["give_str", "take_str"];
+    run_test_with_full_pipeline("", hdr, rs, generate, &[]);
 }
 
 #[test]
