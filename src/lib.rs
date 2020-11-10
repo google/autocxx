@@ -38,7 +38,7 @@
 /// include_cpp!(
 /// #   parse_only
 ///     #include "input.h"
-///     generate("do_math")
+///     generate!("do_math")
 /// );
 ///
 /// # mod ffi { pub fn do_math(a: u32) -> u32 { a+3 } }
@@ -62,7 +62,7 @@
 /// a list of at least the following:
 ///
 /// * `#include "cpp_header.h"`: a header filename to parse and include
-/// * `generate("type_or_function_name")`: a type or function name whose declaration
+/// * `generate!("type_or_function_name")`: a type or function name whose declaration
 ///   should be made available to C++.
 ///
 /// Other directives are possible as documented in this crate.
