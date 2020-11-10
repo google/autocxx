@@ -739,15 +739,21 @@ impl<'a> BridgeConversion<'a> {
         }
     }
 
+    fn requires_conversion(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Path(typ) => !self
+                .byvalue_checker
+                .is_pod(&TypeName::from_cxx_type_path(typ)),
+            _ => false,
+        }
+    }
+
     fn convert_return_type(&self, rt: ReturnType) -> (ReturnType, Option<ArgumentConversion>) {
         match rt {
             ReturnType::Default => (ReturnType::Default, None),
             ReturnType::Type(rarrow, boxed_type) => {
                 let boxed_type = self.convert_boxed_type(boxed_type);
-                let conversion = if !self
-                    .byvalue_checker
-                    .is_pod(&TypeName::from_cxx_type(boxed_type.as_ref()))
-                {
+                let conversion = if self.requires_conversion(boxed_type.as_ref()) {
                     ArgumentConversion::new_to_unique_ptr(*boxed_type.clone())
                 } else {
                     ArgumentConversion::new_unconverted(*boxed_type.clone())
