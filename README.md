@@ -26,7 +26,7 @@ use autocxx::include_cpp;
 
 include_cpp!(
     #include "base/bob.h"
-    generate("Bob")
+    generate!("Bob")
 )
 
 let a = ffi::base::Bob::make_unique("hello".into());
@@ -177,4 +177,3 @@ This is not an officially supported Google product.
 Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
 2.0</a> or <a href="LICENSE-MIT">MIT license</a> at your option.
 </sup>
-
