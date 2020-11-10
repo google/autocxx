@@ -61,14 +61,28 @@ pub struct CppFilePair {
 
 pub struct GeneratedCpp(pub Vec<CppFilePair>);
 
+/// Errors which may occur in generating bindings for these C++
+/// functions.
 #[derive(Debug)]
 pub enum Error {
+    /// A file reading error, most likely on the .rs file.
     Io(std::io::Error),
+    /// Any error reported by bindgen, generating the C++ bindings.
+    /// Any C++ parsing errors, etc. would be reported this way.
     Bindgen(()),
+    /// Any problem reported by the cxx crate in generating
+    /// safe bindings. This would encompass errors where bindgen
+    /// has generated unsafe bindings, but we're unable to convert
+    /// them to safe `cxx::bridge` style bindings.
     CxxGen(cxx_gen::Error),
+    /// Any problem parsing the Rust file.
     Parsing(syn::Error),
+    /// No `include_cpp!` macro could be found.
     NoAutoCxxInc,
+    /// The include directories specified were incorreect.
     CouldNotCanoncalizeIncludeDir(PathBuf),
+    /// Some error occcurred in converting the bindgen-style
+    /// bindings to safe cxx bindings.
     Conversion(bridge_converter::ConvertError),
     /// No 'generate' or 'generate_pod' was specified.
     /// It might be that in future we can simply let things work
