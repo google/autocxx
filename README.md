@@ -26,7 +26,7 @@ use autocxx::include_cpp;
 
 include_cpp!(
     #include "base/bob.h"
-    allow("Bob")
+    generate("Bob")
 )
 
 let a = ffi::base::Bob::make_unique("hello".into());

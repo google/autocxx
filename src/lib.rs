@@ -38,7 +38,7 @@
 /// include_cpp!(
 /// #   parse_only
 ///     #include "input.h"
-///     allow("do_math")
+///     generate("do_math")
 /// );
 ///
 /// # mod ffi { pub fn do_math(a: u32) -> u32 { a+3 } }
@@ -62,23 +62,23 @@
 /// a list of at least the following:
 ///
 /// * `#include "cpp_header.h"`: a header filename to parse and include
-/// * `allow("type_or_function_name")`: a type or function name whose declaration
+/// * `generate("type_or_function_name")`: a type or function name whose declaration
 ///   should be made available to C++.
 ///
 /// Other directives are possible as documented in this crate.
 ///
-/// # How to allow structs
+/// # How to generate structs
 ///
 /// All C++ types can be owned within a [UniquePtr][autocxx_engine::cxx::UniquePtr]
 /// within Rust. To let this be possible, simply pass the names of these
-/// types within [allow] (or just [allow] any function which requires these types).
+/// types within [generate] (or just [generate] any function which requires these types).
 ///
 /// However, only _some_ C++ `struct`s can be owned _by value_ within Rust. Those
 /// types must be freely byte-copyable, because Rust is free to do that at
 /// any time. If you believe your `struct` meets those criteria, you can
-/// use [allow_pod] instead.
+/// use [generate_pod] instead.
 ///
-/// Use [allow] under normal circumstances, but [allow_pod] only for structs
+/// Use [generate] under normal circumstances, but [generate_pod] only for structs
 /// where you absolutely do need to pass them truly by value and have direct field access.
 ///
 /// This doesn't just make a difference to the generated code for the type;
@@ -184,9 +184,9 @@ macro_rules! include {
 /// Generate Rust bindings for the given C++ type or function.
 /// A directive to be included inside
 /// [include_cpp] - see [include_cpp] for general information.
-/// See also [allow_pod].
+/// See also [generate_pod].
 #[macro_export]
-macro_rules! allow {
+macro_rules! generate {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
@@ -195,12 +195,12 @@ macro_rules! allow {
 /// it can be passed and owned by value in Rust. This only works
 /// for C++ types which have trivial move constructors and no
 /// destructor - you'll encounter a compile error otherwise.
-/// If your type doesn't match that description, use [allow]
+/// If your type doesn't match that description, use [generate]
 /// instead, and own the type using [UniquePtr][autocxx_engine::cxx::UniquePtr].
 /// A directive to be included inside
 /// [include_cpp] - see [include_cpp] for general information.
 #[macro_export]
-macro_rules! allow_pod {
+macro_rules! generate_pod {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
@@ -220,8 +220,8 @@ macro_rules! usage {
     ($($tt:tt)*) => {
         compile_error! {r#"usage:  include_cpp! {
                    #include "path/to/header.h"
-                   allow!(...)
-                   allow_pod!(...)
+                   generate!(...)
+                   generate_pod!(...)
                }
 "#}
     };

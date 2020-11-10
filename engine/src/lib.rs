@@ -70,12 +70,12 @@ pub enum Error {
     NoAutoCxxInc,
     CouldNotCanoncalizeIncludeDir(PathBuf),
     Conversion(bridge_converter::ConvertError),
-    /// No 'allow' or 'allow_pod' was specified.
+    /// No 'generate' or 'generate_pod' was specified.
     /// It might be that in future we can simply let things work
     /// without any allowlist, in which case bindgen should generate
     /// bindings for everything. That just seems very unlikely to work
     /// in the common case right now.
-    NoAllowlist,
+    NoGenerationRequested,
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -150,13 +150,13 @@ impl IncludeCpp {
             } else {
                 let ident: syn::Ident = input.parse()?;
                 input.parse::<Option<syn::Token![!]>>()?;
-                if ident == "allow" || ident == "allow_pod" {
+                if ident == "generate" || ident == "generate_pod" {
                     let args;
                     syn::parenthesized!(args in input);
-                    let allow: syn::LitStr = args.parse()?;
-                    allowlist.push(allow.value());
-                    if ident == "allow_pod" {
-                        pod_types.push(TypeName::new_from_user_input(&allow.value()));
+                    let generate: syn::LitStr = args.parse()?;
+                    allowlist.push(generate.value());
+                    if ident == "generate_pod" {
+                        pod_types.push(TypeName::new_from_user_input(&generate.value()));
                     }
                 } else if ident == "parse_only" {
                     parse_only = true;
@@ -165,7 +165,7 @@ impl IncludeCpp {
                 } else {
                     return Err(syn::Error::new(
                         ident.span(),
-                        "expected allow, allow_pod or exclude_utilities",
+                        "expected generate, generate_pod or exclude_utilities",
                     ));
                 }
             }
@@ -324,7 +324,7 @@ impl IncludeCpp {
         }
 
         if self.allowlist.is_empty() {
-            return Err(Error::NoAllowlist);
+            return Err(Error::NoGenerationRequested);
         }
 
         let builder = self.make_bindgen_builder()?;
