@@ -12,4 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use autocxx_engine::build;
+use autocxx_engine::{build as engine_build, BuilderResult};
+use std::io::Write;
+use std::{ffi::OsStr, path::Path};
+
+pub fn build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> BuilderResult
+where
+    P1: AsRef<Path>,
+    I: IntoIterator<Item = T>,
+    T: AsRef<OsStr>,
+{
+    env_logger::builder()
+        .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
+        .init();
+    engine_build(rs_file, autocxx_incs)
+}
