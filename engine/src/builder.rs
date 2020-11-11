@@ -41,11 +41,14 @@ pub enum BuilderError {
     UnableToCreateDirectory(std::io::Error, PathBuf),
 }
 
+/// Results of a build.
+pub type BuilderResult = Result<cc::Build, BuilderError>;
+
 /// Build autocxx C++ files and return a cc::Build you can use to build
 /// more from a build.rs file.
 /// You need to provide the Rust file path and the iterator of paths
 /// which should be used as include directories.
-pub fn build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> Result<cc::Build, BuilderError>
+pub fn build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> BuilderResult
 where
     P1: AsRef<Path>,
     I: IntoIterator<Item = T>,
@@ -60,7 +63,7 @@ pub(crate) fn build_to_custom_directory<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
     outdir: PathBuf,
-) -> Result<cc::Build, BuilderError>
+) -> BuilderResult
 where
     P1: AsRef<Path>,
     I: IntoIterator<Item = T>,
