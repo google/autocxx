@@ -1914,6 +1914,48 @@ fn test_return_reference() {
     run_test(cxx, hdr, rs, &["give_bob"], &["Bob"]);
 }
 
+#[test]
+fn test_destructor() {
+    let hdr = indoc! {"
+        struct WithDtor {
+            ~WithDtor();
+        };
+        WithDtor make_with_dtor();
+    "};
+    let cxx = indoc! {"
+        WithDtor::~WithDtor() {}
+        WithDtor make_with_dtor() {
+            return {};
+        }
+    "};
+    let rs = quote! {
+        use ffi::*;
+        let with_dtor: cxx::UniquePtr<WithDtor> = make_with_dtor();
+        drop(with_dtor);
+    };
+    run_test(cxx, hdr, rs, &["WithDtor", "make_with_dtor"], &[]);
+}
+
+#[test]
+#[ignore]
+fn test_static_func() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct WithStaticMethod {
+            static uint32_t call();
+        };
+    "};
+    let cxx = indoc! {"
+        WithStaticMethod::call() {
+            return 42;
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::cxx::WithStaticMethod::call(), 42);
+    };
+    run_test(cxx, hdr, rs, &["WithStaticMethod"], &[]);
+}
+
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
 // 3. Constants

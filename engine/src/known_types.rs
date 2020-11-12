@@ -151,6 +151,13 @@ fn create_type_database() -> TypeDatabase {
             false,
         ));
     }
+    do_insert(TypeDetails::new(
+        "bool".into(),
+        "bool".into(),
+        true,
+        PreludePolicy::Exclude,
+        false,
+    ));
 
     let mut by_cppname = HashMap::new();
     for td in by_rs_name.values() {

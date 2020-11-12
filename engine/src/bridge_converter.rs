@@ -536,6 +536,10 @@ impl<'a> BridgeConversion<'a> {
             if fun.sig.ident == constructor_name {
                 return Ok(());
             }
+            let destructor_name = format!("{}_{}_destructor", ty, ty);
+            if fun.sig.ident == destructor_name {
+                return Ok(());
+            }
         }
         // Now let's analyze all the parameters. We do this first
         // because we'll use this to determine whether this is a method.
