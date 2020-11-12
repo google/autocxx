@@ -1893,7 +1893,6 @@ fn test_ns_func() {
 }
 
 #[test]
-#[ignore]
 fn test_destructor() {
     let hdr = indoc! {"
         struct WithDtor {
