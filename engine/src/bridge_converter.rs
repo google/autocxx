@@ -138,6 +138,14 @@ fn type_to_typename(ty: &Type) -> Option<TypeName> {
     }
 }
 
+/// Analysis of a typedef.
+#[derive(Debug)]
+enum TypedefType {
+    NoArguments(TypeName),
+    HasArguments,
+    SomethingComplex,
+}
+
 /// A particular bridge conversion operation. This can really
 /// be thought of as a ton of parameters which we'd otherwise
 /// need to pass into each individual function within this file.
@@ -301,6 +309,18 @@ impl<'a> BridgeConversion<'a> {
                 Item::Const(_) => {
                     self.all_items.push(item);
                 }
+                Item::Type(ity) => {
+                    let typedef_type = Self::analyze_typedef_target(ity.ty.as_ref());
+                    log::info!("Typedef is {:?}", typedef_type);
+                    match typedef_type {
+                        TypedefType::NoArguments(tgt) => {
+                            let tyname = TypeName::new(&ns, &ity.ident.to_string());
+                            output_items.push(Item::Type(ity));
+                            self.generate_extern_c_type_alias(tyname, tgt);
+                        }
+                        _ => panic!("We do not yet support typedefs to complicated types"),
+                    }
+                }
                 _ => {
                     // TODO it would be nice to enable this, but at the moment
                     // we hit it too often. Also, item is not Debug so
@@ -310,6 +330,20 @@ impl<'a> BridgeConversion<'a> {
             }
         }
         Ok(())
+    }
+
+    fn analyze_typedef_target(ty: &Type) -> TypedefType {
+        match ty {
+            Type::Path(typ) => {
+                let seg = typ.path.segments.last().unwrap();
+                if seg.arguments.is_empty() {
+                    TypedefType::NoArguments(TypeName::from_bindgen_type_path(typ))
+                } else {
+                    TypedefType::HasArguments
+                }
+            }
+            _ => TypedefType::SomethingComplex,
+        }
     }
 
     fn find_nested_pod_types(
@@ -323,6 +357,18 @@ impl<'a> BridgeConversion<'a> {
                 Item::Enum(e) => self
                     .byvalue_checker
                     .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
+                Item::Type(ity) => {
+                    let typedef_type = Self::analyze_typedef_target(ity.ty.as_ref());
+                    let name = TypeName::new(ns, &ity.ident.to_string());
+                    match typedef_type {
+                        TypedefType::NoArguments(tn) => {
+                            self.byvalue_checker.ingest_simple_typedef(name, tn)
+                        }
+                        TypedefType::HasArguments | TypedefType::SomethingComplex => {
+                            self.byvalue_checker.ingest_nonpod_type(name)
+                        }
+                    }
+                }
                 Item::Mod(itm) => {
                     if let Some((_, nested_items)) = &itm.content {
                         let new_ns = ns.push(itm.ident.to_string());
@@ -409,6 +455,43 @@ impl<'a> BridgeConversion<'a> {
         self.add_use(tyname.get_namespace(), &final_ident);
         self.types_found.push(final_ident);
         Ok(())
+    }
+
+    fn generate_extern_c_type_alias(&mut self, tyname: TypeName, target: TypeName) {
+        let final_ident = make_ident(tyname.get_final_ident());
+        let target_ident = make_ident(target.get_final_ident());
+        let mut for_extern_c_ts = if tyname.has_namespace() {
+            let ns_string = tyname
+                .ns_segment_iter()
+                .cloned()
+                .collect::<Vec<String>>()
+                .join("::");
+            quote! {
+                #[namespace = #ns_string]
+            }
+        } else {
+            TokenStream2::new()
+        };
+
+        // We can't use parse_quote! here because it doesn't support type aliases
+        // at the moment.
+        for_extern_c_ts.extend(
+            [
+                TokenTree::Ident(make_ident("type")),
+                TokenTree::Ident(final_ident),
+                TokenTree::Punct(proc_macro2::Punct::new('=', proc_macro2::Spacing::Alone)),
+            ]
+            .to_vec(),
+        );
+        for_extern_c_ts.extend(
+            [
+                TokenTree::Ident(target_ident),
+                TokenTree::Punct(proc_macro2::Punct::new(';', proc_macro2::Spacing::Alone)),
+            ]
+            .to_vec(),
+        );
+        self.extern_c_mod_items
+            .push(ForeignItem::Verbatim(for_extern_c_ts));
     }
 
     fn build_include_foreign_items(&self) -> Vec<ForeignItem> {
