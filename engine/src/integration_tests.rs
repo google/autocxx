@@ -1956,6 +1956,97 @@ fn test_static_func() {
     run_test(cxx, hdr, rs, &["WithStaticMethod"], &[]);
 }
 
+#[test]
+fn test_give_pod_typedef_by_value() {
+    let cxx = indoc! {"
+        Horace give_bob() {
+            Horace a;
+            a.a = 3;
+            a.b = 4;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        using Horace = Bob;
+        Horace give_bob();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_bob().b, 4);
+    };
+    run_test(cxx, hdr, rs, &["give_bob"], &["Bob"]);
+}
+
+#[ignore] // because we need to put some aliases in the output ffi mod.
+#[test]
+fn test_use_pod_typedef() {
+    let cxx = indoc! {"
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        using Horace = Bob;
+    "};
+    let rs = quote! {
+        let h = Horace { a: 3, b: 4 };
+        assert_eq!(h.b, 4);
+    };
+    run_test(cxx, hdr, rs, &[], &["Bob"]);
+}
+
+#[ignore] // we don't yet allow typedefs to be listed in allow_pod
+#[test]
+fn test_use_pod_typedef_with_allowpod() {
+    let cxx = indoc! {"
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        using Horace = Bob;
+    "};
+    let rs = quote! {
+        let h = Horace { a: 3, b: 4 };
+        assert_eq!(h.b, 4);
+    };
+    run_test(cxx, hdr, rs, &[], &["Horace"]);
+}
+
+#[test]
+fn test_give_nonpod_typedef_by_value() {
+    let cxx = indoc! {"
+        Horace give_bob() {
+            Horace a;
+            a.a = 3;
+            a.b = 4;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        using Horace = Bob;
+        Horace give_bob();
+        inline uint32_t take_horace(const Horace& horace) { return horace.b; }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::take_horace(ffi::give_bob().as_ref().unwrap()), 4);
+    };
+    run_test(cxx, hdr, rs, &["give_bob", "take_horace"], &[]);
+}
+
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
 // 3. Constants
@@ -1963,7 +2054,6 @@ fn test_static_func() {
 // 6. Ifdef
 // 7. Out params
 // 8. Opaque type handling
-// 9. Multiple functions in one header
 // 10. ExcludeUtilities
 // Stuff which requires much more thought:
 // 1. Shared pointers
