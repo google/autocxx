@@ -113,27 +113,6 @@ impl TypeName {
         unreachable!()
     }
 
-    fn from_type<F>(ty: &Type, func: F) -> Self
-    where
-        F: FnOnce(&TypePath) -> Self,
-    {
-        match ty {
-            Type::Path(typ) => func(typ),
-            _ => panic!("Stringifying unknown type, not yet supported"), // TODO
-        }
-    }
-
-    /// From a Type found in bindgen-generated Rust code.
-    /// The Type starts with 'root' typically.
-    pub(crate) fn from_bindgen_type(ty: &Type) -> Self {
-        Self::from_type(ty, Self::from_bindgen_type_path)
-    }
-
-    /// From a Type found in code we've already generated.
-    pub(crate) fn from_cxx_type(ty: &Type) -> Self {
-        Self::from_type(ty, Self::from_cxx_type_path)
-    }
-
     /// Create from a type encountered in the code.
     pub(crate) fn new(ns: &Namespace, id: &str) -> Self {
         Self(ns.clone(), id.to_string())
@@ -197,6 +176,36 @@ impl Display for TypeName {
             f.write_str("::")?;
         }
         f.write_str(&self.1)
+    }
+}
+
+pub(crate) fn type_to_cpp<F>(ty: &Type, func: F) -> String
+where
+    F: FnOnce(&TypePath) -> TypeName,
+{
+    match ty {
+        Type::Path(typ) => func(typ).to_cpp_name(),
+        Type::Reference(typr) => {
+            let const_bit = match typr.mutability {
+                None => "const ",
+                Some(_) => "",
+            };
+            format!("{}{}&", const_bit, type_to_cpp(typr.elem.as_ref(), func))
+        }
+        Type::Array(_)
+        | Type::BareFn(_)
+        | Type::Group(_)
+        | Type::ImplTrait(_)
+        | Type::Infer(_)
+        | Type::Macro(_)
+        | Type::Never(_)
+        | Type::Paren(_)
+        | Type::Ptr(_)
+        | Type::Slice(_)
+        | Type::TraitObject(_)
+        | Type::Tuple(_)
+        | Type::Verbatim(_) => panic!("Unsupported type"),
+        _ => panic!("Unknown type"),
     }
 }
 

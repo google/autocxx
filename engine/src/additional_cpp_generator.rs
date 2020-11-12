@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::TypeName;
+use crate::types::{type_to_cpp, TypeName};
 use itertools::Itertools;
 use std::collections::HashSet;
 use syn::{parse_quote, Ident, Type};
@@ -95,21 +95,9 @@ impl ArgumentConversion {
     }
 
     fn unwrapped_type_as_string(&self) -> String {
-        match self.unwrapped_type {
-            Type::Path(ref typ) => TypeName::from_bindgen_type_path(typ).to_cpp_name(),
-            Type::Reference(ref typr) => {
-                let const_bit = match typr.mutability {
-                    None => "const ",
-                    Some(_) => "",
-                };
-                format!(
-                    "{}{}&",
-                    const_bit,
-                    TypeName::from_bindgen_type(typr.elem.as_ref()).to_cpp_name()
-                )
-            }
-            _ => unimplemented!(),
-        }
+        // TODO it's not clear why I'm using from_bindgen_type_path
+        // not from_cxx_type_path. May be a bug.
+        type_to_cpp(&self.unwrapped_type, TypeName::from_bindgen_type_path)
     }
 
     fn wrapped_type(&self) -> String {
