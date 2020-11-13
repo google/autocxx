@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use itertools::Itertools;
 use proc_macro2::Span;
 use std::fmt::Display;
 use std::iter::Peekable;
@@ -105,7 +106,19 @@ impl TypeName {
             Self::from_segments(typ.path.segments.iter().peekable())
         } else {
             // This is a primitive e.g. u32
-            assert!(seg_iter.next().is_none());
+            if seg_iter.next().is_some() {
+                // Oh, dear.
+                let type_name = typ
+                    .path
+                    .segments
+                    .iter()
+                    .map(|s| s.ident.to_string())
+                    .join("::");
+                panic!(
+                    "Unable to handle type found in bindgen output: {}",
+                    type_name
+                );
+            }
             Self::from_ident(&first_seg)
         }
     }
