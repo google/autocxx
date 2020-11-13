@@ -158,13 +158,22 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::Exclude,
         false,
     ));
-    do_insert(TypeDetails::new(
-        "std::os::raw::c_ulong".into(),
-        "ulong".into(),
-        true,
-        PreludePolicy::Exclude,
-        false,
-    ));
+
+    let mut insert_ctype = |cname: &str| {
+        let td = TypeDetails::new(
+            format!("std::os::raw::c_{}", cname),
+            cname.into(),
+            true,
+            PreludePolicy::Exclude,
+            false,
+        );
+        by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+    };
+
+    insert_ctype("ulong");
+    insert_ctype("uint");
+    insert_ctype("long");
+    insert_ctype("int");
 
     let mut by_cppname = HashMap::new();
     for td in by_rs_name.values() {
