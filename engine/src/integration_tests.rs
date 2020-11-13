@@ -2077,13 +2077,165 @@ fn test_give_nonpod_typedef_by_value() {
     run_test(cxx, hdr, rs, &["give_bob", "take_horace"], &[]);
 }
 
+#[test]
+fn test_conflicting_methods() {
+    let cxx = indoc! {"
+        uint32_t Bob::get() const { return a; }
+        uint32_t Fred::get() const { return b; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t get() const;
+        };
+        struct Fred {
+            uint32_t b;
+            uint32_t get() const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 10 };
+        let b = ffi::Fred { b: 20 };
+        assert_eq!(a.get(), 10);
+        assert_eq!(b.get(), 20);
+    };
+    run_test(cxx, hdr, rs, &[], &["Bob", "Fred"]);
+}
+
+#[test]
+fn test_ns_struct_pod_request() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            struct Bob {
+                uint32_t a;
+            };
+        }
+    "};
+    let rs = quote! {
+        ffi::A::Bob { a: 12 };
+    };
+    run_test("", hdr, rs, &[], &["A::Bob"]);
+}
+
+#[ignore] // because currently we feed a flat namespace to cxx
+#[test]
+fn test_conflicting_ns_methods() {
+    let cxx = indoc! {"
+        uint32_t A::get() { return 10; }
+        uint32_t B::get() { return 20; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            uint32_t get();
+        }
+        namespace B {
+            uint32_t get();
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::A::get(), 10);
+        assert_eq!(ffi::B::get(), 20);
+    };
+    run_test(cxx, hdr, rs, &["A::get", "B::get"], &[]);
+}
+
+#[ignore] // because currently we feed a flat namespace to cxx
+#[test]
+fn test_conflicting_ns_structs() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            struct Bob {
+                uint32_t a;
+            };
+        }
+        namespace B {
+            struct Bob {
+                uint32_t a;
+            };
+        }
+    "};
+    let rs = quote! {
+        ffi::A::Bob { a: 12 };
+        ffi::b::Bob { b: 12 };
+    };
+    run_test("", hdr, rs, &[], &["A::Bob", "B::Bob"]);
+}
+
+#[test]
+fn test_make_string() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::make_string("hello");
+        assert_eq!(a.to_str().unwrap(), "hello");
+    };
+    run_test("", hdr, rs, &["Bob"], &[]);
+}
+
+#[test]
+fn test_string_constant() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        const char* STRING = \"Foo\";
+    "};
+    let rs = quote! {
+        let a = std::str::from_utf8(ffi::STRING).unwrap().trim_end_matches(char::from(0));
+        assert_eq!(a, "Foo");
+    };
+    run_test("", hdr, rs, &["STRING"], &[]);
+}
+
+#[test]
+#[ignore]
+fn test_pod_constant() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+        const Bob BOB = Bob { 10 };
+    "};
+    let rs = quote! {
+        let a = &ffi::BOB;
+        assert_eq!(a.a, 10);
+    };
+    run_test("", hdr, rs, &["BOB"], &["Bob"]);
+}
+
+#[test]
+#[ignore] // this probably requires code generation on the C++
+// side. It's not at all clear how best to handle this.
+fn test_non_pod_constant() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Bob {
+            std::string a;
+            std::string get() { return a };
+        };
+        const Bob BOB = Bob { \"hello\" };
+    "};
+    let rs = quote! {
+        let a = ffi::BOB;
+        // following line assumes that 'a' is a &Bob
+        // but who knows how we'll really do this.
+        assert_eq!(a.get().as_ref().unwrap().to_str().unwrap(), "hello");
+    };
+    run_test("", hdr, rs, &["BOB"], &[]);
+}
+
 // Yet to test:
-// 1. Make UniquePtr<CxxStrings> in Rust
-// 3. Constants
 // 5. Templated stuff
 // 6. Ifdef
 // 7. Out params
-// 8. Opaque type handling
 // 10. ExcludeUtilities
 // Stuff which requires much more thought:
 // 1. Shared pointers
