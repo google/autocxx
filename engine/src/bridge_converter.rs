@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+
 use crate::{
     additional_cpp_generator::{AdditionalNeed, ArgumentConversion, ByValueWrapper},
     known_types::{replace_type_path_without_arguments, should_dereference_in_cpp},
@@ -114,6 +116,7 @@ impl BridgeConverter {
                     pod_requests: &self.pod_requests,
                     include_list: &self.include_list,
                     final_uses: Vec::new(),
+                    typedefs: HashMap::new(),
                 };
                 conversion.convert_items(items, exclude_utilities)
             }
@@ -138,6 +141,14 @@ fn type_to_typename(ty: &Type) -> Option<TypeName> {
     }
 }
 
+/// Analysis of a typedef.
+#[derive(Debug)]
+enum TypedefTarget {
+    NoArguments(TypeName),
+    HasArguments,
+    SomethingComplex,
+}
+
 /// A particular bridge conversion operation. This can really
 /// be thought of as a ton of parameters which we'd otherwise
 /// need to pass into each individual function within this file.
@@ -153,6 +164,7 @@ struct BridgeConversion<'a> {
     pod_requests: &'a Vec<TypeName>,
     include_list: &'a Vec<String>,
     final_uses: Vec<Use>,
+    typedefs: HashMap<TypeName, TypedefTarget>,
 }
 
 impl<'a> BridgeConversion<'a> {
@@ -301,6 +313,12 @@ impl<'a> BridgeConversion<'a> {
                 Item::Const(_) => {
                     self.all_items.push(item);
                 }
+                Item::Type(ity) => {
+                    let tyname = TypeName::new(&ns, &ity.ident.to_string());
+                    let target = Self::analyze_typedef_target(ity.ty.as_ref());
+                    output_items.push(Item::Type(ity));
+                    self.typedefs.insert(tyname, target);
+                }
                 _ => {
                     // TODO it would be nice to enable this, but at the moment
                     // we hit it too often. Also, item is not Debug so
@@ -310,6 +328,20 @@ impl<'a> BridgeConversion<'a> {
             }
         }
         Ok(())
+    }
+
+    fn analyze_typedef_target(ty: &Type) -> TypedefTarget {
+        match ty {
+            Type::Path(typ) => {
+                let seg = typ.path.segments.last().unwrap();
+                if seg.arguments.is_empty() {
+                    TypedefTarget::NoArguments(TypeName::from_bindgen_type_path(typ))
+                } else {
+                    TypedefTarget::HasArguments
+                }
+            }
+            _ => TypedefTarget::SomethingComplex,
+        }
     }
 
     fn find_nested_pod_types(
@@ -323,6 +355,18 @@ impl<'a> BridgeConversion<'a> {
                 Item::Enum(e) => self
                     .byvalue_checker
                     .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
+                Item::Type(ity) => {
+                    let typedef_type = Self::analyze_typedef_target(ity.ty.as_ref());
+                    let name = TypeName::new(ns, &ity.ident.to_string());
+                    match typedef_type {
+                        TypedefTarget::NoArguments(tn) => {
+                            self.byvalue_checker.ingest_simple_typedef(name, tn)
+                        }
+                        TypedefTarget::HasArguments | TypedefTarget::SomethingComplex => {
+                            self.byvalue_checker.ingest_nonpod_type(name)
+                        }
+                    }
+                }
                 Item::Mod(itm) => {
                     if let Some((_, nested_items)) = &itm.content {
                         let new_ns = ns.push(itm.ident.to_string());
@@ -828,10 +872,10 @@ impl<'a> BridgeConversion<'a> {
                 })
                 .collect();
         }
-        Self::replace_cpp_with_cxx(typ)
+        self.replace_cpp_with_cxx(typ)
     }
 
-    fn replace_cpp_with_cxx(typ: TypePath) -> TypePath {
+    fn replace_cpp_with_cxx(&self, typ: TypePath) -> TypePath {
         let mut last_seg_args = None;
         let mut seg_iter = typ.path.segments.iter().peekable();
         while let Some(seg) = seg_iter.next() {
@@ -844,6 +888,18 @@ impl<'a> BridgeConversion<'a> {
             }
         }
         drop(seg_iter);
+        let tn = TypeName::from_cxx_type_path(&typ);
+        // Let's see if this is a typedef.
+        let typ = match self.resolve_typedef(&tn) {
+            Some(newid) => {
+                let newid = make_ident(newid.get_final_ident());
+                parse_quote! {
+                    #newid
+                }
+            }
+            None => typ,
+        };
+
         // This line will strip off any path arguments...
         let mut typ = replace_type_path_without_arguments(typ);
         // but then we'll put them back again as necessary.
@@ -852,6 +908,19 @@ impl<'a> BridgeConversion<'a> {
             last_seg.arguments = last_seg_args;
         }
         typ
+    }
+
+    fn resolve_typedef<'b>(&'b self, tn: &'b TypeName) -> Option<&'b TypeName> {
+        match self.typedefs.get(&tn) {
+            None => None,
+            Some(TypedefTarget::NoArguments(original_tn)) => {
+                match self.resolve_typedef(original_tn) {
+                    None => Some(original_tn),
+                    Some(further_resolution) => Some(further_resolution)
+                }
+            },
+            _ => panic!("Asked to resolve typedef {} but it leads to something complex which autocxx cannot yet handle", tn.to_cpp_name())
+        }
     }
 
     fn convert_punctuated<P>(

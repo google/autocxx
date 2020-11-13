@@ -159,6 +159,22 @@ fn create_type_database() -> TypeDatabase {
         false,
     ));
 
+    let mut insert_ctype = |cname: &str| {
+        let td = TypeDetails::new(
+            format!("std::os::raw::c_{}", cname),
+            cname.into(),
+            true,
+            PreludePolicy::Exclude,
+            false,
+        );
+        by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+    };
+
+    insert_ctype("ulong");
+    insert_ctype("uint");
+    insert_ctype("long");
+    insert_ctype("int");
+
     let mut by_cppname = HashMap::new();
     for td in by_rs_name.values() {
         by_cppname.insert(td.cpp_name.clone(), td.rs_name.clone());
@@ -203,12 +219,7 @@ pub(crate) fn get_pod_safe_types() -> Vec<(TypeName, bool)> {
     KNOWN_TYPES
         .by_rs_name
         .iter()
-        .map(|(_, td)| {
-            (
-                TypeName::from_ident(&make_ident(&td.rs_name)),
-                td.by_value_safe,
-            )
-        })
+        .map(|(_, td)| (TypeName::new_from_user_input(&td.rs_name), td.by_value_safe))
         .collect()
 }
 

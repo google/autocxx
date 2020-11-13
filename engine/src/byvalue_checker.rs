@@ -16,12 +16,14 @@ use crate::types::{Namespace, TypeName};
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
+#[derive(Clone)]
 enum PODState {
     UnsafeToBePOD(String),
     SafeToBePOD,
     IsPOD,
 }
 
+#[derive(Clone)]
 struct StructDetails {
     state: PODState,
     dependent_structs: Vec<TypeName>,
@@ -90,6 +92,22 @@ impl ByValueChecker {
     pub fn ingest_pod_type(&mut self, tyname: TypeName) {
         self.results
             .insert(tyname, StructDetails::new(PODState::IsPOD));
+    }
+
+    pub fn ingest_simple_typedef(&mut self, tyname: TypeName, target: TypeName) {
+        let newdeets = match self.results.get(&target) {
+            None => panic!("Typedef from {} to {} which doesn't exist", tyname, target),
+            Some(deets) => deets.clone(),
+        };
+        self.results.insert(tyname, newdeets);
+    }
+
+    pub fn ingest_nonpod_type(&mut self, tyname: TypeName) {
+        let new_reason = format!("Type {} is a typedef to a complex type", tyname);
+        self.results.insert(
+            tyname,
+            StructDetails::new(PODState::UnsafeToBePOD(new_reason)),
+        );
     }
 
     pub fn satisfy_requests(&mut self, mut requests: Vec<TypeName>) -> Result<(), String> {
