@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use crate::{
     additional_cpp_generator::{AdditionalNeed, ArgumentConversion, ByValueWrapper},
     known_types::{replace_type_path_without_arguments, should_dereference_in_cpp},
+    types::make_ident,
 };
 use crate::{
     byvalue_checker::ByValueChecker,
@@ -28,7 +29,7 @@ use crate::{
     types::TypeName,
 };
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
-use quote::ToTokens;
+use quote::quote;
 use syn::punctuated::Punctuated;
 use syn::{parse::Parser, ItemType};
 use syn::{
@@ -122,10 +123,6 @@ impl BridgeConverter {
             }
         }
     }
-}
-
-fn make_ident(id: &str) -> Ident {
-    Ident::new(id, Span::call_site())
 }
 
 fn get_blank_extern_c_mod() -> ItemForeignMod {
@@ -907,12 +904,7 @@ impl<'a> BridgeConversion<'a> {
         let tn = TypeName::from_cxx_type_path(&typ);
         // Let's see if this is a typedef.
         let typ = match self.resolve_typedef(&tn) {
-            Some(newid) => {
-                let newid = make_ident(newid.get_final_ident());
-                parse_quote! {
-                    #newid
-                }
-            }
+            Some(newid) => newid.to_cxx_type_path(),
             None => typ,
         };
 

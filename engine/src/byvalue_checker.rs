@@ -21,6 +21,7 @@ enum PODState {
     UnsafeToBePOD(String),
     SafeToBePOD,
     IsPOD,
+    IsAlias(TypeName),
 }
 
 #[derive(Clone)]
@@ -95,11 +96,8 @@ impl ByValueChecker {
     }
 
     pub fn ingest_simple_typedef(&mut self, tyname: TypeName, target: TypeName) {
-        let newdeets = match self.results.get(&target) {
-            None => panic!("Typedef from {} to {} which doesn't exist", tyname, target),
-            Some(deets) => deets.clone(),
-        };
-        self.results.insert(tyname, newdeets);
+        self.results
+            .insert(tyname, StructDetails::new(PODState::IsAlias(target)));
     }
 
     pub fn ingest_nonpod_type(&mut self, tyname: TypeName) {
@@ -114,6 +112,7 @@ impl ByValueChecker {
         while !requests.is_empty() {
             let ty_id = requests.remove(requests.len() - 1);
             let deets = self.results.get_mut(&ty_id);
+            let mut alias_to_consider = None;
             match deets {
                 None => {
                     return Err(format!(
@@ -128,7 +127,20 @@ impl ByValueChecker {
                         deets.state = PODState::IsPOD;
                         requests.extend_from_slice(&deets.dependent_structs);
                     }
+                    PODState::IsAlias(target_type) => {
+                        alias_to_consider = Some(target_type.clone());
+                    }
                 },
+            }
+            // Do the following outside the match to avoid borrow checker violation.
+            if let Some(alias) = alias_to_consider {
+                match self.results.get(&alias) {
+                    None => requests.extend_from_slice(&[alias, ty_id]), // try again after resolving alias target
+                    Some(alias_target_deets) => {
+                        self.results.get_mut(&ty_id).unwrap().state =
+                            alias_target_deets.state.clone();
+                    }
+                }
             }
         }
         Ok(())

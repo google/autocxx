@@ -12,9 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use proc_macro2::Span;
 use std::fmt::Display;
 use std::iter::Peekable;
-use syn::{Ident, PathSegment, Type, TypePath};
+use syn::{parse_quote, Ident, PathSegment, Type, TypePath};
+
+pub(crate) fn make_ident(id: &str) -> Ident {
+    Ident::new(id, Span::call_site())
+}
 
 /// Newtype wrapper for a C++ namespace.
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
@@ -164,6 +169,16 @@ impl TypeName {
                 s.push_str(&self.1);
                 s
             }
+        }
+    }
+
+    pub(crate) fn to_cxx_type_path(&self) -> TypePath {
+        let segs = self
+            .ns_segment_iter()
+            .chain(std::iter::once(&self.1))
+            .map(|x| make_ident(x));
+        parse_quote! {
+            #(#segs)::*
         }
     }
 
