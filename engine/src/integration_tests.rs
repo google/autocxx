@@ -2077,6 +2077,33 @@ fn test_give_nonpod_typedef_by_value() {
     run_test(cxx, hdr, rs, &["give_bob", "take_horace"], &[]);
 }
 
+#[test]
+fn test_conflicting_methods() {
+    let cxx = indoc! {"
+        uint32_t Bob::get() const { return a; }
+        uint32_t Fred::get() const { return b; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t get() const;
+        };
+        struct Fred {
+            uint32_t b;
+            uint32_t get() const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 10 };
+        let b = ffi::Fred { b: 20 };
+        assert_eq!(a.get(), 10);
+        assert_eq!(b.get(), 20);
+    };
+    run_test(cxx, hdr, rs, &[], &["Bob", "Fred"]);
+}
+
+
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
 // 3. Constants
