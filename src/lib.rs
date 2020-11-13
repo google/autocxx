@@ -141,8 +141,14 @@
 /// # Preprocessor symbols
 ///
 /// `#define` and other preprocessor symbols will appear as constants.
-/// For integers this is straightforward; for strings they appear
-/// as `[u8]` with a null terminator. To get a string, do this:
+/// At present there is no way to do compile-time disablement of code
+/// (equivalent of `#ifdef`).
+///
+/// # String constants
+///
+/// Whether from a preprocessor symbol or from a C++ `char*` constant,
+/// strings appear as `[u8]` with a null terminator. To get a Rust string,
+/// do this:
 ///
 /// ```cpp
 /// #define BOB "Hello"
