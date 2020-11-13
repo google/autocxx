@@ -739,7 +739,7 @@ fn test_take_nonpod_by_value() {
         uint32_t take_bob(Bob a);
     "};
     let rs = quote! {
-        let a = ffi::Bob_make_unique(12, 13);
+        let a = ffi::Bob::make_unique(12, 13);
         assert_eq!(ffi::take_bob(a), 12);
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob"], &[]);
