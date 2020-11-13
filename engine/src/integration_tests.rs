@@ -2119,6 +2119,51 @@ fn test_ns_struct_pod_request() {
     run_test("", hdr, rs, &[], &["A::Bob"]);
 }
 
+#[ignore] // because currently we feed a flat namespace to cxx
+#[test]
+fn test_conflicting_ns_methods() {
+    let cxx = indoc! {"
+        uint32_t A::get() { return 10; }
+        uint32_t B::get() { return 20; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            uint32_t get();
+        }
+        namespace B {
+            uint32_t get();
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::A::get(), 10);
+        assert_eq!(ffi::B::get(), 20);
+    };
+    run_test(cxx, hdr, rs, &["A::get", "B::get"], &[]);
+}
+
+#[ignore] // because currently we feed a flat namespace to cxx
+#[test]
+fn test_conflicting_ns_structs() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            struct Bob {
+                uint32_t a;
+            };
+        }
+        namespace B {
+            struct Bob {
+                uint32_t a;
+            };
+        }
+    "};
+    let rs = quote! {
+        ffi::A::Bob { a: 12 };
+        ffi::b::Bob { b: 12 };
+    };
+    run_test("", hdr, rs, &[], &["A::Bob", "B::Bob"]);
+}
 
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
