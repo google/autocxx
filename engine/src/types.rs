@@ -94,6 +94,10 @@ impl TypeName {
             // This is a C++ type prefixed with a namespace,
             // e.g. std::string or something the user has defined.
             Self::from_segments(seg_iter) // all but 'root'
+        } else if first_seg == "std" {
+            // This is actually a Rust type e.g.
+            // std::os::raw::c_ulong. Start iterating from the beginning again.
+            Self::from_segments(typ.path.segments.iter().peekable())
         } else {
             // This is a primitive e.g. u32
             assert!(seg_iter.next().is_none());

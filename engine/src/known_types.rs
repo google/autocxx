@@ -158,6 +158,13 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::Exclude,
         false,
     ));
+    do_insert(TypeDetails::new(
+        "std::os::raw::c_ulong".into(),
+        "ulong".into(),
+        true,
+        PreludePolicy::Exclude,
+        false,
+    ));
 
     let mut by_cppname = HashMap::new();
     for td in by_rs_name.values() {
@@ -203,12 +210,7 @@ pub(crate) fn get_pod_safe_types() -> Vec<(TypeName, bool)> {
     KNOWN_TYPES
         .by_rs_name
         .iter()
-        .map(|(_, td)| {
-            (
-                TypeName::from_ident(&make_ident(&td.rs_name)),
-                td.by_value_safe,
-            )
-        })
+        .map(|(_, td)| (TypeName::new_from_user_input(&td.rs_name), td.by_value_safe))
         .collect()
 }
 
