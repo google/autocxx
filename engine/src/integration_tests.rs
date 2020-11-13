@@ -2165,8 +2165,23 @@ fn test_conflicting_ns_structs() {
     run_test("", hdr, rs, &[], &["A::Bob", "B::Bob"]);
 }
 
+#[test]
+fn test_make_string() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::make_string("hello");
+        assert_eq!(a.to_str().unwrap(), "hello");
+    };
+    run_test("", hdr, rs, &["Bob"], &[]);
+}
+
+
 // Yet to test:
-// 1. Make UniquePtr<CxxStrings> in Rust
 // 3. Constants
 // 5. Templated stuff
 // 6. Ifdef
