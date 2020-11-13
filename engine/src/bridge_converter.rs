@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use crate::{
     additional_cpp_generator::{AdditionalNeed, ArgumentConversion, ByValueWrapper},
     known_types::{replace_type_path_without_arguments, should_dereference_in_cpp},
+    types::make_ident,
 };
 use crate::{
     byvalue_checker::ByValueChecker,
@@ -29,8 +30,8 @@ use crate::{
 };
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
-use syn::parse::Parser;
 use syn::punctuated::Punctuated;
+use syn::{parse::Parser, ItemType};
 use syn::{
     parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
     ItemForeignMod, ItemMod, Pat, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
@@ -122,10 +123,6 @@ impl BridgeConverter {
             }
         }
     }
-}
-
-fn make_ident(id: &str) -> Ident {
-    Ident::new(id, Span::call_site())
 }
 
 fn get_blank_extern_c_mod() -> ItemForeignMod {
@@ -314,6 +311,11 @@ impl<'a> BridgeConversion<'a> {
                     self.all_items.push(item);
                 }
                 Item::Type(ity) => {
+                    if Self::should_ignore_item_type(&ity) {
+                        // Ignore this for now. Sometimes bindgen generates such things
+                        // without an actual need to do so.
+                        continue;
+                    }
                     let tyname = TypeName::new(&ns, &ity.ident.to_string());
                     let target = Self::analyze_typedef_target(ity.ty.as_ref());
                     output_items.push(Item::Type(ity));
@@ -328,6 +330,12 @@ impl<'a> BridgeConversion<'a> {
             }
         }
         Ok(())
+    }
+
+    fn should_ignore_item_type(ity: &ItemType) -> bool {
+        ity.generics.lifetimes().next().is_some()
+            || ity.generics.const_params().next().is_some()
+            || ity.generics.type_params().next().is_some()
     }
 
     fn analyze_typedef_target(ty: &Type) -> TypedefTarget {
@@ -356,6 +364,11 @@ impl<'a> BridgeConversion<'a> {
                     .byvalue_checker
                     .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
                 Item::Type(ity) => {
+                    if Self::should_ignore_item_type(&ity) {
+                        // Ignore this for now. Sometimes bindgen generates such things
+                        // without an actual need to do so.
+                        continue;
+                    }
                     let typedef_type = Self::analyze_typedef_target(ity.ty.as_ref());
                     let name = TypeName::new(ns, &ity.ident.to_string());
                     match typedef_type {
@@ -891,12 +904,7 @@ impl<'a> BridgeConversion<'a> {
         let tn = TypeName::from_cxx_type_path(&typ);
         // Let's see if this is a typedef.
         let typ = match self.resolve_typedef(&tn) {
-            Some(newid) => {
-                let newid = make_ident(newid.get_final_ident());
-                parse_quote! {
-                    #newid
-                }
-            }
+            Some(newid) => newid.to_cxx_type_path(),
             None => typ,
         };
 

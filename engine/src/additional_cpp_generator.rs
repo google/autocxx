@@ -95,9 +95,7 @@ impl ArgumentConversion {
     }
 
     fn unwrapped_type_as_string(&self) -> String {
-        // TODO it's not clear why I'm using from_bindgen_type_path
-        // not from_cxx_type_path. May be a bug.
-        type_to_cpp(&self.unwrapped_type, TypeName::from_bindgen_type_path)
+        type_to_cpp(&self.unwrapped_type, TypeName::from_cxx_type_path)
     }
 
     fn wrapped_type(&self) -> String {
