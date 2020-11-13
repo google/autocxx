@@ -2121,7 +2121,7 @@ fn test_ns_struct_pod_request() {
 
 #[ignore] // because currently we feed a flat namespace to cxx
 #[test]
-fn test_conflicting_ns_methods() {
+fn test_conflicting_ns_funcs() {
     let cxx = indoc! {"
         uint32_t A::get() { return 10; }
         uint32_t B::get() { return 20; }
