@@ -28,9 +28,9 @@ use crate::{
     types::TypeName,
 };
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
-use quote::quote;
-use syn::parse::Parser;
+use quote::ToTokens;
 use syn::punctuated::Punctuated;
+use syn::{parse::Parser, ItemType};
 use syn::{
     parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
     ItemForeignMod, ItemMod, Pat, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
@@ -314,6 +314,11 @@ impl<'a> BridgeConversion<'a> {
                     self.all_items.push(item);
                 }
                 Item::Type(ity) => {
+                    if Self::should_ignore_item_type(&ity) {
+                        // Ignore this for now. Sometimes bindgen generates such things
+                        // without an actual need to do so.
+                        continue;
+                    }
                     let tyname = TypeName::new(&ns, &ity.ident.to_string());
                     let target = Self::analyze_typedef_target(ity.ty.as_ref());
                     output_items.push(Item::Type(ity));
@@ -328,6 +333,12 @@ impl<'a> BridgeConversion<'a> {
             }
         }
         Ok(())
+    }
+
+    fn should_ignore_item_type(ity: &ItemType) -> bool {
+        ity.generics.lifetimes().next().is_some()
+            || ity.generics.const_params().next().is_some()
+            || ity.generics.type_params().next().is_some()
     }
 
     fn analyze_typedef_target(ty: &Type) -> TypedefTarget {
@@ -356,6 +367,11 @@ impl<'a> BridgeConversion<'a> {
                     .byvalue_checker
                     .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
                 Item::Type(ity) => {
+                    if Self::should_ignore_item_type(&ity) {
+                        // Ignore this for now. Sometimes bindgen generates such things
+                        // without an actual need to do so.
+                        continue;
+                    }
                     let typedef_type = Self::analyze_typedef_target(ity.ty.as_ref());
                     let name = TypeName::new(ns, &ity.ident.to_string());
                     match typedef_type {
