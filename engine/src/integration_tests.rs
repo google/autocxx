@@ -1350,8 +1350,7 @@ fn test_method_pass_nonpod_by_value() {
     let rs = quote! {
         let a = ffi::give_anna();
         let b = ffi::Bob { a: 12, b: 13 };
-        assert_eq!(ffi::get_bob(&b, a), 12);
-        // assert_eq!(b.get_bob(a), 12); // eventual goal
+        assert_eq!(b.get_bob(a), 12);
     };
     run_test(
         cxx,
@@ -1493,8 +1492,7 @@ fn test_method_return_nonpod_by_value() {
     "};
     let rs = quote! {
         let b = ffi::Bob { a: 12, b: 13 };
-        // let a = b.get_bob(); // eventual goal
-        let a = ffi::get_anna(&b);
+        let a = b.get_anna();
         assert!(!a.is_null());
     };
     run_test(cxx, hdr, rs, &["take_bob", "Anna", "get_anna"], &["Bob"]);
@@ -1568,8 +1566,7 @@ fn test_method_pass_string_by_value() {
     let rs = quote! {
         let a = ffi::get_msg();
         let b = ffi::Bob { a: 12, b: 13 };
-        let c = ffi::measure_string(&b, a);
-        // let c = b.measure_string(a); // eventual goal
+        let c = b.measure_string(a);
         assert_eq!(c, 5);
     };
     run_test(
@@ -1600,8 +1597,7 @@ fn test_method_return_string_by_value() {
     "};
     let rs = quote! {
         let b = ffi::Bob { a: 12, b: 13 };
-        // let a = b.get_msg(); // eventual goal
-        let a = ffi::get_msg(&b);
+        let a = b.get_msg();
         assert!(a.as_ref().unwrap() == "hello");
     };
     run_test(cxx, hdr, rs, &["take_bob", "get_msg"], &["Bob"]);
@@ -2212,7 +2208,7 @@ fn test_pod_constant() {
 
 #[test]
 #[ignore] // this probably requires code generation on the C++
-// side. It's not at all clear how best to handle this.
+          // side. It's not at all clear how best to handle this.
 fn test_non_pod_constant() {
     let hdr = indoc! {"
         #include <cstdint>
