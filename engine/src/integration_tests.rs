@@ -2180,6 +2180,19 @@ fn test_make_string() {
     run_test("", hdr, rs, &["Bob"], &[]);
 }
 
+#[test]
+fn test_string_constant() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        const char* STRING = \"Foo\";
+    "};
+    let rs = quote! {
+        let a = std::str::from_utf8(ffi::STRING).unwrap().trim_end_matches(char::from(0));
+        assert_eq!(a, "Foo");
+    };
+    run_test("", hdr, rs, &["STRING"], &[]);
+}
+
 
 // Yet to test:
 // 3. Constants
