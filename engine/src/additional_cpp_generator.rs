@@ -72,24 +72,14 @@ impl ArgumentConversion {
 
     pub(crate) fn unconverted_rust_type(&self) -> Type {
         match self.conversion {
-            ArgumentConversionType::FromValueToUniquePtr => {
-                let orig_ty = &self.unwrapped_type;
-                parse_quote! {
-                    UniquePtr < #orig_ty >
-                }
-            }
+            ArgumentConversionType::FromValueToUniquePtr => self.make_unique_ptr_type(),
             _ => self.unwrapped_type.clone(),
         }
     }
 
     pub(crate) fn converted_rust_type(&self) -> Type {
         match self.conversion {
-            ArgumentConversionType::FromUniquePtrToValue => {
-                let orig_ty = &self.unwrapped_type;
-                parse_quote! {
-                    UniquePtr < #orig_ty >
-                }
-            }
+            ArgumentConversionType::FromUniquePtrToValue => self.make_unique_ptr_type(),
             _ => self.unwrapped_type.clone(),
         }
     }
@@ -111,6 +101,23 @@ impl ArgumentConversion {
                 self.unconverted_type(),
                 var_name
             ),
+        }
+    }
+
+    fn make_unique_ptr_type(&self) -> Type {
+        let innerty = match &self.unwrapped_type {
+            Type::Path(typ) => {
+                // Until cxx supports a hierarchic set of inner mods
+                // for namespace purposes, we just take the final segment.
+                let final_seg = typ.path.segments.last().unwrap();
+                parse_quote! {
+                   #final_seg
+                }
+            }
+            _ => self.unwrapped_type.clone(),
+        };
+        parse_quote! {
+            UniquePtr < #innerty >
         }
     }
 }
