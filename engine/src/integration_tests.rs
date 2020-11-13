@@ -2193,9 +2193,46 @@ fn test_string_constant() {
     run_test("", hdr, rs, &["STRING"], &[]);
 }
 
+#[test]
+#[ignore]
+fn test_pod_constant() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+        const Bob BOB = Bob { 10 };
+    "};
+    let rs = quote! {
+        let a = &ffi::BOB;
+        assert_eq!(a.a, 10);
+    };
+    run_test("", hdr, rs, &["BOB"], &["Bob"]);
+}
+
+#[test]
+#[ignore] // this probably requires code generation on the C++
+// side. It's not at all clear how best to handle this.
+fn test_non_pod_constant() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Bob {
+            std::string a;
+            std::string get() { return a };
+        };
+        const Bob BOB = Bob { \"hello\" };
+    "};
+    let rs = quote! {
+        let a = ffi::BOB;
+        // following line assumes that 'a' is a &Bob
+        // but who knows how we'll really do this.
+        assert_eq!(a.get().as_ref().unwrap().to_str().unwrap(), "hello");
+    };
+    run_test("", hdr, rs, &["BOB"], &[]);
+}
 
 // Yet to test:
-// 3. Constants
 // 5. Templated stuff
 // 6. Ifdef
 // 7. Out params
