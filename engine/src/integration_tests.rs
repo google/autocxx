@@ -2103,6 +2103,22 @@ fn test_conflicting_methods() {
     run_test(cxx, hdr, rs, &[], &["Bob", "Fred"]);
 }
 
+#[test]
+fn test_ns_struct_pod_request() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            struct Bob {
+                uint32_t a;
+            };
+        }
+    "};
+    let rs = quote! {
+        ffi::A::Bob { a: 12 };
+    };
+    run_test("", hdr, rs, &[], &["A::Bob"]);
+}
+
 
 // Yet to test:
 // 1. Make UniquePtr<CxxStrings> in Rust
