@@ -1893,6 +1893,36 @@ fn test_ns_func() {
 }
 
 #[test]
+fn test_ns_up_wrappers() {
+    let cxx = indoc! {"
+        A::Bob get_bob() {
+            A::Bob b;
+            b.a = 2;
+            b.b = 3;
+            return b;
+        }
+        uint32_t give_bob(A::Bob bob) {
+            return bob.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            struct Bob {
+                uint32_t a;
+                uint32_t b;
+            };
+        }
+        A::Bob get_bob();
+        uint32_t give_bob(A::Bob bob);
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_bob(ffi::get_bob()), 2);
+    };
+    run_test(cxx, hdr, rs, &["give_bob", "get_bob"], &[]);
+}
+
+#[test]
 fn test_return_reference() {
     let cxx = indoc! {"
         const Bob& give_bob(const Bob& input_bob) {
