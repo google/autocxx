@@ -2083,7 +2083,6 @@ fn test_give_nonpod_typedef_by_value() {
 // 5. Templated stuff
 // 6. Ifdef
 // 7. Out params
-// 8. Opaque type handling
 // 10. ExcludeUtilities
 // Stuff which requires much more thought:
 // 1. Shared pointers
