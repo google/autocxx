@@ -14,10 +14,10 @@
 
 use crate::Error as EngineError;
 use crate::{ParseError, ParsedFile};
-use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::{ffi::OsStr, io, process};
 
 /// Errors returned during creation of a cc::Build from an include_cxx
 /// macro.
@@ -41,8 +41,10 @@ pub enum BuilderError {
     UnableToCreateDirectory(std::io::Error, PathBuf),
 }
 
+pub type BuilderSuccess = cc::Build;
+
 /// Results of a build.
-pub type BuilderResult = Result<cc::Build, BuilderError>;
+pub type BuilderResult = Result<BuilderSuccess, BuilderError>;
 
 /// Build autocxx C++ files and return a cc::Build you can use to build
 /// more from a build.rs file.
@@ -55,6 +57,24 @@ where
     T: AsRef<OsStr>,
 {
     build_to_custom_directory(rs_file, autocxx_incs, out_dir())
+}
+
+/// Builds successfully, or exits the process displaying a suitable
+/// message.
+pub fn expect_build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> cc::Build
+where
+    P1: AsRef<Path>,
+    I: IntoIterator<Item = T>,
+    T: AsRef<OsStr>,
+{
+    build(rs_file, autocxx_incs).unwrap_or_else(|err| {
+        let _ = writeln!(io::stderr(), "\n\nautocxx error: {}\n\n", report(err));
+        process::exit(1);
+    })
+}
+
+fn report(err: BuilderError) -> String {
+    format!("{:?}", err)
 }
 
 /// Like build, but you can specify the location where files should be generated.

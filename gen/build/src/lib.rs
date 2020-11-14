@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx_engine::{build as engine_build, BuilderResult};
+use autocxx_engine::{
+    build as engine_build, expect_build as engine_expect_build, BuilderResult, BuilderSuccess,
+};
 use std::io::Write;
 use std::{ffi::OsStr, path::Path};
 
@@ -26,4 +28,16 @@ where
         .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
         .init();
     engine_build(rs_file, autocxx_incs)
+}
+
+pub fn expect_build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> BuilderSuccess
+where
+    P1: AsRef<Path>,
+    I: IntoIterator<Item = T>,
+    T: AsRef<OsStr>,
+{
+    env_logger::builder()
+        .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
+        .init();
+    engine_expect_build(rs_file, autocxx_incs)
 }

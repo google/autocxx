@@ -41,7 +41,7 @@ use log::{info, warn};
 use types::TypeName;
 
 #[cfg(any(test, feature = "build"))]
-pub use builder::{build, BuilderError, BuilderResult};
+pub use builder::{build, expect_build, BuilderError, BuilderResult, BuilderSuccess};
 pub use parse::{parse_file, parse_token_stream, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
