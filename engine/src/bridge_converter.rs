@@ -674,7 +674,21 @@ impl<'a> BridgeConversion<'a> {
 
         // Analyze the return type, just as we previously did for the
         // parameters.
-        let (mut ret_type, ret_type_conversion) = self.convert_return_type(fun.sig.output)?;
+        let return_analysis = self.convert_return_type(fun.sig.output)?;
+        if return_analysis.was_reference {
+            // cxx only allows functions to return a reference if they take exactly
+            // one reference as a parameter. Let's see...
+            let num_input_references = param_details.iter().filter(|pd| pd.was_reference).count();
+            if num_input_references != 1 {
+                log::info!(
+                    "Skipping function {} due to reference return type and <> 1 input reference",
+                    rust_name
+                );
+                return Ok(()); // TODO think about how to inform user about this
+            }
+        }
+        let mut ret_type = return_analysis.rt;
+        let ret_type_conversion = return_analysis.conversion;
 
         // Do we need to convert either parameters or return type?
         let param_conversion_needed = param_details.iter().any(|b| b.conversion.work_needed());
@@ -805,6 +819,7 @@ impl<'a> BridgeConversion<'a> {
                     _ => old_pat,
                 };
                 let new_ty = self.convert_boxed_type(pt.ty)?;
+                let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
                 let conversion = self.argument_conversion_details(&new_ty);
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
@@ -814,6 +829,7 @@ impl<'a> BridgeConversion<'a> {
                         was_self: found_this,
                         name: new_pat,
                         conversion,
+                        was_reference,
                     },
                 )
             }
@@ -848,16 +864,22 @@ impl<'a> BridgeConversion<'a> {
         self.conversion_details(ty, ArgumentConversion::new_to_unique_ptr)
     }
 
-    fn convert_return_type(
-        &self,
-        rt: ReturnType,
-    ) -> Result<(ReturnType, Option<ArgumentConversion>), ConvertError> {
+    fn convert_return_type(&self, rt: ReturnType) -> Result<ReturnTypeAnalysis, ConvertError> {
         let result = match rt {
-            ReturnType::Default => (ReturnType::Default, None),
+            ReturnType::Default => ReturnTypeAnalysis {
+                rt: ReturnType::Default,
+                was_reference: false,
+                conversion: None,
+            },
             ReturnType::Type(rarrow, boxed_type) => {
                 let boxed_type = self.convert_boxed_type(boxed_type)?;
+                let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
                 let conversion = self.return_type_conversion_details(boxed_type.as_ref());
-                (ReturnType::Type(rarrow, boxed_type), Some(conversion))
+                ReturnTypeAnalysis {
+                    rt: ReturnType::Type(rarrow, boxed_type),
+                    conversion: Some(conversion),
+                    was_reference,
+                }
             }
         };
         Ok(result)
@@ -1025,4 +1047,11 @@ struct ArgumentAnalysis {
     conversion: ArgumentConversion,
     name: Pat,
     was_self: bool,
+    was_reference: bool,
+}
+
+struct ReturnTypeAnalysis {
+    rt: ReturnType,
+    conversion: Option<ArgumentConversion>,
+    was_reference: bool,
 }
