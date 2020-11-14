@@ -30,13 +30,13 @@ use crate::{
 };
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
-use syn::punctuated::Punctuated;
 use syn::{parse::Parser, ItemType};
 use syn::{
     parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
     ItemForeignMod, ItemMod, Pat, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
     TypeReference,
 };
+use syn::{punctuated::Punctuated, ItemImpl};
 
 #[derive(Debug)]
 pub enum ConvertError {
@@ -203,9 +203,19 @@ impl<'a> BridgeConversion<'a> {
             .unwrap_or_else(get_blank_extern_c_mod);
         extern_c_mod.items.append(&mut self.extern_c_mod_items);
         self.bridge_items.push(Item::ForeignMod(extern_c_mod));
+        // Quite possibly, the following lines need to be repeated
+        // for each sub-mod. TODO.
         bindgen_root_items.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]
             use self::super::super::cxxbridge;
+        }));
+        bindgen_root_items.push(Item::Use(parse_quote! {
+            #[allow(unused_imports)]
+            use cxx::UniquePtr;
+        }));
+        bindgen_root_items.push(Item::Use(parse_quote! {
+            #[allow(unused_imports)]
+            use cxx::CxxString;
         }));
         // The extensive use of parse_quote here could end up
         // being a performance bottleneck. If so, we might want
@@ -249,7 +259,7 @@ impl<'a> BridgeConversion<'a> {
                         // the contents of all bindgen 'extern "C"' mods into this
                         // one.
                     }
-                    self.convert_foreign_mod_items(items, &ns)?;
+                    self.convert_foreign_mod_items(items, &ns, output_items)?;
                 }
                 Item::Struct(mut s) => {
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
@@ -562,11 +572,12 @@ impl<'a> BridgeConversion<'a> {
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
         ns: &Namespace,
+        output_items: &mut Vec<Item>,
     ) -> Result<(), ConvertError> {
         for i in foreign_mod_items {
             match i {
                 ForeignItem::Fn(f) => {
-                    self.convert_foreign_fn(f, ns)?;
+                    self.convert_foreign_fn(f, ns, output_items)?;
                 }
                 _ => return Err(ConvertError::UnknownForeignItem),
             }
@@ -578,6 +589,7 @@ impl<'a> BridgeConversion<'a> {
         &mut self,
         fun: ForeignItemFn,
         ns: &Namespace,
+        output_items: &mut Vec<Item>,
     ) -> Result<(), ConvertError> {
         // This function is one of the most complex parts of bridge_converter.
         // It needs to consider:
@@ -611,6 +623,7 @@ impl<'a> BridgeConversion<'a> {
 
         // Work out naming.
         let mut rust_name = fun.sig.ident.to_string();
+        let mut type_name = None;
         if is_a_method {
             // bindgen generates methods with the name:
             // {class}_{method name}
@@ -623,6 +636,7 @@ impl<'a> BridgeConversion<'a> {
                 let cn = cn.to_string();
                 if rust_name.starts_with(&cn) {
                     rust_name = rust_name[cn.len() + 1..].to_string();
+                    type_name = Some(cn);
                     break;
                 }
             }
@@ -667,24 +681,46 @@ impl<'a> BridgeConversion<'a> {
                 );
             }
             params.clear();
+            let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
+            let mut arg_list = Vec::new();
             for pd in param_details {
                 let type_name = pd.conversion.converted_rust_type();
-                let arg_name = if pd.was_self {
-                    parse_quote!(autocxx_gen_this)
+                let (arg_name, wrapper_arg_name) = if pd.was_self {
+                    (parse_quote!(autocxx_gen_this), parse_quote!(self))
                 } else {
-                    pd.name
+                    (pd.name.clone(), pd.name)
                 };
                 params.push(parse_quote!(
                     #arg_name: #type_name
                 ));
+                wrapper_params.push(parse_quote!(
+                    #wrapper_arg_name: #type_name
+                ));
+                arg_list.push(wrapper_arg_name);
             }
-            // Keep the original Rust name the same so callers don't
-            // need to know about all of these shenanigans.
-            rust_name_attr = Attribute::parse_outer
-                .parse2(quote!(
-                    #[rust_name = #rust_name]
-                ))
-                .unwrap();
+            // Now we've made a brand new function, we need to plumb it back
+            // into place such that users can call it just as if it were
+            // the original function.
+            if is_a_method {
+                let type_name = make_ident(&type_name.unwrap());
+                let rust_name = make_ident(&rust_name);
+                let extra_impl_block: ItemImpl = parse_quote! {
+                    impl #type_name {
+                        pub fn #rust_name ( #wrapper_params ) #ret_type {
+                            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+                        }
+                    }
+                };
+                output_items.push(Item::Impl(extra_impl_block));
+            } else {
+                // Keep the original Rust name the same so callers don't
+                // need to know about all of these shenanigans.
+                rust_name_attr = Attribute::parse_outer
+                    .parse2(quote!(
+                        #[rust_name = #rust_name]
+                    ))
+                    .unwrap();
+            }
         };
         // Finally - namespace support. All the Types in everything
         // above this point are fully qualified. We need to unqualify them.
@@ -715,7 +751,7 @@ impl<'a> BridgeConversion<'a> {
             #(#rust_name_attr)*
             #vis fn #cxxbridge_name ( #params ) #ret_type;
         )));
-        if !is_a_method || wrapper_function_needed {
+        if !is_a_method {
             self.add_use(&ns, &rust_name_ident);
         }
         Ok(())
