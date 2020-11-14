@@ -805,7 +805,7 @@ impl<'a> BridgeConversion<'a> {
                     _ => old_pat,
                 };
                 let new_ty = self.convert_boxed_type(pt.ty)?;
-                let conversion = self.conversion_required(&new_ty);
+                let conversion = self.argument_conversion_details(&new_ty);
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
                 (
@@ -821,7 +821,10 @@ impl<'a> BridgeConversion<'a> {
         })
     }
 
-    fn conversion_required(&self, ty: &Type) -> ArgumentConversion {
+    fn conversion_details<F>(&self, ty: &Type, conversion_direction: F) -> ArgumentConversion
+    where
+        F: FnOnce(Type) -> ArgumentConversion,
+    {
         match ty {
             Type::Path(p) => {
                 if self
@@ -830,20 +833,19 @@ impl<'a> BridgeConversion<'a> {
                 {
                     ArgumentConversion::new_unconverted(ty.clone())
                 } else {
-                    ArgumentConversion::new_from_unique_ptr(ty.clone())
+                    conversion_direction(ty.clone())
                 }
             }
             _ => ArgumentConversion::new_unconverted(ty.clone()),
         }
     }
 
-    fn requires_conversion(&self, ty: &Type) -> bool {
-        match ty {
-            Type::Path(typ) => !self
-                .byvalue_checker
-                .is_pod(&TypeName::from_cxx_type_path(typ)),
-            _ => false,
-        }
+    fn argument_conversion_details(&self, ty: &Type) -> ArgumentConversion {
+        self.conversion_details(ty, ArgumentConversion::new_from_unique_ptr)
+    }
+
+    fn return_type_conversion_details(&self, ty: &Type) -> ArgumentConversion {
+        self.conversion_details(ty, ArgumentConversion::new_to_unique_ptr)
     }
 
     fn convert_return_type(
@@ -854,11 +856,7 @@ impl<'a> BridgeConversion<'a> {
             ReturnType::Default => (ReturnType::Default, None),
             ReturnType::Type(rarrow, boxed_type) => {
                 let boxed_type = self.convert_boxed_type(boxed_type)?;
-                let conversion = if self.requires_conversion(boxed_type.as_ref()) {
-                    ArgumentConversion::new_to_unique_ptr(*boxed_type.clone())
-                } else {
-                    ArgumentConversion::new_unconverted(*boxed_type.clone())
-                };
+                let conversion = self.return_type_conversion_details(boxed_type.as_ref());
                 (ReturnType::Type(rarrow, boxed_type), Some(conversion))
             }
         };
