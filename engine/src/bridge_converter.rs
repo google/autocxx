@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{fmt::Display, collections::HashMap};
+use std::{collections::HashMap, fmt::Display};
 
 use crate::{
     additional_cpp_generator::{AdditionalNeed, ArgumentConversion, ByValueWrapper},
@@ -43,6 +43,9 @@ pub enum ConvertError {
     NoContent,
     UnsafePODType(String),
     UnknownForeignItem,
+    UnexpectedOuterItem,
+    UnexpectedItemInMod,
+    ComplexTypedefTarget(String),
 }
 
 impl Display for ConvertError {
@@ -50,7 +53,10 @@ impl Display for ConvertError {
         match self {
             ConvertError::NoContent => write!(f, "The initial run of 'bindgen' did not generate any content. This might be because none of the requested items for generation could be converted.")?,
             ConvertError::UnsafePODType(err) => write!(f, "An item was requested using 'generate_pod' which was not safe to hold by value in Rust. {}", err)?,
-            ConvertError::UnknownForeignItem => write!(f, "Bindgen generated some unexpected code. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
+            ConvertError::UnknownForeignItem => write!(f, "Bindgen generated some unexpected code in a foreign mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
+            ConvertError::UnexpectedOuterItem => write!(f, "Bindgen generated some unexpected code in its outermost mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
+            ConvertError::UnexpectedItemInMod => write!(f, "Bindgen generated some unexpected code in an inner namespace mod. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
+            ConvertError::ComplexTypedefTarget(ty) => write!(f, "autocxx was unable to produce a typdef pointing to the complex type {}.", ty)?,
         }
         Ok(())
     }
@@ -200,7 +206,7 @@ impl<'a> BridgeConversion<'a> {
                         self.convert_mod_items(items, root_ns, &mut bindgen_root_items)?;
                     }
                 }
-                _ => panic!("Unexpected outer item"),
+                _ => return Err(ConvertError::UnexpectedOuterItem),
             }
         }
         self.extern_c_mod_items
@@ -342,12 +348,7 @@ impl<'a> BridgeConversion<'a> {
                     output_items.push(Item::Type(ity));
                     self.typedefs.insert(tyname, target);
                 }
-                _ => {
-                    // TODO it would be nice to enable this, but at the moment
-                    // we hit it too often. Also, item is not Debug so
-                    // it's a bit annoying trying to work out what's up.
-                    //panic!("Unhandled item");
-                }
+                _ => return Err(ConvertError::UnexpectedItemInMod),
             }
         }
         Ok(())
@@ -625,12 +626,20 @@ impl<'a> BridgeConversion<'a> {
         }
         // Now let's analyze all the parameters. We do this first
         // because we'll use this to determine whether this is a method.
-        let (mut params, param_details): (Punctuated<_, syn::Token![,]>, Vec<_>) = fun
+        let (goods, bads): (Vec<_>, Vec<_>) = fun
             .sig
             .inputs
             .into_iter()
             .map(|i| self.convert_fn_arg(i))
-            .unzip();
+            .partition(Result::is_ok);
+        if let Some(problem) = bads.into_iter().next() {
+            match problem {
+                Err(e) => return Err(e),
+                _ => panic!("Err didn't contain en err"),
+            }
+        }
+        let (mut params, param_details): (Punctuated<_, syn::Token![,]>, Vec<_>) =
+            goods.into_iter().map(Result::unwrap).unzip();
 
         let is_a_method = param_details.iter().any(|b| b.was_self);
 
@@ -665,7 +674,7 @@ impl<'a> BridgeConversion<'a> {
 
         // Analyze the return type, just as we previously did for the
         // parameters.
-        let (mut ret_type, ret_type_conversion) = self.convert_return_type(fun.sig.output);
+        let (mut ret_type, ret_type_conversion) = self.convert_return_type(fun.sig.output)?;
 
         // Do we need to convert either parameters or return type?
         let param_conversion_needed = param_details.iter().any(|b| b.conversion.work_needed());
@@ -806,8 +815,8 @@ impl<'a> BridgeConversion<'a> {
     ///    methodWhichTakesValue_up_wrapper) is just a function.
     /// 2) Don't give the first parameter a special name. In which case
     ///    we will generate a standalone function on the Rust side.
-    fn convert_fn_arg(&self, arg: FnArg) -> (FnArg, ArgumentAnalysis) {
-        match arg {
+    fn convert_fn_arg(&self, arg: FnArg) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
+        Ok(match arg {
             FnArg::Typed(mut pt) => {
                 let mut found_this = false;
                 let old_pat = *pt.pat;
@@ -822,7 +831,7 @@ impl<'a> BridgeConversion<'a> {
                     }
                     _ => old_pat,
                 };
-                let new_ty = self.convert_boxed_type(pt.ty);
+                let new_ty = self.convert_boxed_type(pt.ty)?;
                 let conversion = self.conversion_required(&new_ty);
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
@@ -835,8 +844,8 @@ impl<'a> BridgeConversion<'a> {
                     },
                 )
             }
-            _ => panic!("FnArg::Receiver not yet handled"),
-        }
+            _ => panic!("Did not expect FnArg::Receiver to be generated by bindgen"),
+        })
     }
 
     fn conversion_required(&self, ty: &Type) -> ArgumentConversion {
@@ -864,11 +873,14 @@ impl<'a> BridgeConversion<'a> {
         }
     }
 
-    fn convert_return_type(&self, rt: ReturnType) -> (ReturnType, Option<ArgumentConversion>) {
-        match rt {
+    fn convert_return_type(
+        &self,
+        rt: ReturnType,
+    ) -> Result<(ReturnType, Option<ArgumentConversion>), ConvertError> {
+        let result = match rt {
             ReturnType::Default => (ReturnType::Default, None),
             ReturnType::Type(rarrow, boxed_type) => {
-                let boxed_type = self.convert_boxed_type(boxed_type);
+                let boxed_type = self.convert_boxed_type(boxed_type)?;
                 let conversion = if self.requires_conversion(boxed_type.as_ref()) {
                     ArgumentConversion::new_to_unique_ptr(*boxed_type.clone())
                 } else {
@@ -876,17 +888,18 @@ impl<'a> BridgeConversion<'a> {
                 };
                 (ReturnType::Type(rarrow, boxed_type), Some(conversion))
             }
-        }
+        };
+        Ok(result)
     }
 
-    fn convert_boxed_type(&self, ty: Box<Type>) -> Box<Type> {
-        Box::new(self.convert_type(*ty))
+    fn convert_boxed_type(&self, ty: Box<Type>) -> Result<Box<Type>, ConvertError> {
+        Ok(Box::new(self.convert_type(*ty)?))
     }
 
-    fn convert_type(&self, ty: Type) -> Type {
-        match ty {
+    fn convert_type(&self, ty: Type) -> Result<Type, ConvertError> {
+        let result = match ty {
             Type::Path(p) => {
-                let newp = self.convert_type_path(p);
+                let newp = self.convert_type_path(p)?;
                 // Special handling because rust_Str (as emitted by bindgen)
                 // doesn't simply get renamed to a different type _identifier_.
                 // This plain type-by-value (as far as bindgen is concerned)
@@ -900,56 +913,57 @@ impl<'a> BridgeConversion<'a> {
                 }
             }
             Type::Reference(mut r) => {
-                r.elem = self.convert_boxed_type(r.elem);
+                r.elem = self.convert_boxed_type(r.elem)?;
                 Type::Reference(r)
             }
-            Type::Ptr(ptr) => Type::Reference(self.convert_ptr_to_reference(ptr)),
+            Type::Ptr(ptr) => Type::Reference(self.convert_ptr_to_reference(ptr)?),
             _ => ty,
-        }
+        };
+        Ok(result)
     }
 
-    fn convert_ptr_to_reference(&self, ptr: TypePtr) -> TypeReference {
+    fn convert_ptr_to_reference(&self, ptr: TypePtr) -> Result<TypeReference, ConvertError> {
         let mutability = ptr.mutability;
-        let elem = self.convert_boxed_type(ptr.elem);
+        let elem = self.convert_boxed_type(ptr.elem)?;
         // TODO - in the future, we should check if this is a rust::Str and throw
         // a wobbler if not. rust::Str should only be seen _by value_ in C++
         // headers; it manifests as &str in Rust but on the C++ side it must
         // be a plain value. We should detect and abort.
-        parse_quote! {
+        Ok(parse_quote! {
             & #mutability #elem
-        }
+        })
     }
 
-    fn convert_type_path(&self, mut typ: TypePath) -> TypePath {
+    fn convert_type_path(&self, mut typ: TypePath) -> Result<TypePath, ConvertError> {
         if typ.path.segments.iter().next().unwrap().ident == "root" {
             typ.path.segments = typ
                 .path
                 .segments
                 .into_iter()
                 .skip(1) // skip root
-                .map(|s| -> PathSegment {
+                .map(|s| -> Result<PathSegment, ConvertError> {
                     let ident = &s.ident;
                     let args = match s.arguments {
                         PathArguments::AngleBracketed(mut ab) => {
-                            ab.args = self.convert_punctuated(ab.args);
+                            ab.args = self.convert_punctuated(ab.args)?;
                             PathArguments::AngleBracketed(ab)
                         }
                         _ => s.arguments,
                     };
-                    parse_quote!( #ident #args )
+                    Ok(parse_quote!( #ident #args ))
                 })
-                .collect();
+                .collect::<Result<_, _>>()?;
         }
         self.replace_cpp_with_cxx(typ)
     }
 
-    fn replace_cpp_with_cxx(&self, typ: TypePath) -> TypePath {
+    fn replace_cpp_with_cxx(&self, typ: TypePath) -> Result<TypePath, ConvertError> {
         let mut last_seg_args = None;
         let mut seg_iter = typ.path.segments.iter().peekable();
         while let Some(seg) = seg_iter.next() {
             if !seg.arguments.is_empty() {
                 if seg_iter.peek().is_some() {
-                    panic!("Found a type with path arguments not on the last segment")
+                    panic!("Did not expect bindgen to create a type with path arguments on a non-final segment")
                 } else {
                     last_seg_args = Some(seg.arguments.clone());
                 }
@@ -958,7 +972,7 @@ impl<'a> BridgeConversion<'a> {
         drop(seg_iter);
         let tn = TypeName::from_cxx_type_path(&typ);
         // Let's see if this is a typedef.
-        let typ = match self.resolve_typedef(&tn) {
+        let typ = match self.resolve_typedef(&tn)? {
             Some(newid) => newid.to_cxx_type_path(),
             None => typ,
         };
@@ -970,37 +984,40 @@ impl<'a> BridgeConversion<'a> {
             let last_seg = typ.path.segments.last_mut().unwrap();
             last_seg.arguments = last_seg_args;
         }
-        typ
+        Ok(typ)
     }
 
-    fn resolve_typedef<'b>(&'b self, tn: &'b TypeName) -> Option<&'b TypeName> {
+    fn resolve_typedef<'b>(
+        &'b self,
+        tn: &'b TypeName,
+    ) -> Result<Option<&'b TypeName>, ConvertError> {
         match self.typedefs.get(&tn) {
-            None => None,
+            None => Ok(None),
             Some(TypedefTarget::NoArguments(original_tn)) => {
-                match self.resolve_typedef(original_tn) {
-                    None => Some(original_tn),
-                    Some(further_resolution) => Some(further_resolution)
+                match self.resolve_typedef(original_tn)? {
+                    None => Ok(Some(original_tn)),
+                    Some(further_resolution) => Ok(Some(further_resolution)),
                 }
-            },
-            _ => panic!("Asked to resolve typedef {} but it leads to something complex which autocxx cannot yet handle", tn.to_cpp_name())
+            }
+            _ => Err(ConvertError::ComplexTypedefTarget(tn.to_cpp_name())),
         }
     }
 
     fn convert_punctuated<P>(
         &self,
         pun: Punctuated<GenericArgument, P>,
-    ) -> Punctuated<GenericArgument, P>
+    ) -> Result<Punctuated<GenericArgument, P>, ConvertError>
     where
         P: Default,
     {
         let mut new_pun = Punctuated::new();
         for arg in pun.into_iter() {
             new_pun.push(match arg {
-                GenericArgument::Type(t) => GenericArgument::Type(self.convert_type(t)),
+                GenericArgument::Type(t) => GenericArgument::Type(self.convert_type(t)?),
                 _ => arg,
             });
         }
-        new_pun
+        Ok(new_pun)
     }
 
     /// Generate lots of 'use' statements to pull cxxbridge items into the output

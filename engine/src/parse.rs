@@ -16,8 +16,8 @@ use crate::Error as EngineError;
 use crate::IncludeCpp;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use std::{fmt::Display, io::Read};
 use std::path::Path;
+use std::{fmt::Display, io::Read};
 use syn::Item;
 
 /// Errors which may occur when parsing a Rust source file to discover
@@ -40,7 +40,9 @@ impl Display for ParseError {
             ParseError::FileOpen(err) => write!(f, "Unable to open file: {}", err)?,
             ParseError::FileRead(err) => write!(f, "Unable to read file: {}", err)?,
             ParseError::Syntax(err) => write!(f, "Syntax error parsing Rust file: {}", err)?,
-            ParseError::MacroParseFail(err) => write!(f, "Unable to parse include_cpp! macro: {}", err)?,
+            ParseError::MacroParseFail(err) => {
+                write!(f, "Unable to parse include_cpp! macro: {}", err)?
+            }
         }
         Ok(())
     }
