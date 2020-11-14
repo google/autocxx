@@ -29,7 +29,7 @@ mod builder;
 mod integration_tests;
 
 use proc_macro2::TokenStream as TokenStream2;
-use std::path::PathBuf;
+use std::{fmt::Display, path::PathBuf};
 
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
@@ -65,16 +65,9 @@ pub struct GeneratedCpp(pub Vec<CppFilePair>);
 /// functions.
 #[derive(Debug)]
 pub enum Error {
-    /// A file reading error, most likely on the .rs file.
-    Io(std::io::Error),
     /// Any error reported by bindgen, generating the C++ bindings.
     /// Any C++ parsing errors, etc. would be reported this way.
     Bindgen(()),
-    /// Any problem reported by the cxx crate in generating
-    /// safe bindings. This would encompass errors where bindgen
-    /// has generated unsafe bindings, but we're unable to convert
-    /// them to safe `cxx::bridge` style bindings.
-    CxxGen(cxx_gen::Error),
     /// Any problem parsing the Rust file.
     Parsing(syn::Error),
     /// No `include_cpp!` macro could be found.
@@ -90,6 +83,20 @@ pub enum Error {
     /// bindings for everything. That just seems very unlikely to work
     /// in the common case right now.
     NoGenerationRequested,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Bindgen(_) => write!(f, "Bindgen was unable to generate the initial .rs bindings for this file. This may indicate a parsing problem with the C++ headers.")?,
+            Error::Parsing(err) => write!(f, "The Rust file could not be parsede: {}", err)?,
+            Error::NoAutoCxxInc => write!(f, "No C++ include directory was provided. Consider setting AUTOCXX_INC.")?,
+            Error::CouldNotCanoncalizeIncludeDir(pb) => write!(f, "One of the C++ include directories provided ({}) did not appear to exist or could otherwise not be made into a canonical path.", pb.to_string_lossy())?,
+            Error::Conversion(err) => write!(f, "autocxx could not generate the requested bindings. {}", err)?,
+            Error::NoGenerationRequested => write!(f, "No 'generate' or 'generate_pod' directives were found, so we would not generate any Rust bindings despite the inclusion of C++ headers.")?,
+        }
+        Ok(())
+    }
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -126,18 +133,6 @@ impl Parse for IncludeCpp {
     fn parse(input: ParseStream) -> ParseResult<Self> {
         Self::new_from_parse_stream(input)
     }
-}
-
-fn dump_generated_code(gen: cxx_gen::GeneratedCode) -> Result<cxx_gen::GeneratedCode> {
-    info!(
-        "CXX:\n{}",
-        String::from_utf8(gen.implementation.clone()).unwrap()
-    );
-    info!(
-        "header:\n{}",
-        String::from_utf8(gen.header.clone()).unwrap()
-    );
-    Ok(gen)
 }
 
 impl IncludeCpp {
@@ -377,7 +372,7 @@ impl IncludeCpp {
     }
 
     /// Generate C++-side bindings for these APIs. Call `generate` first.
-    pub fn generate_h_and_cxx(&self) -> Result<GeneratedCpp> {
+    pub fn generate_h_and_cxx(&self) -> Result<GeneratedCpp, cxx_gen::Error> {
         let mut files = Vec::new();
         match &self.state {
             State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
@@ -386,9 +381,7 @@ impl IncludeCpp {
             State::Generated(itemmod, additional_cpp_generator) => {
                 let rs = itemmod.into_token_stream();
                 let opt = cxx_gen::Opt::default();
-                let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)
-                    .map_err(Error::CxxGen)
-                    .and_then(dump_generated_code)?;
+                let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
                 files.push(CppFilePair {
                     header: cxx_generated.header,
                     header_name: "cxxgen.h".to_string(),
