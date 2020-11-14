@@ -16,8 +16,8 @@ use crate::Error as EngineError;
 use crate::IncludeCpp;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use std::io::Read;
 use std::path::Path;
+use std::{fmt::Display, io::Read};
 use syn::Item;
 
 /// Errors which may occur when parsing a Rust source file to discover
@@ -32,7 +32,20 @@ pub enum ParseError {
     Syntax(syn::Error),
     /// The include CPP macro could not be parsed.
     MacroParseFail(EngineError),
-    GenerateRsError(EngineError),
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseError::FileOpen(err) => write!(f, "Unable to open file: {}", err)?,
+            ParseError::FileRead(err) => write!(f, "Unable to read file: {}", err)?,
+            ParseError::Syntax(err) => write!(f, "Syntax error parsing Rust file: {}", err)?,
+            ParseError::MacroParseFail(err) => {
+                write!(f, "Unable to parse include_cpp! macro: {}", err)?
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Parse a Rust file, and spot any include_cpp macros within it.
