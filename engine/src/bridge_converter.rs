@@ -593,11 +593,13 @@ impl<'a> BridgeConversion<'a> {
     ) -> Result<(), ConvertError> {
         // This function is one of the most complex parts of bridge_converter.
         // It needs to consider:
-        // 1. Rejecting constructors entirely.
+        // 1. Rejecting constructors/destructors entirely.
         // 2. For methods, we need to strip off the class name.
         // 3. For anything taking or returning a non-POD type _by value_,
         //    we need to generate a wrapper function in C++ which wraps and unwraps
         //    it from a unique_ptr.
+        //    3a. And alias the original name to the wrapper.
+
         // See if it's a constructor, in which case skip it.
         // We instead pass onto cxx an alternative make_unique implementation later.
         for ty in &self.types_found {
@@ -640,6 +642,7 @@ impl<'a> BridgeConversion<'a> {
                     break;
                 }
             }
+            assert!(type_name.is_some());
         }
 
         // When we generate the cxx::bridge fn declaration, we'll need to
@@ -665,9 +668,14 @@ impl<'a> BridgeConversion<'a> {
             // and return values into/out of std::unique_ptrs.
             // First give instructions to generate the additional C++.
             let cpp_construction_ident = cxxbridge_name;
-            cxxbridge_name = make_ident(&format!("{}_up_wrapper", rust_name));
+            cxxbridge_name = make_ident(&if let Some(type_name) = &type_name {
+                format!("{}_{}_up_wrapper", type_name, rust_name)
+            } else {
+                format!("{}_up_wrapper", rust_name)
+            });
             let a = AdditionalNeed::ByValueWrapper(Box::new(ByValueWrapper {
-                id: cpp_construction_ident,
+                original_function_name: cpp_construction_ident,
+                wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
                 is_a_method,
@@ -701,8 +709,8 @@ impl<'a> BridgeConversion<'a> {
             // Now we've made a brand new function, we need to plumb it back
             // into place such that users can call it just as if it were
             // the original function.
-            if is_a_method {
-                let type_name = make_ident(&type_name.unwrap());
+            if let Some(type_name) = &type_name {
+                let type_name = make_ident(&type_name);
                 let rust_name = make_ident(&rust_name);
                 let extra_impl_block: ItemImpl = parse_quote! {
                     impl #type_name {
