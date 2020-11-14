@@ -123,7 +123,8 @@ impl ArgumentConversion {
 }
 
 pub(crate) struct ByValueWrapper {
-    pub(crate) id: Ident,
+    pub(crate) original_function_name: Ident,
+    pub(crate) wrapper_function_name: Ident,
     pub(crate) return_conversion: Option<ArgumentConversion>,
     pub(crate) argument_conversion: Vec<ArgumentConversion>,
     pub(crate) is_a_method: bool,
@@ -286,9 +287,9 @@ impl AdditionalCppGenerator {
     }
 
     fn generate_by_value_wrapper(&mut self, details: ByValueWrapper) {
-        let ident = details.id;
+        let ident = details.original_function_name;
         let is_a_method = details.is_a_method;
-        let name = format!("{}_up_wrapper", ident.to_string());
+        let name = details.wrapper_function_name;
         let get_arg_name = |counter: usize| -> String {
             if is_a_method && counter == 0 {
                 // For method calls that we generate, the first

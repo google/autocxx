@@ -2100,6 +2100,39 @@ fn test_conflicting_methods() {
 }
 
 #[test]
+fn test_conflicting_up_wrapper_methods() {
+    // Ensures the two names 'get' do not conflict in the flat
+    // cxx::bridge mod namespace.
+    let cxx = indoc! {"
+        Bob::Bob() : a(\"hello\") {}
+        Fred::Fred() : b(\"goodbye\") {}
+        std::string Bob::get() const { return a; }
+        std::string Fred::get() const { return b; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Bob {
+            Bob();
+            std::string a;
+            std::string get() const;
+        };
+        struct Fred {
+            Fred();
+            std::string b;
+            std::string get() const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::Bob::make_unique();
+        let b = ffi::Fred::make_unique();
+        assert_eq!(a.get().as_ref().unwrap().to_str().unwrap(), "hello");
+        assert_eq!(b.get().as_ref().unwrap().to_str().unwrap(), "goodbye");
+    };
+    run_test(cxx, hdr, rs, &["Bob", "Fred"], &[]);
+}
+
+#[test]
 fn test_ns_struct_pod_request() {
     let hdr = indoc! {"
         #include <cstdint>
