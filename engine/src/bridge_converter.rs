@@ -728,6 +728,7 @@ impl<'a> BridgeConversion<'a> {
             });
             let a = AdditionalNeed::ByValueWrapper(Box::new(ByValueWrapper {
                 original_function_name: cpp_construction_ident,
+                original_function_ns: ns.clone(),
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
@@ -795,7 +796,7 @@ impl<'a> BridgeConversion<'a> {
         let ret_type = unqualify_ret_type(ret_type);
         // And we need to make an attribute for the namespace that the function
         // itself is in.
-        let namespace_attr = if ns.is_empty() {
+        let namespace_attr = if ns.is_empty() || wrapper_function_needed {
             Vec::new()
         } else {
             let namespace_string = ns.to_string();
