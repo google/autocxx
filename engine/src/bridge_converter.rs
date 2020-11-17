@@ -966,10 +966,6 @@ impl<'a> BridgeConversion<'a> {
                 })
                 .collect::<Result<_, _>>()?;
         }
-        self.replace_cpp_with_cxx(typ)
-    }
-
-    fn replace_cpp_with_cxx(&self, typ: TypePath) -> Result<TypePath, ConvertError> {
         let mut last_seg_args = None;
         let mut seg_iter = typ.path.segments.iter().peekable();
         while let Some(seg) = seg_iter.next() {
