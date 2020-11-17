@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::{type_to_cpp, TypeName};
+use crate::types::{make_ident, type_to_cpp, Namespace, TypeName};
 use itertools::Itertools;
 use std::collections::HashSet;
 use syn::{parse_quote, Ident, Type};
@@ -124,6 +124,7 @@ impl ArgumentConversion {
 
 pub(crate) struct ByValueWrapper {
     pub(crate) original_function_name: Ident,
+    pub(crate) original_function_ns: Namespace,
     pub(crate) wrapper_function_name: Ident,
     pub(crate) return_conversion: Option<ArgumentConversion>,
     pub(crate) argument_conversion: Vec<ArgumentConversion>,
@@ -262,7 +263,7 @@ impl AdditionalCppGenerator {
     }
 
     fn generate_make_unique(&mut self, ty: &TypeName, constructor_arg_types: &[TypeName]) {
-        let name = format!("{}_make_unique", ty.to_cpp_name());
+        let name = format!("{}_make_unique", ty.get_final_ident());
         let constructor_args = constructor_arg_types
             .iter()
             .enumerate()
@@ -287,7 +288,19 @@ impl AdditionalCppGenerator {
     }
 
     fn generate_by_value_wrapper(&mut self, details: ByValueWrapper) {
-        let ident = details.original_function_name;
+        // Even if the original function call is in a namespace,
+        // we generate this wrapper in the global namespace.
+        // We could easily do this the other way round, and when
+        // cxx::bridge comes to support nested namespace mods then
+        // we wil wish to do that to avoid name conflicts. However,
+        // at the moment this is simpler because it avoids us having
+        // to generate namespace blocks in the generated C++.
+        let original_func_call = details
+            .original_function_ns
+            .into_iter()
+            .map(|s| make_ident(s))
+            .chain(std::iter::once(details.original_function_name))
+            .join("::");
         let is_a_method = details.is_a_method;
         let name = details.wrapper_function_name;
         let get_arg_name = |counter: usize| -> String {
@@ -320,7 +333,7 @@ impl AdditionalCppGenerator {
             .map(|(counter, conv)| conv.conversion(&get_arg_name(counter)));
         let receiver = if is_a_method { arg_list.next() } else { None };
         let arg_list = arg_list.join(", ");
-        let mut underlying_function_call = format!("{}({})", ident.to_string(), arg_list);
+        let mut underlying_function_call = format!("{}({})", original_func_call, arg_list);
         if let Some(receiver) = receiver {
             underlying_function_call = format!("{}.{}", receiver, underlying_function_call);
         }

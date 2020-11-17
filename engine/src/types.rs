@@ -50,6 +50,10 @@ impl Namespace {
     pub(crate) fn from_user_input(input: &str) -> Self {
         Self(input.split("::").map(|x| x.to_string()).collect())
     }
+
+    pub(crate) fn depth(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl Display for Namespace {
@@ -121,6 +125,10 @@ impl TypeName {
             }
             Self::from_ident(&first_seg)
         }
+    }
+
+    pub(crate) fn qualify_with_ns(&self, ns: &Namespace) -> Self {
+        Self(ns.clone(), self.1.clone())
     }
 
     fn from_segments<'a, T: Iterator<Item = &'a PathSegment>>(mut seg_iter: Peekable<T>) -> Self {
