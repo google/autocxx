@@ -12,25 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use syn::{parse_quote, punctuated::Punctuated, FnArg, ReturnType, Token, Type, TypePath};
+use syn::{
+    parse_quote, punctuated::Punctuated, FnArg, GenericArgument, PathArguments, PathSegment,
+    ReturnType, Token, Type, TypePath,
+};
 
 /// Mod to handle stripping paths off the front of types.
 
-fn unqualify_type_path(mut typ: TypePath) -> TypePath {
-    if typ.path.segments.len() > 1 {
-        // If we've still got more than one
-        // path segment then this is referring to a type within
-        // C++ namespaces. Strip them off for now, until cxx supports
-        // nested mods within a cxx::bridge.
-        // This is 'safe' because earlier code will already have
-        // failed with 'DuplicateType' if we had several types called
-        // the same thing.
-        let last_seg = typ.path.segments.last().unwrap();
-        typ.path.segments = parse_quote!(
-            #last_seg
-        );
+fn unqualify_type_path(typ: TypePath) -> TypePath {
+    // If we've still got more than one
+    // path segment then this is referring to a type within
+    // C++ namespaces. Strip them off for now, until cxx supports
+    // nested mods within a cxx::bridge.
+    // This is 'safe' because earlier code will already have
+    // failed with 'DuplicateType' if we had several types called
+    // the same thing.
+    let last_seg = typ.path.segments.into_iter().last().unwrap();
+    let ident = &last_seg.ident;
+    let args = match last_seg.arguments {
+        PathArguments::AngleBracketed(mut ab) => {
+            ab.args = unqualify_punctuated(ab.args);
+            PathArguments::AngleBracketed(ab)
+        }
+        _ => last_seg.arguments.clone(),
+    };
+    let last_seg: PathSegment = parse_quote!( #ident #args );
+    parse_quote!(
+        #last_seg
+    )
+}
+
+fn unqualify_punctuated<P>(pun: Punctuated<GenericArgument, P>) -> Punctuated<GenericArgument, P>
+where
+    P: Default,
+{
+    let mut new_pun = Punctuated::new();
+    for arg in pun.into_iter() {
+        new_pun.push(match arg {
+            GenericArgument::Type(t) => GenericArgument::Type(unqualify_type(t)),
+            _ => arg,
+        });
     }
-    typ
+    new_pun
 }
 
 fn unqualify_type(typ: Type) -> Type {
