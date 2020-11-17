@@ -129,6 +129,7 @@ impl BridgeConverter {
                     extern_c_mod: None,
                     extern_c_mod_items: Vec::new(),
                     additional_cpp_needs: Vec::new(),
+                    idents_found: Vec::new(),
                     types_found: Vec::new(),
                     byvalue_checker: ByValueChecker::new(),
                     pod_requests: &self.pod_requests,
@@ -146,13 +147,6 @@ fn get_blank_extern_c_mod() -> ItemForeignMod {
     parse_quote!(
         extern "C" {}
     )
-}
-
-fn type_to_typename(ty: &Type) -> Option<TypeName> {
-    match ty {
-        Type::Path(pn) => Some(TypeName::from_bindgen_type_path(pn)),
-        _ => None,
-    }
 }
 
 /// Analysis of a typedef.
@@ -173,7 +167,8 @@ struct BridgeConversion<'a> {
     extern_c_mod: Option<ItemForeignMod>,
     extern_c_mod_items: Vec<ForeignItem>,
     additional_cpp_needs: Vec<AdditionalNeed>,
-    types_found: Vec<Ident>,
+    idents_found: Vec<Ident>,
+    types_found: Vec<TypeName>,
     byvalue_checker: ByValueChecker,
     pod_requests: &'a Vec<TypeName>,
     include_list: &'a Vec<String>,
@@ -296,11 +291,11 @@ impl<'a> BridgeConversion<'a> {
                     output_items.push(Item::Enum(e));
                 }
                 Item::Impl(i) => {
-                    if let Some(ty) = type_to_typename(&i.self_ty) {
+                    if let Some(ty) = self.type_to_typename(&i.self_ty, &ns) {
                         for item in i.items.clone() {
                             match item {
                                 syn::ImplItem::Method(m) if m.sig.ident == "new" => {
-                                    self.convert_new_method(m, &ty, &i, output_items)
+                                    self.convert_new_method(m, &ty, &i, &ns, output_items)
                                 }
                                 _ => {}
                             }
@@ -486,7 +481,8 @@ impl<'a> BridgeConversion<'a> {
             }
         }));
         self.add_use(tyname.get_namespace(), &final_ident);
-        self.types_found.push(final_ident);
+        self.types_found.push(tyname.clone());
+        self.idents_found.push(final_ident);
         Ok(())
     }
 
@@ -528,11 +524,31 @@ impl<'a> BridgeConversion<'a> {
             .push(AdditionalNeed::MakeStringConstructor);
     }
 
+    fn type_to_typename(&self, ty: &Type, ns: &Namespace) -> Option<TypeName> {
+        match ty {
+            Type::Path(pn) => {
+                let ty = TypeName::from_bindgen_type_path(pn);
+                // If the type looks like it is unqualified, check we know it
+                // already, and if not, qualify it according to the current
+                // namespace. This is a bit of a shortcut compared to having a full
+                // resolution pass which can search all known namespaces.
+                if !ty.has_namespace() {
+                    if !self.types_found.contains(&ty) {
+                        return Some(ty.qualify_with_ns(ns));
+                    }
+                }
+                Some(ty)
+            }
+            _ => None,
+        }
+    }
+
     fn convert_new_method(
         &mut self,
         mut m: syn::ImplItemMethod,
         ty: &TypeName,
         i: &syn::ItemImpl,
+        ns: &Namespace,
         output_items: &mut Vec<Item>,
     ) {
         let self_ty = i.self_ty.as_ref();
@@ -541,10 +557,13 @@ impl<'a> BridgeConversion<'a> {
             ReturnType::Default => return,
         };
         let cpp_constructor_args = m.sig.inputs.iter().filter_map(|x| match x {
-            FnArg::Typed(pt) => type_to_typename(&pt.ty).and_then(|x| match *(pt.pat.clone()) {
-                syn::Pat::Ident(pti) => Some((x, pti.ident)),
-                _ => None,
-            }),
+            FnArg::Typed(pt) => {
+                self.type_to_typename(&pt.ty, ns)
+                    .and_then(|x| match *(pt.pat.clone()) {
+                        syn::Pat::Ident(pti) => Some((x, pti.ident)),
+                        _ => None,
+                    })
+            }
             FnArg::Receiver(_) => None,
         });
         let (cpp_arg_types, cpp_arg_names): (Vec<_>, Vec<_>) = cpp_constructor_args.unzip();
@@ -554,7 +573,7 @@ impl<'a> BridgeConversion<'a> {
         // Create a function which calls Bob_make_unique
         // from Bob::make_unique.
         let call_name = Ident::new(
-            &format!("{}_make_unique", ty.to_string()),
+            &format!("{}_make_unique", ty.get_final_ident()),
             Span::call_site(),
         );
         self.add_use(&ty.get_namespace(), &call_name);
@@ -614,7 +633,7 @@ impl<'a> BridgeConversion<'a> {
 
         // See if it's a constructor, in which case skip it.
         // We instead pass onto cxx an alternative make_unique implementation later.
-        for ty in &self.types_found {
+        for ty in &self.idents_found {
             let constructor_name = format!("{}_{}", ty, ty);
             if fun.sig.ident == constructor_name {
                 return Ok(());
@@ -654,7 +673,7 @@ impl<'a> BridgeConversion<'a> {
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
             // TODO test with class names containing underscores. It should work.
-            for cn in &self.types_found {
+            for cn in &self.idents_found {
                 let cn = cn.to_string();
                 if rust_name.starts_with(&cn) {
                     rust_name = rust_name[cn.len() + 1..].to_string();

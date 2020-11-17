@@ -127,6 +127,10 @@ impl TypeName {
         }
     }
 
+    pub(crate) fn qualify_with_ns(&self, ns: &Namespace) -> Self {
+        Self(ns.clone(), self.1.clone())
+    }
+
     fn from_segments<'a, T: Iterator<Item = &'a PathSegment>>(mut seg_iter: Peekable<T>) -> Self {
         let mut ns = Namespace::new();
         while let Some(seg) = seg_iter.next() {

@@ -262,7 +262,7 @@ impl AdditionalCppGenerator {
     }
 
     fn generate_make_unique(&mut self, ty: &TypeName, constructor_arg_types: &[TypeName]) {
-        let name = format!("{}_make_unique", ty.to_cpp_name());
+        let name = format!("{}_make_unique", ty.get_final_ident());
         let constructor_args = constructor_arg_types
             .iter()
             .enumerate()
