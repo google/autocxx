@@ -1917,6 +1917,59 @@ fn test_ns_func() {
 }
 
 #[test]
+fn test_ns_constructor() {
+    let cxx = indoc! {"
+        A::Bob::Bob() {}
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        namespace A {
+            struct Bob {
+                Bob();
+                uint32_t a;
+                uint32_t b;
+            };
+        }
+    "};
+    let rs = quote! {
+        ffi::A::Bob::make_unique();
+    };
+    run_test(cxx, hdr, rs, &["A::Bob"], &[]);
+}
+
+#[test]
+fn test_ns_up_direct() {
+    let cxx = indoc! {"
+        std::unique_ptr<A::Bob> A::get_bob() {
+            A::Bob b;
+            b.a = 2;
+            b.b = 3;
+            return std::make_unique<A::Bob>(b);
+        }
+        uint32_t give_bob(A::Bob bob) {
+            return bob.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        namespace A {
+            struct Bob {
+                uint32_t a;
+                uint32_t b;
+            };
+            std::unique_ptr<Bob> get_bob();
+        }
+        uint32_t give_bob(A::Bob bob);
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_bob(ffi::A::get_bob()), 2);
+    };
+    run_test(cxx, hdr, rs, &["give_bob", "A::get_bob"], &[]);
+}
+
+#[test]
 fn test_ns_up_wrappers() {
     let cxx = indoc! {"
         A::Bob get_bob() {
@@ -1944,6 +1997,36 @@ fn test_ns_up_wrappers() {
         assert_eq!(ffi::give_bob(ffi::get_bob()), 2);
     };
     run_test(cxx, hdr, rs, &["give_bob", "get_bob"], &[]);
+}
+
+#[test]
+fn test_ns_up_wrappers_in_up() {
+    let cxx = indoc! {"
+        A::Bob A::get_bob() {
+            A::Bob b;
+            b.a = 2;
+            b.b = 3;
+            return b;
+        }
+        uint32_t give_bob(A::Bob bob) {
+            return bob.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            struct Bob {
+                uint32_t a;
+                uint32_t b;
+            };
+            Bob get_bob();
+        }
+        uint32_t give_bob(A::Bob bob);
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_bob(ffi::A::get_bob()), 2);
+    };
+    run_test(cxx, hdr, rs, &["give_bob", "A::get_bob"], &[]);
 }
 
 #[test]
