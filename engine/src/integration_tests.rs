@@ -89,7 +89,6 @@ impl LinkableTryBuilder {
 fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
     let path = tdir.path().join(filename);
     let mut f = File::create(&path).unwrap();
-    info!("Writing to {:?}: {}", path, content);
     f.write_all(content.as_bytes()).unwrap();
     path
 }

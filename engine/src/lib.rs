@@ -271,7 +271,6 @@ impl IncludeCpp {
     fn inject_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
         let full_header = self.build_header();
         let full_header = format!("{}\n\n{}", known_types::get_prelude(), full_header,);
-        info!("Full header: {}", full_header);
         builder = builder.header_contents("example.hpp", &full_header);
         builder
     }
@@ -398,6 +397,7 @@ impl IncludeCpp {
                             header_name: "autocxxgen.h".to_string(),
                             implementation: additional_cpp.definitions.as_bytes().to_vec(),
                         });
+                        info!("Additional C++ bindings:\n{}", declarations);
                     }
                 }
             }
