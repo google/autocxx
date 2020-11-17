@@ -50,6 +50,10 @@ impl Namespace {
     pub(crate) fn from_user_input(input: &str) -> Self {
         Self(input.split("::").map(|x| x.to_string()).collect())
     }
+
+    pub(crate) fn depth(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl Display for Namespace {

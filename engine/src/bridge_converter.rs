@@ -220,20 +220,6 @@ impl<'a> BridgeConversion<'a> {
             .unwrap_or_else(get_blank_extern_c_mod);
         extern_c_mod.items.append(&mut self.extern_c_mod_items);
         self.bridge_items.push(Item::ForeignMod(extern_c_mod));
-        // Quite possibly, the following lines need to be repeated
-        // for each sub-mod. TODO.
-        bindgen_root_items.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use self::super::super::cxxbridge;
-        }));
-        bindgen_root_items.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use cxx::UniquePtr;
-        }));
-        bindgen_root_items.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use cxx::CxxString;
-        }));
         // The extensive use of parse_quote here could end up
         // being a performance bottleneck. If so, we might want
         // to set the 'contents' field of the ItemMod
@@ -350,6 +336,20 @@ impl<'a> BridgeConversion<'a> {
                 }
                 _ => return Err(ConvertError::UnexpectedItemInMod),
             }
+        }
+        let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
+        output_items.push(Item::Use(parse_quote! {
+            #[allow(unused_imports)]
+            use self::
+                #(#supers)::*
+            ::cxxbridge;
+        }));
+        for thing in &["UniquePtr", "CxxString"] {
+            let thing = make_ident(thing);
+            output_items.push(Item::Use(parse_quote! {
+                #[allow(unused_imports)]
+                use cxx:: #thing;
+            }));
         }
         Ok(())
     }
