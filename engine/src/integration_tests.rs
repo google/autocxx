@@ -2373,7 +2373,6 @@ fn test_non_pod_constant() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/106
 fn test_templated_typedef() {
     let hdr = indoc! {"
         #include <string>
@@ -2398,7 +2397,6 @@ fn test_templated_typedef() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/106
 fn test_struct_templated_typedef() {
     let hdr = indoc! {"
         #include <string>

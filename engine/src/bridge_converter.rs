@@ -30,7 +30,7 @@ use crate::{
 };
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
-use syn::{parse::Parser, ItemType};
+use syn::{parse::Parser, Field, GenericParam, Generics, ItemStruct};
 use syn::{
     parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
     ItemForeignMod, ItemMod, Pat, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
@@ -262,26 +262,13 @@ impl<'a> BridgeConversion<'a> {
                 Item::Struct(mut s) => {
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
                     let should_be_pod = self.byvalue_checker.is_pod(&tyname);
-                    self.generate_type_alias(tyname, should_be_pod)?;
+                    if !Self::generics_contentful(&s.generics) {
+                        // cxx::bridge can't cope with type aliases to generic
+                        // types at the moment.
+                        self.generate_type_alias(tyname, should_be_pod)?;
+                    }
                     if !should_be_pod {
-                        // See cxx's opaque::Opaque for rationale for this type... in
-                        // short, it's to avoid being Send/Sync.
-                        s.fields = syn::Fields::Named(parse_quote! {
-                            {
-                                do_not_attempt_to_allocate_nonpod_types: [*const u8; 0],
-                            }
-                        });
-                        // Thanks to dtolnay@ for this explanation of why the following
-                        // is needed:
-                        // If the real alignment of the C++ type is smaller and a reference
-                        // is returned from C++ to Rust, mere existence of an insufficiently
-                        // aligned reference in Rust causes UB even if never dereferenced
-                        // by Rust code
-                        // (see https://doc.rust-lang.org/1.47.0/reference/behavior-considered-undefined.html).
-                        // Rustc can use least-significant bits of the reference for other storage.
-                        s.attrs = vec![parse_quote!(
-                            #[repr(C, packed)]
-                        )];
+                        Self::make_non_pod(&mut s);
                     }
                     output_items.push(Item::Struct(s));
                 }
@@ -319,7 +306,7 @@ impl<'a> BridgeConversion<'a> {
                     self.all_items.push(item);
                 }
                 Item::Type(ity) => {
-                    if Self::should_ignore_item_type(&ity) {
+                    if Self::generics_contentful(&ity.generics) {
                         // Ignore this for now. Sometimes bindgen generates such things
                         // without an actual need to do so.
                         continue;
@@ -349,10 +336,51 @@ impl<'a> BridgeConversion<'a> {
         Ok(())
     }
 
-    fn should_ignore_item_type(ity: &ItemType) -> bool {
-        ity.generics.lifetimes().next().is_some()
-            || ity.generics.const_params().next().is_some()
-            || ity.generics.type_params().next().is_some()
+    fn make_non_pod(s: &mut ItemStruct) {
+        // Thanks to dtolnay@ for this explanation of why the following
+        // is needed:
+        // If the real alignment of the C++ type is smaller and a reference
+        // is returned from C++ to Rust, mere existence of an insufficiently
+        // aligned reference in Rust causes UB even if never dereferenced
+        // by Rust code
+        // (see https://doc.rust-lang.org/1.47.0/reference/behavior-considered-undefined.html).
+        // Rustc can use least-significant bits of the reference for other storage.
+        s.attrs = vec![parse_quote!(
+            #[repr(C, packed)]
+        )];
+        // Now fill in fields. Usually, we just want a single field
+        // but if this is a generic type we need to faff a bit.
+        let generic_type_fields =
+            s.generics
+                .params
+                .iter()
+                .enumerate()
+                .filter_map(|(counter, gp)| match gp {
+                    GenericParam::Type(gpt) => {
+                        let id = &gpt.ident;
+                        let field_name = make_ident(&format!("_phantom_{}", counter));
+                        let toks = quote! {
+                            #field_name: ::std::marker::PhantomData<::std::cell::UnsafeCell< #id >>
+                        };
+                        let parser = Field::parse_named;
+                        Some(parser.parse2(toks).unwrap())
+                    }
+                    _ => None,
+                });
+        // See cxx's opaque::Opaque for rationale for this type... in
+        // short, it's to avoid being Send/Sync.
+        s.fields = syn::Fields::Named(parse_quote! {
+            {
+                do_not_attempt_to_allocate_nonpod_types: [*const u8; 0],
+                #(#generic_type_fields),*
+            }
+        });
+    }
+
+    fn generics_contentful(generics: &Generics) -> bool {
+        generics.lifetimes().next().is_some()
+            || generics.const_params().next().is_some()
+            || generics.type_params().next().is_some()
     }
 
     fn analyze_typedef_target(ty: &Type) -> TypedefTarget {
@@ -381,7 +409,7 @@ impl<'a> BridgeConversion<'a> {
                     .byvalue_checker
                     .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
                 Item::Type(ity) => {
-                    if Self::should_ignore_item_type(&ity) {
+                    if Self::generics_contentful(&ity.generics) {
                         // Ignore this for now. Sometimes bindgen generates such things
                         // without an actual need to do so.
                         continue;
