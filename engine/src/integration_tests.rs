@@ -2372,10 +2372,119 @@ fn test_non_pod_constant() {
     run_test("", hdr, rs, &["BOB"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/106
+fn test_templated_typedef() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            const STRING_TYPE* ptr_;
+            size_t length_;
+        };
+        typedef BasicStringPiece<uint8_t> StringPiece;
+
+        struct Origin {
+            Origin() {}
+            StringPiece host;
+        };
+    "};
+    let rs = quote! {
+        ffi::Origin::make_unique();
+    };
+    run_test("", hdr, rs, &["Origin"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/106
+fn test_struct_templated_typedef() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        struct Concrete {
+            uint8_t a;
+        };
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            const STRING_TYPE* ptr_;
+            size_t length_;
+        };
+        typedef BasicStringPiece<Concrete> StringPiece;
+
+        struct Origin {
+            Origin() {}
+            StringPiece host;
+        };
+    "};
+    let rs = quote! {
+        ffi::Origin::make_unique();
+    };
+    run_test("", hdr, rs, &["Origin"], &[]);
+}
+
+#[ignore] // https://github.com/google/autocxx/issues/106
+#[test]
+fn test_string_templated_typedef() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            const STRING_TYPE* ptr_;
+            size_t length_;
+        };
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        struct Origin {
+            Origin() {}
+            StringPiece host;
+        };
+    "};
+    let rs = quote! {
+        ffi::Origin::make_unique();
+    };
+    run_test("", hdr, rs, &["Origin"], &[]);
+}
+
+#[ignore] // https://github.com/google/autocxx/issues/106
+#[test]
+fn test_string_forward_declared_templated_typedef() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        
+        template <typename STRING_TYPE>
+        class BasicStringPiece;
+        
+        typedef BasicStringPiece<std::string> StringPiece;
+        
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+        
+        struct Origin {
+            // void SetHost(StringPiece host);
+            StringPiece host;
+        };
+    "};
+    let rs = quote! {
+        ffi::Origin::make_unique();
+    };
+    run_test("", hdr, rs, &["Origin"], &[]);
+}
+
 // Yet to test:
-// 5. Templated stuff
+// 5. Using templated types.
 // 6. Ifdef
-// 7. Out params
+// 7. Pointers (including out params)
 // 10. ExcludeUtilities
 // Stuff which requires much more thought:
 // 1. Shared pointers
