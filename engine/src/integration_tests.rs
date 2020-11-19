@@ -2476,35 +2476,6 @@ fn test_associated_type_templated_typedef() {
     run_test("", hdr, rs, &["Origin"], &[]);
 }
 
-#[test]
-#[ignore] // https://github.com/google/autocxx/issues/106
-fn test_string_forward_declared_templated_typedef() {
-    let hdr = indoc! {"
-        #include <string>
-        #include <cstdint>
-        
-        template <typename STRING_TYPE>
-        class BasicStringPiece;
-        
-        typedef BasicStringPiece<std::string> StringPiece;
-        
-        template <typename STRING_TYPE> class BasicStringPiece {
-        public:
-            const STRING_TYPE* ptr_;
-            size_t length_;
-        };
-        
-        struct Origin {
-            Origin() {}
-            StringPiece host;
-        };
-    "};
-    let rs = quote! {
-        ffi::Origin::make_unique();
-    };
-    run_test("", hdr, rs, &["Origin"], &[]);
-}
-
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef
