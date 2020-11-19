@@ -239,7 +239,7 @@ impl AdditionalCppGenerator {
             .iter()
             .map(field_access)
             .collect::<Vec<&str>>()
-            .join("\n\n");
+            .join("\n");
         s.push('\n');
         s
     }
