@@ -2423,8 +2423,8 @@ fn test_struct_templated_typedef() {
     run_test("", hdr, rs, &["Origin"], &[]);
 }
 
-#[ignore] // https://github.com/google/autocxx/issues/106
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/106
 fn test_string_templated_typedef() {
     let hdr = indoc! {"
         #include <string>
@@ -2448,8 +2448,36 @@ fn test_string_templated_typedef() {
     run_test("", hdr, rs, &["Origin"], &[]);
 }
 
-#[ignore] // https://github.com/google/autocxx/issues/106
+#[ignore] // https://github.com/rust-lang/rust-bindgen/issues/1924
 #[test]
+fn test_associated_type_templated_typedef() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        struct Origin {
+            // void SetHost(StringPiece host);
+            StringPiece host;
+        };
+    "};
+    let rs = quote! {
+        ffi::Origin::make_unique();
+    };
+    run_test("", hdr, rs, &["Origin"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/106
 fn test_string_forward_declared_templated_typedef() {
     let hdr = indoc! {"
         #include <string>
@@ -2462,14 +2490,12 @@ fn test_string_forward_declared_templated_typedef() {
         
         template <typename STRING_TYPE> class BasicStringPiece {
         public:
-            typedef size_t size_type;
-            typedef typename STRING_TYPE::value_type value_type;
-            const value_type* ptr_;
-            size_type length_;
+            const STRING_TYPE* ptr_;
+            size_t length_;
         };
         
         struct Origin {
-            // void SetHost(StringPiece host);
+            Origin() {}
             StringPiece host;
         };
     "};
