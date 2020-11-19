@@ -718,7 +718,14 @@ impl<'a> BridgeConversion<'a> {
                     break;
                 }
             }
-            assert!(type_name.is_some());
+            if type_name.is_none() {
+                // Sometimes bindgen generates functions for STL
+                // types which have a parameter entitled 'this'
+                // but don't really correspond to any particular type found
+                // so far. We don't even want to attempt to convert
+                // such methods
+                return Ok(())
+            }
         }
 
         // When we generate the cxx::bridge fn declaration, we'll need to
