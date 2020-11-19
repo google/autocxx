@@ -397,7 +397,7 @@ impl<'a> BridgeConversion<'a> {
         }
     }
 
-    fn find_nested_pod_types(
+    fn find_nested_pod_types_in_mod(
         &mut self,
         items: &[Item],
         ns: &Namespace,
@@ -428,12 +428,21 @@ impl<'a> BridgeConversion<'a> {
                 Item::Mod(itm) => {
                     if let Some((_, nested_items)) = &itm.content {
                         let new_ns = ns.push(itm.ident.to_string());
-                        self.find_nested_pod_types(nested_items, &new_ns)?;
+                        self.find_nested_pod_types_in_mod(nested_items, &new_ns)?;
                     }
                 }
                 _ => {}
             }
         }
+        Ok(())
+    }
+
+    fn find_nested_pod_types(
+        &mut self,
+        items: &[Item],
+        ns: &Namespace,
+    ) -> Result<(), ConvertError> {
+        self.find_nested_pod_types_in_mod(items, ns)?;
         self.byvalue_checker
             .satisfy_requests(self.pod_requests.clone())
             .map_err(ConvertError::UnsafePODType)
