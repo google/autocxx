@@ -122,9 +122,13 @@ impl ArgumentConversion {
     }
 }
 
+pub(crate) enum ByValueWrapperPayload {
+    FunctionCall(Namespace, Ident),
+    Constructor,
+}
+
 pub(crate) struct ByValueWrapper {
-    pub(crate) original_function_name: Ident,
-    pub(crate) original_function_ns: Namespace,
+    pub(crate) payload: ByValueWrapperPayload,
     pub(crate) wrapper_function_name: Ident,
     pub(crate) return_conversion: Option<ArgumentConversion>,
     pub(crate) argument_conversion: Vec<ArgumentConversion>,
@@ -134,7 +138,6 @@ pub(crate) struct ByValueWrapper {
 /// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
     MakeStringConstructor,
-    MakeUnique(TypeName, Vec<TypeName>),
     ByValueWrapper(Box<ByValueWrapper>),
 }
 
@@ -200,7 +203,6 @@ impl AdditionalCppGenerator {
         for need in additions {
             match need {
                 AdditionalNeed::MakeStringConstructor => self.generate_string_constructor(),
-                AdditionalNeed::MakeUnique(ty, args) => self.generate_make_unique(&ty, &args),
                 AdditionalNeed::ByValueWrapper(by_value_wrapper) => {
                     self.generate_by_value_wrapper(*by_value_wrapper)
                 }
@@ -262,31 +264,6 @@ impl AdditionalCppGenerator {
         })
     }
 
-    fn generate_make_unique(&mut self, ty: &TypeName, constructor_arg_types: &[TypeName]) {
-        let name = format!("{}_make_unique", ty.get_final_ident());
-        let constructor_args = constructor_arg_types
-            .iter()
-            .enumerate()
-            .map(|(counter, ty)| format!("{} arg{}", ty.to_cpp_name(), counter))
-            .join(", ");
-        let declaration = format!("std::unique_ptr<{}> {}({})", ty, name, constructor_args);
-        let arg_list = constructor_arg_types
-            .iter()
-            .enumerate()
-            .map(|(counter, _)| format!("arg{}", counter))
-            .join(", ");
-        let definition = format!(
-            "{} {{ return std::make_unique<{}>({}); }}",
-            declaration, ty, arg_list
-        );
-        let declaration = format!("{};", declaration);
-        self.additional_functions.push(AdditionalFunction {
-            declaration,
-            definition,
-            headers: vec![Header::system("memory")],
-        })
-    }
-
     fn generate_by_value_wrapper(&mut self, details: ByValueWrapper) {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
@@ -295,12 +272,6 @@ impl AdditionalCppGenerator {
         // we wil wish to do that to avoid name conflicts. However,
         // at the moment this is simpler because it avoids us having
         // to generate namespace blocks in the generated C++.
-        let original_func_call = details
-            .original_function_ns
-            .into_iter()
-            .map(|s| make_ident(s))
-            .chain(std::iter::once(details.original_function_name))
-            .join("::");
         let is_a_method = details.is_a_method;
         let name = details.wrapper_function_name;
         let get_arg_name = |counter: usize| -> String {
@@ -333,10 +304,22 @@ impl AdditionalCppGenerator {
             .map(|(counter, conv)| conv.conversion(&get_arg_name(counter)));
         let receiver = if is_a_method { arg_list.next() } else { None };
         let arg_list = arg_list.join(", ");
-        let mut underlying_function_call = format!("{}({})", original_func_call, arg_list);
-        if let Some(receiver) = receiver {
-            underlying_function_call = format!("{}.{}", receiver, underlying_function_call);
-        }
+        let mut underlying_function_call = match details.payload {
+            ByValueWrapperPayload::Constructor => arg_list,
+            ByValueWrapperPayload::FunctionCall(ns, id) => {
+                let underlying_function_call = ns
+                    .into_iter()
+                    .map(|s| make_ident(s))
+                    .chain(std::iter::once(id))
+                    .join("::");
+                let mut underlying_function_call =
+                    format!("{}({})", underlying_function_call, arg_list);
+                if let Some(receiver) = receiver {
+                    underlying_function_call = format!("{}.{}", receiver, underlying_function_call);
+                }
+                underlying_function_call
+            }
+        };
         if let Some(ret) = details.return_conversion {
             underlying_function_call =
                 format!("return {}", ret.conversion(&underlying_function_call));
