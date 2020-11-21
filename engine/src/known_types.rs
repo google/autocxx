@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::TypeName;
+use crate::types::{make_ident, TypeName};
 use indoc::indoc;
 use lazy_static::lazy_static;
-use proc_macro2::Span;
 use std::collections::HashMap;
-use syn::{parse_quote, Ident, TypePath};
+use syn::{parse_quote, TypePath};
 
 /// Whether this type should be included in the 'prelude'
 /// passed to bindgen, and if so, how.
@@ -247,17 +246,15 @@ pub(crate) fn should_dereference_in_cpp(typ: &TypePath) -> bool {
 /// The 'without_arguments' bit means we strip off and ignore
 /// any PathArguments within this TypePath - callers should
 /// put them back again if needs be.
-pub(crate) fn replace_type_path_without_arguments(typ: TypePath) -> TypePath {
-    let name = TypeName::from_cxx_type_path(&typ).to_cpp_name();
-    match KNOWN_TYPES.by_cppname.get(&name) {
-        Some(replacement_name) => {
-            let id = make_ident(replacement_name);
-            parse_quote! {
-                #id
-            }
+pub(crate) fn known_type_substitute_path(typ: &TypePath) -> Option<TypePath> {
+    let tn = TypeName::from_cxx_type_path(typ);
+    let name = tn.to_cpp_name();
+    KNOWN_TYPES.by_cppname.get(&name).map(|id| {
+        let id = make_ident(id);
+        parse_quote! {
+            #id
         }
-        None => typ,
-    }
+    })
 }
 
 pub(crate) fn special_cpp_name(rs: &TypeName) -> Option<String> {
@@ -267,6 +264,6 @@ pub(crate) fn special_cpp_name(rs: &TypeName) -> Option<String> {
         .map(|x| x.cpp_name.to_string())
 }
 
-fn make_ident(id: &str) -> Ident {
-    Ident::new(id, Span::call_site())
+pub(crate) fn is_known_type(ty: &TypeName) -> bool {
+    KNOWN_TYPES.by_rs_name.contains_key(ty)
 }

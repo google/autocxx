@@ -397,7 +397,8 @@ impl IncludeCpp {
                             header_name: "autocxxgen.h".to_string(),
                             implementation: additional_cpp.definitions.as_bytes().to_vec(),
                         });
-                        info!("Additional C++ bindings:\n{}", declarations);
+                        info!("Additional C++ decls:\n{}", declarations);
+                        info!("Additional C++ defs:\n{}", additional_cpp.definitions);
                     }
                 }
             }

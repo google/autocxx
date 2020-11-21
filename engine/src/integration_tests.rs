@@ -972,7 +972,7 @@ fn test_make_up_with_args() {
         uint32_t take_bob(const Bob& a);
     "};
     let rs = quote! {
-        let a = ffi::Bob_make_unique(12, 13);
+        let a = ffi::Bob::make_unique(12, 13);
         assert_eq!(ffi::take_bob(a.as_ref().unwrap()), 12);
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob"], &[]);
