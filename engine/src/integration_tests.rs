@@ -2739,6 +2739,228 @@ fn test_foreign_ns_meth_ret_nonpod() {
     run_test("", hdr, rs, &["A::Bob"], &["B::C"]);
 }
 
+// ====
+
+#[test]
+fn test_root_ns_func_arg_pod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+        namespace B {
+            inline uint32_t daft(Bob a) { return a.a; }
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12 };
+        assert_eq!(ffi::B::daft(a), 12);
+    };
+    run_test("", hdr, rs, &["B::daft"], &["Bob"]);
+}
+
+#[test]
+fn test_root_ns_func_arg_nonpod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+            Bob(uint32_t _a) :a(_a) {}
+        };
+        namespace B {
+            inline uint32_t daft(Bob a) { return a.a; }
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::Bob::make_unique(12);
+        assert_eq!(ffi::B::daft(a), 12);
+    };
+    run_test("", hdr, rs, &["B::daft", "Bob"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/111
+fn test_root_ns_meth_arg_pod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+        namespace B {
+            struct C {
+                uint32_t a;
+                uint32_t daft(Bob a) { return a.a; } const
+            };
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12 };
+        let b = ffi::B::C { a: 12 };
+        assert_eq!(b.daft(a), 12);
+    };
+    run_test("", hdr, rs, &[], &["Bob", "B::C"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/111
+fn test_root_ns_meth_arg_nonpod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+            Bob(uint32_t _a) :a(_a) {}
+        };
+        namespace B {
+            struct C {
+                uint32_t a;
+                uint32_t daft(Bob a) { return a.a; } const
+            };
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::Bob::make_unique(12);
+        let b = ffi::B::C { a: 12 };
+        assert_eq!(b.daft(a), 12);
+    };
+    run_test("", hdr, rs, &["Bob"], &["B::C"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/111
+fn test_root_ns_cons_arg_pod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+        namespace B {
+            struct C {
+                uint32_t a;
+                C(const Bob& input) : a(input.a) {}
+            };
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12 };
+        let b = ffi::B::C::make_unique(a);
+        assert_eq!(b.as_ref().unwrap().a, 12);
+    };
+    run_test("", hdr, rs, &[], &["B::C", "A::Bob"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/111
+fn test_root_ns_cons_arg_nonpod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            Bob(uint32_t _a) :a(_a) {}
+            uint32_t a;
+        };
+        namespace B {
+            struct C {
+                uint32_t a;
+                C(const Bob& input) : a(input.a) {}
+            };
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::Bob::make_unique(12);
+        let b = ffi::B::C::make_unique(a);
+        assert_eq!(b.as_ref().unwrap().a, 12);
+    };
+    run_test("", hdr, rs, &["Bob"], &["B::C"]);
+}
+
+#[test]
+fn test_root_ns_func_ret_pod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+        namespace B {
+            inline Bob daft() { Bob bob; bob.a = 12; return bob; }
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::B::daft().a, 12);
+    };
+    run_test("", hdr, rs, &["B::daft"], &["Bob"]);
+}
+
+#[test]
+fn test_root_ns_func_ret_nonpod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+        namespace B {
+            inline Bob daft() { Bob bob; bob.a = 12; return bob; }
+        }
+    "};
+    let rs = quote! {
+        ffi::B::daft().as_ref().unwrap();
+    };
+    run_test("", hdr, rs, &["B::daft", "Bob"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/111
+fn test_root_ns_meth_ret_pod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+        namespace B {
+            struct C {
+                uint32_t a;
+                Bob daft() { Bob bob; bob.a = 12; return bob; } const
+            };
+        }
+    "};
+    let rs = quote! {
+        let b = ffi::B::C { a: 12 };
+        assert_eq!(b.daft().a, 12);
+    };
+    run_test("", hdr, rs, &[], &["Bob", "B::C"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/111
+fn test_root_ns_meth_ret_nonpod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+            Bob(uint32_t _a) :a(_a) {}
+        };
+        namespace B {
+            struct C {
+                uint32_t a;
+                Bob daft() { Bob bob; bob.a = 12; return bob; } const
+            };
+        }
+    "};
+    let rs = quote! {
+        let b = ffi::B::C { a: 12 };
+        b.daft().as_ref().unwrap();
+    };
+    run_test("", hdr, rs, &["Bob"], &["B::C"]);
+}
+
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef
