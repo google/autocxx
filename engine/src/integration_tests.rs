@@ -2961,6 +2961,26 @@ fn test_root_ns_meth_ret_nonpod() {
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/115
+fn test_nested_struct() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct A {
+            uint32_t a;
+            struct B {
+                uint32_t b;
+            };
+        };
+        void daft(A::B a);
+    "};
+    let rs = quote! {
+        let b = ffi::A::B { b: 12 };
+        ffi::daft(b);
+    };
+    run_test("", hdr, rs, &["daft"], &["A::B"]);
+}
+
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef
