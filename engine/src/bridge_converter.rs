@@ -726,7 +726,7 @@ impl<'a> BridgeConversion<'a> {
             } else {
                 FunctionWrapperPayload::FunctionCall(ns.clone(), cpp_construction_ident)
             };
-            let a = AdditionalNeed::ByValueWrapper(Box::new(FunctionWrapper {
+            let a = AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
                 payload,
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion.clone(),

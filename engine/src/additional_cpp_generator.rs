@@ -138,7 +138,7 @@ pub(crate) struct FunctionWrapper {
 /// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
     MakeStringConstructor,
-    ByValueWrapper(Box<FunctionWrapper>),
+    FunctionWrapper(Box<FunctionWrapper>),
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -203,7 +203,7 @@ impl AdditionalCppGenerator {
         for need in additions {
             match need {
                 AdditionalNeed::MakeStringConstructor => self.generate_string_constructor(),
-                AdditionalNeed::ByValueWrapper(by_value_wrapper) => {
+                AdditionalNeed::FunctionWrapper(by_value_wrapper) => {
                     self.generate_by_value_wrapper(*by_value_wrapper)
                 }
             }
