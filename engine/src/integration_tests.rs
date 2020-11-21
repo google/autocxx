@@ -1917,6 +1917,29 @@ fn test_ns_func() {
 }
 
 #[test]
+fn test_two_constructors() {
+    let cxx = indoc! {"
+        Bob::Bob() {}
+        Bob::Bob(uint32_t _a) :a(_a) {}
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            Bob();
+            Bob(uint32_t a);
+            uint32_t a;
+            uint32_t b;
+        };
+    "};
+    let rs = quote! {
+        ffi::Bob::make_unique();
+        ffi::Bob::make_unique1(32);
+    };
+    run_test(cxx, hdr, rs, &["Bob"], &[]);
+}
+
+#[test]
 fn test_ns_constructor() {
     let cxx = indoc! {"
         A::Bob::Bob() {}
