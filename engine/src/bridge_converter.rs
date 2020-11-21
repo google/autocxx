@@ -559,18 +559,6 @@ impl<'a> BridgeConversion<'a> {
             .push(AdditionalNeed::MakeStringConstructor);
     }
 
-    fn type_path_to_typename(&self, typ: &TypePath, ns: &Namespace) -> TypeName {
-        let ty = TypeName::from_cxx_type_path(typ);
-        // If the type looks like it is unqualified, check we know it
-        // already, and if not, qualify it according to the current
-        // namespace. This is a bit of a shortcut compared to having a full
-        // resolution pass which can search all known namespaces.
-        if !ty.has_namespace() && !self.types_found.contains(&ty) && !is_known_type(&ty) {
-            return ty.qualify_with_ns(ns);
-        }
-        ty
-    }
-
     fn convert_foreign_mod_items(
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
@@ -984,6 +972,19 @@ impl<'a> BridgeConversion<'a> {
                     Ok(parse_quote!( #ident #args ))
                 })
                 .collect::<Result<_, _>>()?;
+        } else {
+            let ty = TypeName::from_cxx_type_path(&typ);
+            // If the type looks like it is unqualified, check we know it
+            // already, and if not, qualify it according to the current
+            // namespace. This is a bit of a shortcut compared to having a full
+            // resolution pass which can search all known namespaces.
+            if !self.types_found.contains(&ty) && !is_known_type(&ty) {
+                typ.path.segments = ns
+                    .iter()
+                    .map(|s| parse_quote! { #s })
+                    .chain(typ.path.segments.into_iter())
+                    .collect();
+            }
         }
         let mut last_seg_args = None;
         let mut seg_iter = typ.path.segments.iter().peekable();
@@ -999,16 +1000,13 @@ impl<'a> BridgeConversion<'a> {
         drop(seg_iter);
         let tn = TypeName::from_cxx_type_path(&typ);
         // Let's see if this is a typedef.
-        let typ = match self.resolve_typedef(&tn)? {
-            Some(newid) => newid.to_cxx_type_path(),
-            None => typ,
-        };
+        let typ = self
+            .resolve_typedef(&tn)?
+            .map(|x| x.to_cxx_type_path())
+            .unwrap_or(typ);
 
         // This will strip off any path arguments...
-        let mut typ = match known_type_substitute_path(&typ) {
-            Some(typ) => typ,
-            None => self.type_path_to_typename(&typ, ns).to_cxx_type_path(),
-        };
+        let mut typ = known_type_substitute_path(&typ).unwrap_or(typ);
         // but then we'll put them back again as necessary.
         if let Some(last_seg_args) = last_seg_args {
             let last_seg = typ.path.segments.last_mut().unwrap();
