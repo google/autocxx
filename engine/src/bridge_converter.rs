@@ -16,7 +16,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use crate::{
     additional_cpp_generator::{
-        AdditionalNeed, ArgumentConversion, ByValueWrapper, ByValueWrapperPayload,
+        AdditionalNeed, ArgumentConversion, FunctionWrapper, FunctionWrapperPayload,
     },
     known_types::{is_known_type, known_type_substitute_path, should_dereference_in_cpp},
     types::make_ident,
@@ -722,11 +722,11 @@ impl<'a> BridgeConversion<'a> {
                 format!("{}_up_wrapper", rust_name)
             });
             let payload = if is_constructor {
-                ByValueWrapperPayload::Constructor
+                FunctionWrapperPayload::Constructor
             } else {
-                ByValueWrapperPayload::FunctionCall(ns.clone(), cpp_construction_ident)
+                FunctionWrapperPayload::FunctionCall(ns.clone(), cpp_construction_ident)
             };
-            let a = AdditionalNeed::ByValueWrapper(Box::new(ByValueWrapper {
+            let a = AdditionalNeed::ByValueWrapper(Box::new(FunctionWrapper {
                 payload,
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion.clone(),

@@ -122,13 +122,13 @@ impl ArgumentConversion {
     }
 }
 
-pub(crate) enum ByValueWrapperPayload {
+pub(crate) enum FunctionWrapperPayload {
     FunctionCall(Namespace, Ident),
     Constructor,
 }
 
-pub(crate) struct ByValueWrapper {
-    pub(crate) payload: ByValueWrapperPayload,
+pub(crate) struct FunctionWrapper {
+    pub(crate) payload: FunctionWrapperPayload,
     pub(crate) wrapper_function_name: Ident,
     pub(crate) return_conversion: Option<ArgumentConversion>,
     pub(crate) argument_conversion: Vec<ArgumentConversion>,
@@ -138,7 +138,7 @@ pub(crate) struct ByValueWrapper {
 /// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
     MakeStringConstructor,
-    ByValueWrapper(Box<ByValueWrapper>),
+    ByValueWrapper(Box<FunctionWrapper>),
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -264,7 +264,7 @@ impl AdditionalCppGenerator {
         })
     }
 
-    fn generate_by_value_wrapper(&mut self, details: ByValueWrapper) {
+    fn generate_by_value_wrapper(&mut self, details: FunctionWrapper) {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
         // We could easily do this the other way round, and when
@@ -305,8 +305,8 @@ impl AdditionalCppGenerator {
         let receiver = if is_a_method { arg_list.next() } else { None };
         let arg_list = arg_list.join(", ");
         let mut underlying_function_call = match details.payload {
-            ByValueWrapperPayload::Constructor => arg_list,
-            ByValueWrapperPayload::FunctionCall(ns, id) => {
+            FunctionWrapperPayload::Constructor => arg_list,
+            FunctionWrapperPayload::FunctionCall(ns, id) => {
                 let underlying_function_call = ns
                     .into_iter()
                     .map(|s| make_ident(s))
