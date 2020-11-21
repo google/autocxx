@@ -2741,7 +2741,6 @@ fn test_foreign_ns_meth_ret_nonpod() {
 
 // ====
 
-
 #[test]
 fn test_root_ns_func_arg_pod() {
     let hdr = indoc! {"
