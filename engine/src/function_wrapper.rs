@@ -1,6 +1,6 @@
 use syn::{parse_quote, Ident, Type};
 
-use crate::types::{type_to_cpp, Namespace, TypeName};
+use crate::types::{type_to_cpp, Namespace};
 
 // Copyright 2020 Google LLC
 //
@@ -84,7 +84,7 @@ impl ArgumentConversion {
     }
 
     fn unwrapped_type_as_string(&self) -> String {
-        type_to_cpp(&self.unwrapped_type, TypeName::from_bindgen_type_path)
+        type_to_cpp(&self.unwrapped_type)
     }
 
     fn wrapped_type(&self) -> String {

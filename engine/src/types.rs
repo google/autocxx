@@ -219,20 +219,15 @@ impl Display for TypeName {
     }
 }
 
-// TODO this no longer needs to be parameterized.
-// The only valid option remaining is from_bindgen_type_path.
-pub(crate) fn type_to_cpp<F>(ty: &Type, func: F) -> String
-where
-    F: FnOnce(&TypePath) -> TypeName,
-{
+pub(crate) fn type_to_cpp(ty: &Type) -> String {
     match ty {
-        Type::Path(typ) => func(typ).to_cpp_name(),
+        Type::Path(typ) => TypeName::from_bindgen_type_path(typ).to_cpp_name(),
         Type::Reference(typr) => {
             let const_bit = match typr.mutability {
                 None => "const ",
                 Some(_) => "",
             };
-            format!("{}{}&", const_bit, type_to_cpp(typr.elem.as_ref(), func))
+            format!("{}{}&", const_bit, type_to_cpp(typr.elem.as_ref()))
         }
         Type::Array(_)
         | Type::BareFn(_)
