@@ -1917,7 +1917,7 @@ fn test_ns_func() {
 }
 
 #[test]
-fn test_two_constructors() {
+fn test_overload_constructors() {
     let cxx = indoc! {"
         Bob::Bob() {}
         Bob::Bob(uint32_t _a) :a(_a) {}
@@ -1937,6 +1937,84 @@ fn test_two_constructors() {
         ffi::Bob::make_unique1(32);
     };
     run_test(cxx, hdr, rs, &["Bob"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/120
+fn test_overload_functions() {
+    let cxx = indoc! {"
+        void daft(uint32_t a) {}
+        void daft(uint8_t a) {}
+        void daft(std::string a) {}
+        void daft(Fred a) {}
+        void daft(Norma a) {}
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Fred {
+            uint32_t a;
+        };
+        struct Norma {
+            uint32_t a;
+        };
+        void daft(uint32_t a);
+        void daft(uint8_t a);
+        void daft(std::string a);
+        void daft(Fred a);
+        void daft(Norma a);
+    "};
+    let rs = quote! {
+        ffi::daft(32);
+        ffi::daft1(8);
+        ffi::daft2(ffi::make_string("hello"));
+        let b = ffi::Fred { a: 3 };
+        ffi::daft3(b);
+        let c = ffi::Norma::make_unique();
+        ffi::daft4(c);
+    };
+    run_test(cxx, hdr, rs, &["Norma", "daft", "daft1", "daft2", "daft3", "daft4"], &["Fred"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/120
+fn test_overload_methods() {
+    let cxx = indoc! {"
+        void Bob::daft(uint32_t a) {}
+        void Bob::daft(uint8_t a) {}
+        void Bob::daft(std::string a) {}
+        void Bob::daft(Fred a) {}
+        void Bob::daft(Norma a) {}
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Fred {
+            uint32_t a;
+        };
+        struct Norma {
+            uint32_t a;
+        };
+        struct Bob {
+            uint32_t a;
+            void daft(uint32_t a);
+            void daft(uint8_t a);
+            void daft(std::string a);
+            void daft(Fred a);
+            void daft(Norma a);
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12 };
+        a.daft(32);
+        a.daft1(8);
+        a.daft2(ffi::make_string("hello"));
+        let b = ffi::Fred { a: 3 };
+        a.daft3(b);
+        let c = ffi::Norma::make_unique();
+        a.daft4(c);
+    };
+    run_test(cxx, hdr, rs, &["Norma"], &["Fred", "Bob"]);
 }
 
 #[test]
