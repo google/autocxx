@@ -15,9 +15,8 @@
 use std::{collections::HashMap, fmt::Display};
 
 use crate::{
-    additional_cpp_generator::{
-        AdditionalNeed, ArgumentConversion, FunctionWrapper, FunctionWrapperPayload,
-    },
+    additional_cpp_generator::AdditionalNeed,
+    function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
     known_types::{is_known_type, known_type_substitute_path, should_dereference_in_cpp},
     types::make_ident,
 };
