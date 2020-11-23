@@ -2608,7 +2608,6 @@ fn test_foreign_ns_func_arg_nonpod() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_foreign_ns_meth_arg_pod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2621,7 +2620,7 @@ fn test_foreign_ns_meth_arg_pod() {
         namespace B {
             struct C {
                 uint32_t a;
-                uint32_t daft(A::Bob a) { return a.a; } const
+                uint32_t daft(A::Bob a) const { return a.a; }
             };
         }
     "};
@@ -2648,7 +2647,7 @@ fn test_foreign_ns_meth_arg_nonpod() {
         namespace B {
             struct C {
                 uint32_t a;
-                uint32_t daft(A::Bob a) { return a.a; } const
+                uint32_t daft(A::Bob a) const { return a.a; }
             };
         }
     "};
@@ -2661,7 +2660,6 @@ fn test_foreign_ns_meth_arg_nonpod() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_foreign_ns_cons_arg_pod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2680,14 +2678,13 @@ fn test_foreign_ns_cons_arg_pod() {
     "};
     let rs = quote! {
         let a = ffi::A::Bob { a: 12 };
-        let b = ffi::B::C::make_unique(a);
+        let b = ffi::B::C::make_unique(&a);
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
     run_test("", hdr, rs, &[], &["B::C", "A::Bob"]);
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_foreign_ns_cons_arg_nonpod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2707,7 +2704,7 @@ fn test_foreign_ns_cons_arg_nonpod() {
     "};
     let rs = quote! {
         let a = ffi::A::Bob::make_unique(12);
-        let b = ffi::B::C::make_unique(a);
+        let b = ffi::B::C::make_unique(&a);
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
     run_test("", hdr, rs, &["A::Bob"], &["B::C"]);
@@ -2754,7 +2751,6 @@ fn test_foreign_ns_func_ret_nonpod() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_foreign_ns_meth_ret_pod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2767,7 +2763,7 @@ fn test_foreign_ns_meth_ret_pod() {
         namespace B {
             struct C {
                 uint32_t a;
-                A::Bob daft() { A::Bob bob; bob.a = 12; return bob; } const
+                A::Bob daft() const { A::Bob bob; bob.a = 12; return bob; }
             };
         }
     "};
@@ -2787,24 +2783,21 @@ fn test_foreign_ns_meth_ret_nonpod() {
         namespace A {
             struct Bob {
                 uint32_t a;
-                Bob(uint32_t _a) :a(_a) {}
             };
         }
         namespace B {
             struct C {
                 uint32_t a;
-                A::Bob daft() { A::Bob bob; bob.a = 12; return bob; } const
+                A::Bob daft() const { A::Bob bob; bob.a = 12; return bob; }
             };
         }
     "};
     let rs = quote! {
-        let b = ffi::B::C { a: 12 };
+        let b = ffi::B::C {};
         b.daft().as_ref().unwrap();
     };
     run_test("", hdr, rs, &["A::Bob"], &["B::C"]);
 }
-
-// ====
 
 #[test]
 fn test_root_ns_func_arg_pod() {
