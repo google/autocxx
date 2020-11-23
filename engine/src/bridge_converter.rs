@@ -32,7 +32,7 @@ use crate::{
 };
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use quote::quote;
-use syn::{parse::Parser, Field, GenericParam, Generics, ItemStruct};
+use syn::{parse::Parser, Field, GenericParam, Generics, ImplItem, ItemStruct};
 use syn::{
     parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
     ItemForeignMod, ItemMod, Pat, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
@@ -249,6 +249,7 @@ impl<'a> BridgeConversion<'a> {
         ns: Namespace,
         output_items: &mut Vec<Item>,
     ) -> Result<(), ConvertError> {
+        let mut method_impl_blocks = HashMap::new();
         for item in items {
             match item {
                 Item::ForeignMod(mut fm) => {
@@ -261,7 +262,7 @@ impl<'a> BridgeConversion<'a> {
                         // the contents of all bindgen 'extern "C"' mods into this
                         // one.
                     }
-                    self.convert_foreign_mod_items(items, &ns, output_items)?;
+                    self.convert_foreign_mod_items(items, &ns, &mut method_impl_blocks)?;
                 }
                 Item::Struct(mut s) => {
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
@@ -317,6 +318,7 @@ impl<'a> BridgeConversion<'a> {
                 _ => return Err(ConvertError::UnexpectedItemInMod),
             }
         }
+        output_items.extend(method_impl_blocks.drain().map(|(_, v)| Item::Impl(v)));
         let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
         output_items.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]
@@ -563,12 +565,12 @@ impl<'a> BridgeConversion<'a> {
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
         ns: &Namespace,
-        output_items: &mut Vec<Item>,
+        method_impl_blocks: &mut HashMap<String, ItemImpl>,
     ) -> Result<(), ConvertError> {
         for i in foreign_mod_items {
             match i {
                 ForeignItem::Fn(f) => {
-                    self.convert_foreign_fn(f, ns, output_items)?;
+                    self.convert_foreign_fn(f, ns, method_impl_blocks)?;
                 }
                 _ => return Err(ConvertError::UnexpectedForeignItem),
             }
@@ -580,7 +582,7 @@ impl<'a> BridgeConversion<'a> {
         &mut self,
         fun: ForeignItemFn,
         ns: &Namespace,
-        output_items: &mut Vec<Item>,
+        method_impl_blocks: &mut HashMap<String, ItemImpl>,
     ) -> Result<(), ConvertError> {
         // This function is one of the most complex parts of bridge_converter.
         // It needs to consider:
@@ -753,14 +755,18 @@ impl<'a> BridgeConversion<'a> {
             if let Some(type_name) = &self_ty {
                 let type_name = make_ident(type_name.get_final_ident());
                 let rust_name = make_ident(&rust_name);
-                let extra_impl_block: ItemImpl = parse_quote! {
-                    impl #type_name {
-                        pub fn #rust_name ( #wrapper_params ) #ret_type {
-                            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-                        }
+                let extra_method = ImplItem::Method(parse_quote! {
+                    pub fn #rust_name ( #wrapper_params ) #ret_type {
+                        cxxbridge::#cxxbridge_name ( #(#arg_list),* )
                     }
-                };
-                output_items.push(Item::Impl(extra_impl_block));
+                });
+                let e = method_impl_blocks
+                    .entry(type_name.to_string())
+                    .or_insert(parse_quote! {
+                        impl #type_name {
+                        }
+                    });
+                e.items.push(extra_method);
             } else {
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
