@@ -232,7 +232,7 @@ pub(crate) fn get_initial_blocklist() -> Vec<String> {
 /// but a reference in Rust. This only applies to rust::Str
 /// (C++ name) which is &str in Rust.
 pub(crate) fn should_dereference_in_cpp(typ: &TypePath) -> bool {
-    let tn = TypeName::from_cxx_type_path(typ);
+    let tn = TypeName::from_type_path(typ);
     let td = KNOWN_TYPES.by_rs_name.get(&tn);
     if let Some(td) = td {
         td.de_referencicate
@@ -247,7 +247,7 @@ pub(crate) fn should_dereference_in_cpp(typ: &TypePath) -> bool {
 /// any PathArguments within this TypePath - callers should
 /// put them back again if needs be.
 pub(crate) fn known_type_substitute_path(typ: &TypePath) -> Option<TypePath> {
-    let tn = TypeName::from_cxx_type_path(typ);
+    let tn = TypeName::from_type_path(typ);
     let name = tn.to_cpp_name();
     KNOWN_TYPES.by_cppname.get(&name).map(|id| {
         let id = make_ident(id);

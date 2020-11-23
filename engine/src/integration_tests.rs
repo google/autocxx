@@ -2267,6 +2267,71 @@ fn test_conflicting_up_wrapper_methods() {
 }
 
 #[test]
+fn test_conflicting_methods_in_ns() {
+    let cxx = indoc! {"
+        uint32_t A::Bob::get() const { return a; }
+        uint32_t B::Fred::get() const { return b; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            struct Bob {
+                uint32_t a;
+                uint32_t get() const;
+            };
+        }
+        namespace B {
+            struct Fred {
+                uint32_t b;
+                uint32_t get() const;
+            };
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::A::Bob { a: 10 };
+        let b = ffi::B::Fred { b: 20 };
+        assert_eq!(a.get(), 10);
+        assert_eq!(b.get(), 20);
+    };
+    run_test(cxx, hdr, rs, &[], &["A::Bob", "B::Fred"]);
+}
+
+#[test]
+fn test_conflicting_up_wrapper_methods_in_ns() {
+    let cxx = indoc! {"
+        A::Bob::Bob() : a(\"hello\") {}
+        B::Fred::Fred() : b(\"goodbye\") {}
+        std::string A::Bob::get() const { return a; }
+        std::string B::Fred::get() const { return b; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        namespace A {
+            struct Bob {
+                Bob();
+                std::string a;
+                std::string get() const;
+            };
+        }
+        namespace B {
+            struct Fred {
+                Fred();
+                std::string b;
+                std::string get() const;
+            };
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::A::Bob::make_unique();
+        let b = ffi::B::Fred::make_unique();
+        assert_eq!(a.get().as_ref().unwrap().to_str().unwrap(), "hello");
+        assert_eq!(b.get().as_ref().unwrap().to_str().unwrap(), "goodbye");
+    };
+    run_test(cxx, hdr, rs, &["A::Bob", "B::Fred"], &[]);
+}
+
+#[test]
 fn test_ns_struct_pod_request() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2781,7 +2846,6 @@ fn test_root_ns_func_arg_nonpod() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_root_ns_meth_arg_pod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2792,7 +2856,7 @@ fn test_root_ns_meth_arg_pod() {
         namespace B {
             struct C {
                 uint32_t a;
-                uint32_t daft(Bob a) { return a.a; } const
+                uint32_t daft(Bob a) const { return a.a; }
             };
         }
     "};
@@ -2817,7 +2881,7 @@ fn test_root_ns_meth_arg_nonpod() {
         namespace B {
             struct C {
                 uint32_t a;
-                uint32_t daft(Bob a) { return a.a; } const
+                uint32_t daft(Bob a) const { return a.a; }
             };
         }
     "};
@@ -2830,7 +2894,6 @@ fn test_root_ns_meth_arg_nonpod() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_root_ns_cons_arg_pod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2847,14 +2910,13 @@ fn test_root_ns_cons_arg_pod() {
     "};
     let rs = quote! {
         let a = ffi::Bob { a: 12 };
-        let b = ffi::B::C::make_unique(a);
+        let b = ffi::B::C::make_unique(&a);
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
-    run_test("", hdr, rs, &[], &["B::C", "A::Bob"]);
+    run_test("", hdr, rs, &[], &["B::C", "Bob"]);
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_root_ns_cons_arg_nonpod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2872,7 +2934,7 @@ fn test_root_ns_cons_arg_nonpod() {
     "};
     let rs = quote! {
         let a = ffi::Bob::make_unique(12);
-        let b = ffi::B::C::make_unique(a);
+        let b = ffi::B::C::make_unique(&a);
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
@@ -2915,7 +2977,6 @@ fn test_root_ns_func_ret_nonpod() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_root_ns_meth_ret_pod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2926,7 +2987,7 @@ fn test_root_ns_meth_ret_pod() {
         namespace B {
             struct C {
                 uint32_t a;
-                Bob daft() { Bob bob; bob.a = 12; return bob; } const
+                Bob daft() const { Bob bob; bob.a = 12; return bob; }
             };
         }
     "};

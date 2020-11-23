@@ -12,128 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::{make_ident, type_to_cpp, Namespace, TypeName};
+use crate::function_wrapper::{FunctionWrapper, FunctionWrapperPayload};
 use itertools::Itertools;
 use std::collections::HashSet;
-use syn::{parse_quote, Ident, Type};
-
-#[derive(Clone)]
-enum ArgumentConversionType {
-    None,
-    FromUniquePtrToValue,
-    FromValueToUniquePtr,
-}
-
-#[derive(Clone)]
-pub(crate) struct ArgumentConversion {
-    unwrapped_type: Type,
-    conversion: ArgumentConversionType,
-}
-
-impl ArgumentConversion {
-    pub(crate) fn new_unconverted(ty: Type) -> Self {
-        ArgumentConversion {
-            unwrapped_type: ty,
-            conversion: ArgumentConversionType::None,
-        }
-    }
-
-    pub(crate) fn new_to_unique_ptr(ty: Type) -> Self {
-        ArgumentConversion {
-            unwrapped_type: ty,
-            conversion: ArgumentConversionType::FromValueToUniquePtr,
-        }
-    }
-
-    pub(crate) fn new_from_unique_ptr(ty: Type) -> Self {
-        ArgumentConversion {
-            unwrapped_type: ty,
-            conversion: ArgumentConversionType::FromUniquePtrToValue,
-        }
-    }
-
-    pub(crate) fn work_needed(&self) -> bool {
-        !matches!(self.conversion, ArgumentConversionType::None)
-    }
-
-    fn unconverted_type(&self) -> String {
-        match self.conversion {
-            ArgumentConversionType::FromUniquePtrToValue => self.wrapped_type(),
-            _ => self.unwrapped_type_as_string(),
-        }
-    }
-
-    fn converted_type(&self) -> String {
-        match self.conversion {
-            ArgumentConversionType::FromValueToUniquePtr => self.wrapped_type(),
-            _ => self.unwrapped_type_as_string(),
-        }
-    }
-
-    pub(crate) fn unconverted_rust_type(&self) -> Type {
-        match self.conversion {
-            ArgumentConversionType::FromValueToUniquePtr => self.make_unique_ptr_type(),
-            _ => self.unwrapped_type.clone(),
-        }
-    }
-
-    pub(crate) fn converted_rust_type(&self) -> Type {
-        match self.conversion {
-            ArgumentConversionType::FromUniquePtrToValue => self.make_unique_ptr_type(),
-            _ => self.unwrapped_type.clone(),
-        }
-    }
-
-    fn unwrapped_type_as_string(&self) -> String {
-        type_to_cpp(&self.unwrapped_type, TypeName::from_cxx_type_path)
-    }
-
-    fn wrapped_type(&self) -> String {
-        format!("std::unique_ptr<{}>", self.unwrapped_type_as_string())
-    }
-
-    fn conversion(&self, var_name: &str) -> String {
-        match self.conversion {
-            ArgumentConversionType::None => var_name.to_string(),
-            ArgumentConversionType::FromUniquePtrToValue => format!("std::move(*{})", var_name),
-            ArgumentConversionType::FromValueToUniquePtr => format!(
-                "std::make_unique<{}>({})",
-                self.unconverted_type(),
-                var_name
-            ),
-        }
-    }
-
-    fn make_unique_ptr_type(&self) -> Type {
-        let innerty = match &self.unwrapped_type {
-            Type::Path(typ) => {
-                // Until cxx supports a hierarchic set of inner mods
-                // for namespace purposes, we just take the final segment.
-                let final_seg = typ.path.segments.last().unwrap();
-                parse_quote! {
-                   #final_seg
-                }
-            }
-            _ => self.unwrapped_type.clone(),
-        };
-        parse_quote! {
-            UniquePtr < #innerty >
-        }
-    }
-}
-
-pub(crate) enum FunctionWrapperPayload {
-    FunctionCall(Namespace, Ident),
-    Constructor,
-}
-
-pub(crate) struct FunctionWrapper {
-    pub(crate) payload: FunctionWrapperPayload,
-    pub(crate) wrapper_function_name: Ident,
-    pub(crate) return_conversion: Option<ArgumentConversion>,
-    pub(crate) argument_conversion: Vec<ArgumentConversion>,
-    pub(crate) is_a_method: bool,
-}
 
 /// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
@@ -281,6 +162,8 @@ impl AdditionalCppGenerator {
                 // it as a method in the second invocation of
                 // bridge_converter after it's flowed again through
                 // bindgen.
+                // TODO this may not be the case any longer. We
+                // may be able to remove this.
                 "autocxx_gen_this".to_string()
             } else {
                 format!("arg{}", counter)
@@ -306,19 +189,17 @@ impl AdditionalCppGenerator {
         let arg_list = arg_list.join(", ");
         let mut underlying_function_call = match details.payload {
             FunctionWrapperPayload::Constructor => arg_list,
-            FunctionWrapperPayload::FunctionCall(ns, id) => {
-                let underlying_function_call = ns
-                    .into_iter()
-                    .map(|s| make_ident(s))
-                    .chain(std::iter::once(id))
-                    .join("::");
-                let mut underlying_function_call =
-                    format!("{}({})", underlying_function_call, arg_list);
-                if let Some(receiver) = receiver {
-                    underlying_function_call = format!("{}.{}", receiver, underlying_function_call);
+            FunctionWrapperPayload::FunctionCall(ns, id) => match receiver {
+                Some(receiver) => format!("{}.{}({})", receiver, id.to_string(), arg_list),
+                None => {
+                    let underlying_function_call = ns
+                        .into_iter()
+                        .cloned()
+                        .chain(std::iter::once(id.to_string()))
+                        .join("::");
+                    format!("{}({})", underlying_function_call, arg_list)
                 }
-                underlying_function_call
-            }
+            },
         };
         if let Some(ret) = details.return_conversion {
             underlying_function_call =

@@ -18,6 +18,8 @@ use std::fmt::Display;
 use std::iter::Peekable;
 use syn::{parse_quote, Ident, PathSegment, Type, TypePath};
 
+use crate::known_types::is_known_type;
+
 pub(crate) fn make_ident(id: &str) -> Ident {
     Ident::new(id, Span::call_site())
 }
@@ -90,14 +92,8 @@ impl TypeName {
         Self(Namespace::new(), id.to_string())
     }
 
-    /// From a TypePath which does not start with 'root'.
-    pub(crate) fn from_cxx_type_path(typ: &TypePath) -> Self {
-        let seg_iter = typ.path.segments.iter().peekable();
-        Self::from_segments(seg_iter)
-    }
-
     /// From a TypePath which starts with 'root'
-    pub(crate) fn from_bindgen_type_path(typ: &TypePath) -> Self {
+    pub(crate) fn from_type_path(typ: &TypePath) -> Self {
         let mut seg_iter = typ.path.segments.iter().peekable();
         let first_seg = seg_iter.next().unwrap().ident.clone();
         if first_seg == "root" {
@@ -189,13 +185,21 @@ impl TypeName {
         }
     }
 
-    pub(crate) fn to_cxx_type_path(&self) -> TypePath {
-        let segs = self
-            .ns_segment_iter()
-            .chain(std::iter::once(&self.1))
-            .map(|x| make_ident(x));
-        parse_quote! {
-            #(#segs)::*
+    pub(crate) fn to_type_path(&self) -> TypePath {
+        if is_known_type(self) {
+            let id = make_ident(&self.1);
+            parse_quote! {
+                #id
+            }
+        } else {
+            let root = "root".to_string();
+            let segs = std::iter::once(&root)
+                .chain(self.ns_segment_iter())
+                .chain(std::iter::once(&self.1))
+                .map(|x| make_ident(x));
+            parse_quote! {
+                #(#segs)::*
+            }
         }
     }
 
@@ -215,18 +219,15 @@ impl Display for TypeName {
     }
 }
 
-pub(crate) fn type_to_cpp<F>(ty: &Type, func: F) -> String
-where
-    F: FnOnce(&TypePath) -> TypeName,
-{
+pub(crate) fn type_to_cpp(ty: &Type) -> String {
     match ty {
-        Type::Path(typ) => func(typ).to_cpp_name(),
+        Type::Path(typ) => TypeName::from_type_path(typ).to_cpp_name(),
         Type::Reference(typr) => {
             let const_bit = match typr.mutability {
                 None => "const ",
                 Some(_) => "",
             };
-            format!("{}{}&", const_bit, type_to_cpp(typr.elem.as_ref(), func))
+            format!("{}{}&", const_bit, type_to_cpp(typr.elem.as_ref()))
         }
         Type::Array(_)
         | Type::BareFn(_)
