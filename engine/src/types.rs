@@ -93,7 +93,7 @@ impl TypeName {
     }
 
     /// From a TypePath which starts with 'root'
-    pub(crate) fn from_bindgen_type_path(typ: &TypePath) -> Self {
+    pub(crate) fn from_type_path(typ: &TypePath) -> Self {
         let mut seg_iter = typ.path.segments.iter().peekable();
         let first_seg = seg_iter.next().unwrap().ident.clone();
         if first_seg == "root" {
@@ -185,7 +185,7 @@ impl TypeName {
         }
     }
 
-    pub(crate) fn to_bindgen_type_path(&self) -> TypePath {
+    pub(crate) fn to_type_path(&self) -> TypePath {
         if is_known_type(self) {
             let id = make_ident(&self.1);
             parse_quote! {
@@ -221,7 +221,7 @@ impl Display for TypeName {
 
 pub(crate) fn type_to_cpp(ty: &Type) -> String {
     match ty {
-        Type::Path(typ) => TypeName::from_bindgen_type_path(typ).to_cpp_name(),
+        Type::Path(typ) => TypeName::from_type_path(typ).to_cpp_name(),
         Type::Reference(typr) => {
             let const_bit = match typr.mutability {
                 None => "const ",

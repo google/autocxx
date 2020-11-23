@@ -387,7 +387,7 @@ impl<'a> BridgeConversion<'a> {
             Type::Path(typ) => {
                 let seg = typ.path.segments.last().unwrap();
                 if seg.arguments.is_empty() {
-                    TypedefTarget::NoArguments(TypeName::from_bindgen_type_path(typ))
+                    TypedefTarget::NoArguments(TypeName::from_type_path(typ))
                 } else {
                     TypedefTarget::HasArguments
                 }
@@ -654,7 +654,7 @@ impl<'a> BridgeConversion<'a> {
         // Analyze the return type, just as we previously did for the
         // parameters.
         let return_analysis = if is_constructor {
-            let constructed_type = self_ty.as_ref().unwrap().to_bindgen_type_path();
+            let constructed_type = self_ty.as_ref().unwrap().to_type_path();
             ReturnTypeAnalysis {
                 rt: parse_quote! {
                     -> #constructed_type
@@ -829,7 +829,7 @@ impl<'a> BridgeConversion<'a> {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
                         self_type = Some(match pt.ty.as_ref() {
                             Type::Ptr(TypePtr { elem, .. }) => match elem.as_ref() {
-                                Type::Path(typ) => TypeName::from_bindgen_type_path(typ),
+                                Type::Path(typ) => TypeName::from_type_path(typ),
                                 _ => return Err(ConvertError::UnexpectedThisType),
                             },
                             _ => return Err(ConvertError::UnexpectedThisType),
@@ -866,7 +866,7 @@ impl<'a> BridgeConversion<'a> {
             Type::Path(p) => {
                 if self
                     .byvalue_checker
-                    .is_pod(&TypeName::from_bindgen_type_path(p))
+                    .is_pod(&TypeName::from_type_path(p))
                 {
                     ArgumentConversion::new_unconverted(ty.clone())
                 } else {
@@ -979,7 +979,7 @@ impl<'a> BridgeConversion<'a> {
                 })
                 .collect::<Result<_, _>>()?;
         } else {
-            let ty = TypeName::from_bindgen_type_path(&typ);
+            let ty = TypeName::from_type_path(&typ);
             // If the type looks like it is unqualified, check we know it
             // already, and if not, qualify it according to the current
             // namespace. This is a bit of a shortcut compared to having a full
@@ -1004,11 +1004,11 @@ impl<'a> BridgeConversion<'a> {
             }
         }
         drop(seg_iter);
-        let tn = TypeName::from_bindgen_type_path(&typ);
+        let tn = TypeName::from_type_path(&typ);
         // Let's see if this is a typedef.
         let typ = self
             .resolve_typedef(&tn)?
-            .map(|x| x.to_bindgen_type_path())
+            .map(|x| x.to_type_path())
             .unwrap_or(typ);
 
         // This will strip off any path arguments...

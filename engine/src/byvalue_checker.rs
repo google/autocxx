@@ -161,7 +161,7 @@ impl ByValueChecker {
         for f in &def.fields {
             let fty = &f.ty;
             if let Type::Path(p) = fty {
-                results.push(TypeName::from_bindgen_type_path(&p));
+                results.push(TypeName::from_type_path(&p));
             }
             // TODO handle anything else which bindgen might spit out, e.g. arrays?
         }
