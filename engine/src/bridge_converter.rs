@@ -864,10 +864,7 @@ impl<'a> BridgeConversion<'a> {
     {
         match ty {
             Type::Path(p) => {
-                if self
-                    .byvalue_checker
-                    .is_pod(&TypeName::from_type_path(p))
-                {
+                if self.byvalue_checker.is_pod(&TypeName::from_type_path(p)) {
                     ArgumentConversion::new_unconverted(ty.clone())
                 } else {
                     conversion_direction(ty.clone())
