@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::{make_ident, type_to_cpp, Namespace, TypeName};
+use crate::types::{type_to_cpp, Namespace, TypeName};
 use itertools::Itertools;
 use std::collections::HashSet;
 use syn::{parse_quote, Ident, Type};
@@ -307,17 +307,16 @@ impl AdditionalCppGenerator {
         let mut underlying_function_call = match details.payload {
             FunctionWrapperPayload::Constructor => arg_list,
             FunctionWrapperPayload::FunctionCall(ns, id) => {
-                let underlying_function_call = ns
-                    .into_iter()
-                    .map(|s| make_ident(s))
-                    .chain(std::iter::once(id))
-                    .join("::");
-                let mut underlying_function_call =
-                    format!("{}({})", underlying_function_call, arg_list);
                 if let Some(receiver) = receiver {
-                    underlying_function_call = format!("{}.{}", receiver, underlying_function_call);
+                    format!("{}.{}({})", receiver, id.to_string(), arg_list)
+                } else {
+                    let underlying_function_call = ns
+                        .into_iter()
+                        .cloned()
+                        .chain(std::iter::once(id.to_string()))
+                        .join("::");
+                    format!("{}({})", underlying_function_call, arg_list)
                 }
-                underlying_function_call
             }
         };
         if let Some(ret) = details.return_conversion {
