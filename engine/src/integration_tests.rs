@@ -2267,6 +2267,71 @@ fn test_conflicting_up_wrapper_methods() {
 }
 
 #[test]
+fn test_conflicting_methods_in_ns() {
+    let cxx = indoc! {"
+        uint32_t A::Bob::get() const { return a; }
+        uint32_t B::Fred::get() const { return b; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            struct Bob {
+                uint32_t a;
+                uint32_t get() const;
+            };
+        }
+        namespace B {
+            struct Fred {
+                uint32_t b;
+                uint32_t get() const;
+            };
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::A::Bob { a: 10 };
+        let b = ffi::B::Fred { b: 20 };
+        assert_eq!(a.get(), 10);
+        assert_eq!(b.get(), 20);
+    };
+    run_test(cxx, hdr, rs, &[], &["A::Bob", "B::Fred"]);
+}
+
+#[test]
+fn test_conflicting_up_wrapper_methods_in_ns() {
+    let cxx = indoc! {"
+        A::Bob::Bob() : a(\"hello\") {}
+        B::Fred::Fred() : b(\"goodbye\") {}
+        std::string A::Bob::get() const { return a; }
+        std::string B::Fred::get() const { return b; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        namespace A {
+            struct Bob {
+                Bob();
+                std::string a;
+                std::string get() const;
+            };
+        }
+        namespace B {
+            struct Fred {
+                Fred();
+                std::string b;
+                std::string get() const;
+            };
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::A::Bob::make_unique();
+        let b = ffi::B::Fred::make_unique();
+        assert_eq!(a.get().as_ref().unwrap().to_str().unwrap(), "hello");
+        assert_eq!(b.get().as_ref().unwrap().to_str().unwrap(), "goodbye");
+    };
+    run_test(cxx, hdr, rs, &["A::Bob", "B::Fred"], &[]);
+}
+
+#[test]
 fn test_ns_struct_pod_request() {
     let hdr = indoc! {"
         #include <cstdint>
