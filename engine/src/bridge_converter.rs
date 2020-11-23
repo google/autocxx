@@ -654,7 +654,7 @@ impl<'a> BridgeConversion<'a> {
         // Analyze the return type, just as we previously did for the
         // parameters.
         let return_analysis = if is_constructor {
-            let constructed_type = self_ty.as_ref().unwrap().to_cxx_type_path();
+            let constructed_type = self_ty.as_ref().unwrap().to_bindgen_type_path();
             ReturnTypeAnalysis {
                 rt: parse_quote! {
                     -> #constructed_type
@@ -866,7 +866,7 @@ impl<'a> BridgeConversion<'a> {
             Type::Path(p) => {
                 if self
                     .byvalue_checker
-                    .is_pod(&TypeName::from_cxx_type_path(p))
+                    .is_pod(&TypeName::from_bindgen_type_path(p))
                 {
                     ArgumentConversion::new_unconverted(ty.clone())
                 } else {
@@ -966,7 +966,6 @@ impl<'a> BridgeConversion<'a> {
                 .path
                 .segments
                 .into_iter()
-                .skip(1) // skip root
                 .map(|s| -> Result<PathSegment, ConvertError> {
                     let ident = &s.ident;
                     let args = match s.arguments {
@@ -980,14 +979,14 @@ impl<'a> BridgeConversion<'a> {
                 })
                 .collect::<Result<_, _>>()?;
         } else {
-            let ty = TypeName::from_cxx_type_path(&typ);
+            let ty = TypeName::from_bindgen_type_path(&typ);
             // If the type looks like it is unqualified, check we know it
             // already, and if not, qualify it according to the current
             // namespace. This is a bit of a shortcut compared to having a full
             // resolution pass which can search all known namespaces.
             if !self.types_found.contains(&ty) && !is_known_type(&ty) {
-                typ.path.segments = ns
-                    .iter()
+                typ.path.segments = std::iter::once(&"root".to_string())
+                    .chain(ns.iter())
                     .map(|s| parse_quote! { #s })
                     .chain(typ.path.segments.into_iter())
                     .collect();
@@ -1005,11 +1004,11 @@ impl<'a> BridgeConversion<'a> {
             }
         }
         drop(seg_iter);
-        let tn = TypeName::from_cxx_type_path(&typ);
+        let tn = TypeName::from_bindgen_type_path(&typ);
         // Let's see if this is a typedef.
         let typ = self
             .resolve_typedef(&tn)?
-            .map(|x| x.to_cxx_type_path())
+            .map(|x| x.to_bindgen_type_path())
             .unwrap_or(typ);
 
         // This will strip off any path arguments...

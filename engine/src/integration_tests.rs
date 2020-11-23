@@ -2846,7 +2846,6 @@ fn test_root_ns_func_arg_nonpod() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_root_ns_meth_arg_pod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2857,7 +2856,7 @@ fn test_root_ns_meth_arg_pod() {
         namespace B {
             struct C {
                 uint32_t a;
-                uint32_t daft(Bob a) { return a.a; } const
+                uint32_t daft(Bob a) const { return a.a; }
             };
         }
     "};
@@ -2882,7 +2881,7 @@ fn test_root_ns_meth_arg_nonpod() {
         namespace B {
             struct C {
                 uint32_t a;
-                uint32_t daft(Bob a) { return a.a; } const
+                uint32_t daft(Bob a) const { return a.a; }
             };
         }
     "};
@@ -2895,7 +2894,6 @@ fn test_root_ns_meth_arg_nonpod() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_root_ns_cons_arg_pod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2912,14 +2910,13 @@ fn test_root_ns_cons_arg_pod() {
     "};
     let rs = quote! {
         let a = ffi::Bob { a: 12 };
-        let b = ffi::B::C::make_unique(a);
+        let b = ffi::B::C::make_unique(&a);
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
-    run_test("", hdr, rs, &[], &["B::C", "A::Bob"]);
+    run_test("", hdr, rs, &[], &["B::C", "Bob"]);
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_root_ns_cons_arg_nonpod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2937,7 +2934,7 @@ fn test_root_ns_cons_arg_nonpod() {
     "};
     let rs = quote! {
         let a = ffi::Bob::make_unique(12);
-        let b = ffi::B::C::make_unique(a);
+        let b = ffi::B::C::make_unique(&a);
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
@@ -2980,7 +2977,6 @@ fn test_root_ns_func_ret_nonpod() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/111
 fn test_root_ns_meth_ret_pod() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2991,7 +2987,7 @@ fn test_root_ns_meth_ret_pod() {
         namespace B {
             struct C {
                 uint32_t a;
-                Bob daft() { Bob bob; bob.a = 12; return bob; } const
+                Bob daft() const { Bob bob; bob.a = 12; return bob; }
             };
         }
     "};

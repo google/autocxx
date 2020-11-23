@@ -18,6 +18,8 @@ use std::fmt::Display;
 use std::iter::Peekable;
 use syn::{parse_quote, Ident, PathSegment, Type, TypePath};
 
+use crate::known_types::is_known_type;
+
 pub(crate) fn make_ident(id: &str) -> Ident {
     Ident::new(id, Span::call_site())
 }
@@ -88,12 +90,6 @@ pub struct TypeName(Namespace, String);
 impl TypeName {
     pub(crate) fn from_ident(id: &Ident) -> Self {
         Self(Namespace::new(), id.to_string())
-    }
-
-    /// From a TypePath which does not start with 'root'.
-    pub(crate) fn from_cxx_type_path(typ: &TypePath) -> Self {
-        let seg_iter = typ.path.segments.iter().peekable();
-        Self::from_segments(seg_iter)
     }
 
     /// From a TypePath which starts with 'root'
@@ -189,13 +185,21 @@ impl TypeName {
         }
     }
 
-    pub(crate) fn to_cxx_type_path(&self) -> TypePath {
-        let segs = self
-            .ns_segment_iter()
-            .chain(std::iter::once(&self.1))
-            .map(|x| make_ident(x));
-        parse_quote! {
-            #(#segs)::*
+    pub(crate) fn to_bindgen_type_path(&self) -> TypePath {
+        if is_known_type(self) {
+            let id = make_ident(&self.1);
+            parse_quote! {
+                #id
+            }
+        } else {
+            let root = "root".to_string();
+            let segs = std::iter::once(&root)
+                .chain(self.ns_segment_iter())
+                .chain(std::iter::once(&self.1))
+                .map(|x| make_ident(x));
+            parse_quote! {
+                #(#segs)::*
+            }
         }
     }
 
@@ -215,6 +219,8 @@ impl Display for TypeName {
     }
 }
 
+// TODO this no longer needs to be parameterized.
+// The only valid option remaining is from_bindgen_type_path.
 pub(crate) fn type_to_cpp<F>(ty: &Type, func: F) -> String
 where
     F: FnOnce(&TypePath) -> TypeName,
