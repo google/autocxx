@@ -162,6 +162,8 @@ impl AdditionalCppGenerator {
                 // it as a method in the second invocation of
                 // bridge_converter after it's flowed again through
                 // bindgen.
+                // TODO this may not be the case any longer. We
+                // may be able to remove this.
                 "autocxx_gen_this".to_string()
             } else {
                 format!("arg{}", counter)
