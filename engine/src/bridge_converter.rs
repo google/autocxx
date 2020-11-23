@@ -761,8 +761,10 @@ impl<'a> BridgeConversion<'a> {
                 });
                 let e = method_impl_blocks
                     .entry(type_name.to_string())
-                    .or_insert(parse_quote! {
-                        impl #type_name {
+                    .or_insert_with(|| {
+                        parse_quote! {
+                            impl #type_name {
+                            }
                         }
                     });
                 e.items.push(extra_method);

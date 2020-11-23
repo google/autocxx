@@ -187,10 +187,9 @@ impl AdditionalCppGenerator {
         let arg_list = arg_list.join(", ");
         let mut underlying_function_call = match details.payload {
             FunctionWrapperPayload::Constructor => arg_list,
-            FunctionWrapperPayload::FunctionCall(ns, id) => {
-                if let Some(receiver) = receiver {
-                    format!("{}.{}({})", receiver, id.to_string(), arg_list)
-                } else {
+            FunctionWrapperPayload::FunctionCall(ns, id) => match receiver {
+                Some(receiver) => format!("{}.{}({})", receiver, id.to_string(), arg_list),
+                None => {
                     let underlying_function_call = ns
                         .into_iter()
                         .cloned()
@@ -198,7 +197,7 @@ impl AdditionalCppGenerator {
                         .join("::");
                     format!("{}({})", underlying_function_call, arg_list)
                 }
-            }
+            },
         };
         if let Some(ret) = details.return_conversion {
             underlying_function_call =
