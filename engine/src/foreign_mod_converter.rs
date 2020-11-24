@@ -62,7 +62,7 @@ impl ForeignModConverter {
 
     pub(crate) fn generate_wrapper_fn(
         &mut self,
-        param_details: &Vec<ArgumentAnalysis>,
+        param_details: &[ArgumentAnalysis],
         is_constructor: bool,
         impl_block_type_name: &Ident,
         cxxbridge_name: &Ident,

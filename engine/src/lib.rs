@@ -22,6 +22,8 @@ mod namespace_organizer;
 mod overload_tracker;
 mod parse;
 mod rust_pretty_printer;
+mod type_converter;
+mod typedef_analyzer;
 mod types;
 mod unqualify;
 
