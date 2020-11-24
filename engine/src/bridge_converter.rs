@@ -781,45 +781,35 @@ impl<'a> BridgeConversion<'a> {
                     -> #new_ret_type
                 );
             }
+
+            // Amend parameters for the function which we're asking cxx to generate.
             params.clear();
-            let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
-            let mut arg_list = Vec::new();
-            for pd in param_details {
+            for pd in &param_details {
                 let type_name = pd.conversion.converted_rust_type();
-                let (arg_name, wrapper_arg_name) = if pd.self_type.is_some() && !is_constructor {
-                    (parse_quote!(autocxx_gen_this), parse_quote!(self))
+                let arg_name = if pd.self_type.is_some() && !is_constructor {
+                    parse_quote!(autocxx_gen_this)
                 } else {
-                    (pd.name.clone(), pd.name)
+                    pd.name.clone()
                 };
                 params.push(parse_quote!(
                     #arg_name: #type_name
                 ));
-                wrapper_params.push(parse_quote!(
-                    #wrapper_arg_name: #type_name
-                ));
-                arg_list.push(wrapper_arg_name);
             }
+
             // Now we've made a brand new function, we need to plumb it back
             // into place such that users can call it just as if it were
             // the original function.
             if let Some(type_name) = &self_ty {
-                let type_name = make_ident(type_name.get_final_ident());
-                let rust_name = make_ident(&rust_name);
-                let extra_method = ImplItem::Method(parse_quote! {
-                    pub fn #rust_name ( #wrapper_params ) #ret_type {
-                        cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-                    }
-                });
-                let e = namespace_context
-                    .method_impl_blocks
-                    .entry(type_name.to_string())
-                    .or_insert_with(|| {
-                        parse_quote! {
-                            impl #type_name {
-                            }
-                        }
-                    });
-                e.items.push(extra_method);
+                // Method, or static method.
+                self.generate_wrapper_fn(
+                    namespace_context,
+                    &param_details,
+                    is_constructor,
+                    &make_ident(type_name.get_final_ident()),
+                    &cxxbridge_name,
+                    &rust_name,
+                    &ret_type,
+                );
             } else {
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
@@ -870,6 +860,40 @@ impl<'a> BridgeConversion<'a> {
             self.add_use(&ns, &rust_name_ident);
         }
         Ok(())
+    }
+
+    fn generate_wrapper_fn(
+        &self,
+        namespace_context: &mut NamespaceContext,
+        param_details: &Vec<ArgumentAnalysis>,
+        is_constructor: bool,
+        impl_block_type_name: &Ident,
+        cxxbridge_name: &Ident,
+        rust_name: &str,
+        ret_type: &ReturnType,
+    ) {
+        let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
+        let mut arg_list = Vec::new();
+        for pd in param_details {
+            let type_name = pd.conversion.converted_rust_type();
+            let wrapper_arg_name = if pd.self_type.is_some() && !is_constructor {
+                parse_quote!(self)
+            } else {
+                pd.name.clone()
+            };
+            wrapper_params.push(parse_quote!(
+                #wrapper_arg_name: #type_name
+            ));
+            arg_list.push(wrapper_arg_name);
+        }
+
+        let rust_name = make_ident(&rust_name);
+        let extra_method = ImplItem::Method(parse_quote! {
+            pub fn #rust_name ( #wrapper_params ) #ret_type {
+                cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+            }
+        });
+        namespace_context.add_method_to_impl_block(impl_block_type_name, extra_method);
     }
 
     /// Returns additionally a Boolean indicating whether an argument was
