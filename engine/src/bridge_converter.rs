@@ -66,9 +66,32 @@ impl Display for ConvertError {
     }
 }
 
+/// Data that is local to a particular namespace.
 struct NamespaceContext {
     overload_tracker: OverloadTracker,
     method_impl_blocks: HashMap<String, ItemImpl>,
+}
+
+impl NamespaceContext {
+    fn new() -> Self {
+        Self {
+            overload_tracker: OverloadTracker::new(),
+            method_impl_blocks: HashMap::new(),
+        }
+    }
+
+    fn add_method_to_impl_block(&mut self, impl_block_type_name: &Ident, extra_method: ImplItem) {
+        let e = self
+            .method_impl_blocks
+            .entry(impl_block_type_name.to_string())
+            .or_insert_with(|| {
+                parse_quote! {
+                    impl #impl_block_type_name {
+                    }
+                }
+            });
+        e.items.push(extra_method);
+    }
 }
 
 /// Results of a conversion.
@@ -254,10 +277,7 @@ impl<'a> BridgeConversion<'a> {
         ns: Namespace,
         output_items: &mut Vec<Item>,
     ) -> Result<(), ConvertError> {
-        let mut namespace_context = NamespaceContext {
-            method_impl_blocks: HashMap::new(),
-            overload_tracker: OverloadTracker::new(),
-        };
+        let mut namespace_context = NamespaceContext::new();
         for item in items {
             match item {
                 Item::ForeignMod(mut fm) => {
