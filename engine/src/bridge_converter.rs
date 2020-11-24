@@ -16,9 +16,9 @@ use std::{collections::HashMap, fmt::Display};
 
 use crate::{
     additional_cpp_generator::AdditionalNeed,
+    foreign_mod_converter::ForeignModConverter,
     function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
     known_types::{is_known_type, known_type_substitute_path, should_dereference_in_cpp},
-    overload_tracker::OverloadTracker,
     types::make_ident,
 };
 use crate::{
@@ -32,13 +32,13 @@ use crate::{
 };
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use quote::quote;
-use syn::{parse::Parser, Field, GenericParam, Generics, ImplItem, ItemStruct};
+use syn::punctuated::Punctuated;
+use syn::{parse::Parser, Field, GenericParam, Generics, ItemStruct};
 use syn::{
     parse_quote, Attribute, FnArg, ForeignItem, ForeignItemFn, GenericArgument, Ident, Item,
     ItemForeignMod, ItemMod, Pat, PathArguments, PathSegment, ReturnType, Type, TypePath, TypePtr,
     TypeReference,
 };
-use syn::{punctuated::Punctuated, ItemImpl};
 
 #[derive(Debug)]
 pub enum ConvertError {
@@ -63,36 +63,6 @@ impl Display for ConvertError {
             ConvertError::UnexpectedThisType => write!(f, "Unexpected type for 'this'")?, // TODO give type/function
         }
         Ok(())
-    }
-}
-
-/// Data that is local to a particular namespace.
-struct ForeignModConverter {
-    ns: Namespace,
-    overload_tracker: OverloadTracker,
-    method_impl_blocks: HashMap<String, ItemImpl>,
-}
-
-impl ForeignModConverter {
-    fn new(ns: Namespace) -> Self {
-        Self {
-            ns,
-            overload_tracker: OverloadTracker::new(),
-            method_impl_blocks: HashMap::new(),
-        }
-    }
-
-    fn add_method_to_impl_block(&mut self, impl_block_type_name: &Ident, extra_method: ImplItem) {
-        let e = self
-            .method_impl_blocks
-            .entry(impl_block_type_name.to_string())
-            .or_insert_with(|| {
-                parse_quote! {
-                    impl #impl_block_type_name {
-                    }
-                }
-            });
-        e.items.push(extra_method);
     }
 }
 
@@ -350,8 +320,7 @@ impl<'a> BridgeConversion<'a> {
         }
         output_items.extend(
             namespace_context
-                .method_impl_blocks
-                .drain()
+                .get_impl_blocks()
                 .map(|(_, v)| Item::Impl(v)),
         );
         let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
@@ -617,7 +586,7 @@ impl<'a> BridgeConversion<'a> {
         fun: ForeignItemFn,
         namespace_context: &mut ForeignModConverter,
     ) -> Result<(), ConvertError> {
-        let ns = &namespace_context.ns.clone();
+        let ns = &namespace_context.get_ns();
         // This function is one of the most complex parts of bridge_converter.
         // It needs to consider:
         // 1. Rejecting destructors entirely.
@@ -670,7 +639,7 @@ impl<'a> BridgeConversion<'a> {
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
             let overload_details = namespace_context
-                .overload_tracker
+                .get_overload_tracker()
                 .get_method_real_name(&type_ident, &initial_rust_name);
             cpp_call_name = overload_details.cpp_method_name;
             rust_name = overload_details.rust_method_name;
@@ -695,7 +664,7 @@ impl<'a> BridgeConversion<'a> {
             // What's the name of the underlying C++ function call?
             // If bindgen found overloaded methods, it may not be what it seems.
             let overload_details = namespace_context
-                .overload_tracker
+                .get_overload_tracker()
                 .get_function_real_name(&initial_rust_name);
             cpp_call_name = overload_details.cpp_method_name;
             rust_name = overload_details.rust_method_name;
@@ -801,8 +770,7 @@ impl<'a> BridgeConversion<'a> {
             // the original function.
             if let Some(type_name) = &self_ty {
                 // Method, or static method.
-                self.generate_wrapper_fn(
-                    namespace_context,
+                namespace_context.generate_wrapper_fn(
                     &param_details,
                     is_constructor,
                     &make_ident(type_name.get_final_ident()),
@@ -860,40 +828,6 @@ impl<'a> BridgeConversion<'a> {
             self.add_use(&ns, &rust_name_ident);
         }
         Ok(())
-    }
-
-    fn generate_wrapper_fn(
-        &self,
-        namespace_context: &mut ForeignModConverter,
-        param_details: &Vec<ArgumentAnalysis>,
-        is_constructor: bool,
-        impl_block_type_name: &Ident,
-        cxxbridge_name: &Ident,
-        rust_name: &str,
-        ret_type: &ReturnType,
-    ) {
-        let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
-        let mut arg_list = Vec::new();
-        for pd in param_details {
-            let type_name = pd.conversion.converted_rust_type();
-            let wrapper_arg_name = if pd.self_type.is_some() && !is_constructor {
-                parse_quote!(self)
-            } else {
-                pd.name.clone()
-            };
-            wrapper_params.push(parse_quote!(
-                #wrapper_arg_name: #type_name
-            ));
-            arg_list.push(wrapper_arg_name);
-        }
-
-        let rust_name = make_ident(&rust_name);
-        let extra_method = ImplItem::Method(parse_quote! {
-            pub fn #rust_name ( #wrapper_params ) #ret_type {
-                cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-            }
-        });
-        namespace_context.add_method_to_impl_block(impl_block_type_name, extra_method);
     }
 
     /// Returns additionally a Boolean indicating whether an argument was
@@ -1165,11 +1099,11 @@ impl<'a> BridgeConversion<'a> {
     }
 }
 
-struct ArgumentAnalysis {
-    conversion: ArgumentConversion,
-    name: Pat,
-    self_type: Option<TypeName>,
-    was_reference: bool,
+pub(crate) struct ArgumentAnalysis {
+    pub(crate) conversion: ArgumentConversion,
+    pub(crate) name: Pat,
+    pub(crate) self_type: Option<TypeName>,
+    pub(crate) was_reference: bool,
 }
 
 struct ReturnTypeAnalysis {
