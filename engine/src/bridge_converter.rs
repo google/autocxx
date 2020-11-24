@@ -67,13 +67,13 @@ impl Display for ConvertError {
 }
 
 /// Data that is local to a particular namespace.
-struct NamespaceContext {
+struct ForeignModConverter {
     ns: Namespace,
     overload_tracker: OverloadTracker,
     method_impl_blocks: HashMap<String, ItemImpl>,
 }
 
-impl NamespaceContext {
+impl ForeignModConverter {
     fn new(ns: Namespace) -> Self {
         Self {
             ns,
@@ -279,7 +279,7 @@ impl<'a> BridgeConversion<'a> {
         ns: Namespace,
         output_items: &mut Vec<Item>,
     ) -> Result<(), ConvertError> {
-        let mut namespace_context = NamespaceContext::new(ns.clone());
+        let mut namespace_context = ForeignModConverter::new(ns.clone());
         for item in items {
             match item {
                 Item::ForeignMod(mut fm) => {
@@ -599,7 +599,7 @@ impl<'a> BridgeConversion<'a> {
     fn convert_foreign_mod_items(
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
-        namespace_context: &mut NamespaceContext,
+        namespace_context: &mut ForeignModConverter,
     ) -> Result<(), ConvertError> {
         for i in foreign_mod_items {
             match i {
@@ -615,7 +615,7 @@ impl<'a> BridgeConversion<'a> {
     fn convert_foreign_fn(
         &mut self,
         fun: ForeignItemFn,
-        namespace_context: &mut NamespaceContext,
+        namespace_context: &mut ForeignModConverter,
     ) -> Result<(), ConvertError> {
         let ns = &namespace_context.ns.clone();
         // This function is one of the most complex parts of bridge_converter.
@@ -864,7 +864,7 @@ impl<'a> BridgeConversion<'a> {
 
     fn generate_wrapper_fn(
         &self,
-        namespace_context: &mut NamespaceContext,
+        namespace_context: &mut ForeignModConverter,
         param_details: &Vec<ArgumentAnalysis>,
         is_constructor: bool,
         impl_block_type_name: &Ident,
