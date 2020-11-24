@@ -68,13 +68,15 @@ impl Display for ConvertError {
 
 /// Data that is local to a particular namespace.
 struct NamespaceContext {
+    ns: Namespace,
     overload_tracker: OverloadTracker,
     method_impl_blocks: HashMap<String, ItemImpl>,
 }
 
 impl NamespaceContext {
-    fn new() -> Self {
+    fn new(ns: Namespace) -> Self {
         Self {
+            ns,
             overload_tracker: OverloadTracker::new(),
             method_impl_blocks: HashMap::new(),
         }
@@ -277,7 +279,7 @@ impl<'a> BridgeConversion<'a> {
         ns: Namespace,
         output_items: &mut Vec<Item>,
     ) -> Result<(), ConvertError> {
-        let mut namespace_context = NamespaceContext::new();
+        let mut namespace_context = NamespaceContext::new(ns.clone());
         for item in items {
             match item {
                 Item::ForeignMod(mut fm) => {
@@ -290,7 +292,7 @@ impl<'a> BridgeConversion<'a> {
                         // the contents of all bindgen 'extern "C"' mods into this
                         // one.
                     }
-                    self.convert_foreign_mod_items(items, &ns, &mut namespace_context)?;
+                    self.convert_foreign_mod_items(items, &mut namespace_context)?;
                 }
                 Item::Struct(mut s) => {
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
@@ -597,13 +599,12 @@ impl<'a> BridgeConversion<'a> {
     fn convert_foreign_mod_items(
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
-        ns: &Namespace,
         namespace_context: &mut NamespaceContext,
     ) -> Result<(), ConvertError> {
         for i in foreign_mod_items {
             match i {
                 ForeignItem::Fn(f) => {
-                    self.convert_foreign_fn(f, ns, namespace_context)?;
+                    self.convert_foreign_fn(f, namespace_context)?;
                 }
                 _ => return Err(ConvertError::UnexpectedForeignItem),
             }
@@ -614,9 +615,9 @@ impl<'a> BridgeConversion<'a> {
     fn convert_foreign_fn(
         &mut self,
         fun: ForeignItemFn,
-        ns: &Namespace,
         namespace_context: &mut NamespaceContext,
     ) -> Result<(), ConvertError> {
+        let ns = &namespace_context.ns.clone();
         // This function is one of the most complex parts of bridge_converter.
         // It needs to consider:
         // 1. Rejecting destructors entirely.
@@ -626,7 +627,6 @@ impl<'a> BridgeConversion<'a> {
         //    we need to generate a wrapper function in C++ which wraps and unwraps
         //    it from a unique_ptr.
         //    3a. And alias the original name to the wrapper.
-
         if fun.sig.ident.to_string().ends_with("_destructor") {
             return Ok(());
         }
