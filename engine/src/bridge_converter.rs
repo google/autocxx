@@ -18,6 +18,7 @@ use crate::{
     additional_cpp_generator::AdditionalNeed,
     function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
     known_types::{is_known_type, known_type_substitute_path, should_dereference_in_cpp},
+    overload_tracker::OverloadTracker,
     types::make_ident,
 };
 use crate::{
@@ -63,6 +64,11 @@ impl Display for ConvertError {
         }
         Ok(())
     }
+}
+
+struct NamespaceContext {
+    overload_tracker: OverloadTracker,
+    method_impl_blocks: HashMap<String, ItemImpl>,
 }
 
 /// Results of a conversion.
@@ -248,7 +254,10 @@ impl<'a> BridgeConversion<'a> {
         ns: Namespace,
         output_items: &mut Vec<Item>,
     ) -> Result<(), ConvertError> {
-        let mut method_impl_blocks = HashMap::new();
+        let mut namespace_context = NamespaceContext {
+            method_impl_blocks: HashMap::new(),
+            overload_tracker: OverloadTracker::new(),
+        };
         for item in items {
             match item {
                 Item::ForeignMod(mut fm) => {
@@ -261,7 +270,7 @@ impl<'a> BridgeConversion<'a> {
                         // the contents of all bindgen 'extern "C"' mods into this
                         // one.
                     }
-                    self.convert_foreign_mod_items(items, &ns, &mut method_impl_blocks)?;
+                    self.convert_foreign_mod_items(items, &ns, &mut namespace_context)?;
                 }
                 Item::Struct(mut s) => {
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
@@ -317,7 +326,12 @@ impl<'a> BridgeConversion<'a> {
                 _ => return Err(ConvertError::UnexpectedItemInMod),
             }
         }
-        output_items.extend(method_impl_blocks.drain().map(|(_, v)| Item::Impl(v)));
+        output_items.extend(
+            namespace_context
+                .method_impl_blocks
+                .drain()
+                .map(|(_, v)| Item::Impl(v)),
+        );
         let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
         output_items.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]
@@ -564,12 +578,12 @@ impl<'a> BridgeConversion<'a> {
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
         ns: &Namespace,
-        method_impl_blocks: &mut HashMap<String, ItemImpl>,
+        namespace_context: &mut NamespaceContext,
     ) -> Result<(), ConvertError> {
         for i in foreign_mod_items {
             match i {
                 ForeignItem::Fn(f) => {
-                    self.convert_foreign_fn(f, ns, method_impl_blocks)?;
+                    self.convert_foreign_fn(f, ns, namespace_context)?;
                 }
                 _ => return Err(ConvertError::UnexpectedForeignItem),
             }
@@ -581,7 +595,7 @@ impl<'a> BridgeConversion<'a> {
         &mut self,
         fun: ForeignItemFn,
         ns: &Namespace,
-        method_impl_blocks: &mut HashMap<String, ItemImpl>,
+        namespace_context: &mut NamespaceContext,
     ) -> Result<(), ConvertError> {
         // This function is one of the most complex parts of bridge_converter.
         // It needs to consider:
@@ -622,18 +636,25 @@ impl<'a> BridgeConversion<'a> {
         let is_a_method = self_ty.is_some();
 
         // Work out naming.
-        let mut rust_name = fun.sig.ident.to_string();
+        let initial_rust_name = fun.sig.ident.to_string();
+        let mut rust_name;
         let mut is_constructor = false;
+        let cpp_call_name;
         if let Some(self_ty) = &self_ty {
-            let method_prefix = self_ty.get_final_ident().to_string();
+            // Method.
+            let type_ident = self_ty.get_final_ident().to_string();
             // bindgen generates methods with the name:
             // {class}_{method name}
             // It then generates an impl section for the Rust type
             // with the original name, but we currently discard that impl section.
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
-            rust_name = rust_name[method_prefix.len() + 1..].to_string();
-            if rust_name.starts_with(&method_prefix) {
+            let overload_details = namespace_context
+                .overload_tracker
+                .get_method_real_name(&type_ident, &initial_rust_name);
+            cpp_call_name = overload_details.cpp_method_name;
+            rust_name = overload_details.rust_method_name;
+            if rust_name.starts_with(&type_ident) {
                 // It's a constructor. bindgen generates
                 // fn new(this: *Type, ...args)
                 // We want
@@ -642,13 +663,22 @@ impl<'a> BridgeConversion<'a> {
                 // fn make_unique(...args) -> UniquePtr<Type>
                 // If there are multiple constructors, bindgen generates
                 // new, new1, new2 etc. and we'll keep those suffixes.
-                let constructor_suffix = &rust_name[method_prefix.len()..];
+                let constructor_suffix = &rust_name[type_ident.len()..];
                 rust_name = format!("make_unique{}", constructor_suffix);
                 // Strip off the 'this' arg.
                 params = params.into_iter().skip(1).collect();
                 param_details.remove(0);
                 is_constructor = true;
             }
+        } else {
+            // Not a method.
+            // What's the name of the underlying C++ function call?
+            // If bindgen found overloaded methods, it may not be what it seems.
+            let overload_details = namespace_context
+                .overload_tracker
+                .get_function_real_name(&initial_rust_name);
+            cpp_call_name = overload_details.cpp_method_name;
+            rust_name = overload_details.rust_method_name;
         }
 
         // Analyze the return type, just as we previously did for the
@@ -693,6 +723,7 @@ impl<'a> BridgeConversion<'a> {
         // put something different into here if we have to do argument or
         // return type conversion, so get some mutable variables ready.
         let mut rust_name_attr = Vec::new();
+        let mut cpp_name_attr = Vec::new();
         let rust_name_ident = make_ident(&rust_name);
         let mut cxxbridge_name = rust_name_ident.clone();
 
@@ -700,7 +731,7 @@ impl<'a> BridgeConversion<'a> {
             // Generate a new layer of C++ code to wrap/unwrap parameters
             // and return values into/out of std::unique_ptrs.
             // First give instructions to generate the additional C++.
-            let cpp_construction_ident = cxxbridge_name;
+            let cpp_construction_ident = make_ident(&cpp_call_name);
             cxxbridge_name = make_ident(&if let Some(type_name) = &self_ty {
                 format!(
                     "{}_{}_up_wrapper",
@@ -759,7 +790,8 @@ impl<'a> BridgeConversion<'a> {
                         cxxbridge::#cxxbridge_name ( #(#arg_list),* )
                     }
                 });
-                let e = method_impl_blocks
+                let e = namespace_context
+                    .method_impl_blocks
                     .entry(type_name.to_string())
                     .or_insert_with(|| {
                         parse_quote! {
@@ -777,7 +809,13 @@ impl<'a> BridgeConversion<'a> {
                     ))
                     .unwrap();
             }
-        };
+        } else {
+            cpp_name_attr = Attribute::parse_outer
+                .parse2(quote!(
+                    #[cxx_name = #cpp_call_name]
+                ))
+                .unwrap();
+        }
         // Finally - namespace support. All the Types in everything
         // above this point are fully qualified. We need to unqualify them.
         // We need to do that _after_ the above wrapper_function_needed
@@ -805,6 +843,7 @@ impl<'a> BridgeConversion<'a> {
         self.extern_c_mod_items.push(ForeignItem::Fn(parse_quote!(
             #(#namespace_attr)*
             #(#rust_name_attr)*
+            #(#cpp_name_attr)*
             #vis fn #cxxbridge_name ( #params ) #ret_type;
         )));
         if !is_a_method {

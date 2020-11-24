@@ -1940,7 +1940,6 @@ fn test_overload_constructors() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/120
 fn test_overload_functions() {
     let cxx = indoc! {"
         void daft(uint32_t a) {}
@@ -1956,10 +1955,57 @@ fn test_overload_functions() {
             uint32_t a;
         };
         struct Norma {
+            Norma() {}
             uint32_t a;
         };
-        void daft(uint32_t a);
-        void daft(uint8_t a);
+        void daft(uint32_t);
+        void daft(uint8_t);
+        void daft(std::string);
+        void daft(Fred);
+        void daft(Norma);
+    "};
+    let rs = quote! {
+        ffi::daft(32);
+        ffi::daft1(8);
+        ffi::daft2(ffi::make_string("hello"));
+        let b = ffi::Fred { a: 3 };
+        ffi::daft3(b);
+        let c = ffi::Norma::make_unique();
+        ffi::daft4(c);
+    };
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &["Norma", "daft", "daft1", "daft2", "daft3", "daft4"],
+        &["Fred"],
+    );
+}
+
+#[test]
+#[ignore] // At present, bindgen generates two separate 'daft1'
+          // functions here, and there's not much we can do about that.
+fn test_overload_numeric_functions() {
+    // Because bindgen deals with conflicting overloaded functions by
+    // appending a numeric suffix, let's see if we can cope.
+    let cxx = indoc! {"
+        void daft1(uint32_t) {}
+        void daft2(uint8_t) {}
+        void daft(std::string) {}
+        void daft(Fred) {}
+        void daft(Norma) {}
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Fred {
+            uint32_t a;
+        };
+        struct Norma {
+            uint32_t a;
+        };
+        void daft1(uint32_t a);
+        void daft2(uint8_t a);
         void daft(std::string a);
         void daft(Fred a);
         void daft(Norma a);
@@ -1973,18 +2019,23 @@ fn test_overload_functions() {
         let c = ffi::Norma::make_unique();
         ffi::daft4(c);
     };
-    run_test(cxx, hdr, rs, &["Norma", "daft", "daft1", "daft2", "daft3", "daft4"], &["Fred"]);
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &["Norma", "daft", "daft1", "daft2", "daft3", "daft4"],
+        &["Fred"],
+    );
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/120
 fn test_overload_methods() {
     let cxx = indoc! {"
-        void Bob::daft(uint32_t a) {}
-        void Bob::daft(uint8_t a) {}
-        void Bob::daft(std::string a) {}
-        void Bob::daft(Fred a) {}
-        void Bob::daft(Norma a) {}
+        void Bob::daft(uint32_t) const {}
+        void Bob::daft(uint8_t) const {}
+        void Bob::daft(std::string) const {}
+        void Bob::daft(Fred) const {}
+        void Bob::daft(Norma) const {}
     "};
     let hdr = indoc! {"
         #include <cstdint>
@@ -1993,15 +2044,16 @@ fn test_overload_methods() {
             uint32_t a;
         };
         struct Norma {
+            Norma() {}
             uint32_t a;
         };
         struct Bob {
             uint32_t a;
-            void daft(uint32_t a);
-            void daft(uint8_t a);
-            void daft(std::string a);
-            void daft(Fred a);
-            void daft(Norma a);
+            void daft(uint32_t) const;
+            void daft(uint8_t) const;
+            void daft(std::string) const;
+            void daft(Fred) const;
+            void daft(Norma) const;
         };
     "};
     let rs = quote! {
