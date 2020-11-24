@@ -18,6 +18,7 @@ mod byvalue_checker;
 mod function_wrapper;
 mod known_types;
 mod namespace_organizer;
+mod overload_tracker;
 mod parse;
 mod rust_pretty_printer;
 mod types;
@@ -245,6 +246,7 @@ impl IncludeCpp {
                 non_exhaustive: false,
             })
             .enable_cxx_namespaces()
+            .disable_nested_struct_naming()
             .generate_inline_functions(true)
             .layout_tests(false); // TODO revisit later
         for item in known_types::get_initial_blocklist() {

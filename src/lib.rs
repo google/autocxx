@@ -165,6 +165,25 @@
 /// ffi mod. However, at present there is an internal limitation that
 /// autocxx can't handle multiple symbols with the same identifier, even
 /// if they're in different namespaces. This will be fixed in future.
+///
+/// # Overloads - and identifiers ending in digits
+///
+/// C++ allows function overloads; Rust doesn't. `autocxx` follows the lead
+/// of `bindgen` here and generating overloads as `func`, `func1`, `func2` etc.
+///
+/// Unfortunately bindgen does not offer a means to distinguish such overloaded
+/// functions from those which are legitimately called `func`, `func1` etc.
+/// and so `autocxx` has to guess. Consider this a known limitation of autocxx
+/// and - for now - avoid functions ending in digits. This restriction may
+/// be solved in future if we can add metadata to the bindgen output or otherwise
+/// arrange for this information to be made available to autocxx.
+///
+/// # C++ classes - why do I get warnings?
+///
+/// autocxx is not currently able to distinguish a C++ struct from a C++ class.
+/// It currently assumes they're all structs. This results in warnings
+/// from most compilers, but could cause actual binary mismatches
+/// on some ABIs. This is a temporary known limitation.
 #[macro_export]
 macro_rules! include_cpp {
     (
