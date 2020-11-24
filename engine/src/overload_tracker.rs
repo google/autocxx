@@ -42,6 +42,7 @@ impl MethodOverload {
 /// it seems, because otherwise two different types with a 'get()'
 /// method would instead have a 'get()' and 'get1()' method in the
 /// bindings we generate.
+#[derive(Default)]
 pub(crate) struct OverloadTracker {
     offset_by_type_and_name: HashMap<String, HashMap<String, usize>>,
     expected_next_by_name: HashMap<String, usize>,
@@ -51,10 +52,7 @@ static NULL_TYPE: &str = "<null>"; // for global functions not methods
 
 impl OverloadTracker {
     pub(crate) fn new() -> Self {
-        Self {
-            offset_by_type_and_name: HashMap::new(),
-            expected_next_by_name: HashMap::new(),
-        }
+        Self::default()
     }
 
     fn split_name(found_name: &str) -> (&str, usize) {
