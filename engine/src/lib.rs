@@ -13,22 +13,14 @@
 // limitations under the License.
 
 mod additional_cpp_generator;
-mod bridge_converter;
-mod bridge_name_tracker;
+mod conversion;
 mod byvalue_checker;
-mod foreign_mod_converter;
-mod function_wrapper;
 mod known_types;
-mod namespace_organizer;
-mod overload_tracker;
 mod parse;
-mod rust_name_tracker;
 mod rust_pretty_printer;
-mod type_converter;
 mod type_database;
-mod typedef_analyzer;
 mod types;
-mod unqualify;
+mod function_wrapper;
 
 #[cfg(any(test, feature = "build"))]
 mod builder;
@@ -36,6 +28,7 @@ mod builder;
 #[cfg(test)]
 mod integration_tests;
 
+use conversion::bridge_converter::BridgeConverter;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{fmt::Display, path::PathBuf};
 use type_database::TypeDatabase;
@@ -85,7 +78,7 @@ pub enum Error {
     CouldNotCanoncalizeIncludeDir(PathBuf),
     /// Some error occcurred in converting the bindgen-style
     /// bindings to safe cxx bindings.
-    Conversion(bridge_converter::ConvertError),
+    Conversion(conversion::bridge_converter::ConvertError),
     /// No 'generate' or 'generate_pod' was specified.
     /// It might be that in future we can simply let things work
     /// without any allowlist, in which case bindgen should generate
@@ -362,7 +355,7 @@ impl IncludeCpp {
 
         let include_list = self.generate_include_list();
         let mut converter =
-            bridge_converter::BridgeConverter::new(&include_list, &self.type_database);
+            BridgeConverter::new(&include_list, &self.type_database);
 
         let conversion = converter
             .convert(bindings, self.exclude_utilities)

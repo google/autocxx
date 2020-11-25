@@ -16,15 +16,8 @@ use std::fmt::Display;
 
 use crate::{
     additional_cpp_generator::AdditionalNeed,
-    bridge_name_tracker::BridgeNameTracker,
     byvalue_checker::ByValueChecker,
-    foreign_mod_converter::{ForeignModConversionCallbacks, ForeignModConverter},
-    namespace_organizer::{NamespaceEntries, Use},
-    rust_name_tracker::RustNameTracker,
-    type_converter::TypeConverter,
     type_database::TypeDatabase,
-    typedef_analyzer::analyze_typedef_target,
-    typedef_analyzer::TypedefTarget,
     types::make_ident,
     types::Namespace,
     types::TypeName,
@@ -35,6 +28,8 @@ use syn::{
     parse::Parser, parse_quote, Field, ForeignItem, GenericParam, Generics, Ident, Item,
     ItemForeignMod, ItemMod, ItemStruct, Type,
 };
+
+use super::{bridge_name_tracker::BridgeNameTracker, foreign_mod_converter::{ForeignModConversionCallbacks, ForeignModConverter}, namespace_organizer::NamespaceEntries, rust_name_tracker::RustNameTracker, type_converter::TypeConverter, namespace_organizer::Use, typedef_analyzer::{TypedefTarget, analyze_typedef_target}};
 
 #[derive(Debug)]
 pub enum ConvertError {
