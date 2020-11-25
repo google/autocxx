@@ -1390,6 +1390,50 @@ fn test_method_pass_nonpod_by_value() {
 }
 
 #[test]
+fn test_method_pass_nonpod_by_value_with_up() {
+    // Checks that existing UniquePtr params are not wrecked
+    // by the conversion we do here.
+    let cxx = indoc! {"
+        uint32_t Bob::get_bob(Anna, std::unique_ptr<Anna>) const {
+            return a;
+        }
+        Anna give_anna() {
+            Anna a;
+            a.a = 10;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct Anna {
+            uint32_t a;
+            std::string b;
+        };
+        Anna give_anna();
+        struct Bob {
+        public:
+            uint32_t a;
+            uint32_t b;
+            uint32_t get_bob(Anna a, std::unique_ptr<Anna>) const;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::give_anna();
+        let a2 = ffi::give_anna();
+        let b = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(b.get_bob(a, a2), 12);
+    };
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &["take_bob", "Anna", "give_anna", "get_bob"],
+        &["Bob"],
+    );
+}
+
+#[test]
 fn test_method_pass_nonpod_by_reference() {
     let cxx = indoc! {"
         uint32_t Bob::get_bob(const Anna&) const {
@@ -2227,7 +2271,6 @@ fn test_destructor() {
 }
 
 #[test]
-#[ignore]
 fn test_static_func() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2236,12 +2279,12 @@ fn test_static_func() {
         };
     "};
     let cxx = indoc! {"
-        WithStaticMethod::call() {
+        uint32_t WithStaticMethod::call() {
             return 42;
         }
     "};
     let rs = quote! {
-        assert_eq!(ffi::cxx::WithStaticMethod::call(), 42);
+        assert_eq!(ffi::WithStaticMethod::call(), 42);
     };
     run_test(cxx, hdr, rs, &["WithStaticMethod"], &[]);
 }
@@ -2335,6 +2378,69 @@ fn test_give_nonpod_typedef_by_value() {
         assert_eq!(ffi::take_horace(ffi::give_bob().as_ref().unwrap()), 4);
     };
     run_test(cxx, hdr, rs, &["give_bob", "take_horace"], &[]);
+}
+
+#[test]
+#[ignore] // bindgen creates functions called create and create1,
+          // then impl blocks for Bob and Fred which call them from methods each
+          // called simply 'create'. Because of this mismatch we have no way to know
+          // that 'create1' is a static function, and this fails. We _could_ parse
+          // the contents of the impl block methods in order to find out what is
+          // actually being called, but currently bindgen in fact gets this wrong,
+          // and calls 'create' from both of them. The first step to getting this
+          // working would therefore be to make a minimal test case and file it
+          // against bindgen. TODO. Then after that was fixed we could look at
+          // whether it's worth fixing this by parsing the contents of the impl'ed
+          // methods.
+fn test_conflicting_static_functions() {
+    let cxx = indoc! {"
+        Bob Bob::create() { Bob a; return a; }
+        Fred Fred::create() { Fred b; return b; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            static Bob create();
+        };
+        struct Fred {
+            uint32_t b;
+            static Fred create();
+        };
+    "};
+    let rs = quote! {
+        ffi::Bob::create();
+        ffi::Fred::create();
+    };
+    run_test(cxx, hdr, rs, &[], &["Bob", "Fred"]);
+}
+
+#[test]
+fn test_conflicting_ns_up_functions() {
+    let cxx = indoc! {"
+        uint32_t A::create(C) { return 3; }
+        uint32_t B::create(C) { return 4; }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct C {
+            C() {}
+            uint32_t a;
+        };
+        namespace A {
+            uint32_t create(C c);
+        };
+        namespace B {
+            uint32_t create(C c);
+        };
+    "};
+    let rs = quote! {
+        let c = ffi::C::make_unique();
+        let c2 = ffi::C::make_unique();
+        assert_eq!(ffi::A::create(c), 3);
+        assert_eq!(ffi::B::create(c2), 4);
+    };
+    run_test(cxx, hdr, rs, &["A::create", "B::create"], &[]);
 }
 
 #[test]
@@ -2477,7 +2583,6 @@ fn test_ns_struct_pod_request() {
     run_test("", hdr, rs, &[], &["A::Bob"]);
 }
 
-#[ignore] // because currently we feed a flat namespace to cxx
 #[test]
 fn test_conflicting_ns_funcs() {
     let cxx = indoc! {"
@@ -2500,7 +2605,11 @@ fn test_conflicting_ns_funcs() {
     run_test(cxx, hdr, rs, &["A::get", "B::get"], &[]);
 }
 
-#[ignore] // because currently we feed a flat namespace to cxx
+#[ignore]
+// because currently we feed a flat namespace to cxx
+// This would be relatively easy to enable now that we have the facility
+// to add aliases to the 'use' statements we generate, plus
+// bridge_name_tracker to pick a unique name. TODO.
 #[test]
 fn test_conflicting_ns_structs() {
     let hdr = indoc! {"
@@ -2518,7 +2627,7 @@ fn test_conflicting_ns_structs() {
     "};
     let rs = quote! {
         ffi::A::Bob { a: 12 };
-        ffi::b::Bob { b: 12 };
+        ffi::B::Bob { b: 12 };
     };
     run_test("", hdr, rs, &[], &["A::Bob", "B::Bob"]);
 }
@@ -3154,10 +3263,10 @@ fn test_nested_struct() {
         void daft(A::B a);
     "};
     let rs = quote! {
-        let b = ffi::A::B { b: 12 };
+        let b = ffi::B { b: 12 };
         ffi::daft(b);
     };
-    run_test("", hdr, rs, &["daft"], &["A::B"]);
+    run_test("", hdr, rs, &["daft"], &["B"]);
 }
 
 // Yet to test:
