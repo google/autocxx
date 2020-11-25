@@ -52,7 +52,8 @@ pub(crate) trait ForeignModConversionCallbacks {
 }
 
 /// Converts a given bindgen-generated 'mod' into suitable
-/// cxx::bridge runes.
+/// cxx::bridge runes. In bindgen output, a given mod concerns
+/// a specific C++ namespace.
 pub(crate) struct ForeignModConverter {
     ns: Namespace,
     overload_tracker: OverloadTracker,

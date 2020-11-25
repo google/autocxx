@@ -166,6 +166,18 @@ struct BridgeConversion<'a> {
 impl<'a> BridgeConversion<'a> {
     /// Main function which goes through and performs conversion from
     /// `bindgen`-style Rust output into `cxx::bridge`-style Rust input.
+    /// At present, it significantly rewrites the bindgen mod,
+    /// as well as generating an additional cxx::bridge mod, and an outer
+    /// mod with all sorts of 'use' statements. A valid alternative plan
+    /// might be to keep the bindgen mod untouched and _only_ generate
+    /// additional bindings, but the sticking point there is that it's not
+    /// obviously possible to stop folks allocating opaque types in the
+    /// bindgen mod. (We mark all types as opaque until we're told
+    /// otherwise, which is the opposite of what bindgen does, so we can't
+    /// just give it lots of directives to make all types opaque.)
+    /// One future option could be to provide a mode to bindgen where
+    /// everything is opaque unless specifically allowlisted to be
+    /// transparent.
     fn convert_items(
         mut self,
         items: Vec<Item>,
@@ -232,7 +244,9 @@ impl<'a> BridgeConversion<'a> {
         ns: Namespace,
         output_items: &mut Vec<Item>,
     ) -> Result<(), ConvertError> {
-        let mut namespace_context = ForeignModConverter::new(ns.clone());
+        // This object maintains some state specific to this namespace, i.e.
+        // this particular mod.
+        let mut mod_converter = ForeignModConverter::new(ns.clone());
         for item in items {
             match item {
                 Item::ForeignMod(mut fm) => {
@@ -245,7 +259,7 @@ impl<'a> BridgeConversion<'a> {
                         // the contents of all bindgen 'extern "C"' mods into this
                         // one.
                     }
-                    namespace_context.convert_foreign_mod_items(items, self)?;
+                    mod_converter.convert_foreign_mod_items(items, self)?;
                 }
                 Item::Struct(mut s) => {
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
@@ -301,7 +315,7 @@ impl<'a> BridgeConversion<'a> {
             }
         }
         output_items.extend(
-            namespace_context
+            mod_converter
                 .get_impl_blocks()
                 .map(|(_, v)| Item::Impl(v)),
         );
