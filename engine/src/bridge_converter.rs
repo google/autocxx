@@ -314,11 +314,7 @@ impl<'a> BridgeConversion<'a> {
                 _ => return Err(ConvertError::UnexpectedItemInMod),
             }
         }
-        output_items.extend(
-            mod_converter
-                .get_impl_blocks()
-                .map(|(_, v)| Item::Impl(v)),
-        );
+        output_items.extend(mod_converter.get_impl_blocks().map(|(_, v)| Item::Impl(v)));
         let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
         output_items.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]
