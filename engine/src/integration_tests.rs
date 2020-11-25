@@ -1894,6 +1894,8 @@ fn test_multiple_classes_with_methods() {
             "make_trivial_class",
             "make_opaque_struct",
             "make_opaque_class",
+            "OpaqueStruct",
+            "OpaqueClass",
         ],
         &["TrivialStruct", "TrivialClass"],
         TestMethod::UseFullPipeline,
@@ -2466,7 +2468,7 @@ fn test_conflicting_ns_up_functions() {
         assert_eq!(ffi::A::create(c), 3);
         assert_eq!(ffi::B::create(c2), 4);
     };
-    run_test(cxx, hdr, rs, &["A::create", "B::create"], &[]);
+    run_test(cxx, hdr, rs, &["A::create", "B::create", "C"], &[]);
 }
 
 #[test]

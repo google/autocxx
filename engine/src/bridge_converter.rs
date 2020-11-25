@@ -92,12 +92,12 @@ pub(crate) struct BridgeConversionResults {
 /// if the bindgen output is not as expected. It may be in future that
 /// we need to be a bit more graceful, but for now, that's OK.
 pub(crate) struct BridgeConverter<'a> {
-    include_list: &'a Vec<String>,
+    include_list: &'a [String],
     type_database: &'a TypeDatabase,
 }
 
 impl<'a> BridgeConverter<'a> {
-    pub fn new(include_list: &'a Vec<String>, type_database: &'a TypeDatabase) -> Self {
+    pub fn new(include_list: &'a [String], type_database: &'a TypeDatabase) -> Self {
         Self {
             include_list,
             type_database,
@@ -163,7 +163,7 @@ struct BridgeConversion<'a> {
     idents_found: Vec<Ident>,
     type_converter: TypeConverter,
     byvalue_checker: ByValueChecker,
-    include_list: &'a Vec<String>,
+    include_list: &'a [String],
     type_database: &'a TypeDatabase,
     final_uses: Vec<Use>,
     bridge_name_tracker: BridgeNameTracker,
@@ -438,7 +438,13 @@ impl<'a> BridgeConversion<'a> {
     ) -> Result<(), ConvertError> {
         self.find_nested_pod_types_in_mod(items, ns)?;
         self.byvalue_checker
-            .satisfy_requests(self.type_database.get_pod_requests())
+            .satisfy_requests(
+                self.type_database
+                    .get_pod_requests()
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
             .map_err(ConvertError::UnsafePODType)
     }
 
@@ -629,5 +635,9 @@ impl<'a> ForeignModConversionCallbacks for BridgeConversion<'a> {
 
     fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool {
         self.rust_name_tracker.ok_to_use_rust_name(rust_name)
+    }
+
+    fn is_on_allowlist(&self, type_name: &TypeName) -> bool {
+        self.type_database.is_on_allowlist(type_name)
     }
 }
