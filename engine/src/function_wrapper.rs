@@ -91,9 +91,20 @@ impl ArgumentConversion {
         format!("std::unique_ptr<{}>", self.unwrapped_type_as_string())
     }
 
+    fn type_lacks_copy_constructor(ty: &Type) -> bool {
+        // TODO obtain this from known_types
+        type_to_cpp(ty).starts_with("std::unique_ptr")
+    }
+
     pub(crate) fn conversion(&self, var_name: &str) -> String {
         match self.conversion {
-            ArgumentConversionType::None => var_name.to_string(),
+            ArgumentConversionType::None => {
+                if Self::type_lacks_copy_constructor(&self.unwrapped_type) {
+                    format!("std::move({})", var_name)
+                } else {
+                    var_name.to_string()
+                }
+            }
             ArgumentConversionType::FromUniquePtrToValue => format!("std::move(*{})", var_name),
             ArgumentConversionType::FromValueToUniquePtr => format!(
                 "std::make_unique<{}>({})",
