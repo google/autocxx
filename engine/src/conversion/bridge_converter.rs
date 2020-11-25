@@ -253,6 +253,7 @@ impl<'a> BridgeConversion<'a> {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
         let mut mod_converter = ForeignModConverter::new(ns.clone());
+        let mut uses_to_add = Vec::new();
         for item in items {
             match item {
                 Item::ForeignMod(mut fm) => {
@@ -303,10 +304,9 @@ impl<'a> BridgeConversion<'a> {
                         self.convert_mod_items(items, new_ns, &mut new_items)?;
                         new_itm.content.as_mut().unwrap().1 = new_items;
                     }
-                    output_items.push(Item::Mod(new_itm));
                 }
                 Item::Use(_) => {
-                    output_items.push(item);
+                    uses_to_add.push(item);
                 }
                 Item::Const(_) => {
                     self.all_items.push(item);
@@ -327,18 +327,21 @@ impl<'a> BridgeConversion<'a> {
         mod_converter.finished(self)?;
         output_items.extend(mod_converter.get_impl_blocks().map(|(_, v)| Item::Impl(v)));
         let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
-        output_items.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use self::
-                #(#supers)::*
-            ::cxxbridge;
-        }));
-        for thing in &["UniquePtr", "CxxString"] {
-            let thing = make_ident(thing);
+        if !output_items.is_empty() {
+            output_items.append(&mut uses_to_add);
             output_items.push(Item::Use(parse_quote! {
                 #[allow(unused_imports)]
-                use cxx:: #thing;
+                use self::
+                    #(#supers)::*
+                ::cxxbridge;
             }));
+            for thing in &["UniquePtr", "CxxString"] {
+                let thing = make_ident(thing);
+                output_items.push(Item::Use(parse_quote! {
+                    #[allow(unused_imports)]
+                    use cxx:: #thing;
+                }));
+            }
         }
         Ok(())
     }
