@@ -124,6 +124,7 @@ impl ArgumentConversion {
 
 pub(crate) enum FunctionWrapperPayload {
     FunctionCall(Namespace, Ident),
+    StaticMethodCall(Namespace, Ident, Ident),
     Constructor,
 }
 

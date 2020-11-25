@@ -2470,7 +2470,13 @@ fn test_conflicting_methods() {
 }
 
 #[test]
-fn test_conflicting_up_wrapper_methods() {
+// There's a bindgen bug here. bindgen generates
+// functions called 'get' and 'get1' but then generates impl
+// blocks which call 'get' and 'get'. By luck, we currently
+// should not be broken by this, but at some point we should take
+// the time to create a minimal bindgen test case and submit it
+// as a bindgen bug.
+fn test_conflicting_up_wrapper_methods_not_in_ns() {
     // Ensures the two names 'get' do not conflict in the flat
     // cxx::bridge mod namespace.
     let cxx = indoc! {"

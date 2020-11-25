@@ -47,8 +47,15 @@ pub(crate) trait ForeignModConversionCallbacks {
     fn add_additional_cpp_need(&mut self, need: AdditionalNeed);
     fn convert_boxed_type(&self, ty: Box<Type>, ns: &Namespace) -> Result<Box<Type>, ConvertError>;
     fn is_pod(&self, ty: &TypeName) -> bool;
-    fn add_use(&mut self, ns: &Namespace, rust_name_ident: &Ident);
+    fn add_use(&mut self, ns: &Namespace, rust_name_ident: &Ident, alias: Option<Ident>);
     fn push_extern_c_mod_item(&mut self, item: ForeignItem);
+    fn get_cxx_bridge_name(
+        &mut self,
+        type_name: Option<&str>,
+        found_name: &str,
+        ns: &Namespace,
+    ) -> String;
+    fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool;
 }
 
 /// Converts a given bindgen-generated 'mod' into suitable
@@ -58,6 +65,16 @@ pub(crate) struct ForeignModConverter {
     ns: Namespace,
     overload_tracker: OverloadTracker,
     method_impl_blocks: HashMap<String, ItemImpl>,
+    // We mostly act upon the functions we see within the 'extern "C"'
+    // block of bindgen output, but we can't actually do this until
+    // we've seen the (possibly subsequent) 'impl' blocks so we can
+    // deduce which functions are actually static methods. Hence
+    // store them.
+    funcs_to_convert: Vec<ForeignItemFn>,
+    // Evidence from 'impl' blocks about which of these items
+    // may actually be methods (static or otherwise). Mapping from
+    // function name to type name.
+    methods: HashMap<Ident, TypeName>,
 }
 
 impl ForeignModConverter {
@@ -66,6 +83,8 @@ impl ForeignModConverter {
             ns,
             overload_tracker: OverloadTracker::new(),
             method_impl_blocks: HashMap::new(),
+            funcs_to_convert: Vec::new(),
+            methods: HashMap::new(),
         }
     }
 
@@ -86,7 +105,7 @@ impl ForeignModConverter {
         self.method_impl_blocks.drain()
     }
 
-    fn generate_wrapper_fn(
+    fn generate_method_impl(
         &mut self,
         param_details: &[ArgumentAnalysis],
         is_constructor: bool,
@@ -122,17 +141,51 @@ impl ForeignModConverter {
     pub(crate) fn convert_foreign_mod_items(
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
-        callbacks: &mut impl ForeignModConversionCallbacks,
     ) -> Result<(), ConvertError> {
         for i in foreign_mod_items {
             match i {
                 ForeignItem::Fn(f) => {
-                    self.convert_foreign_fn(f, callbacks)?;
+                    self.funcs_to_convert.push(f);
                 }
                 _ => return Err(ConvertError::UnexpectedForeignItem),
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn convert_impl_items(&mut self, imp: ItemImpl) {
+        let ty_id = match *imp.self_ty {
+            Type::Path(typ) => typ.path.segments.last().unwrap().ident.clone(),
+            _ => return,
+        };
+        for i in imp.items {
+            if let ImplItem::Method(itm) = i {
+                let effective_fun_name = if itm.sig.ident == "new" {
+                    ty_id.clone()
+                } else {
+                    itm.sig.ident
+                };
+                self.methods.insert(
+                    effective_fun_name,
+                    TypeName::new(&self.ns, &ty_id.to_string()),
+                );
+            }
+        }
+    }
+
+    pub(crate) fn finished(
+        &mut self,
+        callbacks: &mut impl ForeignModConversionCallbacks,
+    ) -> Result<(), ConvertError> {
+        while !self.funcs_to_convert.is_empty() {
+            let fun = self.funcs_to_convert.remove(0);
+            self.convert_foreign_fn(fun, callbacks)?;
+        }
+        Ok(())
+    }
+
+    fn is_a_method(&self, id: &Ident) -> Option<TypeName> {
+        self.methods.get(&id).cloned()
     }
 
     fn convert_foreign_fn(
@@ -150,11 +203,12 @@ impl ForeignModConverter {
         //    we need to generate a wrapper function in C++ which wraps and unwraps
         //    it from a unique_ptr.
         //    3a. And alias the original name to the wrapper.
-        if fun.sig.ident.to_string().ends_with("_destructor") {
+        let initial_rust_name = fun.sig.ident.to_string();
+        if initial_rust_name.ends_with("_destructor") {
             return Ok(());
         }
-        // Now let's analyze all the parameters. We do this first
-        // because we'll use this to determine whether this is a method.
+
+        // Now let's analyze all the parameters.
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .sig
             .inputs
@@ -167,24 +221,32 @@ impl ForeignModConverter {
                 _ => panic!("Err didn't contain en err"),
             }
         }
-
-        // Is it a method?
         let (mut params, mut param_details): (Punctuated<_, syn::Token![,]>, Vec<_>) =
             param_details.into_iter().map(Result::unwrap).unzip();
-        let self_ty = param_details
+        let mut self_ty = param_details
             .iter()
             .filter_map(|pd| pd.self_type.as_ref())
             .next()
             .cloned();
+
+        let is_static_method = if self_ty.is_none() {
+            // Even if we can't find a 'self' parameter this could conceivably
+            // be a static method.
+            self_ty = self.is_a_method(&fun.sig.ident);
+            self_ty.is_some()
+        } else {
+            false
+        };
+
         let is_a_method = self_ty.is_some();
+        let self_ty = self_ty; // prevent subsequent mut'ing
 
         // Work out naming.
-        let initial_rust_name = fun.sig.ident.to_string();
         let mut rust_name;
         let mut is_constructor = false;
         let cpp_call_name;
         if let Some(self_ty) = &self_ty {
-            // Method.
+            // Method or static method.
             let type_ident = self_ty.get_final_ident().to_string();
             // bindgen generates methods with the name:
             // {class}_{method name}
@@ -214,7 +276,7 @@ impl ForeignModConverter {
                 is_constructor = true;
             }
         } else {
-            // Not a method.
+            // Not a method (unless it's a static method).
             // What's the name of the underlying C++ function call?
             // If bindgen found overloaded methods, it may not be what it seems.
             let overload_details = self
@@ -223,6 +285,16 @@ impl ForeignModConverter {
             cpp_call_name = overload_details.cpp_method_name;
             rust_name = overload_details.rust_method_name;
         }
+
+        // The name we use within the cxx::bridge mod may be different
+        // from both the C++ name and the Rust name, because it's a flat
+        // namespace so we might need to prepend some stuff to make it unique.
+        let cxxbridge_name = callbacks.get_cxx_bridge_name(
+            self_ty.as_ref().map(|ty| ty.get_final_ident()),
+            &rust_name,
+            &self.ns,
+        );
+        let mut cxxbridge_name = make_ident(&cxxbridge_name);
 
         // Analyze the return type, just as we previously did for the
         // parameters.
@@ -260,32 +332,32 @@ impl ForeignModConverter {
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
             .map_or(false, |x| x.work_needed());
-        let wrapper_function_needed = param_conversion_needed | ret_type_conversion_needed;
+        let differently_named_method = self_ty.is_some() && (cxxbridge_name != rust_name);
+        let wrapper_function_needed = param_conversion_needed
+            || ret_type_conversion_needed
+            || is_static_method
+            || differently_named_method;
 
         // When we generate the cxx::bridge fn declaration, we'll need to
         // put something different into here if we have to do argument or
         // return type conversion, so get some mutable variables ready.
         let mut rust_name_attr = Vec::new();
         let mut cpp_name_attr = Vec::new();
-        let rust_name_ident = make_ident(&rust_name);
-        let mut cxxbridge_name = rust_name_ident.clone();
 
         if wrapper_function_needed {
             // Generate a new layer of C++ code to wrap/unwrap parameters
             // and return values into/out of std::unique_ptrs.
             // First give instructions to generate the additional C++.
             let cpp_construction_ident = make_ident(&cpp_call_name);
-            cxxbridge_name = make_ident(&if let Some(type_name) = &self_ty {
-                format!(
-                    "{}_{}_up_wrapper",
-                    type_name.get_final_ident().to_string(),
-                    rust_name
-                )
-            } else {
-                format!("{}_up_wrapper", rust_name)
-            });
+            cxxbridge_name = make_ident(&format!("{}_autocxx_wrapper", cxxbridge_name));
             let payload = if is_constructor {
                 FunctionWrapperPayload::Constructor
+            } else if is_static_method {
+                FunctionWrapperPayload::StaticMethodCall(
+                    ns.clone(),
+                    make_ident(self_ty.as_ref().unwrap().get_final_ident()),
+                    cpp_construction_ident,
+                )
             } else {
                 FunctionWrapperPayload::FunctionCall(ns.clone(), cpp_construction_ident)
             };
@@ -318,13 +390,23 @@ impl ForeignModConverter {
                     #arg_name: #type_name
                 ));
             }
+        }
 
+        let mut use_alias_required = None;
+        if cxxbridge_name == rust_name {
+            if !is_a_method {
+                // Mark that this name is now occupied in the output
+                // namespace of cxx, so that future functions we encounter
+                // with the same name instead get called something else.
+                callbacks.ok_to_use_rust_name(&rust_name);
+            }
+        } else {
             // Now we've made a brand new function, we need to plumb it back
             // into place such that users can call it just as if it were
             // the original function.
             if let Some(type_name) = &self_ty {
                 // Method, or static method.
-                self.generate_wrapper_fn(
+                self.generate_method_impl(
                     &param_details,
                     is_constructor,
                     &make_ident(type_name.get_final_ident()),
@@ -335,13 +417,21 @@ impl ForeignModConverter {
             } else {
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
-                rust_name_attr = Attribute::parse_outer
-                    .parse2(quote!(
-                        #[rust_name = #rust_name]
-                    ))
-                    .unwrap();
+                // There is a global space of rust_names even if they're in
+                // different namespaces.
+                let rust_name_ok = callbacks.ok_to_use_rust_name(&rust_name);
+                if rust_name_ok {
+                    rust_name_attr = Attribute::parse_outer
+                        .parse2(quote!(
+                            #[rust_name = #rust_name]
+                        ))
+                        .unwrap();
+                } else {
+                    use_alias_required = Some(make_ident(&rust_name));
+                }
             }
-        } else {
+        }
+        if cxxbridge_name != cpp_call_name && !wrapper_function_needed {
             cpp_name_attr = Attribute::parse_outer
                 .parse2(quote!(
                     #[cxx_name = #cpp_call_name]
@@ -379,7 +469,11 @@ impl ForeignModConverter {
             #vis fn #cxxbridge_name ( #params ) #ret_type;
         )));
         if !is_a_method {
-            callbacks.add_use(&ns, &rust_name_ident);
+            if use_alias_required.is_some() {
+                callbacks.add_use(&ns, &cxxbridge_name, use_alias_required);
+            } else {
+                callbacks.add_use(&ns, &make_ident(&rust_name), None);
+            }
         }
         Ok(())
     }

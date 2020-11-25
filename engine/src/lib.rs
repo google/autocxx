@@ -14,6 +14,7 @@
 
 mod additional_cpp_generator;
 mod bridge_converter;
+mod bridge_name_tracker;
 mod byvalue_checker;
 mod foreign_mod_converter;
 mod function_wrapper;
@@ -21,6 +22,7 @@ mod known_types;
 mod namespace_organizer;
 mod overload_tracker;
 mod parse;
+mod rust_name_tracker;
 mod rust_pretty_printer;
 mod type_converter;
 mod typedef_analyzer;

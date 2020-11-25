@@ -29,6 +29,25 @@ impl MethodOverload {
     }
 }
 
+pub(crate) fn split_name(found_name: &str) -> (&str, usize) {
+    for (pos, ch) in found_name.chars().rev().enumerate() {
+        if !ch.is_numeric() {
+            let split = found_name.len() - pos;
+            let prefix = &found_name[0..split];
+            let suffix = &found_name[split..];
+            let counter = if suffix.is_empty() {
+                0
+            } else {
+                suffix.parse::<usize>().unwrap()
+            };
+            return (prefix, counter);
+        }
+    }
+    panic!("Identifier was entirely numeric");
+}
+
+type Offsets = HashMap<String, usize>;
+
 /// Registry of all the overloads of a function found within a given
 /// namespace (i.e. mod in bindgen's output).
 /// The idea here is that bindgen will output a series of overridden
@@ -42,38 +61,22 @@ impl MethodOverload {
 /// it seems, because otherwise two different types with a 'get()'
 /// method would instead have a 'get()' and 'get1()' method in the
 /// bindings we generate.
+/// See also `bridge_name_tracker`: there's a big comment
+/// there explaining the relationship of all the names.
 #[derive(Default)]
 pub(crate) struct OverloadTracker {
-    offset_by_type_and_name: HashMap<String, HashMap<String, usize>>,
+    offset_by_name: Offsets,
+    offset_by_type_and_name: HashMap<String, Offsets>,
     expected_next_by_name: HashMap<String, usize>,
 }
-
-static NULL_TYPE: &str = "<null>"; // for global functions not methods
 
 impl OverloadTracker {
     pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    fn split_name(found_name: &str) -> (&str, usize) {
-        for (pos, ch) in found_name.chars().rev().enumerate() {
-            if !ch.is_numeric() {
-                let split = found_name.len() - pos;
-                let prefix = &found_name[0..split];
-                let suffix = &found_name[split..];
-                let counter = if suffix.is_empty() {
-                    0
-                } else {
-                    suffix.parse::<usize>().unwrap()
-                };
-                return (prefix, counter);
-            }
-        }
-        panic!("Identifier was entirely numeric");
-    }
-
     pub(crate) fn get_function_real_name(&mut self, found_name: &str) -> MethodOverload {
-        self.get_method_real_name(NULL_TYPE, found_name)
+        self.next_offset(None, found_name)
     }
 
     pub(crate) fn get_method_real_name(
@@ -81,7 +84,11 @@ impl OverloadTracker {
         type_name: &str,
         found_name: &str,
     ) -> MethodOverload {
-        let (fn_name, counter) = Self::split_name(found_name);
+        self.next_offset(Some(type_name), found_name)
+    }
+
+    fn next_offset(&mut self, type_name: Option<&str>, found_name: &str) -> MethodOverload {
+        let (fn_name, counter) = split_name(found_name);
         let expected_next_suffix = self
             .expected_next_by_name
             .entry(fn_name.to_owned())
@@ -94,11 +101,14 @@ impl OverloadTracker {
             // Possibly part of an overload sequence. We have no way to be sure
             // but let's assume so.
             *expected_next_suffix += 1;
-            let type_e = self
-                .offset_by_type_and_name
-                .entry(type_name.to_string())
-                .or_insert_with(HashMap::new);
-            let offset = type_e.entry(fn_name.to_string()).or_insert(counter);
+            let registry = match type_name {
+                Some(type_name) => self
+                    .offset_by_type_and_name
+                    .entry(type_name.to_string())
+                    .or_insert_with(HashMap::new),
+                None => &mut self.offset_by_name,
+            };
+            let offset = registry.entry(fn_name.to_string()).or_insert(counter);
             let effective_count = counter - *offset;
             MethodOverload::new(
                 fn_name.to_string(),
@@ -175,6 +185,10 @@ mod tests {
         assert_eq!(
             ot.get_method_real_name("C", "do2"),
             MethodOverload::new("do2".into(), "do2".into())
+        );
+        assert_eq!(
+            ot.get_function_real_name("C_do2"),
+            MethodOverload::new("C_do2".into(), "C_do2".into())
         );
     }
 }
