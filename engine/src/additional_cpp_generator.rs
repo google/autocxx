@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::function_wrapper::{FunctionWrapper, FunctionWrapperPayload};
+use crate::{
+    function_wrapper::{FunctionWrapper, FunctionWrapperPayload},
+    type_database::TypeDatabase,
+};
 use itertools::Itertools;
 use std::collections::HashSet;
 
@@ -80,12 +83,16 @@ impl AdditionalCppGenerator {
         }
     }
 
-    pub(crate) fn add_needs(&mut self, additions: Vec<AdditionalNeed>) {
+    pub(crate) fn add_needs(
+        &mut self,
+        additions: Vec<AdditionalNeed>,
+        type_database: &TypeDatabase,
+    ) {
         for need in additions {
             match need {
                 AdditionalNeed::MakeStringConstructor => self.generate_string_constructor(),
                 AdditionalNeed::FunctionWrapper(by_value_wrapper) => {
-                    self.generate_by_value_wrapper(*by_value_wrapper)
+                    self.generate_by_value_wrapper(*by_value_wrapper, type_database)
                 }
             }
         }
@@ -145,7 +152,11 @@ impl AdditionalCppGenerator {
         })
     }
 
-    fn generate_by_value_wrapper(&mut self, details: FunctionWrapper) {
+    fn generate_by_value_wrapper(
+        &mut self,
+        details: FunctionWrapper,
+        type_database: &TypeDatabase,
+    ) {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
         // We could easily do this the other way round, and when
@@ -173,18 +184,24 @@ impl AdditionalCppGenerator {
             .argument_conversion
             .iter()
             .enumerate()
-            .map(|(counter, ty)| format!("{} {}", ty.unconverted_type(), get_arg_name(counter)))
+            .map(|(counter, ty)| {
+                format!(
+                    "{} {}",
+                    ty.unconverted_type(type_database),
+                    get_arg_name(counter)
+                )
+            })
             .join(", ");
         let ret_type = details
             .return_conversion
             .as_ref()
-            .map_or("void".to_string(), |x| x.converted_type());
+            .map_or("void".to_string(), |x| x.converted_type(type_database));
         let declaration = format!("{} {}({})", ret_type, name, args);
         let mut arg_list = details
             .argument_conversion
             .iter()
             .enumerate()
-            .map(|(counter, conv)| conv.conversion(&get_arg_name(counter)));
+            .map(|(counter, conv)| conv.conversion(&get_arg_name(counter), type_database));
         let receiver = if is_a_method { arg_list.next() } else { None };
         let arg_list = arg_list.join(", ");
         let mut underlying_function_call = match details.payload {
@@ -210,8 +227,10 @@ impl AdditionalCppGenerator {
             }
         };
         if let Some(ret) = details.return_conversion {
-            underlying_function_call =
-                format!("return {}", ret.conversion(&underlying_function_call));
+            underlying_function_call = format!(
+                "return {}",
+                ret.conversion(&underlying_function_call, type_database)
+            );
         };
         let definition = format!("{} {{ {}; }}", declaration, underlying_function_call,);
         let declaration = format!("{};", declaration);

@@ -1,6 +1,8 @@
 use syn::{parse_quote, Ident, Type};
 
-use crate::types::{type_to_cpp, Namespace};
+use crate::{
+    known_types::type_lacks_copy_constructor, type_database::TypeDatabase, types::Namespace,
+};
 
 // Copyright 2020 Google LLC
 //
@@ -55,17 +57,17 @@ impl ArgumentConversion {
         !matches!(self.conversion, ArgumentConversionType::None)
     }
 
-    pub(crate) fn unconverted_type(&self) -> String {
+    pub(crate) fn unconverted_type(&self, type_database: &TypeDatabase) -> String {
         match self.conversion {
-            ArgumentConversionType::FromUniquePtrToValue => self.wrapped_type(),
-            _ => self.unwrapped_type_as_string(),
+            ArgumentConversionType::FromUniquePtrToValue => self.wrapped_type(type_database),
+            _ => self.unwrapped_type_as_string(type_database),
         }
     }
 
-    pub(crate) fn converted_type(&self) -> String {
+    pub(crate) fn converted_type(&self, type_database: &TypeDatabase) -> String {
         match self.conversion {
-            ArgumentConversionType::FromValueToUniquePtr => self.wrapped_type(),
-            _ => self.unwrapped_type_as_string(),
+            ArgumentConversionType::FromValueToUniquePtr => self.wrapped_type(type_database),
+            _ => self.unwrapped_type_as_string(type_database),
         }
     }
 
@@ -83,23 +85,21 @@ impl ArgumentConversion {
         }
     }
 
-    fn unwrapped_type_as_string(&self) -> String {
-        type_to_cpp(&self.unwrapped_type)
+    fn unwrapped_type_as_string(&self, type_database: &TypeDatabase) -> String {
+        type_database.type_to_cpp(&self.unwrapped_type)
     }
 
-    fn wrapped_type(&self) -> String {
-        format!("std::unique_ptr<{}>", self.unwrapped_type_as_string())
+    fn wrapped_type(&self, type_database: &TypeDatabase) -> String {
+        format!(
+            "std::unique_ptr<{}>",
+            self.unwrapped_type_as_string(type_database)
+        )
     }
 
-    fn type_lacks_copy_constructor(ty: &Type) -> bool {
-        // TODO obtain this from known_types
-        type_to_cpp(ty).starts_with("std::unique_ptr")
-    }
-
-    pub(crate) fn conversion(&self, var_name: &str) -> String {
+    pub(crate) fn conversion(&self, var_name: &str, type_database: &TypeDatabase) -> String {
         match self.conversion {
             ArgumentConversionType::None => {
-                if Self::type_lacks_copy_constructor(&self.unwrapped_type) {
+                if type_lacks_copy_constructor(&self.unwrapped_type) {
                     format!("std::move({})", var_name)
                 } else {
                     var_name.to_string()
@@ -108,7 +108,7 @@ impl ArgumentConversion {
             ArgumentConversionType::FromUniquePtrToValue => format!("std::move(*{})", var_name),
             ArgumentConversionType::FromValueToUniquePtr => format!(
                 "std::make_unique<{}>({})",
-                self.unconverted_type(),
+                self.unconverted_type(type_database),
                 var_name
             ),
         }

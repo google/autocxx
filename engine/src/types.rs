@@ -16,7 +16,7 @@ use itertools::Itertools;
 use proc_macro2::Span;
 use std::fmt::Display;
 use std::iter::Peekable;
-use syn::{parse_quote, Ident, PathSegment, Type, TypePath};
+use syn::{parse_quote, Ident, PathSegment, TypePath};
 
 use crate::known_types::is_known_type;
 
@@ -216,53 +216,6 @@ impl Display for TypeName {
             f.write_str("::")?;
         }
         f.write_str(&self.1)
-    }
-}
-
-pub(crate) fn type_to_cpp(ty: &Type) -> String {
-    match ty {
-        Type::Path(typ) => {
-            // If this is a std::unique_ptr we do need to pass
-            // its argument through.
-            let root = TypeName::from_type_path(typ).to_cpp_name();
-            let suffix = match &typ.path.segments.last().unwrap().arguments {
-                syn::PathArguments::AngleBracketed(ab) => Some(
-                    ab.args
-                        .iter()
-                        .map(|x| match x {
-                            syn::GenericArgument::Type(gat) => type_to_cpp(gat),
-                            _ => "".to_string(),
-                        })
-                        .join(", "),
-                ),
-                syn::PathArguments::None | syn::PathArguments::Parenthesized(_) => None,
-            };
-            match suffix {
-                None => root,
-                Some(suffix) => format!("{}<{}>", root, suffix),
-            }
-        }
-        Type::Reference(typr) => {
-            let const_bit = match typr.mutability {
-                None => "const ",
-                Some(_) => "",
-            };
-            format!("{}{}&", const_bit, type_to_cpp(typr.elem.as_ref()))
-        }
-        Type::Array(_)
-        | Type::BareFn(_)
-        | Type::Group(_)
-        | Type::ImplTrait(_)
-        | Type::Infer(_)
-        | Type::Macro(_)
-        | Type::Never(_)
-        | Type::Paren(_)
-        | Type::Ptr(_)
-        | Type::Slice(_)
-        | Type::TraitObject(_)
-        | Type::Tuple(_)
-        | Type::Verbatim(_) => panic!("Unsupported type"),
-        _ => panic!("Unknown type"),
     }
 }
 
