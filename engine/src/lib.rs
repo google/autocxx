@@ -131,7 +131,6 @@ enum State {
 /// we avoid exposing an external interface from this code.
 pub struct IncludeCpp {
     inclusions: Vec<CppInclusion>,
-    allowlist: Vec<String>, // not TypeName as it may be functions or whatever.
     type_database: TypeDatabase,
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
     exclude_utilities: bool,
@@ -152,7 +151,6 @@ impl IncludeCpp {
         // 3. Allowlist
 
         let mut inclusions = Vec::new();
-        let mut allowlist = Vec::new();
         let mut parse_only = false;
         let mut exclude_utilities = false;
         let mut type_database = TypeDatabase::new();
@@ -172,7 +170,7 @@ impl IncludeCpp {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
-                    allowlist.push(generate.value());
+                    type_database.add_to_allowlist(generate.value());
                     if ident == "generate_pod" {
                         type_database
                             .note_pod_request(TypeName::new_from_user_input(&generate.value()));
@@ -205,7 +203,6 @@ impl IncludeCpp {
 
         Ok(IncludeCpp {
             inclusions,
-            allowlist,
             preconfigured_inc_dirs: None,
             exclude_utilities,
             type_database,
@@ -278,7 +275,7 @@ impl IncludeCpp {
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
-        for a in &self.allowlist {
+        for a in self.type_database.allowlist() {
             // TODO - allowlist type/functions/separately
             builder = builder
                 .whitelist_type(a)
@@ -352,7 +349,7 @@ impl IncludeCpp {
             State::Generated(_, _) | State::NothingGenerated => panic!("Only call generate once"),
         }
 
-        if self.allowlist.is_empty() {
+        if self.type_database.allowlist_is_empty() {
             return Err(Error::NoGenerationRequested);
         }
 

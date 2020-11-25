@@ -56,6 +56,7 @@ pub(crate) trait ForeignModConversionCallbacks {
         ns: &Namespace,
     ) -> String;
     fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool;
+    fn is_on_allowlist(&self, type_name: &TypeName) -> bool;
 }
 
 /// Converts a given bindgen-generated 'mod' into suitable
@@ -246,6 +247,13 @@ impl ForeignModConverter {
         let mut is_constructor = false;
         let cpp_call_name;
         if let Some(self_ty) = &self_ty {
+            if !callbacks.is_on_allowlist(&self_ty) {
+                // Bindgen will output methods for types which have been encountered
+                // virally as arguments on other allowlisted types. But we don't want
+                // to generate methods unless the user has specifically asked us to.
+                // It may, for instance, be a private type.
+                return Ok(());
+            }
             // Method or static method.
             let type_ident = self_ty.get_final_ident().to_string();
             // bindgen generates methods with the name:

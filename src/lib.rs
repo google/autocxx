@@ -264,7 +264,6 @@ macro_rules! nested_type {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
-
 #[doc(hidden)]
 #[macro_export]
 macro_rules! usage {

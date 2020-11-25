@@ -16,7 +16,7 @@ use itertools::Itertools;
 use syn::Type;
 
 use crate::types::TypeName;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Central registry of all information known about types.
 /// At present this is very minimal; in future we should roll
@@ -24,7 +24,8 @@ use std::collections::HashMap;
 #[derive(Default)]
 pub(crate) struct TypeDatabase {
     nested_types: HashMap<TypeName, TypeName>,
-    pod_requests: Vec<TypeName>,
+    pod_requests: HashSet<TypeName>,
+    allowlist: HashSet<String>, // not TypeName as it may be funcs not types.
 }
 
 impl TypeDatabase {
@@ -37,15 +38,31 @@ impl TypeDatabase {
     }
 
     pub(crate) fn note_pod_request(&mut self, tn: TypeName) {
-        self.pod_requests.push(tn);
+        self.pod_requests.insert(tn);
     }
 
     pub(crate) fn get_effective_type(&self, original: &TypeName) -> Option<&TypeName> {
         self.nested_types.get(original)
     }
 
-    pub(crate) fn get_pod_requests(&self) -> Vec<TypeName> {
-        self.pod_requests.clone()
+    pub(crate) fn add_to_allowlist(&mut self, item: String) {
+        self.allowlist.insert(item);
+    }
+
+    pub(crate) fn get_pod_requests(&self) -> &HashSet<TypeName> {
+        &self.pod_requests
+    }
+
+    pub(crate) fn allowlist(&self) -> impl Iterator<Item = &String> {
+        self.allowlist.iter()
+    }
+
+    pub(crate) fn allowlist_is_empty(&self) -> bool {
+        self.allowlist.is_empty()
+    }
+
+    pub(crate) fn is_on_allowlist(&self, tn: &TypeName) -> bool {
+        self.allowlist.contains(&tn.to_cpp_name())
     }
 
     pub(crate) fn type_to_cpp(&self, ty: &Type) -> String {
