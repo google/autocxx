@@ -200,6 +200,14 @@ impl AdditionalCppGenerator {
                     format!("{}({})", underlying_function_call, arg_list)
                 }
             },
+            FunctionWrapperPayload::StaticMethodCall(ns, ty_id, fn_id) => {
+                let underlying_function_call = ns
+                    .into_iter()
+                    .cloned()
+                    .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
+                    .join("::");
+                format!("{}({})", underlying_function_call, arg_list)
+            }
         };
         if let Some(ret) = details.return_conversion {
             underlying_function_call =

@@ -221,7 +221,27 @@ impl Display for TypeName {
 
 pub(crate) fn type_to_cpp(ty: &Type) -> String {
     match ty {
-        Type::Path(typ) => TypeName::from_type_path(typ).to_cpp_name(),
+        Type::Path(typ) => {
+            // If this is a std::unique_ptr we do need to pass
+            // its argument through.
+            let root = TypeName::from_type_path(typ).to_cpp_name();
+            let suffix = match &typ.path.segments.last().unwrap().arguments {
+                syn::PathArguments::AngleBracketed(ab) => Some(
+                    ab.args
+                        .iter()
+                        .map(|x| match x {
+                            syn::GenericArgument::Type(gat) => type_to_cpp(gat),
+                            _ => "".to_string(),
+                        })
+                        .join(", "),
+                ),
+                syn::PathArguments::None | syn::PathArguments::Parenthesized(_) => None,
+            };
+            match suffix {
+                None => root,
+                Some(suffix) => format!("{}<{}>", root, suffix),
+            }
+        }
         Type::Reference(typr) => {
             let const_bit = match typr.mutability {
                 None => "const ",

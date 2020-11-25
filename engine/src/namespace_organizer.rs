@@ -20,6 +20,7 @@ use crate::types::Namespace;
 pub(crate) struct Use {
     pub(crate) ns: Namespace,
     pub(crate) id: Ident,
+    pub(crate) alias: Option<Ident>,
 }
 
 pub struct NamespaceEntries<'a> {
@@ -134,6 +135,7 @@ mod tests {
         Use {
             ns,
             id: Ident::new(id, Span::call_site()),
+            alias: None,
         }
     }
 }
