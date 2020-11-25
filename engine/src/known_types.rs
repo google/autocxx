@@ -16,7 +16,7 @@ use crate::types::{make_ident, TypeName};
 use indoc::indoc;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
-use syn::{parse_quote, TypePath};
+use syn::{parse_quote, Type, TypePath};
 
 /// Whether this type should be included in the 'prelude'
 /// passed to bindgen, and if so, how.
@@ -266,4 +266,17 @@ pub(crate) fn special_cpp_name(rs: &TypeName) -> Option<String> {
 
 pub(crate) fn is_known_type(ty: &TypeName) -> bool {
     KNOWN_TYPES.by_rs_name.contains_key(ty)
+}
+
+/// If a given type lacks a copy constructor, we should always use
+/// std::move in wrapper functions.
+pub(crate) fn type_lacks_copy_constructor(ty: &Type) -> bool {
+    // In future we may wish to look this up in KNOWN_TYPES.
+    match ty {
+        Type::Path(typ) => {
+            let tn = TypeName::from_type_path(typ);
+            tn.to_cpp_name().starts_with("std::unique_ptr")
+        }
+        _ => false,
+    }
 }

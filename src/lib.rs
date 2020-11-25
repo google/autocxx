@@ -238,6 +238,33 @@ macro_rules! exclude_utilities {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// Specify that a struct (or other type) is nested within
+/// some outer type. autocxx can't currently determine
+/// this itself; it's hoped that this is a temporary restriction
+/// and that the need for this directive will evaporate soon.
+/// Meanwhile, specify two arguments - first the path to the
+/// type without any nesting; and secondly the path with nesting.
+/// So for instance for a situation like
+/// ```cpp
+/// namespace A {
+///   struct B {
+///     struct C {
+///       uint32_t b;
+///     }
+///     uint32_t a;
+///   }
+/// ```
+/// specify
+/// `nested_type("A::C", "A::B::C")`
+///
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+#[macro_export]
+macro_rules! nested_type {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! usage {

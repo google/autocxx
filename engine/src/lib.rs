@@ -25,6 +25,7 @@ mod parse;
 mod rust_name_tracker;
 mod rust_pretty_printer;
 mod type_converter;
+mod type_database;
 mod typedef_analyzer;
 mod types;
 mod unqualify;
@@ -37,6 +38,7 @@ mod integration_tests;
 
 use proc_macro2::TokenStream as TokenStream2;
 use std::{fmt::Display, path::PathBuf};
+use type_database::TypeDatabase;
 
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
@@ -130,7 +132,7 @@ enum State {
 pub struct IncludeCpp {
     inclusions: Vec<CppInclusion>,
     allowlist: Vec<String>, // not TypeName as it may be functions or whatever.
-    pod_types: Vec<TypeName>,
+    type_database: TypeDatabase,
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
     exclude_utilities: bool,
     state: State,
@@ -151,9 +153,9 @@ impl IncludeCpp {
 
         let mut inclusions = Vec::new();
         let mut allowlist = Vec::new();
-        let mut pod_types = Vec::new();
         let mut parse_only = false;
         let mut exclude_utilities = false;
+        let mut type_database = TypeDatabase::new();
 
         while !input.is_empty() {
             if input.parse::<Option<syn::Token![#]>>()?.is_some() {
@@ -172,8 +174,19 @@ impl IncludeCpp {
                     let generate: syn::LitStr = args.parse()?;
                     allowlist.push(generate.value());
                     if ident == "generate_pod" {
-                        pod_types.push(TypeName::new_from_user_input(&generate.value()));
+                        type_database
+                            .note_pod_request(TypeName::new_from_user_input(&generate.value()));
                     }
+                } else if ident == "nested_type" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let nested: syn::LitStr = args.parse()?;
+                    args.parse::<syn::Token![,]>()?;
+                    let nested_in: syn::LitStr = args.parse()?;
+                    type_database.note_nested_type(
+                        TypeName::new_from_user_input(&nested.value()),
+                        TypeName::new_from_user_input(&nested_in.value()),
+                    );
                 } else if ident == "parse_only" {
                     parse_only = true;
                 } else if ident == "exclude_utilities" {
@@ -181,7 +194,7 @@ impl IncludeCpp {
                 } else {
                     return Err(syn::Error::new(
                         ident.span(),
-                        "expected generate, generate_pod or exclude_utilities",
+                        "expected generate, generate_pod, nested_type or exclude_utilities",
                     ));
                 }
             }
@@ -193,9 +206,9 @@ impl IncludeCpp {
         Ok(IncludeCpp {
             inclusions,
             allowlist,
-            pod_types,
             preconfigured_inc_dirs: None,
             exclude_utilities,
+            type_database,
             state: if parse_only {
                 State::ParseOnly
             } else {
@@ -350,16 +363,15 @@ impl IncludeCpp {
             .map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
 
-        let mut converter = bridge_converter::BridgeConverter::new(
-            self.generate_include_list(),
-            self.pod_types.clone(), // TODO take self by value to avoid clone.
-        );
+        let include_list = self.generate_include_list();
+        let mut converter =
+            bridge_converter::BridgeConverter::new(&include_list, &self.type_database);
 
         let conversion = converter
             .convert(bindings, self.exclude_utilities)
             .map_err(Error::Conversion)?;
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
-        additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
+        additional_cpp_generator.add_needs(conversion.additional_cpp_needs, &self.type_database);
         let mut items = conversion.items;
         let mut new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]

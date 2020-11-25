@@ -22,6 +22,7 @@ use crate::{
     namespace_organizer::{NamespaceEntries, Use},
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
+    type_database::TypeDatabase,
     typedef_analyzer::analyze_typedef_target,
     typedef_analyzer::TypedefTarget,
     types::make_ident,
@@ -90,16 +91,16 @@ pub(crate) struct BridgeConversionResults {
 /// At the moment this crate takes the view that it's OK to panic
 /// if the bindgen output is not as expected. It may be in future that
 /// we need to be a bit more graceful, but for now, that's OK.
-pub(crate) struct BridgeConverter {
-    include_list: Vec<String>,
-    pod_requests: Vec<TypeName>,
+pub(crate) struct BridgeConverter<'a> {
+    include_list: &'a Vec<String>,
+    type_database: &'a TypeDatabase,
 }
 
-impl BridgeConverter {
-    pub fn new(include_list: Vec<String>, pod_requests: Vec<TypeName>) -> Self {
+impl<'a> BridgeConverter<'a> {
+    pub fn new(include_list: &'a Vec<String>, type_database: &'a TypeDatabase) -> Self {
         Self {
             include_list,
-            pod_requests,
+            type_database,
         }
     }
 
@@ -131,11 +132,11 @@ impl BridgeConverter {
                     idents_found: Vec::new(),
                     type_converter: TypeConverter::new(),
                     byvalue_checker: ByValueChecker::new(),
-                    pod_requests: &self.pod_requests,
                     include_list: &self.include_list,
                     final_uses: Vec::new(),
                     bridge_name_tracker: BridgeNameTracker::new(),
                     rust_name_tracker: RustNameTracker::new(),
+                    type_database: &self.type_database,
                 };
                 conversion.convert_items(items, exclude_utilities)
             }
@@ -162,8 +163,8 @@ struct BridgeConversion<'a> {
     idents_found: Vec<Ident>,
     type_converter: TypeConverter,
     byvalue_checker: ByValueChecker,
-    pod_requests: &'a Vec<TypeName>,
     include_list: &'a Vec<String>,
+    type_database: &'a TypeDatabase,
     final_uses: Vec<Use>,
     bridge_name_tracker: BridgeNameTracker,
     rust_name_tracker: RustNameTracker,
@@ -437,7 +438,7 @@ impl<'a> BridgeConversion<'a> {
     ) -> Result<(), ConvertError> {
         self.find_nested_pod_types_in_mod(items, ns)?;
         self.byvalue_checker
-            .satisfy_requests(self.pod_requests.clone())
+            .satisfy_requests(self.type_database.get_pod_requests())
             .map_err(ConvertError::UnsafePODType)
     }
 
@@ -448,9 +449,13 @@ impl<'a> BridgeConversion<'a> {
     ) -> Result<(), ConvertError> {
         let final_ident = make_ident(tyname.get_final_ident());
         let kind_item = make_ident(if should_be_pod { "Trivial" } else { "Opaque" });
-        let tynamestring = tyname.to_cpp_name();
-        let mut for_extern_c_ts = if tyname.has_namespace() {
-            let ns_string = tyname
+        let effective_type = self
+            .type_database
+            .get_effective_type(&tyname)
+            .unwrap_or(&tyname);
+        let tynamestring = effective_type.to_cpp_name();
+        let mut for_extern_c_ts = if effective_type.has_namespace() {
+            let ns_string = effective_type
                 .ns_segment_iter()
                 .cloned()
                 .collect::<Vec<String>>()

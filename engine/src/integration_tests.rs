@@ -113,6 +113,29 @@ fn run_test(
         generate,
         generate_pods,
         TestMethod::BeQuick,
+        None,
+    )
+    .unwrap()
+}
+
+/// A positive test, we expect to pass.
+fn run_test_ex(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code: TokenStream,
+    generate: &[&str],
+    generate_pods: &[&str],
+    method: TestMethod,
+    extra_directives: Option<TokenStream>,
+) {
+    do_run_test(
+        cxx_code,
+        header_code,
+        rust_code,
+        generate,
+        generate_pods,
+        method,
+        extra_directives,
     )
     .unwrap()
 }
@@ -131,6 +154,7 @@ fn run_test_expect_fail(
         generate,
         generate_pods,
         TestMethod::BeQuick,
+        None,
     )
     .expect_err("Unexpected success");
 }
@@ -151,6 +175,7 @@ fn do_run_test(
     generate: &[&str],
     generate_pods: &[&str],
     method: TestMethod,
+    extra_directives: Option<TokenStream>,
 ) -> Result<(), TestError> {
     // Step 1: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
@@ -199,6 +224,7 @@ fn do_run_test(
             #hexathorpe include "input.h"
             #(#generate)*
             #(#generate_pods)*
+            #extra_directives
         );
 
         fn main() {
@@ -281,25 +307,6 @@ fn do_run_test(
         println!("Tempdir: {:?}", tdir.into_path().to_str());
     }
     Ok(())
-}
-
-/// This function runs a test with the full pipeline of build.rs support etc.
-fn run_test_with_full_pipeline(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-) {
-    do_run_test(
-        cxx_code,
-        header_code,
-        rust_code,
-        generate,
-        generate_pods,
-        TestMethod::UseFullPipeline,
-    )
-    .unwrap();
 }
 
 #[test]
@@ -1755,7 +1762,15 @@ fn test_cycle_string_full_pipeline() {
         assert_eq!(ffi::take_str(s), 3);
     };
     let generate = &["give_str", "take_str"];
-    run_test_with_full_pipeline(cxx, hdr, rs, generate, &[]);
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        generate,
+        &[],
+        TestMethod::UseFullPipeline,
+        None,
+    );
 }
 
 #[test]
@@ -1775,7 +1790,15 @@ fn test_inline_full_pipeline() {
         assert_eq!(ffi::take_str(s), 3);
     };
     let generate = &["give_str", "take_str"];
-    run_test_with_full_pipeline("", hdr, rs, generate, &[]);
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        generate,
+        &[],
+        TestMethod::UseFullPipeline,
+        None,
+    );
 }
 
 #[test]
@@ -1862,7 +1885,7 @@ fn test_multiple_classes_with_methods() {
         assert_eq!(oc.inc(), 4);
         assert_eq!(oc.inc(), 5);
     };
-    run_test_with_full_pipeline(
+    run_test_ex(
         cxx,
         hdr,
         rs,
@@ -1873,6 +1896,8 @@ fn test_multiple_classes_with_methods() {
             "make_opaque_class",
         ],
         &["TrivialStruct", "TrivialClass"],
+        TestMethod::UseFullPipeline,
+        None,
     );
 }
 
@@ -3257,8 +3282,7 @@ fn test_root_ns_meth_ret_nonpod() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/115
-fn test_nested_struct() {
+fn test_nested_struct_pod() {
     let hdr = indoc! {"
         #include <cstdint>
         struct A {
@@ -3267,13 +3291,53 @@ fn test_nested_struct() {
                 uint32_t b;
             };
         };
-        void daft(A::B a);
+        inline void daft(A::B a) {};
     "};
     let rs = quote! {
         let b = ffi::B { b: 12 };
         ffi::daft(b);
     };
-    run_test("", hdr, rs, &["daft"], &["B"]);
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["daft"],
+        &["B"],
+        TestMethod::BeQuick,
+        Some(quote! {
+            nested_type!("B", "A::B")
+        }),
+    );
+}
+
+#[test]
+fn test_nested_struct_nonpod() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct A {
+            uint32_t a;
+            struct B {
+                B() {}
+                uint32_t b;
+            };
+        };
+        inline void daft(A::B) {}
+    "};
+    let rs = quote! {
+        let b = ffi::B::make_unique();
+        ffi::daft(b);
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["daft", "B"],
+        &[],
+        TestMethod::BeQuick,
+        Some(quote! {
+            nested_type!("B", "A::B")
+        }),
+    );
 }
 
 // Yet to test:
