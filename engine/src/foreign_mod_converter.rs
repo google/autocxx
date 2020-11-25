@@ -276,7 +276,7 @@ impl ForeignModConverter {
                 is_constructor = true;
             }
         } else {
-            // Not a method (unless it's a static method).
+            // Not a method.
             // What's the name of the underlying C++ function call?
             // If bindgen found overloaded methods, it may not be what it seems.
             let overload_details = self
