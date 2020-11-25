@@ -24,7 +24,11 @@ use syn::{
     ForeignItemFn, Ident, ImplItem, ItemImpl, Pat, ReturnType, Type, TypePtr,
 };
 
-use super::{bridge_converter::ConvertError, overload_tracker::OverloadTracker, unqualify::{unqualify_params, unqualify_ret_type}};
+use super::{
+    bridge_converter::ConvertError,
+    overload_tracker::OverloadTracker,
+    unqualify::{unqualify_params, unqualify_ret_type},
+};
 
 struct ArgumentAnalysis {
     conversion: ArgumentConversion,

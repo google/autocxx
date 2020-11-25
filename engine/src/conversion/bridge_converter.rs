@@ -15,12 +15,8 @@
 use std::fmt::Display;
 
 use crate::{
-    additional_cpp_generator::AdditionalNeed,
-    byvalue_checker::ByValueChecker,
-    type_database::TypeDatabase,
-    types::make_ident,
-    types::Namespace,
-    types::TypeName,
+    additional_cpp_generator::AdditionalNeed, byvalue_checker::ByValueChecker,
+    type_database::TypeDatabase, types::make_ident, types::Namespace, types::TypeName,
 };
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use quote::quote;
@@ -29,7 +25,15 @@ use syn::{
     ItemForeignMod, ItemMod, ItemStruct, Type,
 };
 
-use super::{bridge_name_tracker::BridgeNameTracker, foreign_mod_converter::{ForeignModConversionCallbacks, ForeignModConverter}, namespace_organizer::NamespaceEntries, rust_name_tracker::RustNameTracker, type_converter::TypeConverter, namespace_organizer::Use, typedef_analyzer::{TypedefTarget, analyze_typedef_target}};
+use super::{
+    bridge_name_tracker::BridgeNameTracker,
+    foreign_mod_converter::{ForeignModConversionCallbacks, ForeignModConverter},
+    namespace_organizer::NamespaceEntries,
+    namespace_organizer::Use,
+    rust_name_tracker::RustNameTracker,
+    type_converter::TypeConverter,
+    typedef_analyzer::{analyze_typedef_target, TypedefTarget},
+};
 
 #[derive(Debug)]
 pub enum ConvertError {

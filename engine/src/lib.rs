@@ -13,14 +13,14 @@
 // limitations under the License.
 
 mod additional_cpp_generator;
-mod conversion;
 mod byvalue_checker;
+mod conversion;
+mod function_wrapper;
 mod known_types;
 mod parse;
 mod rust_pretty_printer;
 mod type_database;
 mod types;
-mod function_wrapper;
 
 #[cfg(any(test, feature = "build"))]
 mod builder;
@@ -354,8 +354,7 @@ impl IncludeCpp {
         let bindings = self.parse_bindings(bindings)?;
 
         let include_list = self.generate_include_list();
-        let mut converter =
-            BridgeConverter::new(&include_list, &self.type_database);
+        let mut converter = BridgeConverter::new(&include_list, &self.type_database);
 
         let conversion = converter
             .convert(bindings, self.exclude_utilities)

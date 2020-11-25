@@ -25,7 +25,7 @@ use crate::{
     types::{Namespace, TypeName},
 };
 
-use super::typedef_analyzer::{TypedefTarget, analyze_typedef_target};
+use super::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
 
 pub(crate) struct TypeConverter {
     types_found: Vec<TypeName>,
