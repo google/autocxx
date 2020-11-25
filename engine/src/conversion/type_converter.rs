@@ -1,17 +1,3 @@
-use std::collections::HashMap;
-
-use syn::{
-    parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
-    TypePath, TypePtr, TypeReference,
-};
-
-use crate::{
-    bridge_converter::ConvertError,
-    known_types::{is_known_type, known_type_substitute_path, should_dereference_in_cpp},
-    typedef_analyzer::{analyze_typedef_target, TypedefTarget},
-    types::{Namespace, TypeName},
-};
-
 // Copyright 2020 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +11,21 @@ use crate::{
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+use std::collections::HashMap;
+
+use syn::{
+    parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
+    TypePath, TypePtr, TypeReference,
+};
+
+use crate::{
+    conversion::bridge_converter::ConvertError,
+    known_types::{is_known_type, known_type_substitute_path, should_dereference_in_cpp},
+    types::{Namespace, TypeName},
+};
+
+use super::typedef_analyzer::{TypedefTarget, analyze_typedef_target};
 
 pub(crate) struct TypeConverter {
     types_found: Vec<TypeName>,

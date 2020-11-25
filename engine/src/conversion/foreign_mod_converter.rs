@@ -14,11 +14,8 @@
 
 use crate::{
     additional_cpp_generator::AdditionalNeed,
-    bridge_converter::ConvertError,
     function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
-    overload_tracker::OverloadTracker,
     types::{make_ident, Namespace, TypeName},
-    unqualify::{unqualify_params, unqualify_ret_type},
 };
 use quote::quote;
 use std::collections::{hash_map::Drain, HashMap};
@@ -26,6 +23,8 @@ use syn::{
     parse::Parser, parse_quote, punctuated::Punctuated, Attribute, FnArg, ForeignItem,
     ForeignItemFn, Ident, ImplItem, ItemImpl, Pat, ReturnType, Type, TypePtr,
 };
+
+use super::{bridge_converter::ConvertError, overload_tracker::OverloadTracker, unqualify::{unqualify_params, unqualify_ret_type}};
 
 struct ArgumentAnalysis {
     conversion: ArgumentConversion,
