@@ -1406,6 +1406,7 @@ fn test_method_pass_nonpod_by_value_with_up() {
     let hdr = indoc! {"
         #include <cstdint>
         #include <string>
+        #include <memory>
         struct Anna {
             uint32_t a;
             std::string b;
