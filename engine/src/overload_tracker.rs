@@ -72,7 +72,7 @@ impl OverloadTracker {
         panic!("Identifier was entirely numeric");
     }
 
-    pub(crate) fn get_function_real_name<'a>(&mut self, found_name: &'a str) -> MethodOverload {
+    pub(crate) fn get_function_real_name(&mut self, found_name: &str) -> MethodOverload {
         self.get_method_real_name(NULL_TYPE, found_name)
     }
 

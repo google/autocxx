@@ -15,12 +15,15 @@
 mod additional_cpp_generator;
 mod bridge_converter;
 mod byvalue_checker;
+mod foreign_mod_converter;
 mod function_wrapper;
 mod known_types;
 mod namespace_organizer;
 mod overload_tracker;
 mod parse;
 mod rust_pretty_printer;
+mod type_converter;
+mod typedef_analyzer;
 mod types;
 mod unqualify;
 
