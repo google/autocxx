@@ -302,7 +302,10 @@ impl<'a> BridgeConversion<'a> {
                         let new_ns = ns.push(itm.ident.to_string());
                         let mut new_items = Vec::new();
                         self.convert_mod_items(items, new_ns, &mut new_items)?;
-                        new_itm.content.as_mut().unwrap().1 = new_items;
+                        if !new_items.is_empty() {
+                            new_itm.content.as_mut().unwrap().1 = new_items;
+                            output_items.push(Item::Mod(new_itm));
+                        }
                     }
                 }
                 Item::Use(_) => {
