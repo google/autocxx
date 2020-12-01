@@ -198,6 +198,9 @@ impl IncludeCpp {
                 break;
             }
         }
+        if !exclude_utilities {
+            type_database.add_to_allowlist("make_string".to_string());
+        }
 
         Ok(IncludeCpp {
             inclusions,

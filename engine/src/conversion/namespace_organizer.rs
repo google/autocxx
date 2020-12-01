@@ -12,29 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use proc_macro2::Ident;
+use super::bridge_converter::Api;
 use std::collections::BTreeMap;
 
-use crate::types::Namespace;
-
-pub(crate) struct Use {
-    pub(crate) ns: Namespace,
-    pub(crate) id: Ident,
-    pub(crate) alias: Option<Ident>,
-}
-
 pub struct NamespaceEntries<'a> {
-    entries: Vec<&'a Use>,
+    entries: Vec<&'a Api>,
     children: BTreeMap<&'a String, NamespaceEntries<'a>>,
 }
 
 impl<'a> NamespaceEntries<'a> {
-    pub(crate) fn new(apis: &'a [Use]) -> Self {
+    pub(crate) fn new(apis: &'a [Api]) -> Self {
         let api_refs = apis.iter().collect::<Vec<_>>();
         Self::sort_by_inner_namespace(api_refs, 0)
     }
 
-    pub(crate) fn entries(&self) -> &[&'a Use] {
+    pub(crate) fn entries(&self) -> &[&'a Api] {
         &self.entries
     }
 
@@ -42,7 +34,7 @@ impl<'a> NamespaceEntries<'a> {
         self.children.iter()
     }
 
-    fn sort_by_inner_namespace(apis: Vec<&'a Use>, depth: usize) -> Self {
+    fn sort_by_inner_namespace(apis: Vec<&'a Api>, depth: usize) -> Self {
         let mut root = NamespaceEntries {
             entries: Vec::new(),
             children: BTreeMap::new(),
@@ -72,9 +64,11 @@ impl<'a> NamespaceEntries<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use super::Api;
     use super::NamespaceEntries;
-    use super::Use;
-    use crate::types::Namespace;
+    use crate::{conversion::bridge_converter::Use, types::Namespace};
     use proc_macro2::{Ident, Span};
 
     #[test]
@@ -123,19 +117,25 @@ mod tests {
         assert_ident(k_nse_entries[1], "M");
     }
 
-    fn assert_ident(api: &Use, expected: &str) {
+    fn assert_ident(api: &Api, expected: &str) {
         assert_eq!(api.id.to_string(), expected);
     }
 
-    fn make_api(ns: Option<&str>, id: &str) -> Use {
+    fn make_api(ns: Option<&str>, id: &str) -> Api {
         let ns = match ns {
             Some(st) => Namespace::from_user_input(st),
             None => Namespace::new(),
         };
-        Use {
+        Api {
             ns,
             id: Ident::new(id, Span::call_site()),
-            alias: None,
+            use_stmt: Use::Used,
+            deps: HashSet::new(),
+            extern_c_mod_item: None,
+            bridge_item: None,
+            global_item: None,
+            additional_cpp: None,
+            id_for_allowlist: None,
         }
     }
 }

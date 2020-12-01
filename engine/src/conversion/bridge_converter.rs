@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt::Display;
+use std::{collections::HashMap, collections::HashSet, fmt::Display};
 
 use crate::{
     additional_cpp_generator::AdditionalNeed, byvalue_checker::ByValueChecker,
@@ -29,11 +29,12 @@ use super::{
     bridge_name_tracker::BridgeNameTracker,
     foreign_mod_converter::{ForeignModConversionCallbacks, ForeignModConverter},
     namespace_organizer::NamespaceEntries,
-    namespace_organizer::Use,
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
     typedef_analyzer::{analyze_typedef_target, TypedefTarget},
 };
+
+unzip_n::unzip_n!(pub 4);
 
 #[derive(Debug)]
 pub enum ConvertError {
@@ -58,6 +59,41 @@ impl Display for ConvertError {
             ConvertError::UnexpectedThisType => write!(f, "Unexpected type for 'this'")?, // TODO give type/function
         }
         Ok(())
+    }
+}
+
+pub(crate) enum Use {
+    Unused,
+    Used,
+    UsedWithAlias(Ident),
+}
+
+pub(crate) struct Api {
+    pub(crate) ns: Namespace,
+    pub(crate) id: Ident,
+    pub(crate) use_stmt: Use,
+    pub(crate) deps: HashSet<TypeName>,
+    pub(crate) extern_c_mod_item: Option<ForeignItem>,
+    pub(crate) bridge_item: Option<Item>,
+    pub(crate) global_item: Option<Item>,
+    pub(crate) additional_cpp: Option<AdditionalNeed>,
+    pub(crate) id_for_allowlist: Option<Ident>,
+}
+
+impl Api {
+    fn typename(&self) -> TypeName {
+        TypeName::new(&self.ns, &self.id.to_string())
+    }
+
+    fn typename_for_allowlist(&self) -> TypeName {
+        let id_for_allowlist = match &self.id_for_allowlist {
+            None => match &self.use_stmt {
+                Use::UsedWithAlias(alias) => alias,
+                _ => &self.id,
+            },
+            Some(id) => &id,
+        };
+        TypeName::new(&self.ns, &id_for_allowlist.to_string())
     }
 }
 
@@ -123,16 +159,12 @@ impl<'a> BridgeConverter<'a> {
                 };
                 let conversion = BridgeConversion {
                     bindgen_mod,
-                    all_items: Vec::new(),
-                    bridge_items: Vec::new(),
                     extern_c_mod: None,
-                    extern_c_mod_items: Vec::new(),
-                    additional_cpp_needs: Vec::new(),
                     idents_found: Vec::new(),
                     type_converter: TypeConverter::new(),
                     byvalue_checker: ByValueChecker::new(),
                     include_list: &self.include_list,
-                    final_uses: Vec::new(),
+                    apis: Vec::new(),
                     bridge_name_tracker: BridgeNameTracker::new(),
                     rust_name_tracker: RustNameTracker::new(),
                     type_database: &self.type_database,
@@ -154,19 +186,22 @@ fn get_blank_extern_c_mod() -> ItemForeignMod {
 /// need to pass into each individual function within this file.
 struct BridgeConversion<'a> {
     bindgen_mod: ItemMod,
-    all_items: Vec<Item>,
-    bridge_items: Vec<Item>,
     extern_c_mod: Option<ItemForeignMod>,
-    extern_c_mod_items: Vec<ForeignItem>,
-    additional_cpp_needs: Vec<AdditionalNeed>,
     idents_found: Vec<Ident>,
     type_converter: TypeConverter,
     byvalue_checker: ByValueChecker,
     include_list: &'a [String],
     type_database: &'a TypeDatabase,
-    final_uses: Vec<Use>,
+    apis: Vec<Api>,
     bridge_name_tracker: BridgeNameTracker,
     rust_name_tracker: RustNameTracker,
+}
+
+fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
+    input
+        .into_iter()
+        .filter_map(std::convert::identity)
+        .collect()
 }
 
 impl<'a> BridgeConversion<'a> {
@@ -209,8 +244,26 @@ impl<'a> BridgeConversion<'a> {
                 _ => return Err(ConvertError::UnexpectedOuterItem),
             }
         }
-        self.extern_c_mod_items
-            .extend(self.build_include_foreign_items());
+        let all_apis = self.filter_apis_by_following_edges_from_allowlist();
+        let mut use_statements = Self::generate_final_use_statements(&all_apis);
+        let (extern_c_mod_items, global_items, bridge_items, additional_cpp_needs) = all_apis
+            .into_iter()
+            .map(|api| {
+                (
+                    api.extern_c_mod_item,
+                    api.global_item,
+                    api.bridge_item,
+                    api.additional_cpp,
+                )
+            })
+            .unzip_n_vec();
+        // Remove Nones.
+        let mut extern_c_mod_items = remove_nones(extern_c_mod_items);
+        let mut all_items = remove_nones(global_items);
+        let mut bridge_items = remove_nones(bridge_items);
+        let additional_cpp_needs = remove_nones(additional_cpp_needs);
+        extern_c_mod_items
+            .extend(self.build_include_foreign_items(!additional_cpp_needs.is_empty()));
         // We will always create an extern "C" mod even if bindgen
         // didn't generate one, e.g. because it only generated types.
         // We still want cxx to know about those types.
@@ -218,30 +271,69 @@ impl<'a> BridgeConversion<'a> {
             .extern_c_mod
             .take()
             .unwrap_or_else(get_blank_extern_c_mod);
-        extern_c_mod.items.append(&mut self.extern_c_mod_items);
-        self.bridge_items.push(Item::ForeignMod(extern_c_mod));
+        extern_c_mod.items.append(&mut extern_c_mod_items);
+        bridge_items.push(Item::ForeignMod(extern_c_mod));
         // The extensive use of parse_quote here could end up
         // being a performance bottleneck. If so, we might want
         // to set the 'contents' field of the ItemMod
         // structures directly.
-        self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(parse_quote! {
-            pub mod root {
-                #(#bindgen_root_items)*
-            }
-        })];
-        self.generate_final_use_statements();
-        self.all_items.push(Item::Mod(self.bindgen_mod));
-        let bridge_items = &self.bridge_items;
-        self.all_items.push(Item::Mod(parse_quote! {
-            #[cxx::bridge]
-            pub mod cxxbridge {
-                #(#bridge_items)*
-            }
-        }));
+        if !bindgen_root_items.is_empty() {
+            self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(parse_quote! {
+                pub mod root {
+                    #(#bindgen_root_items)*
+                }
+            })];
+            all_items.push(Item::Mod(self.bindgen_mod));
+        }
+        if !bridge_items.is_empty() {
+            all_items.push(Item::Mod(parse_quote! {
+                #[cxx::bridge]
+                pub mod cxxbridge {
+                    #(#bridge_items)*
+                }
+            }));
+        }
+        all_items.append(&mut use_statements);
         Ok(BridgeConversionResults {
-            items: self.all_items,
-            additional_cpp_needs: self.additional_cpp_needs,
+            items: all_items,
+            additional_cpp_needs,
         })
+    }
+
+    fn filter_apis_by_following_edges_from_allowlist(&mut self) -> Vec<Api> {
+        let mut todos: Vec<_> = self
+            .apis
+            .iter()
+            .filter(|api| {
+                let tnforal = api.typename_for_allowlist();
+                log::info!("Considering {}", tnforal);
+                self.is_on_allowlist(&tnforal)
+            })
+            .map(Api::typename)
+            .collect();
+        log::info!("APIs now: {:?}", todos);
+        let mut by_typename: HashMap<TypeName, Vec<Api>> = HashMap::new();
+        for api in self.apis.drain(..) {
+            let tn = api.typename();
+            by_typename.entry(tn).or_default().push(api);
+        }
+        let mut done = HashSet::new();
+        let mut output = Vec::new();
+        while !todos.is_empty() {
+            let todo = todos.remove(0);
+            if done.contains(&todo) {
+                continue;
+            }
+            match by_typename.remove(&todo) {
+                Some(mut these_apis) => {
+                    todos.extend(these_apis.iter_mut().flat_map(|api| api.deps.drain()));
+                    output.append(&mut these_apis);
+                }
+                None => {} // probably an intrisic e.g. uint32_t
+            }
+            done.insert(todo);
+        }
+        output
     }
 
     fn convert_mod_items(
@@ -271,19 +363,22 @@ impl<'a> BridgeConversion<'a> {
                 Item::Struct(mut s) => {
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
                     let should_be_pod = self.byvalue_checker.is_pod(&tyname);
+                    let field_types = if should_be_pod {
+                        self.get_struct_field_types(&ns, &s)?
+                    } else {
+                        Self::make_non_pod(&mut s);
+                        HashSet::new()
+                    };
                     if !Self::generics_contentful(&s.generics) {
                         // cxx::bridge can't cope with type aliases to generic
                         // types at the moment.
-                        self.generate_type_alias(tyname, should_be_pod)?;
-                    }
-                    if !should_be_pod {
-                        Self::make_non_pod(&mut s);
+                        self.generate_type_alias(tyname, should_be_pod, field_types)?;
                     }
                     output_items.push(Item::Struct(s));
                 }
                 Item::Enum(e) => {
                     let tyname = TypeName::new(&ns, &e.ident.to_string());
-                    self.generate_type_alias(tyname, true)?;
+                    self.generate_type_alias(tyname, true, HashSet::new())?;
                     output_items.push(Item::Enum(e));
                 }
                 Item::Impl(imp) => {
@@ -311,8 +406,21 @@ impl<'a> BridgeConversion<'a> {
                 Item::Use(_) => {
                     uses_to_add.push(item);
                 }
-                Item::Const(_) => {
-                    self.all_items.push(item);
+                Item::Const(itc) => {
+                    // TODO the following puts this constant into
+                    // the global namespace which is bug
+                    // https://github.com/google/autocxx/issues/133
+                    self.add_api(Api {
+                        id: itc.ident.clone(),
+                        ns: ns.clone(),
+                        bridge_item: None,
+                        extern_c_mod_item: None,
+                        global_item: Some(Item::Const(itc)),
+                        additional_cpp: None,
+                        deps: HashSet::new(),
+                        use_stmt: Use::Unused,
+                        id_for_allowlist: None,
+                    });
                 }
                 Item::Type(ity) => {
                     if Self::generics_contentful(&ity.generics) {
@@ -347,6 +455,19 @@ impl<'a> BridgeConversion<'a> {
             }
         }
         Ok(())
+    }
+
+    fn get_struct_field_types(
+        &self,
+        ns: &Namespace,
+        s: &ItemStruct,
+    ) -> Result<HashSet<TypeName>, ConvertError> {
+        let mut results = HashSet::new();
+        for f in &s.fields {
+            let annotated = self.type_converter.convert_type(f.ty.clone(), ns)?;
+            results.extend(annotated.types_encountered);
+        }
+        Ok(results)
     }
 
     fn make_non_pod(s: &mut ItemStruct) {
@@ -457,6 +578,7 @@ impl<'a> BridgeConversion<'a> {
         &mut self,
         tyname: TypeName,
         should_be_pod: bool,
+        deps: HashSet<TypeName>,
     ) -> Result<(), ConvertError> {
         let final_ident = make_ident(tyname.get_final_ident());
         let kind_item = make_ident(if should_be_pod { "Trivial" } else { "Opaque" });
@@ -518,28 +640,35 @@ impl<'a> BridgeConversion<'a> {
             .to_vec(),
         );
         fulltypath.push(final_ident.clone());
-        self.extern_c_mod_items
-            .push(ForeignItem::Verbatim(for_extern_c_ts));
-        self.bridge_items.push(Item::Impl(parse_quote! {
-            impl UniquePtr<#final_ident> {}
-        }));
-        self.all_items.push(Item::Impl(parse_quote! {
-            unsafe impl cxx::ExternType for #(#fulltypath)::* {
-                type Id = cxx::type_id!(#tynamestring);
-                type Kind = cxx::kind::#kind_item;
-            }
-        }));
-        self.add_use(tyname.get_namespace(), &final_ident, None);
+        let api = Api {
+            ns: tyname.get_namespace().clone(),
+            id: final_ident.clone(),
+            use_stmt: Use::Used,
+            global_item: Some(Item::Impl(parse_quote! {
+                unsafe impl cxx::ExternType for #(#fulltypath)::* {
+                    type Id = cxx::type_id!(#tynamestring);
+                    type Kind = cxx::kind::#kind_item;
+                }
+            })),
+            bridge_item: Some(Item::Impl(parse_quote! {
+                impl UniquePtr<#final_ident> {}
+            })),
+            extern_c_mod_item: Some(ForeignItem::Verbatim(for_extern_c_ts)),
+            additional_cpp: None,
+            deps,
+            id_for_allowlist: None,
+        };
+        self.add_api(api);
         self.type_converter.push(tyname);
         self.idents_found.push(final_ident);
         Ok(())
     }
 
-    fn build_include_foreign_items(&self) -> Vec<ForeignItem> {
-        let extra_inclusion = if self.additional_cpp_needs.is_empty() {
-            None
-        } else {
+    fn build_include_foreign_items(&self, has_additional_cpp_needs: bool) -> Vec<ForeignItem> {
+        let extra_inclusion = if has_additional_cpp_needs {
             Some("autocxxgen.h".to_string())
+        } else {
+            None
         };
         let chained = self.include_list.iter().chain(extra_inclusion.iter());
         chained
@@ -551,14 +680,6 @@ impl<'a> BridgeConversion<'a> {
             .collect()
     }
 
-    fn add_use(&mut self, ns: &Namespace, id: &Ident, alias: Option<Ident>) {
-        self.final_uses.push(Use {
-            ns: ns.clone(),
-            id: id.clone(),
-            alias,
-        });
-    }
-
     /// Adds items which we always add, cos they're useful.
     fn generate_utilities(&mut self) {
         // Unless we've been specifically asked not to do so, we always
@@ -566,33 +687,43 @@ impl<'a> BridgeConversion<'a> {
         // we run two passes through bindgen. i.e. the next 'if' is always true,
         // and we always generate an additional C++ file for our bindings additions,
         // unless the include_cpp macro has specified ExcludeUtilities.
-        self.extern_c_mod_items.push(ForeignItem::Fn(parse_quote!(
-            fn make_string(str_: &str) -> UniquePtr<CxxString>;
-        )));
-        self.add_use(&Namespace::new(), &make_ident("make_string"), None);
-        self.additional_cpp_needs
-            .push(AdditionalNeed::MakeStringConstructor);
+        let api = Api {
+            ns: Namespace::new(),
+            id: make_ident("make_string"),
+            use_stmt: Use::Used,
+            extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
+                fn make_string(str_: &str) -> UniquePtr<CxxString>;
+            ))),
+            additional_cpp: Some(AdditionalNeed::MakeStringConstructor),
+            deps: HashSet::new(),
+            bridge_item: None,
+            global_item: None,
+            id_for_allowlist: None,
+        };
+        self.add_api(api);
     }
 
     /// Generate lots of 'use' statements to pull cxxbridge items into the output
     /// mod hierarchy according to C++ namespaces.
-    fn generate_final_use_statements(&mut self) {
-        let ns_entries = NamespaceEntries::new(&self.final_uses);
-        Self::append_child_namespace(&ns_entries, &mut self.all_items);
+    fn generate_final_use_statements(input_items: &[Api]) -> Vec<Item> {
+        let mut output_items = Vec::new();
+        let ns_entries = NamespaceEntries::new(input_items);
+        Self::append_child_namespace(&ns_entries, &mut output_items);
+        output_items
     }
 
     fn append_child_namespace(ns_entries: &NamespaceEntries, output_items: &mut Vec<Item>) {
         for item in ns_entries.entries() {
             let id = &item.id;
-            let stmt = match &item.alias {
-                Some(alias) => parse_quote!(
+            match &item.use_stmt {
+                Use::UsedWithAlias(alias) => output_items.push(Item::Use(parse_quote!(
                     pub use cxxbridge :: #id as #alias;
-                ),
-                None => parse_quote!(
+                ))),
+                Use::Used => output_items.push(Item::Use(parse_quote!(
                     pub use cxxbridge :: #id;
-                ),
+                ))),
+                Use::Unused => {}
             };
-            output_items.push(Item::Use(stmt));
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
             let child_id = make_ident(child_name);
@@ -611,35 +742,21 @@ impl<'a> BridgeConversion<'a> {
 }
 
 impl<'a> ForeignModConversionCallbacks for BridgeConversion<'a> {
-    fn add_additional_cpp_need(&mut self, need: AdditionalNeed) {
-        self.additional_cpp_needs.push(need);
-    }
-
     fn convert_boxed_type(
         &self,
         ty: Box<Type>,
         ns: &Namespace,
-    ) -> Result<(Box<Type>, bool), ConvertError> {
+    ) -> Result<(Box<Type>, HashSet<TypeName>), ConvertError> {
         let annotated = self.type_converter.convert_boxed_type(ty, ns)?;
-        let blocklisted = annotated
-            .types_encountered
-            .into_iter()
-            .filter(|x| self.is_on_blocklist(x))
-            .next()
-            .is_some();
-        Ok((annotated.ty, blocklisted))
+        Ok((annotated.ty, annotated.types_encountered))
     }
 
     fn is_pod(&self, ty: &TypeName) -> bool {
         self.byvalue_checker.is_pod(ty)
     }
 
-    fn add_use(&mut self, ns: &Namespace, id: &Ident, alias: Option<Ident>) {
-        self.add_use(ns, id, alias);
-    }
-
-    fn push_extern_c_mod_item(&mut self, item: ForeignItem) {
-        self.extern_c_mod_items.push(item);
+    fn add_api(&mut self, api: Api) {
+        self.apis.push(api);
     }
 
     fn get_cxx_bridge_name(

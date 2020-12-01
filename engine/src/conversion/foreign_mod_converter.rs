@@ -18,14 +18,15 @@ use crate::{
     types::{make_ident, Namespace, TypeName},
 };
 use quote::quote;
-use std::collections::{hash_map::Drain, HashMap};
+use std::collections::{hash_map::Drain, HashMap, HashSet};
 use syn::{
     parse::Parser, parse_quote, punctuated::Punctuated, Attribute, FnArg, ForeignItem,
     ForeignItemFn, Ident, ImplItem, ItemImpl, Pat, ReturnType, Type, TypePtr,
 };
 
 use super::{
-    bridge_converter::ConvertError,
+    bridge_converter::Use,
+    bridge_converter::{Api, ConvertError},
     overload_tracker::OverloadTracker,
     unqualify::{unqualify_params, unqualify_ret_type},
 };
@@ -35,29 +36,27 @@ struct ArgumentAnalysis {
     name: Pat,
     self_type: Option<TypeName>,
     was_reference: bool,
-    on_blocklist: bool,
+    deps: HashSet<TypeName>,
 }
 
 struct ReturnTypeAnalysis {
     rt: ReturnType,
     conversion: Option<ArgumentConversion>,
     was_reference: bool,
-    on_blocklist: bool,
+    deps: HashSet<TypeName>,
 }
 
 /// Ways in which the conversion of a given extern "C" mod can
 /// have more global effects or require more global knowledge outside
 /// of its immediate conversion.
 pub(crate) trait ForeignModConversionCallbacks {
-    fn add_additional_cpp_need(&mut self, need: AdditionalNeed);
     fn convert_boxed_type(
         &self,
         ty: Box<Type>,
         ns: &Namespace,
-    ) -> Result<(Box<Type>, bool), ConvertError>;
+    ) -> Result<(Box<Type>, HashSet<TypeName>), ConvertError>;
     fn is_pod(&self, ty: &TypeName) -> bool;
-    fn add_use(&mut self, ns: &Namespace, rust_name_ident: &Ident, alias: Option<Ident>);
-    fn push_extern_c_mod_item(&mut self, item: ForeignItem);
+    fn add_api(&mut self, api: Api);
     fn get_cxx_bridge_name(
         &mut self,
         type_name: Option<&str>,
@@ -235,14 +234,11 @@ impl ForeignModConverter {
         let (mut params, mut param_details): (Punctuated<_, syn::Token![,]>, Vec<_>) =
             param_details.into_iter().map(Result::unwrap).unzip();
 
-        let params_on_blocklist = param_details.iter().any(|b| b.on_blocklist);
-        if params_on_blocklist {
-            log::info!(
-                "Skipping function {} because one or more parameters were on the blocklist",
-                initial_rust_name
-            );
-            return Ok(()); // TODO consider how to inform user
-        }
+        let params_deps: HashSet<_> = param_details
+            .iter()
+            .map(|p| p.deps.iter().cloned())
+            .flatten()
+            .collect();
         let mut self_ty = param_details
             .iter()
             .filter_map(|pd| pd.self_type.as_ref())
@@ -325,9 +321,11 @@ impl ForeignModConverter {
 
         // Analyze the return type, just as we previously did for the
         // parameters.
-        let return_analysis = if is_constructor {
+        let mut return_analysis = if is_constructor {
             let self_ty = self_ty.as_ref().unwrap();
             let constructed_type = self_ty.to_type_path();
+            let mut these_deps = HashSet::new();
+            these_deps.insert(self_ty.clone());
             ReturnTypeAnalysis {
                 rt: parse_quote! {
                     -> #constructed_type
@@ -336,14 +334,16 @@ impl ForeignModConverter {
                     #constructed_type
                 })),
                 was_reference: false,
-                on_blocklist: callbacks.is_on_blocklist(self_ty),
+                deps: these_deps,
             }
         } else {
             self.convert_return_type(callbacks, fun.sig.output, ns)?
         };
-        if return_analysis.on_blocklist {
+        let mut deps = params_deps;
+        deps.extend(return_analysis.deps.drain());
+        if deps.iter().any(|tn| callbacks.is_on_blocklist(tn)) {
             log::info!(
-                "Skipping function {} due to return type being on blocklist",
+                "Skipping function {} due to return type or parameter being on blocklist",
                 rust_name
             );
             return Ok(()); // TODO think about how to inform user about this
@@ -379,6 +379,7 @@ impl ForeignModConverter {
         // return type conversion, so get some mutable variables ready.
         let mut rust_name_attr = Vec::new();
         let mut cpp_name_attr = Vec::new();
+        let mut additional_cpp = None;
 
         if wrapper_function_needed {
             // Generate a new layer of C++ code to wrap/unwrap parameters
@@ -397,14 +398,13 @@ impl ForeignModConverter {
             } else {
                 FunctionWrapperPayload::FunctionCall(ns.clone(), cpp_construction_ident)
             };
-            let a = AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
+            additional_cpp = Some(AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
                 payload,
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
                 is_a_method: is_a_method && !is_constructor && !is_static_method,
-            }));
-            callbacks.add_additional_cpp_need(a);
+            })));
             // Now modify the cxx::bridge entry we're going to make.
             if let Some(conversion) = ret_type_conversion {
                 let new_ret_type = conversion.unconverted_rust_type();
@@ -498,19 +498,36 @@ impl ForeignModConverter {
         };
         // At last, actually generate the cxx::bridge entry.
         let vis = &fun.vis;
-        callbacks.push_extern_c_mod_item(ForeignItem::Fn(parse_quote!(
+        let extern_c_mod_item = Some(ForeignItem::Fn(parse_quote!(
             #(#namespace_attr)*
             #(#rust_name_attr)*
             #(#cpp_name_attr)*
             #vis fn #cxxbridge_name ( #params ) #ret_type;
         )));
-        if !is_a_method {
-            if use_alias_required.is_some() {
-                callbacks.add_use(&ns, &cxxbridge_name, use_alias_required);
-            } else {
-                callbacks.add_use(&ns, &make_ident(&rust_name), None);
+        let (id, use_stmt, id_for_allowlist) = if is_a_method {
+            (
+                make_ident(&rust_name),
+                Use::Unused,
+                self_ty.map(|ty| make_ident(ty.get_final_ident())),
+            )
+        } else {
+            match use_alias_required {
+                None => (make_ident(&rust_name), Use::Used, None),
+                Some(alias) => (cxxbridge_name, Use::UsedWithAlias(alias), None),
             }
-        }
+        };
+        let api = Api {
+            ns: ns.clone(),
+            id,
+            use_stmt,
+            extern_c_mod_item,
+            additional_cpp,
+            global_item: None,
+            bridge_item: None,
+            deps,
+            id_for_allowlist,
+        };
+        callbacks.add_api(api);
         Ok(())
     }
 
@@ -541,7 +558,7 @@ impl ForeignModConverter {
                     }
                     _ => old_pat,
                 };
-                let (new_ty, on_blocklist) = callbacks.convert_boxed_type(pt.ty, ns)?;
+                let (new_ty, deps) = callbacks.convert_boxed_type(pt.ty, ns)?;
                 let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
                 let conversion = self.argument_conversion_details(&new_ty, callbacks);
                 pt.pat = Box::new(new_pat.clone());
@@ -553,7 +570,7 @@ impl ForeignModConverter {
                         name: new_pat,
                         conversion,
                         was_reference,
-                        on_blocklist,
+                        deps,
                     },
                 )
             }
@@ -609,10 +626,10 @@ impl ForeignModConverter {
                 rt: ReturnType::Default,
                 was_reference: false,
                 conversion: None,
-                on_blocklist: false,
+                deps: HashSet::new(),
             },
             ReturnType::Type(rarrow, boxed_type) => {
-                let (boxed_type, on_blocklist) = callbacks.convert_boxed_type(boxed_type, ns)?;
+                let (boxed_type, deps) = callbacks.convert_boxed_type(boxed_type, ns)?;
                 let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
                 let conversion =
                     self.return_type_conversion_details(boxed_type.as_ref(), callbacks);
@@ -620,7 +637,7 @@ impl ForeignModConverter {
                     rt: ReturnType::Type(rarrow, boxed_type),
                     conversion: Some(conversion),
                     was_reference,
-                    on_blocklist,
+                    deps,
                 }
             }
         };
