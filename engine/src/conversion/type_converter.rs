@@ -146,9 +146,6 @@ impl TypeConverter {
                     .map(|s| parse_quote! { #s })
                     .chain(typ.path.segments.into_iter())
                     .collect();
-                types_encountered.push(TypeName::from_type_path(&typ));
-            } else {
-                types_encountered.push(ty);
             }
         }
         let mut last_seg_args = None;
@@ -164,6 +161,7 @@ impl TypeConverter {
         }
         drop(seg_iter);
         let tn = TypeName::from_type_path(&typ);
+        types_encountered.push(tn.clone());
         // Let's see if this is a typedef.
         let typ = self
             .resolve_typedef(&tn)?
