@@ -15,12 +15,8 @@
 use std::fmt::Display;
 
 use crate::{
-    additional_cpp_generator::AdditionalNeed,
-    byvalue_checker::ByValueChecker,
-    type_database::TypeDatabase,
-    types::make_ident,
-    types::Namespace,
-    types::TypeName,
+    additional_cpp_generator::AdditionalNeed, byvalue_checker::ByValueChecker,
+    type_database::TypeDatabase, types::make_ident, types::Namespace, types::TypeName,
 };
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use quote::quote;
@@ -29,7 +25,15 @@ use syn::{
     ItemForeignMod, ItemMod, ItemStruct, Type,
 };
 
-use super::{bridge_name_tracker::BridgeNameTracker, foreign_mod_converter::{ForeignModConversionCallbacks, ForeignModConverter}, namespace_organizer::NamespaceEntries, rust_name_tracker::RustNameTracker, type_converter::TypeConverter, namespace_organizer::Use, typedef_analyzer::{TypedefTarget, analyze_typedef_target}};
+use super::{
+    bridge_name_tracker::BridgeNameTracker,
+    foreign_mod_converter::{ForeignModConversionCallbacks, ForeignModConverter},
+    namespace_organizer::NamespaceEntries,
+    namespace_organizer::Use,
+    rust_name_tracker::RustNameTracker,
+    type_converter::TypeConverter,
+    typedef_analyzer::{analyze_typedef_target, TypedefTarget},
+};
 
 #[derive(Debug)]
 pub enum ConvertError {
@@ -249,6 +253,7 @@ impl<'a> BridgeConversion<'a> {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
         let mut mod_converter = ForeignModConverter::new(ns.clone());
+        let mut uses_to_add = Vec::new();
         for item in items {
             match item {
                 Item::ForeignMod(mut fm) => {
@@ -297,12 +302,14 @@ impl<'a> BridgeConversion<'a> {
                         let new_ns = ns.push(itm.ident.to_string());
                         let mut new_items = Vec::new();
                         self.convert_mod_items(items, new_ns, &mut new_items)?;
-                        new_itm.content.as_mut().unwrap().1 = new_items;
+                        if !new_items.is_empty() {
+                            new_itm.content.as_mut().unwrap().1 = new_items;
+                            output_items.push(Item::Mod(new_itm));
+                        }
                     }
-                    output_items.push(Item::Mod(new_itm));
                 }
                 Item::Use(_) => {
-                    output_items.push(item);
+                    uses_to_add.push(item);
                 }
                 Item::Const(_) => {
                     self.all_items.push(item);
@@ -323,18 +330,21 @@ impl<'a> BridgeConversion<'a> {
         mod_converter.finished(self)?;
         output_items.extend(mod_converter.get_impl_blocks().map(|(_, v)| Item::Impl(v)));
         let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
-        output_items.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use self::
-                #(#supers)::*
-            ::cxxbridge;
-        }));
-        for thing in &["UniquePtr", "CxxString"] {
-            let thing = make_ident(thing);
+        if !output_items.is_empty() {
+            output_items.append(&mut uses_to_add);
             output_items.push(Item::Use(parse_quote! {
                 #[allow(unused_imports)]
-                use cxx:: #thing;
+                use self::
+                    #(#supers)::*
+                ::cxxbridge;
             }));
+            for thing in &["UniquePtr", "CxxString"] {
+                let thing = make_ident(thing);
+                output_items.push(Item::Use(parse_quote! {
+                    #[allow(unused_imports)]
+                    use cxx:: #thing;
+                }));
+            }
         }
         Ok(())
     }

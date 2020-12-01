@@ -13,11 +13,11 @@
 // limitations under the License.
 
 pub(crate) mod bridge_converter;
-mod foreign_mod_converter;
-mod type_converter;
-mod overload_tracker;
-mod namespace_organizer;
-mod typedef_analyzer;
-mod rust_name_tracker;
 mod bridge_name_tracker;
+mod foreign_mod_converter;
+mod namespace_organizer;
+mod overload_tracker;
+mod rust_name_tracker;
+mod type_converter;
+mod typedef_analyzer;
 mod unqualify;
