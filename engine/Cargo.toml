@@ -38,6 +38,7 @@ cxx-gen = "0.6.3"
 dunce = "1.0.1"
 cc = { version = "1.0", optional = true }
 cxx = "0.5.6"
+unzip-n = "0.1.2"
 
 [dependencies.syn]
 version = "1.0.39"

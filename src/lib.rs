@@ -276,7 +276,6 @@ macro_rules! block {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
-
 #[doc(hidden)]
 #[macro_export]
 macro_rules! usage {

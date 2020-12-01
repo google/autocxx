@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use syn::{
     parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
@@ -30,11 +30,11 @@ use super::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
 /// Results of some type conversion, annotated with a list of every type encountered.
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
-    pub(crate) types_encountered: Vec<TypeName>,
+    pub(crate) types_encountered: HashSet<TypeName>,
 }
 
 impl<T> Annotated<T> {
-    fn new(ty: T, types_encountered: Vec<TypeName>) -> Self {
+    fn new(ty: T, types_encountered: HashSet<TypeName>) -> Self {
         Self {
             ty,
             types_encountered,
@@ -79,7 +79,11 @@ impl TypeConverter {
         Ok(self.convert_type(*ty, ns)?.map(Box::new))
     }
 
-    fn convert_type(&self, ty: Type, ns: &Namespace) -> Result<Annotated<Type>, ConvertError> {
+    pub(crate) fn convert_type(
+        &self,
+        ty: Type,
+        ns: &Namespace,
+    ) -> Result<Annotated<Type>, ConvertError> {
         let result = match ty {
             Type::Path(p) => {
                 let newp = self.convert_type_path(p, ns)?;
@@ -104,7 +108,7 @@ impl TypeConverter {
                 Annotated::new(Type::Reference(r), innerty.types_encountered)
             }
             Type::Ptr(ptr) => self.convert_ptr_to_reference(ptr, ns)?.map(Type::Reference),
-            _ => Annotated::new(ty, Vec::new()),
+            _ => Annotated::new(ty, HashSet::new()),
         };
         Ok(result)
     }
@@ -114,7 +118,7 @@ impl TypeConverter {
         mut typ: TypePath,
         ns: &Namespace,
     ) -> Result<Annotated<TypePath>, ConvertError> {
-        let mut types_encountered = Vec::new();
+        let mut types_encountered = HashSet::new();
         if typ.path.segments.iter().next().unwrap().ident == "root" {
             typ.path.segments = typ
                 .path
@@ -126,7 +130,7 @@ impl TypeConverter {
                         PathArguments::AngleBracketed(mut ab) => {
                             let mut innerty = self.convert_punctuated(ab.args, ns)?;
                             ab.args = innerty.ty;
-                            types_encountered.append(&mut innerty.types_encountered);
+                            types_encountered.extend(innerty.types_encountered.drain());
                             PathArguments::AngleBracketed(ab)
                         }
                         _ => s.arguments,
@@ -161,12 +165,15 @@ impl TypeConverter {
         }
         drop(seg_iter);
         let tn = TypeName::from_type_path(&typ);
-        types_encountered.push(tn.clone());
+        types_encountered.insert(tn.clone());
         // Let's see if this is a typedef.
-        let typ = self
-            .resolve_typedef(&tn)?
-            .map(|x| x.to_type_path())
-            .unwrap_or(typ);
+        let typ = match self.resolve_typedef(&tn)? {
+            None => typ,
+            Some(resolved_tn) => {
+                types_encountered.insert(resolved_tn.clone());
+                resolved_tn.to_type_path()
+            }
+        };
 
         // This will strip off any path arguments...
         let mut typ = known_type_substitute_path(&typ).unwrap_or(typ);
@@ -187,12 +194,12 @@ impl TypeConverter {
         P: Default,
     {
         let mut new_pun = Punctuated::new();
-        let mut types_encountered = Vec::new();
+        let mut types_encountered = HashSet::new();
         for arg in pun.into_iter() {
             new_pun.push(match arg {
                 GenericArgument::Type(t) => {
                     let mut innerty = self.convert_type(t, ns)?;
-                    types_encountered.append(&mut innerty.types_encountered);
+                    types_encountered.extend(innerty.types_encountered.drain());
                     GenericArgument::Type(innerty.ty)
                 }
                 _ => arg,
