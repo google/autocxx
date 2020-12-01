@@ -234,6 +234,15 @@ impl ForeignModConverter {
         }
         let (mut params, mut param_details): (Punctuated<_, syn::Token![,]>, Vec<_>) =
             param_details.into_iter().map(Result::unwrap).unzip();
+
+        let params_on_blocklist = param_details.iter().any(|b| b.on_blocklist);
+        if params_on_blocklist {
+            log::info!(
+                "Skipping function {} because one or more parameters were on the blocklist",
+                initial_rust_name
+            );
+            return Ok(()); // TODO consider how to inform user
+        }
         let mut self_ty = param_details
             .iter()
             .filter_map(|pd| pd.self_type.as_ref())
@@ -332,6 +341,13 @@ impl ForeignModConverter {
         } else {
             self.convert_return_type(callbacks, fun.sig.output, ns)?
         };
+        if return_analysis.on_blocklist {
+            log::info!(
+                "Skipping function {} due to return type being on blocklist",
+                rust_name
+            );
+            return Ok(()); // TODO think about how to inform user about this
+        }
         if return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
             // one reference as a parameter. Let's see...
