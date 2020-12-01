@@ -178,6 +178,11 @@ impl IncludeCpp {
                         TypeName::new_from_user_input(&nested.value()),
                         TypeName::new_from_user_input(&nested_in.value()),
                     );
+                } else if ident == "block" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let generate: syn::LitStr = args.parse()?;
+                    type_database.add_to_blocklist(generate.value());
                 } else if ident == "parse_only" {
                     parse_only = true;
                 } else if ident == "exclude_utilities" {

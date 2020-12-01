@@ -612,8 +612,19 @@ impl<'a> ForeignModConversionCallbacks for BridgeConversion<'a> {
         self.additional_cpp_needs.push(need);
     }
 
-    fn convert_boxed_type(&self, ty: Box<Type>, ns: &Namespace) -> Result<Box<Type>, ConvertError> {
-        self.type_converter.convert_boxed_type(ty, ns)
+    fn convert_boxed_type(
+        &self,
+        ty: Box<Type>,
+        ns: &Namespace,
+    ) -> Result<(Box<Type>, bool), ConvertError> {
+        let annotated = self.type_converter.convert_boxed_type(ty, ns)?;
+        let blocklisted = annotated
+            .types_encountered
+            .into_iter()
+            .filter(|x| self.is_on_blocklist(x))
+            .next()
+            .is_some();
+        Ok((annotated.ty, blocklisted))
     }
 
     fn is_pod(&self, ty: &TypeName) -> bool {
@@ -644,5 +655,9 @@ impl<'a> ForeignModConversionCallbacks for BridgeConversion<'a> {
 
     fn is_on_allowlist(&self, type_name: &TypeName) -> bool {
         self.type_database.is_on_allowlist(type_name)
+    }
+
+    fn is_on_blocklist(&self, type_name: &TypeName) -> bool {
+        self.type_database.is_on_blocklist(type_name)
     }
 }

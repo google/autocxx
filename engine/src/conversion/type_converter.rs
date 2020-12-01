@@ -27,6 +27,28 @@ use crate::{
 
 use super::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
 
+/// Results of some type conversion, annotated with a list of every type encountered.
+pub(crate) struct Annotated<T> {
+    pub(crate) ty: T,
+    pub(crate) types_encountered: Vec<TypeName>,
+}
+
+impl<T> Annotated<T> {
+    fn new(ty: T, types_encountered: Vec<TypeName>) -> Self {
+        Self {
+            ty,
+            types_encountered,
+        }
+    }
+
+    fn map<T2, F: FnOnce(T) -> T2>(self, fun: F) -> Annotated<T2> {
+        Annotated {
+            ty: fun(self.ty),
+            types_encountered: self.types_encountered,
+        }
+    }
+}
+
 pub(crate) struct TypeConverter {
     types_found: Vec<TypeName>,
     typedefs: HashMap<TypeName, TypedefTarget>,
@@ -53,11 +75,11 @@ impl TypeConverter {
         &self,
         ty: Box<Type>,
         ns: &Namespace,
-    ) -> Result<Box<Type>, ConvertError> {
-        Ok(Box::new(self.convert_type(*ty, ns)?))
+    ) -> Result<Annotated<Box<Type>>, ConvertError> {
+        Ok(self.convert_type(*ty, ns)?.map(Box::new))
     }
 
-    fn convert_type(&self, ty: Type, ns: &Namespace) -> Result<Type, ConvertError> {
+    fn convert_type(&self, ty: Type, ns: &Namespace) -> Result<Annotated<Type>, ConvertError> {
         let result = match ty {
             Type::Path(p) => {
                 let newp = self.convert_type_path(p, ns)?;
@@ -65,20 +87,24 @@ impl TypeConverter {
                 // doesn't simply get renamed to a different type _identifier_.
                 // This plain type-by-value (as far as bindgen is concerned)
                 // is actually a &str.
-                if should_dereference_in_cpp(&newp) {
-                    Type::Reference(parse_quote! {
-                        &str
-                    })
+                if should_dereference_in_cpp(&newp.ty) {
+                    Annotated::new(
+                        Type::Reference(parse_quote! {
+                            &str
+                        }),
+                        newp.types_encountered,
+                    )
                 } else {
-                    Type::Path(newp)
+                    newp.map(Type::Path)
                 }
             }
             Type::Reference(mut r) => {
-                r.elem = self.convert_boxed_type(r.elem, ns)?;
-                Type::Reference(r)
+                let innerty = self.convert_boxed_type(r.elem, ns)?;
+                r.elem = innerty.ty;
+                Annotated::new(Type::Reference(r), innerty.types_encountered)
             }
-            Type::Ptr(ptr) => Type::Reference(self.convert_ptr_to_reference(ptr, ns)?),
-            _ => ty,
+            Type::Ptr(ptr) => self.convert_ptr_to_reference(ptr, ns)?.map(Type::Reference),
+            _ => Annotated::new(ty, Vec::new()),
         };
         Ok(result)
     }
@@ -87,7 +113,8 @@ impl TypeConverter {
         &self,
         mut typ: TypePath,
         ns: &Namespace,
-    ) -> Result<TypePath, ConvertError> {
+    ) -> Result<Annotated<TypePath>, ConvertError> {
+        let mut types_encountered = Vec::new();
         if typ.path.segments.iter().next().unwrap().ident == "root" {
             typ.path.segments = typ
                 .path
@@ -97,7 +124,9 @@ impl TypeConverter {
                     let ident = &s.ident;
                     let args = match s.arguments {
                         PathArguments::AngleBracketed(mut ab) => {
-                            ab.args = self.convert_punctuated(ab.args, ns)?;
+                            let mut innerty = self.convert_punctuated(ab.args, ns)?;
+                            ab.args = innerty.ty;
+                            types_encountered.append(&mut innerty.types_encountered);
                             PathArguments::AngleBracketed(ab)
                         }
                         _ => s.arguments,
@@ -117,6 +146,9 @@ impl TypeConverter {
                     .map(|s| parse_quote! { #s })
                     .chain(typ.path.segments.into_iter())
                     .collect();
+                types_encountered.push(TypeName::from_type_path(&typ));
+            } else {
+                types_encountered.push(ty);
             }
         }
         let mut last_seg_args = None;
@@ -145,25 +177,30 @@ impl TypeConverter {
             let last_seg = typ.path.segments.last_mut().unwrap();
             last_seg.arguments = last_seg_args;
         }
-        Ok(typ)
+        Ok(Annotated::new(typ, types_encountered))
     }
 
     fn convert_punctuated<P>(
         &self,
         pun: Punctuated<GenericArgument, P>,
         ns: &Namespace,
-    ) -> Result<Punctuated<GenericArgument, P>, ConvertError>
+    ) -> Result<Annotated<Punctuated<GenericArgument, P>>, ConvertError>
     where
         P: Default,
     {
         let mut new_pun = Punctuated::new();
+        let mut types_encountered = Vec::new();
         for arg in pun.into_iter() {
             new_pun.push(match arg {
-                GenericArgument::Type(t) => GenericArgument::Type(self.convert_type(t, ns)?),
+                GenericArgument::Type(t) => {
+                    let mut innerty = self.convert_type(t, ns)?;
+                    types_encountered.append(&mut innerty.types_encountered);
+                    GenericArgument::Type(innerty.ty)
+                }
                 _ => arg,
             });
         }
-        Ok(new_pun)
+        Ok(Annotated::new(new_pun, types_encountered))
     }
 
     fn resolve_typedef<'b>(
@@ -186,15 +223,17 @@ impl TypeConverter {
         &self,
         ptr: TypePtr,
         ns: &Namespace,
-    ) -> Result<TypeReference, ConvertError> {
+    ) -> Result<Annotated<TypeReference>, ConvertError> {
         let mutability = ptr.mutability;
         let elem = self.convert_boxed_type(ptr.elem, ns)?;
         // TODO - in the future, we should check if this is a rust::Str and throw
         // a wobbler if not. rust::Str should only be seen _by value_ in C++
         // headers; it manifests as &str in Rust but on the C++ side it must
         // be a plain value. We should detect and abort.
-        Ok(parse_quote! {
-            & #mutability #elem
-        })
+        Ok(elem.map(|elem| {
+            parse_quote! {
+                & #mutability #elem
+            }
+        }))
     }
 }
