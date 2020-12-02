@@ -33,3 +33,4 @@ members = ["engine", "gen/cmd", "gen/build", "macro", "demo"]
 # [patch.crates-io]
 # cxx = { path="../cxx" }
 # cxx-gen = { path="../cxx/gen/lib" }
+# autocxx-bindgen = { path="../bindgen" }
