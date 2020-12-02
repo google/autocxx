@@ -402,7 +402,7 @@ impl ForeignModConverter {
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
-                is_a_method: is_a_method && !is_constructor,
+                is_a_method: is_a_method && !is_constructor && !is_static_method,
             }));
             callbacks.add_additional_cpp_need(a);
             // Now modify the cxx::bridge entry we're going to make.
