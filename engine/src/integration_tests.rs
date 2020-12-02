@@ -2318,7 +2318,6 @@ fn test_static_func() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/139
 fn test_static_func_wrapper() {
     let hdr = indoc! {"
         #include <cstdint>
