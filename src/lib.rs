@@ -264,6 +264,19 @@ macro_rules! nested_type {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// Entirely block some type from appearing in the generated
+/// code. This can be useful if there is a type which is not
+/// understood by bindgen or autocxx, and incorrect code is
+/// otherwise generated.
+///
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+#[macro_export]
+macro_rules! block {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! usage {

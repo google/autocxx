@@ -26,6 +26,7 @@ pub(crate) struct TypeDatabase {
     nested_types: HashMap<TypeName, TypeName>,
     pod_requests: HashSet<TypeName>,
     allowlist: HashSet<String>, // not TypeName as it may be funcs not types.
+    blocklist: HashSet<String>, // not TypeName as it may be funcs not types.
 }
 
 impl TypeDatabase {
@@ -49,6 +50,10 @@ impl TypeDatabase {
         self.allowlist.insert(item);
     }
 
+    pub(crate) fn add_to_blocklist(&mut self, item: String) {
+        self.blocklist.insert(item);
+    }
+
     pub(crate) fn get_pod_requests(&self) -> &HashSet<TypeName> {
         &self.pod_requests
     }
@@ -61,8 +66,20 @@ impl TypeDatabase {
         self.allowlist.is_empty()
     }
 
+    /// Whether this type is on the allowlist specified by the user.
+    ///
+    /// A note on the allowlist handling in general. It's used in two places:
+    /// 1) As directives to bindgen
+    /// 2) After bindgen has generated code, to filter the APIs which
+    ///    we pass to cxx.
+    /// This second pass may seem redundant. But sometimes bindgen generates
+    /// unnecessary stuff.
     pub(crate) fn is_on_allowlist(&self, tn: &TypeName) -> bool {
         self.allowlist.contains(&tn.to_cpp_name())
+    }
+
+    pub(crate) fn is_on_blocklist(&self, tn: &TypeName) -> bool {
+        self.blocklist.contains(&tn.to_cpp_name())
     }
 
     pub(crate) fn type_to_cpp(&self, ty: &Type) -> String {

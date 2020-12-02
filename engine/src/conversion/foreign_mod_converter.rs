@@ -35,12 +35,14 @@ struct ArgumentAnalysis {
     name: Pat,
     self_type: Option<TypeName>,
     was_reference: bool,
+    on_blocklist: bool,
 }
 
 struct ReturnTypeAnalysis {
     rt: ReturnType,
     conversion: Option<ArgumentConversion>,
     was_reference: bool,
+    on_blocklist: bool,
 }
 
 /// Ways in which the conversion of a given extern "C" mod can
@@ -48,7 +50,11 @@ struct ReturnTypeAnalysis {
 /// of its immediate conversion.
 pub(crate) trait ForeignModConversionCallbacks {
     fn add_additional_cpp_need(&mut self, need: AdditionalNeed);
-    fn convert_boxed_type(&self, ty: Box<Type>, ns: &Namespace) -> Result<Box<Type>, ConvertError>;
+    fn convert_boxed_type(
+        &self,
+        ty: Box<Type>,
+        ns: &Namespace,
+    ) -> Result<(Box<Type>, bool), ConvertError>;
     fn is_pod(&self, ty: &TypeName) -> bool;
     fn add_use(&mut self, ns: &Namespace, rust_name_ident: &Ident, alias: Option<Ident>);
     fn push_extern_c_mod_item(&mut self, item: ForeignItem);
@@ -60,6 +66,7 @@ pub(crate) trait ForeignModConversionCallbacks {
     ) -> String;
     fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool;
     fn is_on_allowlist(&self, type_name: &TypeName) -> bool;
+    fn is_on_blocklist(&self, type_name: &TypeName) -> bool;
 }
 
 /// Converts a given bindgen-generated 'mod' into suitable
@@ -227,6 +234,15 @@ impl ForeignModConverter {
         }
         let (mut params, mut param_details): (Punctuated<_, syn::Token![,]>, Vec<_>) =
             param_details.into_iter().map(Result::unwrap).unzip();
+
+        let params_on_blocklist = param_details.iter().any(|b| b.on_blocklist);
+        if params_on_blocklist {
+            log::info!(
+                "Skipping function {} because one or more parameters were on the blocklist",
+                initial_rust_name
+            );
+            return Ok(()); // TODO consider how to inform user
+        }
         let mut self_ty = param_details
             .iter()
             .filter_map(|pd| pd.self_type.as_ref())
@@ -310,7 +326,8 @@ impl ForeignModConverter {
         // Analyze the return type, just as we previously did for the
         // parameters.
         let return_analysis = if is_constructor {
-            let constructed_type = self_ty.as_ref().unwrap().to_type_path();
+            let self_ty = self_ty.as_ref().unwrap();
+            let constructed_type = self_ty.to_type_path();
             ReturnTypeAnalysis {
                 rt: parse_quote! {
                     -> #constructed_type
@@ -319,10 +336,18 @@ impl ForeignModConverter {
                     #constructed_type
                 })),
                 was_reference: false,
+                on_blocklist: callbacks.is_on_blocklist(self_ty),
             }
         } else {
             self.convert_return_type(callbacks, fun.sig.output, ns)?
         };
+        if return_analysis.on_blocklist {
+            log::info!(
+                "Skipping function {} due to return type being on blocklist",
+                rust_name
+            );
+            return Ok(()); // TODO think about how to inform user about this
+        }
         if return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
             // one reference as a parameter. Let's see...
@@ -516,7 +541,7 @@ impl ForeignModConverter {
                     }
                     _ => old_pat,
                 };
-                let new_ty = callbacks.convert_boxed_type(pt.ty, ns)?;
+                let (new_ty, on_blocklist) = callbacks.convert_boxed_type(pt.ty, ns)?;
                 let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
                 let conversion = self.argument_conversion_details(&new_ty, callbacks);
                 pt.pat = Box::new(new_pat.clone());
@@ -528,6 +553,7 @@ impl ForeignModConverter {
                         name: new_pat,
                         conversion,
                         was_reference,
+                        on_blocklist,
                     },
                 )
             }
@@ -583,9 +609,10 @@ impl ForeignModConverter {
                 rt: ReturnType::Default,
                 was_reference: false,
                 conversion: None,
+                on_blocklist: false,
             },
             ReturnType::Type(rarrow, boxed_type) => {
-                let boxed_type = callbacks.convert_boxed_type(boxed_type, ns)?;
+                let (boxed_type, on_blocklist) = callbacks.convert_boxed_type(boxed_type, ns)?;
                 let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
                 let conversion =
                     self.return_type_conversion_details(boxed_type.as_ref(), callbacks);
@@ -593,6 +620,7 @@ impl ForeignModConverter {
                     rt: ReturnType::Type(rarrow, boxed_type),
                     conversion: Some(conversion),
                     was_reference,
+                    on_blocklist,
                 }
             }
         };
