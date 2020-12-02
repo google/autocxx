@@ -182,11 +182,6 @@ fn do_run_test(
     write_to_file(&tdir, "input.h", &format!("#pragma once\n{}", header_code));
     write_to_file(&tdir, "cxx.h", crate::HEADER);
 
-    // Step 4: Write the C++ code snippet to a .cc file, along with a #include
-    //         of the header emitted in step 5.
-    let cxx_code = format!("#include \"{}\"\n{}", "input.h", cxx_code);
-    let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
-
     // Step 2: Expand the snippet of Rust code into an entire
     //         program including include_cxx!
     // TODO - we're not quoting #s below (in the "" sense), and it's not entirely
@@ -282,8 +277,15 @@ fn do_run_test(
 
     let target = rust_info::get().target_triple.unwrap();
 
-    b.file(cxx_path)
-        .out_dir(&target_dir)
+    if !cxx_code.is_empty() {
+        // Step 4: Write the C++ code snippet to a .cc file, along with a #include
+        //         of the header emitted in step 5.
+        let cxx_code = format!("#include \"{}\"\n{}", "input.h", cxx_code);
+        let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
+        b.file(cxx_path);
+    }
+
+    b.out_dir(&target_dir)
         .host(&target)
         .target(&target)
         .opt_level(1)
