@@ -172,35 +172,35 @@ mod tests {
     fn test_by_method() {
         let mut ot = OverloadTracker::new();
         assert_eq!(
-            ot.get_method_real_name("A", "do"),
+            ot.get_method_real_name("A", "do", None),
             MethodOverload::new("do".into(), "do".into())
         );
         assert_eq!(
-            ot.get_method_real_name("A", "do1"),
+            ot.get_method_real_name("A", "do1", None),
             MethodOverload::new("do".into(), "do1".into())
         );
         assert_eq!(
-            ot.get_method_real_name("A", "dog"),
+            ot.get_method_real_name("A", "dog", None),
             MethodOverload::new("dog".into(), "dog".into())
         );
         assert_eq!(
-            ot.get_method_real_name("A", "dog1"),
+            ot.get_method_real_name("A", "dog1", None),
             MethodOverload::new("dog".into(), "dog1".into())
         );
         assert_eq!(
-            ot.get_method_real_name("B", "do2"),
+            ot.get_method_real_name("B", "do2", None),
             MethodOverload::new("do".into(), "do".into())
         );
         assert_eq!(
-            ot.get_method_real_name("B", "do3"),
+            ot.get_method_real_name("B", "do3", None),
             MethodOverload::new("do".into(), "do1".into())
         );
         assert_eq!(
-            ot.get_method_real_name("C", "do2"),
+            ot.get_method_real_name("C", "do2", None),
             MethodOverload::new("do2".into(), "do2".into())
         );
         assert_eq!(
-            ot.get_function_real_name("C_do2"),
+            ot.get_function_real_name("C_do2", None),
             MethodOverload::new("C_do2".into(), "C_do2".into())
         );
     }
