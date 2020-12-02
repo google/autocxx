@@ -464,6 +464,9 @@ impl<'a> BridgeConversion<'a> {
             .type_database
             .get_effective_type(&tyname)
             .unwrap_or(&tyname);
+        if self.is_on_blocklist(effective_type) {
+            return Ok(())
+        }
         let tynamestring = effective_type.to_cpp_name();
         let mut for_extern_c_ts = if effective_type.has_namespace() {
             let ns_string = effective_type
