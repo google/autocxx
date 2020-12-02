@@ -2318,6 +2318,27 @@ fn test_static_func() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/139
+fn test_static_func_wrapper() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        struct A {
+            std::string a;
+            static A CreateA(std::string a, std::string b) {
+                A c;
+                c.a = a;
+                return c;
+            }
+        };
+    "};
+    let rs = quote! {
+        ffi::A::CreateA(ffi::make_string("a"), ffi::make_string("b"));
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_give_pod_typedef_by_value() {
     let cxx = indoc! {"
         Horace give_bob() {
