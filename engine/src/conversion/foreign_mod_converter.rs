@@ -21,7 +21,7 @@ use quote::quote;
 use std::collections::{hash_map::Drain, HashMap};
 use syn::{
     parse::Parser, parse_quote, punctuated::Punctuated, Attribute, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, ItemImpl, Pat, ReturnType, Type, TypePtr,
+    ForeignItemFn, Ident, ImplItem, ItemImpl, LitStr, Pat, ReturnType, Type, TypePtr,
 };
 
 use super::{
@@ -219,6 +219,8 @@ impl ForeignModConverter {
             return Ok(());
         }
 
+        let original_name = Self::get_bindgen_original_name_annotation(&fun);
+
         // Now let's analyze all the parameters.
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .sig
@@ -281,9 +283,11 @@ impl ForeignModConverter {
             // with the original name, but we currently discard that impl section.
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
-            let overload_details = self
-                .overload_tracker
-                .get_method_real_name(&type_ident, &initial_rust_name);
+            let overload_details = self.overload_tracker.get_method_real_name(
+                &type_ident,
+                &initial_rust_name,
+                original_name,
+            );
             cpp_call_name = overload_details.cpp_method_name;
             rust_name = overload_details.rust_method_name;
             if rust_name.starts_with(&type_ident) {
@@ -308,7 +312,7 @@ impl ForeignModConverter {
             // If bindgen found overloaded methods, it may not be what it seems.
             let overload_details = self
                 .overload_tracker
-                .get_function_real_name(&initial_rust_name);
+                .get_function_real_name(&initial_rust_name, original_name);
             cpp_call_name = overload_details.cpp_method_name;
             rust_name = overload_details.rust_method_name;
         }
@@ -625,5 +629,22 @@ impl ForeignModConverter {
             }
         };
         Ok(result)
+    }
+
+    fn get_bindgen_original_name_annotation(fun: &ForeignItemFn) -> Option<String> {
+        fun.attrs
+            .iter()
+            .filter_map(|a| {
+                if a.path.is_ident("bindgen_original_name") {
+                    let r: Result<LitStr, syn::Error> = a.parse_args();
+                    match r {
+                        Ok(ls) => Some(ls.value()),
+                        Err(_) => None,
+                    }
+                } else {
+                    None
+                }
+            })
+            .next()
     }
 }

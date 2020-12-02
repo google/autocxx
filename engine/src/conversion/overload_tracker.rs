@@ -75,19 +75,32 @@ impl OverloadTracker {
         Self::default()
     }
 
-    pub(crate) fn get_function_real_name(&mut self, found_name: &str) -> MethodOverload {
-        self.next_offset(None, found_name)
+    pub(crate) fn get_function_real_name(
+        &mut self,
+        found_name: &str,
+        original_name: Option<String>,
+    ) -> MethodOverload {
+        self.next_offset(None, found_name, original_name)
     }
 
     pub(crate) fn get_method_real_name(
         &mut self,
         type_name: &str,
         found_name: &str,
+        original_name: Option<String>,
     ) -> MethodOverload {
-        self.next_offset(Some(type_name), found_name)
+        self.next_offset(Some(type_name), found_name, original_name)
     }
 
-    fn next_offset(&mut self, type_name: Option<&str>, found_name: &str) -> MethodOverload {
+    fn next_offset(
+        &mut self,
+        type_name: Option<&str>,
+        found_name: &str,
+        original_name: Option<String>,
+    ) -> MethodOverload {
+        if let Some(original_name) = original_name {
+            return MethodOverload::new(original_name, found_name.to_owned());
+        }
         let (fn_name, counter) = split_name(found_name);
         let expected_next_suffix = self
             .expected_next_by_name
@@ -130,27 +143,27 @@ mod tests {
     fn test_by_function() {
         let mut ot = OverloadTracker::new();
         assert_eq!(
-            ot.get_function_real_name("job"),
+            ot.get_function_real_name("job", None),
             MethodOverload::new("job".into(), "job".into())
         );
         assert_eq!(
-            ot.get_function_real_name("job1"),
+            ot.get_function_real_name("job1", None),
             MethodOverload::new("job".into(), "job1".into())
         );
         assert_eq!(
-            ot.get_function_real_name("job2"),
+            ot.get_function_real_name("job2", None),
             MethodOverload::new("job".into(), "job2".into())
         );
         assert_eq!(
-            ot.get_function_real_name("job24"),
+            ot.get_function_real_name("job24", None),
             MethodOverload::new("job24".into(), "job24".into())
         );
         assert_eq!(
-            ot.get_function_real_name("fish1"),
+            ot.get_function_real_name("fish1", None),
             MethodOverload::new("fish1".into(), "fish1".into())
         );
         assert_eq!(
-            ot.get_function_real_name("fish2"),
+            ot.get_function_real_name("fish2", None),
             MethodOverload::new("fish2".into(), "fish2".into())
         );
     }
