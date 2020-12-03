@@ -429,6 +429,9 @@ impl<'a> BridgeConversion<'a> {
                         continue;
                     }
                     let tyname = TypeName::new(&ns, &ity.ident.to_string());
+                    if self.is_on_blocklist(&tyname) {
+                        continue;
+                    }
                     self.type_converter.insert_typedef(tyname, ity.ty.as_ref());
                     output_items.push(Item::Type(ity));
                 }
