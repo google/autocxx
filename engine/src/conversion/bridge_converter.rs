@@ -21,8 +21,8 @@ use crate::{
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::{
-    parse::Parser, parse_quote, Field, ForeignItem, GenericParam, Generics, Ident, Item,
-    ItemForeignMod, ItemMod, ItemStruct, Type,
+    parse::Parser, parse_quote, Field, ForeignItem, GenericParam, Ident, Item, ItemForeignMod,
+    ItemMod, ItemStruct, Type,
 };
 
 use super::{
@@ -382,16 +382,9 @@ impl<'a> BridgeConversion<'a> {
                         Self::make_non_pod(&mut s);
                         HashSet::new()
                     };
-                    if !Self::generics_contentful(&s.generics) {
-                        // cxx::bridge can't cope with type aliases to generic
-                        // types at the moment.
-                        self.generate_type(
-                            tyname,
-                            should_be_pod,
-                            field_types,
-                            Some(Item::Struct(s)),
-                        )?;
-                    }
+                    // cxx::bridge can't cope with type aliases to generic
+                    // types at the moment.
+                    self.generate_type(tyname, should_be_pod, field_types, Some(Item::Struct(s)))?;
                 }
                 Item::Enum(e) => {
                     let tyname = TypeName::new(&ns, &e.ident.to_string());
@@ -434,11 +427,6 @@ impl<'a> BridgeConversion<'a> {
                     });
                 }
                 Item::Type(ity) => {
-                    if Self::generics_contentful(&ity.generics) {
-                        // Ignore this for now. Sometimes bindgen generates such things
-                        // without an actual need to do so.
-                        continue;
-                    }
                     let tyname = TypeName::new(&ns, &ity.ident.to_string());
                     self.type_converter.insert_typedef(tyname, ity.ty.as_ref());
                     self.add_api(Api {
@@ -536,12 +524,6 @@ impl<'a> BridgeConversion<'a> {
         });
     }
 
-    fn generics_contentful(generics: &Generics) -> bool {
-        generics.lifetimes().next().is_some()
-            || generics.const_params().next().is_some()
-            || generics.type_params().next().is_some()
-    }
-
     fn find_nested_pod_types_in_mod(
         &mut self,
         items: &[Item],
@@ -554,11 +536,6 @@ impl<'a> BridgeConversion<'a> {
                     .byvalue_checker
                     .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
                 Item::Type(ity) => {
-                    if Self::generics_contentful(&ity.generics) {
-                        // Ignore this for now. Sometimes bindgen generates such things
-                        // without an actual need to do so.
-                        continue;
-                    }
                     let typedef_type = analyze_typedef_target(ity.ty.as_ref());
                     let name = TypeName::new(ns, &ity.ident.to_string());
                     match typedef_type {
