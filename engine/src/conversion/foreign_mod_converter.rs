@@ -96,59 +96,6 @@ impl ForeignModConverter {
         }
     }
 
-    #[allow(clippy::too_many_arguments)] // Clippy's right, but the alternatives
-                                         // are probably less maintainable still.
-    fn generate_method_impl(
-        &mut self,
-        param_details: &[ArgumentAnalysis],
-        is_constructor: bool,
-        impl_block_type_name: &Ident,
-        cxxbridge_name: &Ident,
-        rust_name: &str,
-        ret_type: &ReturnType,
-        ns: &Namespace,
-        callbacks: &mut impl ForeignModConversionCallbacks,
-    ) {
-        let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
-        let mut arg_list = Vec::new();
-        for pd in param_details {
-            let type_name = pd.conversion.converted_rust_type();
-            let wrapper_arg_name = if pd.self_type.is_some() && !is_constructor {
-                parse_quote!(self)
-            } else {
-                pd.name.clone()
-            };
-            wrapper_params.push(parse_quote!(
-                #wrapper_arg_name: #type_name
-            ));
-            arg_list.push(wrapper_arg_name);
-        }
-
-        let rust_name = make_ident(&rust_name);
-        let extra_method = ImplItem::Method(parse_quote! {
-            pub fn #rust_name ( #wrapper_params ) #ret_type {
-                cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-            }
-        });
-
-        callbacks.add_api(Api {
-            ns: ns.clone(),
-            id: impl_block_type_name.clone(),
-            use_stmt: Use::Unused,
-            deps: HashSet::new(),
-            extern_c_mod_item: None,
-            bridge_item: None,
-            global_item: None,
-            additional_cpp: None,
-            id_for_allowlist: None,
-            bindgen_mod_item: Some(Item::Impl(parse_quote! {
-                impl #impl_block_type_name {
-                    #extra_method
-                }
-            })),
-        });
-    }
-
     pub(crate) fn convert_foreign_mod_items(
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
@@ -646,5 +593,58 @@ impl ForeignModConverter {
             }
         };
         Ok(result)
+    }
+
+    #[allow(clippy::too_many_arguments)] // Clippy's right, but the alternatives
+                                         // are probably less maintainable still.
+    fn generate_method_impl(
+        &mut self,
+        param_details: &[ArgumentAnalysis],
+        is_constructor: bool,
+        impl_block_type_name: &Ident,
+        cxxbridge_name: &Ident,
+        rust_name: &str,
+        ret_type: &ReturnType,
+        ns: &Namespace,
+        callbacks: &mut impl ForeignModConversionCallbacks,
+    ) {
+        let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
+        let mut arg_list = Vec::new();
+        for pd in param_details {
+            let type_name = pd.conversion.converted_rust_type();
+            let wrapper_arg_name = if pd.self_type.is_some() && !is_constructor {
+                parse_quote!(self)
+            } else {
+                pd.name.clone()
+            };
+            wrapper_params.push(parse_quote!(
+                #wrapper_arg_name: #type_name
+            ));
+            arg_list.push(wrapper_arg_name);
+        }
+
+        let rust_name = make_ident(&rust_name);
+        let extra_method = ImplItem::Method(parse_quote! {
+            pub fn #rust_name ( #wrapper_params ) #ret_type {
+                cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+            }
+        });
+
+        callbacks.add_api(Api {
+            ns: ns.clone(),
+            id: impl_block_type_name.clone(),
+            use_stmt: Use::Unused,
+            deps: HashSet::new(),
+            extern_c_mod_item: None,
+            bridge_item: None,
+            global_item: None,
+            additional_cpp: None,
+            id_for_allowlist: None,
+            bindgen_mod_item: Some(Item::Impl(parse_quote! {
+                impl #impl_block_type_name {
+                    #extra_method
+                }
+            })),
+        });
     }
 }
