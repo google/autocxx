@@ -83,7 +83,7 @@ pub(crate) struct ForeignModConverter {
     // Evidence from 'impl' blocks about which of these items
     // may actually be methods (static or otherwise). Mapping from
     // function name to type name.
-    methods: HashMap<Ident, TypeName>,
+    method_receivers: HashMap<Ident, TypeName>,
 }
 
 impl ForeignModConverter {
@@ -92,10 +92,12 @@ impl ForeignModConverter {
             ns,
             overload_tracker: OverloadTracker::new(),
             funcs_to_convert: Vec::new(),
-            methods: HashMap::new(),
+            method_receivers: HashMap::new(),
         }
     }
 
+    /// Record information from foreign mod items encountered
+    /// in bindgen output.
     pub(crate) fn convert_foreign_mod_items(
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
@@ -111,6 +113,8 @@ impl ForeignModConverter {
         Ok(())
     }
 
+    /// Record information from impl blocks encountered in bindgen
+    /// output.
     pub(crate) fn convert_impl_items(&mut self, imp: ItemImpl) {
         let ty_id = match *imp.self_ty {
             Type::Path(typ) => typ.path.segments.last().unwrap().ident.clone(),
@@ -123,7 +127,7 @@ impl ForeignModConverter {
                 } else {
                     itm.sig.ident
                 };
-                self.methods.insert(
+                self.method_receivers.insert(
                     effective_fun_name,
                     TypeName::new(&self.ns, &ty_id.to_string()),
                 );
@@ -131,6 +135,9 @@ impl ForeignModConverter {
         }
     }
 
+    /// Indicate that all foreign mods and all impl blocks have been
+    /// fed into us, and we should process that information to generate
+    /// the resulting APIs.
     pub(crate) fn finished(
         &mut self,
         callbacks: &mut impl ForeignModConversionCallbacks,
@@ -142,17 +149,13 @@ impl ForeignModConverter {
         Ok(())
     }
 
-    fn is_a_method(&self, id: &Ident) -> Option<TypeName> {
-        self.methods.get(&id).cloned()
-    }
-
     fn convert_foreign_fn(
         &mut self,
         fun: ForeignItemFn,
         callbacks: &mut impl ForeignModConversionCallbacks,
     ) -> Result<(), ConvertError> {
         let ns = &self.ns.clone();
-        // This function is one of the most complex parts of bridge_converter.
+        // This function is one of the most complex parts of our conversion.
         // It needs to consider:
         // 1. Rejecting destructors entirely.
         // 2. For methods, we need to strip off the class name.
@@ -196,7 +199,7 @@ impl ForeignModConverter {
         let is_static_method = if self_ty.is_none() {
             // Even if we can't find a 'self' parameter this could conceivably
             // be a static method.
-            self_ty = self.is_a_method(&fun.sig.ident);
+            self_ty = self.method_receivers.get(&fun.sig.ident).cloned();
             self_ty.is_some()
         } else {
             false
@@ -595,6 +598,7 @@ impl ForeignModConverter {
         Ok(result)
     }
 
+    /// Generate an 'impl Type { methods-go-here }' item
     #[allow(clippy::too_many_arguments)] // Clippy's right, but the alternatives
                                          // are probably less maintainable still.
     fn generate_method_impl(
