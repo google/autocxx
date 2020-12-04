@@ -24,9 +24,7 @@ where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
-    env_logger::builder()
-        .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
-        .init();
+    setup_logging();
     engine_build(rs_file, autocxx_incs)
 }
 
@@ -36,8 +34,12 @@ where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
+    setup_logging();
+    engine_expect_build(rs_file, autocxx_incs)
+}
+
+fn setup_logging() {
     env_logger::builder()
         .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
         .init();
-    engine_expect_build(rs_file, autocxx_incs)
 }
