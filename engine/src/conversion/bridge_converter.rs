@@ -192,10 +192,7 @@ struct BridgeConversion<'a> {
 }
 
 fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
-    input
-        .into_iter()
-        .flatten()
-        .collect()
+    input.into_iter().flatten().collect()
 }
 
 impl<'a> BridgeConversion<'a> {
@@ -480,7 +477,8 @@ impl<'a> BridgeConversion<'a> {
                 use cxx:: #thing;
             }));
         }
-        self.use_stmts_by_mod.insert(ns, use_statements_for_this_mod);
+        self.use_stmts_by_mod
+            .insert(ns, use_statements_for_this_mod);
         Ok(())
     }
 
