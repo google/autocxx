@@ -31,8 +31,9 @@ use super::{
     namespace_organizer::NamespaceEntries,
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
-    typedef_analyzer::{analyze_typedef_target, TypedefTarget},
 };
+
+use crate::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
 
 unzip_n::unzip_n!(pub 4);
 

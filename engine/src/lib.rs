@@ -20,6 +20,7 @@ mod known_types;
 mod parse;
 mod rust_pretty_printer;
 mod type_database;
+mod typedef_analyzer;
 mod types;
 
 #[cfg(any(test, feature = "build"))]
