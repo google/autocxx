@@ -3364,6 +3364,27 @@ fn test_nested_struct_nonpod() {
     );
 }
 
+#[test]
+fn test_forward_declaration() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct A;
+        struct B {
+            B() {}
+            uint32_t a;
+            void daft(const A&) {}
+            void daft2(std::unique_ptr<A> a) {}
+        };
+    "};
+    let rs = quote! {
+        ffi::B::make_unique();
+    };
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
+
+
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef
