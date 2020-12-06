@@ -14,6 +14,7 @@
 
 mod additional_cpp_generator;
 mod byvalue_checker;
+mod byvalue_scanner;
 mod conversion;
 mod function_wrapper;
 mod known_types;
