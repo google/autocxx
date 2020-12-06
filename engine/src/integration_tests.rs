@@ -3383,8 +3383,6 @@ fn test_forward_declaration() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
-
-
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef

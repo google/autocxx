@@ -184,6 +184,14 @@
 /// It currently assumes they're all structs. This results in warnings
 /// from most compilers, but could cause actual binary mismatches
 /// on some ABIs. This is a temporary known limitation.
+///
+/// # Forward declarations
+///
+/// A type which is incomplete in the C++ headers (i.e. represented only by a forward
+/// declaration) can't be held in a `UniquePtr` within Rust (because Rust can't know
+/// if it has a destructor that will need to be called if the object is `Drop`ped.)
+/// Naturally, such an object can't be passed by value either; it can still be
+/// referenced in Rust references.
 #[macro_export]
 macro_rules! include_cpp {
     (
