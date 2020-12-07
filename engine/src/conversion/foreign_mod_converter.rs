@@ -65,7 +65,7 @@ pub(crate) trait ForeignModConversionCallbacks {
     ) -> String;
     fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool;
     fn is_on_allowlist(&self, type_name: &TypeName) -> bool;
-    fn is_on_blocklist(&self, type_name: &TypeName) -> bool;
+    fn avoid_generating_type(&self, type_name: &TypeName) -> bool;
 }
 
 /// Converts a given bindgen-generated 'mod' into suitable
@@ -292,12 +292,12 @@ impl ForeignModConverter {
         };
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
-        if deps.iter().any(|tn| callbacks.is_on_blocklist(tn)) {
+        if deps.iter().any(|tn| callbacks.avoid_generating_type(tn)) {
             log::info!(
-                "Skipping function {} due to return type or parameter being on blocklist",
+                "Skipping function {} due to return type or parameter being on blocklist or because only a forward declaration was encountered",
                 rust_name
             );
-            return Ok(()); // TODO think about how to inform user about this
+            return Ok(()); // TODO think about how to inform user about this. Consider a more precise reason too.
         }
         if return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
