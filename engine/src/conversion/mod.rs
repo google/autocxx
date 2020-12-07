@@ -19,5 +19,4 @@ mod namespace_organizer;
 mod overload_tracker;
 mod rust_name_tracker;
 mod type_converter;
-mod typedef_analyzer;
 mod unqualify;

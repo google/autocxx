@@ -25,7 +25,7 @@ use crate::{
     types::{Namespace, TypeName},
 };
 
-use super::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
+use crate::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
 
 /// Results of some type conversion, annotated with a list of every type encountered.
 pub(crate) struct Annotated<T> {

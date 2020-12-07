@@ -14,12 +14,14 @@
 
 mod additional_cpp_generator;
 mod byvalue_checker;
+mod byvalue_scanner;
 mod conversion;
 mod function_wrapper;
 mod known_types;
 mod parse;
 mod rust_pretty_printer;
 mod type_database;
+mod typedef_analyzer;
 mod types;
 
 #[cfg(any(test, feature = "build"))]

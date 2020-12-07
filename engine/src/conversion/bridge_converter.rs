@@ -16,7 +16,8 @@ use std::{collections::HashMap, collections::HashSet, fmt::Display};
 
 use crate::{
     additional_cpp_generator::AdditionalNeed, byvalue_checker::ByValueChecker,
-    type_database::TypeDatabase, types::make_ident, types::Namespace, types::TypeName,
+    byvalue_scanner::identify_byvalue_safe_types, type_database::TypeDatabase, types::make_ident,
+    types::Namespace, types::TypeName,
 };
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use quote::quote;
@@ -31,7 +32,6 @@ use super::{
     namespace_organizer::NamespaceEntries,
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
-    typedef_analyzer::{analyze_typedef_target, TypedefTarget},
 };
 
 unzip_n::unzip_n!(pub 4);
@@ -160,11 +160,14 @@ impl<'a> BridgeConverter<'a> {
                     content: Some((brace, Vec::new())),
                     semi: bindings.semi,
                 };
+                let items_in_root = find_items_in_root(items)?;
+                let byvalue_checker =
+                    identify_byvalue_safe_types(&items_in_root, &self.type_database)?;
                 let conversion = BridgeConversion {
                     bindgen_mod,
                     extern_c_mod: None,
                     type_converter: TypeConverter::new(),
-                    byvalue_checker: ByValueChecker::new(),
+                    byvalue_checker,
                     include_list: &self.include_list,
                     apis: Vec::new(),
                     bridge_name_tracker: BridgeNameTracker::new(),
@@ -173,7 +176,7 @@ impl<'a> BridgeConverter<'a> {
                     use_stmts_by_mod: HashMap::new(),
                     incomplete_types: HashSet::new(),
                 };
-                conversion.convert_items(items, exclude_utilities)
+                conversion.convert_items(items_in_root, exclude_utilities)
             }
         }
     }
@@ -206,6 +209,24 @@ fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
     input.into_iter().flatten().collect()
 }
 
+fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
+    for item in items {
+        match item {
+            Item::Mod(root_mod) => {
+                // With namespaces enabled, bindgen always puts everything
+                // in a mod called 'root'. We don't want to pass that
+                // onto cxx, so jump right into it.
+                assert!(root_mod.ident == "root");
+                if let Some((_, items)) = root_mod.content {
+                    return Ok(items);
+                }
+            }
+            _ => return Err(ConvertError::UnexpectedOuterItem),
+        }
+    }
+    Ok(Vec::new())
+}
+
 impl<'a> BridgeConversion<'a> {
     /// Main function which goes through and performs conversion from
     /// `bindgen`-style Rust output into `cxx::bridge`-style Rust input.
@@ -229,22 +250,8 @@ impl<'a> BridgeConversion<'a> {
         if !exclude_utilities {
             self.generate_utilities();
         }
-        for item in items {
-            match item {
-                Item::Mod(root_mod) => {
-                    // With namespaces enabled, bindgen always puts everything
-                    // in a mod called 'root'. We don't want to pass that
-                    // onto cxx, so jump right into it.
-                    assert!(root_mod.ident == "root");
-                    if let Some((_, items)) = root_mod.content {
-                        let root_ns = Namespace::new();
-                        self.find_nested_pod_types(&items, &root_ns)?;
-                        self.convert_mod_items(items, root_ns)?;
-                    }
-                }
-                _ => return Err(ConvertError::UnexpectedOuterItem),
-            }
-        }
+        let root_ns = Namespace::new();
+        self.convert_mod_items(items, root_ns)?;
         // The code above will have contributed lots of Apis to self.apis.
         // We now garbage collect the ones we don't need...
         let all_apis = self.filter_apis_by_following_edges_from_allowlist();
@@ -549,58 +556,6 @@ impl<'a> BridgeConversion<'a> {
                 #(#generic_type_fields),*
             }
         });
-    }
-
-    fn find_nested_pod_types_in_mod(
-        &mut self,
-        items: &[Item],
-        ns: &Namespace,
-    ) -> Result<(), ConvertError> {
-        for item in items {
-            match item {
-                Item::Struct(s) => self.byvalue_checker.ingest_struct(s, ns),
-                Item::Enum(e) => self
-                    .byvalue_checker
-                    .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
-                Item::Type(ity) => {
-                    let typedef_type = analyze_typedef_target(ity.ty.as_ref());
-                    let name = TypeName::new(ns, &ity.ident.to_string());
-                    match typedef_type {
-                        TypedefTarget::NoArguments(tn) => {
-                            self.byvalue_checker.ingest_simple_typedef(name, tn)
-                        }
-                        TypedefTarget::HasArguments | TypedefTarget::SomethingComplex => {
-                            self.byvalue_checker.ingest_nonpod_type(name)
-                        }
-                    }
-                }
-                Item::Mod(itm) => {
-                    if let Some((_, nested_items)) = &itm.content {
-                        let new_ns = ns.push(itm.ident.to_string());
-                        self.find_nested_pod_types_in_mod(nested_items, &new_ns)?;
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    fn find_nested_pod_types(
-        &mut self,
-        items: &[Item],
-        ns: &Namespace,
-    ) -> Result<(), ConvertError> {
-        self.find_nested_pod_types_in_mod(items, ns)?;
-        self.byvalue_checker
-            .satisfy_requests(
-                self.type_database
-                    .get_pod_requests()
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-            .map_err(ConvertError::UnsafePODType)
     }
 
     /// Record the Api for a type, e.g. enum or struct.
