@@ -15,6 +15,7 @@
 use autocxx::include_cpp;
 
 include_cpp! {
+    unsafe
     #include "input.h"
     generate!("DoMath")
 }

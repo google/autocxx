@@ -36,6 +36,7 @@
 /// ```
 /// # use autocxx_macro::include_cpp_impl as include_cpp;
 /// include_cpp!(
+///     unsafe
 /// #   parse_only
 ///     #include "input.h"
 ///     generate!("do_math")
@@ -61,6 +62,7 @@
 /// Within the brackets of the `include_cxx!(...)` macro, you should provide
 /// a list of at least the following:
 ///
+/// * the `unsafe` keyword (must always come first)
 /// * `#include "cpp_header.h"`: a header filename to parse and include
 /// * `generate!("type_or_function_name")`: a type or function name whose declaration
 ///   should be made available to C++.
@@ -86,7 +88,6 @@
 /// If there's a C++ function which takes a struct by value, but that struct
 /// is not declared as POD-safe, then we'll generate wrapper functions to move
 /// that type into and out of [UniquePtr][autocxx_engine::cxx::UniquePtr]s.
-///
 ///
 /// # Generated code
 ///
@@ -124,9 +125,9 @@
 ///
 /// # Making other C++ types
 ///
-/// Types gain a `_make_unique` function. At present this is not
-/// an associated function; it's simply the type name followed by
-/// that suffix.
+/// Types gain a `make_unique` associated function. At present they only
+/// gain this if they have an explicit C++ constructor; this is a limitation
+/// which should be resolved in future.
 ///
 /// ```
 /// mod ffi {
@@ -195,12 +196,14 @@
 #[macro_export]
 macro_rules! include_cpp {
     (
+        unsafe
         $(#$include:ident $lit:literal)*
         $($mac:ident!($($arg:tt)*))*
     ) => {
         $($crate::$include!{__docs})*
         $($crate::$mac!{__docs})*
         $crate::include_cpp_impl! {
+            unsafe
             $(#include $lit)*
             $($mac!($($arg)*))*
         }
