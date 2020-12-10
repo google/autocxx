@@ -18,7 +18,7 @@ use crate::{
     types::{make_ident, Namespace},
 };
 use std::collections::HashSet;
-use syn::{parse_quote, ForeignItem};
+use syn::{ForeignItem, Item, parse_quote};
 
 /// Adds items which we always add, cos they're useful.
 /// Any APIs or techniques which do not involve actual C++ interop
@@ -33,14 +33,27 @@ pub(crate) fn generate_utilities(apis: &mut Vec<Api>) {
     apis.push(Api {
         ns: Namespace::new(),
         id: make_ident("make_string"),
-        use_stmt: Use::Used,
+        use_stmt: Use::Unused,
         extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
             fn make_string(str_: &str) -> UniquePtr<CxxString>;
         ))),
         additional_cpp: Some(AdditionalNeed::MakeStringConstructor),
         deps: HashSet::new(),
         bridge_item: None,
-        global_items: Vec::new(),
+        global_items: vec![
+            Item::Trait(parse_quote! {
+                pub trait ToCppString {
+                    fn to_cpp(&self) -> cxx::UniquePtr<cxx::CxxString>;
+                }
+            }),
+            Item::Impl(parse_quote! {
+                impl ToCppString for str {
+                    fn to_cpp(&self) -> cxx::UniquePtr<cxx::CxxString> {
+                        cxxbridge::make_string(self)
+                    }
+                }
+            })
+        ],
         id_for_allowlist: None,
         bindgen_mod_item: None,
     });
