@@ -97,21 +97,14 @@ impl<'a> BridgeConverter<'a> {
     /// suitable for cxx.
     pub(crate) fn convert(
         &mut self,
-        bindings: ItemMod,
+        mut bindgen_mod: ItemMod,
         exclude_utilities: bool,
     ) -> Result<CodegenResults, ConvertError> {
-        match bindings.content {
+        match &mut bindgen_mod.content {
             None => Err(ConvertError::NoContent),
-            Some((brace, items)) => {
-                let bindgen_mod = ItemMod {
-                    attrs: bindings.attrs,
-                    vis: bindings.vis,
-                    ident: bindings.ident,
-                    mod_token: bindings.mod_token,
-                    content: Some((brace, Vec::new())),
-                    semi: bindings.semi,
-                };
-                let items_in_root = find_items_in_root(items)?;
+            Some((_, items)) => {
+                let items_to_process = items.drain(..).collect();
+                let items_in_root = find_items_in_root(items_to_process)?;
                 let byvalue_checker =
                     identify_byvalue_safe_types(&items_in_root, &self.type_database)?;
                 let conversion = BridgeConversion {
