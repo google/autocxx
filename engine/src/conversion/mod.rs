@@ -15,6 +15,7 @@
 mod api;
 pub(crate) mod bridge_converter;
 mod bridge_name_tracker;
+mod codegen;
 mod foreign_mod_converter;
 mod namespace_organizer;
 mod overload_tracker;
