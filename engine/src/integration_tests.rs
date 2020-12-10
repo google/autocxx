@@ -2039,9 +2039,10 @@ fn test_overload_functions() {
         void daft(Norma);
     "};
     let rs = quote! {
+        use ffi::ToCppString;
         ffi::daft(32);
         ffi::daft1(8);
-        ffi::daft2(ffi::make_string("hello"));
+        ffi::daft2("hello".to_cpp());
         let b = ffi::Fred { a: 3 };
         ffi::daft3(b);
         let c = ffi::Norma::make_unique();
@@ -2085,9 +2086,10 @@ fn test_overload_numeric_functions() {
         void daft(Norma a);
     "};
     let rs = quote! {
+        use ffi::ToCppString;
         ffi::daft(32);
         ffi::daft1(8);
-        ffi::daft2(ffi::make_string("hello"));
+        ffi::daft2("hello".to_cpp());
         let b = ffi::Fred { a: 3 };
         ffi::daft3(b);
         let c = ffi::Norma::make_unique();
@@ -2131,10 +2133,11 @@ fn test_overload_methods() {
         };
     "};
     let rs = quote! {
+        use ffi::ToCppString;
         let a = ffi::Bob { a: 12 };
         a.daft(32);
         a.daft1(8);
-        a.daft2(ffi::make_string("hello"));
+        a.daft2("hello".to_cpp());
         let b = ffi::Fred { a: 3 };
         a.daft3(b);
         let c = ffi::Norma::make_unique();
@@ -2334,7 +2337,8 @@ fn test_static_func_wrapper() {
         };
     "};
     let rs = quote! {
-        ffi::A::CreateA(ffi::make_string("a"), ffi::make_string("b"));
+        use ffi::ToCppString;
+        ffi::A::CreateA("a".to_cpp(), "b".to_cpp());
     };
     run_test("", hdr, rs, &["A"], &[]);
 }
@@ -2697,7 +2701,8 @@ fn test_make_string() {
         };
     "};
     let rs = quote! {
-        let a = ffi::make_string("hello");
+        use ffi::ToCppString;
+        let a = "hello".to_cpp();
         assert_eq!(a.to_str().unwrap(), "hello");
     };
     run_test("", hdr, rs, &["Bob"], &[]);

@@ -32,6 +32,7 @@ use super::{
     namespace_organizer::NamespaceEntries,
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
+    utilities::generate_utilities,
 };
 
 unzip_n::unzip_n!(pub 4);
@@ -88,7 +89,7 @@ pub(crate) struct Api {
     pub(crate) deps: HashSet<TypeName>,
     pub(crate) extern_c_mod_item: Option<ForeignItem>,
     pub(crate) bridge_item: Option<Item>,
-    pub(crate) global_item: Option<Item>,
+    pub(crate) global_items: Vec<Item>,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
     pub(crate) id_for_allowlist: Option<Ident>,
     pub(crate) bindgen_mod_item: Option<Item>,
@@ -248,7 +249,7 @@ impl<'a> BridgeConversion<'a> {
         exclude_utilities: bool,
     ) -> Result<BridgeConversionResults, ConvertError> {
         if !exclude_utilities {
-            self.generate_utilities();
+            generate_utilities(&mut self.apis);
         }
         let root_ns = Namespace::new();
         self.convert_mod_items(items, root_ns)?;
@@ -264,12 +265,12 @@ impl<'a> BridgeConversion<'a> {
         let bindgen_root_items = self.generate_final_bindgen_mods(&all_apis);
         // Both of the above are organized into sub-mods by namespace.
         // From here on, things are flat.
-        let (extern_c_mod_items, global_items, bridge_items, additional_cpp_needs) = all_apis
+        let (extern_c_mod_items, all_items, bridge_items, additional_cpp_needs) = all_apis
             .into_iter()
             .map(|api| {
                 (
                     api.extern_c_mod_item,
-                    api.global_item,
+                    api.global_items,
                     api.bridge_item,
                     api.additional_cpp,
                 )
@@ -280,7 +281,7 @@ impl<'a> BridgeConversion<'a> {
         // Things to include in the "extern "C"" mod passed within the cxx::bridge
         let mut extern_c_mod_items = remove_nones(extern_c_mod_items);
         // And a list of global items to include at the top level.
-        let mut all_items = remove_nones(global_items);
+        let mut all_items: Vec<Item> = all_items.into_iter().flatten().collect();
         // And finally any C++ we need to generate. And by "we" I mean autocxx not cxx.
         let additional_cpp_needs = remove_nones(additional_cpp_needs);
         extern_c_mod_items
@@ -446,7 +447,7 @@ impl<'a> BridgeConversion<'a> {
                         ns: ns.clone(),
                         bridge_item: None,
                         extern_c_mod_item: None,
-                        global_item: Some(Item::Const(itc)),
+                        global_items: vec![Item::Const(itc)],
                         additional_cpp: None,
                         deps: HashSet::new(),
                         use_stmt: Use::Unused,
@@ -462,7 +463,7 @@ impl<'a> BridgeConversion<'a> {
                         ns: ns.clone(),
                         bridge_item: None,
                         extern_c_mod_item: None,
-                        global_item: None,
+                        global_items: Vec::new(),
                         additional_cpp: None,
                         deps: HashSet::new(),
                         use_stmt: Use::Unused,
@@ -645,12 +646,12 @@ impl<'a> BridgeConversion<'a> {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
             use_stmt: Use::Used,
-            global_item: Some(Item::Impl(parse_quote! {
+            global_items: vec![Item::Impl(parse_quote! {
                 unsafe impl cxx::ExternType for #(#fulltypath)::* {
                     type Id = cxx::type_id!(#tynamestring);
                     type Kind = cxx::kind::#kind_item;
                 }
-            })),
+            })],
             bridge_item,
             extern_c_mod_item: Some(ForeignItem::Verbatim(for_extern_c_ts)),
             additional_cpp: None,
@@ -677,30 +678,6 @@ impl<'a> BridgeConversion<'a> {
                 })
             })
             .collect()
-    }
-
-    /// Adds items which we always add, cos they're useful.
-    fn generate_utilities(&mut self) {
-        // Unless we've been specifically asked not to do so, we always
-        // generate a 'make_string' function. That pretty much *always* means
-        // we run two passes through bindgen. i.e. the next 'if' is always true,
-        // and we always generate an additional C++ file for our bindings additions,
-        // unless the include_cpp macro has specified ExcludeUtilities.
-        let api = Api {
-            ns: Namespace::new(),
-            id: make_ident("make_string"),
-            use_stmt: Use::Used,
-            extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
-                fn make_string(str_: &str) -> UniquePtr<CxxString>;
-            ))),
-            additional_cpp: Some(AdditionalNeed::MakeStringConstructor),
-            deps: HashSet::new(),
-            bridge_item: None,
-            global_item: None,
-            id_for_allowlist: None,
-            bindgen_mod_item: None,
-        };
-        self.add_api(api);
     }
 
     /// Generate lots of 'use' statements to pull cxxbridge items into the output
