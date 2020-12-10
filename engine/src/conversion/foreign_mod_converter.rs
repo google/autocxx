@@ -475,7 +475,7 @@ impl ForeignModConverter {
             use_stmt,
             extern_c_mod_item,
             additional_cpp,
-            global_item: None,
+            global_items: Vec::new(),
             bridge_item: None,
             deps,
             id_for_allowlist,
@@ -641,7 +641,7 @@ impl ForeignModConverter {
             deps: HashSet::new(),
             extern_c_mod_item: None,
             bridge_item: None,
-            global_item: None,
+            global_items: Vec::new(),
             additional_cpp: None,
             id_for_allowlist: None,
             bindgen_mod_item: Some(Item::Impl(parse_quote! {

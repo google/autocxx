@@ -40,7 +40,7 @@ pub(crate) fn generate_utilities(apis: &mut Vec<Api>) {
         additional_cpp: Some(AdditionalNeed::MakeStringConstructor),
         deps: HashSet::new(),
         bridge_item: None,
-        global_item: None,
+        global_items: Vec::new(),
         id_for_allowlist: None,
         bindgen_mod_item: None,
     });
