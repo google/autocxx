@@ -32,6 +32,7 @@ use super::{
     namespace_organizer::NamespaceEntries,
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
+    utilities::generate_utilities,
 };
 
 unzip_n::unzip_n!(pub 4);
@@ -248,7 +249,7 @@ impl<'a> BridgeConversion<'a> {
         exclude_utilities: bool,
     ) -> Result<BridgeConversionResults, ConvertError> {
         if !exclude_utilities {
-            self.generate_utilities();
+            generate_utilities(&mut self.apis);
         }
         let root_ns = Namespace::new();
         self.convert_mod_items(items, root_ns)?;
@@ -677,30 +678,6 @@ impl<'a> BridgeConversion<'a> {
                 })
             })
             .collect()
-    }
-
-    /// Adds items which we always add, cos they're useful.
-    fn generate_utilities(&mut self) {
-        // Unless we've been specifically asked not to do so, we always
-        // generate a 'make_string' function. That pretty much *always* means
-        // we run two passes through bindgen. i.e. the next 'if' is always true,
-        // and we always generate an additional C++ file for our bindings additions,
-        // unless the include_cpp macro has specified ExcludeUtilities.
-        let api = Api {
-            ns: Namespace::new(),
-            id: make_ident("make_string"),
-            use_stmt: Use::Used,
-            extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
-                fn make_string(str_: &str) -> UniquePtr<CxxString>;
-            ))),
-            additional_cpp: Some(AdditionalNeed::MakeStringConstructor),
-            deps: HashSet::new(),
-            bridge_item: None,
-            global_item: None,
-            id_for_allowlist: None,
-            bindgen_mod_item: None,
-        };
-        self.add_api(api);
     }
 
     /// Generate lots of 'use' statements to pull cxxbridge items into the output
