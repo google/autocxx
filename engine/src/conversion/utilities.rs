@@ -21,6 +21,9 @@ use std::collections::HashSet;
 use syn::{parse_quote, ForeignItem};
 
 /// Adds items which we always add, cos they're useful.
+/// Any APIs or techniques which do not involve actual C++ interop
+/// shouldn't go here, but instead should go into the main autocxx
+/// src/lib.rs.
 pub(crate) fn generate_utilities(apis: &mut Vec<Api>) {
     // Unless we've been specifically asked not to do so, we always
     // generate a 'make_string' function. That pretty much *always* means
