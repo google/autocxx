@@ -25,8 +25,8 @@ use syn::{
 };
 
 use super::{
-    bridge_converter::Use,
-    bridge_converter::{Api, ConvertError},
+    api::{Api, Use},
+    bridge_converter::ConvertError,
     overload_tracker::OverloadTracker,
     unqualify::{unqualify_params, unqualify_ret_type},
 };

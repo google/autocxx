@@ -22,11 +22,12 @@ use crate::{
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::{
-    parse::Parser, parse_quote, Field, Fields, ForeignItem, GenericParam, Ident, Item,
-    ItemForeignMod, ItemMod, ItemStruct, Type,
+    parse::Parser, parse_quote, Field, Fields, ForeignItem, GenericParam, Item, ItemForeignMod,
+    ItemMod, ItemStruct, Type,
 };
 
 use super::{
+    api::{Api, Use},
     bridge_name_tracker::BridgeNameTracker,
     foreign_mod_converter::{ForeignModConversionCallbacks, ForeignModConverter},
     namespace_organizer::NamespaceEntries,
@@ -63,53 +64,11 @@ impl Display for ConvertError {
     }
 }
 
-/// Whetther and how this type should be exposed in the mods constructed
-/// for actual end-user use.
-pub(crate) enum Use {
-    Unused,
-    Used,
-    UsedWithAlias(Ident),
-}
-
 #[derive(Copy, Clone, Eq, PartialEq)]
 enum TypeKind {
     POD,                // trivial. Can be moved and copied in Rust.
     NonPOD, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
     ForwardDeclaration, // no full C++ declaration available - can't even generate UniquePtr
-}
-
-/// Any API we encounter in the input bindgen rs which we might want to pass
-/// onto the output Rust or C++. Everything is stored in these structures
-/// because we will do a garbage collection for unnecessary APIs later,
-/// using the `deps` field as the edges in the graph.
-pub(crate) struct Api {
-    pub(crate) ns: Namespace,
-    pub(crate) id: Ident,
-    pub(crate) use_stmt: Use,
-    pub(crate) deps: HashSet<TypeName>,
-    pub(crate) extern_c_mod_item: Option<ForeignItem>,
-    pub(crate) bridge_item: Option<Item>,
-    pub(crate) global_items: Vec<Item>,
-    pub(crate) additional_cpp: Option<AdditionalNeed>,
-    pub(crate) id_for_allowlist: Option<Ident>,
-    pub(crate) bindgen_mod_item: Option<Item>,
-}
-
-impl Api {
-    fn typename(&self) -> TypeName {
-        TypeName::new(&self.ns, &self.id.to_string())
-    }
-
-    fn typename_for_allowlist(&self) -> TypeName {
-        let id_for_allowlist = match &self.id_for_allowlist {
-            None => match &self.use_stmt {
-                Use::UsedWithAlias(alias) => alias,
-                _ => &self.id,
-            },
-            Some(id) => &id,
-        };
-        TypeName::new(&self.ns, &id_for_allowlist.to_string())
-    }
 }
 
 /// Results of a conversion.

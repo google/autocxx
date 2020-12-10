@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod api;
 pub(crate) mod bridge_converter;
 mod bridge_name_tracker;
 mod foreign_mod_converter;
