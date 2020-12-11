@@ -16,9 +16,7 @@ mod api;
 mod codegen;
 mod gc;
 mod namespace_organizer;
-mod overload_tracker;
 mod parse;
-mod unqualify;
 mod utilities;
 
 pub(crate) use api::ConvertError;

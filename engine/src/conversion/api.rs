@@ -57,9 +57,15 @@ pub(crate) enum Use {
 }
 
 /// Any API we encounter in the input bindgen rs which we might want to pass
-/// onto the output Rust or C++. Everything is stored in these structures
-/// because we will do a garbage collection for unnecessary APIs later,
-/// using the `deps` field as the edges in the graph.
+/// onto the output Rust or C++. This is not exactly a high level representation
+/// of the APIs we encounter - instead, we're mostly storing snippets of Rust
+/// syntax which we encountered in the bindgen mod and want to pass onto the
+/// resulting Rust mods. It may be that eventually this type turns into
+/// a higher level description of the APIs we find, possibly even an enum.
+/// That's the approach taken by both cxx and bindgen. This gives a cleaner
+/// separation between the parser and the codegen phases. However our case is
+/// a bit less normal because the code we generate actually includes most of
+/// the code we parse.
 pub(crate) struct Api {
     pub(crate) ns: Namespace,
     pub(crate) id: Ident,
@@ -90,7 +96,8 @@ impl Api {
     }
 }
 
-/// Results of parsing the bindgen mod.
+/// Results of parsing the bindgen mod. This is what is passed from
+/// the parser to the code generation phase.
 pub(crate) struct ParseResults {
     pub(crate) apis: Vec<Api>,
     pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,

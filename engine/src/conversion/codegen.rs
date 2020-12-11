@@ -38,6 +38,12 @@ fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
     input.into_iter().flatten().collect()
 }
 
+/// Type which handles generation of code.
+/// "Code" here includes a list of Items to expose in Rust,
+/// and also a list of "additional C++ needs" which can be passed
+/// to the C++ code generator.
+/// In practice, much of the "generation" involves connecting together
+/// existing lumps of code within the Api structures.
 pub(crate) struct CodeGenerator<'a> {
     include_list: &'a [String],
     use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,

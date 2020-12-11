@@ -25,8 +25,8 @@ use syn::{
     ForeignItemFn, Ident, ImplItem, Item, ItemImpl, Pat, ReturnType, Type, TypePtr,
 };
 
-use super::super::{
-    api::{Api, Use},
+use super::{
+    super::api::{Api, Use},
     overload_tracker::OverloadTracker,
     unqualify::{unqualify_params, unqualify_ret_type},
 };
