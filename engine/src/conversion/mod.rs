@@ -13,14 +13,11 @@
 // limitations under the License.
 
 mod api;
-mod bridge_name_tracker;
 mod codegen;
 mod gc;
 mod namespace_organizer;
 mod overload_tracker;
 mod parse;
-mod rust_name_tracker;
-mod type_converter;
 mod unqualify;
 mod utilities;
 

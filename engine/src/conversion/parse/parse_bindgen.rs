@@ -28,13 +28,10 @@ use syn::{
     parse::Parser, parse_quote, Field, Fields, ForeignItem, GenericParam, Item, ItemStruct, Type,
 };
 
-use super::super::{
+use super::{super::{
     api::{Api, Use},
-    bridge_name_tracker::BridgeNameTracker,
-    rust_name_tracker::RustNameTracker,
-    type_converter::TypeConverter,
     utilities::generate_utilities,
-};
+}, bridge_name_tracker::BridgeNameTracker, rust_name_tracker::RustNameTracker, type_converter::TypeConverter};
 
 use super::parse_foreign_mod::{ForeignModParseCallbacks, ParseForeignMod};
 
