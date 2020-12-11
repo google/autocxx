@@ -30,7 +30,7 @@ mod builder;
 #[cfg(test)]
 mod integration_tests;
 
-use conversion::bridge_converter::BridgeConverter;
+use conversion::BridgeConverter;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{fmt::Display, path::PathBuf};
 use type_database::TypeDatabase;
@@ -80,7 +80,7 @@ pub enum Error {
     CouldNotCanoncalizeIncludeDir(PathBuf),
     /// Some error occcurred in converting the bindgen-style
     /// bindings to safe cxx bindings.
-    Conversion(conversion::bridge_converter::ConvertError),
+    Conversion(conversion::ConvertError),
     /// No 'generate' or 'generate_pod' was specified.
     /// It might be that in future we can simply let things work
     /// without any allowlist, in which case bindgen should generate

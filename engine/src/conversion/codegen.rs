@@ -23,8 +23,8 @@ use crate::{
 
 use super::{
     api::{Api, Use},
-    bridge_converter::ConvertError,
     namespace_organizer::NamespaceEntries,
+    ConvertError,
 };
 
 unzip_n::unzip_n!(pub 4);

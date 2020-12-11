@@ -12,14 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
-
-use syn::{ForeignItem, Ident, Item};
-
 use crate::{
     additional_cpp_generator::AdditionalNeed,
     types::{Namespace, TypeName},
 };
+use std::{collections::HashSet, fmt::Display};
+use syn::{ForeignItem, Ident, Item};
+
+#[derive(Debug)]
+pub enum ConvertError {
+    NoContent,
+    UnsafePODType(String),
+    UnexpectedForeignItem,
+    UnexpectedOuterItem,
+    UnexpectedItemInMod,
+    ComplexTypedefTarget(String),
+    UnexpectedThisType,
+}
+
+impl Display for ConvertError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConvertError::NoContent => write!(f, "The initial run of 'bindgen' did not generate any content. This might be because none of the requested items for generation could be converted.")?,
+            ConvertError::UnsafePODType(err) => write!(f, "An item was requested using 'generate_pod' which was not safe to hold by value in Rust. {}", err)?,
+            ConvertError::UnexpectedForeignItem => write!(f, "Bindgen generated some unexpected code in a foreign mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
+            ConvertError::UnexpectedOuterItem => write!(f, "Bindgen generated some unexpected code in its outermost mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
+            ConvertError::UnexpectedItemInMod => write!(f, "Bindgen generated some unexpected code in an inner namespace mod. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
+            ConvertError::ComplexTypedefTarget(ty) => write!(f, "autocxx was unable to produce a typdef pointing to the complex type {}.", ty)?,
+            ConvertError::UnexpectedThisType => write!(f, "Unexpected type for 'this'")?, // TODO give type/function
+        }
+        Ok(())
+    }
+}
 
 /// Whetther and how this type should be exposed in the mods constructed
 /// for actual end-user use.

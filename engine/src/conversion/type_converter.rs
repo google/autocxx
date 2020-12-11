@@ -20,7 +20,7 @@ use syn::{
 };
 
 use crate::{
-    conversion::bridge_converter::ConvertError,
+    conversion::ConvertError,
     known_types::{is_known_type, known_type_substitute_path, should_dereference_in_cpp},
     types::{Namespace, TypeName},
 };

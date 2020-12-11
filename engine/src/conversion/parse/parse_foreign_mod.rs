@@ -14,6 +14,7 @@
 
 use crate::{
     additional_cpp_generator::AdditionalNeed,
+    conversion::ConvertError,
     function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
     types::{make_ident, Namespace, TypeName},
 };
@@ -24,9 +25,8 @@ use syn::{
     ForeignItemFn, Ident, ImplItem, Item, ItemImpl, Pat, ReturnType, Type, TypePtr,
 };
 
-use super::{
+use super::super::{
     api::{Api, Use},
-    bridge_converter::ConvertError,
     overload_tracker::OverloadTracker,
     unqualify::{unqualify_params, unqualify_ret_type},
 };

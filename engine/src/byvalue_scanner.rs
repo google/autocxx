@@ -15,9 +15,9 @@
 use syn::Item;
 
 use crate::{
-    byvalue_checker::ByValueChecker, conversion::bridge_converter::ConvertError,
-    type_database::TypeDatabase, typedef_analyzer::analyze_typedef_target,
-    typedef_analyzer::TypedefTarget, types::Namespace, types::TypeName,
+    byvalue_checker::ByValueChecker, conversion::ConvertError, type_database::TypeDatabase,
+    typedef_analyzer::analyze_typedef_target, typedef_analyzer::TypedefTarget, types::Namespace,
+    types::TypeName,
 };
 
 struct ByValueScanner<'a> {
