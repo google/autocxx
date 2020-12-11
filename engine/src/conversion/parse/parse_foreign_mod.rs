@@ -14,6 +14,7 @@
 
 use crate::{
     additional_cpp_generator::AdditionalNeed,
+    conversion::ConvertError,
     function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
     types::{make_ident, Namespace, TypeName},
 };
@@ -25,8 +26,7 @@ use syn::{
 };
 
 use super::{
-    bridge_converter::Use,
-    bridge_converter::{Api, ConvertError},
+    super::api::{Api, Use},
     overload_tracker::OverloadTracker,
     unqualify::{unqualify_params, unqualify_ret_type},
 };
@@ -49,7 +49,7 @@ struct ReturnTypeAnalysis {
 /// Ways in which the conversion of a given extern "C" mod can
 /// have more global effects or require more global knowledge outside
 /// of its immediate conversion.
-pub(crate) trait ForeignModConversionCallbacks {
+pub(crate) trait ForeignModParseCallbacks {
     fn convert_boxed_type(
         &self,
         ty: Box<Type>,
@@ -71,7 +71,7 @@ pub(crate) trait ForeignModConversionCallbacks {
 /// Converts a given bindgen-generated 'mod' into suitable
 /// cxx::bridge runes. In bindgen output, a given mod concerns
 /// a specific C++ namespace.
-pub(crate) struct ForeignModConverter {
+pub(crate) struct ParseForeignMod {
     ns: Namespace,
     overload_tracker: OverloadTracker,
     // We mostly act upon the functions we see within the 'extern "C"'
@@ -86,7 +86,7 @@ pub(crate) struct ForeignModConverter {
     method_receivers: HashMap<Ident, TypeName>,
 }
 
-impl ForeignModConverter {
+impl ParseForeignMod {
     pub(crate) fn new(ns: Namespace) -> Self {
         Self {
             ns,
@@ -140,7 +140,7 @@ impl ForeignModConverter {
     /// the resulting APIs.
     pub(crate) fn finished(
         &mut self,
-        callbacks: &mut impl ForeignModConversionCallbacks,
+        callbacks: &mut impl ForeignModParseCallbacks,
     ) -> Result<(), ConvertError> {
         while !self.funcs_to_convert.is_empty() {
             let fun = self.funcs_to_convert.remove(0);
@@ -152,7 +152,7 @@ impl ForeignModConverter {
     fn convert_foreign_fn(
         &mut self,
         fun: ForeignItemFn,
-        callbacks: &mut impl ForeignModConversionCallbacks,
+        callbacks: &mut impl ForeignModParseCallbacks,
     ) -> Result<(), ConvertError> {
         let ns = &self.ns.clone();
         // This function is one of the most complex parts of our conversion.
@@ -492,7 +492,7 @@ impl ForeignModConverter {
         &self,
         arg: FnArg,
         ns: &Namespace,
-        callbacks: &impl ForeignModConversionCallbacks,
+        callbacks: &impl ForeignModParseCallbacks,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
             FnArg::Typed(mut pt) => {
@@ -535,7 +535,7 @@ impl ForeignModConverter {
     fn conversion_details<F>(
         &self,
         ty: &Type,
-        callbacks: &impl ForeignModConversionCallbacks,
+        callbacks: &impl ForeignModParseCallbacks,
         conversion_direction: F,
     ) -> ArgumentConversion
     where
@@ -556,7 +556,7 @@ impl ForeignModConverter {
     fn argument_conversion_details(
         &self,
         ty: &Type,
-        callbacks: &impl ForeignModConversionCallbacks,
+        callbacks: &impl ForeignModParseCallbacks,
     ) -> ArgumentConversion {
         self.conversion_details(ty, callbacks, ArgumentConversion::new_from_unique_ptr)
     }
@@ -564,14 +564,14 @@ impl ForeignModConverter {
     fn return_type_conversion_details(
         &self,
         ty: &Type,
-        callbacks: &impl ForeignModConversionCallbacks,
+        callbacks: &impl ForeignModParseCallbacks,
     ) -> ArgumentConversion {
         self.conversion_details(ty, callbacks, ArgumentConversion::new_to_unique_ptr)
     }
 
     fn convert_return_type(
         &self,
-        callbacks: &impl ForeignModConversionCallbacks,
+        callbacks: &impl ForeignModParseCallbacks,
         rt: ReturnType,
         ns: &Namespace,
     ) -> Result<ReturnTypeAnalysis, ConvertError> {
@@ -610,7 +610,7 @@ impl ForeignModConverter {
         rust_name: &str,
         ret_type: &ReturnType,
         ns: &Namespace,
-        callbacks: &mut impl ForeignModConversionCallbacks,
+        callbacks: &mut impl ForeignModParseCallbacks,
     ) {
         let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
         let mut arg_list = Vec::new();

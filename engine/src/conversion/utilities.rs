@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::bridge_converter::{Api, Use};
+use super::api::{Api, Use};
 use crate::{
     additional_cpp_generator::AdditionalNeed,
     types::{make_ident, Namespace},
 };
 use std::collections::HashSet;
-use syn::{ForeignItem, Item, parse_quote};
+use syn::{parse_quote, ForeignItem, Item};
 
 /// Adds items which we always add, cos they're useful.
 /// Any APIs or techniques which do not involve actual C++ interop
@@ -52,7 +52,7 @@ pub(crate) fn generate_utilities(apis: &mut Vec<Api>) {
                         cxxbridge::make_string(self)
                     }
                 }
-            })
+            }),
         ],
         id_for_allowlist: None,
         bindgen_mod_item: None,
