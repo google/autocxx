@@ -22,19 +22,25 @@ use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::{
     parse::Parser, parse_quote, Field, Fields, ForeignItem, GenericParam, Item, ItemForeignMod,
-    ItemMod, ItemStruct, Type,
+    ItemStruct, Type,
 };
 
 use super::super::{
     api::{Api, Use},
     bridge_name_tracker::BridgeNameTracker,
-    codegen::{CodeGenerator, CodegenResults},
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
     utilities::generate_utilities,
 };
 
 use super::parse_foreign_mod::{ForeignModConversionCallbacks, ForeignModConverter};
+
+/// Results of parsing the bindgen mod.
+pub(crate) struct ParseResults {
+    pub(crate) apis: Vec<Api>,
+    pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
+    pub(crate) extern_c_mod: Option<ItemForeignMod>,
+}
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 enum TypeKind {
@@ -47,38 +53,29 @@ enum TypeKind {
 /// be thought of as a ton of parameters which we'd otherwise
 /// need to pass into each individual function within this file.
 pub(crate) struct BridgeConversion<'a> {
-    bindgen_mod: ItemMod,
-    extern_c_mod: Option<ItemForeignMod>,
     type_converter: TypeConverter,
     byvalue_checker: ByValueChecker,
     type_database: &'a TypeDatabase,
-    include_list: &'a [String],
-    apis: Vec<Api>,
     bridge_name_tracker: BridgeNameTracker,
     rust_name_tracker: RustNameTracker,
-    use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
     incomplete_types: HashSet<TypeName>,
+    results: ParseResults,
 }
 
 impl<'a> BridgeConversion<'a> {
-    pub(crate) fn new(
-        bindgen_mod: ItemMod,
-        byvalue_checker: ByValueChecker,
-        include_list: &'a [String],
-        type_database: &'a TypeDatabase,
-    ) -> Self {
+    pub(crate) fn new(byvalue_checker: ByValueChecker, type_database: &'a TypeDatabase) -> Self {
         BridgeConversion {
-            bindgen_mod,
-            extern_c_mod: None,
             type_converter: TypeConverter::new(),
             byvalue_checker,
-            include_list,
-            apis: Vec::new(),
             bridge_name_tracker: BridgeNameTracker::new(),
             rust_name_tracker: RustNameTracker::new(),
             type_database,
-            use_stmts_by_mod: HashMap::new(),
             incomplete_types: HashSet::new(),
+            results: ParseResults {
+                apis: Vec::new(),
+                extern_c_mod: None,
+                use_stmts_by_mod: HashMap::new(),
+            },
         }
     }
 
@@ -100,71 +97,13 @@ impl<'a> BridgeConversion<'a> {
         mut self,
         items: Vec<Item>,
         exclude_utilities: bool,
-    ) -> Result<CodegenResults, ConvertError> {
+    ) -> Result<ParseResults, ConvertError> {
         if !exclude_utilities {
-            generate_utilities(&mut self.apis);
+            generate_utilities(&mut self.results.apis);
         }
         let root_ns = Namespace::new();
         self.convert_mod_items(items, root_ns)?;
-        // The code above will have contributed lots of Apis to self.apis.
-        // We now garbage collect the ones we don't need...
-        let all_apis = self.filter_apis_by_following_edges_from_allowlist();
-        CodeGenerator::generate_code(
-            all_apis,
-            self.include_list,
-            self.use_stmts_by_mod,
-            self.extern_c_mod,
-            self.bindgen_mod,
-        )
-    }
-
-    /// This is essentially mark-and-sweep garbage collection of the
-    /// Apis that we've discovered. Why do we do this, you might wonder?
-    /// It seems a bit strange given that we pass an explicit allowlist
-    /// to bindgen.
-    /// There are two circumstances under which we want to discard
-    /// some of the APIs we encounter parsing the bindgen.
-    /// 1) We simplify some struct to be non-POD. In this case, we'll
-    ///    discard all the fields within it. Those fields can be, and
-    ///    in fact often _are_, stuff which we have trouble converting
-    ///    e.g. std::string or std::string::value_type or
-    ///    my_derived_thing<std::basic_string::value_type> or some
-    ///    other permutation. In such cases, we want to discard those
-    ///    field types with prejudice.
-    /// 2) block! may be used to ban certain APIs. This often eliminates
-    ///    some methods from a given struct/class. In which case, we
-    ///    don't care about the other parameter types passed into those
-    ///    APIs either.
-    fn filter_apis_by_following_edges_from_allowlist(&mut self) -> Vec<Api> {
-        let mut todos: Vec<_> = self
-            .apis
-            .iter()
-            .filter(|api| {
-                let tnforal = api.typename_for_allowlist();
-                log::info!("Considering {}", tnforal);
-                self.is_on_allowlist(&tnforal)
-            })
-            .map(Api::typename)
-            .collect();
-        let mut by_typename: HashMap<TypeName, Vec<Api>> = HashMap::new();
-        for api in self.apis.drain(..) {
-            let tn = api.typename();
-            by_typename.entry(tn).or_default().push(api);
-        }
-        let mut done = HashSet::new();
-        let mut output = Vec::new();
-        while !todos.is_empty() {
-            let todo = todos.remove(0);
-            if done.contains(&todo) {
-                continue;
-            }
-            if let Some(mut these_apis) = by_typename.remove(&todo) {
-                todos.extend(these_apis.iter_mut().flat_map(|api| api.deps.drain()));
-                output.append(&mut these_apis);
-            } // otherwise, probably an intrinsic e.g. uint32_t.
-            done.insert(todo);
-        }
-        output
+        Ok(self.results)
     }
 
     /// Interpret the bindgen-generated .rs for a particular
@@ -179,8 +118,8 @@ impl<'a> BridgeConversion<'a> {
                 Item::ForeignMod(mut fm) => {
                     let items = fm.items;
                     fm.items = Vec::new();
-                    if self.extern_c_mod.is_none() {
-                        self.extern_c_mod = Some(fm);
+                    if self.results.extern_c_mod.is_none() {
+                        self.results.extern_c_mod = Some(fm);
                         // We'll use the first 'extern "C"' mod we come
                         // across for attributes, spans etc. but we'll stuff
                         // the contents of all bindgen 'extern "C"' mods into this
@@ -193,12 +132,10 @@ impl<'a> BridgeConversion<'a> {
                     let type_kind = if Self::spot_forward_declaration(&s.fields) {
                         self.incomplete_types.insert(tyname.clone());
                         TypeKind::ForwardDeclaration
+                    } else if self.byvalue_checker.is_pod(&tyname) {
+                        TypeKind::POD
                     } else {
-                        if self.byvalue_checker.is_pod(&tyname) {
-                            TypeKind::POD
-                        } else {
-                            TypeKind::NonPOD
-                        }
+                        TypeKind::NonPOD
                     };
                     // We either leave a bindgen struct untouched, or we completely
                     // replace its contents with opaque nonsense.
@@ -292,7 +229,8 @@ impl<'a> BridgeConversion<'a> {
                 use cxx:: #thing;
             }));
         }
-        self.use_stmts_by_mod
+        self.results
+            .use_stmts_by_mod
             .insert(ns, use_statements_for_this_mod);
         Ok(())
     }
@@ -442,7 +380,7 @@ impl<'a> BridgeConversion<'a> {
         fulltypath.push(final_ident.clone());
         let api = Api {
             ns: tyname.get_namespace().clone(),
-            id: final_ident.clone(),
+            id: final_ident,
             use_stmt: Use::Used,
             global_items: vec![Item::Impl(parse_quote! {
                 unsafe impl cxx::ExternType for #(#fulltypath)::* {
@@ -478,7 +416,7 @@ impl<'a> ForeignModConversionCallbacks for BridgeConversion<'a> {
     }
 
     fn add_api(&mut self, api: Api) {
-        self.apis.push(api);
+        self.results.apis.push(api);
     }
 
     fn get_cxx_bridge_name(
