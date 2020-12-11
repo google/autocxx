@@ -15,4 +15,4 @@
 pub(crate) mod parse_bindgen;
 mod parse_foreign_mod;
 
-pub(crate) use parse_bindgen::BridgeConversion;
+pub(crate) use parse_bindgen::ParseBindgen;

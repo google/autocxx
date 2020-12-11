@@ -16,8 +16,11 @@ use crate::{
     additional_cpp_generator::AdditionalNeed,
     types::{Namespace, TypeName},
 };
-use std::{collections::HashSet, fmt::Display};
-use syn::{ForeignItem, Ident, Item};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
+use syn::{ForeignItem, Ident, Item, ItemForeignMod};
 
 #[derive(Debug)]
 pub enum ConvertError {
@@ -85,4 +88,11 @@ impl Api {
         };
         TypeName::new(&self.ns, &id_for_allowlist.to_string())
     }
+}
+
+/// Results of parsing the bindgen mod.
+pub(crate) struct ParseResults {
+    pub(crate) apis: Vec<Api>,
+    pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
+    pub(crate) extern_c_mod: Option<ItemForeignMod>,
 }

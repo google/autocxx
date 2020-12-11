@@ -15,14 +15,17 @@
 use std::{collections::HashMap, collections::HashSet};
 
 use crate::{
-    byvalue_checker::ByValueChecker, conversion::ConvertError, type_database::TypeDatabase,
-    types::make_ident, types::Namespace, types::TypeName,
+    byvalue_checker::ByValueChecker,
+    conversion::{api::ParseResults, ConvertError},
+    type_database::TypeDatabase,
+    types::make_ident,
+    types::Namespace,
+    types::TypeName,
 };
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::{
-    parse::Parser, parse_quote, Field, Fields, ForeignItem, GenericParam, Item, ItemForeignMod,
-    ItemStruct, Type,
+    parse::Parser, parse_quote, Field, Fields, ForeignItem, GenericParam, Item, ItemStruct, Type,
 };
 
 use super::super::{
@@ -33,14 +36,7 @@ use super::super::{
     utilities::generate_utilities,
 };
 
-use super::parse_foreign_mod::{ForeignModConversionCallbacks, ForeignModConverter};
-
-/// Results of parsing the bindgen mod.
-pub(crate) struct ParseResults {
-    pub(crate) apis: Vec<Api>,
-    pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
-    pub(crate) extern_c_mod: Option<ItemForeignMod>,
-}
+use super::parse_foreign_mod::{ForeignModParseCallbacks, ParseForeignMod};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 enum TypeKind {
@@ -49,10 +45,8 @@ enum TypeKind {
     ForwardDeclaration, // no full C++ declaration available - can't even generate UniquePtr
 }
 
-/// A particular bridge conversion operation. This can really
-/// be thought of as a ton of parameters which we'd otherwise
-/// need to pass into each individual function within this file.
-pub(crate) struct BridgeConversion<'a> {
+/// Parses a bindgen mod in order to understand the APIs within it.
+pub(crate) struct ParseBindgen<'a> {
     type_converter: TypeConverter,
     byvalue_checker: ByValueChecker,
     type_database: &'a TypeDatabase,
@@ -62,9 +56,9 @@ pub(crate) struct BridgeConversion<'a> {
     results: ParseResults,
 }
 
-impl<'a> BridgeConversion<'a> {
+impl<'a> ParseBindgen<'a> {
     pub(crate) fn new(byvalue_checker: ByValueChecker, type_database: &'a TypeDatabase) -> Self {
-        BridgeConversion {
+        ParseBindgen {
             type_converter: TypeConverter::new(),
             byvalue_checker,
             bridge_name_tracker: BridgeNameTracker::new(),
@@ -111,7 +105,7 @@ impl<'a> BridgeConversion<'a> {
     fn convert_mod_items(&mut self, items: Vec<Item>, ns: Namespace) -> Result<(), ConvertError> {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
-        let mut mod_converter = ForeignModConverter::new(ns.clone());
+        let mut mod_converter = ParseForeignMod::new(ns.clone());
         let mut use_statements_for_this_mod = Vec::new();
         for item in items {
             match item {
@@ -401,7 +395,7 @@ impl<'a> BridgeConversion<'a> {
     }
 }
 
-impl<'a> ForeignModConversionCallbacks for BridgeConversion<'a> {
+impl<'a> ForeignModParseCallbacks for ParseBindgen<'a> {
     fn convert_boxed_type(
         &self,
         ty: Box<Type>,
