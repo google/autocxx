@@ -43,7 +43,6 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
         .iter()
         .filter(|api| {
             let tnforal = api.typename_for_allowlist();
-            log::info!("Considering {}", tnforal);
             type_database.is_on_allowlist(&tnforal)
         })
         .map(Api::typename)

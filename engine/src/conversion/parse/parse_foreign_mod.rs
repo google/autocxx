@@ -22,7 +22,7 @@ use quote::quote;
 use std::collections::{HashMap, HashSet};
 use syn::{
     parse::Parser, parse_quote, punctuated::Punctuated, Attribute, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemImpl, Pat, ReturnType, Type, TypePtr,
+    ForeignItemFn, Ident, ImplItem, Item, ItemImpl, LitStr, Pat, ReturnType, Type, TypePtr,
 };
 
 use super::{
@@ -169,6 +169,8 @@ impl ParseForeignMod {
             return Ok(());
         }
 
+        let original_name = Self::get_bindgen_original_name_annotation(&fun);
+
         // Now let's analyze all the parameters.
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .sig
@@ -211,7 +213,7 @@ impl ParseForeignMod {
         // Work out naming.
         let mut rust_name;
         let mut is_constructor = false;
-        let cpp_call_name;
+        let cpp_call_name = original_name.unwrap_or_else(|| initial_rust_name.into());
         if let Some(self_ty) = &self_ty {
             if !callbacks.is_on_allowlist(&self_ty) {
                 // Bindgen will output methods for types which have been encountered
@@ -228,11 +230,9 @@ impl ParseForeignMod {
             // with the original name, but we currently discard that impl section.
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
-            let overload_details = self
+            rust_name = self
                 .overload_tracker
-                .get_method_real_name(&type_ident, &initial_rust_name);
-            cpp_call_name = overload_details.cpp_method_name;
-            rust_name = overload_details.rust_method_name;
+                .get_method_real_name(&type_ident, cpp_call_name.clone());
             if rust_name.starts_with(&type_ident) {
                 // It's a constructor. bindgen generates
                 // fn new(this: *Type, ...args)
@@ -251,13 +251,10 @@ impl ParseForeignMod {
             }
         } else {
             // Not a method.
-            // What's the name of the underlying C++ function call?
-            // If bindgen found overloaded methods, it may not be what it seems.
-            let overload_details = self
+            // What shall we call this function? It may be overloaded.
+            rust_name = self
                 .overload_tracker
-                .get_function_real_name(&initial_rust_name);
-            cpp_call_name = overload_details.cpp_method_name;
-            rust_name = overload_details.rust_method_name;
+                .get_function_real_name(cpp_call_name.clone());
         }
 
         // The name we use within the cxx::bridge mod may be different
@@ -650,5 +647,22 @@ impl ParseForeignMod {
                 }
             })),
         });
+    }
+
+    fn get_bindgen_original_name_annotation(fun: &ForeignItemFn) -> Option<String> {
+        fun.attrs
+            .iter()
+            .filter_map(|a| {
+                if a.path.is_ident("bindgen_original_name") {
+                    let r: Result<LitStr, syn::Error> = a.parse_args();
+                    match r {
+                        Ok(ls) => Some(ls.value()),
+                        Err(_) => None,
+                    }
+                } else {
+                    None
+                }
+            })
+            .next()
     }
 }
