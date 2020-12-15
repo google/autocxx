@@ -34,10 +34,10 @@ lazy_static = "1.4"
 indoc = "1.0"
 autocxx-bindgen = "0.56.1"
 itertools = "0.9"
-cxx-gen = "0.6.3"
+cxx-gen = "0.6.7"
 dunce = "1.0.1"
 cc = { version = "1.0", optional = true }
-cxx = "0.5.6"
+cxx = "0.5.10"
 unzip-n = "0.1.2"
 
 [dependencies.syn]
