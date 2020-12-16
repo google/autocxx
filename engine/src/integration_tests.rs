@@ -3388,6 +3388,29 @@ fn test_forward_declaration() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
+#[test]
+fn test_ulong() {
+    let hdr = indoc! {"
+    unsigned long daft(unsigned long a) { return a; }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
+    };
+    run_test("", hdr, rs, &["daft"], &[]);
+}
+
+#[test]
+fn test_typedef_to_ulong() {
+    let hdr = indoc! {"
+        #include <cstddef>
+        size_t daft(size_t a) { return a; }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
+    };
+    run_test("", hdr, rs, &["daft"], &[]);
+}
+
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef
