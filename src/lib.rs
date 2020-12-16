@@ -50,11 +50,13 @@
 /// # Configuring the build
 ///
 /// To build this, you'll need to:
+/// * Build the C++ side of the bindings. You'll need to use the `autocxx-gen`
+///   crate or the `autocxx-build` crate to process the .rs code into C++ header and
+///   implementation files.
 /// * Educate the procedural macro about where to find the C++ headers. Set the
 ///   `AUTOCXX_INC` environment variable to a list of directories to search.
-/// * Build the C++ side of the bindings. You'll need to use the `autocxx-gen`
-///   crate (or similar) to process the same .rs code into C++ header and
-///   implementation files.
+///   If you use `autocxx-build`, this happens automatically.
+
 ///
 /// # Syntax
 ///
@@ -87,7 +89,6 @@
 /// is not declared as POD-safe, then we'll generate wrapper functions to move
 /// that type into and out of [UniquePtr][autocxx_engine::cxx::UniquePtr]s.
 ///
-///
 /// # Generated code
 ///
 /// You will find that this macro expands to the equivalent of:
@@ -110,34 +111,21 @@
 ///
 /// # Making strings
 ///
-/// Unless you use [exclude_utilities], you will find a function
-/// called `make_string` exists inside the generated `ffi` block:
+/// Unless you use [exclude_utilities], you will find a trait called
+/// `ffi::ToCppString` which you can use to convert any Rust string into a C++
+/// `std::unique_ptr<std::string>` like this:
 ///
-/// ```no_run
-/// mod ffi {
-/// # use autocxx_engine::cxx::UniquePtr;
-/// # use autocxx_engine::cxx::CxxString;
-///     pub fn make_string(str_: &str) -> UniquePtr<CxxString>
-/// #   { unreachable!() }
-/// }
+/// ```ignore
+/// use ffi::ToCpp;
+/// let unique_ptr_to_cxx_string = "my_string".to_cpp();
 /// ```
 ///
 /// # Making other C++ types
 ///
-/// Types gain a `_make_unique` function. At present this is not
-/// an associated function; it's simply the type name followed by
-/// that suffix.
+/// Types gain a `make_unique` associated function, but currently only
+/// if they have an explicit constructor. This will (of course) return a
+/// `UniquePtr` containing that type.
 ///
-/// ```
-/// mod ffi {
-/// # struct UniquePtr<T>(T);
-///     struct Bob {
-///         a: u32,
-///     }
-///     pub fn Bob_make_unique() -> UniquePtr<Bob>
-/// #   { unreachable!() }
-/// }
-/// ```
 /// # Preprocessor symbols
 ///
 /// `#define` and other preprocessor symbols will appear as constants.
@@ -170,13 +158,6 @@
 ///
 /// C++ allows function overloads; Rust doesn't. `autocxx` follows the lead
 /// of `bindgen` here and generating overloads as `func`, `func1`, `func2` etc.
-///
-/// Unfortunately bindgen does not offer a means to distinguish such overloaded
-/// functions from those which are legitimately called `func`, `func1` etc.
-/// and so `autocxx` has to guess. Consider this a known limitation of autocxx
-/// and - for now - avoid functions ending in digits. This restriction may
-/// be solved in future if we can add metadata to the bindgen output or otherwise
-/// arrange for this information to be made available to autocxx.
 ///
 /// # C++ classes - why do I get warnings?
 ///
@@ -276,6 +257,8 @@ macro_rules! nested_type {
 /// code. This can be useful if there is a type which is not
 /// understood by bindgen or autocxx, and incorrect code is
 /// otherwise generated.
+/// This is 'greedy' in the sense that any functions/methods
+/// which take or return such a type will _also_ be blocked.
 ///
 /// A directive to be included inside
 /// [include_cpp] - see [include_cpp] for general information.
