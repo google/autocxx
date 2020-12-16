@@ -57,7 +57,7 @@ impl OverloadTracker {
         let this_offset = *offset;
         *offset += 1;
         if this_offset == 0 {
-            cpp_method_name.to_string()
+            cpp_method_name
         } else {
             format!("{}{}", cpp_method_name, this_offset)
         }

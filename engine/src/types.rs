@@ -26,6 +26,7 @@ pub(crate) fn make_ident(id: &str) -> Ident {
 
 /// Newtype wrapper for a C++ namespace.
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
+#[allow(clippy::rc_buffer)]
 pub struct Namespace(Arc<Vec<String>>);
 
 impl Namespace {

@@ -213,7 +213,7 @@ impl ParseForeignMod {
         // Work out naming.
         let mut rust_name;
         let mut is_constructor = false;
-        let cpp_call_name = original_name.unwrap_or_else(|| initial_rust_name.into());
+        let cpp_call_name = original_name.unwrap_or(initial_rust_name);
         if let Some(self_ty) = &self_ty {
             if !callbacks.is_on_allowlist(&self_ty) {
                 // Bindgen will output methods for types which have been encountered
