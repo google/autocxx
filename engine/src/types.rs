@@ -18,7 +18,7 @@ use std::iter::Peekable;
 use std::{fmt::Display, sync::Arc};
 use syn::{parse_quote, Ident, PathSegment, TypePath};
 
-use crate::known_types::is_known_type;
+use crate::known_types::KNOWN_TYPES;
 
 pub(crate) fn make_ident(id: &str) -> Ident {
     Ident::new(id, Span::call_site())
@@ -171,7 +171,7 @@ impl TypeName {
 
     /// Output the fully-qualified C++ name of this type.
     pub(crate) fn to_cpp_name(&self) -> String {
-        let special_cpp_name = crate::known_types::special_cpp_name(&self);
+        let special_cpp_name = KNOWN_TYPES.special_cpp_name(&self);
         match special_cpp_name {
             Some(name) => name,
             None => {
@@ -187,11 +187,8 @@ impl TypeName {
     }
 
     pub(crate) fn to_type_path(&self) -> TypePath {
-        if is_known_type(self) {
-            let id = make_ident(&self.1);
-            parse_quote! {
-                #id
-            }
+        if let Some(known_type_path) = KNOWN_TYPES.known_type_type_path(self) {
+            known_type_path
         } else {
             let root = "root".to_string();
             let segs = std::iter::once(&root)
