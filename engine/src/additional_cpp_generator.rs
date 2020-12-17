@@ -15,6 +15,7 @@
 use crate::{
     function_wrapper::{FunctionWrapper, FunctionWrapperPayload},
     type_database::TypeDatabase,
+    types::TypeName,
 };
 use itertools::Itertools;
 use std::collections::HashSet;
@@ -23,6 +24,7 @@ use std::collections::HashSet;
 pub(crate) enum AdditionalNeed {
     MakeStringConstructor,
     FunctionWrapper(Box<FunctionWrapper>),
+    CTypeTypedef(TypeName),
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -94,6 +96,7 @@ impl AdditionalCppGenerator {
                 AdditionalNeed::FunctionWrapper(by_value_wrapper) => {
                     self.generate_by_value_wrapper(*by_value_wrapper, type_database)
                 }
+                AdditionalNeed::CTypeTypedef(tn) => self.generate_typedef(tn),
             }
         }
     }
@@ -238,6 +241,16 @@ impl AdditionalCppGenerator {
             declaration,
             definition,
             headers: vec![Header::system("memory")],
+        })
+    }
+
+    fn generate_typedef(&mut self, tn: TypeName) {
+        let our_name = tn.get_final_ident();
+        let cpp_name = tn.to_cpp_name();
+        self.additional_functions.push(AdditionalFunction {
+            declaration: format!("typedef {} {};", cpp_name, our_name),
+            definition: "".into(),
+            headers: Vec::new(),
         })
     }
 }

@@ -24,8 +24,9 @@ keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
 
 [dependencies]
-autocxx-engine = { path="engine", version="0.4.1" }
 autocxx-macro = { path="macro", version="0.4.1" }
+autocxx-engine = { path="engine", version="0.4.1" }
+cxx = "0.5.10" # needed because expansion of type_id refers to ::cxx
 
 [workspace]
 members = ["engine", "gen/cmd", "gen/build", "macro", "demo"]

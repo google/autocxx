@@ -41,6 +41,8 @@ struct TypeDetails {
     /// Whether this is a & on the Rust side but a value on the C++
     /// side. Only applies to &str.
     de_referencicate: bool,
+    /// Is a C type whose size is not fixed (e.g. int, short)
+    is_ctype: bool,
 }
 
 impl TypeDetails {
@@ -50,6 +52,7 @@ impl TypeDetails {
         by_value_safe: bool,
         prelude_policy: PreludePolicy,
         de_referencicate: bool,
+        is_ctype: bool,
     ) -> Self {
         TypeDetails {
             rs_name,
@@ -57,6 +60,7 @@ impl TypeDetails {
             by_value_safe,
             prelude_policy,
             de_referencicate,
+            is_ctype,
         }
     }
 
@@ -175,6 +179,10 @@ impl TypeDatabase {
     pub(crate) fn known_type_type_path(&self, ty: &TypeName) -> Option<TypePath> {
         self.get(ty).map(|td| td.to_type_path())
     }
+
+    pub(crate) fn is_ctype(&self, ty: &TypeName) -> bool {
+        self.get(ty).map(|td| td.is_ctype).unwrap_or(false)
+    }
 }
 
 fn create_type_database() -> TypeDatabase {
@@ -189,12 +197,14 @@ fn create_type_database() -> TypeDatabase {
         true,
         PreludePolicy::IncludeTemplated,
         false,
+        false,
     ));
     do_insert(TypeDetails::new(
         "CxxString".into(),
         "std::string".into(),
         false,
         PreludePolicy::IncludeNormal,
+        false,
         false,
     ));
     do_insert(TypeDetails::new(
@@ -203,12 +213,14 @@ fn create_type_database() -> TypeDatabase {
         true,
         PreludePolicy::IncludeNormal,
         true,
+        false,
     ));
     do_insert(TypeDetails::new(
         "String".into(),
         "rust::String".into(),
         true,
         PreludePolicy::IncludeNormal,
+        false,
         false,
     ));
     for (cpp_type, rust_type) in (3..7)
@@ -227,6 +239,7 @@ fn create_type_database() -> TypeDatabase {
             true,
             PreludePolicy::Exclude,
             false,
+            false,
         ));
     }
     do_insert(TypeDetails::new(
@@ -234,6 +247,7 @@ fn create_type_database() -> TypeDatabase {
         "bool".into(),
         true,
         PreludePolicy::Exclude,
+        false,
         false,
     ));
 
@@ -244,14 +258,24 @@ fn create_type_database() -> TypeDatabase {
             true,
             PreludePolicy::Exclude,
             false,
+            true,
+        );
+        by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+        let td = TypeDetails::new(
+            format!("std::os::raw::c_u{}", cname),
+            format!("unsigned {}", cname),
+            true,
+            PreludePolicy::Exclude,
+            false,
+            true,
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
     };
 
-    insert_ctype("ulong");
-    insert_ctype("uint");
     insert_ctype("long");
     insert_ctype("int");
+    insert_ctype("short");
+    insert_ctype("char");
 
     let mut by_cppname = HashMap::new();
     for td in by_rs_name.values() {
