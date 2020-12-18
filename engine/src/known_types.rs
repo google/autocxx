@@ -41,6 +41,8 @@ struct TypeDetails {
     /// Whether this is a & on the Rust side but a value on the C++
     /// side. Only applies to &str.
     de_referencicate: bool,
+    /// Is a C type whose size is not fixed (e.g. int, short)
+    is_ctype: bool,
 }
 
 impl TypeDetails {
@@ -50,6 +52,7 @@ impl TypeDetails {
         by_value_safe: bool,
         prelude_policy: PreludePolicy,
         de_referencicate: bool,
+        is_ctype: bool,
     ) -> Self {
         TypeDetails {
             rs_name,
@@ -57,6 +60,7 @@ impl TypeDetails {
             by_value_safe,
             prelude_policy,
             de_referencicate,
+            is_ctype,
         }
     }
 
@@ -85,17 +89,100 @@ impl TypeDetails {
             }
         }
     }
+
+    fn to_type_path(&self) -> TypePath {
+        let segs = self.rs_name.split("::").map(make_ident);
+        parse_quote! {
+            #(#segs)::*
+        }
+    }
 }
 
 /// Database of known types.
 pub(crate) struct TypeDatabase {
     by_rs_name: HashMap<TypeName, TypeDetails>,
-    by_cppname: HashMap<String, String>,
+    by_cppname: HashMap<TypeName, TypeName>,
 }
 
 lazy_static! {
     /// Database of known types.
-    static ref KNOWN_TYPES: TypeDatabase = create_type_database();
+    pub(crate) static ref KNOWN_TYPES: TypeDatabase = create_type_database();
+}
+
+impl TypeDatabase {
+    fn get(&self, ty: &TypeName) -> Option<&TypeDetails> {
+        // The following line is important. It says that
+        // when we encounter something like 'std::unique_ptr'
+        // in the bindgen-generated bindings, we'll immediately
+        // start to refer to that as 'UniquePtr' henceforth.
+        let canonical_name = self.by_cppname.get(ty).unwrap_or(ty);
+        self.by_rs_name.get(canonical_name)
+    }
+
+    /// Prelude of C++ for squirting into bindgen. This configures
+    /// bindgen to output simpler types to replace some STL types
+    /// that bindgen just can't cope with. Although we then replace
+    /// those types with cxx types (e.g. UniquePtr), this intermediate
+    /// step is still necessary because bindgen can't otherwise
+    /// give us the templated types (e.g. when faced with the STL
+    /// unique_ptr, bindgen would normally give us std_unique_ptr
+    /// as opposed to std_unique_ptr<T>.)
+    pub(crate) fn get_prelude(&self) -> String {
+        itertools::join(
+            self.by_rs_name
+                .values()
+                .filter_map(|t| t.get_prelude_entry()),
+            "\n",
+        )
+    }
+
+    /// Types which are known to be safe (or unsafe) to hold and pass by
+    /// value in Rust.
+    pub(crate) fn get_pod_safe_types(&self) -> Vec<(TypeName, bool)> {
+        self.by_rs_name
+            .iter()
+            .map(|(tn, td)| (tn.clone(), td.by_value_safe))
+            .collect()
+    }
+
+    /// Whether this TypePath should be treated as a value in C++
+    /// but a reference in Rust. This only applies to rust::Str
+    /// (C++ name) which is &str in Rust.
+    pub(crate) fn should_dereference_in_cpp(&self, typ: &TypePath) -> bool {
+        let tn = TypeName::from_type_path(typ);
+        let td = self.get(&tn);
+        if let Some(td) = td {
+            td.de_referencicate
+        } else {
+            false
+        }
+    }
+
+    /// Here we substitute any names which we know are Special from
+    /// our type database, e.g. std::unique_ptr -> UniquePtr.
+    /// We strip off and ignore
+    /// any PathArguments within this TypePath - callers should
+    /// put them back again if needs be.
+    pub(crate) fn known_type_substitute_path(&self, typ: &TypePath) -> Option<TypePath> {
+        let tn = TypeName::from_type_path(typ);
+        self.get(&tn).map(|td| td.to_type_path())
+    }
+
+    pub(crate) fn special_cpp_name(&self, rs: &TypeName) -> Option<String> {
+        self.get(rs).map(|x| x.cpp_name.to_string())
+    }
+
+    pub(crate) fn is_known_type(&self, ty: &TypeName) -> bool {
+        self.get(ty).is_some()
+    }
+
+    pub(crate) fn known_type_type_path(&self, ty: &TypeName) -> Option<TypePath> {
+        self.get(ty).map(|td| td.to_type_path())
+    }
+
+    pub(crate) fn is_ctype(&self, ty: &TypeName) -> bool {
+        self.get(ty).map(|td| td.is_ctype).unwrap_or(false)
+    }
 }
 
 fn create_type_database() -> TypeDatabase {
@@ -110,12 +197,14 @@ fn create_type_database() -> TypeDatabase {
         true,
         PreludePolicy::IncludeTemplated,
         false,
+        false,
     ));
     do_insert(TypeDetails::new(
         "CxxString".into(),
         "std::string".into(),
         false,
         PreludePolicy::IncludeNormal,
+        false,
         false,
     ));
     do_insert(TypeDetails::new(
@@ -124,12 +213,14 @@ fn create_type_database() -> TypeDatabase {
         true,
         PreludePolicy::IncludeNormal,
         true,
+        false,
     ));
     do_insert(TypeDetails::new(
         "String".into(),
         "rust::String".into(),
         true,
         PreludePolicy::IncludeNormal,
+        false,
         false,
     ));
     for (cpp_type, rust_type) in (3..7)
@@ -148,6 +239,7 @@ fn create_type_database() -> TypeDatabase {
             true,
             PreludePolicy::Exclude,
             false,
+            false,
         ));
     }
     do_insert(TypeDetails::new(
@@ -155,6 +247,7 @@ fn create_type_database() -> TypeDatabase {
         "bool".into(),
         true,
         PreludePolicy::Exclude,
+        false,
         false,
     ));
 
@@ -165,18 +258,31 @@ fn create_type_database() -> TypeDatabase {
             true,
             PreludePolicy::Exclude,
             false,
+            true,
+        );
+        by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+        let td = TypeDetails::new(
+            format!("std::os::raw::c_u{}", cname),
+            format!("unsigned {}", cname),
+            true,
+            PreludePolicy::Exclude,
+            false,
+            true,
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
     };
 
-    insert_ctype("ulong");
-    insert_ctype("uint");
     insert_ctype("long");
     insert_ctype("int");
+    insert_ctype("short");
+    insert_ctype("char");
 
     let mut by_cppname = HashMap::new();
     for td in by_rs_name.values() {
-        by_cppname.insert(td.cpp_name.clone(), td.rs_name.clone());
+        by_cppname.insert(
+            TypeName::new_from_user_input(&td.cpp_name),
+            TypeName::new_from_user_input(&td.rs_name),
+        );
     }
 
     TypeDatabase {
@@ -194,78 +300,10 @@ fn create_type_database() -> TypeDatabase {
 /// it would be good to dig into bindgen's behavior here - TODO.
 const BINDGEN_BLOCKLIST: &[&str] = &["std.*", "__gnu.*", ".*mbstate_t.*", "rust.*"];
 
-/// Prelude of C++ for squirting into bindgen. This configures
-/// bindgen to output simpler types to replace some STL types
-/// that bindgen just can't cope with. Although we then replace
-/// those types with cxx types (e.g. UniquePtr), this intermediate
-/// step is still necessary because bindgen can't otherwise
-/// give us the templated types (e.g. when faced with the STL
-/// unique_ptr, bindgen would normally give us std_unique_ptr
-/// as opposed to std_unique_ptr<T>.)
-pub(crate) fn get_prelude() -> String {
-    itertools::join(
-        KNOWN_TYPES
-            .by_rs_name
-            .values()
-            .filter_map(|t| t.get_prelude_entry()),
-        "\n",
-    )
-}
-
-/// Types which are known to be safe (or unsafe) to hold and pass by
-/// value in Rust.
-pub(crate) fn get_pod_safe_types() -> Vec<(TypeName, bool)> {
-    KNOWN_TYPES
-        .by_rs_name
-        .iter()
-        .map(|(_, td)| (TypeName::new_from_user_input(&td.rs_name), td.by_value_safe))
-        .collect()
-}
-
 /// Get the list of types to give to bindgen to ask it _not_ to
 /// generate code for.
 pub(crate) fn get_initial_blocklist() -> Vec<String> {
     BINDGEN_BLOCKLIST.iter().map(|s| s.to_string()).collect()
-}
-
-/// Whether this TypePath should be treated as a value in C++
-/// but a reference in Rust. This only applies to rust::Str
-/// (C++ name) which is &str in Rust.
-pub(crate) fn should_dereference_in_cpp(typ: &TypePath) -> bool {
-    let tn = TypeName::from_type_path(typ);
-    let td = KNOWN_TYPES.by_rs_name.get(&tn);
-    if let Some(td) = td {
-        td.de_referencicate
-    } else {
-        false
-    }
-}
-
-/// Here we substitute any names which we know are Special from
-/// our type database, e.g. std::unique_ptr -> UniquePtr.
-/// The 'without_arguments' bit means we strip off and ignore
-/// any PathArguments within this TypePath - callers should
-/// put them back again if needs be.
-pub(crate) fn known_type_substitute_path(typ: &TypePath) -> Option<TypePath> {
-    let tn = TypeName::from_type_path(typ);
-    let name = tn.to_cpp_name();
-    KNOWN_TYPES.by_cppname.get(&name).map(|id| {
-        let id = make_ident(id);
-        parse_quote! {
-            #id
-        }
-    })
-}
-
-pub(crate) fn special_cpp_name(rs: &TypeName) -> Option<String> {
-    KNOWN_TYPES
-        .by_rs_name
-        .get(rs)
-        .map(|x| x.cpp_name.to_string())
-}
-
-pub(crate) fn is_known_type(ty: &TypeName) -> bool {
-    KNOWN_TYPES.by_rs_name.contains_key(ty)
 }
 
 /// If a given type lacks a copy constructor, we should always use

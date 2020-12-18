@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use quote::quote;
 use syn::{parse_quote, ForeignItem, Item, ItemForeignMod, ItemMod};
 
+use crate::known_types::KNOWN_TYPES;
 use crate::{
     additional_cpp_generator::AdditionalNeed,
-    types::{make_ident, Namespace},
+    types::{make_ident, Namespace, TypeName},
 };
 
 use super::{
@@ -27,7 +29,7 @@ use super::{
     ConvertError,
 };
 
-unzip_n::unzip_n!(pub 4);
+unzip_n::unzip_n!(pub 5);
 
 pub(crate) struct CodegenResults {
     pub(crate) items: Vec<Item>,
@@ -79,7 +81,7 @@ impl<'a> CodeGenerator<'a> {
         let bindgen_root_items = self.generate_final_bindgen_mods(&all_apis);
         // Both of the above are organized into sub-mods by namespace.
         // From here on, things are flat.
-        let (extern_c_mod_items, all_items, bridge_items, additional_cpp_needs) = all_apis
+        let (extern_c_mod_items, all_items, bridge_items, additional_cpp_needs, deps) = all_apis
             .into_iter()
             .map(|api| {
                 (
@@ -87,6 +89,7 @@ impl<'a> CodeGenerator<'a> {
                     api.global_items,
                     api.bridge_item,
                     api.additional_cpp,
+                    api.deps,
                 )
             })
             .unzip_n_vec();
@@ -97,7 +100,9 @@ impl<'a> CodeGenerator<'a> {
         // And a list of global items to include at the top level.
         let mut all_items: Vec<Item> = all_items.into_iter().flatten().collect();
         // And finally any C++ we need to generate. And by "we" I mean autocxx not cxx.
-        let additional_cpp_needs = remove_nones(additional_cpp_needs);
+        let mut additional_cpp_needs = remove_nones(additional_cpp_needs);
+        // Determine what variably-sized C types (e.g. int) we need to include
+        self.append_ctype_information(&deps, &mut extern_c_mod_items, &mut additional_cpp_needs);
         extern_c_mod_items
             .extend(self.build_include_foreign_items(!additional_cpp_needs.is_empty()));
         // We will always create an extern "C" mod even if bindgen
@@ -132,6 +137,27 @@ impl<'a> CodeGenerator<'a> {
             items: all_items,
             additional_cpp_needs,
         })
+    }
+
+    fn append_ctype_information(
+        &self,
+        deps: &Vec<HashSet<TypeName>>,
+        extern_c_mod_items: &mut Vec<ForeignItem>,
+        additional_cpp_needs: &mut Vec<AdditionalNeed>,
+    ) {
+        let ctypes: HashSet<_> = deps
+            .into_iter()
+            .flatten()
+            .filter(|ty| KNOWN_TYPES.is_ctype(ty))
+            .collect();
+        for ctype in ctypes {
+            let id = make_ident(ctype.get_final_ident());
+            let ts = quote! {
+                type #id = autocxx::#id;
+            };
+            extern_c_mod_items.push(ForeignItem::Verbatim(ts));
+            additional_cpp_needs.push(AdditionalNeed::CTypeTypedef(ctype.clone()))
+        }
     }
 
     fn get_blank_extern_c_mod() -> ItemForeignMod {

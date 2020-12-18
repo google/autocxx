@@ -132,6 +132,14 @@
 /// At present there is no way to do compile-time disablement of code
 /// (equivalent of `#ifdef`).
 ///
+/// # Integer types
+///
+/// For C++ types with a defined size, just go ahead and use `u64`, `i32` etc.
+/// For types such as `int` or `unsigned long`, the hope is that you can
+/// eventually use `std::os::raw::c_int` oor `std::os::raw::c_ulong` etc.
+/// For now, this doesn't quite work: instead you need to wrap these values
+/// in a newtype wrapper such as [c_int] or [c_ulong] in this crate.
+///
 /// # String constants
 ///
 /// Whether from a preprocessor symbol or from a C++ `char*` constant,
@@ -283,3 +291,27 @@ macro_rules! usage {
 
 #[doc(hidden)]
 pub use autocxx_macro::include_cpp_impl;
+
+macro_rules! ctype_wrapper {
+    ($r:ident, $c:expr) => {
+        /// Newtype wrapper for a `$c`
+        #[derive(Debug, Eq, Clone, PartialEq, Hash)]
+        #[allow(non_camel_case_types)]
+        #[repr(transparent)]
+        pub struct $r(pub ::std::os::raw::$r);
+
+        unsafe impl autocxx_engine::cxx::ExternType for $r {
+            type Id = autocxx_engine::cxx::type_id!($c);
+            type Kind = autocxx_engine::cxx::kind::Trivial;
+        }
+    };
+}
+
+ctype_wrapper!(c_ulong, "c_ulong");
+ctype_wrapper!(c_long, "c_long");
+ctype_wrapper!(c_ushort, "c_ushort");
+ctype_wrapper!(c_short, "c_short");
+ctype_wrapper!(c_uint, "c_uint");
+ctype_wrapper!(c_int, "c_int");
+ctype_wrapper!(c_uchar, "c_uchar");
+ctype_wrapper!(c_char, "c_char");

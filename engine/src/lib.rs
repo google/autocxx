@@ -41,6 +41,7 @@ use syn::{parse_quote, ItemMod, Macro};
 
 use additional_cpp_generator::AdditionalCppGenerator;
 use itertools::join;
+use known_types::KNOWN_TYPES;
 use log::{info, warn};
 use types::TypeName;
 
@@ -295,7 +296,7 @@ impl IncludeCpp {
 
     fn inject_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
         let full_header = self.build_header();
-        let full_header = format!("{}\n\n{}", known_types::get_prelude(), full_header,);
+        let full_header = format!("{}\n\n{}", KNOWN_TYPES.get_prelude(), full_header,);
         builder = builder.header_contents("example.hpp", &full_header);
         builder
     }
