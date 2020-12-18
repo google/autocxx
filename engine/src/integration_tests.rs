@@ -3391,7 +3391,7 @@ fn test_forward_declaration() {
 #[test]
 fn test_ulong() {
     let hdr = indoc! {"
-    unsigned long daft(unsigned long a) { return a; }
+    inline unsigned long daft(unsigned long a) { return a; }
     "};
     let rs = quote! {
         assert_eq!(ffi::daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
@@ -3403,7 +3403,7 @@ fn test_ulong() {
 fn test_typedef_to_ulong() {
     let hdr = indoc! {"
         #include <cstddef>
-        size_t daft(size_t a) { return a; }
+        inline size_t daft(size_t a) { return a; }
     "};
     let rs = quote! {
         assert_eq!(ffi::daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
