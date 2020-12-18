@@ -20,7 +20,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
 };
-use syn::{ForeignItem, Ident, Item, ItemForeignMod};
+use syn::{ForeignItem, Ident, ImplItem, Item, ItemForeignMod};
 
 #[derive(Debug)]
 pub enum ConvertError {
@@ -77,6 +77,7 @@ pub(crate) struct Api {
     pub(crate) additional_cpp: Option<AdditionalNeed>,
     pub(crate) id_for_allowlist: Option<Ident>,
     pub(crate) bindgen_mod_item: Option<Item>,
+    pub(crate) impl_entry: Option<ImplItem>,
 }
 
 impl Api {

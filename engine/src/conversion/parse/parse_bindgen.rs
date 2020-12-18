@@ -184,6 +184,7 @@ impl<'a> ParseBindgen<'a> {
                         use_stmt: Use::Unused,
                         id_for_allowlist: None,
                         bindgen_mod_item: None,
+                        impl_entry: None,
                     });
                 }
                 Item::Type(ity) => {
@@ -200,6 +201,7 @@ impl<'a> ParseBindgen<'a> {
                         use_stmt: Use::Unused,
                         id_for_allowlist: None,
                         bindgen_mod_item: Some(Item::Type(ity)),
+                        impl_entry: None,
                     });
                 }
                 _ => return Err(ConvertError::UnexpectedItemInMod),
@@ -390,6 +392,7 @@ impl<'a> ParseBindgen<'a> {
             deps,
             id_for_allowlist: None,
             bindgen_mod_item,
+            impl_entry: None,
         };
         self.add_api(api);
         self.type_converter.push(tyname);

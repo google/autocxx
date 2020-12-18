@@ -137,6 +137,7 @@ mod tests {
             additional_cpp: None,
             id_for_allowlist: None,
             bindgen_mod_item: None,
+            impl_entry: None,
         }
     }
 }

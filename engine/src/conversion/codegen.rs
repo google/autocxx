@@ -230,8 +230,22 @@ impl<'a> CodeGenerator<'a> {
         output_items: &mut Vec<Item>,
         ns: &Namespace,
     ) {
+        let mut impl_entries_by_type: HashMap<_, Vec<_>> = HashMap::new();
         for item in ns_entries.entries() {
             output_items.extend(item.bindgen_mod_item.iter().cloned());
+            if let Some(impl_entry) = &item.impl_entry {
+                impl_entries_by_type
+                    .entry(item.id.clone())
+                    .or_default()
+                    .push(impl_entry);
+            }
+        }
+        for (ty, entries) in impl_entries_by_type.into_iter() {
+            output_items.push(Item::Impl(parse_quote! {
+                impl #ty {
+                    #(#entries)*
+                }
+            }))
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
             let new_ns = ns.push((*child_name).clone());

@@ -22,7 +22,7 @@ use quote::quote;
 use std::collections::{HashMap, HashSet};
 use syn::{
     parse::Parser, parse_quote, punctuated::Punctuated, Attribute, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemImpl, LitStr, Pat, ReturnType, Type, TypePtr,
+    ForeignItemFn, Ident, ImplItem, ItemImpl, LitStr, Pat, ReturnType, Type, TypePtr,
 };
 
 use super::{
@@ -477,6 +477,7 @@ impl ParseForeignMod {
             deps,
             id_for_allowlist,
             bindgen_mod_item: None,
+            impl_entry: None,
         };
         callbacks.add_api(api);
         Ok(())
@@ -641,11 +642,8 @@ impl ParseForeignMod {
             global_items: Vec::new(),
             additional_cpp: None,
             id_for_allowlist: None,
-            bindgen_mod_item: Some(Item::Impl(parse_quote! {
-                impl #impl_block_type_name {
-                    #extra_method
-                }
-            })),
+            bindgen_mod_item: None,
+            impl_entry: Some(extra_method),
         });
     }
 
