@@ -141,7 +141,7 @@ impl<'a> CodeGenerator<'a> {
 
     fn append_ctype_information(
         &self,
-        deps: &Vec<HashSet<TypeName>>,
+        deps: &[HashSet<TypeName>],
         extern_c_mod_items: &mut Vec<ForeignItem>,
         additional_cpp_needs: &mut Vec<AdditionalNeed>,
     ) {
