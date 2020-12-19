@@ -3411,6 +3411,18 @@ fn test_typedef_to_ulong() {
     run_test("", hdr, rs, &["daft"], &[]);
 }
 
+#[test]
+fn test_reserved_name() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        inline uint32_t async(uint32_t a) { return a; }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::async_(34), 34);
+    };
+    run_test("", hdr, rs, &["async_"], &[]);
+}
+
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef
