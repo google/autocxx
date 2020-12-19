@@ -56,5 +56,6 @@ pub(crate) fn generate_utilities(apis: &mut Vec<Api>) {
         ],
         id_for_allowlist: None,
         bindgen_mod_item: None,
+        impl_entry: None,
     });
 }
