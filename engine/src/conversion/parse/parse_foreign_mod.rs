@@ -346,7 +346,12 @@ impl ParseForeignMod {
             // and return values into/out of std::unique_ptrs.
             // First give instructions to generate the additional C++.
             let cpp_construction_ident = make_ident(&cpp_call_name);
-            cxxbridge_name = make_ident(&format!("{}_autocxx_wrapper", cxxbridge_name));
+            let joiner = if cxxbridge_name.to_string().ends_with('_') {
+                ""
+            } else {
+                "_"
+            };
+            cxxbridge_name = make_ident(&format!("{}{}autocxx_wrapper", cxxbridge_name, joiner));
             let payload = if is_constructor {
                 FunctionWrapperPayload::Constructor
             } else if is_static_method {
