@@ -74,7 +74,6 @@ impl<'a> ParseBindgen<'a> {
             incomplete_types: HashSet::new(),
             results: ParseResults {
                 apis: Vec::new(),
-                extern_c_mod: None,
                 use_stmts_by_mod: HashMap::new(),
             },
             unsafe_policy,
@@ -120,13 +119,6 @@ impl<'a> ParseBindgen<'a> {
                 Item::ForeignMod(mut fm) => {
                     let items = fm.items;
                     fm.items = Vec::new();
-                    if self.results.extern_c_mod.is_none() {
-                        self.results.extern_c_mod = Some(fm);
-                        // We'll use the first 'extern "C"' mod we come
-                        // across for attributes, spans etc. but we'll stuff
-                        // the contents of all bindgen 'extern "C"' mods into this
-                        // one.
-                    }
                     mod_converter.convert_foreign_mod_items(items)?;
                 }
                 Item::Struct(mut s) => {

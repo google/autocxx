@@ -49,7 +49,6 @@ fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
 pub(crate) struct CodeGenerator<'a> {
     include_list: &'a [String],
     use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
-    extern_c_mod: Option<ItemForeignMod>,
     bindgen_mod: ItemMod,
 }
 
@@ -59,13 +58,11 @@ impl<'a> CodeGenerator<'a> {
         all_apis: Vec<Api>,
         include_list: &'a [String],
         use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
-        extern_c_mod: Option<ItemForeignMod>,
         bindgen_mod: ItemMod,
     ) -> Result<CodegenResults, ConvertError> {
         let c = Self {
             include_list,
             use_stmts_by_mod,
-            extern_c_mod,
             bindgen_mod,
         };
         c.codegen(all_apis)
@@ -108,12 +105,11 @@ impl<'a> CodeGenerator<'a> {
         // We will always create an extern "C" mod even if bindgen
         // didn't generate one, e.g. because it only generated types.
         // We still want cxx to know about those types.
-        let mut extern_c_mod = self
-            .extern_c_mod
-            .take()
-            .unwrap_or_else(Self::get_blank_extern_c_mod);
+        let mut extern_c_mod: ItemForeignMod = parse_quote!(
+            extern "C++" {}
+        );
         extern_c_mod.items.append(&mut extern_c_mod_items);
-        bridge_items.push(Item::ForeignMod(extern_c_mod));
+        bridge_items.push(Self::make_foreign_mod_unsafe(extern_c_mod));
         // The extensive use of parse_quote here could end up
         // being a performance bottleneck. If so, we might want
         // to set the 'contents' field of the ItemMod
@@ -139,6 +135,14 @@ impl<'a> CodeGenerator<'a> {
         })
     }
 
+    fn make_foreign_mod_unsafe(ifm: ItemForeignMod) -> Item {
+        // At the moment syn does not support outputting 'unsafe extern "C"' except in verbatim
+        // items. See https://github.com/dtolnay/syn/pull/938
+        Item::Verbatim(quote! {
+            unsafe #ifm
+        })
+    }
+
     fn append_ctype_information(
         &self,
         deps: &[HashSet<TypeName>],
@@ -158,12 +162,6 @@ impl<'a> CodeGenerator<'a> {
             extern_c_mod_items.push(ForeignItem::Verbatim(ts));
             additional_cpp_needs.push(AdditionalNeed::CTypeTypedef(ctype.clone()))
         }
-    }
-
-    fn get_blank_extern_c_mod() -> ItemForeignMod {
-        parse_quote!(
-            extern "C" {}
-        )
     }
 
     fn build_include_foreign_items(&self, has_additional_cpp_needs: bool) -> Vec<ForeignItem> {

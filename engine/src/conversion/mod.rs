@@ -92,7 +92,6 @@ impl<'a> BridgeConverter<'a> {
                     apis,
                     self.include_list,
                     parse_results.use_stmts_by_mod,
-                    parse_results.extern_c_mod,
                     bindgen_mod,
                 )
             }

@@ -29,7 +29,7 @@ use quote::quote;
 use std::collections::{HashMap, HashSet};
 use syn::{
     parse_quote, punctuated::Punctuated, ForeignItem, GenericArgument, Item, PathArguments,
-    PathSegment, Type, TypePath, TypePtr, TypeReference,
+    PathSegment, Type, TypePath, TypePtr,
 };
 
 use super::non_pod_struct::new_non_pod_struct;
@@ -127,7 +127,7 @@ impl<'a> TypeConverter<'a> {
                     innerty.extra_apis,
                 )
             }
-            Type::Ptr(ptr) => self.convert_ptr_to_reference(ptr, ns)?.map(Type::Reference),
+            Type::Ptr(ptr) => self.convert_ptr_to_reference(ptr, ns)?,
             _ => Annotated::new(ty, HashSet::new(), Vec::new()),
         };
         Ok(result)
@@ -264,17 +264,20 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         ptr: TypePtr,
         ns: &Namespace,
-    ) -> Result<Annotated<TypeReference>, ConvertError> {
+    ) -> Result<Annotated<Type>, ConvertError> {
         let mutability = ptr.mutability;
         let elem = self.convert_boxed_type(ptr.elem, ns)?;
         // TODO - in the future, we should check if this is a rust::Str and throw
         // a wobbler if not. rust::Str should only be seen _by value_ in C++
         // headers; it manifests as &str in Rust but on the C++ side it must
         // be a plain value. We should detect and abort.
-        Ok(elem.map(|elem| {
-            parse_quote! {
-                & #mutability #elem
-            }
+        Ok(elem.map(|elem| match mutability {
+            Some(_) => Type::Path(parse_quote! {
+                Pin < & #mutability #elem >
+            }),
+            None => Type::Reference(parse_quote! {
+                & #elem
+            }),
         }))
     }
 
