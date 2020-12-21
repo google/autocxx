@@ -14,11 +14,11 @@
 
 use itertools::Itertools;
 use proc_macro2::Span;
-use std::fmt::Display;
 use std::iter::Peekable;
+use std::{fmt::Display, sync::Arc};
 use syn::{parse_quote, Ident, PathSegment, TypePath};
 
-use crate::known_types::is_known_type;
+use crate::known_types::KNOWN_TYPES;
 
 pub(crate) fn make_ident(id: &str) -> Ident {
     Ident::new(id, Span::call_site())
@@ -26,18 +26,19 @@ pub(crate) fn make_ident(id: &str) -> Ident {
 
 /// Newtype wrapper for a C++ namespace.
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
-pub struct Namespace(Vec<String>);
+#[allow(clippy::rc_buffer)]
+pub struct Namespace(Arc<Vec<String>>);
 
 impl Namespace {
     pub(crate) fn new() -> Self {
-        Self(Vec::new())
+        Self(Arc::new(Vec::new()))
     }
 
     #[must_use]
     pub(crate) fn push(&self, segment: String) -> Self {
-        let mut bigger = self.0.clone();
+        let mut bigger = (*self.0).clone();
         bigger.push(segment);
-        Namespace(bigger)
+        Namespace(Arc::new(bigger))
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -50,7 +51,7 @@ impl Namespace {
 
     #[cfg(test)]
     pub(crate) fn from_user_input(input: &str) -> Self {
-        Self(input.split("::").map(|x| x.to_string()).collect())
+        Self(Arc::new(input.split("::").map(|x| x.to_string()).collect()))
     }
 
     pub(crate) fn depth(&self) -> usize {
@@ -170,7 +171,7 @@ impl TypeName {
 
     /// Output the fully-qualified C++ name of this type.
     pub(crate) fn to_cpp_name(&self) -> String {
-        let special_cpp_name = crate::known_types::special_cpp_name(&self);
+        let special_cpp_name = KNOWN_TYPES.special_cpp_name(&self);
         match special_cpp_name {
             Some(name) => name,
             None => {
@@ -186,11 +187,8 @@ impl TypeName {
     }
 
     pub(crate) fn to_type_path(&self) -> TypePath {
-        if is_known_type(self) {
-            let id = make_ident(&self.1);
-            parse_quote! {
-                #id
-            }
+        if let Some(known_type_path) = KNOWN_TYPES.known_type_type_path(self) {
+            known_type_path
         } else {
             let root = "root".to_string();
             let segs = std::iter::once(&root)

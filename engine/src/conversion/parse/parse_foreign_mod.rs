@@ -14,6 +14,7 @@
 
 use crate::{
     additional_cpp_generator::AdditionalNeed,
+    conversion::ConvertError,
     function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
     types::{make_ident, Namespace, TypeName},
 };
@@ -21,12 +22,11 @@ use quote::quote;
 use std::collections::{HashMap, HashSet};
 use syn::{
     parse::Parser, parse_quote, punctuated::Punctuated, Attribute, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemImpl, Pat, ReturnType, Type, TypePtr,
+    ForeignItemFn, Ident, ImplItem, ItemImpl, LitStr, Pat, ReturnType, Type, TypePtr,
 };
 
 use super::{
-    bridge_converter::Use,
-    bridge_converter::{Api, ConvertError},
+    super::api::{Api, Use},
     overload_tracker::OverloadTracker,
     unqualify::{unqualify_params, unqualify_ret_type},
 };
@@ -49,7 +49,7 @@ struct ReturnTypeAnalysis {
 /// Ways in which the conversion of a given extern "C" mod can
 /// have more global effects or require more global knowledge outside
 /// of its immediate conversion.
-pub(crate) trait ForeignModConversionCallbacks {
+pub(crate) trait ForeignModParseCallbacks {
     fn convert_boxed_type(
         &self,
         ty: Box<Type>,
@@ -71,7 +71,7 @@ pub(crate) trait ForeignModConversionCallbacks {
 /// Converts a given bindgen-generated 'mod' into suitable
 /// cxx::bridge runes. In bindgen output, a given mod concerns
 /// a specific C++ namespace.
-pub(crate) struct ForeignModConverter {
+pub(crate) struct ParseForeignMod {
     ns: Namespace,
     overload_tracker: OverloadTracker,
     // We mostly act upon the functions we see within the 'extern "C"'
@@ -86,7 +86,7 @@ pub(crate) struct ForeignModConverter {
     method_receivers: HashMap<Ident, TypeName>,
 }
 
-impl ForeignModConverter {
+impl ParseForeignMod {
     pub(crate) fn new(ns: Namespace) -> Self {
         Self {
             ns,
@@ -140,7 +140,7 @@ impl ForeignModConverter {
     /// the resulting APIs.
     pub(crate) fn finished(
         &mut self,
-        callbacks: &mut impl ForeignModConversionCallbacks,
+        callbacks: &mut impl ForeignModParseCallbacks,
     ) -> Result<(), ConvertError> {
         while !self.funcs_to_convert.is_empty() {
             let fun = self.funcs_to_convert.remove(0);
@@ -152,7 +152,7 @@ impl ForeignModConverter {
     fn convert_foreign_fn(
         &mut self,
         fun: ForeignItemFn,
-        callbacks: &mut impl ForeignModConversionCallbacks,
+        callbacks: &mut impl ForeignModParseCallbacks,
     ) -> Result<(), ConvertError> {
         let ns = &self.ns.clone();
         // This function is one of the most complex parts of our conversion.
@@ -168,6 +168,8 @@ impl ForeignModConverter {
         if initial_rust_name.ends_with("_destructor") {
             return Ok(());
         }
+
+        let original_name = Self::get_bindgen_original_name_annotation(&fun);
 
         // Now let's analyze all the parameters.
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
@@ -211,7 +213,18 @@ impl ForeignModConverter {
         // Work out naming.
         let mut rust_name;
         let mut is_constructor = false;
-        let cpp_call_name;
+        // bindgen may have mangled the name either because it's invalid Rust
+        // syntax (e.g. a keyword like 'async') or it's an overload.
+        // If the former, we respect that mangling. If the latter, we don't,
+        // because we'll add our own overload counting mangling later.
+        let name_probably_invalid_in_rust = original_name.is_some() && initial_rust_name.ends_with("_");
+        // The C++ call name will always be whatever bindgen tells us.
+        let cpp_call_name = original_name.unwrap_or_else(|| initial_rust_name.clone());
+        let ideal_rust_name = if name_probably_invalid_in_rust {
+            initial_rust_name
+        } else {
+            cpp_call_name.clone()
+        };
         if let Some(self_ty) = &self_ty {
             if !callbacks.is_on_allowlist(&self_ty) {
                 // Bindgen will output methods for types which have been encountered
@@ -228,11 +241,9 @@ impl ForeignModConverter {
             // with the original name, but we currently discard that impl section.
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
-            let overload_details = self
+            rust_name = self
                 .overload_tracker
-                .get_method_real_name(&type_ident, &initial_rust_name);
-            cpp_call_name = overload_details.cpp_method_name;
-            rust_name = overload_details.rust_method_name;
+                .get_method_real_name(&type_ident, ideal_rust_name.clone());
             if rust_name.starts_with(&type_ident) {
                 // It's a constructor. bindgen generates
                 // fn new(this: *Type, ...args)
@@ -251,13 +262,10 @@ impl ForeignModConverter {
             }
         } else {
             // Not a method.
-            // What's the name of the underlying C++ function call?
-            // If bindgen found overloaded methods, it may not be what it seems.
-            let overload_details = self
+            // What shall we call this function? It may be overloaded.
+            rust_name = self
                 .overload_tracker
-                .get_function_real_name(&initial_rust_name);
-            cpp_call_name = overload_details.cpp_method_name;
-            rust_name = overload_details.rust_method_name;
+                .get_function_real_name(ideal_rust_name.clone());
         }
 
         // The name we use within the cxx::bridge mod may be different
@@ -475,11 +483,12 @@ impl ForeignModConverter {
             use_stmt,
             extern_c_mod_item,
             additional_cpp,
-            global_item: None,
+            global_items: Vec::new(),
             bridge_item: None,
             deps,
             id_for_allowlist,
             bindgen_mod_item: None,
+            impl_entry: None,
         };
         callbacks.add_api(api);
         Ok(())
@@ -492,7 +501,7 @@ impl ForeignModConverter {
         &self,
         arg: FnArg,
         ns: &Namespace,
-        callbacks: &impl ForeignModConversionCallbacks,
+        callbacks: &impl ForeignModParseCallbacks,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
             FnArg::Typed(mut pt) => {
@@ -535,7 +544,7 @@ impl ForeignModConverter {
     fn conversion_details<F>(
         &self,
         ty: &Type,
-        callbacks: &impl ForeignModConversionCallbacks,
+        callbacks: &impl ForeignModParseCallbacks,
         conversion_direction: F,
     ) -> ArgumentConversion
     where
@@ -556,7 +565,7 @@ impl ForeignModConverter {
     fn argument_conversion_details(
         &self,
         ty: &Type,
-        callbacks: &impl ForeignModConversionCallbacks,
+        callbacks: &impl ForeignModParseCallbacks,
     ) -> ArgumentConversion {
         self.conversion_details(ty, callbacks, ArgumentConversion::new_from_unique_ptr)
     }
@@ -564,14 +573,14 @@ impl ForeignModConverter {
     fn return_type_conversion_details(
         &self,
         ty: &Type,
-        callbacks: &impl ForeignModConversionCallbacks,
+        callbacks: &impl ForeignModParseCallbacks,
     ) -> ArgumentConversion {
         self.conversion_details(ty, callbacks, ArgumentConversion::new_to_unique_ptr)
     }
 
     fn convert_return_type(
         &self,
-        callbacks: &impl ForeignModConversionCallbacks,
+        callbacks: &impl ForeignModParseCallbacks,
         rt: ReturnType,
         ns: &Namespace,
     ) -> Result<ReturnTypeAnalysis, ConvertError> {
@@ -610,7 +619,7 @@ impl ForeignModConverter {
         rust_name: &str,
         ret_type: &ReturnType,
         ns: &Namespace,
-        callbacks: &mut impl ForeignModConversionCallbacks,
+        callbacks: &mut impl ForeignModParseCallbacks,
     ) {
         let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
         let mut arg_list = Vec::new();
@@ -641,14 +650,28 @@ impl ForeignModConverter {
             deps: HashSet::new(),
             extern_c_mod_item: None,
             bridge_item: None,
-            global_item: None,
+            global_items: Vec::new(),
             additional_cpp: None,
             id_for_allowlist: None,
-            bindgen_mod_item: Some(Item::Impl(parse_quote! {
-                impl #impl_block_type_name {
-                    #extra_method
-                }
-            })),
+            bindgen_mod_item: None,
+            impl_entry: Some(extra_method),
         });
+    }
+
+    fn get_bindgen_original_name_annotation(fun: &ForeignItemFn) -> Option<String> {
+        fun.attrs
+            .iter()
+            .filter_map(|a| {
+                if a.path.is_ident("bindgen_original_name") {
+                    let r: Result<LitStr, syn::Error> = a.parse_args();
+                    match r {
+                        Ok(ls) => Some(ls.value()),
+                        Err(_) => None,
+                    }
+                } else {
+                    None
+                }
+            })
+            .next()
     }
 }

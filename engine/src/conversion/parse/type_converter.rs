@@ -20,12 +20,12 @@ use syn::{
 };
 
 use crate::{
-    conversion::bridge_converter::ConvertError,
-    known_types::{is_known_type, known_type_substitute_path, should_dereference_in_cpp},
+    conversion::ConvertError,
+    known_types::KNOWN_TYPES,
     types::{Namespace, TypeName},
 };
 
-use super::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
+use crate::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
 
 /// Results of some type conversion, annotated with a list of every type encountered.
 pub(crate) struct Annotated<T> {
@@ -91,7 +91,7 @@ impl TypeConverter {
                 // doesn't simply get renamed to a different type _identifier_.
                 // This plain type-by-value (as far as bindgen is concerned)
                 // is actually a &str.
-                if should_dereference_in_cpp(&newp.ty) {
+                if KNOWN_TYPES.should_dereference_in_cpp(&newp.ty) {
                     Annotated::new(
                         Type::Reference(parse_quote! {
                             &str
@@ -144,7 +144,8 @@ impl TypeConverter {
             // already, and if not, qualify it according to the current
             // namespace. This is a bit of a shortcut compared to having a full
             // resolution pass which can search all known namespaces.
-            if !self.types_found.contains(&ty) && !is_known_type(&ty) {
+            if !self.types_found.contains(&ty) && !KNOWN_TYPES.is_known_type(&ty) {
+                log::info!("Converting {:?}", ty.to_string());
                 typ.path.segments = std::iter::once(&"root".to_string())
                     .chain(ns.iter())
                     .map(|s| parse_quote! { #s })
@@ -176,7 +177,7 @@ impl TypeConverter {
         };
 
         // This will strip off any path arguments...
-        let mut typ = known_type_substitute_path(&typ).unwrap_or(typ);
+        let mut typ = KNOWN_TYPES.known_type_substitute_path(&typ).unwrap_or(typ);
         // but then we'll put them back again as necessary.
         if let Some(last_seg_args) = last_seg_args {
             let last_seg = typ.path.segments.last_mut().unwrap();

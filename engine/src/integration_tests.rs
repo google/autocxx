@@ -2040,9 +2040,10 @@ fn test_overload_functions() {
         void daft(Norma);
     "};
     let rs = quote! {
+        use ffi::ToCppString;
         ffi::daft(32);
         ffi::daft1(8);
-        ffi::daft2(ffi::make_string("hello"));
+        ffi::daft2("hello".to_cpp());
         let b = ffi::Fred { a: 3 };
         ffi::daft3(b);
         let c = ffi::Norma::make_unique();
@@ -2086,9 +2087,10 @@ fn test_overload_numeric_functions() {
         void daft(Norma a);
     "};
     let rs = quote! {
+        use ffi::ToCppString;
         ffi::daft(32);
         ffi::daft1(8);
-        ffi::daft2(ffi::make_string("hello"));
+        ffi::daft2("hello".to_cpp());
         let b = ffi::Fred { a: 3 };
         ffi::daft3(b);
         let c = ffi::Norma::make_unique();
@@ -2132,10 +2134,11 @@ fn test_overload_methods() {
         };
     "};
     let rs = quote! {
+        use ffi::ToCppString;
         let a = ffi::Bob { a: 12 };
         a.daft(32);
         a.daft1(8);
-        a.daft2(ffi::make_string("hello"));
+        a.daft2("hello".to_cpp());
         let b = ffi::Fred { a: 3 };
         a.daft3(b);
         let c = ffi::Norma::make_unique();
@@ -2335,7 +2338,8 @@ fn test_static_func_wrapper() {
         };
     "};
     let rs = quote! {
-        ffi::A::CreateA(ffi::make_string("a"), ffi::make_string("b"));
+        use ffi::ToCppString;
+        ffi::A::CreateA("a".to_cpp(), "b".to_cpp());
     };
     run_test("", hdr, rs, &["A"], &[]);
 }
@@ -2698,7 +2702,8 @@ fn test_make_string() {
         };
     "};
     let rs = quote! {
-        let a = ffi::make_string("hello");
+        use ffi::ToCppString;
+        let a = "hello".to_cpp();
         assert_eq!(a.to_str().unwrap(), "hello");
     };
     run_test("", hdr, rs, &["Bob"], &[]);
@@ -3382,6 +3387,41 @@ fn test_forward_declaration() {
         ffi::B::make_unique();
     };
     run_test("", hdr, rs, &["B"], &[]);
+}
+
+#[test]
+fn test_ulong() {
+    let hdr = indoc! {"
+    inline unsigned long daft(unsigned long a) { return a; }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
+    };
+    run_test("", hdr, rs, &["daft"], &[]);
+}
+
+#[test]
+fn test_typedef_to_ulong() {
+    let hdr = indoc! {"
+        #include <cstddef>
+        inline size_t daft(size_t a) { return a; }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
+    };
+    run_test("", hdr, rs, &["daft"], &[]);
+}
+
+#[test]
+fn test_reserved_name() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        inline uint32_t async(uint32_t a) { return a; }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::async_(34), 34);
+    };
+    run_test("", hdr, rs, &["async_"], &[]);
 }
 
 // Yet to test:

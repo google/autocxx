@@ -6,9 +6,7 @@ This project is a tool for calling C++ from Rust in a heavily automated, but saf
 
 The intention is that it has all the fluent safety from [cxx](https://github.com/dtolnay/cxx) whilst generating interfaces automatically from existing C++ headers using a variant of [bindgen](https://docs.rs/bindgen/0.54.1/bindgen/). Think of autocxx as glue which plugs bindgen into cxx.
 
-# Intended eventual interface
-
-It's intended that eventually this exposes a single procedural macro, something like this:
+# Overview
 
 ```cpp
 namespace base {
@@ -16,7 +14,7 @@ namespace base {
   public:
       Bob(std::string name);
       ...
-      void do_a_thing();
+      void do_a_thing() const;
   };
 }
 ```
@@ -76,7 +74,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Primitive constants | Works |
 | Enums | Works, though more thought needed |
 | #ifdef, #if etc. | - |
-| Typedefs | - |
+| Typedefs | Infinite permutations, some of which work |
 | Structs containing UniquePtr | Works |
 | Structs containing strings | Works (opaque only) |
 | Passing opaque structs (owned by UniquePtr) into C++ functions which take them by value | Works |
@@ -88,14 +86,14 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Namespaces | Works, but a known limitation |
 | Field access to opaque objects via UniquePtr | - |
 | Plain-old-data structs containing opaque fields | Impossible by design, but may not be ergonomic so may need more thought |
-| Reference counting | - |
+| Reference counting, std::shared_ptr | - |
 | std::optional | - |
 | Function pointers | - |
 | Unique ptrs to primitives | - |
 | Inheritance from pure virtual classes | - |
 | Generic (templated) types | - |
 
-The plan is (roughly) to work through the above list of features. Some are going to be _very_ hard, and it's not at all clear that a plan will present itself. In particular, some will require that C++ structs are owned by `UniquePtr` yet passed to C++ by value. It's not clear how ergonomic the results will be. Until we are much further, I don't advise using this for anything in production.
+The plan is (roughly) to work through the above list of features and fix corner cases. This project is deliberately incremental. There are open questions about whether the end result is ergonomic and performant: specifically, whether it's acceptable to hold opaque C++ types always by `UniquePtr` in Rust. Until we know more, this project is considered experimental and we don't advise using it for anything in production.
 
 # On safety
 
@@ -135,20 +133,24 @@ The plan is:
   these APIs for external users, so maybe it needs to be a directory of code symlinked
   into all the other sub-crates. All the following three sub-crates are thin wrappers
   for part of this engine. This also contains the test code.
+* `macro` - the procedural macro which expands the Rust code.
 * `gen/build` - a library to be used from `build.rs` scripts to generate .cc and .h
   files from an `include_cxx` section.
 * `gen/cmd` - a command-line tool which does the same.
-* `src` (outermost project)- the procedural macro `include_cxx` as described above.
+* `src` (outermost project) - a wrapper crate which imports the procedural macro and
+  a few other things.
 
 # Where to start reading
 
 The main algorithm is in `engine/src/lib.rs`, in the function `generate()`. This asks
 `bindgen` to generate a heap of Rust code and then passes it into
-`engine/src/bridge_converter.rs` to convert it to be a format suitable for input
+`engine/src/conversion` to convert it to be a format suitable for input
 to `cxx`.
 
-However, most of the actual code is indeed in `engine/src/bridge_converter.rs`. Start
-by looking at `convert_items`.
+However, most of the actual code is in `engine/src/conversion/mod.rs`.
+
+At the moment we're using a slightly branched version of `bindgen` called `autocxx-bindgen`.
+It's hoped this is temporary; some of our changes are sufficiently weird that it would be presumptious to try to get them accepted upstream until we're sure `autocxx` has roughly the right approach.
 
 # How to develop
 
@@ -163,7 +165,7 @@ RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test  integration_tests::tes
 ```
 
 This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
-in `engine/src/bridge_converter.rs`.
+in `engine/src/conversion`.
 
 # Credits
 

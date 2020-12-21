@@ -51,11 +51,13 @@
 /// # Configuring the build
 ///
 /// To build this, you'll need to:
+/// * Build the C++ side of the bindings. You'll need to use the `autocxx-gen`
+///   crate or the `autocxx-build` crate to process the .rs code into C++ header and
+///   implementation files.
 /// * Educate the procedural macro about where to find the C++ headers. Set the
 ///   `AUTOCXX_INC` environment variable to a list of directories to search.
-/// * Build the C++ side of the bindings. You'll need to use the `autocxx-gen`
-///   crate (or similar) to process the same .rs code into C++ header and
-///   implementation files.
+///   If you use `autocxx-build`, this happens automatically.
+
 ///
 /// # Syntax
 ///
@@ -111,16 +113,13 @@
 ///
 /// # Making strings
 ///
-/// Unless you use [exclude_utilities], you will find a function
-/// called `make_string` exists inside the generated `ffi` block:
+/// Unless you use [exclude_utilities], you will find a trait called
+/// `ffi::ToCppString` which you can use to convert any Rust string into a C++
+/// `std::unique_ptr<std::string>` like this:
 ///
-/// ```no_run
-/// mod ffi {
-/// # use autocxx_engine::cxx::UniquePtr;
-/// # use autocxx_engine::cxx::CxxString;
-///     pub fn make_string(str_: &str) -> UniquePtr<CxxString>
-/// #   { unreachable!() }
-/// }
+/// ```ignore
+/// use ffi::ToCpp;
+/// let unique_ptr_to_cxx_string = "my_string".to_cpp();
 /// ```
 ///
 /// # Making other C++ types
@@ -128,22 +127,21 @@
 /// Types gain a `make_unique` associated function. At present they only
 /// gain this if they have an explicit C++ constructor; this is a limitation
 /// which should be resolved in future.
+/// This will (of course) return a `UniquePtr` containing that type.
 ///
-/// ```
-/// mod ffi {
-/// # struct UniquePtr<T>(T);
-///     struct Bob {
-///         a: u32,
-///     }
-///     pub fn Bob_make_unique() -> UniquePtr<Bob>
-/// #   { unreachable!() }
-/// }
-/// ```
 /// # Preprocessor symbols
 ///
 /// `#define` and other preprocessor symbols will appear as constants.
 /// At present there is no way to do compile-time disablement of code
 /// (equivalent of `#ifdef`).
+///
+/// # Integer types
+///
+/// For C++ types with a defined size, just go ahead and use `u64`, `i32` etc.
+/// For types such as `int` or `unsigned long`, the hope is that you can
+/// eventually use `std::os::raw::c_int` oor `std::os::raw::c_ulong` etc.
+/// For now, this doesn't quite work: instead you need to wrap these values
+/// in a newtype wrapper such as [c_int] or [c_ulong] in this crate.
 ///
 /// # String constants
 ///
@@ -171,13 +169,6 @@
 ///
 /// C++ allows function overloads; Rust doesn't. `autocxx` follows the lead
 /// of `bindgen` here and generating overloads as `func`, `func1`, `func2` etc.
-///
-/// Unfortunately bindgen does not offer a means to distinguish such overloaded
-/// functions from those which are legitimately called `func`, `func1` etc.
-/// and so `autocxx` has to guess. Consider this a known limitation of autocxx
-/// and - for now - avoid functions ending in digits. This restriction may
-/// be solved in future if we can add metadata to the bindgen output or otherwise
-/// arrange for this information to be made available to autocxx.
 ///
 /// # C++ classes - why do I get warnings?
 ///
@@ -279,6 +270,8 @@ macro_rules! nested_type {
 /// code. This can be useful if there is a type which is not
 /// understood by bindgen or autocxx, and incorrect code is
 /// otherwise generated.
+/// This is 'greedy' in the sense that any functions/methods
+/// which take or return such a type will _also_ be blocked.
 ///
 /// A directive to be included inside
 /// [include_cpp] - see [include_cpp] for general information.
@@ -303,3 +296,27 @@ macro_rules! usage {
 
 #[doc(hidden)]
 pub use autocxx_macro::include_cpp_impl;
+
+macro_rules! ctype_wrapper {
+    ($r:ident, $c:expr) => {
+        /// Newtype wrapper for a `$c`
+        #[derive(Debug, Eq, Clone, PartialEq, Hash)]
+        #[allow(non_camel_case_types)]
+        #[repr(transparent)]
+        pub struct $r(pub ::std::os::raw::$r);
+
+        unsafe impl autocxx_engine::cxx::ExternType for $r {
+            type Id = autocxx_engine::cxx::type_id!($c);
+            type Kind = autocxx_engine::cxx::kind::Trivial;
+        }
+    };
+}
+
+ctype_wrapper!(c_ulong, "c_ulong");
+ctype_wrapper!(c_long, "c_long");
+ctype_wrapper!(c_ushort, "c_ushort");
+ctype_wrapper!(c_short, "c_short");
+ctype_wrapper!(c_uint, "c_uint");
+ctype_wrapper!(c_int, "c_int");
+ctype_wrapper!(c_uchar, "c_uchar");
+ctype_wrapper!(c_char, "c_char");

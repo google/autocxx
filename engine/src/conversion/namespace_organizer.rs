@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::bridge_converter::Api;
+use super::api::Api;
 use std::collections::BTreeMap;
 
 pub struct NamespaceEntries<'a> {
@@ -68,7 +68,7 @@ mod tests {
 
     use super::Api;
     use super::NamespaceEntries;
-    use crate::{conversion::bridge_converter::Use, types::Namespace};
+    use crate::{conversion::api::Use, types::Namespace};
     use proc_macro2::{Ident, Span};
 
     #[test]
@@ -133,10 +133,11 @@ mod tests {
             deps: HashSet::new(),
             extern_c_mod_item: None,
             bridge_item: None,
-            global_item: None,
+            global_items: Vec::new(),
             additional_cpp: None,
             id_for_allowlist: None,
             bindgen_mod_item: None,
+            impl_entry: None,
         }
     }
 }

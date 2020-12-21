@@ -14,12 +14,14 @@
 
 mod additional_cpp_generator;
 mod byvalue_checker;
+mod byvalue_scanner;
 mod conversion;
 mod function_wrapper;
 mod known_types;
 mod parse;
 mod rust_pretty_printer;
 mod type_database;
+mod typedef_analyzer;
 mod types;
 
 #[cfg(any(test, feature = "build"))]
@@ -28,7 +30,7 @@ mod builder;
 #[cfg(test)]
 mod integration_tests;
 
-use conversion::bridge_converter::BridgeConverter;
+use conversion::BridgeConverter;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{fmt::Display, path::PathBuf};
 use type_database::TypeDatabase;
@@ -39,8 +41,13 @@ use syn::{parse_quote, ItemMod, Macro};
 
 use additional_cpp_generator::AdditionalCppGenerator;
 use itertools::join;
+use known_types::KNOWN_TYPES;
 use log::{info, warn};
 use types::TypeName;
+
+/// We use a forked version of bindgen - for now.
+/// We hope to unfork.
+use autocxx_bindgen as bindgen;
 
 #[cfg(any(test, feature = "build"))]
 pub use builder::{build, expect_build, BuilderError, BuilderResult, BuilderSuccess};
@@ -78,7 +85,7 @@ pub enum Error {
     CouldNotCanoncalizeIncludeDir(PathBuf),
     /// Some error occcurred in converting the bindgen-style
     /// bindings to safe cxx bindings.
-    Conversion(conversion::bridge_converter::ConvertError),
+    Conversion(conversion::ConvertError),
     /// No 'generate' or 'generate_pod' was specified.
     /// It might be that in future we can simply let things work
     /// without any allowlist, in which case bindgen should generate
@@ -298,7 +305,7 @@ impl IncludeCpp {
 
     fn inject_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
         let full_header = self.build_header();
-        let full_header = format!("{}\n\n{}", known_types::get_prelude(), full_header,);
+        let full_header = format!("{}\n\n{}", KNOWN_TYPES.get_prelude(), full_header,);
         builder = builder.header_contents("example.hpp", &full_header);
         builder
     }
