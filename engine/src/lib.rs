@@ -36,7 +36,10 @@ use std::{fmt::Display, path::PathBuf};
 use type_database::TypeDatabase;
 
 use quote::ToTokens;
-use syn::{Token, parse::{Parse, ParseStream, Result as ParseResult}};
+use syn::{
+    parse::{Parse, ParseStream, Result as ParseResult},
+    Token,
+};
 use syn::{parse_quote, ItemMod, Macro};
 
 use additional_cpp_generator::AdditionalCppGenerator;

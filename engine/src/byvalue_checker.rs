@@ -148,6 +148,10 @@ impl ByValueChecker {
     }
 
     pub fn is_pod(&self, ty_id: &TypeName) -> bool {
+        if !ty_id.has_namespace() && ty_id.get_final_ident().starts_with("AutocxxConcrete") {
+            // Type we created at conversion time.
+            return false;
+        }
         matches!(self
         .results
         .get(ty_id)

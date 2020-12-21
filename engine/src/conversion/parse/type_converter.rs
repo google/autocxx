@@ -12,32 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{HashMap, HashSet};
-
-use syn::{
-    parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
-    TypePath, TypePtr, TypeReference,
-};
-
 use crate::{
-    conversion::ConvertError,
+    additional_cpp_generator::AdditionalNeed,
+    conversion::{
+        api::{Api, Use},
+        ConvertError,
+    },
     known_types::KNOWN_TYPES,
-    types::{Namespace, TypeName},
+    types::{make_ident, Namespace, TypeName},
+};
+use crate::{
+    type_database::TypeDatabase,
+    typedef_analyzer::{analyze_typedef_target, TypedefTarget},
+};
+use quote::quote;
+use std::collections::{HashMap, HashSet};
+use syn::{
+    parse_quote, punctuated::Punctuated, ForeignItem, GenericArgument, Item, PathArguments,
+    PathSegment, Type, TypePath, TypePtr, TypeReference,
 };
 
-use crate::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
+use super::non_pod_struct::new_non_pod_struct;
 
-/// Results of some type conversion, annotated with a list of every type encountered.
+/// Results of some type conversion, annotated with a list of every type encountered,
+/// and optionally any extra API we need in order to use this type.
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<TypeName>,
+    pub(crate) extra_apis: Vec<Api>,
 }
 
 impl<T> Annotated<T> {
-    fn new(ty: T, types_encountered: HashSet<TypeName>) -> Self {
+    fn new(ty: T, types_encountered: HashSet<TypeName>, extra_apis: Vec<Api>) -> Self {
         Self {
             ty,
             types_encountered,
+            extra_apis,
         }
     }
 
@@ -45,20 +55,25 @@ impl<T> Annotated<T> {
         Annotated {
             ty: fun(self.ty),
             types_encountered: self.types_encountered,
+            extra_apis: self.extra_apis,
         }
     }
 }
 
-pub(crate) struct TypeConverter {
+pub(crate) struct TypeConverter<'a> {
+    type_database: &'a TypeDatabase,
     types_found: Vec<TypeName>,
     typedefs: HashMap<TypeName, TypedefTarget>,
+    concrete_templates: HashMap<String, TypeName>,
 }
 
-impl TypeConverter {
-    pub(crate) fn new() -> Self {
+impl<'a> TypeConverter<'a> {
+    pub(crate) fn new(type_database: &'a TypeDatabase) -> Self {
         Self {
+            type_database,
             types_found: Vec::new(),
             typedefs: HashMap::new(),
+            concrete_templates: HashMap::new(),
         }
     }
 
@@ -72,7 +87,7 @@ impl TypeConverter {
     }
 
     pub(crate) fn convert_boxed_type(
-        &self,
+        &mut self,
         ty: Box<Type>,
         ns: &Namespace,
     ) -> Result<Annotated<Box<Type>>, ConvertError> {
@@ -80,7 +95,7 @@ impl TypeConverter {
     }
 
     pub(crate) fn convert_type(
-        &self,
+        &mut self,
         ty: Type,
         ns: &Namespace,
     ) -> Result<Annotated<Type>, ConvertError> {
@@ -97,6 +112,7 @@ impl TypeConverter {
                             &str
                         }),
                         newp.types_encountered,
+                        newp.extra_apis,
                     )
                 } else {
                     newp.map(Type::Path)
@@ -105,40 +121,25 @@ impl TypeConverter {
             Type::Reference(mut r) => {
                 let innerty = self.convert_boxed_type(r.elem, ns)?;
                 r.elem = innerty.ty;
-                Annotated::new(Type::Reference(r), innerty.types_encountered)
+                Annotated::new(
+                    Type::Reference(r),
+                    innerty.types_encountered,
+                    innerty.extra_apis,
+                )
             }
             Type::Ptr(ptr) => self.convert_ptr_to_reference(ptr, ns)?.map(Type::Reference),
-            _ => Annotated::new(ty, HashSet::new()),
+            _ => Annotated::new(ty, HashSet::new(), Vec::new()),
         };
         Ok(result)
     }
 
     fn convert_type_path(
-        &self,
+        &mut self,
         mut typ: TypePath,
         ns: &Namespace,
     ) -> Result<Annotated<TypePath>, ConvertError> {
         let mut types_encountered = HashSet::new();
-        if typ.path.segments.iter().next().unwrap().ident == "root" {
-            typ.path.segments = typ
-                .path
-                .segments
-                .into_iter()
-                .map(|s| -> Result<PathSegment, ConvertError> {
-                    let ident = &s.ident;
-                    let args = match s.arguments {
-                        PathArguments::AngleBracketed(mut ab) => {
-                            let mut innerty = self.convert_punctuated(ab.args, ns)?;
-                            ab.args = innerty.ty;
-                            types_encountered.extend(innerty.types_encountered.drain());
-                            PathArguments::AngleBracketed(ab)
-                        }
-                        _ => s.arguments,
-                    };
-                    Ok(parse_quote!( #ident #args ))
-                })
-                .collect::<Result<_, _>>()?;
-        } else {
+        if typ.path.segments.iter().next().unwrap().ident != "root" {
             let ty = TypeName::from_type_path(&typ);
             // If the type looks like it is unqualified, check we know it
             // already, and if not, qualify it according to the current
@@ -153,6 +154,26 @@ impl TypeConverter {
                     .collect();
             }
         }
+
+        typ.path.segments = typ
+            .path
+            .segments
+            .into_iter()
+            .map(|s| -> Result<PathSegment, ConvertError> {
+                let ident = &s.ident;
+                let args = match s.arguments {
+                    PathArguments::AngleBracketed(mut ab) => {
+                        let mut innerty = self.convert_punctuated(ab.args, ns)?;
+                        ab.args = innerty.ty;
+                        types_encountered.extend(innerty.types_encountered.drain());
+                        PathArguments::AngleBracketed(ab)
+                    }
+                    _ => s.arguments,
+                };
+                Ok(parse_quote!( #ident #args ))
+            })
+            .collect::<Result<_, _>>()?;
+
         let mut last_seg_args = None;
         let mut seg_iter = typ.path.segments.iter().peekable();
         while let Some(seg) = seg_iter.next() {
@@ -178,16 +199,28 @@ impl TypeConverter {
 
         // This will strip off any path arguments...
         let mut typ = KNOWN_TYPES.known_type_substitute_path(&typ).unwrap_or(typ);
+        let mut extra_apis = Vec::new();
         // but then we'll put them back again as necessary.
         if let Some(last_seg_args) = last_seg_args {
             let last_seg = typ.path.segments.last_mut().unwrap();
             last_seg.arguments = last_seg_args;
+            // Is it one of the things built into cxx?
+            if !KNOWN_TYPES.is_cxx_acceptable_generic(&tn) {
+                // Oh poop. It's a generic type which cxx won't be able to handle.
+                // We'll have to come up with a concrete type in both the cxx::bridge (in Rust)
+                // and a corresponding typedef in C++.
+                let (new_tn, api) = self.get_templated_typename(&Type::Path(typ));
+                typ = new_tn.to_type_path();
+                extra_apis.extend(api.into_iter());
+                types_encountered.remove(&tn);
+                types_encountered.insert(new_tn);
+            }
         }
-        Ok(Annotated::new(typ, types_encountered))
+        Ok(Annotated::new(typ, types_encountered, extra_apis))
     }
 
     fn convert_punctuated<P>(
-        &self,
+        &mut self,
         pun: Punctuated<GenericArgument, P>,
         ns: &Namespace,
     ) -> Result<Annotated<Punctuated<GenericArgument, P>>, ConvertError>
@@ -196,17 +229,19 @@ impl TypeConverter {
     {
         let mut new_pun = Punctuated::new();
         let mut types_encountered = HashSet::new();
+        let mut extra_apis = Vec::new();
         for arg in pun.into_iter() {
             new_pun.push(match arg {
                 GenericArgument::Type(t) => {
                     let mut innerty = self.convert_type(t, ns)?;
                     types_encountered.extend(innerty.types_encountered.drain());
+                    extra_apis.extend(innerty.extra_apis.drain(..));
                     GenericArgument::Type(innerty.ty)
                 }
                 _ => arg,
             });
         }
-        Ok(Annotated::new(new_pun, types_encountered))
+        Ok(Annotated::new(new_pun, types_encountered, extra_apis))
     }
 
     fn resolve_typedef<'b>(
@@ -226,7 +261,7 @@ impl TypeConverter {
     }
 
     fn convert_ptr_to_reference(
-        &self,
+        &mut self,
         ptr: TypePtr,
         ns: &Namespace,
     ) -> Result<Annotated<TypeReference>, ConvertError> {
@@ -241,5 +276,55 @@ impl TypeConverter {
                 & #mutability #elem
             }
         }))
+    }
+
+    fn add_concrete_type(&self, tyname: &TypeName, rs_definition: &Type) -> Api {
+        let final_ident = make_ident(tyname.get_final_ident());
+        let bridge_item = Some(Item::Impl(parse_quote! {
+            impl UniquePtr<#final_ident> {}
+        }));
+        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(|x| make_ident(x)).collect();
+        fulltypath.push(final_ident.clone());
+        let tynamestring = tyname.to_cpp_name();
+        Api {
+            ns: tyname.get_namespace().clone(),
+            id: final_ident.clone(),
+            use_stmt: Use::Unused,
+            global_items: vec![Item::Impl(parse_quote! {
+                unsafe impl cxx::ExternType for #(#fulltypath)::* {
+                    type Id = cxx::type_id!(#tynamestring);
+                    type Kind = cxx::kind::Opaque;
+                }
+            })],
+            bridge_item,
+            extern_c_mod_item: Some(ForeignItem::Verbatim(quote! {
+                type #final_ident = super::bindgen::root::#final_ident;
+            })),
+            additional_cpp: Some(AdditionalNeed::ConcreteTemplatedTypeTypedef(
+                tyname.clone(),
+                Box::new(rs_definition.clone()),
+            )),
+            deps: HashSet::new(),
+            id_for_allowlist: None,
+            bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(final_ident))),
+            impl_entry: None,
+        }
+    }
+
+    fn get_templated_typename(&mut self, rs_definition: &Type) -> (TypeName, Option<Api>) {
+        let count = self.concrete_templates.len();
+        // We just use this as a hash key, essentially.
+        let cpp_definition = self.type_database.type_to_cpp(rs_definition);
+        let e = self.concrete_templates.get(&cpp_definition);
+        match e {
+            Some(tn) => (tn.clone(), None),
+            None => {
+                let tn = TypeName::new(&Namespace::new(), &format!("AutocxxConcrete{}", count));
+                self.concrete_templates
+                    .insert(cpp_definition.clone(), tn.clone());
+                let api = self.add_concrete_type(&tn, rs_definition);
+                (tn, Some(api))
+            }
+        }
     }
 }

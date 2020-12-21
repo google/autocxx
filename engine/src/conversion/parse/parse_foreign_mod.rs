@@ -51,7 +51,7 @@ struct ReturnTypeAnalysis {
 /// of its immediate conversion.
 pub(crate) trait ForeignModParseCallbacks {
     fn convert_boxed_type(
-        &self,
+        &mut self,
         ty: Box<Type>,
         ns: &Namespace,
     ) -> Result<(Box<Type>, HashSet<TypeName>), ConvertError>;
@@ -507,7 +507,7 @@ impl ParseForeignMod {
         &self,
         arg: FnArg,
         ns: &Namespace,
-        callbacks: &impl ForeignModParseCallbacks,
+        callbacks: &mut impl ForeignModParseCallbacks,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
             FnArg::Typed(mut pt) => {
@@ -586,7 +586,7 @@ impl ParseForeignMod {
 
     fn convert_return_type(
         &self,
-        callbacks: &impl ForeignModParseCallbacks,
+        callbacks: &mut impl ForeignModParseCallbacks,
         rt: ReturnType,
         ns: &Namespace,
     ) -> Result<ReturnTypeAnalysis, ConvertError> {
