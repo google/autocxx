@@ -36,7 +36,7 @@ use std::{fmt::Display, path::PathBuf};
 use type_database::TypeDatabase;
 
 use quote::ToTokens;
-use syn::parse::{Parse, ParseStream, Result as ParseResult};
+use syn::{Token, parse::{Parse, ParseStream, Result as ParseResult}};
 use syn::{parse_quote, ItemMod, Macro};
 
 use additional_cpp_generator::AdditionalCppGenerator;
@@ -154,6 +154,7 @@ impl IncludeCpp {
         let mut parse_only = false;
         let mut exclude_utilities = false;
         let mut type_database = TypeDatabase::new();
+        let mut unsafe_found = false;
 
         while !input.is_empty() {
             if input.parse::<Option<syn::Token![#]>>()?.is_some() {
@@ -163,6 +164,8 @@ impl IncludeCpp {
                 }
                 let hdr: syn::LitStr = input.parse()?;
                 inclusions.push(CppInclusion::Header(hdr.value()));
+            } else if input.parse::<Option<Token![unsafe]>>()?.is_some() {
+                unsafe_found = true;
             } else {
                 let ident: syn::Ident = input.parse()?;
                 input.parse::<Option<syn::Token![!]>>()?;
@@ -207,6 +210,12 @@ impl IncludeCpp {
         }
         if !exclude_utilities {
             type_database.add_to_allowlist("make_string".to_string());
+        }
+        if !unsafe_found {
+            return Err(syn::Error::new(
+                input.span(),
+                "the unsafe keyword must be specified within each include_cpp! block",
+            ));
         }
 
         Ok(IncludeCpp {
