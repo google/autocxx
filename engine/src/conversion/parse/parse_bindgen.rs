@@ -22,11 +22,9 @@ use crate::{
     types::Namespace,
     types::TypeName,
 };
-use proc_macro2::{TokenStream as TokenStream2, TokenTree};
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{
-    parse::Parser, parse_quote, Field, Fields, ForeignItem, GenericParam, Item, ItemStruct, Type,
-};
+use syn::{parse_quote, Fields, ForeignItem, Item, ItemStruct, Type};
 
 use super::{
     super::{
@@ -34,6 +32,7 @@ use super::{
         utilities::generate_utilities,
     },
     bridge_name_tracker::BridgeNameTracker,
+    non_pod_struct::make_non_pod,
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
 };
@@ -49,7 +48,7 @@ enum TypeKind {
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
-    type_converter: TypeConverter,
+    type_converter: TypeConverter<'a>,
     byvalue_checker: ByValueChecker,
     type_database: &'a TypeDatabase,
     bridge_name_tracker: BridgeNameTracker,
@@ -61,7 +60,7 @@ pub(crate) struct ParseBindgen<'a> {
 impl<'a> ParseBindgen<'a> {
     pub(crate) fn new(byvalue_checker: ByValueChecker, type_database: &'a TypeDatabase) -> Self {
         ParseBindgen {
-            type_converter: TypeConverter::new(),
+            type_converter: TypeConverter::new(type_database),
             byvalue_checker,
             bridge_name_tracker: BridgeNameTracker::new(),
             rust_name_tracker: RustNameTracker::new(),
@@ -138,7 +137,7 @@ impl<'a> ParseBindgen<'a> {
                     let field_types = match type_kind {
                         TypeKind::POD => self.get_struct_field_types(&ns, &s)?,
                         _ => {
-                            Self::make_non_pod(&mut s);
+                            make_non_pod(&mut s);
                             HashSet::new()
                         }
                     };
@@ -234,13 +233,14 @@ impl<'a> ParseBindgen<'a> {
     }
 
     fn get_struct_field_types(
-        &self,
+        &mut self,
         ns: &Namespace,
         s: &ItemStruct,
     ) -> Result<HashSet<TypeName>, ConvertError> {
         let mut results = HashSet::new();
         for f in &s.fields {
             let annotated = self.type_converter.convert_type(f.ty.clone(), ns)?;
+            self.results.apis.extend(annotated.extra_apis);
             results.extend(annotated.types_encountered);
         }
         Ok(results)
@@ -250,47 +250,6 @@ impl<'a> ParseBindgen<'a> {
         s.iter()
             .filter_map(|f| f.ident.as_ref())
             .any(|id| id == "_unused")
-    }
-
-    fn make_non_pod(s: &mut ItemStruct) {
-        // Thanks to dtolnay@ for this explanation of why the following
-        // is needed:
-        // If the real alignment of the C++ type is smaller and a reference
-        // is returned from C++ to Rust, mere existence of an insufficiently
-        // aligned reference in Rust causes UB even if never dereferenced
-        // by Rust code
-        // (see https://doc.rust-lang.org/1.47.0/reference/behavior-considered-undefined.html).
-        // Rustc can use least-significant bits of the reference for other storage.
-        s.attrs = vec![parse_quote!(
-            #[repr(C, packed)]
-        )];
-        // Now fill in fields. Usually, we just want a single field
-        // but if this is a generic type we need to faff a bit.
-        let generic_type_fields =
-            s.generics
-                .params
-                .iter()
-                .enumerate()
-                .filter_map(|(counter, gp)| match gp {
-                    GenericParam::Type(gpt) => {
-                        let id = &gpt.ident;
-                        let field_name = make_ident(&format!("_phantom_{}", counter));
-                        let toks = quote! {
-                            #field_name: ::std::marker::PhantomData<::std::cell::UnsafeCell< #id >>
-                        };
-                        let parser = Field::parse_named;
-                        Some(parser.parse2(toks).unwrap())
-                    }
-                    _ => None,
-                });
-        // See cxx's opaque::Opaque for rationale for this type... in
-        // short, it's to avoid being Send/Sync.
-        s.fields = syn::Fields::Named(parse_quote! {
-            {
-                do_not_attempt_to_allocate_nonpod_types: [*const u8; 0],
-                #(#generic_type_fields),*
-            }
-        });
     }
 
     /// Record the Api for a type, e.g. enum or struct.
@@ -333,42 +292,20 @@ impl<'a> ParseBindgen<'a> {
             TokenStream2::new()
         };
 
-        let mut fulltypath = Vec::new();
-        // We can't use parse_quote! here because it doesn't support type aliases
-        // at the moment.
-        let colon = TokenTree::Punct(proc_macro2::Punct::new(':', proc_macro2::Spacing::Joint));
-        for_extern_c_ts.extend(
-            [
-                TokenTree::Ident(make_ident("type")),
-                TokenTree::Ident(final_ident.clone()),
-                TokenTree::Punct(proc_macro2::Punct::new('=', proc_macro2::Spacing::Alone)),
-                TokenTree::Ident(make_ident("super")),
-                colon.clone(),
-                colon.clone(),
-                TokenTree::Ident(make_ident("bindgen")),
-                colon.clone(),
-                colon.clone(),
-                TokenTree::Ident(make_ident("root")),
-                colon.clone(),
-                colon.clone(),
-            ]
-            .to_vec(),
-        );
-        fulltypath.push(make_ident("bindgen"));
-        fulltypath.push(make_ident("root"));
+        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(|x| make_ident(x)).collect();
+        for_extern_c_ts.extend(quote! {
+            type #final_ident = super::bindgen::root::
+        });
         for segment in tyname.ns_segment_iter() {
             let id = make_ident(segment);
-            for_extern_c_ts
-                .extend([TokenTree::Ident(id.clone()), colon.clone(), colon.clone()].to_vec());
+            for_extern_c_ts.extend(quote! {
+                #id::
+            });
             fulltypath.push(id);
         }
-        for_extern_c_ts.extend(
-            [
-                TokenTree::Ident(final_ident.clone()),
-                TokenTree::Punct(proc_macro2::Punct::new(';', proc_macro2::Spacing::Alone)),
-            ]
-            .to_vec(),
-        );
+        for_extern_c_ts.extend(quote! {
+            #final_ident;
+        });
         let bridge_item = match type_nature {
             TypeKind::ForwardDeclaration => None,
             _ => Some(Item::Impl(parse_quote! {
@@ -402,11 +339,12 @@ impl<'a> ParseBindgen<'a> {
 
 impl<'a> ForeignModParseCallbacks for ParseBindgen<'a> {
     fn convert_boxed_type(
-        &self,
+        &mut self,
         ty: Box<Type>,
         ns: &Namespace,
     ) -> Result<(Box<Type>, HashSet<TypeName>), ConvertError> {
         let annotated = self.type_converter.convert_boxed_type(ty, ns)?;
+        self.results.apis.extend(annotated.extra_apis);
         Ok((annotated.ty, annotated.types_encountered))
     }
 

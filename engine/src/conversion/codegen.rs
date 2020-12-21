@@ -146,7 +146,7 @@ impl<'a> CodeGenerator<'a> {
         additional_cpp_needs: &mut Vec<AdditionalNeed>,
     ) {
         let ctypes: HashSet<_> = deps
-            .into_iter()
+            .iter()
             .flatten()
             .filter(|ty| KNOWN_TYPES.is_ctype(ty))
             .collect();

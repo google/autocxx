@@ -51,7 +51,7 @@ struct ReturnTypeAnalysis {
 /// of its immediate conversion.
 pub(crate) trait ForeignModParseCallbacks {
     fn convert_boxed_type(
-        &self,
+        &mut self,
         ty: Box<Type>,
         ns: &Namespace,
     ) -> Result<(Box<Type>, HashSet<TypeName>), ConvertError>;
@@ -217,7 +217,8 @@ impl ParseForeignMod {
         // syntax (e.g. a keyword like 'async') or it's an overload.
         // If the former, we respect that mangling. If the latter, we don't,
         // because we'll add our own overload counting mangling later.
-        let name_probably_invalid_in_rust = original_name.is_some() && initial_rust_name.ends_with("_");
+        let name_probably_invalid_in_rust =
+            original_name.is_some() && initial_rust_name.ends_with('_');
         // The C++ call name will always be whatever bindgen tells us.
         let cpp_call_name = original_name.unwrap_or_else(|| initial_rust_name.clone());
         let ideal_rust_name = if name_probably_invalid_in_rust {
@@ -243,7 +244,7 @@ impl ParseForeignMod {
             // strip off the class name.
             rust_name = self
                 .overload_tracker
-                .get_method_real_name(&type_ident, ideal_rust_name.clone());
+                .get_method_real_name(&type_ident, ideal_rust_name);
             if rust_name.starts_with(&type_ident) {
                 // It's a constructor. bindgen generates
                 // fn new(this: *Type, ...args)
@@ -265,7 +266,7 @@ impl ParseForeignMod {
             // What shall we call this function? It may be overloaded.
             rust_name = self
                 .overload_tracker
-                .get_function_real_name(ideal_rust_name.clone());
+                .get_function_real_name(ideal_rust_name);
         }
 
         // The name we use within the cxx::bridge mod may be different
@@ -345,7 +346,12 @@ impl ParseForeignMod {
             // and return values into/out of std::unique_ptrs.
             // First give instructions to generate the additional C++.
             let cpp_construction_ident = make_ident(&cpp_call_name);
-            cxxbridge_name = make_ident(&format!("{}_autocxx_wrapper", cxxbridge_name));
+            let joiner = if cxxbridge_name.to_string().ends_with('_') {
+                ""
+            } else {
+                "_"
+            };
+            cxxbridge_name = make_ident(&format!("{}{}autocxx_wrapper", cxxbridge_name, joiner));
             let payload = if is_constructor {
                 FunctionWrapperPayload::Constructor
             } else if is_static_method {
@@ -501,7 +507,7 @@ impl ParseForeignMod {
         &self,
         arg: FnArg,
         ns: &Namespace,
-        callbacks: &impl ForeignModParseCallbacks,
+        callbacks: &mut impl ForeignModParseCallbacks,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
             FnArg::Typed(mut pt) => {
@@ -580,7 +586,7 @@ impl ParseForeignMod {
 
     fn convert_return_type(
         &self,
-        callbacks: &impl ForeignModParseCallbacks,
+        callbacks: &mut impl ForeignModParseCallbacks,
         rt: ReturnType,
         ns: &Namespace,
     ) -> Result<ReturnTypeAnalysis, ConvertError> {

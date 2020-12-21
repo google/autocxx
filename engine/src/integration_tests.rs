@@ -3424,6 +3424,31 @@ fn test_reserved_name() {
     run_test("", hdr, rs, &["async_"], &[]);
 }
 
+#[test]
+fn test_generic_type() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        template<typename TY>
+        struct Container {
+            Container(TY a_) : a(a_) {}
+            TY a;
+        };
+        struct Secondary {
+            Secondary() {}
+            void take_a(const Container<char>) const {}
+            void take_b(const Container<uint16_t>) const {}
+            uint16_t take_c(std::string a) const { return 10 + a.size(); }
+        };
+    "};
+    let rs = quote! {
+        use ffi::ToCppString;
+        let item = ffi::Secondary::make_unique();
+        assert_eq!(item.take_c("hello".to_cpp()), 15)
+    };
+    run_test("", hdr, rs, &["Secondary"], &[]);
+}
+
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef

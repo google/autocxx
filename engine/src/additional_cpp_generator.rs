@@ -19,12 +19,14 @@ use crate::{
 };
 use itertools::Itertools;
 use std::collections::HashSet;
+use syn::Type;
 
 /// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
     MakeStringConstructor,
     FunctionWrapper(Box<FunctionWrapper>),
     CTypeTypedef(TypeName),
+    ConcreteTemplatedTypeTypedef(TypeName, Box<Type>),
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -55,6 +57,7 @@ impl Header {
 }
 
 struct AdditionalFunction {
+    type_definition: String, // are output before main declarations
     declaration: String,
     definition: String,
     headers: Vec<Header>,
@@ -96,7 +99,10 @@ impl AdditionalCppGenerator {
                 AdditionalNeed::FunctionWrapper(by_value_wrapper) => {
                     self.generate_by_value_wrapper(*by_value_wrapper, type_database)
                 }
-                AdditionalNeed::CTypeTypedef(tn) => self.generate_typedef(tn),
+                AdditionalNeed::CTypeTypedef(tn) => self.generate_ctype_typedef(tn),
+                AdditionalNeed::ConcreteTemplatedTypeTypedef(tn, def) => {
+                    self.generate_typedef(tn, type_database.type_to_cpp(&def))
+                }
             }
         }
     }
@@ -112,8 +118,12 @@ impl AdditionalCppGenerator {
                 .flatten()
                 .collect();
             let headers = headers.iter().map(|x| x.include_stmt()).join("\n");
+            let type_definitions = self.concat_additional_items(|x| &x.type_definition);
             let declarations = self.concat_additional_items(|x| &x.declaration);
-            let declarations = format!("{}\n{}\n{}", headers, self.inclusions, declarations);
+            let declarations = format!(
+                "{}\n{}\n{}\n{}",
+                headers, self.inclusions, type_definitions, declarations
+            );
             let definitions = self.concat_additional_items(|x| &x.definition);
             let definitions = format!("#include \"autocxxgen.h\"\n{}", definitions);
             Some(AdditionalCpp {
@@ -145,6 +155,7 @@ impl AdditionalCppGenerator {
         );
         let declaration = format!("{};", declaration);
         self.additional_functions.push(AdditionalFunction {
+            type_definition: "".into(),
             declaration,
             definition,
             headers: vec![
@@ -238,17 +249,23 @@ impl AdditionalCppGenerator {
         let definition = format!("{} {{ {}; }}", declaration, underlying_function_call,);
         let declaration = format!("{};", declaration);
         self.additional_functions.push(AdditionalFunction {
+            type_definition: "".into(),
             declaration,
             definition,
             headers: vec![Header::system("memory")],
         })
     }
 
-    fn generate_typedef(&mut self, tn: TypeName) {
-        let our_name = tn.get_final_ident();
+    fn generate_ctype_typedef(&mut self, tn: TypeName) {
         let cpp_name = tn.to_cpp_name();
+        self.generate_typedef(tn, cpp_name)
+    }
+
+    fn generate_typedef(&mut self, tn: TypeName, definition: String) {
+        let our_name = tn.get_final_ident();
         self.additional_functions.push(AdditionalFunction {
-            declaration: format!("typedef {} {};", cpp_name, our_name),
+            type_definition: format!("typedef {} {};", definition, our_name),
+            declaration: "".into(),
             definition: "".into(),
             headers: Vec::new(),
         })

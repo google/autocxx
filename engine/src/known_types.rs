@@ -43,6 +43,10 @@ struct TypeDetails {
     de_referencicate: bool,
     /// Is a C type whose size is not fixed (e.g. int, short)
     is_ctype: bool,
+    /// Whether this is a container type cxx allows. Otherwise,
+    /// if we encounter such a type as a generic, we'll replace it with
+    /// a concrete instantiation.
+    is_cxx_container: bool,
 }
 
 impl TypeDetails {
@@ -53,6 +57,7 @@ impl TypeDetails {
         prelude_policy: PreludePolicy,
         de_referencicate: bool,
         is_ctype: bool,
+        is_cxx_container: bool,
     ) -> Self {
         TypeDetails {
             rs_name,
@@ -61,6 +66,7 @@ impl TypeDetails {
             prelude_policy,
             de_referencicate,
             is_ctype,
+            is_cxx_container,
         }
     }
 
@@ -183,6 +189,10 @@ impl TypeDatabase {
     pub(crate) fn is_ctype(&self, ty: &TypeName) -> bool {
         self.get(ty).map(|td| td.is_ctype).unwrap_or(false)
     }
+
+    pub(crate) fn is_cxx_acceptable_generic(&self, ty: &TypeName) -> bool {
+        self.get(ty).map(|x| x.is_cxx_container).unwrap_or(false)
+    }
 }
 
 fn create_type_database() -> TypeDatabase {
@@ -198,12 +208,32 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::IncludeTemplated,
         false,
         false,
+        true,
+    ));
+    do_insert(TypeDetails::new(
+        "CxxVector".into(),
+        "std::vector".into(),
+        true,
+        PreludePolicy::IncludeTemplated,
+        false,
+        false,
+        true,
+    ));
+    do_insert(TypeDetails::new(
+        "SharedPtr".into(),
+        "std::shared_ptr".into(),
+        true,
+        PreludePolicy::IncludeTemplated,
+        false,
+        false,
+        true,
     ));
     do_insert(TypeDetails::new(
         "CxxString".into(),
         "std::string".into(),
         false,
         PreludePolicy::IncludeNormal,
+        false,
         false,
         false,
     ));
@@ -214,12 +244,14 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::IncludeNormal,
         true,
         false,
+        false,
     ));
     do_insert(TypeDetails::new(
         "String".into(),
         "rust::String".into(),
         true,
         PreludePolicy::IncludeNormal,
+        false,
         false,
         false,
     ));
@@ -240,6 +272,7 @@ fn create_type_database() -> TypeDatabase {
             PreludePolicy::Exclude,
             false,
             false,
+            false,
         ));
     }
     do_insert(TypeDetails::new(
@@ -247,6 +280,7 @@ fn create_type_database() -> TypeDatabase {
         "bool".into(),
         true,
         PreludePolicy::Exclude,
+        false,
         false,
         false,
     ));
@@ -259,6 +293,7 @@ fn create_type_database() -> TypeDatabase {
             PreludePolicy::Exclude,
             false,
             true,
+            false,
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
         let td = TypeDetails::new(
@@ -268,6 +303,7 @@ fn create_type_database() -> TypeDatabase {
             PreludePolicy::Exclude,
             false,
             true,
+            false,
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
     };

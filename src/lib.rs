@@ -184,6 +184,18 @@
 /// if it has a destructor that will need to be called if the object is `Drop`ped.)
 /// Naturally, such an object can't be passed by value either; it can still be
 /// referenced in Rust references.
+///
+/// # Generic types
+///
+/// If you're using one of the generic types which is supported natively by cxx,
+/// e.g. `std::unique_ptr`, it should work as you expect. For other generic types,
+/// we synthesize a concrete Rust type, corresponding to a C++ typedef, for each
+/// concrete instantiation of the type. Such generated types are always opaque,
+/// and never have methods attached. That's therefore enough to pass them
+/// between return types and parameters of other functions within `UniquePtr`s
+/// but not really enough to do anything else with these types just yet. Hopefully,
+/// this will be improved in future. At present such types have a name
+/// `AutocxxConcrete{n}` but this may change in future.
 #[macro_export]
 macro_rules! include_cpp {
     (

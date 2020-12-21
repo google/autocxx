@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod bridge_name_tracker;
+mod non_pod_struct;
 mod overload_tracker;
 pub(crate) mod parse_bindgen;
 mod parse_foreign_mod;
