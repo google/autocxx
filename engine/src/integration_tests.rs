@@ -693,8 +693,8 @@ fn test_take_pod_by_mut_ref() {
         uint32_t take_bob(Bob& a);
     "};
     let rs = quote! {
-        let mut a = ffi::Bob { a: 12, b: 13 };
-        assert_eq!(ffi::take_bob(&mut a), 12);
+        let mut a = Box::pin(ffi::Bob { a: 12, b: 13 });
+        assert_eq!(ffi::take_bob(a.as_mut()), 12);
         assert_eq!(a.b, 14);
     };
     run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
@@ -834,7 +834,7 @@ fn test_take_nonpod_by_mut_ref() {
     "};
     let rs = quote! {
         let mut a = ffi::make_bob(12);
-        assert_eq!(ffi::take_bob(&mut a), 12);
+        assert_eq!(ffi::take_bob(a.pin_mut()), 12);
     };
     // TODO confirm that the object really was mutated by C++ in this
     // and similar tests.
@@ -1114,8 +1114,8 @@ fn test_pod_mut_method() {
         };
     "};
     let rs = quote! {
-        let mut a = ffi::Bob { a: 12, b: 13 };
-        assert_eq!(a.get_bob(), 12);
+        let mut a = Box::pin(ffi::Bob { a: 12, b: 13 });
+        assert_eq!(a.as_mut().get_bob(), 12);
     };
     run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
@@ -1323,9 +1323,9 @@ fn test_method_pass_pod_by_mut_reference() {
         };
     "};
     let rs = quote! {
-        let mut a = ffi::Anna { a: 14 };
+        let mut a = Box::pin(ffi::Anna { a: 14 });
         let b = ffi::Bob { a: 12, b: 13 };
-        assert_eq!(b.get_bob(&mut a), 12);
+        assert_eq!(b.get_bob(a.as_mut()), 12);
     };
     run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
 }
@@ -1866,27 +1866,27 @@ fn test_multiple_classes_with_methods() {
     let rs = quote! {
         use ffi::*;
 
-        let mut ts: TrivialStruct = make_trivial_struct();
+        let mut ts: TrivialStruct = Box::pin(make_trivial_struct());
         assert_eq!(ts.get(), 0);
-        assert_eq!(ts.inc(), 1);
-        assert_eq!(ts.inc(), 2);
+        assert_eq!(ts.as_mut().inc(), 1);
+        assert_eq!(ts.as_mut().inc(), 2);
 
-        let mut tc: TrivialClass = make_trivial_class();
+        let mut tc: TrivialClass = Box::pin(make_trivial_class());
         assert_eq!(tc.get(), 1);
-        assert_eq!(tc.inc(), 2);
-        assert_eq!(tc.inc(), 3);
+        assert_eq!(tc.as_mut().inc(), 2);
+        assert_eq!(tc.as_mut().inc(), 3);
 
         let mut os: cxx::UniquePtr<OpaqueStruct> = make_opaque_struct();
         let os:  &mut OpaqueStruct = &mut *os;
         assert_eq!(os.get(), 2);
-        assert_eq!(os.inc(), 3);
-        assert_eq!(os.inc(), 4);
+        assert_eq!(os.pin_mut().inc(), 3);
+        assert_eq!(os.pin_mut().inc(), 4);
 
         let mut oc: cxx::UniquePtr<OpaqueClass> = make_opaque_class();
         let oc:  &mut OpaqueClass = &mut *oc;
         assert_eq!(oc.get(), 3);
-        assert_eq!(oc.inc(), 4);
-        assert_eq!(oc.inc(), 5);
+        assert_eq!(oc.pin_mut().inc(), 4);
+        assert_eq!(oc.pin_mut().inc(), 5);
     };
     run_test_ex(
         cxx,
