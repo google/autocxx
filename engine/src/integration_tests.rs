@@ -1866,24 +1866,22 @@ fn test_multiple_classes_with_methods() {
     let rs = quote! {
         use ffi::*;
 
-        let mut ts: TrivialStruct = Box::pin(make_trivial_struct());
+        let mut ts = Box::pin(make_trivial_struct());
         assert_eq!(ts.get(), 0);
         assert_eq!(ts.as_mut().inc(), 1);
         assert_eq!(ts.as_mut().inc(), 2);
 
-        let mut tc: TrivialClass = Box::pin(make_trivial_class());
+        let mut tc = Box::pin(make_trivial_class());
         assert_eq!(tc.get(), 1);
         assert_eq!(tc.as_mut().inc(), 2);
         assert_eq!(tc.as_mut().inc(), 3);
 
-        let mut os: cxx::UniquePtr<OpaqueStruct> = make_opaque_struct();
-        let os:  &mut OpaqueStruct = &mut *os;
+        let mut os= make_opaque_struct();
         assert_eq!(os.get(), 2);
         assert_eq!(os.pin_mut().inc(), 3);
         assert_eq!(os.pin_mut().inc(), 4);
 
-        let mut oc: cxx::UniquePtr<OpaqueClass> = make_opaque_class();
-        let oc:  &mut OpaqueClass = &mut *oc;
+        let mut oc = make_opaque_class();
         assert_eq!(oc.get(), 3);
         assert_eq!(oc.pin_mut().inc(), 4);
         assert_eq!(oc.pin_mut().inc(), 5);

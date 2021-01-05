@@ -225,6 +225,10 @@ impl<'a> ParseBindgen<'a> {
                 use cxx:: #thing;
             }));
         }
+        use_statements_for_this_mod.push(Item::Use(parse_quote! {
+            #[allow(unused_imports)]
+            use std::pin::Pin;
+        }));
         self.results
             .use_stmts_by_mod
             .insert(ns, use_statements_for_this_mod);
