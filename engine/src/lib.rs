@@ -31,7 +31,7 @@ mod builder;
 mod integration_tests;
 
 use conversion::BridgeConverter;
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{Span, TokenStream as TokenStream2};
 use std::{fmt::Display, path::PathBuf};
 use type_database::TypeDatabase;
 
@@ -126,6 +126,37 @@ enum State {
     Generated(ItemMod, AdditionalCppGenerator),
 }
 
+#[derive(PartialEq, Clone, Debug)]
+pub(crate) enum UnsafePolicy {
+    AllFunctionsSafe,
+    AllFunctionsUnsafe,
+}
+
+impl Parse for UnsafePolicy {
+    fn parse(input: ParseStream) -> ParseResult<Self> {
+        if input.parse::<Option<Token![unsafe]>>()?.is_some() {
+            return Ok(UnsafePolicy::AllFunctionsSafe);
+        }
+        let r = match input.parse::<Option<syn::Ident>>()? {
+            Some(id) => {
+                if id.to_string() == "unsafe_ffi" {
+                    Ok(UnsafePolicy::AllFunctionsSafe)
+                } else {
+                    Err(syn::Error::new(id.span(), "expected unsafe_ffi"))
+                }
+            }
+            None => Ok(UnsafePolicy::AllFunctionsUnsafe),
+        };
+        if !input.is_empty() {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "unexpected tokens within safety directive",
+            ));
+        }
+        r
+    }
+}
+
 /// Core of the autocxx engine. See `generate` for most details
 /// on how this works.
 ///
@@ -138,6 +169,7 @@ pub struct IncludeCpp {
     preconfigured_inc_dirs: Option<std::ffi::OsString>,
     exclude_utilities: bool,
     state: State,
+    unsafe_policy: UnsafePolicy,
 }
 
 impl Parse for IncludeCpp {
@@ -157,7 +189,7 @@ impl IncludeCpp {
         let mut parse_only = false;
         let mut exclude_utilities = false;
         let mut type_database = TypeDatabase::new();
-        let mut unsafe_found = false;
+        let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
 
         while !input.is_empty() {
             if input.parse::<Option<syn::Token![#]>>()?.is_some() {
@@ -167,8 +199,6 @@ impl IncludeCpp {
                 }
                 let hdr: syn::LitStr = input.parse()?;
                 inclusions.push(CppInclusion::Header(hdr.value()));
-            } else if input.parse::<Option<Token![unsafe]>>()?.is_some() {
-                unsafe_found = true;
             } else {
                 let ident: syn::Ident = input.parse()?;
                 input.parse::<Option<syn::Token![!]>>()?;
@@ -200,10 +230,14 @@ impl IncludeCpp {
                     parse_only = true;
                 } else if ident == "exclude_utilities" {
                     exclude_utilities = true;
+                } else if ident == "safety" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    unsafe_policy = args.parse()?;
                 } else {
                     return Err(syn::Error::new(
                         ident.span(),
-                        "expected generate, generate_pod, nested_type or exclude_utilities",
+                        "expected generate, generate_pod, nested_type, safety or exclude_utilities",
                     ));
                 }
             }
@@ -213,12 +247,6 @@ impl IncludeCpp {
         }
         if !exclude_utilities {
             type_database.add_to_allowlist("make_string".to_string());
-        }
-        if !unsafe_found {
-            return Err(syn::Error::new(
-                input.span(),
-                "the unsafe keyword must be specified within each include_cpp! block",
-            ));
         }
 
         Ok(IncludeCpp {
@@ -231,6 +259,7 @@ impl IncludeCpp {
             } else {
                 State::NotGenerated
             },
+            unsafe_policy,
         })
     }
 
@@ -384,7 +413,7 @@ impl IncludeCpp {
         let mut converter = BridgeConverter::new(&include_list, &self.type_database);
 
         let conversion = converter
-            .convert(bindings, self.exclude_utilities)
+            .convert(bindings, self.exclude_utilities, self.unsafe_policy.clone())
             .map_err(Error::Conversion)?;
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
         additional_cpp_generator.add_needs(conversion.additional_cpp_needs, &self.type_database);
@@ -445,5 +474,38 @@ impl IncludeCpp {
     /// Get the configured include directories.
     pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
         self.determine_incdirs()
+    }
+}
+
+#[cfg(test)]
+mod parse_tests {
+    use crate::{IncludeCpp, UnsafePolicy};
+    use syn::parse_quote;
+
+    #[test]
+    fn test_basic() {
+        let _i: IncludeCpp = parse_quote! {};
+    }
+
+    #[test]
+    fn test_safety_unsafe() {
+        let us: UnsafePolicy = parse_quote! {
+            unsafe
+        };
+        assert_eq!(us, UnsafePolicy::AllFunctionsSafe)
+    }
+
+    #[test]
+    fn test_safety_unsafe_ffi() {
+        let us: UnsafePolicy = parse_quote! {
+            unsafe_ffi
+        };
+        assert_eq!(us, UnsafePolicy::AllFunctionsSafe)
+    }
+
+    #[test]
+    fn test_safety_safe() {
+        let us: UnsafePolicy = parse_quote! {};
+        assert_eq!(us, UnsafePolicy::AllFunctionsUnsafe)
     }
 }

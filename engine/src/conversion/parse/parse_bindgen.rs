@@ -21,6 +21,7 @@ use crate::{
     types::make_ident,
     types::Namespace,
     types::TypeName,
+    UnsafePolicy,
 };
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -55,10 +56,15 @@ pub(crate) struct ParseBindgen<'a> {
     rust_name_tracker: RustNameTracker,
     incomplete_types: HashSet<TypeName>,
     results: ParseResults,
+    unsafe_policy: UnsafePolicy,
 }
 
 impl<'a> ParseBindgen<'a> {
-    pub(crate) fn new(byvalue_checker: ByValueChecker, type_database: &'a TypeDatabase) -> Self {
+    pub(crate) fn new(
+        byvalue_checker: ByValueChecker,
+        type_database: &'a TypeDatabase,
+        unsafe_policy: UnsafePolicy,
+    ) -> Self {
         ParseBindgen {
             type_converter: TypeConverter::new(type_database),
             byvalue_checker,
@@ -71,6 +77,7 @@ impl<'a> ParseBindgen<'a> {
                 extern_c_mod: None,
                 use_stmts_by_mod: HashMap::new(),
             },
+            unsafe_policy,
         }
     }
 
@@ -376,5 +383,9 @@ impl<'a> ForeignModParseCallbacks for ParseBindgen<'a> {
 
     fn avoid_generating_type(&self, type_name: &TypeName) -> bool {
         self.type_database.is_on_blocklist(type_name) || self.incomplete_types.contains(type_name)
+    }
+
+    fn should_be_unsafe(&self) -> bool {
+        self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
     }
 }

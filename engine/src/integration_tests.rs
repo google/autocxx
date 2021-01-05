@@ -216,8 +216,8 @@ fn do_run_test(
         #include_bit
 
         include_cpp!(
-            unsafe
             #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
             #(#generate)*
             #(#generate_pods)*
             #extra_directives

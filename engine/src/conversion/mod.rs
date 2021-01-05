@@ -22,7 +22,9 @@ mod utilities;
 pub(crate) use api::ConvertError;
 use syn::{Item, ItemMod};
 
-use crate::{byvalue_scanner::identify_byvalue_safe_types, type_database::TypeDatabase};
+use crate::{
+    byvalue_scanner::identify_byvalue_safe_types, type_database::TypeDatabase, UnsafePolicy,
+};
 
 use self::{
     codegen::{CodeGenerator, CodegenResults},
@@ -61,6 +63,7 @@ impl<'a> BridgeConverter<'a> {
         &mut self,
         mut bindgen_mod: ItemMod,
         exclude_utilities: bool,
+        unsafe_policy: UnsafePolicy,
     ) -> Result<CodegenResults, ConvertError> {
         match &mut bindgen_mod.content {
             None => Err(ConvertError::NoContent),
@@ -75,7 +78,7 @@ impl<'a> BridgeConverter<'a> {
                 let byvalue_checker =
                     identify_byvalue_safe_types(&items_in_root, &self.type_database)?;
                 // Parse the bindgen mod.
-                let parser = ParseBindgen::new(byvalue_checker, &self.type_database);
+                let parser = ParseBindgen::new(byvalue_checker, &self.type_database, unsafe_policy);
                 let parse_results = parser.convert_items(items_in_root, exclude_utilities)?;
                 // The code above will have contributed lots of Apis to self.apis.
                 // We now garbage collect the ones we don't need...

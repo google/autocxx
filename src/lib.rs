@@ -199,14 +199,12 @@
 #[macro_export]
 macro_rules! include_cpp {
     (
-        unsafe
         $(#$include:ident $lit:literal)*
         $($mac:ident!($($arg:tt)*))*
     ) => {
         $($crate::$include!{__docs})*
         $($crate::$mac!{__docs})*
         $crate::include_cpp_impl! {
-            unsafe
             $(#include $lit)*
             $($mac!($($arg)*))*
         }
@@ -289,6 +287,42 @@ macro_rules! nested_type {
 /// [include_cpp] - see [include_cpp] for general information.
 #[macro_export]
 macro_rules! block {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
+/// Specifies a global safety policy for functions generated
+/// from these headers. By default (without such a `safety!`
+/// directive) all such functions are marked as `unsafe` and
+/// therefore can only be called within an `unsafe {}` block
+/// or some `unsafe` function which you create.
+///
+/// Alternatively, by specifying a `safety!` block you can
+/// declare that all generated functions are in fact safe.
+/// Specifically, you'd specify:
+/// `safety!(unsafe)`
+/// or
+/// `safety!(unsafe_ffi)`
+/// These two options are functionally identical. If you're
+/// unsure, simply use `unsafe`. The reason for the
+/// latter option is if you have code review policies which
+/// might want to give a different level of scrutiny to
+/// C++ interop as opposed to other types of unsafe Rust code.
+/// Maybe in your organization, C++ interop is less scary than
+/// a low-level Rust data structure using pointer manipulation.
+/// Or maybe it's more scary. Either way, using `unsafe` for
+/// the data structure and using `unsafe_ffi` for the C++
+/// interop allows you to apply different linting tools and
+/// policies to the different options.
+///
+/// Irrespective, C++ code is of course unsafe. It's worth
+/// noting that use of C++ can cause unexpected unsafety at
+/// a distance in faraway Rust code. As with any use of the
+/// `unsafe` keyword in Rust, *you the human* are declaring
+/// that you've analyzed all possible ways that the code
+/// can be used and you are guaranteeing to the compiler that
+/// no badness can occur. Good luck.
+#[macro_export]
+macro_rules! safety {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
