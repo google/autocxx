@@ -21,8 +21,8 @@ use crate::{
 use quote::quote;
 use std::collections::{HashMap, HashSet};
 use syn::{
-    parse::Parser, parse_quote, punctuated::Punctuated, Attribute, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, ItemImpl, LitStr, Pat, ReturnType, Type, TypePtr,
+    parse::Parser, parse_quote, punctuated::Punctuated, token::Unsafe, Attribute, FnArg,
+    ForeignItem, ForeignItemFn, Ident, ImplItem, ItemImpl, LitStr, Pat, ReturnType, Type, TypePtr,
 };
 
 use super::{
@@ -66,6 +66,10 @@ pub(crate) trait ForeignModParseCallbacks {
     fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool;
     fn is_on_allowlist(&self, type_name: &TypeName) -> bool;
     fn avoid_generating_type(&self, type_name: &TypeName) -> bool;
+    /// In the future, this will take details of the function
+    /// we're generating, in order to determine whether it should be unsafe
+    /// according to a more nuanced policy.
+    fn should_be_unsafe(&self) -> bool;
 }
 
 /// Converts a given bindgen-generated 'mod' into suitable
@@ -465,11 +469,16 @@ impl ParseForeignMod {
         };
         // At last, actually generate the cxx::bridge entry.
         let vis = &fun.vis;
+        let unsafety: Option<Unsafe> = if callbacks.should_be_unsafe() {
+            Some(parse_quote!(unsafe))
+        } else {
+            None
+        };
         let extern_c_mod_item = Some(ForeignItem::Fn(parse_quote!(
             #(#namespace_attr)*
             #(#rust_name_attr)*
             #(#cpp_name_attr)*
-            #vis fn #cxxbridge_name ( #params ) #ret_type;
+            #vis #unsafety fn #cxxbridge_name ( #params ) #ret_type;
         )));
         let (id, use_stmt, id_for_allowlist) = if is_a_method {
             (
