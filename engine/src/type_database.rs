@@ -90,6 +90,17 @@ impl TypeDatabase {
                 let root = TypeName::from_type_path(typ);
                 let root = self.get_effective_type(&root).unwrap_or(&root);
                 let root = root.to_cpp_name();
+                if root == "Pin" {
+                    // Strip all Pins from type names when describing them in C++.
+                    let inner_type = &typ.path.segments.last().unwrap().arguments;
+                    if let syn::PathArguments::AngleBracketed(ab) = inner_type {
+                        let inner_type = ab.args.iter().next().unwrap();
+                        if let syn::GenericArgument::Type(gat) = inner_type {
+                            return self.type_to_cpp(gat);
+                        }
+                    }
+                    panic!("Pin<...> didn't contain the inner types we expected");
+                }
                 let suffix = match &typ.path.segments.last().unwrap().arguments {
                     syn::PathArguments::AngleBracketed(ab) => Some(
                         ab.args

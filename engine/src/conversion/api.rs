@@ -20,7 +20,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
 };
-use syn::{ForeignItem, Ident, ImplItem, Item, ItemForeignMod};
+use syn::{ForeignItem, Ident, ImplItem, Item};
 
 #[derive(Debug)]
 pub enum ConvertError {
@@ -102,5 +102,4 @@ impl Api {
 pub(crate) struct ParseResults {
     pub(crate) apis: Vec<Api>,
     pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
-    pub(crate) extern_c_mod: Option<ItemForeignMod>,
 }

@@ -285,6 +285,16 @@ fn create_type_database() -> TypeDatabase {
         false,
     ));
 
+    do_insert(TypeDetails::new(
+        "Pin".into(),
+        "Pin".into(),
+        true, // because this is actually Pin<&something>
+        PreludePolicy::Exclude,
+        false,
+        false,
+        false,
+    ));
+
     let mut insert_ctype = |cname: &str| {
         let td = TypeDetails::new(
             format!("std::os::raw::c_{}", cname),
