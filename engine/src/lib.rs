@@ -15,6 +15,7 @@
 mod additional_cpp_generator;
 mod byvalue_checker;
 mod byvalue_scanner;
+mod config;
 mod conversion;
 mod function_wrapper;
 mod known_types;
@@ -30,16 +31,14 @@ mod builder;
 #[cfg(test)]
 mod integration_tests;
 
+use config::UnsafePolicy;
 use conversion::BridgeConverter;
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::TokenStream as TokenStream2;
 use std::{fmt::Display, path::PathBuf};
 use type_database::TypeDatabase;
 
 use quote::ToTokens;
-use syn::{
-    parse::{Parse, ParseStream, Result as ParseResult},
-    Token,
-};
+use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{parse_quote, ItemMod, Macro};
 
 use additional_cpp_generator::AdditionalCppGenerator;
@@ -124,37 +123,6 @@ enum State {
     ParseOnly,
     NothingGenerated,
     Generated(ItemMod, AdditionalCppGenerator),
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub(crate) enum UnsafePolicy {
-    AllFunctionsSafe,
-    AllFunctionsUnsafe,
-}
-
-impl Parse for UnsafePolicy {
-    fn parse(input: ParseStream) -> ParseResult<Self> {
-        if input.parse::<Option<Token![unsafe]>>()?.is_some() {
-            return Ok(UnsafePolicy::AllFunctionsSafe);
-        }
-        let r = match input.parse::<Option<syn::Ident>>()? {
-            Some(id) => {
-                if id == "unsafe_ffi" {
-                    Ok(UnsafePolicy::AllFunctionsSafe)
-                } else {
-                    Err(syn::Error::new(id.span(), "expected unsafe_ffi"))
-                }
-            }
-            None => Ok(UnsafePolicy::AllFunctionsUnsafe),
-        };
-        if !input.is_empty() {
-            return Err(syn::Error::new(
-                Span::call_site(),
-                "unexpected tokens within safety directive",
-            ));
-        }
-        r
-    }
 }
 
 /// Core of the autocxx engine. See `generate` for most details
@@ -469,33 +437,11 @@ impl IncludeCpp {
 
 #[cfg(test)]
 mod parse_tests {
-    use crate::{IncludeCpp, UnsafePolicy};
+    use crate::IncludeCpp;
     use syn::parse_quote;
 
     #[test]
     fn test_basic() {
         let _i: IncludeCpp = parse_quote! {};
-    }
-
-    #[test]
-    fn test_safety_unsafe() {
-        let us: UnsafePolicy = parse_quote! {
-            unsafe
-        };
-        assert_eq!(us, UnsafePolicy::AllFunctionsSafe)
-    }
-
-    #[test]
-    fn test_safety_unsafe_ffi() {
-        let us: UnsafePolicy = parse_quote! {
-            unsafe_ffi
-        };
-        assert_eq!(us, UnsafePolicy::AllFunctionsSafe)
-    }
-
-    #[test]
-    fn test_safety_safe() {
-        let us: UnsafePolicy = parse_quote! {};
-        assert_eq!(us, UnsafePolicy::AllFunctionsUnsafe)
     }
 }
