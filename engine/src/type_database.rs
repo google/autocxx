@@ -16,14 +16,13 @@ use itertools::Itertools;
 use syn::Type;
 
 use crate::types::TypeName;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 /// Central registry of all information known about types.
 /// At present this is very minimal; in future we should roll
 /// known_types.rs into this and possibly other things as well.
 #[derive(Default)]
 pub(crate) struct TypeDatabase {
-    nested_types: HashMap<TypeName, TypeName>,
     pod_requests: HashSet<TypeName>,
     allowlist: HashSet<String>, // not TypeName as it may be funcs not types.
     blocklist: HashSet<String>, // not TypeName as it may be funcs not types.
@@ -34,16 +33,8 @@ impl TypeDatabase {
         Self::default()
     }
 
-    pub(crate) fn note_nested_type(&mut self, original: TypeName, replacement: TypeName) {
-        self.nested_types.insert(original, replacement);
-    }
-
     pub(crate) fn note_pod_request(&mut self, tn: TypeName) {
         self.pod_requests.insert(tn);
-    }
-
-    pub(crate) fn get_effective_type(&self, original: &TypeName) -> Option<&TypeName> {
-        self.nested_types.get(original)
     }
 
     pub(crate) fn add_to_allowlist(&mut self, item: String) {
@@ -88,7 +79,6 @@ impl TypeDatabase {
                 // If this is a std::unique_ptr we do need to pass
                 // its argument through.
                 let root = TypeName::from_type_path(typ);
-                let root = self.get_effective_type(&root).unwrap_or(&root);
                 let root = root.to_cpp_name();
                 if root == "Pin" {
                     // Strip all Pins from type names when describing them in C++.

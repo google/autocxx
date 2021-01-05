@@ -274,16 +274,12 @@ impl<'a> ParseBindgen<'a> {
             _ => "Opaque",
         };
         let kind_item = make_ident(kind_item);
-        let effective_type = self
-            .type_database
-            .get_effective_type(&tyname)
-            .unwrap_or(&tyname);
-        if self.type_database.is_on_blocklist(effective_type) {
+        if self.type_database.is_on_blocklist(&tyname) {
             return Ok(());
         }
-        let tynamestring = effective_type.to_cpp_name();
-        let mut for_extern_c_ts = if effective_type.has_namespace() {
-            let ns_string = effective_type
+        let tynamestring = tyname.to_cpp_name();
+        let mut for_extern_c_ts = if tyname.has_namespace() {
+            let ns_string = tyname
                 .ns_segment_iter()
                 .cloned()
                 .collect::<Vec<String>>()

@@ -211,16 +211,6 @@ impl IncludeCpp {
                         type_database
                             .note_pod_request(TypeName::new_from_user_input(&generate.value()));
                     }
-                } else if ident == "nested_type" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let nested: syn::LitStr = args.parse()?;
-                    args.parse::<syn::Token![,]>()?;
-                    let nested_in: syn::LitStr = args.parse()?;
-                    type_database.note_nested_type(
-                        TypeName::new_from_user_input(&nested.value()),
-                        TypeName::new_from_user_input(&nested_in.value()),
-                    );
                 } else if ident == "block" {
                     let args;
                     syn::parenthesized!(args in input);
