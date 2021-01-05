@@ -31,21 +31,22 @@ mod builder;
 #[cfg(test)]
 mod integration_tests;
 
-use config::UnsafePolicy;
+use config::{CppInclusion, IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{fmt::Display, path::PathBuf};
-use type_database::TypeDatabase;
 
 use quote::ToTokens;
-use syn::parse::{Parse, ParseStream, Result as ParseResult};
-use syn::{parse_quote, ItemMod, Macro};
+use syn::Result as ParseResult;
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_quote, ItemMod, Macro,
+};
 
 use additional_cpp_generator::AdditionalCppGenerator;
 use itertools::join;
 use known_types::KNOWN_TYPES;
 use log::{info, warn};
-use types::TypeName;
 
 /// We use a forked version of bindgen - for now.
 /// We hope to unfork.
@@ -112,11 +113,6 @@ impl Display for Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub enum CppInclusion {
-    Define(String),
-    Header(String),
-}
-
 #[allow(clippy::large_enum_variant)] // because this is only used once
 enum State {
     NotGenerated,
@@ -132,95 +128,28 @@ enum State {
 /// directory of source symlinked from all the other sub-crates, so that
 /// we avoid exposing an external interface from this code.
 pub struct IncludeCpp {
-    inclusions: Vec<CppInclusion>,
-    type_database: TypeDatabase,
-    preconfigured_inc_dirs: Option<std::ffi::OsString>,
-    exclude_utilities: bool,
+    config: IncludeCppConfig,
     state: State,
-    unsafe_policy: UnsafePolicy,
+    preconfigured_inc_dirs: Option<std::ffi::OsString>,
 }
 
 impl Parse for IncludeCpp {
     fn parse(input: ParseStream) -> ParseResult<Self> {
-        Self::new_from_parse_stream(input)
+        let config = input.parse::<IncludeCppConfig>()?;
+        let state = if config.parse_only {
+            State::ParseOnly
+        } else {
+            State::NotGenerated
+        };
+        Ok(Self {
+            config,
+            state,
+            preconfigured_inc_dirs: None,
+        })
     }
 }
 
 impl IncludeCpp {
-    fn new_from_parse_stream(input: ParseStream) -> syn::Result<Self> {
-        // Takes as inputs:
-        // 1. List of headers to include
-        // 2. List of #defines to include
-        // 3. Allowlist
-
-        let mut inclusions = Vec::new();
-        let mut parse_only = false;
-        let mut exclude_utilities = false;
-        let mut type_database = TypeDatabase::new();
-        let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
-
-        while !input.is_empty() {
-            if input.parse::<Option<syn::Token![#]>>()?.is_some() {
-                let ident: syn::Ident = input.parse()?;
-                if ident != "include" {
-                    return Err(syn::Error::new(ident.span(), "expected include"));
-                }
-                let hdr: syn::LitStr = input.parse()?;
-                inclusions.push(CppInclusion::Header(hdr.value()));
-            } else {
-                let ident: syn::Ident = input.parse()?;
-                input.parse::<Option<syn::Token![!]>>()?;
-                if ident == "generate" || ident == "generate_pod" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let generate: syn::LitStr = args.parse()?;
-                    type_database.add_to_allowlist(generate.value());
-                    if ident == "generate_pod" {
-                        type_database
-                            .note_pod_request(TypeName::new_from_user_input(&generate.value()));
-                    }
-                } else if ident == "block" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let generate: syn::LitStr = args.parse()?;
-                    type_database.add_to_blocklist(generate.value());
-                } else if ident == "parse_only" {
-                    parse_only = true;
-                } else if ident == "exclude_utilities" {
-                    exclude_utilities = true;
-                } else if ident == "safety" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    unsafe_policy = args.parse()?;
-                } else {
-                    return Err(syn::Error::new(
-                        ident.span(),
-                        "expected generate, generate_pod, nested_type, safety or exclude_utilities",
-                    ));
-                }
-            }
-            if input.is_empty() {
-                break;
-            }
-        }
-        if !exclude_utilities {
-            type_database.add_to_allowlist("make_string".to_string());
-        }
-
-        Ok(IncludeCpp {
-            inclusions,
-            preconfigured_inc_dirs: None,
-            exclude_utilities,
-            type_database,
-            state: if parse_only {
-                State::ParseOnly
-            } else {
-                State::NotGenerated
-            },
-            unsafe_policy,
-        })
-    }
-
     pub fn new_from_syn(mac: Macro) -> Result<Self> {
         mac.parse_body::<IncludeCpp>().map_err(Error::Parsing)
     }
@@ -231,7 +160,7 @@ impl IncludeCpp {
 
     fn build_header(&self) -> String {
         join(
-            self.inclusions.iter().map(|incl| match incl {
+            self.config.inclusions.iter().map(|incl| match incl {
                 CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
                 CppInclusion::Header(path) => format!("#include \"{}\"\n", path),
             }),
@@ -282,7 +211,7 @@ impl IncludeCpp {
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
-        for a in self.type_database.allowlist() {
+        for a in self.config.type_database.allowlist() {
             // TODO - allowlist type/functions/separately
             builder = builder
                 .whitelist_type(a)
@@ -323,7 +252,7 @@ impl IncludeCpp {
 
     fn generate_include_list(&self) -> Vec<String> {
         let mut include_list = Vec::new();
-        for incl in &self.inclusions {
+        for incl in &self.config.inclusions {
             match incl {
                 CppInclusion::Header(ref hdr) => {
                     include_list.push(hdr.clone());
@@ -356,7 +285,7 @@ impl IncludeCpp {
             State::Generated(_, _) | State::NothingGenerated => panic!("Only call generate once"),
         }
 
-        if self.type_database.allowlist_is_empty() {
+        if self.config.type_database.allowlist_is_empty() {
             return Err(Error::NoGenerationRequested);
         }
 
@@ -368,13 +297,18 @@ impl IncludeCpp {
         let bindings = self.parse_bindings(bindings)?;
 
         let include_list = self.generate_include_list();
-        let mut converter = BridgeConverter::new(&include_list, &self.type_database);
+        let mut converter = BridgeConverter::new(&include_list, &self.config.type_database);
 
         let conversion = converter
-            .convert(bindings, self.exclude_utilities, self.unsafe_policy.clone())
+            .convert(
+                bindings,
+                self.config.exclude_utilities,
+                self.config.unsafe_policy.clone(),
+            )
             .map_err(Error::Conversion)?;
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
-        additional_cpp_generator.add_needs(conversion.additional_cpp_needs, &self.type_database);
+        additional_cpp_generator
+            .add_needs(conversion.additional_cpp_needs, &self.config.type_database);
         let mut items = conversion.items;
         let mut new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]

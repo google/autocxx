@@ -177,7 +177,7 @@ impl ByValueChecker {
 #[cfg(test)]
 mod tests {
     use super::ByValueChecker;
-    use crate::{types::Namespace, TypeName};
+    use crate::types::{Namespace, TypeName};
     use syn::{parse_quote, ItemStruct};
 
     #[test]

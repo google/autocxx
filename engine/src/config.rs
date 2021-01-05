@@ -19,6 +19,8 @@ use syn::{
     Token,
 };
 
+use crate::{type_database::TypeDatabase, types::TypeName};
+
 #[derive(PartialEq, Clone, Debug)]
 pub(crate) enum UnsafePolicy {
     AllFunctionsSafe,
@@ -47,6 +49,91 @@ impl Parse for UnsafePolicy {
             ));
         }
         r
+    }
+}
+
+pub enum CppInclusion {
+    #[allow(dead_code)]
+    Define(String), // currently unused, may use in future.
+    Header(String),
+}
+
+pub struct IncludeCppConfig {
+    pub(crate) inclusions: Vec<CppInclusion>,
+    pub(crate) exclude_utilities: bool,
+    pub(crate) unsafe_policy: UnsafePolicy,
+    pub(crate) type_database: TypeDatabase,
+    pub(crate) parse_only: bool,
+}
+
+impl Parse for IncludeCppConfig {
+    fn parse(input: ParseStream) -> ParseResult<Self> {
+        // Takes as inputs:
+        // 1. List of headers to include
+        // 2. List of #defines to include
+        // 3. Allowlist
+
+        let mut inclusions = Vec::new();
+        let mut parse_only = false;
+        let mut exclude_utilities = false;
+        let mut type_database = TypeDatabase::new();
+        let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
+
+        while !input.is_empty() {
+            if input.parse::<Option<syn::Token![#]>>()?.is_some() {
+                let ident: syn::Ident = input.parse()?;
+                if ident != "include" {
+                    return Err(syn::Error::new(ident.span(), "expected include"));
+                }
+                let hdr: syn::LitStr = input.parse()?;
+                inclusions.push(CppInclusion::Header(hdr.value()));
+            } else {
+                let ident: syn::Ident = input.parse()?;
+                input.parse::<Option<syn::Token![!]>>()?;
+                if ident == "generate" || ident == "generate_pod" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let generate: syn::LitStr = args.parse()?;
+                    type_database.add_to_allowlist(generate.value());
+                    if ident == "generate_pod" {
+                        type_database
+                            .note_pod_request(TypeName::new_from_user_input(&generate.value()));
+                    }
+                } else if ident == "block" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let generate: syn::LitStr = args.parse()?;
+                    type_database.add_to_blocklist(generate.value());
+                } else if ident == "parse_only" {
+                    parse_only = true;
+                } else if ident == "exclude_utilities" {
+                    exclude_utilities = true;
+                } else if ident == "safety" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    unsafe_policy = args.parse()?;
+                } else {
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        "expected generate, generate_pod, nested_type, safety or exclude_utilities",
+                    ));
+                }
+            }
+            if input.is_empty() {
+                break;
+            }
+        }
+        if !exclude_utilities {
+            type_database.add_to_allowlist("make_string".to_string());
+        }
+
+        Ok(IncludeCppConfig {
+            inclusions,
+            exclude_utilities,
+            type_database,
+            parse_only,
+            unsafe_policy,
+        })
     }
 }
 

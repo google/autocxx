@@ -219,7 +219,7 @@ impl Display for TypeName {
 
 #[cfg(test)]
 mod tests {
-    use crate::TypeName;
+    use super::TypeName;
 
     #[test]
     fn test_ints() {
