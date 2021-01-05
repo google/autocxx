@@ -36,10 +36,10 @@
 /// ```
 /// # use autocxx_macro::include_cpp_impl as include_cpp;
 /// include_cpp!(
-///     unsafe
 /// #   parse_only
 ///     #include "input.h"
 ///     generate!("do_math")
+///     safety!(unsafe)
 /// );
 ///
 /// # mod ffi { pub fn do_math(a: u32) -> u32 { a+3 } }
@@ -64,10 +64,10 @@
 /// Within the brackets of the `include_cxx!(...)` macro, you should provide
 /// a list of at least the following:
 ///
-/// * the `unsafe` keyword (must always come first)
 /// * `#include "cpp_header.h"`: a header filename to parse and include
 /// * `generate!("type_or_function_name")`: a type or function name whose declaration
 ///   should be made available to C++.
+/// * Possibly, `safety!(unsafe)` - see discussion of [unsafe] later.
 ///
 /// Other directives are possible as documented in this crate.
 ///
