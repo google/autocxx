@@ -16,16 +16,15 @@ use itertools::Itertools;
 use syn::Type;
 
 use crate::types::TypeName;
-use std::collections::HashSet;
 
 /// Central registry of all information known about types.
 /// At present this is very minimal; in future we should roll
 /// known_types.rs into this and possibly other things as well.
-#[derive(Default)]
+#[derive(Default, Hash)]
 pub(crate) struct TypeDatabase {
-    pod_requests: HashSet<TypeName>,
-    allowlist: HashSet<String>, // not TypeName as it may be funcs not types.
-    blocklist: HashSet<String>, // not TypeName as it may be funcs not types.
+    pod_requests: Vec<TypeName>,
+    allowlist: Vec<String>, // not TypeName as it may be funcs not types.
+    blocklist: Vec<String>, // not TypeName as it may be funcs not types.
 }
 
 impl TypeDatabase {
@@ -34,18 +33,18 @@ impl TypeDatabase {
     }
 
     pub(crate) fn note_pod_request(&mut self, tn: TypeName) {
-        self.pod_requests.insert(tn);
+        self.pod_requests.push(tn);
     }
 
     pub(crate) fn add_to_allowlist(&mut self, item: String) {
-        self.allowlist.insert(item);
+        self.allowlist.push(item);
     }
 
     pub(crate) fn add_to_blocklist(&mut self, item: String) {
-        self.blocklist.insert(item);
+        self.blocklist.push(item);
     }
 
-    pub(crate) fn get_pod_requests(&self) -> &HashSet<TypeName> {
+    pub(crate) fn get_pod_requests(&self) -> &[TypeName] {
         &self.pod_requests
     }
 
