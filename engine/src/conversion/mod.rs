@@ -88,12 +88,12 @@ impl<'a> BridgeConverter<'a> {
                 );
                 // And finally pass them to the code gen phase, which outputs
                 // code suitable for cxx to consume.
-                CodeGenerator::generate_code(
+                Ok(CodeGenerator::generate_code(
                     apis,
                     self.include_list,
                     parse_results.use_stmts_by_mod,
                     bindgen_mod,
-                )
+                ))
             }
         }
     }
