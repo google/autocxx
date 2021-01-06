@@ -26,7 +26,6 @@ use crate::{
 use super::{
     api::{Api, Use},
     namespace_organizer::NamespaceEntries,
-    ConvertError,
 };
 
 unzip_n::unzip_n!(pub 5);
@@ -59,7 +58,7 @@ impl<'a> CodeGenerator<'a> {
         include_list: &'a [String],
         use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
         bindgen_mod: ItemMod,
-    ) -> Result<CodegenResults, ConvertError> {
+    ) -> CodegenResults {
         let c = Self {
             include_list,
             use_stmts_by_mod,
@@ -68,7 +67,7 @@ impl<'a> CodeGenerator<'a> {
         c.codegen(all_apis)
     }
 
-    fn codegen(mut self, all_apis: Vec<Api>) -> Result<CodegenResults, ConvertError> {
+    fn codegen(mut self, all_apis: Vec<Api>) -> CodegenResults {
         // ... and now let's start to generate the output code.
         // First, the hierarchy of mods containing lots of 'use' statements
         // which is the final API exposed as 'ffi'.
@@ -129,10 +128,10 @@ impl<'a> CodeGenerator<'a> {
             }
         }));
         all_items.append(&mut use_statements);
-        Ok(CodegenResults {
+        CodegenResults {
             items: all_items,
             additional_cpp_needs,
-        })
+        }
     }
 
     fn make_foreign_mod_unsafe(ifm: ItemForeignMod) -> Item {

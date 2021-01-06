@@ -139,7 +139,7 @@ impl Parse for UnsafePolicy {
         }
         let r = match input.parse::<Option<syn::Ident>>()? {
             Some(id) => {
-                if id.to_string() == "unsafe_ffi" {
+                if id == "unsafe_ffi" {
                     Ok(UnsafePolicy::AllFunctionsSafe)
                 } else {
                     Err(syn::Error::new(id.span(), "expected unsafe_ffi"))
