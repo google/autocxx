@@ -97,7 +97,7 @@ The plan is (roughly) to work through the above list of features and fix corner 
 
 # On safety
 
-This crate mostly intends to follow the lead of the `cxx` crate in where and when `unsafe` is required (it doesn't currently do that, because `cxx` has recently changed policy). But, this crate is opinionated. It believes some unsafety requires more careful review than other bits, along the following spectrum:
+This crate mostly intends to follow the lead of the `cxx` crate in where and when `unsafe` is required. But, this crate is opinionated. It believes some unsafety requires more careful review than other bits, along the following spectrum:
 
 * Rust unsafe code (requires most review)
 * Rust code calling C++ with raw pointers
@@ -106,8 +106,6 @@ This crate mostly intends to follow the lead of the `cxx` crate in where and whe
 * Rust safe code (requires least review)
 
 If your project is 90% Rust code, with small bits of C++, don't use this crate. You need something where all C++ interaction is marked with big red "this is terrifying" flags. This crate is aimed at cases where there's 90% C++ and small bits of Rust, and so we want the Rust code to be pragmatically reviewable without the signal:noise ratio of `unsafe` in the Rust code becoming so bad that `unsafe` loses all value.
-
-It's not clear yet how this opinion will play out in practice. Perhaps we will get something like `unsafe(ffi)` or `might_be_a_bit_unsafe` (joking!) All that is yet to be determined.
 
 # Build environment
 
