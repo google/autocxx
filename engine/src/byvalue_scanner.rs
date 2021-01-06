@@ -76,13 +76,7 @@ impl<'a> ByValueScanner<'a> {
     fn find_nested_pod_types(&mut self, items: &[Item]) -> Result<(), ConvertError> {
         self.find_nested_pod_types_in_mod(items, &Namespace::new())?;
         self.byvalue_checker
-            .satisfy_requests(
-                self.type_database
-                    .get_pod_requests()
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
+            .satisfy_requests(self.type_database.get_pod_requests().to_vec())
             .map_err(ConvertError::UnsafePODType)
     }
 }
