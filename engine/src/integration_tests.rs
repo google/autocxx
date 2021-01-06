@@ -3310,65 +3310,6 @@ fn test_root_ns_meth_ret_nonpod() {
 }
 
 #[test]
-fn test_nested_struct_pod() {
-    let hdr = indoc! {"
-        #include <cstdint>
-        struct A {
-            uint32_t a;
-            struct B {
-                uint32_t b;
-            };
-        };
-        inline void daft(A::B a) {};
-    "};
-    let rs = quote! {
-        let b = ffi::B { b: 12 };
-        ffi::daft(b);
-    };
-    run_test_ex(
-        "",
-        hdr,
-        rs,
-        &["daft"],
-        &["B"],
-        TestMethod::BeQuick,
-        Some(quote! {
-            nested_type!("B", "A::B")
-        }),
-    );
-}
-
-#[test]
-fn test_nested_struct_nonpod() {
-    let hdr = indoc! {"
-        #include <cstdint>
-        struct A {
-            uint32_t a;
-            struct B {
-                B() {}
-                uint32_t b;
-            };
-        };
-        inline void daft(A::B) {}
-    "};
-    let rs = quote! {
-        let b = ffi::B::make_unique();
-        ffi::daft(b);
-    };
-    run_test_ex(
-        "",
-        hdr,
-        rs,
-        &["daft", "B"],
-        &[],
-        TestMethod::BeQuick,
-        Some(quote! {
-            nested_type!("B", "A::B")
-        }),
-    );
-}
-
-#[test]
 fn test_forward_declaration() {
     let hdr = indoc! {"
         #include <cstdint>
