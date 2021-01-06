@@ -99,11 +99,6 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
     path
 }
 
-enum TestMethod {
-    UseFullPipeline,
-    BeQuick,
-}
-
 /// A positive test, we expect to pass.
 fn run_test(
     cxx_code: &str,
@@ -118,7 +113,6 @@ fn run_test(
         rust_code,
         generate,
         generate_pods,
-        TestMethod::BeQuick,
         None,
     )
     .unwrap()
@@ -131,7 +125,6 @@ fn run_test_ex(
     rust_code: TokenStream,
     generate: &[&str],
     generate_pods: &[&str],
-    method: TestMethod,
     extra_directives: Option<TokenStream>,
 ) {
     do_run_test(
@@ -140,7 +133,6 @@ fn run_test_ex(
         rust_code,
         generate,
         generate_pods,
-        method,
         extra_directives,
     )
     .unwrap()
@@ -159,7 +151,6 @@ fn run_test_expect_fail(
         rust_code,
         generate,
         generate_pods,
-        TestMethod::BeQuick,
         None,
     )
     .expect_err("Unexpected success");
@@ -180,7 +171,6 @@ fn do_run_test(
     rust_code: TokenStream,
     generate: &[&str],
     generate_pods: &[&str],
-    method: TestMethod,
     extra_directives: Option<TokenStream>,
 ) -> Result<(), TestError> {
     // Step 1: Write the C++ header snippet to a temp file
@@ -1712,66 +1702,6 @@ fn test_pass_rust_str() {
 }
 
 #[test]
-fn test_cycle_string_full_pipeline() {
-    let cxx = indoc! {"
-        std::string give_str() {
-            return std::string(\"Bob\");
-        }
-        uint32_t take_str(std::string a) {
-            return a.length();
-        }
-    "};
-    let hdr = indoc! {"
-        #include <string>
-        #include <cstdint>
-        std::string give_str();
-        uint32_t take_str(std::string a);
-    "};
-    let rs = quote! {
-        let s = ffi::give_str();
-        assert_eq!(ffi::take_str(s), 3);
-    };
-    let generate = &["give_str", "take_str"];
-    run_test_ex(
-        cxx,
-        hdr,
-        rs,
-        generate,
-        &[],
-        TestMethod::UseFullPipeline,
-        None,
-    );
-}
-
-#[test]
-fn test_inline_full_pipeline() {
-    let hdr = indoc! {"
-        #include <string>
-        #include <cstdint>
-        inline std::string give_str() {
-            return std::string(\"Bob\");
-        }
-        inline uint32_t take_str(std::string a) {
-            return a.length();
-        }
-    "};
-    let rs = quote! {
-        let s = ffi::give_str();
-        assert_eq!(ffi::take_str(s), 3);
-    };
-    let generate = &["give_str", "take_str"];
-    run_test_ex(
-        "",
-        hdr,
-        rs,
-        generate,
-        &[],
-        TestMethod::UseFullPipeline,
-        None,
-    );
-}
-
-#[test]
 fn test_multiple_classes_with_methods() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -1866,7 +1796,6 @@ fn test_multiple_classes_with_methods() {
             "OpaqueClass",
         ],
         &["TrivialStruct", "TrivialClass"],
-        TestMethod::UseFullPipeline,
         None,
     );
 }
