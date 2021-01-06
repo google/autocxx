@@ -162,7 +162,6 @@ enum TestError {
     AutoCxx(crate::BuilderError),
     CppBuild(cc::Error),
     RsBuild,
-    IncludeCpp(crate::ParseError),
 }
 
 fn do_run_test(

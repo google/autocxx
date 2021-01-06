@@ -108,7 +108,7 @@ impl Display for Error {
         match self {
             Error::Bindgen(_) => write!(f, "Bindgen was unable to generate the initial .rs bindings for this file. This may indicate a parsing problem with the C++ headers.")?,
             Error::Parsing(err) => write!(f, "The Rust file could not be parsede: {}", err)?,
-            Error::NoAutoCxxInc => write!(f, "No C++ include directory was provided. Consider setting AUTOCXX_INC.")?,
+            Error::NoAutoCxxInc => write!(f, "No C++ include directory was provided.")?,
             Error::CouldNotCanoncalizeIncludeDir(pb) => write!(f, "One of the C++ include directories provided ({}) did not appear to exist or could otherwise not be made into a canonical path.", pb.to_string_lossy())?,
             Error::Conversion(err) => write!(f, "autocxx could not generate the requested bindings. {}", err)?,
             Error::NoGenerationRequested => write!(f, "No 'generate' or 'generate_pod' directives were found, so we would not generate any Rust bindings despite the inclusion of C++ headers.")?,
@@ -119,12 +119,16 @@ impl Display for Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[allow(clippy::large_enum_variant)] // because this is only used once
+struct GenerationResults {
+    item_mod: ItemMod,
+    additional_cpp_generator: AdditionalCppGenerator,
+    inc_dirs: Vec<PathBuf>,
+}
 enum State {
     NotGenerated,
     ParseOnly,
     NothingGenerated,
-    Generated(ItemMod, AdditionalCppGenerator),
+    Generated(Box<GenerationResults>),
 }
 
 /// Core of the autocxx engine. See `generate` for most details
@@ -136,7 +140,6 @@ enum State {
 pub struct IncludeCpp {
     config: IncludeCppConfig,
     state: State,
-    preconfigured_inc_dirs: Option<std::ffi::OsString>,
 }
 
 impl Parse for IncludeCpp {
@@ -147,21 +150,13 @@ impl Parse for IncludeCpp {
         } else {
             State::NotGenerated
         };
-        Ok(Self {
-            config,
-            state,
-            preconfigured_inc_dirs: None,
-        })
+        Ok(Self { config, state })
     }
 }
 
 impl IncludeCpp {
     pub fn new_from_syn(mac: Macro) -> Result<Self> {
         mac.parse_body::<IncludeCpp>().map_err(Error::Parsing)
-    }
-
-    pub fn set_include_dirs<P: AsRef<std::ffi::OsStr>>(&mut self, include_dirs: P) {
-        self.preconfigured_inc_dirs = Some(include_dirs.as_ref().into());
     }
 
     fn build_header(&self) -> String {
@@ -174,15 +169,8 @@ impl IncludeCpp {
         )
     }
 
-    fn determine_incdirs(&self) -> Result<Vec<PathBuf>> {
-        let inc_dirs = match &self.preconfigured_inc_dirs {
-            Some(d) => d.clone(),
-            None => std::env::var_os("AUTOCXX_INC").ok_or(Error::NoAutoCxxInc)?,
-        };
+    fn canonize_inc_dirs(inc_dirs: &str) -> Result<Vec<PathBuf>> {
         let inc_dirs = std::env::split_paths(&inc_dirs);
-        // TODO consider if we can or should look up the include path automatically
-        // instead of requiring callers always to set AUTOCXX_INC.
-
         // On Windows, the canonical path begins with a UNC prefix that cannot be passed to
         // the MSVC compiler, so dunce::canonicalize() is used instead of std::fs::canonicalize()
         // See:
@@ -193,7 +181,7 @@ impl IncludeCpp {
             .collect()
     }
 
-    fn make_bindgen_builder(&self) -> Result<bindgen::Builder> {
+    fn make_bindgen_builder(&self, inc_dirs: &[PathBuf]) -> bindgen::Builder {
         // TODO support different C++ versions
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14"])
@@ -210,7 +198,7 @@ impl IncludeCpp {
             builder = builder.blacklist_item(item);
         }
 
-        for inc_dir in self.determine_incdirs()? {
+        for inc_dir in inc_dirs {
             // TODO work with OsStrs here to avoid the .display()
             builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
         }
@@ -225,7 +213,7 @@ impl IncludeCpp {
                 .whitelist_var(a);
         }
 
-        Ok(builder)
+        builder
     }
 
     fn inject_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
@@ -254,7 +242,7 @@ impl IncludeCpp {
                     include!(#fname);
                 }
             }
-            State::Generated(itemmod, _) => itemmod.to_token_stream(),
+            State::Generated(gen_results) => gen_results.item_mod.to_token_stream(),
             State::NothingGenerated | State::ParseOnly => TokenStream2::new(),
         }
     }
@@ -296,21 +284,23 @@ impl IncludeCpp {
     /// Along the way, the `bridge_converter` might tell us of additional
     /// C++ code which we should generate, e.g. wrappers to move things
     /// into and out of `UniquePtr`s.
-    pub fn generate(&mut self) -> Result<()> {
+    pub fn generate(&mut self, inc_dirs: &str) -> Result<()> {
+        let inc_dirs = Self::canonize_inc_dirs(inc_dirs)?;
+
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
         match self.state {
             State::ParseOnly => return Ok(()),
             State::NotGenerated => {}
-            State::Generated(_, _) | State::NothingGenerated => panic!("Only call generate once"),
+            State::Generated(_) | State::NothingGenerated => panic!("Only call generate once"),
         }
 
         if self.config.type_database.allowlist_is_empty() {
             return Err(Error::NoGenerationRequested);
         }
 
-        let builder = self.make_bindgen_builder()?;
+        let builder = self.make_bindgen_builder(&inc_dirs);
         let bindings = self
             .inject_header_into_bindgen(builder)
             .generate()
@@ -344,7 +334,11 @@ impl IncludeCpp {
             "New bindings:\n{}",
             rust_pretty_printer::pretty_print(&new_bindings.to_token_stream())
         );
-        self.state = State::Generated(new_bindings, additional_cpp_generator);
+        self.state = State::Generated(Box::new(GenerationResults {
+            item_mod: new_bindings,
+            additional_cpp_generator,
+            inc_dirs,
+        }));
         Ok(())
     }
 
@@ -355,8 +349,8 @@ impl IncludeCpp {
             State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
             State::NotGenerated => panic!("Call generate() first"),
             State::NothingGenerated => {}
-            State::Generated(itemmod, additional_cpp_generator) => {
-                let rs = itemmod.into_token_stream();
+            State::Generated(gen_results) => {
+                let rs = gen_results.item_mod.to_token_stream();
                 let opt = cxx_gen::Opt::default();
                 let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
                 files.push(CppFilePair {
@@ -365,7 +359,7 @@ impl IncludeCpp {
                     implementation: cxx_generated.implementation,
                 });
 
-                match additional_cpp_generator.generate() {
+                match gen_results.additional_cpp_generator.generate() {
                     None => {}
                     Some(additional_cpp) => {
                         // TODO should probably replace pragma once below with traditional include guards.
@@ -384,9 +378,12 @@ impl IncludeCpp {
         Ok(GeneratedCpp(files))
     }
 
-    /// Get the configured include directories.
-    pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
-        self.determine_incdirs()
+    /// Return the include directories used for this include_cpp invocation.
+    pub fn include_dirs(&self) -> &Vec<PathBuf> {
+        match &self.state {
+            State::Generated(gen_results) => &gen_results.inc_dirs,
+            _ => panic!("Must call generate() before include_dirs()"),
+        }
     }
 }
 

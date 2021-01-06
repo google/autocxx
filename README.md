@@ -35,22 +35,19 @@ See [demo/src/main.rs](demo/src/main.rs) for a real example.
 
 The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string` - so the Rust code should not typically require use of unsafe code, unlike with normal `bindgen` bindings.
 
-The macro and code generator will both need to know the include path to be passed to bindgen. At the moment, this is passed in via an
-environment variable, `AUTOCXX_INC`. See the [demo/build.rs](demo/build.rs) file for details.
-
 # How it works
 
-It is effectively a three-stage procedural macro, which:
+Before building the Rust code, you must run a code generator (typically run in a `build.rs` for a Cargo setup.)
+
+This:
 
 * First, runs `bindgen` to generate some bindings (with all the usual `unsafe`, `#[repr(C)]` etc.)
 * Second, interprets and converts them to bindings suitable for `cxx::bridge`.
-* Thirdly, runs `cxx::bridge` to convert them to Rust code.
+* Thirdly, runs `cxx::bridge` to create the C++ bindings.
+* Fourthly, writes out a `.rs` file.
 
-The same code can be passed through tools that generate .cc and .h bindings too:
-
-* First, runs `bindgen` to generate some bindings (with all the usual `unsafe`, `#[repr(C)]` etc.) - in exactly the same way as above.
-* Second, interprets and converts them to bindings suitable for `cxx::bridge` - in the same way as above.
-* Thirdly, runs the codegen code from `cxx` to generate .cc and .h files
+When building your Rust code, the procedural macro boils down to an `include!` macro that pulls in the
+generated Rust code.
 
 # Current state of affairs
 
@@ -115,14 +112,6 @@ As with `cxx`, this generates both Rust and C++ side bindings code. The Rust cod
 and transparently generated at build time by the `include_cpp!` procedural macro. But you'll
 need to take steps to generate the C++ code: either by using the `build.rs` integration within
 `autocxx_build`, or the command line utility within `autocxx_gen`.
-
-# Configuring the build
-
-This runs `bindgen` within a procedural macro. There are limited opportunities to pass information into procedural macros, yet bindgen needs to know a lot about the build environment.
-
-The plan is:
-* The Rust code itself will specify the include file(s) and allowlist by passing them into the macro. This is the sort of thing that developers within an existing C++ codebase would specify in C++ (give or take) so it makes sense for it to be specific in the Rust code.
-* However, all build settings (e.g. bindgen compiler configuration, include path etc.) will be passed into the macro by means of environment variables. The build environment should set these before building the code. (An alternative means will be provided to pass these into the C++ code generator tools.)
 
 # Directory structure
 

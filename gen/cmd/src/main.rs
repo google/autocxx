@@ -88,9 +88,12 @@ fn main() {
         )
         .subcommand(SubCommand::with_name("gen-rs").help("Generate expanded Rust file."))
         .get_matches();
-    let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap(), matches.value_of("inc"))
+    let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap())
         .expect("Unable to parse Rust file and interpret autocxx macro");
-    parsed_file.resolve_all().expect("Unable to resolve macro");
+    let incs = matches.value_of("inc").unwrap_or("");
+    parsed_file
+        .resolve_all(incs)
+        .expect("Unable to resolve macro");
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
     if let Some(matches) = matches.subcommand_matches("gen-cpp") {
         let pattern = matches.value_of("pattern").unwrap_or("gen");
