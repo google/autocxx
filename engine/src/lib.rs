@@ -34,7 +34,12 @@ mod integration_tests;
 use config::{CppInclusion, IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use proc_macro2::TokenStream as TokenStream2;
-use std::{fmt::Display, path::PathBuf};
+use std::{
+    collections::hash_map::DefaultHasher,
+    fmt::Display,
+    hash::{Hash, Hasher},
+    path::PathBuf,
+};
 
 use quote::ToTokens;
 use syn::Result as ParseResult;
@@ -47,13 +52,14 @@ use additional_cpp_generator::AdditionalCppGenerator;
 use itertools::join;
 use known_types::KNOWN_TYPES;
 use log::{info, warn};
+use quote::quote;
 
 /// We use a forked version of bindgen - for now.
 /// We hope to unfork.
 use autocxx_bindgen as bindgen;
 
 #[cfg(any(test, feature = "build"))]
-pub use builder::{build, expect_build, BuilderError, BuilderResult, BuilderSuccess};
+pub use builder::{build, expect_build, BuilderBuild, BuilderError, BuilderResult, BuilderSuccess};
 pub use parse::{parse_file, parse_token_stream, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
@@ -229,10 +235,25 @@ impl IncludeCpp {
         builder
     }
 
+    pub fn get_rs_filename(&self) -> String {
+        let mut hasher = DefaultHasher::new();
+        self.config.hash(&mut hasher);
+        let id = hasher.finish();
+        format!("{}.rs", id)
+    }
+
     /// Generate the Rust bindings. Call `generate` first.
     pub fn generate_rs(&self) -> TokenStream2 {
         match &self.state {
-            State::NotGenerated => panic!("Call generate() first"),
+            State::NotGenerated => {
+                let rs_dir = std::env::var_os("AUTOCXX_RS").expect("No AUTOCXX_RS configured");
+                let rs_dir = PathBuf::from(rs_dir);
+                let fname = self.get_rs_filename();
+                let fname = rs_dir.join(fname).to_str().unwrap().to_string();
+                quote! {
+                    include!(#fname);
+                }
+            }
             State::Generated(itemmod, _) => itemmod.to_token_stream(),
             State::NothingGenerated | State::ParseOnly => TokenStream2::new(),
         }

@@ -14,16 +14,13 @@
 
 use autocxx_engine::IncludeCpp;
 use proc_macro::TokenStream;
-use proc_macro_error::{abort_call_site, proc_macro_error};
+use proc_macro_error::proc_macro_error;
 use syn::parse_macro_input;
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
 #[proc_macro]
 pub fn include_cpp_impl(input: TokenStream) -> TokenStream {
-    let mut include_cpp = parse_macro_input!(input as IncludeCpp);
-    match include_cpp.generate() {
-        Ok(_) => TokenStream::from(include_cpp.generate_rs()),
-        Err(e) => abort_call_site!(format!("{:?}", e)),
-    }
+    let include_cpp = parse_macro_input!(input as IncludeCpp);
+    TokenStream::from(include_cpp.generate_rs())
 }

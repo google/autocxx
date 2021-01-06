@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use proc_macro2::TokenStream;
+
 use crate::Error as EngineError;
 use crate::{ParseError, ParsedFile};
 use std::io::Write;
@@ -53,7 +55,9 @@ impl Display for BuilderError {
     }
 }
 
-pub type BuilderSuccess = cc::Build;
+pub type BuilderBuild = cc::Build;
+
+pub struct BuilderSuccess(pub BuilderBuild, pub Vec<PathBuf>);
 
 /// Results of a build.
 pub type BuilderResult = Result<BuilderSuccess, BuilderError>;
@@ -73,7 +77,7 @@ where
 
 /// Builds successfully, or exits the process displaying a suitable
 /// message.
-pub fn expect_build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> cc::Build
+pub fn expect_build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> BuilderSuccess
 where
     P1: AsRef<Path>,
     I: IntoIterator<Item = T>,
@@ -106,6 +110,8 @@ where
     ensure_created(&incdir)?;
     let cxxdir = gendir.join("cxx");
     ensure_created(&cxxdir)?;
+    let rsdir = gendir.join("rs");
+    ensure_created(&rsdir)?;
     // We are incredibly unsophisticated in our directory arrangement here
     // compared to cxx. I have no doubt that we will need to replicate just
     // about everything cxx does, in due course...
@@ -117,23 +123,26 @@ where
     // Configure cargo to give the same set of include paths to autocxx
     // when expanding the macro.
     println!("cargo:rustc-env=AUTOCXX_INC={}", autocxx_inc);
+    println!("cargo:rustc-env=AUTOCXX_RS={}", rsdir.to_str().unwrap());
 
     let mut parsed_file =
         crate::parse_file(rs_file, Some(&autocxx_inc)).map_err(BuilderError::ParseError)?;
     parsed_file
         .resolve_all()
         .map_err(BuilderError::ParseError)?;
-    build_with_existing_parsed_file(parsed_file, cxxdir, incdir)
+    build_with_existing_parsed_file(parsed_file, cxxdir, incdir, rsdir)
 }
 
 pub(crate) fn build_with_existing_parsed_file(
     parsed_file: ParsedFile,
     cxxdir: PathBuf,
     incdir: PathBuf,
-) -> Result<cc::Build, BuilderError> {
+    rsdir: PathBuf,
+) -> BuilderResult {
     let mut counter = 0;
     let mut builder = cc::Build::new();
     builder.cpp(true);
+    let mut generated_rs = Vec::new();
     for include_cpp in parsed_file.get_autocxxes() {
         for inc_dir in include_cpp
             .include_dirs()
@@ -151,12 +160,15 @@ pub(crate) fn build_with_existing_parsed_file(
             builder.file(gen_cxx_path);
 
             write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
+            let fname = include_cpp.get_rs_filename();
+            let rs = include_cpp.generate_rs();
+            generated_rs.push(write_rs_to_file(&rsdir, &fname, rs)?);
         }
     }
     if counter == 0 {
         Err(BuilderError::NoIncludeCxxMacrosFound)
     } else {
-        Ok(builder)
+        Ok(BuilderSuccess(builder, generated_rs))
     }
 }
 
@@ -194,4 +206,12 @@ fn write_to_file(dir: &PathBuf, filename: &str, content: &[u8]) -> Result<PathBu
 fn try_write_to_file(path: &PathBuf, content: &[u8]) -> std::io::Result<()> {
     let mut f = File::create(path)?;
     f.write_all(content)
+}
+
+fn write_rs_to_file(
+    dir: &PathBuf,
+    filename: &str,
+    content: TokenStream,
+) -> Result<PathBuf, BuilderError> {
+    write_to_file(dir, filename, content.to_string().as_bytes())
 }

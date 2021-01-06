@@ -16,7 +16,6 @@ use indoc::indoc;
 use log::info;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use quote::ToTokens;
 use std::fs::File;
 use std::io::Write;
 use std::panic::RefUnwindSafe;
@@ -69,6 +68,7 @@ impl LinkableTryBuilder {
         header_path: &P2,
         header_names: &[&str],
         rs_path: &P3,
+        generated_rs_files: Vec<PathBuf>,
     ) -> std::thread::Result<()> {
         // Copy all items from the source dir into our temporary dir if their name matches
         // the pattern given in `library_name`.
@@ -76,9 +76,15 @@ impl LinkableTryBuilder {
         for header_name in header_names {
             self.move_items_into_temp_dir(header_path, header_name);
         }
+        for generated_rs in generated_rs_files {
+            self.move_items_into_temp_dir(
+                &generated_rs.parent().unwrap().to_path_buf(),
+                &generated_rs.file_name().unwrap().to_str().unwrap(),
+            );
+        }
         let temp_path = self.temp_dir.path().to_str().unwrap();
         std::env::set_var("RUSTFLAGS", format!("-L {}", temp_path));
-        std::env::set_var("AUTOCXX_INC", temp_path);
+        std::env::set_var("AUTOCXX_RS", temp_path);
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();
             test_cases.pass(rs_path)
@@ -197,23 +203,9 @@ fn do_run_test(
         }
     });
 
-    // After this point we start taking liberties for speed
-    // unless we're testing the full pipeline explicitly.
-    let be_quick = match method {
-        TestMethod::BeQuick => true,
-        TestMethod::UseFullPipeline => false,
-    };
-
-    let include_bit = if be_quick {
-        quote!()
-    } else {
-        quote!(
-            use autocxx::include_cpp;
-        )
-    };
     let hexathorpe = Token![#](Span::call_site());
     let unexpanded_rust = quote! {
-        #include_bit
+        use autocxx::include_cpp;
 
         include_cpp!(
             #hexathorpe include "input.h"
@@ -232,9 +224,6 @@ fn do_run_test(
     };
     info!("Unexpanded Rust: {}", unexpanded_rust);
 
-    let mut expanded_rust;
-    let rs_path: PathBuf;
-
     let write_rust_to_file = |ts: &TokenStream| -> PathBuf {
         // Step 3: Write the Rust code to a temp file
         let rs_code = format!("{}", ts);
@@ -244,37 +233,14 @@ fn do_run_test(
     let target_dir = tdir.path().join("target");
     std::fs::create_dir(&target_dir).unwrap();
 
-    let mut b = if be_quick {
-        // The speed of this test suite is dictated by how much work needs to be done
-        // when building the final Rust executable using trybuild, because that's single
-        // threaded. In the slow path, we let that final Rust build expand the
-        // include_cxx macro. In the quick path, we'll expand that macro now in this
-        // multithreaded test code.
-        let autocxx_inc = tdir.path().to_str().unwrap();
-        let mut parsed_file = crate::parse_token_stream(unexpanded_rust, Some(autocxx_inc))
-            .map_err(TestError::IncludeCpp)?;
-        parsed_file.resolve_all().map_err(TestError::IncludeCpp)?;
-        let include_cpps = parsed_file.get_autocxxes();
-        assert_eq!(include_cpps.len(), 1);
-        expanded_rust = TokenStream::new();
-        parsed_file.to_tokens(&mut expanded_rust);
+    let rs_path = write_rust_to_file(&unexpanded_rust);
 
-        rs_path = write_rust_to_file(&expanded_rust);
-
-        crate::builder::build_with_existing_parsed_file(
-            parsed_file,
-            tdir.path().to_path_buf(),
-            tdir.path().to_path_buf(),
-        )
-    } else {
-        expanded_rust = unexpanded_rust;
-
-        rs_path = write_rust_to_file(&expanded_rust);
-
-        info!("Path is {:?}", tdir.path());
+    info!("Path is {:?}", tdir.path());
+    let build_results =
         crate::builder::build_to_custom_directory(&rs_path, &[tdir.path()], target_dir.clone())
-    }
-    .map_err(TestError::AutoCxx)?;
+            .map_err(TestError::AutoCxx)?;
+    let mut b = build_results.0;
+    let generated_rs_files = build_results.1;
 
     let target = rust_info::get().target_triple.unwrap();
 
@@ -301,6 +267,7 @@ fn do_run_test(
         &tdir.path(),
         &["input.h", "cxx.h"],
         &rs_path,
+        generated_rs_files,
     );
     if r.is_err() {
         return Err(TestError::RsBuild); // details of Rust panic are a bit messy to include, and

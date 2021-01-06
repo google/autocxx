@@ -13,29 +13,29 @@
 // limitations under the License.
 
 use autocxx_engine::{
-    build as engine_build, expect_build as engine_expect_build, BuilderResult, BuilderSuccess,
+    build as engine_build, expect_build as engine_expect_build, BuilderBuild, BuilderError,
 };
 use std::io::Write;
 use std::{ffi::OsStr, path::Path};
 
-pub fn build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> BuilderResult
+pub fn build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> Result<BuilderBuild, BuilderError>
 where
     P1: AsRef<Path>,
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
     setup_logging();
-    engine_build(rs_file, autocxx_incs)
+    engine_build(rs_file, autocxx_incs).map(|r| r.0)
 }
 
-pub fn expect_build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> BuilderSuccess
+pub fn expect_build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> BuilderBuild
 where
     P1: AsRef<Path>,
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
     setup_logging();
-    engine_expect_build(rs_file, autocxx_incs)
+    engine_expect_build(rs_file, autocxx_incs).0
 }
 
 fn setup_logging() {

@@ -21,7 +21,7 @@ use syn::{
 
 use crate::{type_database::TypeDatabase, types::TypeName};
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Hash)]
 pub(crate) enum UnsafePolicy {
     AllFunctionsSafe,
     AllFunctionsUnsafe,
@@ -52,12 +52,14 @@ impl Parse for UnsafePolicy {
     }
 }
 
+#[derive(Hash)]
 pub enum CppInclusion {
     #[allow(dead_code)]
     Define(String), // currently unused, may use in future.
     Header(String),
 }
 
+#[derive(Hash)]
 pub struct IncludeCppConfig {
     pub(crate) inclusions: Vec<CppInclusion>,
     pub(crate) exclude_utilities: bool,
