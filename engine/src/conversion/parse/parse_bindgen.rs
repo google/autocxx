@@ -49,7 +49,7 @@ enum TypeKind {
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
-    type_converter: TypeConverter<'a>,
+    type_converter: TypeConverter,
     byvalue_checker: ByValueChecker,
     type_database: &'a TypeDatabase,
     bridge_name_tracker: BridgeNameTracker,
@@ -66,7 +66,7 @@ impl<'a> ParseBindgen<'a> {
         unsafe_policy: UnsafePolicy,
     ) -> Self {
         ParseBindgen {
-            type_converter: TypeConverter::new(type_database),
+            type_converter: TypeConverter::new(),
             byvalue_checker,
             bridge_name_tracker: BridgeNameTracker::new(),
             rust_name_tracker: RustNameTracker::new(),

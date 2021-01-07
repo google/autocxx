@@ -308,8 +308,7 @@ impl IncludeCppEngine {
             )
             .map_err(Error::Conversion)?;
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
-        additional_cpp_generator
-            .add_needs(conversion.additional_cpp_needs, &self.config.type_database);
+        additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
         let mut items = conversion.items;
         let mut new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]

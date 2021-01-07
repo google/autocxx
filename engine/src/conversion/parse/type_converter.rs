@@ -23,7 +23,6 @@ use crate::{
     type_to_cpp::type_to_cpp,
     types::{make_ident, Namespace, TypeName},
 };
-use autocxx_parser::TypeDatabase;
 use quote::quote;
 use std::collections::{HashMap, HashSet};
 use syn::{
@@ -59,17 +58,15 @@ impl<T> Annotated<T> {
     }
 }
 
-pub(crate) struct TypeConverter<'a> {
-    type_database: &'a TypeDatabase,
+pub(crate) struct TypeConverter {
     types_found: Vec<TypeName>,
     typedefs: HashMap<TypeName, TypedefTarget>,
     concrete_templates: HashMap<String, TypeName>,
 }
 
-impl<'a> TypeConverter<'a> {
-    pub(crate) fn new(type_database: &'a TypeDatabase) -> Self {
+impl TypeConverter {
+    pub(crate) fn new() -> Self {
         Self {
-            type_database,
             types_found: Vec::new(),
             typedefs: HashMap::new(),
             concrete_templates: HashMap::new(),

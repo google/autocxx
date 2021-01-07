@@ -1,8 +1,3 @@
-use autocxx_parser::TypeDatabase;
-use syn::{parse_quote, Ident, Type};
-
-use crate::{known_types::type_lacks_copy_constructor, type_to_cpp::type_to_cpp, types::Namespace};
-
 // Copyright 2020 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +11,9 @@ use crate::{known_types::type_lacks_copy_constructor, type_to_cpp::type_to_cpp, 
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+use crate::{known_types::type_lacks_copy_constructor, type_to_cpp::type_to_cpp, types::Namespace};
+use syn::{parse_quote, Ident, Type};
 
 #[derive(Clone)]
 enum ArgumentConversionType {
@@ -56,17 +54,17 @@ impl ArgumentConversion {
         !matches!(self.conversion, ArgumentConversionType::None)
     }
 
-    pub(crate) fn unconverted_type(&self, type_database: &TypeDatabase) -> String {
+    pub(crate) fn unconverted_type(&self) -> String {
         match self.conversion {
-            ArgumentConversionType::FromUniquePtrToValue => self.wrapped_type(type_database),
-            _ => self.unwrapped_type_as_string(type_database),
+            ArgumentConversionType::FromUniquePtrToValue => self.wrapped_type(),
+            _ => self.unwrapped_type_as_string(),
         }
     }
 
-    pub(crate) fn converted_type(&self, type_database: &TypeDatabase) -> String {
+    pub(crate) fn converted_type(&self) -> String {
         match self.conversion {
-            ArgumentConversionType::FromValueToUniquePtr => self.wrapped_type(type_database),
-            _ => self.unwrapped_type_as_string(type_database),
+            ArgumentConversionType::FromValueToUniquePtr => self.wrapped_type(),
+            _ => self.unwrapped_type_as_string(),
         }
     }
 
@@ -84,18 +82,15 @@ impl ArgumentConversion {
         }
     }
 
-    fn unwrapped_type_as_string(&self, type_database: &TypeDatabase) -> String {
+    fn unwrapped_type_as_string(&self) -> String {
         type_to_cpp(&self.unwrapped_type)
     }
 
-    fn wrapped_type(&self, type_database: &TypeDatabase) -> String {
-        format!(
-            "std::unique_ptr<{}>",
-            self.unwrapped_type_as_string(type_database)
-        )
+    fn wrapped_type(&self) -> String {
+        format!("std::unique_ptr<{}>", self.unwrapped_type_as_string())
     }
 
-    pub(crate) fn conversion(&self, var_name: &str, type_database: &TypeDatabase) -> String {
+    pub(crate) fn conversion(&self, var_name: &str) -> String {
         match self.conversion {
             ArgumentConversionType::None => {
                 if type_lacks_copy_constructor(&self.unwrapped_type) {
@@ -107,7 +102,7 @@ impl ArgumentConversion {
             ArgumentConversionType::FromUniquePtrToValue => format!("std::move(*{})", var_name),
             ArgumentConversionType::FromValueToUniquePtr => format!(
                 "std::make_unique<{}>({})",
-                self.unconverted_type(type_database),
+                self.unconverted_type(),
                 var_name
             ),
         }
