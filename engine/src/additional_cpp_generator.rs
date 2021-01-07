@@ -14,9 +14,10 @@
 
 use crate::{
     function_wrapper::{FunctionWrapper, FunctionWrapperPayload},
-    type_database::TypeDatabase,
+    type_to_cpp::type_to_cpp,
     types::TypeName,
 };
+use autocxx_parser::TypeDatabase;
 use itertools::Itertools;
 use std::collections::HashSet;
 use syn::Type;
@@ -101,7 +102,7 @@ impl AdditionalCppGenerator {
                 }
                 AdditionalNeed::CTypeTypedef(tn) => self.generate_ctype_typedef(tn),
                 AdditionalNeed::ConcreteTemplatedTypeTypedef(tn, def) => {
-                    self.generate_typedef(tn, type_database.type_to_cpp(&def))
+                    self.generate_typedef(tn, type_to_cpp(&def))
                 }
             }
         }

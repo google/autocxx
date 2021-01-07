@@ -15,13 +15,12 @@
 mod additional_cpp_generator;
 mod byvalue_checker;
 mod byvalue_scanner;
-mod config;
 mod conversion;
 mod function_wrapper;
 mod known_types;
 mod parse;
 mod rust_pretty_printer;
-mod type_database;
+mod type_to_cpp;
 mod typedef_analyzer;
 mod types;
 
@@ -31,7 +30,7 @@ mod builder;
 #[cfg(test)]
 mod integration_tests;
 
-use config::{CppInclusion, IncludeCppConfig, UnsafePolicy};
+use autocxx_parser::{CppInclusion, IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{
@@ -52,7 +51,6 @@ use additional_cpp_generator::AdditionalCppGenerator;
 use itertools::join;
 use known_types::KNOWN_TYPES;
 use log::{info, warn};
-use quote::quote;
 
 /// We use a forked version of bindgen - for now.
 /// We hope to unfork.
@@ -137,12 +135,12 @@ enum State {
 /// TODO - consider whether this 'engine' crate should actually be a
 /// directory of source symlinked from all the other sub-crates, so that
 /// we avoid exposing an external interface from this code.
-pub struct IncludeCpp {
+pub struct IncludeCppEngine {
     config: IncludeCppConfig,
     state: State,
 }
 
-impl Parse for IncludeCpp {
+impl Parse for IncludeCppEngine {
     fn parse(input: ParseStream) -> ParseResult<Self> {
         let config = input.parse::<IncludeCppConfig>()?;
         let state = if config.parse_only {
@@ -154,9 +152,9 @@ impl Parse for IncludeCpp {
     }
 }
 
-impl IncludeCpp {
+impl IncludeCppEngine {
     pub fn new_from_syn(mac: Macro) -> Result<Self> {
-        mac.parse_body::<IncludeCpp>().map_err(Error::Parsing)
+        mac.parse_body::<IncludeCppEngine>().map_err(Error::Parsing)
     }
 
     fn build_header(&self) -> String {
@@ -233,15 +231,7 @@ impl IncludeCpp {
     /// Generate the Rust bindings. Call `generate` first.
     pub fn generate_rs(&self) -> TokenStream2 {
         match &self.state {
-            State::NotGenerated => {
-                let rs_dir = std::env::var_os("AUTOCXX_RS").expect("No AUTOCXX_RS configured");
-                let rs_dir = PathBuf::from(rs_dir);
-                let fname = self.get_rs_filename();
-                let fname = rs_dir.join(fname).to_str().unwrap().to_string();
-                quote! {
-                    include!(#fname);
-                }
-            }
+            State::NotGenerated => panic!("Generate first"),
             State::Generated(gen_results) => gen_results.item_mod.to_token_stream(),
             State::NothingGenerated | State::ParseOnly => TokenStream2::new(),
         }
@@ -384,16 +374,5 @@ impl IncludeCpp {
             State::Generated(gen_results) => &gen_results.inc_dirs,
             _ => panic!("Must call generate() before include_dirs()"),
         }
-    }
-}
-
-#[cfg(test)]
-mod parse_tests {
-    use crate::IncludeCpp;
-    use syn::parse_quote;
-
-    #[test]
-    fn test_basic() {
-        let _i: IncludeCpp = parse_quote! {};
     }
 }

@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use autocxx_parser::TypeDatabase;
 use syn::Item;
 
 use crate::{
-    byvalue_checker::ByValueChecker, conversion::ConvertError, type_database::TypeDatabase,
+    byvalue_checker::ByValueChecker, conversion::ConvertError,
     typedef_analyzer::analyze_typedef_target, typedef_analyzer::TypedefTarget, types::Namespace,
     types::TypeName,
 };
@@ -75,8 +76,14 @@ impl<'a> ByValueScanner<'a> {
 
     fn find_nested_pod_types(&mut self, items: &[Item]) -> Result<(), ConvertError> {
         self.find_nested_pod_types_in_mod(items, &Namespace::new())?;
+        let pod_requests = self
+            .type_database
+            .get_pod_requests()
+            .iter()
+            .map(|ty| TypeName::new_from_user_input(ty))
+            .collect();
         self.byvalue_checker
-            .satisfy_requests(self.type_database.get_pod_requests().to_vec())
+            .satisfy_requests(pod_requests)
             .map_err(ConvertError::UnsafePODType)
     }
 }

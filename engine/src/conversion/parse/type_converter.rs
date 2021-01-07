@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
 use crate::{
     additional_cpp_generator::AdditionalNeed,
     conversion::{
@@ -19,12 +20,10 @@ use crate::{
         ConvertError,
     },
     known_types::KNOWN_TYPES,
+    type_to_cpp::type_to_cpp,
     types::{make_ident, Namespace, TypeName},
 };
-use crate::{
-    type_database::TypeDatabase,
-    typedef_analyzer::{analyze_typedef_target, TypedefTarget},
-};
+use autocxx_parser::TypeDatabase;
 use quote::quote;
 use std::collections::{HashMap, HashSet};
 use syn::{
@@ -317,7 +316,7 @@ impl<'a> TypeConverter<'a> {
     fn get_templated_typename(&mut self, rs_definition: &Type) -> (TypeName, Option<Api>) {
         let count = self.concrete_templates.len();
         // We just use this as a hash key, essentially.
-        let cpp_definition = self.type_database.type_to_cpp(rs_definition);
+        let cpp_definition = type_to_cpp(rs_definition);
         let e = self.concrete_templates.get(&cpp_definition);
         match e {
             Some(tn) => (tn.clone(), None),

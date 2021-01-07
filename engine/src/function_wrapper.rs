@@ -1,8 +1,7 @@
+use autocxx_parser::TypeDatabase;
 use syn::{parse_quote, Ident, Type};
 
-use crate::{
-    known_types::type_lacks_copy_constructor, type_database::TypeDatabase, types::Namespace,
-};
+use crate::{known_types::type_lacks_copy_constructor, type_to_cpp::type_to_cpp, types::Namespace};
 
 // Copyright 2020 Google LLC
 //
@@ -86,7 +85,7 @@ impl ArgumentConversion {
     }
 
     fn unwrapped_type_as_string(&self, type_database: &TypeDatabase) -> String {
-        type_database.type_to_cpp(&self.unwrapped_type)
+        type_to_cpp(&self.unwrapped_type)
     }
 
     fn wrapped_type(&self, type_database: &TypeDatabase) -> String {

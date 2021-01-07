@@ -17,12 +17,12 @@ use std::{collections::HashMap, collections::HashSet};
 use crate::{
     byvalue_checker::ByValueChecker,
     conversion::{api::ParseResults, ConvertError},
-    type_database::TypeDatabase,
     types::make_ident,
     types::Namespace,
     types::TypeName,
     UnsafePolicy,
 };
+use autocxx_parser::TypeDatabase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_quote, Fields, ForeignItem, Item, ItemStruct, Type};
@@ -274,7 +274,7 @@ impl<'a> ParseBindgen<'a> {
             _ => "Opaque",
         };
         let kind_item = make_ident(kind_item);
-        if self.type_database.is_on_blocklist(&tyname) {
+        if self.type_database.is_on_blocklist(&tyname.to_cpp_name()) {
             return;
         }
         let tynamestring = tyname.to_cpp_name();
@@ -369,11 +369,12 @@ impl<'a> ForeignModParseCallbacks for ParseBindgen<'a> {
     }
 
     fn is_on_allowlist(&self, type_name: &TypeName) -> bool {
-        self.type_database.is_on_allowlist(type_name)
+        self.type_database.is_on_allowlist(&type_name.to_cpp_name())
     }
 
     fn avoid_generating_type(&self, type_name: &TypeName) -> bool {
-        self.type_database.is_on_blocklist(type_name) || self.incomplete_types.contains(type_name)
+        self.type_database.is_on_blocklist(&type_name.to_cpp_name())
+            || self.incomplete_types.contains(type_name)
     }
 
     fn should_be_unsafe(&self) -> bool {

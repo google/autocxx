@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx_engine::IncludeCpp;
+use autocxx_parser::IncludeCpp;
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
 use syn::parse_macro_input;

@@ -19,10 +19,10 @@ use syn::{
     Token,
 };
 
-use crate::{type_database::TypeDatabase, types::TypeName};
+use crate::type_database::TypeDatabase;
 
 #[derive(PartialEq, Clone, Debug, Hash)]
-pub(crate) enum UnsafePolicy {
+pub enum UnsafePolicy {
     AllFunctionsSafe,
     AllFunctionsUnsafe,
 }
@@ -61,11 +61,11 @@ pub enum CppInclusion {
 
 #[derive(Hash)]
 pub struct IncludeCppConfig {
-    pub(crate) inclusions: Vec<CppInclusion>,
-    pub(crate) exclude_utilities: bool,
-    pub(crate) unsafe_policy: UnsafePolicy,
-    pub(crate) type_database: TypeDatabase,
-    pub(crate) parse_only: bool,
+    pub inclusions: Vec<CppInclusion>,
+    pub exclude_utilities: bool,
+    pub unsafe_policy: UnsafePolicy,
+    pub type_database: TypeDatabase,
+    pub parse_only: bool,
 }
 
 impl Parse for IncludeCppConfig {
@@ -98,8 +98,7 @@ impl Parse for IncludeCppConfig {
                     let generate: syn::LitStr = args.parse()?;
                     type_database.add_to_allowlist(generate.value());
                     if ident == "generate_pod" {
-                        type_database
-                            .note_pod_request(TypeName::new_from_user_input(&generate.value()));
+                        type_database.note_pod_request(generate.value());
                     }
                 } else if ident == "block" {
                     let args;
@@ -141,7 +140,7 @@ impl Parse for IncludeCppConfig {
 
 #[cfg(test)]
 mod parse_tests {
-    use crate::UnsafePolicy;
+    use crate::config::UnsafePolicy;
     use syn::parse_quote;
     #[test]
     fn test_safety_unsafe() {
