@@ -29,7 +29,7 @@ autocxx-engine = { path="engine", version="0.5.0" }
 cxx = "1.0.20" # needed because expansion of type_id refers to ::cxx
 
 [workspace]
-members = ["engine", "gen/cmd", "gen/build", "macro", "demo"]
+members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo"]
 
 # [patch.crates-io]
 # cxx = { path="../cxx" }

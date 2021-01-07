@@ -20,7 +20,7 @@ mod function_wrapper;
 mod known_types;
 mod parse;
 mod rust_pretty_printer;
-mod type_database;
+mod type_to_cpp;
 mod typedef_analyzer;
 mod types;
 
@@ -30,30 +30,34 @@ mod builder;
 #[cfg(test)]
 mod integration_tests;
 
+use autocxx_parser::{CppInclusion, IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
-use proc_macro2::{Span, TokenStream as TokenStream2};
-use std::{fmt::Display, path::PathBuf};
-use type_database::TypeDatabase;
+use proc_macro2::TokenStream as TokenStream2;
+use std::{
+    collections::hash_map::DefaultHasher,
+    fmt::Display,
+    hash::{Hash, Hasher},
+    path::PathBuf,
+};
 
 use quote::ToTokens;
+use syn::Result as ParseResult;
 use syn::{
-    parse::{Parse, ParseStream, Result as ParseResult},
-    Token,
+    parse::{Parse, ParseStream},
+    parse_quote, ItemMod, Macro,
 };
-use syn::{parse_quote, ItemMod, Macro};
 
 use additional_cpp_generator::AdditionalCppGenerator;
 use itertools::join;
 use known_types::KNOWN_TYPES;
 use log::{info, warn};
-use types::TypeName;
 
 /// We use a forked version of bindgen - for now.
 /// We hope to unfork.
 use autocxx_bindgen as bindgen;
 
 #[cfg(any(test, feature = "build"))]
-pub use builder::{build, expect_build, BuilderError, BuilderResult, BuilderSuccess};
+pub use builder::{build, expect_build, BuilderBuild, BuilderError, BuilderResult, BuilderSuccess};
 pub use parse::{parse_file, parse_token_stream, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
@@ -102,7 +106,7 @@ impl Display for Error {
         match self {
             Error::Bindgen(_) => write!(f, "Bindgen was unable to generate the initial .rs bindings for this file. This may indicate a parsing problem with the C++ headers.")?,
             Error::Parsing(err) => write!(f, "The Rust file could not be parsede: {}", err)?,
-            Error::NoAutoCxxInc => write!(f, "No C++ include directory was provided. Consider setting AUTOCXX_INC.")?,
+            Error::NoAutoCxxInc => write!(f, "No C++ include directory was provided.")?,
             Error::CouldNotCanoncalizeIncludeDir(pb) => write!(f, "One of the C++ include directories provided ({}) did not appear to exist or could otherwise not be made into a canonical path.", pb.to_string_lossy())?,
             Error::Conversion(err) => write!(f, "autocxx could not generate the requested bindings. {}", err)?,
             Error::NoGenerationRequested => write!(f, "No 'generate' or 'generate_pod' directives were found, so we would not generate any Rust bindings despite the inclusion of C++ headers.")?,
@@ -113,48 +117,16 @@ impl Display for Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub enum CppInclusion {
-    Define(String),
-    Header(String),
+struct GenerationResults {
+    item_mod: ItemMod,
+    additional_cpp_generator: AdditionalCppGenerator,
+    inc_dirs: Vec<PathBuf>,
 }
-
-#[allow(clippy::large_enum_variant)] // because this is only used once
 enum State {
     NotGenerated,
     ParseOnly,
     NothingGenerated,
-    Generated(ItemMod, AdditionalCppGenerator),
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub(crate) enum UnsafePolicy {
-    AllFunctionsSafe,
-    AllFunctionsUnsafe,
-}
-
-impl Parse for UnsafePolicy {
-    fn parse(input: ParseStream) -> ParseResult<Self> {
-        if input.parse::<Option<Token![unsafe]>>()?.is_some() {
-            return Ok(UnsafePolicy::AllFunctionsSafe);
-        }
-        let r = match input.parse::<Option<syn::Ident>>()? {
-            Some(id) => {
-                if id == "unsafe_ffi" {
-                    Ok(UnsafePolicy::AllFunctionsSafe)
-                } else {
-                    Err(syn::Error::new(id.span(), "expected unsafe_ffi"))
-                }
-            }
-            None => Ok(UnsafePolicy::AllFunctionsUnsafe),
-        };
-        if !input.is_empty() {
-            return Err(syn::Error::new(
-                Span::call_site(),
-                "unexpected tokens within safety directive",
-            ));
-        }
-        r
-    }
+    Generated(Box<GenerationResults>),
 }
 
 /// Core of the autocxx engine. See `generate` for most details
@@ -163,107 +135,31 @@ impl Parse for UnsafePolicy {
 /// TODO - consider whether this 'engine' crate should actually be a
 /// directory of source symlinked from all the other sub-crates, so that
 /// we avoid exposing an external interface from this code.
-pub struct IncludeCpp {
-    inclusions: Vec<CppInclusion>,
-    type_database: TypeDatabase,
-    preconfigured_inc_dirs: Option<std::ffi::OsString>,
-    exclude_utilities: bool,
+pub struct IncludeCppEngine {
+    config: IncludeCppConfig,
     state: State,
-    unsafe_policy: UnsafePolicy,
 }
 
-impl Parse for IncludeCpp {
+impl Parse for IncludeCppEngine {
     fn parse(input: ParseStream) -> ParseResult<Self> {
-        Self::new_from_parse_stream(input)
+        let config = input.parse::<IncludeCppConfig>()?;
+        let state = if config.parse_only {
+            State::ParseOnly
+        } else {
+            State::NotGenerated
+        };
+        Ok(Self { config, state })
     }
 }
 
-impl IncludeCpp {
-    fn new_from_parse_stream(input: ParseStream) -> syn::Result<Self> {
-        // Takes as inputs:
-        // 1. List of headers to include
-        // 2. List of #defines to include
-        // 3. Allowlist
-
-        let mut inclusions = Vec::new();
-        let mut parse_only = false;
-        let mut exclude_utilities = false;
-        let mut type_database = TypeDatabase::new();
-        let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
-
-        while !input.is_empty() {
-            if input.parse::<Option<syn::Token![#]>>()?.is_some() {
-                let ident: syn::Ident = input.parse()?;
-                if ident != "include" {
-                    return Err(syn::Error::new(ident.span(), "expected include"));
-                }
-                let hdr: syn::LitStr = input.parse()?;
-                inclusions.push(CppInclusion::Header(hdr.value()));
-            } else {
-                let ident: syn::Ident = input.parse()?;
-                input.parse::<Option<syn::Token![!]>>()?;
-                if ident == "generate" || ident == "generate_pod" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let generate: syn::LitStr = args.parse()?;
-                    type_database.add_to_allowlist(generate.value());
-                    if ident == "generate_pod" {
-                        type_database
-                            .note_pod_request(TypeName::new_from_user_input(&generate.value()));
-                    }
-                } else if ident == "block" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let generate: syn::LitStr = args.parse()?;
-                    type_database.add_to_blocklist(generate.value());
-                } else if ident == "parse_only" {
-                    parse_only = true;
-                } else if ident == "exclude_utilities" {
-                    exclude_utilities = true;
-                } else if ident == "safety" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    unsafe_policy = args.parse()?;
-                } else {
-                    return Err(syn::Error::new(
-                        ident.span(),
-                        "expected generate, generate_pod, nested_type, safety or exclude_utilities",
-                    ));
-                }
-            }
-            if input.is_empty() {
-                break;
-            }
-        }
-        if !exclude_utilities {
-            type_database.add_to_allowlist("make_string".to_string());
-        }
-
-        Ok(IncludeCpp {
-            inclusions,
-            preconfigured_inc_dirs: None,
-            exclude_utilities,
-            type_database,
-            state: if parse_only {
-                State::ParseOnly
-            } else {
-                State::NotGenerated
-            },
-            unsafe_policy,
-        })
-    }
-
+impl IncludeCppEngine {
     pub fn new_from_syn(mac: Macro) -> Result<Self> {
-        mac.parse_body::<IncludeCpp>().map_err(Error::Parsing)
-    }
-
-    pub fn set_include_dirs<P: AsRef<std::ffi::OsStr>>(&mut self, include_dirs: P) {
-        self.preconfigured_inc_dirs = Some(include_dirs.as_ref().into());
+        mac.parse_body::<IncludeCppEngine>().map_err(Error::Parsing)
     }
 
     fn build_header(&self) -> String {
         join(
-            self.inclusions.iter().map(|incl| match incl {
+            self.config.inclusions.iter().map(|incl| match incl {
                 CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
                 CppInclusion::Header(path) => format!("#include \"{}\"\n", path),
             }),
@@ -271,15 +167,8 @@ impl IncludeCpp {
         )
     }
 
-    fn determine_incdirs(&self) -> Result<Vec<PathBuf>> {
-        let inc_dirs = match &self.preconfigured_inc_dirs {
-            Some(d) => d.clone(),
-            None => std::env::var_os("AUTOCXX_INC").ok_or(Error::NoAutoCxxInc)?,
-        };
+    fn canonize_inc_dirs(inc_dirs: &str) -> Result<Vec<PathBuf>> {
         let inc_dirs = std::env::split_paths(&inc_dirs);
-        // TODO consider if we can or should look up the include path automatically
-        // instead of requiring callers always to set AUTOCXX_INC.
-
         // On Windows, the canonical path begins with a UNC prefix that cannot be passed to
         // the MSVC compiler, so dunce::canonicalize() is used instead of std::fs::canonicalize()
         // See:
@@ -290,7 +179,7 @@ impl IncludeCpp {
             .collect()
     }
 
-    fn make_bindgen_builder(&self) -> Result<bindgen::Builder> {
+    fn make_bindgen_builder(&self, inc_dirs: &[PathBuf]) -> bindgen::Builder {
         // TODO support different C++ versions
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14"])
@@ -307,14 +196,14 @@ impl IncludeCpp {
             builder = builder.blacklist_item(item);
         }
 
-        for inc_dir in self.determine_incdirs()? {
+        for inc_dir in inc_dirs {
             // TODO work with OsStrs here to avoid the .display()
             builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
         }
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
-        for a in self.type_database.allowlist() {
+        for a in self.config.type_database.allowlist() {
             // TODO - allowlist type/functions/separately
             builder = builder
                 .whitelist_type(a)
@@ -322,7 +211,7 @@ impl IncludeCpp {
                 .whitelist_var(a);
         }
 
-        Ok(builder)
+        builder
     }
 
     fn inject_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
@@ -332,11 +221,18 @@ impl IncludeCpp {
         builder
     }
 
+    pub fn get_rs_filename(&self) -> String {
+        let mut hasher = DefaultHasher::new();
+        self.config.hash(&mut hasher);
+        let id = hasher.finish();
+        format!("{}.rs", id)
+    }
+
     /// Generate the Rust bindings. Call `generate` first.
     pub fn generate_rs(&self) -> TokenStream2 {
         match &self.state {
-            State::NotGenerated => panic!("Call generate() first"),
-            State::Generated(itemmod, _) => itemmod.to_token_stream(),
+            State::NotGenerated => panic!("Generate first"),
+            State::Generated(gen_results) => gen_results.item_mod.to_token_stream(),
             State::NothingGenerated | State::ParseOnly => TokenStream2::new(),
         }
     }
@@ -355,7 +251,7 @@ impl IncludeCpp {
 
     fn generate_include_list(&self) -> Vec<String> {
         let mut include_list = Vec::new();
-        for incl in &self.inclusions {
+        for incl in &self.config.inclusions {
             match incl {
                 CppInclusion::Header(ref hdr) => {
                     include_list.push(hdr.clone());
@@ -378,21 +274,23 @@ impl IncludeCpp {
     /// Along the way, the `bridge_converter` might tell us of additional
     /// C++ code which we should generate, e.g. wrappers to move things
     /// into and out of `UniquePtr`s.
-    pub fn generate(&mut self) -> Result<()> {
+    pub fn generate(&mut self, inc_dirs: &str) -> Result<()> {
+        let inc_dirs = Self::canonize_inc_dirs(inc_dirs)?;
+
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
         match self.state {
             State::ParseOnly => return Ok(()),
             State::NotGenerated => {}
-            State::Generated(_, _) | State::NothingGenerated => panic!("Only call generate once"),
+            State::Generated(_) | State::NothingGenerated => panic!("Only call generate once"),
         }
 
-        if self.type_database.allowlist_is_empty() {
+        if self.config.type_database.allowlist_is_empty() {
             return Err(Error::NoGenerationRequested);
         }
 
-        let builder = self.make_bindgen_builder()?;
+        let builder = self.make_bindgen_builder(&inc_dirs);
         let bindings = self
             .inject_header_into_bindgen(builder)
             .generate()
@@ -400,13 +298,17 @@ impl IncludeCpp {
         let bindings = self.parse_bindings(bindings)?;
 
         let include_list = self.generate_include_list();
-        let mut converter = BridgeConverter::new(&include_list, &self.type_database);
+        let mut converter = BridgeConverter::new(&include_list, &self.config.type_database);
 
         let conversion = converter
-            .convert(bindings, self.exclude_utilities, self.unsafe_policy.clone())
+            .convert(
+                bindings,
+                self.config.exclude_utilities,
+                self.config.unsafe_policy.clone(),
+            )
             .map_err(Error::Conversion)?;
         let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
-        additional_cpp_generator.add_needs(conversion.additional_cpp_needs, &self.type_database);
+        additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
         let mut items = conversion.items;
         let mut new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]
@@ -421,7 +323,11 @@ impl IncludeCpp {
             "New bindings:\n{}",
             rust_pretty_printer::pretty_print(&new_bindings.to_token_stream())
         );
-        self.state = State::Generated(new_bindings, additional_cpp_generator);
+        self.state = State::Generated(Box::new(GenerationResults {
+            item_mod: new_bindings,
+            additional_cpp_generator,
+            inc_dirs,
+        }));
         Ok(())
     }
 
@@ -432,8 +338,8 @@ impl IncludeCpp {
             State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
             State::NotGenerated => panic!("Call generate() first"),
             State::NothingGenerated => {}
-            State::Generated(itemmod, additional_cpp_generator) => {
-                let rs = itemmod.into_token_stream();
+            State::Generated(gen_results) => {
+                let rs = gen_results.item_mod.to_token_stream();
                 let opt = cxx_gen::Opt::default();
                 let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
                 files.push(CppFilePair {
@@ -442,7 +348,7 @@ impl IncludeCpp {
                     implementation: cxx_generated.implementation,
                 });
 
-                match additional_cpp_generator.generate() {
+                match gen_results.additional_cpp_generator.generate() {
                     None => {}
                     Some(additional_cpp) => {
                         // TODO should probably replace pragma once below with traditional include guards.
@@ -461,41 +367,11 @@ impl IncludeCpp {
         Ok(GeneratedCpp(files))
     }
 
-    /// Get the configured include directories.
-    pub fn include_dirs(&self) -> Result<Vec<PathBuf>> {
-        self.determine_incdirs()
-    }
-}
-
-#[cfg(test)]
-mod parse_tests {
-    use crate::{IncludeCpp, UnsafePolicy};
-    use syn::parse_quote;
-
-    #[test]
-    fn test_basic() {
-        let _i: IncludeCpp = parse_quote! {};
-    }
-
-    #[test]
-    fn test_safety_unsafe() {
-        let us: UnsafePolicy = parse_quote! {
-            unsafe
-        };
-        assert_eq!(us, UnsafePolicy::AllFunctionsSafe)
-    }
-
-    #[test]
-    fn test_safety_unsafe_ffi() {
-        let us: UnsafePolicy = parse_quote! {
-            unsafe_ffi
-        };
-        assert_eq!(us, UnsafePolicy::AllFunctionsSafe)
-    }
-
-    #[test]
-    fn test_safety_safe() {
-        let us: UnsafePolicy = parse_quote! {};
-        assert_eq!(us, UnsafePolicy::AllFunctionsUnsafe)
+    /// Return the include directories used for this include_cpp invocation.
+    pub fn include_dirs(&self) -> &Vec<PathBuf> {
+        match &self.state {
+            State::Generated(gen_results) => &gen_results.inc_dirs,
+            _ => panic!("Must call generate() before include_dirs()"),
+        }
     }
 }

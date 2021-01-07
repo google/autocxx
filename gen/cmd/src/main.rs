@@ -31,9 +31,7 @@ fn main() {
                 include_cpp macro. Normal usage here is to use the gen-cpp
                 subcommand to generate the .cpp and .h side of the bindings,
                 such that you can build them and link them to Rust code.
-                The Rust side of the bindings will be expanded automatically
-                as part of the Rust compilation process, by virtue of procedural
-                macro expansion. You can, however, also use this utility
+                You can also use this utility
                 to expand the Rust code if you wish to avoid a dependency
                 on a C++ include path within your Rust build process.
         "})
@@ -88,9 +86,12 @@ fn main() {
         )
         .subcommand(SubCommand::with_name("gen-rs").help("Generate expanded Rust file."))
         .get_matches();
-    let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap(), matches.value_of("inc"))
+    let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap())
         .expect("Unable to parse Rust file and interpret autocxx macro");
-    parsed_file.resolve_all().expect("Unable to resolve macro");
+    let incs = matches.value_of("inc").unwrap_or("");
+    parsed_file
+        .resolve_all(incs)
+        .expect("Unable to resolve macro");
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
     if let Some(matches) = matches.subcommand_matches("gen-cpp") {
         let pattern = matches.value_of("pattern").unwrap_or("gen");

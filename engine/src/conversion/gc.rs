@@ -14,7 +14,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{type_database::TypeDatabase, types::TypeName};
+use autocxx_parser::TypeDatabase;
+
+use crate::types::TypeName;
 
 use super::api::Api;
 
@@ -43,7 +45,7 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
         .iter()
         .filter(|api| {
             let tnforal = api.typename_for_allowlist();
-            type_database.is_on_allowlist(&tnforal)
+            type_database.is_on_allowlist(&tnforal.to_cpp_name())
         })
         .map(Api::typename)
         .collect();

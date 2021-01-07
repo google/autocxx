@@ -13,7 +13,7 @@
 # limitations under the License.
 
 [package]
-name = "autocxx-engine"
+name = "autocxx-parser"
 version = "0.5.0"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 license = "MIT OR Apache-2.0"
@@ -23,36 +23,11 @@ edition = "2018"
 keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
 
-[features]
-build = ["cc"]
-
 [dependencies]
 log = "0.4"
 proc-macro2 = "1.0"
 quote = "1.0"
-lazy_static = "1.4"
-indoc = "1.0"
-autocxx-bindgen = "0.56.1"
-itertools = "0.9"
-dunce = "1.0.1"
-cc = { version = "1.0", optional = true }
-unzip-n = "0.1.2"
-cxx-gen = "0.7.20"
-cxx = "1.0.20"
-autocxx-parser = { path="../parser" }
 
 [dependencies.syn]
 version = "1.0.39"
 features = [ "full" ]
-
-[dev-dependencies]
-tempfile = "3.1"
-trybuild = "1.0"
-test-env-log = "0.2.2"
-env_logger = "0.7.1"
-rust_info = "0.3.1"
-cc = "1.0"
-# This is necessary for building the projects created
-# by the trybuild test system...
-autocxx = { path=".." }
-link-cplusplus = "1.0"

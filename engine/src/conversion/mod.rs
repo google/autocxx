@@ -20,11 +20,10 @@ mod parse;
 mod utilities;
 
 pub(crate) use api::ConvertError;
+use autocxx_parser::TypeDatabase;
 use syn::{Item, ItemMod};
 
-use crate::{
-    byvalue_scanner::identify_byvalue_safe_types, type_database::TypeDatabase, UnsafePolicy,
-};
+use crate::{byvalue_scanner::identify_byvalue_safe_types, UnsafePolicy};
 
 use self::{
     codegen::{CodeGenerator, CodegenResults},

@@ -16,7 +16,6 @@ use indoc::indoc;
 use log::info;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use quote::ToTokens;
 use std::fs::File;
 use std::io::Write;
 use std::panic::RefUnwindSafe;
@@ -69,6 +68,7 @@ impl LinkableTryBuilder {
         header_path: &P2,
         header_names: &[&str],
         rs_path: &P3,
+        generated_rs_files: Vec<PathBuf>,
     ) -> std::thread::Result<()> {
         // Copy all items from the source dir into our temporary dir if their name matches
         // the pattern given in `library_name`.
@@ -76,9 +76,15 @@ impl LinkableTryBuilder {
         for header_name in header_names {
             self.move_items_into_temp_dir(header_path, header_name);
         }
+        for generated_rs in generated_rs_files {
+            self.move_items_into_temp_dir(
+                &generated_rs.parent().unwrap().to_path_buf(),
+                &generated_rs.file_name().unwrap().to_str().unwrap(),
+            );
+        }
         let temp_path = self.temp_dir.path().to_str().unwrap();
         std::env::set_var("RUSTFLAGS", format!("-L {}", temp_path));
-        std::env::set_var("AUTOCXX_INC", temp_path);
+        std::env::set_var("AUTOCXX_RS", temp_path);
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();
             test_cases.pass(rs_path)
@@ -91,11 +97,6 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
     let mut f = File::create(&path).unwrap();
     f.write_all(content.as_bytes()).unwrap();
     path
-}
-
-enum TestMethod {
-    UseFullPipeline,
-    BeQuick,
 }
 
 /// A positive test, we expect to pass.
@@ -112,7 +113,6 @@ fn run_test(
         rust_code,
         generate,
         generate_pods,
-        TestMethod::BeQuick,
         None,
     )
     .unwrap()
@@ -125,7 +125,6 @@ fn run_test_ex(
     rust_code: TokenStream,
     generate: &[&str],
     generate_pods: &[&str],
-    method: TestMethod,
     extra_directives: Option<TokenStream>,
 ) {
     do_run_test(
@@ -134,7 +133,6 @@ fn run_test_ex(
         rust_code,
         generate,
         generate_pods,
-        method,
         extra_directives,
     )
     .unwrap()
@@ -153,7 +151,6 @@ fn run_test_expect_fail(
         rust_code,
         generate,
         generate_pods,
-        TestMethod::BeQuick,
         None,
     )
     .expect_err("Unexpected success");
@@ -165,7 +162,6 @@ enum TestError {
     AutoCxx(crate::BuilderError),
     CppBuild(cc::Error),
     RsBuild,
-    IncludeCpp(crate::ParseError),
 }
 
 fn do_run_test(
@@ -174,7 +170,6 @@ fn do_run_test(
     rust_code: TokenStream,
     generate: &[&str],
     generate_pods: &[&str],
-    method: TestMethod,
     extra_directives: Option<TokenStream>,
 ) -> Result<(), TestError> {
     // Step 1: Write the C++ header snippet to a temp file
@@ -197,23 +192,9 @@ fn do_run_test(
         }
     });
 
-    // After this point we start taking liberties for speed
-    // unless we're testing the full pipeline explicitly.
-    let be_quick = match method {
-        TestMethod::BeQuick => true,
-        TestMethod::UseFullPipeline => false,
-    };
-
-    let include_bit = if be_quick {
-        quote!()
-    } else {
-        quote!(
-            use autocxx::include_cpp;
-        )
-    };
     let hexathorpe = Token![#](Span::call_site());
     let unexpanded_rust = quote! {
-        #include_bit
+        use autocxx::include_cpp;
 
         include_cpp!(
             #hexathorpe include "input.h"
@@ -232,9 +213,6 @@ fn do_run_test(
     };
     info!("Unexpanded Rust: {}", unexpanded_rust);
 
-    let mut expanded_rust;
-    let rs_path: PathBuf;
-
     let write_rust_to_file = |ts: &TokenStream| -> PathBuf {
         // Step 3: Write the Rust code to a temp file
         let rs_code = format!("{}", ts);
@@ -244,37 +222,14 @@ fn do_run_test(
     let target_dir = tdir.path().join("target");
     std::fs::create_dir(&target_dir).unwrap();
 
-    let mut b = if be_quick {
-        // The speed of this test suite is dictated by how much work needs to be done
-        // when building the final Rust executable using trybuild, because that's single
-        // threaded. In the slow path, we let that final Rust build expand the
-        // include_cxx macro. In the quick path, we'll expand that macro now in this
-        // multithreaded test code.
-        let autocxx_inc = tdir.path().to_str().unwrap();
-        let mut parsed_file = crate::parse_token_stream(unexpanded_rust, Some(autocxx_inc))
-            .map_err(TestError::IncludeCpp)?;
-        parsed_file.resolve_all().map_err(TestError::IncludeCpp)?;
-        let include_cpps = parsed_file.get_autocxxes();
-        assert_eq!(include_cpps.len(), 1);
-        expanded_rust = TokenStream::new();
-        parsed_file.to_tokens(&mut expanded_rust);
+    let rs_path = write_rust_to_file(&unexpanded_rust);
 
-        rs_path = write_rust_to_file(&expanded_rust);
-
-        crate::builder::build_with_existing_parsed_file(
-            parsed_file,
-            tdir.path().to_path_buf(),
-            tdir.path().to_path_buf(),
-        )
-    } else {
-        expanded_rust = unexpanded_rust;
-
-        rs_path = write_rust_to_file(&expanded_rust);
-
-        info!("Path is {:?}", tdir.path());
+    info!("Path is {:?}", tdir.path());
+    let build_results =
         crate::builder::build_to_custom_directory(&rs_path, &[tdir.path()], target_dir.clone())
-    }
-    .map_err(TestError::AutoCxx)?;
+            .map_err(TestError::AutoCxx)?;
+    let mut b = build_results.0;
+    let generated_rs_files = build_results.1;
 
     let target = rust_info::get().target_triple.unwrap();
 
@@ -301,6 +256,7 @@ fn do_run_test(
         &tdir.path(),
         &["input.h", "cxx.h"],
         &rs_path,
+        generated_rs_files,
     );
     if r.is_err() {
         return Err(TestError::RsBuild); // details of Rust panic are a bit messy to include, and
@@ -1745,66 +1701,6 @@ fn test_pass_rust_str() {
 }
 
 #[test]
-fn test_cycle_string_full_pipeline() {
-    let cxx = indoc! {"
-        std::string give_str() {
-            return std::string(\"Bob\");
-        }
-        uint32_t take_str(std::string a) {
-            return a.length();
-        }
-    "};
-    let hdr = indoc! {"
-        #include <string>
-        #include <cstdint>
-        std::string give_str();
-        uint32_t take_str(std::string a);
-    "};
-    let rs = quote! {
-        let s = ffi::give_str();
-        assert_eq!(ffi::take_str(s), 3);
-    };
-    let generate = &["give_str", "take_str"];
-    run_test_ex(
-        cxx,
-        hdr,
-        rs,
-        generate,
-        &[],
-        TestMethod::UseFullPipeline,
-        None,
-    );
-}
-
-#[test]
-fn test_inline_full_pipeline() {
-    let hdr = indoc! {"
-        #include <string>
-        #include <cstdint>
-        inline std::string give_str() {
-            return std::string(\"Bob\");
-        }
-        inline uint32_t take_str(std::string a) {
-            return a.length();
-        }
-    "};
-    let rs = quote! {
-        let s = ffi::give_str();
-        assert_eq!(ffi::take_str(s), 3);
-    };
-    let generate = &["give_str", "take_str"];
-    run_test_ex(
-        "",
-        hdr,
-        rs,
-        generate,
-        &[],
-        TestMethod::UseFullPipeline,
-        None,
-    );
-}
-
-#[test]
 fn test_multiple_classes_with_methods() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -1899,7 +1795,6 @@ fn test_multiple_classes_with_methods() {
             "OpaqueClass",
         ],
         &["TrivialStruct", "TrivialClass"],
-        TestMethod::UseFullPipeline,
         None,
     );
 }

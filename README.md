@@ -35,22 +35,19 @@ See [demo/src/main.rs](demo/src/main.rs) for a real example.
 
 The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string` - so the Rust code should not typically require use of unsafe code, unlike with normal `bindgen` bindings.
 
-The macro and code generator will both need to know the include path to be passed to bindgen. At the moment, this is passed in via an
-environment variable, `AUTOCXX_INC`. See the [demo/build.rs](demo/build.rs) file for details.
-
 # How it works
 
-It is effectively a three-stage procedural macro, which:
+Before building the Rust code, you must run a code generator (typically run in a `build.rs` for a Cargo setup.)
+
+This:
 
 * First, runs `bindgen` to generate some bindings (with all the usual `unsafe`, `#[repr(C)]` etc.)
 * Second, interprets and converts them to bindings suitable for `cxx::bridge`.
-* Thirdly, runs `cxx::bridge` to convert them to Rust code.
+* Thirdly, runs `cxx::bridge` to create the C++ bindings.
+* Fourthly, writes out a `.rs` file with the Rust bindings.
 
-The same code can be passed through tools that generate .cc and .h bindings too:
-
-* First, runs `bindgen` to generate some bindings (with all the usual `unsafe`, `#[repr(C)]` etc.) - in exactly the same way as above.
-* Second, interprets and converts them to bindings suitable for `cxx::bridge` - in the same way as above.
-* Thirdly, runs the codegen code from `cxx` to generate .cc and .h files
+When building your Rust code, the procedural macro boils down to an `include!` macro that pulls in the
+generated Rust code.
 
 # Current state of affairs
 
@@ -107,30 +104,37 @@ This crate mostly intends to follow the lead of the `cxx` crate in where and whe
 
 If your project is 90% Rust code, with small bits of C++, don't use this crate. You need something where all C++ interaction is marked with big red "this is terrifying" flags. This crate is aimed at cases where there's 90% C++ and small bits of Rust, and so we want the Rust code to be pragmatically reviewable without the signal:noise ratio of `unsafe` in the Rust code becoming so bad that `unsafe` loses all value.
 
+See [safety!] in the documentation for more details.
+
 # Build environment
 
 Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html)
 
-As with `cxx`, this generates both Rust and C++ side bindings code. The Rust code is simply
-and transparently generated at build time by the `include_cpp!` procedural macro. But you'll
+As with `cxx`, this generates both Rust and C++ side bindings code. You'll
 need to take steps to generate the C++ code: either by using the `build.rs` integration within
-`autocxx_build`, or the command line utility within `autocxx_gen`.
+`autocxx_build`, or the command line utility within `autocxx_gen`. Either way, you'll need
+to specify the Rust file(s) which have `include_cpp` macros in place, and suitable corresponding
+C++ and Rust code will be generated.
 
-# Configuring the build
+When you come to build your Rust code, it will expand to an `include!` macro which will pull
+in the generated Rust code. For this to work, you need to specify an `AUTOCXX_RS` environment
+variable such that the macro can discover the location of the .rs file which was generated.
+If you use the `build.rs` cargo integration, this happens automatically. You'll also need
+to ensure that you build and link against the C++ code. Again, if you use the Cargo integrationm
+and follow the pattern of the `demo` example, this is fairly automatic because we use
+`cc` for this.
 
-This runs `bindgen` within a procedural macro. There are limited opportunities to pass information into procedural macros, yet bindgen needs to know a lot about the build environment.
-
-The plan is:
-* The Rust code itself will specify the include file(s) and allowlist by passing them into the macro. This is the sort of thing that developers within an existing C++ codebase would specify in C++ (give or take) so it makes sense for it to be specific in the Rust code.
-* However, all build settings (e.g. bindgen compiler configuration, include path etc.) will be passed into the macro by means of environment variables. The build environment should set these before building the code. (An alternative means will be provided to pass these into the C++ code generator tools.)
+You'll also want to ensure that the code generation (both Rust and C++ code) happens whenever
+any included header file changes. This is _not_ yet handled automatically even by our
+`build.rs` integration, but is coming soon.
 
 # Directory structure
 
 * `demo` - a demo example
-* `engine` - all the core code. Currently a Rust library, but we wouldn't want to support
-  these APIs for external users, so maybe it needs to be a directory of code symlinked
-  into all the other sub-crates. All the following three sub-crates are thin wrappers
-  for part of this engine. This also contains the test code.
+* `parser` - code which parses a single `include_cpp!` macro. Used by both the macro
+  (which doesn't do much) and the code generator (which does much more, by means of
+  `engine` below)
+* `engine` - all the core code for actual code generation.
 * `macro` - the procedural macro which expands the Rust code.
 * `gen/build` - a library to be used from `build.rs` scripts to generate .cc and .h
   files from an `include_cxx` section.
