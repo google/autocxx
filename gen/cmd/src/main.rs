@@ -31,9 +31,7 @@ fn main() {
                 include_cpp macro. Normal usage here is to use the gen-cpp
                 subcommand to generate the .cpp and .h side of the bindings,
                 such that you can build them and link them to Rust code.
-                The Rust side of the bindings will be expanded automatically
-                as part of the Rust compilation process, by virtue of procedural
-                macro expansion. You can, however, also use this utility
+                You can also use this utility
                 to expand the Rust code if you wish to avoid a dependency
                 on a C++ include path within your Rust build process.
         "})

@@ -18,6 +18,10 @@ use autocxx_engine::{
 use std::io::Write;
 use std::{ffi::OsStr, path::Path};
 
+/// Build autocxx C++ files and return a cc::Build you can use to build
+/// more from a build.rs file.
+/// You need to provide the Rust file path and the iterator of paths
+/// which should be used as include directories.
 pub fn build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> Result<BuilderBuild, BuilderError>
 where
     P1: AsRef<Path>,
@@ -28,6 +32,8 @@ where
     engine_build(rs_file, autocxx_incs).map(|r| r.0)
 }
 
+/// Builds successfully, or exits the process displaying a suitable
+/// message.
 pub fn expect_build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> BuilderBuild
 where
     P1: AsRef<Path>,
