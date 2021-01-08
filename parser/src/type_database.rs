@@ -23,7 +23,7 @@ pub struct TypeDatabase {
 }
 
 impl TypeDatabase {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 

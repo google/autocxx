@@ -14,6 +14,8 @@
 
 mod api;
 mod codegen;
+#[cfg(test)]
+mod conversion_tests;
 mod gc;
 mod namespace_organizer;
 mod parse;
