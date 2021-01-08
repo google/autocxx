@@ -31,6 +31,7 @@ pub enum ConvertError {
     UnexpectedItemInMod,
     ComplexTypedefTarget(String),
     UnexpectedThisType,
+    UnsupportedBuiltInType(TypeName),
 }
 
 impl Display for ConvertError {
@@ -43,6 +44,7 @@ impl Display for ConvertError {
             ConvertError::UnexpectedItemInMod => write!(f, "Bindgen generated some unexpected code in an inner namespace mod. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
             ConvertError::ComplexTypedefTarget(ty) => write!(f, "autocxx was unable to produce a typdef pointing to the complex type {}.", ty)?,
             ConvertError::UnexpectedThisType => write!(f, "Unexpected type for 'this'")?, // TODO give type/function
+            ConvertError::UnsupportedBuiltInType(ty) => write!(f, "autocxx does not yet know how to support the built-in C++ type {} - please raise an issue on github", ty.to_cpp_name())?,
         }
         Ok(())
     }
