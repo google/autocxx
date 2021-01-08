@@ -148,7 +148,14 @@ impl ParseForeignMod {
     ) -> Result<(), ConvertError> {
         while !self.funcs_to_convert.is_empty() {
             let fun = self.funcs_to_convert.remove(0);
-            self.convert_foreign_fn(fun, callbacks)?;
+            let r = self.convert_foreign_fn(fun, callbacks);
+            if let Err(e) = r {
+                if e.is_ignorable() {
+                    log::warn!("Skipped function because: {}", e);
+                } else {
+                    return Err(e);
+                }
+            }
         }
         Ok(())
     }
@@ -174,13 +181,14 @@ impl ParseForeignMod {
         }
 
         let original_name = Self::get_bindgen_original_name_annotation(&fun);
+        let diagnostic_display_name = original_name.as_ref().unwrap_or(&initial_rust_name);
 
         // Now let's analyze all the parameters.
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .sig
             .inputs
             .into_iter()
-            .map(|i| self.convert_fn_arg(i, ns, callbacks))
+            .map(|i| self.convert_fn_arg(i, ns, callbacks, diagnostic_display_name))
             .partition(Result::is_ok);
         if let Some(problem) = bads.into_iter().next() {
             match problem {
@@ -517,6 +525,7 @@ impl ParseForeignMod {
         arg: FnArg,
         ns: &Namespace,
         callbacks: &mut impl ForeignModParseCallbacks,
+        fn_name: &str,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
             FnArg::Typed(mut pt) => {
@@ -524,13 +533,27 @@ impl ParseForeignMod {
                 let old_pat = *pt.pat;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
-                        self_type = Some(match pt.ty.as_ref() {
+                        let this_type = match pt.ty.as_ref() {
                             Type::Ptr(TypePtr { elem, .. }) => match elem.as_ref() {
                                 Type::Path(typ) => TypeName::from_type_path(typ),
-                                _ => return Err(ConvertError::UnexpectedThisType),
+                                _ => {
+                                    return Err(ConvertError::UnexpectedThisType(
+                                        ns.clone(),
+                                        fn_name.into(),
+                                    ))
+                                }
                             },
-                            _ => return Err(ConvertError::UnexpectedThisType),
-                        });
+                            _ => {
+                                return Err(ConvertError::UnexpectedThisType(
+                                    ns.clone(),
+                                    fn_name.into(),
+                                ))
+                            }
+                        };
+                        if this_type.is_cvoid() {
+                            return Err(ConvertError::VirtualThisType(ns.clone(), fn_name.into()));
+                        }
+                        self_type = Some(this_type);
                         pp.ident = Ident::new("self", pp.ident.span());
                         syn::Pat::Ident(pp)
                     }

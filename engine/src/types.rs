@@ -57,6 +57,14 @@ impl Namespace {
     pub(crate) fn depth(&self) -> usize {
         self.0.len()
     }
+
+    pub(crate) fn to_display_suffix(&self) -> String {
+        if self.is_empty() {
+            String::new()
+        } else {
+            format!(" (in namespace {})", self)
+        }
+    }
 }
 
 impl Display for Namespace {
@@ -204,6 +212,10 @@ impl TypeName {
     /// Iterator over segments in the namespace of this type.
     pub(crate) fn ns_segment_iter(&self) -> impl Iterator<Item = &String> {
         self.0.iter()
+    }
+
+    pub(crate) fn is_cvoid(&self) -> bool {
+        self.to_cpp_name() == "std::os::raw::c_void"
     }
 }
 
