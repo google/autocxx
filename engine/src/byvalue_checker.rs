@@ -183,11 +183,7 @@ impl ByValueChecker {
 
     fn has_vtable(def: &ItemStruct) -> bool {
         for f in &def.fields {
-            if f.ident
-                .as_ref()
-                .map(|id| id == "vtable_")
-                .unwrap_or(false)
-            {
+            if f.ident.as_ref().map(|id| id == "vtable_").unwrap_or(false) {
                 return true;
             }
         }

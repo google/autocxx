@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use autocxx_parser::file_locations::FileLocationStrategy;
 use proc_macro2::TokenStream;
 
 use crate::{ParseError, ParsedFile};
@@ -67,7 +68,7 @@ where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
-    build_to_custom_directory(rs_file, autocxx_incs, out_dir())
+    build_to_custom_directory(rs_file, autocxx_incs, None)
 }
 
 /// Builds successfully, or exits the process displaying a suitable
@@ -93,19 +94,22 @@ fn report(err: BuilderError) -> String {
 pub(crate) fn build_to_custom_directory<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
-    outdir: PathBuf,
+    custom_gendir: Option<PathBuf>,
 ) -> BuilderResult
 where
     P1: AsRef<Path>,
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
-    let gendir = outdir.join("autocxx-build");
-    let incdir = gendir.join("include");
+    let gen_location_strategy = match custom_gendir {
+        None => FileLocationStrategy::new(),
+        Some(custom_dir) => FileLocationStrategy::Custom(custom_dir),
+    };
+    let incdir = gen_location_strategy.get_include_dir();
     ensure_created(&incdir)?;
-    let cxxdir = gendir.join("cxx");
+    let cxxdir = gen_location_strategy.get_cxx_dir();
     ensure_created(&cxxdir)?;
-    let rsdir = gendir.join("rs");
+    let rsdir = gen_location_strategy.get_rs_dir();
     ensure_created(&rsdir)?;
     // We are incredibly unsophisticated in our directory arrangement here
     // compared to cxx. I have no doubt that we will need to replicate just
@@ -115,9 +119,8 @@ where
     write_to_file(&incdir, "cxx.h", crate::HEADER.as_bytes())?;
 
     let autocxx_inc = build_autocxx_inc(autocxx_incs, &incdir);
-    // Configure cargo to tell the procedural macro how to find the
-    // Rust files we may have written out.
-    println!("cargo:rustc-env=AUTOCXX_RS={}", rsdir.to_str().unwrap());
+    // pass on th
+    gen_location_strategy.set_cargo_env_vars_for_build();
 
     let mut parsed_file = crate::parse_file(rs_file).map_err(BuilderError::ParseError)?;
     parsed_file
@@ -164,10 +167,6 @@ pub(crate) fn build_with_existing_parsed_file(
 
 fn ensure_created(dir: &PathBuf) -> Result<(), BuilderError> {
     std::fs::create_dir_all(dir).map_err(|e| BuilderError::UnableToCreateDirectory(e, dir.clone()))
-}
-
-fn out_dir() -> PathBuf {
-    std::env::var_os("OUT_DIR").map(PathBuf::from).unwrap()
 }
 
 fn build_autocxx_inc<I, T>(paths: I, extra_path: &PathBuf) -> String
