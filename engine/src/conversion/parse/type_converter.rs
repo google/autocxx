@@ -142,10 +142,12 @@ impl TypeConverter {
             // namespace. This is a bit of a shortcut compared to having a full
             // resolution pass which can search all known namespaces.
             if !self.types_found.contains(&ty) && !KNOWN_TYPES.is_known_type(&ty) {
-                log::info!("Converting {:?}", ty.to_string());
                 typ.path.segments = std::iter::once(&"root".to_string())
                     .chain(ns.iter())
-                    .map(|s| parse_quote! { #s })
+                    .map(|s| {
+                        let i = make_ident(s);
+                        parse_quote! { #i }
+                    })
                     .chain(typ.path.segments.into_iter())
                     .collect();
             }
