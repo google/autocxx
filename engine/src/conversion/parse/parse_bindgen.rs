@@ -122,6 +122,9 @@ impl<'a> ParseBindgen<'a> {
                     mod_converter.convert_foreign_mod_items(items)?;
                 }
                 Item::Struct(mut s) => {
+                    if s.ident.to_string().ends_with("__bindgen_vtable") {
+                        continue;
+                    }
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
                     let type_kind = if Self::spot_forward_declaration(&s.fields) {
                         self.incomplete_types.insert(tyname.clone());

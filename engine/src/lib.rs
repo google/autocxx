@@ -298,7 +298,7 @@ impl IncludeCppEngine {
         let bindings = self.parse_bindings(bindings)?;
 
         let include_list = self.generate_include_list();
-        let mut converter = BridgeConverter::new(&include_list, &self.config.type_database);
+        let converter = BridgeConverter::new(&include_list, &self.config.type_database);
 
         let conversion = converter
             .convert(

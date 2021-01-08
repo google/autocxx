@@ -30,7 +30,9 @@ pub enum ConvertError {
     UnexpectedOuterItem,
     UnexpectedItemInMod,
     ComplexTypedefTarget(String),
-    UnexpectedThisType,
+    UnexpectedThisType(Namespace, String),
+    UnsupportedBuiltInType(TypeName),
+    VirtualThisType(Namespace, String),
 }
 
 impl Display for ConvertError {
@@ -42,9 +44,23 @@ impl Display for ConvertError {
             ConvertError::UnexpectedOuterItem => write!(f, "Bindgen generated some unexpected code in its outermost mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
             ConvertError::UnexpectedItemInMod => write!(f, "Bindgen generated some unexpected code in an inner namespace mod. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
             ConvertError::ComplexTypedefTarget(ty) => write!(f, "autocxx was unable to produce a typdef pointing to the complex type {}.", ty)?,
-            ConvertError::UnexpectedThisType => write!(f, "Unexpected type for 'this'")?, // TODO give type/function
+            ConvertError::UnexpectedThisType(ns, fn_name) => write!(f, "Unexpected type for 'this' in the function {}{}.", fn_name, ns.to_display_suffix())?,
+            ConvertError::UnsupportedBuiltInType(ty) => write!(f, "autocxx does not yet know how to support the built-in C++ type {} - please raise an issue on github", ty.to_cpp_name())?,
+            ConvertError::VirtualThisType(ns, fn_name) => write!(f, "Member function encountered where the 'this' type is 'void*'. This is usually because it's a virtual function that may be overridden, which is not supported. Function {}{}.", fn_name, ns.to_display_suffix())?,
         }
         Ok(())
+    }
+}
+
+impl ConvertError {
+    /// Whether we should ignore this error and simply skip over such items.
+    /// In the future we need to use this to provide diagnostics or logging to the user,
+    /// which ideally we'd somehow winkle into the generated bindings
+    /// in a way that causes them a compile-time problem only if they try to
+    /// _use_ the affects functions. I don't know a way to do that. Otherwise,
+    /// we should output these things as warnings during the codegen phase. TODO.
+    pub(crate) fn is_ignorable(&self) -> bool {
+        matches!(self, ConvertError::VirtualThisType(_, _) | ConvertError::UnsupportedBuiltInType(_))
     }
 }
 

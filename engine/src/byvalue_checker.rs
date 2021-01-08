@@ -67,7 +67,7 @@ impl ByValueChecker {
         // For this struct, work out whether it _could_ be safe as a POD.
         let tyname = TypeName::new(ns, &def.ident.to_string());
         let mut field_safety_problem = PODState::SafeToBePOD;
-        let fieldlist = self.get_field_types(def);
+        let fieldlist = Self::get_field_types(def);
         for ty_id in &fieldlist {
             match self.results.get(ty_id) {
                 None => {
@@ -85,6 +85,14 @@ impl ByValueChecker {
                     }
                 }
             }
+        }
+        let has_vtable = Self::has_vtable(def);
+        if has_vtable {
+            let reason = format!(
+                "Type {} could not be POD because it has virtual functions.",
+                tyname
+            );
+            field_safety_problem = PODState::UnsafeToBePOD(reason);
         }
         let mut my_details = StructDetails::new(field_safety_problem);
         my_details.dependent_structs = fieldlist;
@@ -161,7 +169,7 @@ impl ByValueChecker {
         })
     }
 
-    fn get_field_types(&self, def: &ItemStruct) -> Vec<TypeName> {
+    fn get_field_types(def: &ItemStruct) -> Vec<TypeName> {
         let mut results = Vec::new();
         for f in &def.fields {
             let fty = &f.ty;
@@ -171,6 +179,19 @@ impl ByValueChecker {
             // TODO handle anything else which bindgen might spit out, e.g. arrays?
         }
         results
+    }
+
+    fn has_vtable(def: &ItemStruct) -> bool {
+        for f in &def.fields {
+            if f.ident
+                .as_ref()
+                .map(|id| id == "vtable_")
+                .unwrap_or(false)
+            {
+                return true;
+            }
+        }
+        false
     }
 }
 
