@@ -3283,6 +3283,36 @@ fn test_generic_type() {
     run_test("", hdr, rs, &["Secondary"], &[]);
 }
 
+#[test]
+fn test_virtual_fns() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        class A {
+        public:
+            A(uint32_t num) : b(num) {}
+            virtual uint32_t foo(uint32_t a) { return a+1; };
+            virtual ~A() {}
+            uint32_t b;
+        };
+        class B: public A {
+        public:
+            B() : A(3), c(4) {}
+            virtual uint32_t foo(uint32_t a) { return a+2; };
+            uint32_t c;
+        };
+    "};
+    let rs = quote! {
+        // We can't call virtual functions...
+        //let a = ffi::A::make_unique(12);
+        //assert_eq!(a.pin_mut().foo(2), 3);
+        let _b = ffi::B::make_unique();
+        // ... even on derived classes where the resolution
+        // would be fixed.
+        //assert_eq!(b_.pin_mut().foo(2), 4);
+    };
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef
