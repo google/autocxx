@@ -13,17 +13,17 @@
 // limitations under the License.
 
 mod config;
+pub mod file_locations;
 mod type_database;
 
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
-    path::PathBuf,
 };
 
 pub use config::{CppInclusion, IncludeCppConfig, UnsafePolicy};
+use file_locations::FileLocationStrategy;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
 use syn::Result as ParseResult;
 use syn::{
     parse::{Parse, ParseStream},
@@ -66,13 +66,8 @@ impl IncludeCpp {
         if self.config.parse_only {
             return TokenStream2::new();
         }
-        let rs_dir = std::env::var_os("AUTOCXX_RS").expect("No AUTOCXX_RS configured");
-        let rs_dir = PathBuf::from(rs_dir);
         let fname = self.get_rs_filename();
-        let fname = rs_dir.join(fname).to_str().unwrap().to_string();
-        quote! {
-            include!(#fname);
-        }
+        FileLocationStrategy::new().make_include(fname)
     }
 
     pub fn get_config(&self) -> &IncludeCppConfig {
