@@ -59,7 +59,7 @@ impl<'a> BridgeConverter<'a> {
     /// Convert a TokenStream of bindgen-generated bindings to a form
     /// suitable for cxx.
     pub(crate) fn convert(
-        &mut self,
+        &self,
         mut bindgen_mod: ItemMod,
         exclude_utilities: bool,
         unsafe_policy: UnsafePolicy,
