@@ -229,6 +229,7 @@ fn do_run_test(
         &rs_path,
         &[tdir.path()],
         Some(target_dir.clone()),
+        None,
     )
     .map_err(TestError::AutoCxx)?;
     let mut b = build_results.0;
