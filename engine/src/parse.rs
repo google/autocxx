@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{Error as EngineError, IncludeCppEngine};
+use crate::{Error as EngineError, IncludeCppEngine, RebuildDependencyRecorder};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use std::path::Path;
 use std::{fmt::Display, io::Read};
+use std::{panic::UnwindSafe, path::Path, rc::Rc};
 use syn::Item;
 
 /// Errors which may occur when parsing a Rust source file to discover
@@ -112,10 +112,23 @@ impl ParsedFile {
             .collect()
     }
 
-    pub fn resolve_all(&mut self, autocxx_inc: &str) -> Result<(), ParseError> {
+    pub fn resolve_all(
+        &mut self,
+        autocxx_inc: &str,
+        dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
+    ) -> Result<(), ParseError> {
+        let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
+            dep_recorder.map(Rc::from);
         for include_cpp in self.get_autocxxes_mut() {
+            let dep_recorder: Option<Box<dyn RebuildDependencyRecorder>> = match &inner_dep_recorder
+            {
+                None => None,
+                Some(inner_dep_recorder) => Some(Box::new(CompositeDepRecorder::new(
+                    inner_dep_recorder.clone(),
+                ))),
+            };
             include_cpp
-                .generate(autocxx_inc)
+                .generate(autocxx_inc, dep_recorder)
                 .map_err(ParseError::MacroParseFail)?
         }
         Ok(())
@@ -133,5 +146,24 @@ impl ToTokens for ParsedFile {
                 }
             }
         }
+    }
+}
+
+/// Shenanigans required to share the same RebuildDependencyRecorder
+/// with all of the include_cpp instances in this one file.
+#[derive(Debug, Clone)]
+struct CompositeDepRecorder(Rc<dyn RebuildDependencyRecorder>);
+
+impl CompositeDepRecorder {
+    fn new(inner: Rc<dyn RebuildDependencyRecorder>) -> Self {
+        CompositeDepRecorder(inner)
+    }
+}
+
+impl UnwindSafe for CompositeDepRecorder {}
+
+impl RebuildDependencyRecorder for CompositeDepRecorder {
+    fn record_header_file_dependency(&self, filename: &str) {
+        self.0.record_header_file_dependency(filename);
     }
 }

@@ -19,6 +19,7 @@ mod conversion;
 mod function_wrapper;
 mod known_types;
 mod parse;
+mod parse_callbacks;
 mod rust_pretty_printer;
 mod type_to_cpp;
 mod typedef_analyzer;
@@ -32,6 +33,7 @@ mod integration_tests;
 
 use autocxx_parser::{CppInclusion, IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
+use parse_callbacks::AutocxxParseCallbacks;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{
     collections::hash_map::DefaultHasher,
@@ -127,6 +129,15 @@ enum State {
     ParseOnly,
     NothingGenerated,
     Generated(Box<GenerationResults>),
+}
+
+/// Implement to learn of header files which get included
+/// by this build process, such that your build system can choose
+/// to rerun the build process if any such file changes in future.
+pub trait RebuildDependencyRecorder: std::fmt::Debug {
+    /// Records that this autocxx build depends on the given
+    /// header file. Full paths will be provided.
+    fn record_header_file_dependency(&self, filename: &str);
 }
 
 /// Core of the autocxx engine. See `generate` for most details
@@ -274,7 +285,11 @@ impl IncludeCppEngine {
     /// Along the way, the `bridge_converter` might tell us of additional
     /// C++ code which we should generate, e.g. wrappers to move things
     /// into and out of `UniquePtr`s.
-    pub fn generate(&mut self, inc_dirs: &str) -> Result<()> {
+    pub fn generate(
+        &mut self,
+        inc_dirs: &str,
+        dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
+    ) -> Result<()> {
         let inc_dirs = Self::canonize_inc_dirs(inc_dirs)?;
 
         // If we are in parse only mode, do nothing. This is used for
@@ -290,7 +305,10 @@ impl IncludeCppEngine {
             return Err(Error::NoGenerationRequested);
         }
 
-        let builder = self.make_bindgen_builder(&inc_dirs);
+        let mut builder = self.make_bindgen_builder(&inc_dirs);
+        if let Some(dep_recorder) = dep_recorder {
+            builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
+        }
         let bindings = self
             .inject_header_into_bindgen(builder)
             .generate()

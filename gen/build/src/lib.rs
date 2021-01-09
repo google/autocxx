@@ -14,6 +14,7 @@
 
 use autocxx_engine::{
     build as engine_build, expect_build as engine_expect_build, BuilderBuild, BuilderError,
+    RebuildDependencyRecorder,
 };
 use std::io::Write;
 use std::{ffi::OsStr, path::Path};
@@ -29,7 +30,12 @@ where
     T: AsRef<OsStr>,
 {
     setup_logging();
-    engine_build(rs_file, autocxx_incs).map(|r| r.0)
+    engine_build(
+        rs_file,
+        autocxx_incs,
+        Some(Box::new(CargoRebuildDependencyRecorder)),
+    )
+    .map(|r| r.0)
 }
 
 /// Builds successfully, or exits the process displaying a suitable
@@ -41,11 +47,25 @@ where
     T: AsRef<OsStr>,
 {
     setup_logging();
-    engine_expect_build(rs_file, autocxx_incs).0
+    engine_expect_build(
+        rs_file,
+        autocxx_incs,
+        Some(Box::new(CargoRebuildDependencyRecorder)),
+    )
+    .0
 }
 
 fn setup_logging() {
     env_logger::builder()
         .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
         .init();
+}
+
+#[derive(Debug)]
+struct CargoRebuildDependencyRecorder;
+
+impl RebuildDependencyRecorder for CargoRebuildDependencyRecorder {
+    fn record_header_file_dependency(&self, filename: &str) {
+        println!("cargo:rerun-if-changed={}", filename);
+    }
 }
