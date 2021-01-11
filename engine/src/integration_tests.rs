@@ -3317,6 +3317,77 @@ fn test_virtual_fns() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/179
+fn test_cycle_up_vector() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <vector>
+        #include <memory>
+        struct A {
+            uint32_t a;
+        };
+        inline uint32_t take_vec(std::unique_ptr<std::vector<A>> many_as) {
+            return many_as->size();
+        }
+        inline std::unique_ptr<std::vector<A>> get_vec() {
+            auto items = std::make_unique<std::vector<A>>();
+            items->push_back(A { 3 });
+            items->push_back(A { 4 });
+            return items;
+        }
+    "};
+    let rs = quote! {
+        let v = ffi::get_vec();
+        assert_eq!(v.as_ref().is_empty(), false);
+        assert_eq!(ffi::take_vec(v), 2);
+    };
+    run_test("", hdr, rs, &["take_vec", "get_vec"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/179
+fn test_cycle_vector() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <vector>
+        struct A {
+            uint32_t a;
+        };
+        inline uint32_t take_vec(std::vector<A> many_as) {
+            return many_as.size();
+        }
+        inline std::vector<A> get_vec() {
+            std::vector<A> items;
+            items.push_back(A { 3 });
+            items.push_back(A { 4 });
+            return items;
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::take_vec(ffi::get_vec()), 2);
+    };
+    run_test("", hdr, rs, &["take_vec", "get_vec"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/183
+fn test_typedef_to_std() {
+    let hdr = indoc! {"
+        #include <string>
+        typedef std::string my_string;
+        inline uint32_t take_str(my_string a) {
+            return a.size();
+        }
+    "};
+    let rs = quote! {
+        use ffi::ToCppString;
+        assert_eq!(ffi::take_str("hello".to_cpp()), 5);
+    };
+    run_test("", hdr, rs, &["take_str"], &[]);
+
+}
+
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef
