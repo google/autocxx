@@ -1,7 +1,3 @@
-use syn::Type;
-
-use crate::types::TypeName;
-
 // Copyright 2020 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,24 +12,12 @@ use crate::types::TypeName;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Analysis of a typedef.
-#[derive(Debug)]
-pub(crate) enum TypedefTarget {
-    NoArguments(TypeName),
-    HasArguments,
-    SomethingComplex,
-}
+use crate::known_types::KNOWN_TYPES;
+use syn::{Type, TypePath};
 
-pub(crate) fn analyze_typedef_target(ty: &Type) -> TypedefTarget {
+pub(crate) fn analyze_typedef_target(ty: &Type) -> Option<TypePath> {
     match ty {
-        Type::Path(typ) => {
-            let seg = typ.path.segments.last().unwrap();
-            if seg.arguments.is_empty() {
-                TypedefTarget::NoArguments(TypeName::from_type_path(typ))
-            } else {
-                TypedefTarget::HasArguments
-            }
-        }
-        _ => TypedefTarget::SomethingComplex,
+        Type::Path(typ) => KNOWN_TYPES.known_type_substitute_path(&typ),
+        _ => None,
     }
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::typedef_analyzer::{analyze_typedef_target, TypedefTarget};
 use crate::{
     additional_cpp_generator::AdditionalNeed,
     conversion::{
@@ -60,7 +59,7 @@ impl<T> Annotated<T> {
 
 pub(crate) struct TypeConverter {
     types_found: Vec<TypeName>,
-    typedefs: HashMap<TypeName, TypedefTarget>,
+    typedefs: HashMap<TypeName, Type>,
     concrete_templates: HashMap<String, TypeName>,
 }
 
@@ -77,8 +76,7 @@ impl TypeConverter {
         self.types_found.push(ty);
     }
 
-    pub(crate) fn insert_typedef(&mut self, id: TypeName, ty: &Type) {
-        let target = analyze_typedef_target(ty);
+    pub(crate) fn insert_typedef(&mut self, id: TypeName, target: Type) {
         self.typedefs.insert(id, target);
     }
 
@@ -98,20 +96,24 @@ impl TypeConverter {
         let result = match ty {
             Type::Path(p) => {
                 let newp = self.convert_type_path(p, ns)?;
-                // Special handling because rust_Str (as emitted by bindgen)
-                // doesn't simply get renamed to a different type _identifier_.
-                // This plain type-by-value (as far as bindgen is concerned)
-                // is actually a &str.
-                if KNOWN_TYPES.should_dereference_in_cpp(&newp.ty) {
-                    Annotated::new(
-                        Type::Reference(parse_quote! {
-                            &str
-                        }),
-                        newp.types_encountered,
-                        newp.extra_apis,
-                    )
+                if let Type::Path(newpp) = &newp.ty {
+                    // Special handling because rust_Str (as emitted by bindgen)
+                    // doesn't simply get renamed to a different type _identifier_.
+                    // This plain type-by-value (as far as bindgen is concerned)
+                    // is actually a &str.
+                    if KNOWN_TYPES.should_dereference_in_cpp(newpp) {
+                        Annotated::new(
+                            Type::Reference(parse_quote! {
+                                &str
+                            }),
+                            newp.types_encountered,
+                            newp.extra_apis,
+                        )
+                    } else {
+                        newp
+                    }
                 } else {
-                    newp.map(Type::Path)
+                    newp
                 }
             }
             Type::Reference(mut r) => {
@@ -133,7 +135,7 @@ impl TypeConverter {
         &mut self,
         mut typ: TypePath,
         ns: &Namespace,
-    ) -> Result<Annotated<TypePath>, ConvertError> {
+    ) -> Result<Annotated<Type>, ConvertError> {
         let mut types_encountered = HashSet::new();
         if typ.path.segments.iter().next().unwrap().ident != "root" {
             let ty = TypeName::from_type_path(&typ);
@@ -178,27 +180,26 @@ impl TypeConverter {
             })
             .collect::<Result<_, _>>()?;
 
-        let mut last_seg_args = None;
-        let mut seg_iter = typ.path.segments.iter().peekable();
-        while let Some(seg) = seg_iter.next() {
-            if !seg.arguments.is_empty() {
-                if seg_iter.peek().is_some() {
-                    panic!("Did not expect bindgen to create a type with path arguments on a non-final segment")
-                } else {
-                    last_seg_args = Some(seg.arguments.clone());
-                }
-            }
-        }
-        drop(seg_iter);
-        let tn = TypeName::from_type_path(&typ);
+        let mut last_seg_args = Self::get_last_segment_args(&typ);
+
+        let mut tn = TypeName::from_type_path(&typ);
         types_encountered.insert(tn.clone());
         // Let's see if this is a typedef.
         let typ = match self.resolve_typedef(&tn)? {
             None => typ,
-            Some(resolved_tn) => {
-                types_encountered.insert(resolved_tn.clone());
-                resolved_tn.to_type_path()
+            Some(Type::Path(resolved_tp)) => {
+                types_encountered.insert(TypeName::from_type_path(&resolved_tp));
+                let typedef_target_args = Self::get_last_segment_args(&resolved_tp);
+                if let Some(typedef_target_args) = typedef_target_args {
+                    if last_seg_args.is_some() {
+                        return Err(ConvertError::ConflictingTemplatedArgsWithTypedef(tn));
+                    }
+                    last_seg_args = Some(typedef_target_args);
+                    tn = TypeName::from_type_path(&resolved_tp);
+                }
+                resolved_tp.clone()
             }
+            Some(other) => return Ok(Annotated::new(other.clone(), HashSet::new(), Vec::new())),
         };
 
         // This will strip off any path arguments...
@@ -220,7 +221,25 @@ impl TypeConverter {
                 types_encountered.insert(new_tn);
             }
         }
-        Ok(Annotated::new(typ, types_encountered, extra_apis))
+        Ok(Annotated::new(
+            Type::Path(typ),
+            types_encountered,
+            extra_apis,
+        ))
+    }
+
+    fn get_last_segment_args(typ: &TypePath) -> Option<PathArguments> {
+        let mut seg_iter = typ.path.segments.iter().peekable();
+        while let Some(seg) = seg_iter.next() {
+            if !seg.arguments.is_empty() {
+                if seg_iter.peek().is_some() {
+                    panic!("Did not expect bindgen to create a type with path arguments on a non-final segment")
+                } else {
+                    return Some(seg.arguments.clone());
+                }
+            }
+        }
+        None
     }
 
     fn convert_punctuated<P>(
@@ -248,19 +267,16 @@ impl TypeConverter {
         Ok(Annotated::new(new_pun, types_encountered, extra_apis))
     }
 
-    fn resolve_typedef<'b>(
-        &'b self,
-        tn: &'b TypeName,
-    ) -> Result<Option<&'b TypeName>, ConvertError> {
+    fn resolve_typedef<'b>(&'b self, tn: &TypeName) -> Result<Option<&'b Type>, ConvertError> {
         match self.typedefs.get(&tn) {
             None => Ok(None),
-            Some(TypedefTarget::NoArguments(original_tn)) => {
-                match self.resolve_typedef(original_tn)? {
-                    None => Ok(Some(original_tn)),
-                    Some(further_resolution) => Ok(Some(further_resolution)),
+            Some(resolution) => match resolution {
+                Type::Path(typ) => {
+                    let tn = TypeName::from_type_path(typ);
+                    Ok(Some(self.resolve_typedef(&tn)?.unwrap_or(resolution)))
                 }
-            }
-            _ => Err(ConvertError::ComplexTypedefTarget(tn.to_cpp_name())),
+                _ => Ok(Some(resolution)),
+            },
         }
     }
 

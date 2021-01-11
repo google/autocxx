@@ -188,9 +188,11 @@ impl<'a> ParseBindgen<'a> {
                         impl_entry: None,
                     });
                 }
-                Item::Type(ity) => {
+                Item::Type(mut ity) => {
                     let tyname = TypeName::new(&ns, &ity.ident.to_string());
-                    self.type_converter.insert_typedef(tyname, ity.ty.as_ref());
+                    let final_type = self.type_converter.convert_type(*ity.ty, &ns)?;
+                    ity.ty = Box::new(final_type.ty.clone());
+                    self.type_converter.insert_typedef(tyname, final_type.ty);
                     self.add_api(Api {
                         id: ity.ident.clone(),
                         ns: ns.clone(),
@@ -198,7 +200,7 @@ impl<'a> ParseBindgen<'a> {
                         extern_c_mod_item: None,
                         global_items: Vec::new(),
                         additional_cpp: None,
-                        deps: HashSet::new(),
+                        deps: final_type.types_encountered,
                         use_stmt: Use::Unused,
                         id_for_allowlist: None,
                         bindgen_mod_item: Some(Item::Type(ity)),

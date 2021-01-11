@@ -17,8 +17,7 @@ use syn::Item;
 
 use crate::{
     byvalue_checker::ByValueChecker, conversion::ConvertError,
-    typedef_analyzer::analyze_typedef_target, typedef_analyzer::TypedefTarget, types::Namespace,
-    types::TypeName,
+    typedef_analyzer::analyze_typedef_target, types::Namespace, types::TypeName,
 };
 
 struct ByValueScanner<'a> {
@@ -51,15 +50,13 @@ impl<'a> ByValueScanner<'a> {
                     .byvalue_checker
                     .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
                 Item::Type(ity) => {
-                    let typedef_type = analyze_typedef_target(ity.ty.as_ref());
                     let name = TypeName::new(ns, &ity.ident.to_string());
+                    let typedef_type = analyze_typedef_target(ity.ty.as_ref());
                     match typedef_type {
-                        TypedefTarget::NoArguments(tn) => {
-                            self.byvalue_checker.ingest_simple_typedef(name, tn)
-                        }
-                        TypedefTarget::HasArguments | TypedefTarget::SomethingComplex => {
-                            self.byvalue_checker.ingest_nonpod_type(name)
-                        }
+                        Some(typ) => self
+                            .byvalue_checker
+                            .ingest_simple_typedef(name, TypeName::from_type_path(&typ)),
+                        None => self.byvalue_checker.ingest_nonpod_type(name),
                     }
                 }
                 Item::Mod(itm) => {

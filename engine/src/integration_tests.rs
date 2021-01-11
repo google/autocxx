@@ -3371,7 +3371,6 @@ fn test_cycle_vector() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/183
 fn test_typedef_to_std() {
     let hdr = indoc! {"
         #include <string>
