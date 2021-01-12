@@ -191,9 +191,10 @@ impl<'a> ParseBindgen<'a> {
                 }
                 Item::Type(mut ity) => {
                     let tyname = TypeName::new(&ns, &ity.ident.to_string());
-                    let final_type = self.type_converter.convert_type(*ity.ty, &ns)?;
+                    let mut final_type = self.type_converter.convert_type(*ity.ty, &ns)?;
                     ity.ty = Box::new(final_type.ty.clone());
                     self.type_converter.insert_typedef(tyname, final_type.ty);
+                    self.results.apis.append(&mut final_type.extra_apis);
                     self.add_api(Api {
                         id: ity.ident.clone(),
                         ns: ns.clone(),

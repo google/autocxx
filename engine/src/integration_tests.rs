@@ -3288,6 +3288,30 @@ fn test_generic_type() {
 }
 
 #[test]
+fn test_cycle_generic_type() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        template<typename TY>
+        struct Container {
+            Container(TY a_) : a(a_) {}
+            TY a;
+        };
+        inline Container<char> make_thingy() {
+            Container<char> a('a');
+            return a;
+        }
+        typedef Container<char> Concrete;
+        inline uint32_t take_thingy(Concrete a) {
+            return a.a;
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::take_thingy(ffi::make_thingy()), 'a' as u32)
+    };
+    run_test("", hdr, rs, &["take_thingy", "make_thingy"], &[]);
+}
+
+#[test]
 fn test_virtual_fns() {
     let hdr = indoc! {"
         #include <cstdint>
