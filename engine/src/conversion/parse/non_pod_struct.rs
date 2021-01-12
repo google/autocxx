@@ -63,6 +63,7 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct) {
     s.fields = syn::Fields::Named(parse_quote! {
         {
             do_not_attempt_to_allocate_nonpod_types: [*const u8; 0],
+            _pinned: core::marker::PhantomData<core::marker::PhantomPinned>,
             #(#generic_type_fields),*
         }
     });
