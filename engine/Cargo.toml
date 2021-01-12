@@ -40,6 +40,7 @@ unzip-n = "0.1.2"
 cxx-gen = "0.7.27"
 cxx = "1.0.27"
 autocxx-parser = { path="../parser" }
+version_check = "0.9"
 
 [dependencies.syn]
 version = "1.0.39"
