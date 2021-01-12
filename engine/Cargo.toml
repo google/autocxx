@@ -37,8 +37,8 @@ itertools = "0.9"
 dunce = "1.0.1"
 cc = { version = "1.0", optional = true }
 unzip-n = "0.1.2"
-cxx-gen = "0.7.20"
-cxx = "1.0.20"
+cxx-gen = "0.7.27"
+cxx = "1.0.27"
 autocxx-parser = { path="../parser" }
 
 [dependencies.syn]
