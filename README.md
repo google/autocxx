@@ -125,8 +125,8 @@ and follow the pattern of the `demo` example, this is fairly automatic because w
 `cc` for this.
 
 You'll also want to ensure that the code generation (both Rust and C++ code) happens whenever
-any included header file changes. This is _not_ yet handled automatically even by our
-`build.rs` integration, but is coming soon.
+any included header file changes. This is now handled automatically by our
+`build.rs` integration, but is not yet done for the standalone `autocxx-gen` tool.
 
 # Directory structure
 
