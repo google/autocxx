@@ -132,7 +132,7 @@ mod tests {
             use_stmt: Use::Used,
             deps: HashSet::new(),
             extern_c_mod_item: None,
-            bridge_item: None,
+            bridge_items: Vec::new(),
             global_items: Vec::new(),
             additional_cpp: None,
             id_for_allowlist: None,

@@ -12,14 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod bridge_name_tracker;
-mod impl_item_creator;
-mod non_pod_struct;
-mod overload_tracker;
-pub(crate) mod parse_bindgen;
-mod parse_foreign_mod;
-mod rust_name_tracker;
-mod type_converter;
-mod unqualify;
+use syn::{parse_quote, Ident, Item};
 
-pub(crate) use parse_bindgen::ParseBindgen;
+pub(crate) fn create_impl_items(id: &Ident) -> Vec<Item> {
+    let bridge_item = Item::Impl(parse_quote! {
+        impl UniquePtr<#id> {}
+    });
+    vec![bridge_item]
+}

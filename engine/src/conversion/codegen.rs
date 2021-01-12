@@ -83,14 +83,14 @@ impl<'a> CodeGenerator<'a> {
                 (
                     api.extern_c_mod_item,
                     api.global_items,
-                    api.bridge_item,
+                    api.bridge_items,
                     api.additional_cpp,
                     api.deps,
                 )
             })
             .unzip_n_vec();
         // Items for the [cxx::bridge] mod...
-        let mut bridge_items = remove_nones(bridge_items);
+        let mut bridge_items: Vec<Item> = bridge_items.into_iter().flatten().collect();
         // Things to include in the "extern "C"" mod passed within the cxx::bridge
         let mut extern_c_mod_items = remove_nones(extern_c_mod_items);
         // And a list of global items to include at the top level.

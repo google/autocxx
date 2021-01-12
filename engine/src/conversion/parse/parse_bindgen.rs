@@ -33,6 +33,7 @@ use super::{
         utilities::generate_utilities,
     },
     bridge_name_tracker::BridgeNameTracker,
+    impl_item_creator::create_impl_items,
     non_pod_struct::make_non_pod,
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
@@ -177,7 +178,7 @@ impl<'a> ParseBindgen<'a> {
                     self.add_api(Api {
                         id: itc.ident.clone(),
                         ns: ns.clone(),
-                        bridge_item: None,
+                        bridge_items: Vec::new(),
                         extern_c_mod_item: None,
                         global_items: vec![Item::Const(itc)],
                         additional_cpp: None,
@@ -196,7 +197,7 @@ impl<'a> ParseBindgen<'a> {
                     self.add_api(Api {
                         id: ity.ident.clone(),
                         ns: ns.clone(),
-                        bridge_item: None,
+                        bridge_items: Vec::new(),
                         extern_c_mod_item: None,
                         global_items: Vec::new(),
                         additional_cpp: None,
@@ -310,11 +311,9 @@ impl<'a> ParseBindgen<'a> {
         for_extern_c_ts.extend(quote! {
             #final_ident;
         });
-        let bridge_item = match type_nature {
-            TypeKind::ForwardDeclaration => None,
-            _ => Some(Item::Impl(parse_quote! {
-                impl UniquePtr<#final_ident> {}
-            })),
+        let bridge_items = match type_nature {
+            TypeKind::ForwardDeclaration => Vec::new(),
+            _ => create_impl_items(&final_ident),
         };
         fulltypath.push(final_ident.clone());
         let api = Api {
@@ -327,7 +326,7 @@ impl<'a> ParseBindgen<'a> {
                     type Kind = cxx::kind::#kind_item;
                 }
             })],
-            bridge_item,
+            bridge_items,
             extern_c_mod_item: Some(ForeignItem::Verbatim(for_extern_c_ts)),
             additional_cpp: None,
             deps,

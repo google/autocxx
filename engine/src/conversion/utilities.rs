@@ -39,7 +39,7 @@ pub(crate) fn generate_utilities(apis: &mut Vec<Api>) {
         ))),
         additional_cpp: Some(AdditionalNeed::MakeStringConstructor),
         deps: HashSet::new(),
-        bridge_item: None,
+        bridge_items: Vec::new(),
         global_items: vec![
             Item::Trait(parse_quote! {
                 pub trait ToCppString {
