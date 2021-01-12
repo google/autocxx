@@ -110,6 +110,7 @@ where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
+    rust_version_check();
     let gen_location_strategy = match custom_gendir {
         None => FileLocationStrategy::new(),
         Some(custom_dir) => FileLocationStrategy::Custom(custom_dir),
@@ -212,4 +213,10 @@ fn write_rs_to_file(
     content: TokenStream,
 ) -> Result<PathBuf, BuilderError> {
     write_to_file(dir, filename, content.to_string().as_bytes())
+}
+
+fn rust_version_check() {
+    if !version_check::is_min_version("1.48.0").unwrap_or(false) {
+        panic!("Rust 1.48 or later is required.")
+    }
 }
