@@ -22,7 +22,6 @@ mod parse;
 mod parse_callbacks;
 mod rust_pretty_printer;
 mod type_to_cpp;
-mod typedef_analyzer;
 mod types;
 
 #[cfg(any(test, feature = "build"))]
