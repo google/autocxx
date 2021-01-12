@@ -90,7 +90,7 @@ pub(crate) struct Api {
     pub(crate) use_stmt: Use,
     pub(crate) deps: HashSet<TypeName>,
     pub(crate) extern_c_mod_item: Option<ForeignItem>,
-    pub(crate) bridge_item: Option<Item>,
+    pub(crate) bridge_items: Vec<Item>,
     pub(crate) global_items: Vec<Item>,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
     pub(crate) id_for_allowlist: Option<Ident>,

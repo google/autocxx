@@ -29,7 +29,7 @@ use syn::{
     PathSegment, Type, TypePath, TypePtr,
 };
 
-use super::non_pod_struct::new_non_pod_struct;
+use super::{impl_item_creator::create_impl_items, non_pod_struct::new_non_pod_struct};
 
 /// Results of some type conversion, annotated with a list of every type encountered,
 /// and optionally any extra API we need in order to use this type.
@@ -268,12 +268,12 @@ impl TypeConverter {
     }
 
     fn resolve_typedef<'b>(&'b self, tn: &TypeName) -> Option<&'b Type> {
-        self.typedefs.get(&tn).and_then(|resolution| match resolution {
+        self.typedefs.get(&tn).map(|resolution| match resolution {
             Type::Path(typ) => {
                 let tn = TypeName::from_type_path(typ);
-                Some(self.resolve_typedef(&tn).unwrap_or(resolution))
+                self.resolve_typedef(&tn).unwrap_or(resolution)
             }
-            _ => Some(resolution),
+            _ => resolution,
         })
     }
 
@@ -300,9 +300,6 @@ impl TypeConverter {
 
     fn add_concrete_type(&self, tyname: &TypeName, rs_definition: &Type) -> Api {
         let final_ident = make_ident(tyname.get_final_ident());
-        let bridge_item = Some(Item::Impl(parse_quote! {
-            impl UniquePtr<#final_ident> {}
-        }));
         let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(|x| make_ident(x)).collect();
         fulltypath.push(final_ident.clone());
         let tynamestring = tyname.to_cpp_name();
@@ -316,7 +313,7 @@ impl TypeConverter {
                     type Kind = cxx::kind::Opaque;
                 }
             })],
-            bridge_item,
+            bridge_items: create_impl_items(&final_ident),
             extern_c_mod_item: Some(ForeignItem::Verbatim(quote! {
                 type #final_ident = super::bindgen::root::#final_ident;
             })),
