@@ -213,7 +213,7 @@ fn create_type_database() -> TypeDatabase {
     do_insert(TypeDetails::new(
         "CxxVector".into(),
         "std::vector".into(),
-        true,
+        false,
         PreludePolicy::IncludeTemplated,
         false,
         false,
