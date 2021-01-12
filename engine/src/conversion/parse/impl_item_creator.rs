@@ -15,8 +15,12 @@
 use syn::{parse_quote, Ident, Item};
 
 pub(crate) fn create_impl_items(id: &Ident) -> Vec<Item> {
-    let bridge_item = Item::Impl(parse_quote! {
-        impl UniquePtr<#id> {}
-    });
-    vec![bridge_item]
+    vec![
+        Item::Impl(parse_quote! {
+            impl UniquePtr<#id> {}
+        }),
+        Item::Impl(parse_quote! {
+            impl CxxVector<#id> {}
+        }),
+    ]
 }
