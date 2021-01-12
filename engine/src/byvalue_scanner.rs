@@ -13,12 +13,11 @@
 // limitations under the License.
 
 use autocxx_parser::TypeDatabase;
-use syn::Item;
+use syn::{Item, Type, TypePath};
 
 use crate::{
-    byvalue_checker::ByValueChecker, conversion::ConvertError,
-    typedef_analyzer::analyze_typedef_target, typedef_analyzer::TypedefTarget, types::Namespace,
-    types::TypeName,
+    byvalue_checker::ByValueChecker, conversion::ConvertError, known_types::KNOWN_TYPES,
+    types::Namespace, types::TypeName,
 };
 
 struct ByValueScanner<'a> {
@@ -51,15 +50,13 @@ impl<'a> ByValueScanner<'a> {
                     .byvalue_checker
                     .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
                 Item::Type(ity) => {
-                    let typedef_type = analyze_typedef_target(ity.ty.as_ref());
                     let name = TypeName::new(ns, &ity.ident.to_string());
-                    match typedef_type {
-                        TypedefTarget::NoArguments(tn) => {
-                            self.byvalue_checker.ingest_simple_typedef(name, tn)
-                        }
-                        TypedefTarget::HasArguments | TypedefTarget::SomethingComplex => {
-                            self.byvalue_checker.ingest_nonpod_type(name)
-                        }
+                    let typedef_type = Self::analyze_typedef_target(ity.ty.as_ref());
+                    match &typedef_type {
+                        Some(typ) => self
+                            .byvalue_checker
+                            .ingest_simple_typedef(name, TypeName::from_type_path(&typ)),
+                        None => self.byvalue_checker.ingest_nonpod_type(name),
                     }
                 }
                 Item::Mod(itm) => {
@@ -72,6 +69,13 @@ impl<'a> ByValueScanner<'a> {
             }
         }
         Ok(())
+    }
+
+    fn analyze_typedef_target(ty: &Type) -> Option<TypePath> {
+        match ty {
+            Type::Path(typ) => KNOWN_TYPES.known_type_substitute_path(&typ),
+            _ => None,
+        }
     }
 
     fn find_nested_pod_types(&mut self, items: &[Item]) -> Result<(), ConvertError> {
