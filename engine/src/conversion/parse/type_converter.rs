@@ -268,12 +268,12 @@ impl TypeConverter {
     }
 
     fn resolve_typedef<'b>(&'b self, tn: &TypeName) -> Option<&'b Type> {
-        self.typedefs.get(&tn).and_then(|resolution| match resolution {
+        self.typedefs.get(&tn).map(|resolution| match resolution {
             Type::Path(typ) => {
                 let tn = TypeName::from_type_path(typ);
-                Some(self.resolve_typedef(&tn).unwrap_or(resolution))
+                self.resolve_typedef(&tn).unwrap_or(resolution)
             }
-            _ => Some(resolution),
+            _ => resolution,
         })
     }
 
