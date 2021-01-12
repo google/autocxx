@@ -81,6 +81,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Inline functions | Works |
 | Construction of std::unique_ptr<std::string> in Rust | Works |
 | Namespaces | Works, but a known limitation |
+| std::vector | Works |
 | Field access to opaque objects via UniquePtr | - |
 | Plain-old-data structs containing opaque fields | Impossible by design, but may not be ergonomic so may need more thought |
 | Reference counting, std::shared_ptr | - |
@@ -88,7 +89,7 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Function pointers | - |
 | Unique ptrs to primitives | - |
 | Inheritance from pure virtual classes | - |
-| Generic (templated) types | - |
+| Generic (templated) types | Works though likely many problems |
 
 The plan is (roughly) to work through the above list of features and fix corner cases. This project is deliberately incremental. There are open questions about whether the end result is ergonomic and performant: specifically, whether it's acceptable to hold opaque C++ types always by `UniquePtr` in Rust. Until we know more, this project is considered experimental and we don't advise using it for anything in production.
 
@@ -125,8 +126,13 @@ and follow the pattern of the `demo` example, this is fairly automatic because w
 `cc` for this.
 
 You'll also want to ensure that the code generation (both Rust and C++ code) happens whenever
-any included header file changes. This is _not_ yet handled automatically even by our
-`build.rs` integration, but is coming soon.
+any included header file changes. This is now handled automatically by our
+`build.rs` integration, but is not yet done for the standalone `autocxx-gen` tool.
+
+Finally, this interop inevitably involves lots of fiddly small functions. It's likely to perform
+far better if you can achieve cross-language LTO. https://github.com/dtolnay/cxx/issues/371
+may give some useful hints - see also all the build-related help in https://cxx.rs/ which all
+applies here too.
 
 # Directory structure
 
