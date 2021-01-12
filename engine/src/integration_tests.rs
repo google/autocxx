@@ -3313,6 +3313,9 @@ fn test_virtual_fns() {
         // ... even on derived classes where the resolution
         // would be fixed.
         //assert_eq!(b_.pin_mut().foo(2), 4);
+        // This test currently exists to ensure that the presence
+        // of virtual functions doesn't actually break other aspects
+        // of the type.
     };
     run_test("", hdr, rs, &["B"], &[]);
 }
@@ -3477,7 +3480,7 @@ fn test_float() {
     inline float daft(float a) { return a; }
     "};
     let rs = quote! {
-        assert_eq!(ffi::daft(34.0), 34.0);
+        assert_eq!(ffi::daft(34.0f32), 34.0f32);
     };
     run_test("", hdr, rs, &["daft"], &[]);
 }
@@ -3488,7 +3491,7 @@ fn test_double() {
     inline double daft(double a) { return a; }
     "};
     let rs = quote! {
-        assert_eq!(ffi::daft(34.0), 34.0);
+        assert_eq!(ffi::daft(34.0f64), 34.0f64);
     };
     run_test("", hdr, rs, &["daft"], &[]);
 }
