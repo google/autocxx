@@ -323,6 +323,28 @@ fn create_type_database() -> TypeDatabase {
     insert_ctype("short");
     insert_ctype("char");
 
+    let td = TypeDetails::new(
+        "f32".into(),
+        "float".into(),
+        true,
+        PreludePolicy::Exclude,
+        false,
+        false,
+        false,
+    );
+    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+
+    let td = TypeDetails::new(
+        "f64".into(),
+        "double".into(),
+        true,
+        PreludePolicy::Exclude,
+        false,
+        false,
+        false,
+    );
+    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+
     let mut by_cppname = HashMap::new();
     for td in by_rs_name.values() {
         by_cppname.insert(

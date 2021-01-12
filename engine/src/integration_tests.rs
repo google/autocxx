@@ -3495,6 +3495,28 @@ fn test_typedef_to_up_in_struct() {
     run_test("", hdr, rs, &["make_a", "take_a"], &[]);
 }
 
+#[test]
+fn test_float() {
+    let hdr = indoc! {"
+    inline float daft(float a) { return a; }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::daft(34.0), 34.0);
+    };
+    run_test("", hdr, rs, &["daft"], &[]);
+}
+
+#[test]
+fn test_double() {
+    let hdr = indoc! {"
+    inline double daft(double a) { return a; }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::daft(34.0), 34.0);
+    };
+    run_test("", hdr, rs, &["daft"], &[]);
+}
+
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef
