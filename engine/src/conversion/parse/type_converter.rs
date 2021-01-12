@@ -185,7 +185,7 @@ impl TypeConverter {
         let mut tn = TypeName::from_type_path(&typ);
         types_encountered.insert(tn.clone());
         // Let's see if this is a typedef.
-        let typ = match self.resolve_typedef(&tn)? {
+        let typ = match self.resolve_typedef(&tn) {
             None => typ,
             Some(Type::Path(resolved_tp)) => {
                 types_encountered.insert(TypeName::from_type_path(&resolved_tp));
@@ -267,17 +267,14 @@ impl TypeConverter {
         Ok(Annotated::new(new_pun, types_encountered, extra_apis))
     }
 
-    fn resolve_typedef<'b>(&'b self, tn: &TypeName) -> Result<Option<&'b Type>, ConvertError> {
-        match self.typedefs.get(&tn) {
-            None => Ok(None),
-            Some(resolution) => match resolution {
-                Type::Path(typ) => {
-                    let tn = TypeName::from_type_path(typ);
-                    Ok(Some(self.resolve_typedef(&tn)?.unwrap_or(resolution)))
-                }
-                _ => Ok(Some(resolution)),
-            },
-        }
+    fn resolve_typedef<'b>(&'b self, tn: &TypeName) -> Option<&'b Type> {
+        self.typedefs.get(&tn).and_then(|resolution| match resolution {
+            Type::Path(typ) => {
+                let tn = TypeName::from_type_path(typ);
+                Some(self.resolve_typedef(&tn).unwrap_or(resolution))
+            }
+            _ => Some(resolution),
+        })
     }
 
     fn convert_ptr_to_reference(
