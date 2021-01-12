@@ -3318,8 +3318,7 @@ fn test_virtual_fns() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/179
-fn test_cycle_up_vector() {
+fn test_vector_cycle_up() {
     let hdr = indoc! {"
         #include <cstdint>
         #include <vector>
@@ -3339,15 +3338,14 @@ fn test_cycle_up_vector() {
     "};
     let rs = quote! {
         let v = ffi::get_vec();
-        assert_eq!(v.as_ref().is_empty(), false);
+        assert_eq!(v.as_ref().unwrap().is_empty(), false);
         assert_eq!(ffi::take_vec(v), 2);
     };
     run_test("", hdr, rs, &["take_vec", "get_vec"], &[]);
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/179
-fn test_cycle_vector() {
+fn test_vector_cycle_bare() {
     let hdr = indoc! {"
         #include <cstdint>
         #include <vector>
