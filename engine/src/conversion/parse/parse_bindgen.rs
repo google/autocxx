@@ -58,6 +58,11 @@ pub(crate) struct ParseBindgen<'a> {
     incomplete_types: HashSet<TypeName>,
     results: ParseResults,
     unsafe_policy: UnsafePolicy,
+    /// Here we track the last struct which bindgen told us about.
+    /// Any subsequent "extern 'C'" blocks are methods belonging to that type,
+    /// even if the 'this' is actually recorded as void in the
+    /// function signature.
+    latest_virtual_this_type: Option<TypeName>,
 }
 
 impl<'a> ParseBindgen<'a> {
@@ -78,6 +83,7 @@ impl<'a> ParseBindgen<'a> {
                 use_stmts_by_mod: HashMap::new(),
             },
             unsafe_policy,
+            latest_virtual_this_type: None,
         }
     }
 
@@ -120,7 +126,8 @@ impl<'a> ParseBindgen<'a> {
                 Item::ForeignMod(mut fm) => {
                     let items = fm.items;
                     fm.items = Vec::new();
-                    mod_converter.convert_foreign_mod_items(items)?;
+                    mod_converter
+                        .convert_foreign_mod_items(items, self.latest_virtual_this_type.clone())?;
                 }
                 Item::Struct(mut s) => {
                     if s.ident.to_string().ends_with("__bindgen_vtable") {
@@ -146,7 +153,13 @@ impl<'a> ParseBindgen<'a> {
                     };
                     // cxx::bridge can't cope with type aliases to generic
                     // types at the moment.
-                    self.generate_type(tyname, type_kind, field_types, Some(Item::Struct(s)));
+                    self.generate_type(
+                        tyname.clone(),
+                        type_kind,
+                        field_types,
+                        Some(Item::Struct(s)),
+                    );
+                    self.latest_virtual_this_type = Some(tyname);
                 }
                 Item::Enum(e) => {
                     let tyname = TypeName::new(&ns, &e.ident.to_string());
