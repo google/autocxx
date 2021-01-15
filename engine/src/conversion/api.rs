@@ -47,7 +47,7 @@ impl Display for ConvertError {
             ConvertError::ComplexTypedefTarget(ty) => write!(f, "autocxx was unable to produce a typdef pointing to the complex type {}.", ty)?,
             ConvertError::UnexpectedThisType(ns, fn_name) => write!(f, "Unexpected type for 'this' in the function {}{}.", fn_name, ns.to_display_suffix())?,
             ConvertError::UnsupportedBuiltInType(ty) => write!(f, "autocxx does not yet know how to support the built-in C++ type {} - please raise an issue on github", ty.to_cpp_name())?,
-            ConvertError::VirtualThisType(ns, fn_name) => write!(f, "Member function encountered where the 'this' type is 'void*'. This is usually because it's a virtual function that may be overridden, which is not supported. Function {}{}.", fn_name, ns.to_display_suffix())?,
+            ConvertError::VirtualThisType(ns, fn_name) => write!(f, "Member function encountered where the 'this' type is 'void*', but we were unable to recognize which type that corresponds to. Function {}{}.", fn_name, ns.to_display_suffix())?,
             ConvertError::ConflictingTemplatedArgsWithTypedef(tn) => write!(f, "Type {} has templatd arguments and so does the typedef to which it points", tn)?,
         }
         Ok(())

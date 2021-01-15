@@ -37,6 +37,7 @@ struct ArgumentAnalysis {
     self_type: Option<TypeName>,
     was_reference: bool,
     deps: HashSet<TypeName>,
+    virtual_this_encountered: bool,
 }
 
 struct ReturnTypeAnalysis {
@@ -72,6 +73,13 @@ pub(crate) trait ForeignModParseCallbacks {
     fn should_be_unsafe(&self) -> bool;
 }
 
+/// A ForeignItemFn with a little bit of context about the
+/// type which is most likely to be 'this'
+struct FuncToConvert {
+    item: ForeignItemFn,
+    virtual_this_type: Option<TypeName>,
+}
+
 /// Converts a given bindgen-generated 'mod' into suitable
 /// cxx::bridge runes. In bindgen output, a given mod concerns
 /// a specific C++ namespace.
@@ -83,7 +91,7 @@ pub(crate) struct ParseForeignMod {
     // we've seen the (possibly subsequent) 'impl' blocks so we can
     // deduce which functions are actually static methods. Hence
     // store them.
-    funcs_to_convert: Vec<ForeignItemFn>,
+    funcs_to_convert: Vec<FuncToConvert>,
     // Evidence from 'impl' blocks about which of these items
     // may actually be methods (static or otherwise). Mapping from
     // function name to type name.
@@ -105,11 +113,15 @@ impl ParseForeignMod {
     pub(crate) fn convert_foreign_mod_items(
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
+        virtual_this_type: Option<TypeName>,
     ) -> Result<(), ConvertError> {
         for i in foreign_mod_items {
             match i {
-                ForeignItem::Fn(f) => {
-                    self.funcs_to_convert.push(f);
+                ForeignItem::Fn(item) => {
+                    self.funcs_to_convert.push(FuncToConvert {
+                        item,
+                        virtual_this_type: virtual_this_type.clone(),
+                    });
                 }
                 _ => return Err(ConvertError::UnexpectedForeignItem),
             }
@@ -162,9 +174,11 @@ impl ParseForeignMod {
 
     fn convert_foreign_fn(
         &mut self,
-        fun: ForeignItemFn,
+        func_information: FuncToConvert,
         callbacks: &mut impl ForeignModParseCallbacks,
     ) -> Result<(), ConvertError> {
+        let fun = func_information.item;
+        let virtual_this = func_information.virtual_this_type;
         let ns = &self.ns.clone();
         // This function is one of the most complex parts of our conversion.
         // It needs to consider:
@@ -188,7 +202,15 @@ impl ParseForeignMod {
             .sig
             .inputs
             .into_iter()
-            .map(|i| self.convert_fn_arg(i, ns, callbacks, diagnostic_display_name))
+            .map(|i| {
+                self.convert_fn_arg(
+                    i,
+                    ns,
+                    callbacks,
+                    diagnostic_display_name,
+                    virtual_this.clone(),
+                )
+            })
             .partition(Result::is_ok);
         if let Some(problem) = bads.into_iter().next() {
             match problem {
@@ -209,6 +231,7 @@ impl ParseForeignMod {
             .filter_map(|pd| pd.self_type.as_ref())
             .next()
             .cloned();
+        let virtual_this_encountered = param_details.iter().any(|pd| pd.virtual_this_encountered);
 
         let is_static_method = if self_ty.is_none() {
             // Even if we can't find a 'self' parameter this could conceivably
@@ -344,7 +367,8 @@ impl ParseForeignMod {
         let wrapper_function_needed = param_conversion_needed
             || ret_type_conversion_needed
             || is_static_method
-            || differently_named_method;
+            || differently_named_method
+            || virtual_this_encountered;
 
         // When we generate the cxx::bridge fn declaration, we'll need to
         // put something different into here if we have to do argument or
@@ -526,33 +550,43 @@ impl ParseForeignMod {
         ns: &Namespace,
         callbacks: &mut impl ForeignModParseCallbacks,
         fn_name: &str,
+        virtual_this: Option<TypeName>,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
             FnArg::Typed(mut pt) => {
                 let mut self_type = None;
                 let old_pat = *pt.pat;
+                let mut virtual_this_encountered = false;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
                         let this_type = match pt.ty.as_ref() {
-                            Type::Ptr(TypePtr { elem, .. }) => match elem.as_ref() {
-                                Type::Path(typ) => TypeName::from_type_path(typ),
-                                _ => {
-                                    return Err(ConvertError::UnexpectedThisType(
-                                        ns.clone(),
-                                        fn_name.into(),
-                                    ))
+                            Type::Ptr(TypePtr {
+                                elem, mutability, ..
+                            }) => match elem.as_ref() {
+                                Type::Path(typ) => {
+                                    let mut this_type = TypeName::from_type_path(typ);
+                                    if this_type.is_cvoid() {
+                                        virtual_this_encountered = true;
+                                        this_type = virtual_this.ok_or_else(|| {
+                                            ConvertError::VirtualThisType(
+                                                ns.clone(),
+                                                fn_name.into(),
+                                            )
+                                        })?;
+                                        let this_type_path = this_type.to_type_path();
+                                        pt.ty = Box::new(parse_quote! {
+                                            * #mutability #this_type_path
+                                        });
+                                    }
+                                    Ok(this_type)
                                 }
-                            },
-                            _ => {
-                                return Err(ConvertError::UnexpectedThisType(
+                                _ => Err(ConvertError::UnexpectedThisType(
                                     ns.clone(),
                                     fn_name.into(),
-                                ))
-                            }
-                        };
-                        if this_type.is_cvoid() {
-                            return Err(ConvertError::VirtualThisType(ns.clone(), fn_name.into()));
-                        }
+                                )),
+                            },
+                            _ => Err(ConvertError::UnexpectedThisType(ns.clone(), fn_name.into())),
+                        }?;
                         self_type = Some(this_type);
                         pp.ident = Ident::new("self", pp.ident.span());
                         syn::Pat::Ident(pp)
@@ -572,6 +606,7 @@ impl ParseForeignMod {
                         conversion,
                         was_reference,
                         deps,
+                        virtual_this_encountered,
                     },
                 )
             }

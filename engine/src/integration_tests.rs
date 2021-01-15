@@ -3330,16 +3330,35 @@ fn test_virtual_fns() {
         };
     "};
     let rs = quote! {
-        // We can't call virtual functions...
-        //let a = ffi::A::make_unique(12);
-        //assert_eq!(a.pin_mut().foo(2), 3);
-        let _b = ffi::B::make_unique();
-        // ... even on derived classes where the resolution
-        // would be fixed.
-        //assert_eq!(b_.pin_mut().foo(2), 4);
-        // This test currently exists to ensure that the presence
-        // of virtual functions doesn't actually break other aspects
-        // of the type.
+        let mut a = ffi::A::make_unique(12);
+        assert_eq!(a.pin_mut().foo(2), 3);
+        let mut b = ffi::B::make_unique();
+        assert_eq!(b.pin_mut().foo(2), 4);
+    };
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/197
+fn test_virtual_fns_inheritance() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        class A {
+        public:
+            A(uint32_t num) : b(num) {}
+            virtual uint32_t foo(uint32_t a) { return a+1; };
+            virtual ~A() {}
+            uint32_t b;
+        };
+        class B: public A {
+        public:
+            B() : A(3), c(4) {}
+            uint32_t c;
+        };
+    "};
+    let rs = quote! {
+        let mut b = ffi::B::make_unique();
+        assert_eq!(b.pin_mut().foo(2), 3);
     };
     run_test("", hdr, rs, &["B"], &[]);
 }
