@@ -31,7 +31,7 @@ cxx = "1.0.29" # needed because expansion of type_id refers to ::cxx
 [workspace]
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo"]
 
-# [patch.crates-io]
-# cxx = { path="../cxx" }
-# cxx-gen = { path="../cxx/gen/lib" }
-# autocxx-bindgen = { path="../bindgen" }
+[patch.crates-io]
+cxx = { path="../cxx" }
+cxx-gen = { path="../cxx/gen/lib" }
+#autocxx-bindgen = { path="../bindgen" }

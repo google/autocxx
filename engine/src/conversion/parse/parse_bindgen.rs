@@ -204,7 +204,7 @@ impl<'a> ParseBindgen<'a> {
                 }
                 Item::Type(mut ity) => {
                     let tyname = TypeName::new(&ns, &ity.ident.to_string());
-                    let mut final_type = self.type_converter.convert_type(*ity.ty, &ns)?;
+                    let mut final_type = self.type_converter.convert_type(*ity.ty, &ns, false)?;
                     ity.ty = Box::new(final_type.ty.clone());
                     self.type_converter.insert_typedef(tyname, final_type.ty);
                     self.results.apis.append(&mut final_type.extra_apis);
@@ -262,7 +262,7 @@ impl<'a> ParseBindgen<'a> {
     ) -> Result<HashSet<TypeName>, ConvertError> {
         let mut results = HashSet::new();
         for f in &s.fields {
-            let annotated = self.type_converter.convert_type(f.ty.clone(), ns)?;
+            let annotated = self.type_converter.convert_type(f.ty.clone(), ns, false)?;
             self.results.apis.extend(annotated.extra_apis);
             results.extend(annotated.types_encountered);
         }
@@ -358,10 +358,17 @@ impl<'a> ForeignModParseCallbacks for ParseBindgen<'a> {
         &mut self,
         ty: Box<Type>,
         ns: &Namespace,
-    ) -> Result<(Box<Type>, HashSet<TypeName>), ConvertError> {
-        let annotated = self.type_converter.convert_boxed_type(ty, ns)?;
+        convert_ptrs_to_reference: bool,
+    ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError> {
+        let annotated =
+            self.type_converter
+                .convert_boxed_type(ty, ns, convert_ptrs_to_reference)?;
         self.results.apis.extend(annotated.extra_apis);
-        Ok((annotated.ty, annotated.types_encountered))
+        Ok((
+            annotated.ty,
+            annotated.types_encountered,
+            annotated.requires_unsafe,
+        ))
     }
 
     fn is_pod(&self, ty: &TypeName) -> bool {
