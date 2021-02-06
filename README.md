@@ -1,6 +1,8 @@
 # Autocxx
 
-[Docs.rs](https://docs.rs/autocxx) [Crates.io](https://crates.io/crates/autocxx)
+[![GitHub](https://img.shields.io/crates/l/autocxx)](https://github.com/google/autocxx)
+[![crates.io](https://img.shields.io/crates/d/autocxx)](https://crates.io/crates/autocxx)
+[![docs.rs](https://docs.rs/autocxx/badge.svg)](https://docs.rs/autocxx)
 
 This project is a tool for calling C++ from Rust in a heavily automated, but safe, fashion.
 
