@@ -103,8 +103,11 @@ impl TypeConverter {
         &mut self,
         ty: Type,
         ns: &Namespace,
-        convert_ptrs_to_reference: bool,
+        mut convert_ptrs_to_reference: bool,
     ) -> Result<Annotated<Type>, ConvertError> {
+        if !cfg!(pointers) {
+            convert_ptrs_to_reference = true;
+        }
         let result = match ty {
             Type::Path(p) => {
                 let newp = self.convert_type_path(p, ns)?;
