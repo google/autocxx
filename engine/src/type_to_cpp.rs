@@ -14,7 +14,7 @@
 
 use crate::types::TypeName;
 use itertools::Itertools;
-use syn::Type;
+use syn::{Token, Type};
 
 pub(crate) fn type_to_cpp(ty: &Type) -> String {
     match ty {
@@ -52,11 +52,18 @@ pub(crate) fn type_to_cpp(ty: &Type) -> String {
             }
         }
         Type::Reference(typr) => {
-            let const_bit = match typr.mutability {
-                None => "const ",
-                Some(_) => "",
-            };
-            format!("{}{}&", const_bit, type_to_cpp(typr.elem.as_ref()))
+            format!(
+                "{}{}&",
+                get_mut_string(&typr.mutability),
+                type_to_cpp(typr.elem.as_ref())
+            )
+        }
+        Type::Ptr(typp) => {
+            format!(
+                "{}{}*",
+                get_mut_string(&typp.mutability),
+                type_to_cpp(typp.elem.as_ref())
+            )
         }
         Type::Array(_)
         | Type::BareFn(_)
@@ -66,11 +73,17 @@ pub(crate) fn type_to_cpp(ty: &Type) -> String {
         | Type::Macro(_)
         | Type::Never(_)
         | Type::Paren(_)
-        | Type::Ptr(_)
         | Type::Slice(_)
         | Type::TraitObject(_)
         | Type::Tuple(_)
         | Type::Verbatim(_) => panic!("Unsupported type"),
         _ => panic!("Unknown type"),
+    }
+}
+
+fn get_mut_string(mutability: &Option<Token![mut]>) -> &'static str {
+    match mutability {
+        None => "const ",
+        Some(_) => "",
     }
 }

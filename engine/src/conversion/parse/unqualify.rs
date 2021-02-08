@@ -63,6 +63,10 @@ fn unqualify_type(typ: Type) -> Type {
             typeref.elem = unqualify_boxed_type(typeref.elem);
             Type::Reference(typeref)
         }
+        Type::Ptr(mut typeptr) => {
+            typeptr.elem = unqualify_boxed_type(typeptr.elem);
+            Type::Ptr(typeptr)
+        }
         _ => typ,
     }
 }

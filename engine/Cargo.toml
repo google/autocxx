@@ -25,6 +25,9 @@ categories = ["development-tools::ffi", "api-bindings"]
 
 [features]
 build = ["cc"]
+# Waiting for raw pointer support to land in cxx before
+# we can enable this (or something like it)
+pointers = []
 
 [dependencies]
 log = "0.4"

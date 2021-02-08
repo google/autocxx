@@ -637,6 +637,33 @@ fn test_take_pod_by_ref() {
 }
 
 #[test]
+#[cfg(feature="pointers")]
+fn test_take_pod_by_ref_and_ptr() {
+    let cxx = indoc! {"
+        uint32_t take_bob_ref(const Bob& a) {
+            return a.a;
+        }
+        uint32_t take_bob_ptr(const Bob* a) {
+            return a->a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        uint32_t take_bob_ref(const Bob& a);
+        uint32_t take_bob_ptr(const Bob* a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob_ref(&a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob_ref", "take_bob_ptr"], &["Bob"]);
+}
+
+#[test]
 fn test_take_pod_by_mut_ref() {
     let cxx = indoc! {"
         uint32_t take_bob(Bob& a) {

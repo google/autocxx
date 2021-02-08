@@ -38,6 +38,7 @@ struct ArgumentAnalysis {
     was_reference: bool,
     deps: HashSet<TypeName>,
     virtual_this_encountered: bool,
+    requires_unsafe: bool,
 }
 
 struct ReturnTypeAnalysis {
@@ -55,7 +56,8 @@ pub(crate) trait ForeignModParseCallbacks {
         &mut self,
         ty: Box<Type>,
         ns: &Namespace,
-    ) -> Result<(Box<Type>, HashSet<TypeName>), ConvertError>;
+        convert_ptrs_to_reference: bool,
+    ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError>;
     fn is_pod(&self, ty: &TypeName) -> bool;
     fn add_api(&mut self, api: Api);
     fn get_cxx_bridge_name(
@@ -195,6 +197,7 @@ impl ParseForeignMod {
         }
 
         let original_name = Self::get_bindgen_original_name_annotation(&fun);
+        let (reference_params, reference_return) = Self::get_reference_parameters_and_return(&fun);
         let diagnostic_display_name = original_name.as_ref().unwrap_or(&initial_rust_name);
 
         // Now let's analyze all the parameters.
@@ -209,6 +212,7 @@ impl ParseForeignMod {
                     callbacks,
                     diagnostic_display_name,
                     virtual_this.clone(),
+                    &reference_params,
                 )
             })
             .partition(Result::is_ok);
@@ -232,6 +236,7 @@ impl ParseForeignMod {
             .next()
             .cloned();
         let virtual_this_encountered = param_details.iter().any(|pd| pd.virtual_this_encountered);
+        let requires_unsafe = param_details.iter().any(|pd| pd.requires_unsafe);
 
         let is_static_method = if self_ty.is_none() {
             // Even if we can't find a 'self' parameter this could conceivably
@@ -332,7 +337,7 @@ impl ParseForeignMod {
                 deps: these_deps,
             }
         } else {
-            self.convert_return_type(callbacks, fun.sig.output, ns)?
+            self.convert_return_type(callbacks, fun.sig.output, ns, reference_return)?
         };
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
@@ -501,7 +506,7 @@ impl ParseForeignMod {
         };
         // At last, actually generate the cxx::bridge entry.
         let vis = &fun.vis;
-        let unsafety: Option<Unsafe> = if callbacks.should_be_unsafe() {
+        let unsafety: Option<Unsafe> = if callbacks.should_be_unsafe() || requires_unsafe {
             Some(parse_quote!(unsafe))
         } else {
             None
@@ -551,12 +556,14 @@ impl ParseForeignMod {
         callbacks: &mut impl ForeignModParseCallbacks,
         fn_name: &str,
         virtual_this: Option<TypeName>,
+        reference_args: &HashSet<Ident>,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
             FnArg::Typed(mut pt) => {
                 let mut self_type = None;
                 let old_pat = *pt.pat;
                 let mut virtual_this_encountered = false;
+                let mut treat_as_reference = false;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
                         let this_type = match pt.ty.as_ref() {
@@ -589,11 +596,17 @@ impl ParseForeignMod {
                         }?;
                         self_type = Some(this_type);
                         pp.ident = Ident::new("self", pp.ident.span());
+                        treat_as_reference = true;
+                        syn::Pat::Ident(pp)
+                    }
+                    syn::Pat::Ident(pp) => {
+                        treat_as_reference = reference_args.contains(&pp.ident);
                         syn::Pat::Ident(pp)
                     }
                     _ => old_pat,
                 };
-                let (new_ty, deps) = callbacks.convert_boxed_type(pt.ty, ns)?;
+                let (new_ty, deps, requires_unsafe) =
+                    callbacks.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
                 let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
                 let conversion = self.argument_conversion_details(&new_ty, callbacks);
                 pt.pat = Box::new(new_pat.clone());
@@ -607,6 +620,7 @@ impl ParseForeignMod {
                         was_reference,
                         deps,
                         virtual_this_encountered,
+                        requires_unsafe,
                     },
                 )
             }
@@ -656,6 +670,7 @@ impl ParseForeignMod {
         callbacks: &mut impl ForeignModParseCallbacks,
         rt: ReturnType,
         ns: &Namespace,
+        convert_ptr_to_reference: bool,
     ) -> Result<ReturnTypeAnalysis, ConvertError> {
         let result = match rt {
             ReturnType::Default => ReturnTypeAnalysis {
@@ -665,7 +680,8 @@ impl ParseForeignMod {
                 deps: HashSet::new(),
             },
             ReturnType::Type(rarrow, boxed_type) => {
-                let (boxed_type, deps) = callbacks.convert_boxed_type(boxed_type, ns)?;
+                let (boxed_type, deps, _) =
+                    callbacks.convert_boxed_type(boxed_type, ns, convert_ptr_to_reference)?;
                 let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
                 let conversion =
                     self.return_type_conversion_details(boxed_type.as_ref(), callbacks);
@@ -746,5 +762,21 @@ impl ParseForeignMod {
                 }
             })
             .next()
+    }
+
+    fn get_reference_parameters_and_return(fun: &ForeignItemFn) -> (HashSet<Ident>, bool) {
+        let mut ref_params = HashSet::new();
+        let mut ref_return = false;
+        for a in &fun.attrs {
+            if a.path.is_ident("bindgen_ret_type_reference") {
+                ref_return = true;
+            } else if a.path.is_ident("bindgen_arg_type_reference") {
+                let r: Result<Ident, syn::Error> = a.parse_args();
+                if let Ok(ls) = r {
+                    ref_params.insert(ls);
+                }
+            }
+        }
+        (ref_params, ref_return)
     }
 }

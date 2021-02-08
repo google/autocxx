@@ -37,14 +37,21 @@ pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<TypeName>,
     pub(crate) extra_apis: Vec<Api>,
+    pub(crate) requires_unsafe: bool,
 }
 
 impl<T> Annotated<T> {
-    fn new(ty: T, types_encountered: HashSet<TypeName>, extra_apis: Vec<Api>) -> Self {
+    fn new(
+        ty: T,
+        types_encountered: HashSet<TypeName>,
+        extra_apis: Vec<Api>,
+        requires_unsafe: bool,
+    ) -> Self {
         Self {
             ty,
             types_encountered,
             extra_apis,
+            requires_unsafe,
         }
     }
 
@@ -53,6 +60,7 @@ impl<T> Annotated<T> {
             ty: fun(self.ty),
             types_encountered: self.types_encountered,
             extra_apis: self.extra_apis,
+            requires_unsafe: self.requires_unsafe,
         }
     }
 }
@@ -84,15 +92,22 @@ impl TypeConverter {
         &mut self,
         ty: Box<Type>,
         ns: &Namespace,
+        convert_ptrs_to_reference: bool,
     ) -> Result<Annotated<Box<Type>>, ConvertError> {
-        Ok(self.convert_type(*ty, ns)?.map(Box::new))
+        Ok(self
+            .convert_type(*ty, ns, convert_ptrs_to_reference)?
+            .map(Box::new))
     }
 
     pub(crate) fn convert_type(
         &mut self,
         ty: Type,
         ns: &Namespace,
+        mut convert_ptrs_to_reference: bool,
     ) -> Result<Annotated<Type>, ConvertError> {
+        if !cfg!(pointers) {
+            convert_ptrs_to_reference = true;
+        }
         let result = match ty {
             Type::Path(p) => {
                 let newp = self.convert_type_path(p, ns)?;
@@ -108,6 +123,7 @@ impl TypeConverter {
                             }),
                             newp.types_encountered,
                             newp.extra_apis,
+                            false,
                         )
                     } else {
                         newp
@@ -117,16 +133,29 @@ impl TypeConverter {
                 }
             }
             Type::Reference(mut r) => {
-                let innerty = self.convert_boxed_type(r.elem, ns)?;
+                let innerty = self.convert_boxed_type(r.elem, ns, false)?;
                 r.elem = innerty.ty;
                 Annotated::new(
                     Type::Reference(r),
                     innerty.types_encountered,
                     innerty.extra_apis,
+                    false,
                 )
             }
-            Type::Ptr(ptr) => self.convert_ptr_to_reference(ptr, ns)?,
-            _ => Annotated::new(ty, HashSet::new(), Vec::new()),
+            Type::Ptr(ptr) if convert_ptrs_to_reference => {
+                self.convert_ptr_to_reference(ptr, ns)?
+            }
+            Type::Ptr(mut ptr) => {
+                let innerty = self.convert_boxed_type(ptr.elem, ns, false)?;
+                ptr.elem = innerty.ty;
+                Annotated::new(
+                    Type::Ptr(ptr),
+                    innerty.types_encountered,
+                    innerty.extra_apis,
+                    true,
+                )
+            }
+            _ => Annotated::new(ty, HashSet::new(), Vec::new(), false),
         };
         Ok(result)
     }
@@ -199,7 +228,14 @@ impl TypeConverter {
                 }
                 resolved_tp.clone()
             }
-            Some(other) => return Ok(Annotated::new(other.clone(), HashSet::new(), Vec::new())),
+            Some(other) => {
+                return Ok(Annotated::new(
+                    other.clone(),
+                    HashSet::new(),
+                    Vec::new(),
+                    false,
+                ))
+            }
         };
 
         // This will strip off any path arguments...
@@ -225,6 +261,7 @@ impl TypeConverter {
             Type::Path(typ),
             types_encountered,
             extra_apis,
+            false,
         ))
     }
 
@@ -256,7 +293,7 @@ impl TypeConverter {
         for arg in pun.into_iter() {
             new_pun.push(match arg {
                 GenericArgument::Type(t) => {
-                    let mut innerty = self.convert_type(t, ns)?;
+                    let mut innerty = self.convert_type(t, ns, false)?;
                     types_encountered.extend(innerty.types_encountered.drain());
                     extra_apis.extend(innerty.extra_apis.drain(..));
                     GenericArgument::Type(innerty.ty)
@@ -264,7 +301,12 @@ impl TypeConverter {
                 _ => arg,
             });
         }
-        Ok(Annotated::new(new_pun, types_encountered, extra_apis))
+        Ok(Annotated::new(
+            new_pun,
+            types_encountered,
+            extra_apis,
+            false,
+        ))
     }
 
     fn resolve_typedef<'b>(&'b self, tn: &TypeName) -> Option<&'b Type> {
@@ -283,7 +325,7 @@ impl TypeConverter {
         ns: &Namespace,
     ) -> Result<Annotated<Type>, ConvertError> {
         let mutability = ptr.mutability;
-        let elem = self.convert_boxed_type(ptr.elem, ns)?;
+        let elem = self.convert_boxed_type(ptr.elem, ns, false)?;
         // TODO - in the future, we should check if this is a rust::Str and throw
         // a wobbler if not. rust::Str should only be seen _by value_ in C++
         // headers; it manifests as &str in Rust but on the C++ side it must
