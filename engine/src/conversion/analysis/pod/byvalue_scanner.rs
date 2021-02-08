@@ -16,9 +16,10 @@ use autocxx_parser::TypeDatabase;
 use syn::{Item, Type, TypePath};
 
 use crate::{
-    byvalue_checker::ByValueChecker, conversion::ConvertError, known_types::KNOWN_TYPES,
-    types::Namespace, types::TypeName,
+    conversion::ConvertError, known_types::KNOWN_TYPES, types::Namespace, types::TypeName,
 };
+
+use super::ByValueChecker;
 
 struct ByValueScanner<'a> {
     byvalue_checker: ByValueChecker,

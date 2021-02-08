@@ -32,7 +32,8 @@ use super::BridgeConverter;
 fn do_test(input: ItemMod) {
     let td = TypeDatabase::new();
     let bc = BridgeConverter::new(&[], &td);
-    bc.convert(input, true, UnsafePolicy::AllFunctionsSafe)
+    let inclusions = "".into();
+    bc.convert(input, true, UnsafePolicy::AllFunctionsSafe, inclusions)
         .unwrap();
 }
 

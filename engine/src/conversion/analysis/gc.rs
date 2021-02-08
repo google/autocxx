@@ -16,9 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::TypeDatabase;
 
-use crate::types::TypeName;
-
-use super::api::Api;
+use crate::{conversion::api::Api, types::TypeName};
 
 /// This is essentially mark-and-sweep garbage collection of the
 /// Apis that we've discovered. Why do we do this, you might wonder?

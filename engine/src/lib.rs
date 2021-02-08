@@ -12,16 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod additional_cpp_generator;
-mod byvalue_checker;
-mod byvalue_scanner;
 mod conversion;
-mod function_wrapper;
 mod known_types;
-mod parse;
 mod parse_callbacks;
+mod parse_file;
 mod rust_pretty_printer;
-mod type_to_cpp;
 mod types;
 
 #[cfg(any(test, feature = "build"))]
@@ -31,7 +26,7 @@ mod builder;
 mod integration_tests;
 
 use autocxx_parser::{CppInclusion, IncludeCppConfig, UnsafePolicy};
-use conversion::BridgeConverter;
+use conversion::{BridgeConverter, CppCodegenResults};
 use parse_callbacks::AutocxxParseCallbacks;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{
@@ -48,7 +43,6 @@ use syn::{
     parse_quote, ItemMod, Macro,
 };
 
-use additional_cpp_generator::AdditionalCppGenerator;
 use itertools::join;
 use known_types::KNOWN_TYPES;
 use log::{info, warn};
@@ -59,7 +53,7 @@ use autocxx_bindgen as bindgen;
 
 #[cfg(any(test, feature = "build"))]
 pub use builder::{build, expect_build, BuilderBuild, BuilderError, BuilderResult, BuilderSuccess};
-pub use parse::{parse_file, parse_token_stream, ParseError, ParsedFile};
+pub use parse_file::{parse_file, parse_token_stream, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
 
@@ -120,7 +114,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 struct GenerationResults {
     item_mod: ItemMod,
-    additional_cpp_generator: AdditionalCppGenerator,
+    additional_cpp_generator: Option<CppCodegenResults>,
     inc_dirs: Vec<PathBuf>,
 }
 enum State {
@@ -322,11 +316,10 @@ impl IncludeCppEngine {
                 bindings,
                 self.config.exclude_utilities,
                 self.config.unsafe_policy.clone(),
+                self.build_header(),
             )
             .map_err(Error::Conversion)?;
-        let mut additional_cpp_generator = AdditionalCppGenerator::new(self.build_header());
-        additional_cpp_generator.add_needs(conversion.additional_cpp_needs);
-        let mut items = conversion.items;
+        let mut items = conversion.rs;
         let mut new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]
             #[allow(dead_code)]
@@ -342,7 +335,7 @@ impl IncludeCppEngine {
         );
         self.state = State::Generated(Box::new(GenerationResults {
             item_mod: new_bindings,
-            additional_cpp_generator,
+            additional_cpp_generator: conversion.cpp,
             inc_dirs,
         }));
         Ok(())
@@ -365,9 +358,9 @@ impl IncludeCppEngine {
                     implementation: cxx_generated.implementation,
                 });
 
-                match gen_results.additional_cpp_generator.generate() {
+                match gen_results.additional_cpp_generator {
                     None => {}
-                    Some(additional_cpp) => {
+                    Some(ref additional_cpp) => {
                         // TODO should probably replace pragma once below with traditional include guards.
                         let declarations = format!("#pragma once\n{}", additional_cpp.declarations);
                         files.push(CppFilePair {

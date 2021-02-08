@@ -12,12 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod bridge_name_tracker;
-mod overload_tracker;
-pub(crate) mod parse_bindgen;
-mod parse_foreign_mod;
-mod rust_name_tracker;
-mod type_converter;
-mod unqualify;
+mod byvalue_checker;
+mod byvalue_scanner;
 
-pub(crate) use parse_bindgen::ParseBindgen;
+pub(crate) use byvalue_checker::ByValueChecker;
+pub(crate) use byvalue_scanner::identify_byvalue_safe_types;

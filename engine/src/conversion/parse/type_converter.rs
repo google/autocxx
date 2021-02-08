@@ -13,23 +13,20 @@
 // limitations under the License.
 
 use crate::{
-    additional_cpp_generator::AdditionalNeed,
+    conversion::codegen_cpp::AdditionalNeed,
     conversion::{
-        api::{Api, Use},
+        api::{Api, TypeApiDetails, Use},
+        codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
     known_types::KNOWN_TYPES,
-    type_to_cpp::type_to_cpp,
     types::{make_ident, Namespace, TypeName},
 };
-use quote::quote;
 use std::collections::{HashMap, HashSet};
 use syn::{
-    parse_quote, punctuated::Punctuated, ForeignItem, GenericArgument, Item, PathArguments,
-    PathSegment, Type, TypePath, TypePtr,
+    parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
+    TypePath, TypePtr,
 };
-
-use super::{impl_item_creator::create_impl_items, non_pod_struct::new_non_pod_struct};
 
 /// Results of some type conversion, annotated with a list of every type encountered,
 /// and optionally any extra API we need in order to use this type.
@@ -349,24 +346,17 @@ impl TypeConverter {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
             use_stmt: Use::Unused,
-            global_items: vec![Item::Impl(parse_quote! {
-                unsafe impl cxx::ExternType for #(#fulltypath)::* {
-                    type Id = cxx::type_id!(#tynamestring);
-                    type Kind = cxx::kind::Opaque;
-                }
-            })],
-            bridge_items: create_impl_items(&final_ident),
-            extern_c_mod_item: Some(ForeignItem::Verbatim(quote! {
-                type #final_ident = super::bindgen::root::#final_ident;
-            })),
+            deps: HashSet::new(),
+            id_for_allowlist: None,
+            detail: crate::conversion::api::ApiDetail::ConcreteType(TypeApiDetails {
+                fulltypath,
+                tynamestring,
+                final_ident,
+            }),
             additional_cpp: Some(AdditionalNeed::ConcreteTemplatedTypeTypedef(
                 tyname.clone(),
                 Box::new(rs_definition.clone()),
             )),
-            deps: HashSet::new(),
-            id_for_allowlist: None,
-            bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(final_ident))),
-            impl_entry: None,
         }
     }
 
