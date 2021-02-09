@@ -20,8 +20,8 @@ use syn::{parse_quote, Ident, PathSegment, TypePath};
 
 use crate::known_types::KNOWN_TYPES;
 
-pub(crate) fn make_ident(id: &str) -> Ident {
-    Ident::new(id, Span::call_site())
+pub(crate) fn make_ident<S: AsRef<str>>(id: S) -> Ident {
+    Ident::new(id.as_ref(), Span::call_site())
 }
 
 /// Newtype wrapper for a C++ namespace.
@@ -202,7 +202,7 @@ impl TypeName {
             let segs = std::iter::once(&root)
                 .chain(self.ns_segment_iter())
                 .chain(std::iter::once(&self.1))
-                .map(|x| make_ident(x));
+                .map(make_ident);
             parse_quote! {
                 #(#segs)::*
             }

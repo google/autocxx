@@ -339,7 +339,7 @@ impl TypeConverter {
 
     fn add_concrete_type(&self, tyname: &TypeName, rs_definition: &Type) -> Api {
         let final_ident = make_ident(tyname.get_final_ident());
-        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(|x| make_ident(x)).collect();
+        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(make_ident).collect();
         fulltypath.push(final_ident.clone());
         let tynamestring = tyname.to_cpp_name();
         Api {
