@@ -89,8 +89,22 @@ pub(crate) struct TypeApiDetails {
     pub(crate) tynamestring: String,
 }
 
+/// Layers of analysis which may be applied to decorate each API.
+pub(crate) trait ApiAnalysis {
+    type ItemAnalysis;
+    type TypeAnalysis;
+}
+
+/// No analysis has been applied to this API.
+pub(crate) struct NullAnalysis;
+
+impl ApiAnalysis for NullAnalysis {
+    type ItemAnalysis = ();
+    type TypeAnalysis = ();
+}
+
 /// Different types of API we might encounter.
-pub(crate) enum ApiDetail {
+pub(crate) enum ApiDetail<T: ApiAnalysis> {
     ConcreteType(TypeApiDetails),
     StringConstructor,
     ImplEntry {
@@ -113,6 +127,7 @@ pub(crate) enum ApiDetail {
         for_extern_c_ts: TokenStream,
         type_kind: TypeKind,
         bindgen_mod_item: Option<Item>,
+        analysis: T::ItemAnalysis,
     },
     CType {
         id: Ident,
@@ -129,17 +144,20 @@ pub(crate) enum ApiDetail {
 /// separation between the parser and the codegen phases. However our case is
 /// a bit less normal because the code we generate actually includes most of
 /// the code we parse.
-pub(crate) struct Api {
+pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) ns: Namespace,
     pub(crate) id: Ident,
     pub(crate) use_stmt: Use,
     pub(crate) deps: HashSet<TypeName>,
     pub(crate) id_for_allowlist: Option<Ident>,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
-    pub(crate) detail: ApiDetail,
+    pub(crate) detail: ApiDetail<T>,
+    pub(crate) analysis: T::ItemAnalysis,
 }
 
-impl Api {
+pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
+
+impl<T: ApiAnalysis> Api<T> {
     pub(crate) fn typename(&self) -> TypeName {
         TypeName::new(&self.ns, &self.id.to_string())
     }
@@ -159,6 +177,6 @@ impl Api {
 /// Results of parsing the bindgen mod. This is what is passed from
 /// the parser to the code generation phase.
 pub(crate) struct ParseResults {
-    pub(crate) apis: Vec<Api>,
+    pub(crate) apis: Vec<Api<NullAnalysis>>,
     pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
 }

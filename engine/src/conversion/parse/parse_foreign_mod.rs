@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::codegen_cpp::function_wrapper::{
-    ArgumentConversion, FunctionWrapper, FunctionWrapperPayload,
+use crate::conversion::{
+    api::UnanalyzedApi,
+    codegen_cpp::function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
 };
 use crate::{
     conversion::ConvertError,
@@ -28,7 +29,7 @@ use syn::{
 };
 
 use super::{
-    super::api::{Api, Use},
+    super::api::Use,
     overload_tracker::OverloadTracker,
     unqualify::{unqualify_params, unqualify_ret_type},
 };
@@ -61,7 +62,7 @@ pub(crate) trait ForeignModParseCallbacks {
         convert_ptrs_to_reference: bool,
     ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError>;
     fn is_pod(&self, ty: &TypeName) -> bool;
-    fn add_api(&mut self, api: Api);
+    fn add_api(&mut self, api: UnanalyzedApi);
     fn get_cxx_bridge_name(
         &mut self,
         type_name: Option<&str>,
@@ -531,7 +532,7 @@ impl ParseForeignMod {
                 Some(alias) => (cxxbridge_name, Use::UsedWithAlias(alias), None),
             }
         };
-        let api = Api {
+        let api = UnanalyzedApi {
             ns: ns.clone(),
             id,
             use_stmt,
@@ -539,6 +540,7 @@ impl ParseForeignMod {
             id_for_allowlist,
             detail: ApiDetail::Function { extern_c_mod_item },
             additional_cpp,
+            analysis: (),
         };
         callbacks.add_api(api);
         Ok(())
@@ -730,7 +732,7 @@ impl ParseForeignMod {
             }
         }));
 
-        callbacks.add_api(Api {
+        callbacks.add_api(UnanalyzedApi {
             ns: ns.clone(),
             id: impl_block_type_name.clone(),
             use_stmt: Use::Unused,
@@ -738,6 +740,7 @@ impl ParseForeignMod {
             id_for_allowlist: None,
             additional_cpp: None,
             detail: ApiDetail::ImplEntry { impl_entry },
+            analysis: (),
         });
     }
 
