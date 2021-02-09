@@ -32,7 +32,8 @@ use crate::UnsafePolicy;
 
 use self::{
     analysis::{
-        gc::filter_apis_by_following_edges_from_allowlist, pod::identify_byvalue_safe_types,
+        gc::filter_apis_by_following_edges_from_allowlist,
+        pod::{analyze_pod_apis, identify_byvalue_safe_types},
     },
     codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
@@ -91,21 +92,25 @@ impl<'a> BridgeConverter<'a> {
                 let byvalue_checker =
                     identify_byvalue_safe_types(&items_in_root, &self.type_database)?;
                 // Parse the bindgen mod.
-                let parser = ParseBindgen::new(byvalue_checker, &self.type_database, unsafe_policy);
+                let parser =
+                    ParseBindgen::new(&byvalue_checker, &self.type_database, unsafe_policy);
                 let parse_results = parser.convert_items(items_in_root, exclude_utilities)?;
                 // The code above will have contributed lots of Apis to self.apis.
+                // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
+                // versus which need to be opaque).
+                let analyzed_apis = analyze_pod_apis(parse_results.apis, &byvalue_checker);
                 // We now garbage collect the ones we don't need...
-                let mut apis = filter_apis_by_following_edges_from_allowlist(
-                    parse_results.apis,
+                let mut analyzed_apis = filter_apis_by_following_edges_from_allowlist(
+                    analyzed_apis,
                     &self.type_database,
                 );
                 // Determine what variably-sized C types (e.g. int) we need to include
-                analysis::ctypes::append_ctype_information(&mut apis);
+                analysis::ctypes::append_ctype_information(&mut analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
-                let cpp = CppCodeGenerator::generate_cpp_code(inclusions, &apis);
+                let cpp = CppCodeGenerator::generate_cpp_code(inclusions, &analyzed_apis);
                 let rs = RsCodeGenerator::generate_rs_code(
-                    apis,
+                    analyzed_apis,
                     self.include_list,
                     parse_results.use_stmts_by_mod,
                     bindgen_mod,
