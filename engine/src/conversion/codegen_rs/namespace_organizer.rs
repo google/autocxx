@@ -12,29 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::api::Api;
+use crate::types::Namespace;
 use std::collections::BTreeMap;
 
-pub struct NamespaceEntries<'a> {
-    entries: Vec<&'a Api>,
-    children: BTreeMap<&'a String, NamespaceEntries<'a>>,
+pub trait HasNs {
+    fn get_namespace(&self) -> &Namespace;
 }
 
-impl<'a> NamespaceEntries<'a> {
-    pub(crate) fn new(apis: &'a [Api]) -> Self {
+pub struct NamespaceEntries<'a, T: HasNs> {
+    entries: Vec<&'a T>,
+    children: BTreeMap<&'a String, NamespaceEntries<'a, T>>,
+}
+
+impl<'a, T: HasNs> NamespaceEntries<'a, T> {
+    pub(crate) fn new(apis: &'a [T]) -> Self {
         let api_refs = apis.iter().collect::<Vec<_>>();
         Self::sort_by_inner_namespace(api_refs, 0)
     }
 
-    pub(crate) fn entries(&self) -> &[&'a Api] {
+    pub(crate) fn entries(&self) -> &[&'a T] {
         &self.entries
     }
 
-    pub(crate) fn children(&self) -> impl Iterator<Item = (&&String, &NamespaceEntries)> {
+    pub(crate) fn children(&self) -> impl Iterator<Item = (&&String, &NamespaceEntries<T>)> {
         self.children.iter()
     }
 
-    fn sort_by_inner_namespace(apis: Vec<&'a Api>, depth: usize) -> Self {
+    fn sort_by_inner_namespace(apis: Vec<&'a T>, depth: usize) -> Self {
         let mut root = NamespaceEntries {
             entries: Vec::new(),
             children: BTreeMap::new(),
@@ -42,7 +46,7 @@ impl<'a> NamespaceEntries<'a> {
 
         let mut kids_by_child_ns = BTreeMap::new();
         for api in apis {
-            let first_ns_elem = api.ns.iter().nth(depth);
+            let first_ns_elem = api.get_namespace().iter().nth(depth);
             if let Some(first_ns_elem) = first_ns_elem {
                 let list = kids_by_child_ns
                     .entry(first_ns_elem)
@@ -64,12 +68,15 @@ impl<'a> NamespaceEntries<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use super::{HasNs, NamespaceEntries};
+    use crate::types::Namespace;
 
-    use super::Api;
-    use super::NamespaceEntries;
-    use crate::{conversion::api::Use, types::Namespace};
-    use proc_macro2::{Ident, Span};
+    struct TestApi(&'static str, Namespace);
+    impl HasNs for TestApi {
+        fn get_namespace(&self) -> &Namespace {
+            &self.1
+        }
+    }
 
     #[test]
     fn test_ns_entries_sort() {
@@ -117,27 +124,15 @@ mod tests {
         assert_ident(k_nse_entries[1], "M");
     }
 
-    fn assert_ident(api: &Api, expected: &str) {
-        assert_eq!(api.id.to_string(), expected);
+    fn assert_ident(api: &TestApi, expected: &str) {
+        assert_eq!(api.0, expected);
     }
 
-    fn make_api(ns: Option<&str>, id: &str) -> Api {
+    fn make_api(ns: Option<&str>, id: &'static str) -> TestApi {
         let ns = match ns {
             Some(st) => Namespace::from_user_input(st),
             None => Namespace::new(),
         };
-        Api {
-            ns,
-            id: Ident::new(id, Span::call_site()),
-            use_stmt: Use::Used,
-            deps: HashSet::new(),
-            extern_c_mod_item: None,
-            bridge_items: Vec::new(),
-            global_items: Vec::new(),
-            additional_cpp: None,
-            id_for_allowlist: None,
-            bindgen_mod_item: None,
-            impl_entry: None,
-        }
+        TestApi(id, ns)
     }
 }

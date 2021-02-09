@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    additional_cpp_generator::AdditionalNeed,
-    types::{Namespace, TypeName},
-};
+use crate::types::{Namespace, TypeName};
+use proc_macro2::TokenStream;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
 };
-use syn::{ForeignItem, Ident, ImplItem, Item};
+use syn::{ForeignItem, Ident, ImplItem, Item, ItemConst, ItemType};
+
+use super::codegen_cpp::AdditionalNeed;
 
 #[derive(Debug)]
 pub enum ConvertError {
@@ -66,12 +66,57 @@ impl ConvertError {
     }
 }
 
-/// Whetther and how this type should be exposed in the mods constructed
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub(crate) enum TypeKind {
+    POD,                // trivial. Can be moved and copied in Rust.
+    NonPOD, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
+    ForwardDeclaration, // no full C++ declaration available - can't even generate UniquePtr
+}
+
+/// Whether and how this type should be exposed in the mods constructed
 /// for actual end-user use.
 pub(crate) enum Use {
     Unused,
     Used,
     UsedWithAlias(Ident),
+}
+
+/// Common details for types of API which are a type and will require
+/// us to generate an ExternType.
+pub(crate) struct TypeApiDetails {
+    pub(crate) fulltypath: Vec<Ident>,
+    pub(crate) final_ident: Ident,
+    pub(crate) tynamestring: String,
+}
+
+/// Different types of API we might encounter.
+pub(crate) enum ApiDetail {
+    ConcreteType(TypeApiDetails),
+    StringConstructor,
+    ImplEntry {
+        // TODO move this to be higher level and/or
+        // combine with the FunctionCall item
+        impl_entry: Box<ImplItem>,
+    },
+    Function {
+        // TODO move this to be much higher level
+        extern_c_mod_item: ForeignItem,
+    },
+    Const {
+        const_item: ItemConst,
+    },
+    Typedef {
+        type_item: ItemType,
+    },
+    Type {
+        ty_details: TypeApiDetails,
+        for_extern_c_ts: TokenStream,
+        type_kind: TypeKind,
+        bindgen_mod_item: Option<Item>,
+    },
+    CType {
+        id: Ident,
+    },
 }
 
 /// Any API we encounter in the input bindgen rs which we might want to pass
@@ -89,13 +134,9 @@ pub(crate) struct Api {
     pub(crate) id: Ident,
     pub(crate) use_stmt: Use,
     pub(crate) deps: HashSet<TypeName>,
-    pub(crate) extern_c_mod_item: Option<ForeignItem>,
-    pub(crate) bridge_items: Vec<Item>,
-    pub(crate) global_items: Vec<Item>,
-    pub(crate) additional_cpp: Option<AdditionalNeed>,
     pub(crate) id_for_allowlist: Option<Ident>,
-    pub(crate) bindgen_mod_item: Option<Item>,
-    pub(crate) impl_entry: Option<ImplItem>,
+    pub(crate) additional_cpp: Option<AdditionalNeed>,
+    pub(crate) detail: ApiDetail,
 }
 
 impl Api {

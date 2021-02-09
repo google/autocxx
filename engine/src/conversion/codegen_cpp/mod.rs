@@ -12,14 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    function_wrapper::{FunctionWrapper, FunctionWrapperPayload},
-    type_to_cpp::type_to_cpp,
-    types::TypeName,
-};
+pub(crate) mod function_wrapper;
+pub(crate) mod type_to_cpp;
+
+use crate::types::TypeName;
 use itertools::Itertools;
 use std::collections::HashSet;
 use syn::Type;
+
+use function_wrapper::FunctionWrapper;
+use type_to_cpp::type_to_cpp;
+
+use self::function_wrapper::FunctionWrapperPayload;
+
+use super::api::Api;
 
 /// Instructions for new C++ which we need to generate.
 pub(crate) enum AdditionalNeed {
@@ -64,7 +70,7 @@ struct AdditionalFunction {
 }
 
 /// Details of additional generated C++.
-pub(crate) struct AdditionalCpp {
+pub(crate) struct CppCodegenResults {
     pub(crate) declarations: String,
     pub(crate) definitions: String,
 }
@@ -75,25 +81,31 @@ pub(crate) struct AdditionalCpp {
 /// generates, and perhaps we'll explore that in future. But for now,
 /// autocxx generates its own _additional_ C++ files which therefore
 /// need to be built and included in linking procedures.
-pub(crate) struct AdditionalCppGenerator {
+pub(crate) struct CppCodeGenerator {
     additional_functions: Vec<AdditionalFunction>,
     inclusions: String,
 }
 
-impl AdditionalCppGenerator {
-    pub(crate) fn new(inclusions: String) -> Self {
-        AdditionalCppGenerator {
+impl CppCodeGenerator {
+    pub(crate) fn generate_cpp_code(inclusions: String, apis: &[Api]) -> Option<CppCodegenResults> {
+        let mut gen = CppCodeGenerator::new(inclusions);
+        gen.add_needs(apis.iter().filter_map(|api| api.additional_cpp.as_ref()));
+        gen.generate()
+    }
+
+    fn new(inclusions: String) -> Self {
+        CppCodeGenerator {
             additional_functions: Vec::new(),
             inclusions,
         }
     }
 
-    pub(crate) fn add_needs(&mut self, additions: Vec<AdditionalNeed>) {
+    fn add_needs<'a>(&mut self, additions: impl Iterator<Item = &'a AdditionalNeed>) {
         for need in additions {
             match need {
                 AdditionalNeed::MakeStringConstructor => self.generate_string_constructor(),
                 AdditionalNeed::FunctionWrapper(by_value_wrapper) => {
-                    self.generate_by_value_wrapper(*by_value_wrapper)
+                    self.generate_by_value_wrapper(by_value_wrapper)
                 }
                 AdditionalNeed::CTypeTypedef(tn) => self.generate_ctype_typedef(tn),
                 AdditionalNeed::ConcreteTemplatedTypeTypedef(tn, def) => {
@@ -103,7 +115,7 @@ impl AdditionalCppGenerator {
         }
     }
 
-    pub(crate) fn generate(&self) -> Option<AdditionalCpp> {
+    fn generate(&self) -> Option<CppCodegenResults> {
         if self.additional_functions.is_empty() {
             None
         } else {
@@ -122,7 +134,7 @@ impl AdditionalCppGenerator {
             );
             let definitions = self.concat_additional_items(|x| &x.definition);
             let definitions = format!("#include \"autocxxgen.h\"\n{}", definitions);
-            Some(AdditionalCpp {
+            Some(CppCodegenResults {
                 declarations,
                 definitions,
             })
@@ -162,7 +174,7 @@ impl AdditionalCppGenerator {
         })
     }
 
-    fn generate_by_value_wrapper(&mut self, details: FunctionWrapper) {
+    fn generate_by_value_wrapper(&mut self, details: &FunctionWrapper) {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
         // We could easily do this the other way round, and when
@@ -171,7 +183,7 @@ impl AdditionalCppGenerator {
         // at the moment this is simpler because it avoids us having
         // to generate namespace blocks in the generated C++.
         let is_a_method = details.is_a_method;
-        let name = details.wrapper_function_name;
+        let name = &details.wrapper_function_name;
         let get_arg_name = |counter: usize| -> String {
             if is_a_method && counter == 0 {
                 // For method calls that we generate, the first
@@ -204,7 +216,7 @@ impl AdditionalCppGenerator {
             .map(|(counter, conv)| conv.conversion(&get_arg_name(counter)));
         let receiver = if is_a_method { arg_list.next() } else { None };
         let arg_list = arg_list.join(", ");
-        let mut underlying_function_call = match details.payload {
+        let mut underlying_function_call = match &details.payload {
             FunctionWrapperPayload::Constructor => arg_list,
             FunctionWrapperPayload::FunctionCall(ns, id) => match receiver {
                 Some(receiver) => format!("{}.{}({})", receiver, id.to_string(), arg_list),
@@ -226,7 +238,7 @@ impl AdditionalCppGenerator {
                 format!("{}({})", underlying_function_call, arg_list)
             }
         };
-        if let Some(ret) = details.return_conversion {
+        if let Some(ret) = &details.return_conversion {
             underlying_function_call =
                 format!("return {}", ret.conversion(&underlying_function_call));
         };
@@ -240,12 +252,12 @@ impl AdditionalCppGenerator {
         })
     }
 
-    fn generate_ctype_typedef(&mut self, tn: TypeName) {
+    fn generate_ctype_typedef(&mut self, tn: &TypeName) {
         let cpp_name = tn.to_cpp_name();
         self.generate_typedef(tn, cpp_name)
     }
 
-    fn generate_typedef(&mut self, tn: TypeName, definition: String) {
+    fn generate_typedef(&mut self, tn: &TypeName, definition: String) {
         let our_name = tn.get_final_ident();
         self.additional_functions.push(AdditionalFunction {
             type_definition: format!("typedef {} {};", definition, our_name),

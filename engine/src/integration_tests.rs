@@ -637,7 +637,7 @@ fn test_take_pod_by_ref() {
 }
 
 #[test]
-#[cfg(feature="pointers")]
+#[cfg(feature = "pointers")]
 fn test_take_pod_by_ref_and_ptr() {
     let cxx = indoc! {"
         uint32_t take_bob_ref(const Bob& a) {

@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::conversion::codegen_cpp::function_wrapper::{
+    ArgumentConversion, FunctionWrapper, FunctionWrapperPayload,
+};
 use crate::{
-    additional_cpp_generator::AdditionalNeed,
     conversion::ConvertError,
-    function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
+    conversion::{api::ApiDetail, codegen_cpp::AdditionalNeed},
     types::{make_ident, Namespace, TypeName},
 };
 use quote::quote;
@@ -511,12 +513,12 @@ impl ParseForeignMod {
         } else {
             None
         };
-        let extern_c_mod_item = Some(ForeignItem::Fn(parse_quote!(
+        let extern_c_mod_item = ForeignItem::Fn(parse_quote!(
             #(#namespace_attr)*
             #(#rust_name_attr)*
             #(#cpp_name_attr)*
             #vis #unsafety fn #cxxbridge_name ( #params ) #ret_type;
-        )));
+        ));
         let (id, use_stmt, id_for_allowlist) = if is_a_method {
             (
                 make_ident(&rust_name),
@@ -533,14 +535,10 @@ impl ParseForeignMod {
             ns: ns.clone(),
             id,
             use_stmt,
-            extern_c_mod_item,
-            additional_cpp,
-            global_items: Vec::new(),
-            bridge_items: Vec::new(),
             deps,
             id_for_allowlist,
-            bindgen_mod_item: None,
-            impl_entry: None,
+            detail: ApiDetail::Function { extern_c_mod_item },
+            additional_cpp,
         };
         callbacks.add_api(api);
         Ok(())
@@ -726,24 +724,20 @@ impl ParseForeignMod {
         }
 
         let rust_name = make_ident(&rust_name);
-        let extra_method = ImplItem::Method(parse_quote! {
+        let impl_entry = Box::new(ImplItem::Method(parse_quote! {
             pub fn #rust_name ( #wrapper_params ) #ret_type {
                 cxxbridge::#cxxbridge_name ( #(#arg_list),* )
             }
-        });
+        }));
 
         callbacks.add_api(Api {
             ns: ns.clone(),
             id: impl_block_type_name.clone(),
             use_stmt: Use::Unused,
             deps: HashSet::new(),
-            extern_c_mod_item: None,
-            bridge_items: Vec::new(),
-            global_items: Vec::new(),
-            additional_cpp: None,
             id_for_allowlist: None,
-            bindgen_mod_item: None,
-            impl_entry: Some(extra_method),
+            additional_cpp: None,
+            detail: ApiDetail::ImplEntry { impl_entry },
         });
     }
 

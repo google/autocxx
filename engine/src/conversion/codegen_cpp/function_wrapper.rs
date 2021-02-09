@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{known_types::type_lacks_copy_constructor, type_to_cpp::type_to_cpp, types::Namespace};
+use crate::conversion::type_to_cpp;
+use crate::{known_types::type_lacks_copy_constructor, types::Namespace};
 use syn::{parse_quote, Ident, Type};
 
 #[derive(Clone)]

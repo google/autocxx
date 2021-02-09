@@ -15,8 +15,12 @@
 use std::{collections::HashMap, collections::HashSet};
 
 use crate::{
-    byvalue_checker::ByValueChecker,
-    conversion::{api::ParseResults, ConvertError},
+    conversion::{
+        analysis::pod::ByValueChecker,
+        api::{ApiDetail, ParseResults, TypeApiDetails, TypeKind},
+        codegen_rs::make_non_pod,
+        ConvertError,
+    },
     types::make_ident,
     types::Namespace,
     types::TypeName,
@@ -25,7 +29,7 @@ use crate::{
 use autocxx_parser::TypeDatabase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_quote, Fields, ForeignItem, Item, ItemStruct, Type};
+use syn::{parse_quote, Fields, Item, ItemStruct, Type};
 
 use super::{
     super::{
@@ -33,20 +37,11 @@ use super::{
         utilities::generate_utilities,
     },
     bridge_name_tracker::BridgeNameTracker,
-    impl_item_creator::create_impl_items,
-    non_pod_struct::make_non_pod,
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
 };
 
 use super::parse_foreign_mod::{ForeignModParseCallbacks, ParseForeignMod};
-
-#[derive(Copy, Clone, Eq, PartialEq)]
-enum TypeKind {
-    POD,                // trivial. Can be moved and copied in Rust.
-    NonPOD, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
-    ForwardDeclaration, // no full C++ declaration available - can't even generate UniquePtr
-}
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
@@ -184,22 +179,18 @@ impl<'a> ParseBindgen<'a> {
                 Item::Use(_) => {
                     use_statements_for_this_mod.push(item);
                 }
-                Item::Const(itc) => {
+                Item::Const(const_item) => {
                     // TODO the following puts this constant into
                     // the global namespace which is bug
                     // https://github.com/google/autocxx/issues/133
                     self.add_api(Api {
-                        id: itc.ident.clone(),
+                        id: const_item.ident.clone(),
                         ns: ns.clone(),
-                        bridge_items: Vec::new(),
-                        extern_c_mod_item: None,
-                        global_items: vec![Item::Const(itc)],
-                        additional_cpp: None,
                         deps: HashSet::new(),
                         use_stmt: Use::Unused,
                         id_for_allowlist: None,
-                        bindgen_mod_item: None,
-                        impl_entry: None,
+                        detail: ApiDetail::Const { const_item },
+                        additional_cpp: None,
                     });
                 }
                 Item::Type(mut ity) => {
@@ -211,15 +202,11 @@ impl<'a> ParseBindgen<'a> {
                     self.add_api(Api {
                         id: ity.ident.clone(),
                         ns: ns.clone(),
-                        bridge_items: Vec::new(),
-                        extern_c_mod_item: None,
-                        global_items: Vec::new(),
-                        additional_cpp: None,
                         deps: final_type.types_encountered,
                         use_stmt: Use::Unused,
                         id_for_allowlist: None,
-                        bindgen_mod_item: Some(Item::Type(ity)),
-                        impl_entry: None,
+                        additional_cpp: None,
+                        detail: ApiDetail::Typedef { type_item: ity },
                     });
                 }
                 _ => return Err(ConvertError::UnexpectedItemInMod),
@@ -284,16 +271,11 @@ impl<'a> ParseBindgen<'a> {
     fn generate_type(
         &mut self,
         tyname: TypeName,
-        type_nature: TypeKind,
+        type_kind: TypeKind,
         deps: HashSet<TypeName>,
         bindgen_mod_item: Option<Item>,
     ) {
         let final_ident = make_ident(tyname.get_final_ident());
-        let kind_item = match type_nature {
-            TypeKind::POD => "Trivial",
-            _ => "Opaque",
-        };
-        let kind_item = make_ident(kind_item);
         if self.type_database.is_on_blocklist(&tyname.to_cpp_name()) {
             return;
         }
@@ -325,28 +307,24 @@ impl<'a> ParseBindgen<'a> {
         for_extern_c_ts.extend(quote! {
             #final_ident;
         });
-        let bridge_items = match type_nature {
-            TypeKind::ForwardDeclaration => Vec::new(),
-            _ => create_impl_items(&final_ident),
-        };
         fulltypath.push(final_ident.clone());
         let api = Api {
             ns: tyname.get_namespace().clone(),
-            id: final_ident,
+            id: final_ident.clone(),
             use_stmt: Use::Used,
-            global_items: vec![Item::Impl(parse_quote! {
-                unsafe impl cxx::ExternType for #(#fulltypath)::* {
-                    type Id = cxx::type_id!(#tynamestring);
-                    type Kind = cxx::kind::#kind_item;
-                }
-            })],
-            bridge_items,
-            extern_c_mod_item: Some(ForeignItem::Verbatim(for_extern_c_ts)),
-            additional_cpp: None,
             deps,
             id_for_allowlist: None,
-            bindgen_mod_item,
-            impl_entry: None,
+            additional_cpp: None,
+            detail: ApiDetail::Type {
+                ty_details: TypeApiDetails {
+                    fulltypath,
+                    final_ident,
+                    tynamestring,
+                },
+                for_extern_c_ts,
+                type_kind,
+                bindgen_mod_item,
+            },
         };
         self.add_api(api);
         self.type_converter.push(tyname);

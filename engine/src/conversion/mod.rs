@@ -12,24 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod analysis;
 mod api;
-mod codegen;
+mod codegen_cpp;
+mod codegen_rs;
 #[cfg(test)]
 mod conversion_tests;
-mod gc;
-mod namespace_organizer;
 mod parse;
 mod utilities;
 
 pub(crate) use api::ConvertError;
 use autocxx_parser::TypeDatabase;
+pub(crate) use codegen_cpp::type_to_cpp::type_to_cpp;
+pub(crate) use codegen_cpp::CppCodeGenerator;
+pub(crate) use codegen_cpp::CppCodegenResults;
 use syn::{Item, ItemMod};
 
-use crate::{byvalue_scanner::identify_byvalue_safe_types, UnsafePolicy};
+use crate::UnsafePolicy;
 
 use self::{
-    codegen::{CodeGenerator, CodegenResults},
-    gc::filter_apis_by_following_edges_from_allowlist,
+    analysis::{
+        gc::filter_apis_by_following_edges_from_allowlist, pod::identify_byvalue_safe_types,
+    },
+    codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
 };
 
@@ -50,6 +55,12 @@ pub(crate) struct BridgeConverter<'a> {
     type_database: &'a TypeDatabase,
 }
 
+/// C++ and Rust code generation output.
+pub(crate) struct CodegenResults {
+    pub(crate) rs: Vec<Item>,
+    pub(crate) cpp: Option<CppCodegenResults>,
+}
+
 impl<'a> BridgeConverter<'a> {
     pub fn new(include_list: &'a [String], type_database: &'a TypeDatabase) -> Self {
         Self {
@@ -65,6 +76,7 @@ impl<'a> BridgeConverter<'a> {
         mut bindgen_mod: ItemMod,
         exclude_utilities: bool,
         unsafe_policy: UnsafePolicy,
+        inclusions: String,
     ) -> Result<CodegenResults, ConvertError> {
         match &mut bindgen_mod.content {
             None => Err(ConvertError::NoContent),
@@ -83,18 +95,22 @@ impl<'a> BridgeConverter<'a> {
                 let parse_results = parser.convert_items(items_in_root, exclude_utilities)?;
                 // The code above will have contributed lots of Apis to self.apis.
                 // We now garbage collect the ones we don't need...
-                let apis = filter_apis_by_following_edges_from_allowlist(
+                let mut apis = filter_apis_by_following_edges_from_allowlist(
                     parse_results.apis,
                     &self.type_database,
                 );
-                // And finally pass them to the code gen phase, which outputs
+                // Determine what variably-sized C types (e.g. int) we need to include
+                analysis::ctypes::append_ctype_information(&mut apis);
+                // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
-                Ok(CodeGenerator::generate_code(
+                let cpp = CppCodeGenerator::generate_cpp_code(inclusions, &apis);
+                let rs = RsCodeGenerator::generate_rs_code(
                     apis,
                     self.include_list,
                     parse_results.use_stmts_by_mod,
                     bindgen_mod,
-                ))
+                );
+                Ok(CodegenResults { rs, cpp })
             }
         }
     }
