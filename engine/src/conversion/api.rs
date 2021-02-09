@@ -135,7 +135,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     Type {
         ty_details: TypeApiDetails,
         for_extern_c_ts: TokenStream,
-        type_kind: TypeKind,
+        is_forward_declaration: bool,
         bindgen_mod_item: Option<Item>,
         analysis: T::TypeAnalysis,
     },
