@@ -127,7 +127,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
         for_extern_c_ts: TokenStream,
         type_kind: TypeKind,
         bindgen_mod_item: Option<Item>,
-        analysis: T::ItemAnalysis,
+        analysis: T::TypeAnalysis,
     },
     CType {
         id: Ident,

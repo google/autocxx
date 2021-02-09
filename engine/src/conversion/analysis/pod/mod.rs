@@ -17,3 +17,23 @@ mod byvalue_scanner;
 
 pub(crate) use byvalue_checker::ByValueChecker;
 pub(crate) use byvalue_scanner::identify_byvalue_safe_types;
+
+use crate::conversion::api::{Api, ApiAnalysis, ApiDetail, TypeKind, UnanalyzedApi};
+
+use super::apply_type_analysis;
+
+pub(crate) struct PodAnalysis;
+
+impl ApiAnalysis for PodAnalysis {
+    type ItemAnalysis = ();
+    type TypeAnalysis = TypeKind;
+}
+
+pub(crate) fn analyze_pod_apis(apis: Vec<UnanalyzedApi>, byvalue_checker: &ByValueChecker) -> Vec<Api<PodAnalysis>> {
+    apis.into_iter().map(|api| analyze_pod_api(api, byvalue_checker)).collect()
+}
+
+fn analyze_pod_api(api: UnanalyzedApi, byvalue_checker: &ByValueChecker) -> Api<PodAnalysis> {
+    let new_type_kind = TypeKind::POD;
+    apply_type_analysis(api, new_type_kind, ())
+}
