@@ -293,7 +293,7 @@ impl<'a> ParseBindgen<'a> {
             TokenStream2::new()
         };
 
-        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(|x| make_ident(x)).collect();
+        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(make_ident).collect();
         for_extern_c_ts.extend(quote! {
             type #final_ident = super::bindgen::root::
         });
