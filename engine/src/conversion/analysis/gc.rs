@@ -16,7 +16,10 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::TypeDatabase;
 
-use crate::{conversion::api::Api, types::TypeName};
+use crate::{
+    conversion::api::{Api, ApiAnalysis},
+    types::TypeName,
+};
 
 /// This is essentially mark-and-sweep garbage collection of the
 /// Apis that we've discovered. Why do we do this, you might wonder?
@@ -35,10 +38,10 @@ use crate::{conversion::api::Api, types::TypeName};
 ///    some methods from a given struct/class. In which case, we
 ///    don't care about the other parameter types passed into those
 ///    APIs either.
-pub(crate) fn filter_apis_by_following_edges_from_allowlist(
-    mut apis: Vec<Api>,
+pub(crate) fn filter_apis_by_following_edges_from_allowlist<T: ApiAnalysis>(
+    mut apis: Vec<Api<T>>,
     type_database: &TypeDatabase,
-) -> Vec<Api> {
+) -> Vec<Api<T>> {
     let mut todos: Vec<_> = apis
         .iter()
         .filter(|api| {
@@ -47,7 +50,7 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
         })
         .map(Api::typename)
         .collect();
-    let mut by_typename: HashMap<TypeName, Vec<Api>> = HashMap::new();
+    let mut by_typename: HashMap<TypeName, Vec<Api<T>>> = HashMap::new();
     for api in apis.drain(..) {
         let tn = api.typename();
         by_typename.entry(tn).or_default().push(api);

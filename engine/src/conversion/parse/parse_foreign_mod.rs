@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::conversion::{
-    api::ImplBlockDetails,
+    api::{ImplBlockDetails, UnanalyzedApi},
     codegen_cpp::function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
 };
 use crate::{
@@ -29,7 +29,7 @@ use syn::{
 };
 
 use super::{
-    super::api::{Api, Use},
+    super::api::Use,
     overload_tracker::OverloadTracker,
     unqualify::{unqualify_params, unqualify_ret_type},
 };
@@ -62,7 +62,7 @@ pub(crate) trait ForeignModParseCallbacks {
         convert_ptrs_to_reference: bool,
     ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError>;
     fn is_pod(&self, ty: &TypeName) -> bool;
-    fn add_api(&mut self, api: Api);
+    fn add_api(&mut self, api: UnanalyzedApi);
     fn get_cxx_bridge_name(
         &mut self,
         type_name: Option<&str>,
@@ -523,7 +523,7 @@ impl ParseForeignMod {
                 Some(alias) => (cxxbridge_name, Use::UsedWithAlias(alias), None),
             }
         };
-        let api = Api {
+        let api = UnanalyzedApi {
             ns: ns.clone(),
             id,
             use_stmt,

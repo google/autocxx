@@ -15,7 +15,7 @@
 use crate::{
     conversion::codegen_cpp::AdditionalNeed,
     conversion::{
-        api::{Api, TypeApiDetails, Use},
+        api::{TypeApiDetails, UnanalyzedApi, Use},
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -33,7 +33,7 @@ use syn::{
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<TypeName>,
-    pub(crate) extra_apis: Vec<Api>,
+    pub(crate) extra_apis: Vec<UnanalyzedApi>,
     pub(crate) requires_unsafe: bool,
 }
 
@@ -41,7 +41,7 @@ impl<T> Annotated<T> {
     fn new(
         ty: T,
         types_encountered: HashSet<TypeName>,
-        extra_apis: Vec<Api>,
+        extra_apis: Vec<UnanalyzedApi>,
         requires_unsafe: bool,
     ) -> Self {
         Self {
@@ -337,12 +337,12 @@ impl TypeConverter {
         }))
     }
 
-    fn add_concrete_type(&self, tyname: &TypeName, rs_definition: &Type) -> Api {
+    fn add_concrete_type(&self, tyname: &TypeName, rs_definition: &Type) -> UnanalyzedApi {
         let final_ident = make_ident(tyname.get_final_ident());
         let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(make_ident).collect();
         fulltypath.push(final_ident.clone());
         let tynamestring = tyname.to_cpp_name();
-        Api {
+        UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
             use_stmt: Use::Unused,
@@ -360,7 +360,10 @@ impl TypeConverter {
         }
     }
 
-    fn get_templated_typename(&mut self, rs_definition: &Type) -> (TypeName, Option<Api>) {
+    fn get_templated_typename(
+        &mut self,
+        rs_definition: &Type,
+    ) -> (TypeName, Option<UnanalyzedApi>) {
         let count = self.concrete_templates.len();
         // We just use this as a hash key, essentially.
         let cpp_definition = type_to_cpp(rs_definition);
