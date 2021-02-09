@@ -104,8 +104,21 @@ pub(crate) struct ImplBlockDetails {
     pub(crate) ty: Ident,
 }
 
+/// Layers of analysis which may be applied to decorate each API.
+/// See description of the purpose of this trait within `Api`.
+pub(crate) trait ApiAnalysis {
+    type TypeAnalysis;
+}
+
+/// No analysis has been applied to this API.
+pub(crate) struct NullAnalysis;
+
+impl ApiAnalysis for NullAnalysis {
+    type TypeAnalysis = ();
+}
+
 /// Different types of API we might encounter.
-pub(crate) enum ApiDetail {
+pub(crate) enum ApiDetail<T: ApiAnalysis> {
     ConcreteType(TypeApiDetails),
     StringConstructor,
     Function {
@@ -124,6 +137,7 @@ pub(crate) enum ApiDetail {
         for_extern_c_ts: TokenStream,
         type_kind: TypeKind,
         bindgen_mod_item: Option<Item>,
+        analysis: T::TypeAnalysis,
     },
     CType {
         id: Ident,
@@ -140,17 +154,27 @@ pub(crate) enum ApiDetail {
 /// separation between the parser and the codegen phases. However our case is
 /// a bit less normal because the code we generate actually includes most of
 /// the code we parse.
-pub(crate) struct Api {
+///
+/// This type is parameterized over an `ApiAnalysis`. This is any additional
+/// information which we wish to apply to our knowledge of our APIs later
+/// during analysis phases. It might be a excessively traity to parameterize
+/// this type; we might be better off relying on an `Option<SomeKindOfAnalysis>`
+/// but for now I'm going to see if I can get away with parameterizing this type,
+/// since then I'll get compile-time errors if I try to refer to an analysis
+/// which hasn't yet been done.
+pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) ns: Namespace,
     pub(crate) id: Ident,
     pub(crate) use_stmt: Use,
     pub(crate) deps: HashSet<TypeName>,
     pub(crate) id_for_allowlist: Option<Ident>,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
-    pub(crate) detail: ApiDetail,
+    pub(crate) detail: ApiDetail<T>,
 }
 
-impl Api {
+pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
+
+impl<T: ApiAnalysis> Api<T> {
     pub(crate) fn typename(&self) -> TypeName {
         TypeName::new(&self.ns, &self.id.to_string())
     }
@@ -170,6 +194,6 @@ impl Api {
 /// Results of parsing the bindgen mod. This is what is passed from
 /// the parser to the code generation phase.
 pub(crate) struct ParseResults {
-    pub(crate) apis: Vec<Api>,
+    pub(crate) apis: Vec<Api<NullAnalysis>>,
     pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
 }

@@ -17,7 +17,7 @@ use std::{collections::HashMap, collections::HashSet};
 use crate::{
     conversion::{
         analysis::pod::ByValueChecker,
-        api::{ApiDetail, ParseResults, TypeApiDetails, TypeKind},
+        api::{ApiDetail, ParseResults, TypeApiDetails, TypeKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
         ConvertError,
     },
@@ -32,10 +32,7 @@ use quote::quote;
 use syn::{parse_quote, Fields, Item, ItemStruct, Type};
 
 use super::{
-    super::{
-        api::{Api, Use},
-        utilities::generate_utilities,
-    },
+    super::{api::Use, utilities::generate_utilities},
     bridge_name_tracker::BridgeNameTracker,
     rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
@@ -118,11 +115,11 @@ impl<'a> ParseBindgen<'a> {
         let mut use_statements_for_this_mod = Vec::new();
         for item in items {
             match item {
-                Item::ForeignMod(mut fm) => {
-                    let items = fm.items;
-                    fm.items = Vec::new();
-                    mod_converter
-                        .convert_foreign_mod_items(items, self.latest_virtual_this_type.clone())?;
+                Item::ForeignMod(fm) => {
+                    mod_converter.convert_foreign_mod_items(
+                        fm.items,
+                        self.latest_virtual_this_type.clone(),
+                    )?;
                 }
                 Item::Struct(mut s) => {
                     if s.ident.to_string().ends_with("__bindgen_vtable") {
@@ -183,7 +180,7 @@ impl<'a> ParseBindgen<'a> {
                     // The following puts this constant into
                     // the global namespace which is bug
                     // https://github.com/google/autocxx/issues/133
-                    self.add_api(Api {
+                    self.add_api(UnanalyzedApi {
                         id: const_item.ident.clone(),
                         ns: ns.clone(),
                         deps: HashSet::new(),
@@ -199,7 +196,7 @@ impl<'a> ParseBindgen<'a> {
                     ity.ty = Box::new(final_type.ty.clone());
                     self.type_converter.insert_typedef(tyname, final_type.ty);
                     self.results.apis.append(&mut final_type.extra_apis);
-                    self.add_api(Api {
+                    self.add_api(UnanalyzedApi {
                         id: ity.ident.clone(),
                         ns: ns.clone(),
                         deps: final_type.types_encountered,
@@ -308,7 +305,7 @@ impl<'a> ParseBindgen<'a> {
             #final_ident;
         });
         fulltypath.push(final_ident.clone());
-        let api = Api {
+        let api = UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
             use_stmt: Use::Used,
@@ -324,6 +321,7 @@ impl<'a> ParseBindgen<'a> {
                 for_extern_c_ts,
                 type_kind,
                 bindgen_mod_item,
+                analysis: (),
             },
         };
         self.add_api(api);
@@ -353,7 +351,7 @@ impl<'a> ForeignModParseCallbacks for ParseBindgen<'a> {
         self.byvalue_checker.is_pod(ty)
     }
 
-    fn add_api(&mut self, api: Api) {
+    fn add_api(&mut self, api: UnanalyzedApi) {
         self.results.apis.push(api);
     }
 
