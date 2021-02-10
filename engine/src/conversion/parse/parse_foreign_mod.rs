@@ -540,7 +540,6 @@ impl ParseForeignMod {
             id_for_allowlist,
             detail: ApiDetail::Function { extern_c_mod_item },
             additional_cpp,
-            analysis: (),
         };
         callbacks.add_api(api);
         Ok(())
@@ -740,7 +739,6 @@ impl ParseForeignMod {
             id_for_allowlist: None,
             additional_cpp: None,
             detail: ApiDetail::ImplEntry { impl_entry },
-            analysis: (),
         });
     }
 

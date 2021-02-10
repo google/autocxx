@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-use crate::{conversion::api::UnanalyzedApi, known_types::KNOWN_TYPES};
+use crate::{conversion::api::Api, known_types::KNOWN_TYPES};
 use crate::{
     conversion::{
         api::{ApiDetail, Use},
@@ -23,7 +23,9 @@ use crate::{
     types::{make_ident, Namespace},
 };
 
-pub(crate) fn append_ctype_information(apis: &mut Vec<UnanalyzedApi>) {
+use super::pod::PodAnalysis;
+
+pub(crate) fn append_ctype_information(apis: &mut Vec<Api<PodAnalysis>>) {
     let ctypes: HashSet<_> = apis
         .iter()
         .map(|api| api.deps.iter())
@@ -33,7 +35,7 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<UnanalyzedApi>) {
         .collect();
     for ctype in ctypes {
         let id = make_ident(ctype.get_final_ident());
-        apis.push(UnanalyzedApi {
+        apis.push(Api {
             ns: Namespace::new(),
             id: id.clone(),
             use_stmt: Use::Unused,
@@ -41,7 +43,6 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<UnanalyzedApi>) {
             id_for_allowlist: None,
             additional_cpp: Some(AdditionalNeed::CTypeTypedef(ctype.clone())),
             detail: ApiDetail::CType { id },
-            analysis: (),
         });
     }
 }

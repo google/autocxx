@@ -357,7 +357,6 @@ impl TypeConverter {
                 tyname.clone(),
                 Box::new(rs_definition.clone()),
             )),
-            analysis: (),
         }
     }
 

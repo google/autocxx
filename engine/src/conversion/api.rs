@@ -91,7 +91,6 @@ pub(crate) struct TypeApiDetails {
 
 /// Layers of analysis which may be applied to decorate each API.
 pub(crate) trait ApiAnalysis {
-    type ItemAnalysis;
     type TypeAnalysis;
 }
 
@@ -99,7 +98,6 @@ pub(crate) trait ApiAnalysis {
 pub(crate) struct NullAnalysis;
 
 impl ApiAnalysis for NullAnalysis {
-    type ItemAnalysis = ();
     type TypeAnalysis = ();
 }
 
@@ -125,7 +123,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     Type {
         ty_details: TypeApiDetails,
         for_extern_c_ts: TokenStream,
-        type_kind: TypeKind,
+        is_forward_declaration: bool,
         bindgen_mod_item: Option<Item>,
         analysis: T::TypeAnalysis,
     },
@@ -152,7 +150,6 @@ pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) id_for_allowlist: Option<Ident>,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
     pub(crate) detail: ApiDetail<T>,
-    pub(crate) analysis: T::ItemAnalysis,
 }
 
 pub(crate) type UnanalyzedApi = Api<NullAnalysis>;

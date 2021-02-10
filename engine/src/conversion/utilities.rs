@@ -37,6 +37,5 @@ pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>) {
         detail: super::api::ApiDetail::StringConstructor,
         id_for_allowlist: None,
         additional_cpp: Some(AdditionalNeed::MakeStringConstructor),
-        analysis: (),
     });
 }
