@@ -95,13 +95,18 @@ impl<'a> BridgeConverter<'a> {
                 // Create a database to track all our types.
                 let mut type_converter = TypeConverter::new();
                 // Parse the bindgen mod.
-                let parser =
-                    ParseBindgen::new(&byvalue_checker, &self.type_database, unsafe_policy, &mut type_converter);
+                let parser = ParseBindgen::new(
+                    &byvalue_checker,
+                    &self.type_database,
+                    unsafe_policy,
+                    &mut type_converter,
+                );
                 let parse_results = parser.convert_items(items_in_root, exclude_utilities)?;
                 // The code above will have contributed lots of Apis to self.apis.
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
-                let analyzed_apis = analyze_pod_apis(parse_results.apis, &byvalue_checker, &mut type_converter)?;
+                let analyzed_apis =
+                    analyze_pod_apis(parse_results.apis, &byvalue_checker, &mut type_converter)?;
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis = filter_apis_by_following_edges_from_allowlist(
                     analyzed_apis,

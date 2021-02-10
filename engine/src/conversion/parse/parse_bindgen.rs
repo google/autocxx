@@ -61,7 +61,7 @@ impl<'a> ParseBindgen<'a> {
         byvalue_checker: &'a ByValueChecker,
         type_database: &'a TypeDatabase,
         unsafe_policy: UnsafePolicy,
-        type_converter: &'a mut TypeConverter
+        type_converter: &'a mut TypeConverter,
     ) -> Self {
         ParseBindgen {
             type_converter,
