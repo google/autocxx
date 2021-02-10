@@ -28,7 +28,7 @@ use crate::{
 use autocxx_parser::TypeDatabase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_quote, Fields, Item, ItemStruct, Type};
+use syn::{parse_quote, Fields, Item, Type};
 
 use super::{
     super::{api::Use, utilities::generate_utilities},
@@ -41,7 +41,7 @@ use super::parse_foreign_mod::{ForeignModParseCallbacks, ParseForeignMod};
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
-    type_converter: TypeConverter,
+    type_converter: &'a mut TypeConverter,
     byvalue_checker: &'a ByValueChecker,
     type_database: &'a TypeDatabase,
     bridge_name_tracker: BridgeNameTracker,
@@ -61,9 +61,10 @@ impl<'a> ParseBindgen<'a> {
         byvalue_checker: &'a ByValueChecker,
         type_database: &'a TypeDatabase,
         unsafe_policy: UnsafePolicy,
+        type_converter: &'a mut TypeConverter,
     ) -> Self {
         ParseBindgen {
-            type_converter: TypeConverter::new(),
+            type_converter,
             byvalue_checker,
             bridge_name_tracker: BridgeNameTracker::new(),
             rust_name_tracker: RustNameTracker::new(),
@@ -129,13 +130,12 @@ impl<'a> ParseBindgen<'a> {
                     if is_forward_declaration {
                         self.incomplete_types.insert(tyname.clone());
                     }
-                    let struct_field_types = self.get_struct_field_types(&ns, &s)?;
                     // cxx::bridge can't cope with type aliases to generic
                     // types at the moment.
                     self.generate_type(
                         tyname.clone(),
                         is_forward_declaration,
-                        struct_field_types,
+                        HashSet::new(),
                         Some(Item::Struct(s)),
                     );
                     self.latest_virtual_this_type = Some(tyname);
@@ -224,20 +224,6 @@ impl<'a> ParseBindgen<'a> {
             .use_stmts_by_mod
             .insert(ns, use_statements_for_this_mod);
         Ok(())
-    }
-
-    fn get_struct_field_types(
-        &mut self,
-        ns: &Namespace,
-        s: &ItemStruct,
-    ) -> Result<HashSet<TypeName>, ConvertError> {
-        let mut results = HashSet::new();
-        for f in &s.fields {
-            let annotated = self.type_converter.convert_type(f.ty.clone(), ns, false)?;
-            self.results.apis.extend(annotated.extra_apis);
-            results.extend(annotated.types_encountered);
-        }
-        Ok(results)
     }
 
     fn spot_forward_declaration(s: &Fields) -> bool {
