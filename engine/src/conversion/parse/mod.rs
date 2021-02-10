@@ -17,7 +17,7 @@ mod overload_tracker;
 pub(crate) mod parse_bindgen;
 mod parse_foreign_mod;
 mod rust_name_tracker;
-mod type_converter;
+pub(crate) mod type_converter;
 mod unqualify;
 
 pub(crate) use parse_bindgen::ParseBindgen;
