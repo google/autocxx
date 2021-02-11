@@ -18,7 +18,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
 };
-use syn::{ForeignItem, Ident, ImplItem, Item, ItemConst, ItemType};
+use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType};
 
 use super::codegen_cpp::AdditionalNeed;
 
@@ -111,8 +111,9 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
         impl_entry: Box<ImplItem>,
     },
     Function {
-        // TODO move this to be much higher level
-        extern_c_mod_item: ForeignItem,
+        item: ForeignItemFn,
+        virtual_this_type: Option<TypeName>,
+        self_ty: Option<TypeName>,
     },
     Const {
         const_item: ItemConst,

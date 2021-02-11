@@ -71,7 +71,7 @@ fn analyze_pod_api(
         ApiDetail::ConcreteType(details) => ApiDetail::ConcreteType(details),
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
         ApiDetail::ImplEntry { impl_entry } => ApiDetail::ImplEntry { impl_entry },
-        ApiDetail::Function { extern_c_mod_item } => ApiDetail::Function { extern_c_mod_item },
+        ApiDetail::Function { item, virtual_this_type, self_ty } => ApiDetail::Function { item, virtual_this_type, self_ty },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
         ApiDetail::Typedef { type_item } => ApiDetail::Typedef { type_item },
         ApiDetail::CType { id } => ApiDetail::CType { id },

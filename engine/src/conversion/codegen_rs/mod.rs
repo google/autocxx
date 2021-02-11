@@ -15,6 +15,7 @@
 mod impl_item_creator;
 mod namespace_organizer;
 mod non_pod_struct;
+mod gen_foreign_item;
 
 use std::collections::HashMap;
 
@@ -26,6 +27,7 @@ use syn::{parse_quote, ForeignItem, Ident, ImplItem, Item, ItemForeignMod, ItemM
 
 use crate::types::{make_ident, Namespace};
 use impl_item_creator::create_impl_items;
+use gen_foreign_item::FnConverter;
 
 use self::{
     namespace_organizer::{HasNs, NamespaceEntries},
@@ -81,9 +83,13 @@ impl<'a> RsCodeGenerator<'a> {
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
+                let ns = api.ns.clone();
+                let id = api.id.clone();
+                let needs_cpp = api.additional_cpp.is_some();
+                let gen = Self::generate_rs_for_api(api);
                 (
-                    (api.ns, api.id, Self::generate_rs_for_api(api.detail)),
-                    api.additional_cpp,
+                    (ns, id, gen),
+                    needs_cpp, // TODO ADE may change
                 )
             })
             .unzip();
@@ -105,9 +111,9 @@ impl<'a> RsCodeGenerator<'a> {
         // And a list of global items to include at the top level.
         let mut all_items: Vec<Item> = all_items.into_iter().flatten().collect();
         // And finally any C++ we need to generate. And by "we" I mean autocxx not cxx.
-        let additional_cpp_needs = remove_nones(additional_cpp_needs);
+        let needs_cpp = additional_cpp_needs.into_iter().any(|x| x);
         extern_c_mod_items
-            .extend(self.build_include_foreign_items(!additional_cpp_needs.is_empty()));
+            .extend(self.build_include_foreign_items(needs_cpp));
         // We will always create an extern "C" mod even if bindgen
         // didn't generate one, e.g. because it only generated types.
         // We still want cxx to know about those types.
@@ -260,8 +266,8 @@ impl<'a> RsCodeGenerator<'a> {
         output_items
     }
 
-    fn generate_rs_for_api(api_detail: ApiDetail<PodAnalysis>) -> RsCodegenResult {
-        match api_detail {
+    fn generate_rs_for_api(api: Api<PodAnalysis>) -> RsCodegenResult {
+        match api.detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
                     fn make_string(str_: &str) -> UniquePtr<CxxString>;
@@ -307,13 +313,8 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_c_mod_item: None,
                 bindgen_mod_item: None,
             },
-            ApiDetail::Function { extern_c_mod_item } => RsCodegenResult {
-                impl_entry: None,
-                global_items: Vec::new(),
-                bridge_items: Vec::new(),
-                extern_c_mod_item: Some(extern_c_mod_item),
-                bindgen_mod_item: None,
-            },
+            ApiDetail::Function { ref item, ref virtual_this_type, ref self_ty } => 
+                FnConverter::new().generate_fn(api),
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
                 impl_entry: None,
@@ -371,6 +372,7 @@ impl<'a> RsCodeGenerator<'a> {
             }
         })]
     }
+
 }
 
 impl HasNs for (Namespace, Ident, RsCodegenResult) {
@@ -385,7 +387,7 @@ impl<T: ApiAnalysis> HasNs for Api<T> {
     }
 }
 
-struct RsCodegenResult {
+pub(crate) struct RsCodegenResult {
     extern_c_mod_item: Option<ForeignItem>,
     bridge_items: Vec<Item>,
     global_items: Vec<Item>,
