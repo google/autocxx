@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use syn::ForeignItemFn;
-use crate::{conversion::{analysis::pod::PodAnalysis, api::Api}, types::TypeName};
+use crate::{conversion::{analysis::{function::FnAnalysis, pod::PodAnalysis}, api::Api}, types::TypeName};
 use super::{RsCodeGenerator, RsCodegenResult};
 
 pub(crate) struct FnConverter;
@@ -23,7 +23,7 @@ impl FnConverter {
         Self
     }
 
-    pub(crate) fn generate_fn(&mut self, api: Api<PodAnalysis>) -> RsCodegenResult {
+    pub(crate) fn generate_fn(&mut self, api: Api<FnAnalysis>) -> RsCodegenResult {
         /*let r = self.convert_foreign_fn(fun, callbacks);
         if let Err(e) = r {
             if e.is_ignorable() {

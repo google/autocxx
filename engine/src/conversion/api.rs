@@ -92,6 +92,7 @@ pub(crate) struct TypeApiDetails {
 /// Layers of analysis which may be applied to decorate each API.
 pub(crate) trait ApiAnalysis {
     type TypeAnalysis;
+    type FnAnalysis;
 }
 
 /// No analysis has been applied to this API.
@@ -99,6 +100,7 @@ pub(crate) struct NullAnalysis;
 
 impl ApiAnalysis for NullAnalysis {
     type TypeAnalysis = ();
+    type FnAnalysis = ();
 }
 
 /// Different types of API we might encounter.
@@ -114,6 +116,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
         item: ForeignItemFn,
         virtual_this_type: Option<TypeName>,
         self_ty: Option<TypeName>,
+        analysis: T::FnAnalysis,
     },
     Const {
         const_item: ItemConst,

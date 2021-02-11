@@ -175,6 +175,7 @@ impl ParseForeignMod {
                     item: fun.item,
                     virtual_this_type: fun.virtual_this_type,
                     self_ty,
+                    analysis: (),
                 }
             });
         }

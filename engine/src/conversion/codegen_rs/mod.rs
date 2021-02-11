@@ -34,10 +34,7 @@ use self::{
     non_pod_struct::new_non_pod_struct,
 };
 
-use super::{
-    analysis::pod::PodAnalysis,
-    api::{Api, ApiAnalysis, ApiDetail, TypeApiDetails, TypeKind, Use},
-};
+use super::{analysis::{function::FnAnalysis, pod::PodAnalysis}, api::{Api, ApiAnalysis, ApiDetail, TypeApiDetails, TypeKind, Use}};
 use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
@@ -61,7 +58,7 @@ pub(crate) struct RsCodeGenerator<'a> {
 impl<'a> RsCodeGenerator<'a> {
     /// Generate code for a set of APIs that was discovered during parsing.
     pub(crate) fn generate_rs_code(
-        all_apis: Vec<Api<PodAnalysis>>,
+        all_apis: Vec<Api<FnAnalysis>>,
         include_list: &'a [String],
         use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
         bindgen_mod: ItemMod,
@@ -74,7 +71,7 @@ impl<'a> RsCodeGenerator<'a> {
         c.rs_codegen(all_apis)
     }
 
-    fn rs_codegen(mut self, all_apis: Vec<Api<PodAnalysis>>) -> Vec<Item> {
+    fn rs_codegen(mut self, all_apis: Vec<Api<FnAnalysis>>) -> Vec<Item> {
         // ... and now let's start to generate the output code.
         // First, the hierarchy of mods containing lots of 'use' statements
         // which is the final API exposed as 'ffi'.
@@ -266,7 +263,7 @@ impl<'a> RsCodeGenerator<'a> {
         output_items
     }
 
-    fn generate_rs_for_api(api: Api<PodAnalysis>) -> RsCodegenResult {
+    fn generate_rs_for_api(api: Api<FnAnalysis>) -> RsCodegenResult {
         match api.detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
@@ -313,7 +310,7 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_c_mod_item: None,
                 bindgen_mod_item: None,
             },
-            ApiDetail::Function { ref item, ref virtual_this_type, ref self_ty } => 
+            ApiDetail::Function { ref item, ref virtual_this_type, ref self_ty, ref analysis } => 
                 FnConverter::new().generate_fn(api),
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
