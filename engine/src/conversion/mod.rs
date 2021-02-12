@@ -21,6 +21,7 @@ mod conversion_tests;
 mod parse;
 mod utilities;
 
+use analysis::fun::FnAnalyzer;
 pub(crate) use api::ConvertError;
 use autocxx_parser::TypeDatabase;
 pub(crate) use codegen_cpp::type_to_cpp::type_to_cpp;
@@ -95,18 +96,24 @@ impl<'a> BridgeConverter<'a> {
                 // Create a database to track all our types.
                 let mut type_converter = TypeConverter::new();
                 // Parse the bindgen mod.
-                let parser = ParseBindgen::new(
-                    &byvalue_checker,
-                    &self.type_database,
-                    unsafe_policy,
-                    &mut type_converter,
-                );
+                let parser = ParseBindgen::new(&self.type_database, &mut type_converter);
                 let parse_results = parser.convert_items(items_in_root, exclude_utilities)?;
                 // The code above will have contributed lots of Apis to self.apis.
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
                 let analyzed_apis =
                     analyze_pod_apis(parse_results.apis, &byvalue_checker, &mut type_converter)?;
+                // Next, figure out how we materialize different functions.
+                // Some will be simple entries in the cxx::bridge module; others will
+                // require C++ wrapper functions.
+                let analyzed_apis = FnAnalyzer::analyze_functions(
+                    analyzed_apis,
+                    unsafe_policy,
+                    &mut type_converter,
+                    &byvalue_checker,
+                    self.type_database,
+                    parse_results.incomplete_types,
+                )?;
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis = filter_apis_by_following_edges_from_allowlist(
                     analyzed_apis,

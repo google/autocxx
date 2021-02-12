@@ -28,6 +28,7 @@ use self::function_wrapper::FunctionWrapperPayload;
 use super::api::{Api, ApiAnalysis};
 
 /// Instructions for new C++ which we need to generate.
+#[derive(Clone)]
 pub(crate) enum AdditionalNeed {
     MakeStringConstructor,
     FunctionWrapper(Box<FunctionWrapper>),

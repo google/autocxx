@@ -18,7 +18,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
 };
-use syn::{ForeignItem, Ident, ImplItem, Item, ItemConst, ItemType};
+use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType};
 
 use super::codegen_cpp::AdditionalNeed;
 
@@ -85,6 +85,7 @@ pub(crate) enum TypeKind {
 
 /// Whether and how this type should be exposed in the mods constructed
 /// for actual end-user use.
+#[derive(Clone)]
 pub(crate) enum Use {
     Unused,
     Used,
@@ -103,11 +104,20 @@ pub(crate) struct ImplBlockDetails {
     pub(crate) item: ImplItem,
     pub(crate) ty: Ident,
 }
+/// A ForeignItemFn with a little bit of context about the
+/// type which is most likely to be 'this'
+#[derive(Clone)]
+pub(crate) struct FuncToConvert {
+    pub(crate) item: ForeignItemFn,
+    pub(crate) virtual_this_type: Option<TypeName>,
+    pub(crate) self_ty: Option<TypeName>,
+}
 
 /// Layers of analysis which may be applied to decorate each API.
 /// See description of the purpose of this trait within `Api`.
 pub(crate) trait ApiAnalysis {
     type TypeAnalysis;
+    type FunAnalysis;
 }
 
 /// No analysis has been applied to this API.
@@ -115,6 +125,7 @@ pub(crate) struct NullAnalysis;
 
 impl ApiAnalysis for NullAnalysis {
     type TypeAnalysis = ();
+    type FunAnalysis = ();
 }
 
 /// Different types of API we might encounter.
@@ -122,9 +133,8 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     ConcreteType(TypeApiDetails),
     StringConstructor,
     Function {
-        // TODO move this to be much higher level
-        extern_c_mod_item: ForeignItem,
-        impl_entry: Option<Box<ImplBlockDetails>>,
+        fun: FuncToConvert,
+        analysis: T::FunAnalysis,
     },
     Const {
         const_item: ItemConst,
@@ -195,5 +205,6 @@ impl<T: ApiAnalysis> Api<T> {
 /// the parser to the code generation phase.
 pub(crate) struct ParseResults {
     pub(crate) apis: Vec<Api<NullAnalysis>>,
-    pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
+    pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>, // TODO future, move to metadata on APIs
+    pub(crate) incomplete_types: HashSet<TypeName>, // TODO future, move to metadata on APIs
 }

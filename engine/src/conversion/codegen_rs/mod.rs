@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod fun_codegen;
 mod impl_item_creator;
 mod namespace_organizer;
 mod non_pod_struct;
+mod unqualify;
 
 use std::collections::HashMap;
 
@@ -28,12 +30,13 @@ use crate::types::{make_ident, Namespace};
 use impl_item_creator::create_impl_items;
 
 use self::{
+    fun_codegen::gen_function,
     namespace_organizer::{HasNs, NamespaceEntries},
     non_pod_struct::new_non_pod_struct,
 };
 
 use super::{
-    analysis::pod::PodAnalysis,
+    analysis::fun::FnAnalysis,
     api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, Use},
 };
 use quote::quote;
@@ -59,7 +62,7 @@ pub(crate) struct RsCodeGenerator<'a> {
 impl<'a> RsCodeGenerator<'a> {
     /// Generate code for a set of APIs that was discovered during parsing.
     pub(crate) fn generate_rs_code(
-        all_apis: Vec<Api<PodAnalysis>>,
+        all_apis: Vec<Api<FnAnalysis>>,
         include_list: &'a [String],
         use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
         bindgen_mod: ItemMod,
@@ -72,7 +75,7 @@ impl<'a> RsCodeGenerator<'a> {
         c.rs_codegen(all_apis)
     }
 
-    fn rs_codegen(mut self, all_apis: Vec<Api<PodAnalysis>>) -> Vec<Item> {
+    fn rs_codegen(mut self, all_apis: Vec<Api<FnAnalysis>>) -> Vec<Item> {
         // ... and now let's start to generate the output code.
         // First, the hierarchy of mods containing lots of 'use' statements
         // which is the final API exposed as 'ffi'.
@@ -81,10 +84,8 @@ impl<'a> RsCodeGenerator<'a> {
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
-                (
-                    (api.ns, api.id, Self::generate_rs_for_api(api.detail)),
-                    api.additional_cpp,
-                )
+                let gen = Self::generate_rs_for_api(&api.ns, api.detail);
+                ((api.ns, api.id, gen), api.additional_cpp)
             })
             .unzip();
         // And work out what we need for the bindgen mod.
@@ -260,7 +261,7 @@ impl<'a> RsCodeGenerator<'a> {
         output_items
     }
 
-    fn generate_rs_for_api(api_detail: ApiDetail<PodAnalysis>) -> RsCodegenResult {
+    fn generate_rs_for_api(ns: &Namespace, api_detail: ApiDetail<FnAnalysis>) -> RsCodegenResult {
         match api_detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
@@ -300,16 +301,7 @@ impl<'a> RsCodeGenerator<'a> {
                     impl_entry: None,
                 }
             }
-            ApiDetail::Function {
-                extern_c_mod_item,
-                impl_entry,
-            } => RsCodegenResult {
-                impl_entry,
-                global_items: Vec::new(),
-                bridge_items: Vec::new(),
-                extern_c_mod_item: Some(extern_c_mod_item),
-                bindgen_mod_item: None,
-            },
+            ApiDetail::Function { fun: _, analysis } => gen_function(ns, analysis),
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
                 impl_entry: None,
@@ -381,7 +373,7 @@ impl<T: ApiAnalysis> HasNs for Api<T> {
     }
 }
 
-struct RsCodegenResult {
+pub(crate) struct RsCodegenResult {
     extern_c_mod_item: Option<ForeignItem>,
     bridge_items: Vec<Item>,
     global_items: Vec<Item>,

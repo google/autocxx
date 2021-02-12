@@ -35,6 +35,7 @@ pub(crate) struct PodAnalysis;
 
 impl ApiAnalysis for PodAnalysis {
     type TypeAnalysis = TypeKind;
+    type FunAnalysis = ();
 }
 
 pub(crate) fn analyze_pod_apis(
@@ -70,13 +71,7 @@ fn analyze_pod_api(
         // No changes to any of these...
         ApiDetail::ConcreteType(details) => ApiDetail::ConcreteType(details),
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
-        ApiDetail::Function {
-            extern_c_mod_item,
-            impl_entry,
-        } => ApiDetail::Function {
-            extern_c_mod_item,
-            impl_entry,
-        },
+        ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
         ApiDetail::Typedef { type_item } => ApiDetail::Typedef { type_item },
         ApiDetail::CType { id } => ApiDetail::CType { id },

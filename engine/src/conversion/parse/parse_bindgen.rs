@@ -16,39 +16,30 @@ use std::{collections::HashMap, collections::HashSet};
 
 use crate::{
     conversion::{
-        analysis::pod::ByValueChecker,
         api::{ApiDetail, ParseResults, TypeApiDetails, UnanalyzedApi},
         ConvertError,
     },
     types::make_ident,
     types::Namespace,
     types::TypeName,
-    UnsafePolicy,
 };
 use autocxx_parser::TypeDatabase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_quote, Fields, Item, Type};
+use syn::{parse_quote, Fields, Item};
 
 use super::{
     super::{api::Use, utilities::generate_utilities},
-    bridge_name_tracker::BridgeNameTracker,
-    rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
 };
 
-use super::parse_foreign_mod::{ForeignModParseCallbacks, ParseForeignMod};
+use super::parse_foreign_mod::ParseForeignMod;
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
     type_converter: &'a mut TypeConverter,
-    byvalue_checker: &'a ByValueChecker,
     type_database: &'a TypeDatabase,
-    bridge_name_tracker: BridgeNameTracker,
-    rust_name_tracker: RustNameTracker,
-    incomplete_types: HashSet<TypeName>,
     results: ParseResults,
-    unsafe_policy: UnsafePolicy,
     /// Here we track the last struct which bindgen told us about.
     /// Any subsequent "extern 'C'" blocks are methods belonging to that type,
     /// even if the 'this' is actually recorded as void in the
@@ -58,23 +49,17 @@ pub(crate) struct ParseBindgen<'a> {
 
 impl<'a> ParseBindgen<'a> {
     pub(crate) fn new(
-        byvalue_checker: &'a ByValueChecker,
         type_database: &'a TypeDatabase,
-        unsafe_policy: UnsafePolicy,
         type_converter: &'a mut TypeConverter,
     ) -> Self {
         ParseBindgen {
             type_converter,
-            byvalue_checker,
-            bridge_name_tracker: BridgeNameTracker::new(),
-            rust_name_tracker: RustNameTracker::new(),
             type_database,
-            incomplete_types: HashSet::new(),
             results: ParseResults {
                 apis: Vec::new(),
                 use_stmts_by_mod: HashMap::new(),
+                incomplete_types: HashSet::new(),
             },
-            unsafe_policy,
             latest_virtual_this_type: None,
         }
     }
@@ -128,7 +113,7 @@ impl<'a> ParseBindgen<'a> {
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
                     let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
                     if is_forward_declaration {
-                        self.incomplete_types.insert(tyname.clone());
+                        self.results.incomplete_types.insert(tyname.clone());
                     }
                     // cxx::bridge can't cope with type aliases to generic
                     // types at the moment.
@@ -167,7 +152,7 @@ impl<'a> ParseBindgen<'a> {
                     // The following puts this constant into
                     // the global namespace which is bug
                     // https://github.com/google/autocxx/issues/133
-                    self.add_api(UnanalyzedApi {
+                    self.results.apis.push(UnanalyzedApi {
                         id: const_item.ident.clone(),
                         ns: ns.clone(),
                         deps: HashSet::new(),
@@ -183,7 +168,7 @@ impl<'a> ParseBindgen<'a> {
                     ity.ty = Box::new(final_type.ty.clone());
                     self.type_converter.insert_typedef(tyname, final_type.ty);
                     self.results.apis.append(&mut final_type.extra_apis);
-                    self.add_api(UnanalyzedApi {
+                    self.results.apis.push(UnanalyzedApi {
                         id: ity.ident.clone(),
                         ns: ns.clone(),
                         deps: final_type.types_encountered,
@@ -196,7 +181,7 @@ impl<'a> ParseBindgen<'a> {
                 _ => return Err(ConvertError::UnexpectedItemInMod),
             }
         }
-        mod_converter.finished(self)?;
+        mod_converter.finished(&mut self.results.apis);
 
         // We don't immediately blat 'use' statements into any particular
         // Api. We'll squirrel them away and insert them into the output mod later
@@ -297,61 +282,7 @@ impl<'a> ParseBindgen<'a> {
                 analysis: (),
             },
         };
-        self.add_api(api);
-        self.type_converter.push(tyname);
-    }
-}
-
-impl<'a> ForeignModParseCallbacks for ParseBindgen<'a> {
-    fn convert_boxed_type(
-        &mut self,
-        ty: Box<Type>,
-        ns: &Namespace,
-        convert_ptrs_to_reference: bool,
-    ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError> {
-        let annotated =
-            self.type_converter
-                .convert_boxed_type(ty, ns, convert_ptrs_to_reference)?;
-        self.results.apis.extend(annotated.extra_apis);
-        Ok((
-            annotated.ty,
-            annotated.types_encountered,
-            annotated.requires_unsafe,
-        ))
-    }
-
-    fn is_pod(&self, ty: &TypeName) -> bool {
-        self.byvalue_checker.is_pod(ty)
-    }
-
-    fn add_api(&mut self, api: UnanalyzedApi) {
         self.results.apis.push(api);
-    }
-
-    fn get_cxx_bridge_name(
-        &mut self,
-        type_name: Option<&str>,
-        found_name: &str,
-        ns: &Namespace,
-    ) -> String {
-        self.bridge_name_tracker
-            .get_unique_cxx_bridge_name(type_name, found_name, ns)
-    }
-
-    fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool {
-        self.rust_name_tracker.ok_to_use_rust_name(rust_name)
-    }
-
-    fn is_on_allowlist(&self, type_name: &TypeName) -> bool {
-        self.type_database.is_on_allowlist(&type_name.to_cpp_name())
-    }
-
-    fn avoid_generating_type(&self, type_name: &TypeName) -> bool {
-        self.type_database.is_on_blocklist(&type_name.to_cpp_name())
-            || self.incomplete_types.contains(type_name)
-    }
-
-    fn should_be_unsafe(&self) -> bool {
-        self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
+        self.type_converter.push(tyname);
     }
 }

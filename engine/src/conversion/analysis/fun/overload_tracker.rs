@@ -33,10 +33,6 @@ pub(crate) struct OverloadTracker {
 }
 
 impl OverloadTracker {
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
     pub(crate) fn get_function_real_name(&mut self, found_name: String) -> String {
         self.get_name(None, found_name)
     }
@@ -70,7 +66,7 @@ mod tests {
 
     #[test]
     fn test_by_function() {
-        let mut ot = OverloadTracker::new();
+        let mut ot = OverloadTracker::default();
         assert_eq!(ot.get_function_real_name("bob".into()), "bob");
         assert_eq!(ot.get_function_real_name("bob".into()), "bob1");
         assert_eq!(ot.get_function_real_name("bob".into()), "bob2");
@@ -78,7 +74,7 @@ mod tests {
 
     #[test]
     fn test_by_method() {
-        let mut ot = OverloadTracker::new();
+        let mut ot = OverloadTracker::default();
         assert_eq!(ot.get_method_real_name("Ty1", "bob".into()), "bob");
         assert_eq!(ot.get_method_real_name("Ty1", "bob".into()), "bob1");
         assert_eq!(ot.get_method_real_name("Ty2", "bob".into()), "bob");

@@ -23,9 +23,9 @@ use crate::{
     types::{make_ident, Namespace},
 };
 
-use super::pod::PodAnalysis;
+use super::fun::FnAnalysis;
 
-pub(crate) fn append_ctype_information(apis: &mut Vec<Api<PodAnalysis>>) {
+pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
     let ctypes: HashSet<_> = apis
         .iter()
         .map(|api| api.deps.iter())
