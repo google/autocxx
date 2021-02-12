@@ -17,9 +17,9 @@ use clap::{crate_authors, crate_version, App, Arg, SubCommand};
 use indoc::indoc;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use std::{fs::File, path::Path};
 
 fn main() {
     let matches = App::new("autocxx-gen")
@@ -134,12 +134,12 @@ fn main() {
     }
 }
 
-fn write_cpp_file(outdir: &PathBuf, pattern: &str, cpp: &str, counter: usize, content: &[u8]) {
+fn write_cpp_file(outdir: &Path, pattern: &str, cpp: &str, counter: usize, content: &[u8]) {
     let cppname = format!("{}{}.{}", pattern, counter, cpp);
     write_to_file(outdir, cppname, content);
 }
 
-fn write_to_file(dir: &PathBuf, filename: String, content: &[u8]) {
+fn write_to_file(dir: &Path, filename: String, content: &[u8]) {
     let path = dir.join(filename);
     let mut f = File::create(&path).expect("Unable to create file");
     f.write_all(content).expect("Unable to write file");
