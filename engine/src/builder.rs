@@ -175,11 +175,12 @@ pub(crate) fn build_with_existing_parsed_file(
     }
 }
 
-fn ensure_created(dir: &PathBuf) -> Result<(), BuilderError> {
-    std::fs::create_dir_all(dir).map_err(|e| BuilderError::UnableToCreateDirectory(e, dir.clone()))
+fn ensure_created(dir: &Path) -> Result<(), BuilderError> {
+    std::fs::create_dir_all(dir)
+        .map_err(|e| BuilderError::UnableToCreateDirectory(e, dir.to_path_buf()))
 }
 
-fn build_autocxx_inc<I, T>(paths: I, extra_path: &PathBuf) -> String
+fn build_autocxx_inc<I, T>(paths: I, extra_path: &Path) -> String
 where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
@@ -188,7 +189,7 @@ where
         .into_iter()
         .map(|p| PathBuf::from(p.as_ref()))
         .collect();
-    all_paths.push(extra_path.clone());
+    all_paths.push(extra_path.to_path_buf());
     std::env::join_paths(all_paths)
         .unwrap()
         .to_str()
