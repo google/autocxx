@@ -134,10 +134,6 @@ pub trait RebuildDependencyRecorder: std::fmt::Debug {
 
 /// Core of the autocxx engine. See `generate` for most details
 /// on how this works.
-///
-/// TODO - consider whether this 'engine' crate should actually be a
-/// directory of source symlinked from all the other sub-crates, so that
-/// we avoid exposing an external interface from this code.
 pub struct IncludeCppEngine {
     config: IncludeCppConfig,
     state: State,
@@ -183,7 +179,6 @@ impl IncludeCppEngine {
     }
 
     fn make_bindgen_builder(&self, inc_dirs: &[PathBuf]) -> bindgen::Builder {
-        // TODO support different C++ versions
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14"])
             .derive_copy(false)

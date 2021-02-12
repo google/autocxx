@@ -34,10 +34,6 @@ pub use type_database::TypeDatabase;
 
 /// Core of the autocxx engine. See `generate` for most details
 /// on how this works.
-///
-/// TODO - consider whether this 'engine' crate should actually be a
-/// directory of source symlinked from all the other sub-crates, so that
-/// we avoid exposing an external interface from this code.
 pub struct IncludeCpp {
     config: IncludeCppConfig,
 }

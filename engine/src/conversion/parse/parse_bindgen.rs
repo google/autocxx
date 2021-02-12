@@ -180,7 +180,7 @@ impl<'a> ParseBindgen<'a> {
                     use_statements_for_this_mod.push(item);
                 }
                 Item::Const(const_item) => {
-                    // TODO the following puts this constant into
+                    // The following puts this constant into
                     // the global namespace which is bug
                     // https://github.com/google/autocxx/issues/133
                     self.add_api(Api {
