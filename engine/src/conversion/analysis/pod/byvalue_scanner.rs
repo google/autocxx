@@ -89,6 +89,6 @@ impl<'a> ByValueScanner<'a> {
             .collect();
         self.byvalue_checker
             .satisfy_requests(pod_requests)
-            .map_err(ConvertError::UnsafePODType)
+            .map_err(ConvertError::UnsafePodType)
     }
 }
