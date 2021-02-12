@@ -66,13 +66,13 @@ impl ConvertError {
     /// _use_ the affects functions. I don't know a way to do that. Otherwise,
     /// we should output these things as warnings during the codegen phase. TODO.
     pub(crate) fn is_ignorable(&self) -> bool {
-        match self {
+        matches!(
+            self,
             ConvertError::VirtualThisType(..)
-            | ConvertError::UnsupportedBuiltInType(..)
-            | ConvertError::UnacceptableParam(..)
-            | ConvertError::NotOneInputReference(..) => true,
-            _ => false,
-        }
+                | ConvertError::UnsupportedBuiltInType(..)
+                | ConvertError::UnacceptableParam(..)
+                | ConvertError::NotOneInputReference(..)
+        )
     }
 }
 
