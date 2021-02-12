@@ -25,7 +25,7 @@ use super::codegen_cpp::AdditionalNeed;
 #[derive(Debug)]
 pub enum ConvertError {
     NoContent,
-    UnsafePODType(String),
+    UnsafePodType(String),
     UnexpectedForeignItem,
     UnexpectedOuterItem,
     UnexpectedItemInMod,
@@ -42,7 +42,7 @@ impl Display for ConvertError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConvertError::NoContent => write!(f, "The initial run of 'bindgen' did not generate any content. This might be because none of the requested items for generation could be converted.")?,
-            ConvertError::UnsafePODType(err) => write!(f, "An item was requested using 'generate_pod' which was not safe to hold by value in Rust. {}", err)?,
+            ConvertError::UnsafePodType(err) => write!(f, "An item was requested using 'generate_pod' which was not safe to hold by value in Rust. {}", err)?,
             ConvertError::UnexpectedForeignItem => write!(f, "Bindgen generated some unexpected code in a foreign mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
             ConvertError::UnexpectedOuterItem => write!(f, "Bindgen generated some unexpected code in its outermost mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
             ConvertError::UnexpectedItemInMod => write!(f, "Bindgen generated some unexpected code in an inner namespace mod. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
@@ -78,8 +78,8 @@ impl ConvertError {
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
-    POD,                // trivial. Can be moved and copied in Rust.
-    NonPOD, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
+    Pod,                // trivial. Can be moved and copied in Rust.
+    NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
     ForwardDeclaration, // no full C++ declaration available - can't even generate UniquePtr
 }
 

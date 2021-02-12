@@ -283,7 +283,7 @@ impl<'a> RsCodeGenerator<'a> {
                 impl_entry: None,
             },
             ApiDetail::ConcreteType(ty_details) => {
-                let global_items = Self::generate_extern_type_impl(TypeKind::NonPOD, &ty_details);
+                let global_items = Self::generate_extern_type_impl(TypeKind::NonPod, &ty_details);
                 let final_ident = &ty_details.final_ident;
                 RsCodegenResult {
                     global_items,
@@ -352,7 +352,7 @@ impl<'a> RsCodeGenerator<'a> {
         let tynamestring = &ty_details.tynamestring;
         let fulltypath = &ty_details.fulltypath;
         let kind_item = match type_kind {
-            TypeKind::POD => "Trivial",
+            TypeKind::Pod => "Trivial",
             _ => "Opaque",
         };
         let kind_item = make_ident(kind_item);
