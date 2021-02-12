@@ -168,7 +168,7 @@ impl ParseForeignMod {
             let r = self.convert_foreign_fn(fun, callbacks);
             if let Err(e) = r {
                 if e.is_ignorable() {
-                    log::warn!("Skipped function because: {}", e);
+                    eprintln!("Skipped function because: {}", e);
                 } else {
                     return Err(e);
                 }
@@ -345,22 +345,14 @@ impl ParseForeignMod {
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
         if deps.iter().any(|tn| callbacks.avoid_generating_type(tn)) {
-            log::info!(
-                "Skipping function {} due to return type or parameter being on blocklist or because only a forward declaration was encountered",
-                rust_name
-            );
-            return Ok(()); // TODO think about how to inform user about this. Consider a more precise reason too.
+            return Err(ConvertError::UnacceptableParam(rust_name));
         }
         if return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
             // one reference as a parameter. Let's see...
             let num_input_references = param_details.iter().filter(|pd| pd.was_reference).count();
             if num_input_references != 1 {
-                log::info!(
-                    "Skipping function {} due to reference return type and <> 1 input reference",
-                    rust_name
-                );
-                return Ok(()); // TODO think about how to inform user about this
+                return Err(ConvertError::NotOneInputReference(rust_name));
             }
         }
         let mut ret_type = return_analysis.rt;

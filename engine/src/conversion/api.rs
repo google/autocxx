@@ -34,6 +34,8 @@ pub enum ConvertError {
     UnsupportedBuiltInType(TypeName),
     VirtualThisType(Namespace, String),
     ConflictingTemplatedArgsWithTypedef(TypeName),
+    UnacceptableParam(String),
+    NotOneInputReference(String),
 }
 
 impl Display for ConvertError {
@@ -48,7 +50,9 @@ impl Display for ConvertError {
             ConvertError::UnexpectedThisType(ns, fn_name) => write!(f, "Unexpected type for 'this' in the function {}{}.", fn_name, ns.to_display_suffix())?,
             ConvertError::UnsupportedBuiltInType(ty) => write!(f, "autocxx does not yet know how to support the built-in C++ type {} - please raise an issue on github", ty.to_cpp_name())?,
             ConvertError::VirtualThisType(ns, fn_name) => write!(f, "Member function encountered where the 'this' type is 'void*', but we were unable to recognize which type that corresponds to. Function {}{}.", fn_name, ns.to_display_suffix())?,
-            ConvertError::ConflictingTemplatedArgsWithTypedef(tn) => write!(f, "Type {} has templatd arguments and so does the typedef to which it points", tn)?,
+            ConvertError::ConflictingTemplatedArgsWithTypedef(tn) => write!(f, "Type {} has templated arguments and so does the typedef to which it points", tn)?,
+            ConvertError::UnacceptableParam(fn_name) => write!(f, "Function {} has a parameter or return type which is either on the blocklist or a forward declaration", fn_name)?,
+            ConvertError::NotOneInputReference(fn_name) => write!(f, "Function {} has a return reference parameter, but 0 or >1 input reference parameters, so the lifetime of the output reference cannot be deduced.", fn_name)?,
         }
         Ok(())
     }
@@ -62,10 +66,13 @@ impl ConvertError {
     /// _use_ the affects functions. I don't know a way to do that. Otherwise,
     /// we should output these things as warnings during the codegen phase. TODO.
     pub(crate) fn is_ignorable(&self) -> bool {
-        matches!(
-            self,
-            ConvertError::VirtualThisType(_, _) | ConvertError::UnsupportedBuiltInType(_)
-        )
+        match self {
+            ConvertError::VirtualThisType(..)
+            | ConvertError::UnsupportedBuiltInType(..)
+            | ConvertError::UnacceptableParam(..)
+            | ConvertError::NotOneInputReference(..) => true,
+            _ => false,
+        }
     }
 }
 

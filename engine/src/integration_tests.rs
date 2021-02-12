@@ -179,8 +179,6 @@ fn do_run_test(
 
     // Step 2: Expand the snippet of Rust code into an entire
     //         program including include_cxx!
-    // TODO - we're not quoting #s below (in the "" sense), and it's not entirely
-    // clear how we're getting away with it, but quoting it doesn't work.
     let generate = generate.iter().map(|s| {
         quote! {
             generate!(#s)
