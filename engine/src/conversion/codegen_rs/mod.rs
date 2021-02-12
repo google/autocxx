@@ -16,6 +16,7 @@ mod impl_item_creator;
 mod namespace_organizer;
 mod non_pod_struct;
 mod gen_foreign_item;
+mod unqualify;
 
 use std::collections::HashMap;
 
@@ -34,7 +35,7 @@ use self::{
     non_pod_struct::new_non_pod_struct,
 };
 
-use super::{analysis::{function::FnAnalysis, pod::PodAnalysis}, api::{Api, ApiAnalysis, ApiDetail, TypeApiDetails, TypeKind, Use}};
+use super::{analysis::{function::FnAnalysis}, api::{Api, ApiAnalysis, ApiDetail, TypeApiDetails, TypeKind, Use}};
 use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
@@ -311,7 +312,7 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: None,
             },
             ApiDetail::Function { ref item, ref virtual_this_type, ref self_ty, ref analysis } => 
-                FnConverter::new().generate_fn(api),
+                FnConverter::new().generate_fn(api, item, virtual_this_type, self_ty, analysis ),
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
                 impl_entry: None,

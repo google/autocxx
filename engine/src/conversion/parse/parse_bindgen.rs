@@ -28,12 +28,10 @@ use crate::{
 use autocxx_parser::TypeDatabase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_quote, Fields, Item, Type};
+use syn::{parse_quote, Fields, Item};
 
 use super::{
     super::{api::Use, utilities::generate_utilities},
-    bridge_name_tracker::BridgeNameTracker,
-    rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
 };
 
@@ -44,9 +42,6 @@ pub(crate) struct ParseBindgen<'a> {
     type_converter: &'a mut TypeConverter,
     byvalue_checker: &'a ByValueChecker,
     type_database: &'a TypeDatabase,
-    bridge_name_tracker: BridgeNameTracker,
-    rust_name_tracker: RustNameTracker,
-    incomplete_types: HashSet<TypeName>,
     results: ParseResults,
     unsafe_policy: UnsafePolicy,
     /// Here we track the last struct which bindgen told us about.
@@ -66,10 +61,7 @@ impl<'a> ParseBindgen<'a> {
         ParseBindgen {
             type_converter,
             byvalue_checker,
-            bridge_name_tracker: BridgeNameTracker::new(),
-            rust_name_tracker: RustNameTracker::new(),
             type_database,
-            incomplete_types: HashSet::new(),
             results: ParseResults {
                 apis: Vec::new(),
                 use_stmts_by_mod: HashMap::new(),
@@ -127,9 +119,6 @@ impl<'a> ParseBindgen<'a> {
                     }
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
                     let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
-                    if is_forward_declaration {
-                        self.incomplete_types.insert(tyname.clone());
-                    }
                     // cxx::bridge can't cope with type aliases to generic
                     // types at the moment.
                     self.generate_type(
@@ -303,55 +292,25 @@ impl<'a> ParseBindgen<'a> {
 }
 
 impl<'a> ForeignModParseCallbacks for ParseBindgen<'a> {
-    fn convert_boxed_type(
-        &mut self,
-        ty: Box<Type>,
-        ns: &Namespace,
-        convert_ptrs_to_reference: bool,
-    ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError> {
-        let annotated =
-            self.type_converter
-                .convert_boxed_type(ty, ns, convert_ptrs_to_reference)?;
-        self.results.apis.extend(annotated.extra_apis);
-        Ok((
-            annotated.ty,
-            annotated.types_encountered,
-            annotated.requires_unsafe,
-        ))
-    }
-
-    fn is_pod(&self, ty: &TypeName) -> bool {
-        self.byvalue_checker.is_pod(ty)
-    }
 
     fn add_api(&mut self, api: UnanalyzedApi) {
         self.results.apis.push(api);
     }
 
-    fn get_cxx_bridge_name(
-        &mut self,
-        type_name: Option<&str>,
-        found_name: &str,
-        ns: &Namespace,
-    ) -> String {
-        self.bridge_name_tracker
-            .get_unique_cxx_bridge_name(type_name, found_name, ns)
-    }
+    // fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool {
+    //     self.rust_name_tracker.ok_to_use_rust_name(rust_name)
+    // }
 
-    fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool {
-        self.rust_name_tracker.ok_to_use_rust_name(rust_name)
-    }
+    // fn is_on_allowlist(&self, type_name: &TypeName) -> bool {
+    //     self.type_database.is_on_allowlist(&type_name.to_cpp_name())
+    // }
 
-    fn is_on_allowlist(&self, type_name: &TypeName) -> bool {
-        self.type_database.is_on_allowlist(&type_name.to_cpp_name())
-    }
+    // fn avoid_generating_type(&self, type_name: &TypeName) -> bool {
+    //     self.type_database.is_on_blocklist(&type_name.to_cpp_name())
+    //         || self.incomplete_types.contains(type_name)
+    // }
 
-    fn avoid_generating_type(&self, type_name: &TypeName) -> bool {
-        self.type_database.is_on_blocklist(&type_name.to_cpp_name())
-            || self.incomplete_types.contains(type_name)
-    }
-
-    fn should_be_unsafe(&self) -> bool {
-        self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
-    }
+    // fn should_be_unsafe(&self) -> bool {
+    //     self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
+    // }
 }

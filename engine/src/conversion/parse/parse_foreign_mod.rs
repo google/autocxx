@@ -14,7 +14,6 @@
 
 use crate::conversion::{
     api::UnanalyzedApi,
-    codegen_cpp::function_wrapper::{ArgumentConversion},
 };
 use crate::{
     conversion::ConvertError,
@@ -24,56 +23,18 @@ use crate::{
 
 use std::collections::{HashMap, HashSet};
 use syn::{
-    ForeignItem, ForeignItemFn, Ident, ImplItem, ItemImpl, Pat, ReturnType, Type,
+    ForeignItem, ForeignItemFn, Ident, ImplItem, ItemImpl, Type,
 };
 
 use super::{
     super::api::Use,
-    overload_tracker::OverloadTracker,
 };
-
-struct ArgumentAnalysis {
-    conversion: ArgumentConversion,
-    name: Pat,
-    self_type: Option<TypeName>,
-    was_reference: bool,
-    deps: HashSet<TypeName>,
-    virtual_this_encountered: bool,
-    requires_unsafe: bool,
-}
-
-struct ReturnTypeAnalysis {
-    rt: ReturnType,
-    conversion: Option<ArgumentConversion>,
-    was_reference: bool,
-    deps: HashSet<TypeName>,
-}
 
 /// Ways in which the conversion of a given extern "C" mod can
 /// have more global effects or require more global knowledge outside
 /// of its immediate conversion.
 pub(crate) trait ForeignModParseCallbacks {
-    fn convert_boxed_type(
-        &mut self,
-        ty: Box<Type>,
-        ns: &Namespace,
-        convert_ptrs_to_reference: bool,
-    ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError>;
-    fn is_pod(&self, ty: &TypeName) -> bool;
     fn add_api(&mut self, api: UnanalyzedApi);
-    fn get_cxx_bridge_name(
-        &mut self,
-        type_name: Option<&str>,
-        found_name: &str,
-        ns: &Namespace,
-    ) -> String;
-    fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool;
-    fn is_on_allowlist(&self, type_name: &TypeName) -> bool;
-    fn avoid_generating_type(&self, type_name: &TypeName) -> bool;
-    /// In the future, this will take details of the function
-    /// we're generating, in order to determine whether it should be unsafe
-    /// according to a more nuanced policy.
-    fn should_be_unsafe(&self) -> bool;
 }
 
 /// A ForeignItemFn with a little bit of context about the
@@ -88,7 +49,6 @@ struct FuncToConvert {
 /// a specific C++ namespace.
 pub(crate) struct ParseForeignMod {
     ns: Namespace,
-    overload_tracker: OverloadTracker,
     // We mostly act upon the functions we see within the 'extern "C"'
     // block of bindgen output, but we can't actually do this until
     // we've seen the (possibly subsequent) 'impl' blocks so we can
@@ -105,7 +65,6 @@ impl ParseForeignMod {
     pub(crate) fn new(ns: Namespace) -> Self {
         Self {
             ns,
-            overload_tracker: OverloadTracker::new(),
             funcs_to_convert: Vec::new(),
             method_receivers: HashMap::new(),
         }

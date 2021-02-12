@@ -101,8 +101,10 @@ impl<'a> BridgeConverter<'a> {
                 // versus which need to be opaque).
                 let analyzed_apis =
                     analyze_pod_apis(parse_results.apis, &byvalue_checker, &mut type_converter)?;
+                // Work out which functions can be expressed in plain cxx::bridge entries
+                // versus which ones need C++ wrappers.
                 let analyzed_apis =
-                    analyze_functions(analyzed_apis)?;
+                    analyze_functions(analyzed_apis, &mut type_converter)?;
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis = filter_apis_by_following_edges_from_allowlist(
                     analyzed_apis,

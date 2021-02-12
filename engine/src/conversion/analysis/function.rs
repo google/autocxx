@@ -14,35 +14,41 @@
 
 use std::collections::HashSet;
 use syn::{FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType, Type, TypePtr, Visibility, parse_quote, punctuated::Punctuated};
-use crate::{conversion::{ConvertError, api::{Api, ApiAnalysis, ApiDetail, TypeKind}, codegen_cpp::function_wrapper::ArgumentConversion, parse::type_converter::{TypeConverter}}, types::{Namespace, TypeName}};
+use crate::{conversion::{ConvertError, api::{Api, ApiAnalysis, ApiDetail, TypeKind, UnanalyzedApi}, codegen_cpp::function_wrapper::ArgumentConversion, parse::type_converter::{TypeConverter}}, types::{Namespace, TypeName}};
 use super::{bridge_name_tracker::BridgeNameTracker, overload_tracker::OverloadTracker, pod::PodAnalysis, rust_name_tracker::RustNameTracker};
 use crate::types::make_ident;
 
 pub(crate) struct FnMaterialization {
-    cxxbridge_name: Ident,
-    rust_name: Ident,
-    is_a_method: bool,
-    ret_type: ReturnType,
-    is_constructor: bool,
-    wrapper_function_needed: bool,
-    requires_unsafe: bool,
-    vis: Visibility,
+    pub(crate) cxxbridge_name: Ident,
+    pub(crate) rust_name: String,
+    pub(crate) is_a_method: bool,
+    pub(crate) ret_type: ReturnType,
+    pub(crate) is_constructor: bool,
+    pub(crate) wrapper_function_needed: bool,
+    pub(crate) requires_unsafe: bool,
+    pub(crate) vis: Visibility,
+    pub(crate) cpp_call_name: String,
+    pub(crate) return_analysis: ReturnTypeAnalysis,
+    pub(crate) param_details: Vec<ArgumentAnalysis>,
+    pub(crate) is_static_method: bool,
+    pub(crate) ret_type_conversion: Option<ArgumentConversion>,
+    pub(crate) params: Punctuated<FnArg, syn::Token![,]>,
 }
-struct ArgumentAnalysis {
-    conversion: ArgumentConversion,
-    name: Pat,
-    self_type: Option<TypeName>,
-    was_reference: bool,
-    deps: HashSet<TypeName>,
-    virtual_this_encountered: bool,
-    requires_unsafe: bool,
+pub(crate) struct ArgumentAnalysis {
+    pub(crate) conversion: ArgumentConversion,
+    pub(crate) name: Pat,
+    pub(crate) self_type: Option<TypeName>,
+    pub(crate) was_reference: bool,
+    pub(crate) deps: HashSet<TypeName>,
+    pub(crate) virtual_this_encountered: bool,
+    pub(crate) requires_unsafe: bool,
 }
 
 struct ReturnTypeAnalysis {
-    rt: ReturnType,
-    conversion: Option<ArgumentConversion>,
-    was_reference: bool,
-    deps: HashSet<TypeName>,
+    pub(crate) rt: ReturnType,
+    pub(crate) conversion: Option<ArgumentConversion>,
+    pub(crate) was_reference: bool,
+    pub(crate) deps: HashSet<TypeName>,
 }
 
 pub(crate) struct FnAnalysis;
@@ -60,12 +66,38 @@ struct Ctx<'a> {
     pod_tracker: PodTracker,
     forward_declarations: HashSet<TypeName>,
     type_converter: &'a mut TypeConverter,
+    extra_apis: Vec<UnanalyzedApi>, // TODO actually handle somehow
 }
 
 impl<'a> Ctx<'a> {
-    fn avoid_generating_type(&self, tn: &TypeName) {
+    fn avoid_generating_type(&self, tn: &TypeName) -> bool {
         self.forward_declarations.contains(tn)
             // TODO || is_on_blocklist
+    }
+    fn convert_boxed_type(
+        &mut self,
+        ty: Box<Type>,
+        ns: &Namespace,
+        convert_ptrs_to_reference: bool,
+    ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError> {
+        let annotated =
+            self.type_converter
+                .convert_boxed_type(ty, ns, convert_ptrs_to_reference)?;
+        self.extra_apis.extend(annotated.extra_apis);
+        Ok((
+            annotated.ty,
+            annotated.types_encountered,
+            annotated.requires_unsafe,
+        ))
+    }
+    fn is_pod(&self, tn: &TypeName) -> bool {
+        false // TODO
+    }
+    fn is_on_allowlist(&self, tn: &TypeName) -> bool {
+        false // TODO
+    }
+    fn should_be_unsafe(&self) -> bool {
+        false // TODO
     }
 }
 
@@ -81,15 +113,16 @@ pub(crate) fn analyze_functions(apis: Vec<Api<PodAnalysis>>, type_converter: &mu
         pod_tracker: PodTracker,
         forward_declarations: HashSet::new(), // TODO fill in
         type_converter,
+        extra_apis: Vec::new(),
     };
     let mut mod_ctx = ModCtx {
         ctx: &mut ctx,
         overload_tracker: OverloadTracker::new(),
     };
-    apis.into_iter().map(|api| {
+    apis.into_iter().filter_map(|api| {
         match api.detail {
             ApiDetail::Function{ref item, ref virtual_this_type, ref self_ty, analysis} => {
-                analyze_function(api, item, virtual_this_type, self_ty, &mut mod_ctx)?
+                analyze_function(api, item, virtual_this_type, self_ty, &mut mod_ctx)
             }
             ApiDetail::ConcreteType(_) => {}
             ApiDetail::StringConstructor => {}
@@ -104,7 +137,7 @@ pub(crate) fn analyze_functions(apis: Vec<Api<PodAnalysis>>, type_converter: &mu
     // TODO fill out the rest
 }
 
-fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &Option<TypeName>, static_self_ty: &Option<TypeName>, mod_ctx: &mut ModCtx) -> Result<Api<FnAnalysis>,ConvertError> {
+fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &Option<TypeName>, static_self_ty: &Option<TypeName>, mod_ctx: &mut ModCtx) -> Result<Option<Api<FnAnalysis>>,ConvertError> {
 
     let ns = api.ns.clone();
     // This function is one of the most complex parts of our conversion.
@@ -118,7 +151,7 @@ fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &O
     //    3a. And alias the original name to the wrapper.
     let initial_rust_name = fun.sig.ident.to_string();
     if initial_rust_name.ends_with("_destructor") {
-        return Ok(());
+        return Ok(None);
     }
 
     let original_name = get_bindgen_original_name_annotation(&fun);
@@ -133,7 +166,7 @@ fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &O
         .map(|i| {
             convert_fn_arg(
                 i,
-                ns,
+                &api.ns,
                 mod_ctx,
                 diagnostic_display_name,
                 virtual_this.clone(),
@@ -166,7 +199,7 @@ fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &O
     let is_static_method = if self_ty.is_none() {
         // Even if we can't find a 'self' parameter this could conceivably
         // be a static method.
-        self_ty = static_self_ty.cloned();
+        self_ty = static_self_ty.as_ref().cloned();
         self_ty.is_some()
     } else {
         false
@@ -192,12 +225,12 @@ fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &O
         cpp_call_name.clone()
     };
     if let Some(self_ty) = &self_ty {
-        if !mod_ctx.is_on_allowlist(&self_ty) {
+        if !mod_ctx.ctx.is_on_allowlist(&self_ty) {
             // Bindgen will output methods for types which have been encountered
             // virally as arguments on other allowlisted types. But we don't want
             // to generate methods unless the user has specifically asked us to.
             // It may, for instance, be a private type.
-            return Ok(());
+            return Ok(None);
         }
         // Method or static method.
         let type_ident = self_ty.get_final_ident().to_string();
@@ -235,7 +268,7 @@ fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &O
     // The name we use within the cxx::bridge mod may be different
     // from both the C++ name and the Rust name, because it's a flat
     // namespace so we might need to prepend some stuff to make it unique.
-    let cxxbridge_name = mod_ctx.ctx.bridge_name_tracker.get_cxx_bridge_name(
+    let cxxbridge_name = mod_ctx.ctx.bridge_name_tracker.get_unique_cxx_bridge_name(
         self_ty.as_ref().map(|ty| ty.get_final_ident()),
         &rust_name,
         &api.ns,
@@ -260,7 +293,7 @@ fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &O
             deps: these_deps,
         }
     } else {
-        convert_return_type(mod_ctx, fun.sig.output, ns, reference_return)?
+        convert_return_type(mod_ctx, fun.sig.output, &api.ns, reference_return)?
     };
     let mut deps = params_deps;
     deps.extend(return_analysis.deps.drain());
@@ -269,7 +302,7 @@ fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &O
             "Skipping function {} due to return type or parameter being on blocklist or because only a forward declaration was encountered",
             rust_name
         );
-        return Ok(()); // TODO think about how to inform user about this. Consider a more precise reason too.
+        return Ok(None); // TODO think about how to inform user about this. Consider a more precise reason too.
     }
     if return_analysis.was_reference {
         // cxx only allows functions to return a reference if they take exactly
@@ -280,7 +313,7 @@ fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &O
                 "Skipping function {} due to reference return type and <> 1 input reference",
                 rust_name
             );
-            return Ok(()); // TODO think about how to inform user about this
+            return Ok(None); // TODO think about how to inform user about this
         }
     }
     let mut ret_type = return_analysis.rt;
@@ -297,6 +330,7 @@ fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &O
         || is_static_method
         || differently_named_method
         || virtual_this_encountered;
+    let requires_unsafe = requires_unsafe || mod_ctx.ctx.should_be_unsafe();
 
     FnMaterialization {
         cxxbridge_name,
@@ -307,6 +341,12 @@ fn analyze_function(api: Api<PodAnalysis>, fun: &ForeignItemFn, virtual_this: &O
         wrapper_function_needed,
         requires_unsafe,
         vis: fun.vis,
+        return_analysis,
+        param_details,
+        cpp_call_name,
+        is_static_method,
+        ret_type_conversion,
+        params,
     };
 
 }
@@ -404,9 +444,9 @@ fn convert_fn_arg(
                 _ => old_pat,
             };
             let (new_ty, deps, requires_unsafe) =
-                mod_ctx.ctx.type_converter.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
+                mod_ctx.ctx.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
             let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
-            let conversion = argument_conversion_details(&new_ty, mod_ctx.ctx.pod_tracker);
+            let conversion = argument_conversion_details(&new_ty, &mod_ctx.ctx);
             pt.pat = Box::new(new_pat.clone());
             pt.ty = new_ty;
             (
@@ -428,7 +468,7 @@ fn convert_fn_arg(
 
 fn conversion_details<F>(
     ty: &Type,
-    pod_tracker: &PodTracker,
+    ctx: &Ctx,
     conversion_direction: F,
 ) -> ArgumentConversion
 where
@@ -436,7 +476,7 @@ where
 {
     match ty {
         Type::Path(p) => {
-            if pod_tracker.is_pod(&TypeName::from_type_path(p)) {
+            if ctx.is_pod(&TypeName::from_type_path(p)) {
                 ArgumentConversion::new_unconverted(ty.clone())
             } else {
                 conversion_direction(ty.clone())
@@ -448,16 +488,16 @@ where
 
 fn argument_conversion_details(
     ty: &Type,
-    pod_tracker: &PodTracker,
+    ctx: &Ctx,
 ) -> ArgumentConversion {
-    conversion_details(ty, pod_tracker, ArgumentConversion::new_from_unique_ptr)
+    conversion_details(ty, ctx, ArgumentConversion::new_from_unique_ptr)
 }
 
 fn return_type_conversion_details(
     ty: &Type,
-    pod_tracker: &PodTracker,
+    ctx: &Ctx,
 ) -> ArgumentConversion {
-    conversion_details(ty, pod_tracker, ArgumentConversion::new_to_unique_ptr)
+    conversion_details(ty, ctx, ArgumentConversion::new_to_unique_ptr)
 }
 
 fn convert_return_type(
@@ -475,10 +515,10 @@ fn convert_return_type(
         },
         ReturnType::Type(rarrow, boxed_type) => {
             let (boxed_type, deps, _) =
-                mod_ctx.ctx.type_converter.convert_boxed_type(boxed_type, ns, convert_ptr_to_reference)?;
+                mod_ctx.ctx.convert_boxed_type(boxed_type, ns, convert_ptr_to_reference)?;
             let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
             let conversion =
-                return_type_conversion_details(boxed_type.as_ref(), &mod_ctx.ctx.pod_tracker);
+                return_type_conversion_details(boxed_type.as_ref(), &mod_ctx.ctx);
             ReturnTypeAnalysis {
                 rt: ReturnType::Type(rarrow, boxed_type),
                 conversion: Some(conversion),

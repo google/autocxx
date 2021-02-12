@@ -16,3 +16,6 @@ pub(crate) mod ctypes;
 pub(crate) mod gc;
 pub(crate) mod pod; // hey, that rhymes
 pub(crate) mod function;
+mod overload_tracker; // TODO move into sub-mod
+mod bridge_name_tracker;
+mod rust_name_tracker;
