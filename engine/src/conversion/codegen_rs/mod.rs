@@ -22,7 +22,7 @@ use std::collections::HashMap;
 // codegen_rs but currently Rust codegen happens everywhere... TODO
 pub(crate) use non_pod_struct::make_non_pod;
 
-use syn::{parse_quote, ForeignItem, Ident, ImplItem, Item, ItemForeignMod, ItemMod};
+use syn::{parse_quote, ForeignItem, Ident, Item, ItemForeignMod, ItemMod};
 
 use crate::types::{make_ident, Namespace};
 use impl_item_creator::create_impl_items;
@@ -32,7 +32,7 @@ use self::{
     non_pod_struct::new_non_pod_struct,
 };
 
-use super::api::{Api, ApiDetail, TypeApiDetails, TypeKind, Use};
+use super::api::{Api, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, Use};
 use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
@@ -215,9 +215,9 @@ impl<'a> RsCodeGenerator<'a> {
             output_items.extend(item.2.bindgen_mod_item.iter().cloned());
             if let Some(impl_entry) = &item.2.impl_entry {
                 impl_entries_by_type
-                    .entry(item.1.clone())
+                    .entry(impl_entry.ty.clone())
                     .or_default()
-                    .push(impl_entry);
+                    .push(&impl_entry.item);
             }
         }
         for (ty, entries) in impl_entries_by_type.into_iter() {
@@ -297,15 +297,11 @@ impl<'a> RsCodeGenerator<'a> {
                     impl_entry: None,
                 }
             }
-            ApiDetail::ImplEntry { impl_entry } => RsCodegenResult {
-                impl_entry: Some(*impl_entry),
-                global_items: Vec::new(),
-                bridge_items: Vec::new(),
-                extern_c_mod_item: None,
-                bindgen_mod_item: None,
-            },
-            ApiDetail::Function { extern_c_mod_item } => RsCodegenResult {
-                impl_entry: None,
+            ApiDetail::Function {
+                extern_c_mod_item,
+                impl_entry,
+            } => RsCodegenResult {
+                impl_entry,
                 global_items: Vec::new(),
                 bridge_items: Vec::new(),
                 extern_c_mod_item: Some(extern_c_mod_item),
@@ -386,5 +382,5 @@ struct RsCodegenResult {
     bridge_items: Vec<Item>,
     global_items: Vec<Item>,
     bindgen_mod_item: Option<Item>,
-    impl_entry: Option<ImplItem>,
+    impl_entry: Option<Box<ImplBlockDetails>>,
 }

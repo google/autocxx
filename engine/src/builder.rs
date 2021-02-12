@@ -196,19 +196,19 @@ where
         .to_string()
 }
 
-fn write_to_file(dir: &PathBuf, filename: &str, content: &[u8]) -> Result<PathBuf, BuilderError> {
+fn write_to_file(dir: &Path, filename: &str, content: &[u8]) -> Result<PathBuf, BuilderError> {
     let path = dir.join(filename);
     try_write_to_file(&path, content).map_err(|e| BuilderError::FileWriteFail(e, path.clone()))?;
     Ok(path)
 }
 
-fn try_write_to_file(path: &PathBuf, content: &[u8]) -> std::io::Result<()> {
+fn try_write_to_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
     let mut f = File::create(path)?;
     f.write_all(content)
 }
 
 fn write_rs_to_file(
-    dir: &PathBuf,
+    dir: &Path,
     filename: &str,
     content: TokenStream,
 ) -> Result<PathBuf, BuilderError> {

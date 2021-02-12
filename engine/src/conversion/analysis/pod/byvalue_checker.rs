@@ -18,21 +18,21 @@ use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
 #[derive(Clone)]
-enum PODState {
-    UnsafeToBePOD(String),
-    SafeToBePOD,
-    IsPOD,
+enum PodState {
+    UnsafeToBePod(String),
+    SafeToBePod,
+    IsPod,
     IsAlias(TypeName),
 }
 
 #[derive(Clone)]
 struct StructDetails {
-    state: PODState,
+    state: PodState,
     dependent_structs: Vec<TypeName>,
 }
 
 impl StructDetails {
-    fn new(state: PODState) -> Self {
+    fn new(state: PodState) -> Self {
         StructDetails {
             state,
             dependent_structs: Vec::new(),
@@ -54,9 +54,9 @@ impl ByValueChecker {
         let mut results = HashMap::new();
         for (tn, by_value_safe) in KNOWN_TYPES.get_pod_safe_types() {
             let safety = if by_value_safe {
-                PODState::IsPOD
+                PodState::IsPod
             } else {
-                PODState::UnsafeToBePOD(format!("type {} is not safe for POD", tn))
+                PodState::UnsafeToBePod(format!("type {} is not safe for POD", tn))
             };
             results.insert(tn, StructDetails::new(safety));
         }
@@ -66,21 +66,21 @@ impl ByValueChecker {
     pub fn ingest_struct(&mut self, def: &ItemStruct, ns: &Namespace) {
         // For this struct, work out whether it _could_ be safe as a POD.
         let tyname = TypeName::new(ns, &def.ident.to_string());
-        let mut field_safety_problem = PODState::SafeToBePOD;
+        let mut field_safety_problem = PodState::SafeToBePod;
         let fieldlist = Self::get_field_types(def);
         for ty_id in &fieldlist {
             match self.results.get(ty_id) {
                 None => {
-                    field_safety_problem = PODState::UnsafeToBePOD(format!(
+                    field_safety_problem = PodState::UnsafeToBePod(format!(
                         "Type {} could not be POD because its dependent type {} isn't known",
                         tyname, ty_id
                     ));
                     break;
                 }
                 Some(deets) => {
-                    if let PODState::UnsafeToBePOD(reason) = &deets.state {
+                    if let PodState::UnsafeToBePod(reason) = &deets.state {
                         let new_reason = format!("Type {} could not be POD because its dependent type {} isn't safe to be POD. Because: {}", tyname, ty_id, reason);
-                        field_safety_problem = PODState::UnsafeToBePOD(new_reason);
+                        field_safety_problem = PodState::UnsafeToBePod(new_reason);
                         break;
                     }
                 }
@@ -92,7 +92,7 @@ impl ByValueChecker {
                 "Type {} could not be POD because it has virtual functions.",
                 tyname
             );
-            field_safety_problem = PODState::UnsafeToBePOD(reason);
+            field_safety_problem = PodState::UnsafeToBePod(reason);
         }
         let mut my_details = StructDetails::new(field_safety_problem);
         my_details.dependent_structs = fieldlist;
@@ -101,19 +101,19 @@ impl ByValueChecker {
 
     pub fn ingest_pod_type(&mut self, tyname: TypeName) {
         self.results
-            .insert(tyname, StructDetails::new(PODState::IsPOD));
+            .insert(tyname, StructDetails::new(PodState::IsPod));
     }
 
     pub fn ingest_simple_typedef(&mut self, tyname: TypeName, target: TypeName) {
         self.results
-            .insert(tyname, StructDetails::new(PODState::IsAlias(target)));
+            .insert(tyname, StructDetails::new(PodState::IsAlias(target)));
     }
 
     pub fn ingest_nonpod_type(&mut self, tyname: TypeName) {
         let new_reason = format!("Type {} is a typedef to a complex type", tyname);
         self.results.insert(
             tyname,
-            StructDetails::new(PODState::UnsafeToBePOD(new_reason)),
+            StructDetails::new(PodState::UnsafeToBePod(new_reason)),
         );
     }
 
@@ -130,13 +130,13 @@ impl ByValueChecker {
                     ))
                 }
                 Some(deets) => match &deets.state {
-                    PODState::UnsafeToBePOD(error_msg) => return Err(error_msg.clone()),
-                    PODState::IsPOD => {}
-                    PODState::SafeToBePOD => {
-                        deets.state = PODState::IsPOD;
+                    PodState::UnsafeToBePod(error_msg) => return Err(error_msg.clone()),
+                    PodState::IsPod => {}
+                    PodState::SafeToBePod => {
+                        deets.state = PodState::IsPod;
                         requests.extend_from_slice(&deets.dependent_structs);
                     }
-                    PODState::IsAlias(target_type) => {
+                    PodState::IsAlias(target_type) => {
                         alias_to_consider = Some(target_type.clone());
                     }
                 },
@@ -160,13 +160,16 @@ impl ByValueChecker {
             // Type we created at conversion time.
             return false;
         }
-        matches!(self
-        .results
-        .get(ty_id)
-        .unwrap_or_else(|| panic!("Type {} not known to byvalue_checker", ty_id.to_string())), StructDetails {
-            state: PODState::IsPOD,
-            dependent_structs: _,
-        })
+        matches!(
+            self.results.get(ty_id).unwrap_or_else(|| panic!(
+                "Type {} not known to byvalue_checker",
+                ty_id.to_string()
+            )),
+            StructDetails {
+                state: PodState::IsPod,
+                dependent_structs: _,
+            }
+        )
     }
 
     fn get_field_types(def: &ItemStruct) -> Vec<TypeName> {

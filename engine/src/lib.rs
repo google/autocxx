@@ -120,7 +120,6 @@ struct GenerationResults {
 enum State {
     NotGenerated,
     ParseOnly,
-    NothingGenerated,
     Generated(Box<GenerationResults>),
 }
 
@@ -237,7 +236,7 @@ impl IncludeCppEngine {
         match &self.state {
             State::NotGenerated => panic!("Generate first"),
             State::Generated(gen_results) => gen_results.item_mod.to_token_stream(),
-            State::NothingGenerated | State::ParseOnly => TokenStream2::new(),
+            State::ParseOnly => TokenStream2::new(),
         }
     }
 
@@ -291,7 +290,7 @@ impl IncludeCppEngine {
         match self.state {
             State::ParseOnly => return Ok(()),
             State::NotGenerated => {}
-            State::Generated(_) | State::NothingGenerated => panic!("Only call generate once"),
+            State::Generated(_) => panic!("Only call generate once"),
         }
 
         if self.config.type_database.allowlist_is_empty() {
@@ -347,7 +346,6 @@ impl IncludeCppEngine {
         match &self.state {
             State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
             State::NotGenerated => panic!("Call generate() first"),
-            State::NothingGenerated => {}
             State::Generated(gen_results) => {
                 let rs = gen_results.item_mod.to_token_stream();
                 let opt = cxx_gen::Opt::default();

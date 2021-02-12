@@ -62,7 +62,10 @@ impl ConvertError {
     /// _use_ the affects functions. I don't know a way to do that. Otherwise,
     /// we should output these things as warnings during the codegen phase. TODO.
     pub(crate) fn is_ignorable(&self) -> bool {
-        matches!(self, ConvertError::VirtualThisType(_, _) | ConvertError::UnsupportedBuiltInType(_))
+        matches!(
+            self,
+            ConvertError::VirtualThisType(_, _) | ConvertError::UnsupportedBuiltInType(_)
+        )
     }
 }
 
@@ -89,18 +92,19 @@ pub(crate) struct TypeApiDetails {
     pub(crate) tynamestring: String,
 }
 
+pub(crate) struct ImplBlockDetails {
+    pub(crate) item: ImplItem,
+    pub(crate) ty: Ident,
+}
+
 /// Different types of API we might encounter.
 pub(crate) enum ApiDetail {
     ConcreteType(TypeApiDetails),
     StringConstructor,
-    ImplEntry {
-        // TODO move this to be higher level and/or
-        // combine with the FunctionCall item
-        impl_entry: Box<ImplItem>,
-    },
     Function {
         // TODO move this to be much higher level
         extern_c_mod_item: ForeignItem,
+        impl_entry: Option<Box<ImplBlockDetails>>,
     },
     Const {
         const_item: ItemConst,
