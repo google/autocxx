@@ -160,13 +160,16 @@ impl ByValueChecker {
             // Type we created at conversion time.
             return false;
         }
-        matches!(self
-        .results
-        .get(ty_id)
-        .unwrap_or_else(|| panic!("Type {} not known to byvalue_checker", ty_id.to_string())), StructDetails {
-            state: PODState::IsPOD,
-            dependent_structs: _,
-        })
+        matches!(
+            self.results.get(ty_id).unwrap_or_else(|| panic!(
+                "Type {} not known to byvalue_checker",
+                ty_id.to_string()
+            )),
+            StructDetails {
+                state: PODState::IsPOD,
+                dependent_structs: _,
+            }
+        )
     }
 
     fn get_field_types(def: &ItemStruct) -> Vec<TypeName> {

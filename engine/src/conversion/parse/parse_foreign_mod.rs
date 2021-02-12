@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::codegen_cpp::function_wrapper::{
-    ArgumentConversion, FunctionWrapper, FunctionWrapperPayload,
+use crate::conversion::{
+    api::ImplBlockDetails,
+    codegen_cpp::function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
 };
 use crate::{
     conversion::ConvertError,
@@ -437,6 +438,7 @@ impl ParseForeignMod {
         }
 
         let mut use_alias_required = None;
+        let mut impl_entry = None;
         if cxxbridge_name == rust_name {
             if !is_a_method {
                 // Mark that this name is now occupied in the output
@@ -450,16 +452,14 @@ impl ParseForeignMod {
             // the original function.
             if let Some(type_name) = &self_ty {
                 // Method, or static method.
-                self.generate_method_impl(
+                impl_entry = Some(self.generate_method_impl(
                     &param_details,
                     is_constructor,
-                    &make_ident(type_name.get_final_ident()),
+                    type_name,
                     &cxxbridge_name,
                     &rust_name,
                     &ret_type,
-                    ns,
-                    callbacks,
-                );
+                ));
             } else {
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
@@ -537,7 +537,10 @@ impl ParseForeignMod {
             use_stmt,
             deps,
             id_for_allowlist,
-            detail: ApiDetail::Function { extern_c_mod_item },
+            detail: ApiDetail::Function {
+                extern_c_mod_item,
+                impl_entry,
+            },
             additional_cpp,
         };
         callbacks.add_api(api);
@@ -695,19 +698,15 @@ impl ParseForeignMod {
     }
 
     /// Generate an 'impl Type { methods-go-here }' item
-    #[allow(clippy::too_many_arguments)] // Clippy's right, but the alternatives
-                                         // are probably less maintainable still.
     fn generate_method_impl(
         &mut self,
         param_details: &[ArgumentAnalysis],
         is_constructor: bool,
-        impl_block_type_name: &Ident,
+        impl_block_type_name: &TypeName,
         cxxbridge_name: &Ident,
         rust_name: &str,
         ret_type: &ReturnType,
-        ns: &Namespace,
-        callbacks: &mut impl ForeignModParseCallbacks,
-    ) {
+    ) -> Box<ImplBlockDetails> {
         let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
         let mut arg_list = Vec::new();
         for pd in param_details {
@@ -724,21 +723,14 @@ impl ParseForeignMod {
         }
 
         let rust_name = make_ident(&rust_name);
-        let impl_entry = Box::new(ImplItem::Method(parse_quote! {
-            pub fn #rust_name ( #wrapper_params ) #ret_type {
-                cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-            }
-        }));
-
-        callbacks.add_api(Api {
-            ns: ns.clone(),
-            id: impl_block_type_name.clone(),
-            use_stmt: Use::Unused,
-            deps: HashSet::new(),
-            id_for_allowlist: None,
-            additional_cpp: None,
-            detail: ApiDetail::ImplEntry { impl_entry },
-        });
+        Box::new(ImplBlockDetails {
+            item: ImplItem::Method(parse_quote! {
+                pub fn #rust_name ( #wrapper_params ) #ret_type {
+                    cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+                }
+            }),
+            ty: make_ident(impl_block_type_name.get_final_ident()),
+        })
     }
 
     fn get_bindgen_original_name_annotation(fun: &ForeignItemFn) -> Option<String> {
