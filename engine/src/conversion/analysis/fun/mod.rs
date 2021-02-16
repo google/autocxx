@@ -111,8 +111,20 @@ impl<'a> FnAnalyzer<'a> {
         type_converter: &'a mut TypeConverter,
         byvalue_checker: &'a ByValueChecker,
         type_database: &'a TypeDatabase,
-        incomplete_types: HashSet<TypeName>,
     ) -> Result<Vec<Api<FnAnalysis>>, ConvertError> {
+        let incomplete_types = apis
+            .iter()
+            .filter_map(|api| match api.detail {
+                ApiDetail::Type {
+                    ty_details: _,
+                    for_extern_c_ts: _,
+                    is_forward_declaration,
+                    bindgen_mod_item: _,
+                    analysis: _,
+                } if is_forward_declaration => Some(TypeName::new(&api.ns, &api.id.to_string())),
+                _ => None,
+            })
+            .collect();
         let mut me = Self {
             unsafe_policy,
             rust_name_tracker: RustNameTracker::new(),

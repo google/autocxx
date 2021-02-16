@@ -206,5 +206,4 @@ impl<T: ApiAnalysis> Api<T> {
 pub(crate) struct ParseResults {
     pub(crate) apis: Vec<Api<NullAnalysis>>,
     pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>, // TODO future, move to metadata on APIs
-    pub(crate) incomplete_types: HashSet<TypeName>, // TODO future, move to metadata on APIs
 }

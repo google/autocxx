@@ -58,7 +58,6 @@ impl<'a> ParseBindgen<'a> {
             results: ParseResults {
                 apis: Vec::new(),
                 use_stmts_by_mod: HashMap::new(),
-                incomplete_types: HashSet::new(),
             },
             latest_virtual_this_type: None,
         }
@@ -112,9 +111,6 @@ impl<'a> ParseBindgen<'a> {
                     }
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
                     let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
-                    if is_forward_declaration {
-                        self.results.incomplete_types.insert(tyname.clone());
-                    }
                     // cxx::bridge can't cope with type aliases to generic
                     // types at the moment.
                     self.generate_type(

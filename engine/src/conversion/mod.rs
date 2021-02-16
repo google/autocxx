@@ -112,7 +112,6 @@ impl<'a> BridgeConverter<'a> {
                     &mut type_converter,
                     &byvalue_checker,
                     self.type_database,
-                    parse_results.incomplete_types,
                 )?;
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis = filter_apis_by_following_edges_from_allowlist(
