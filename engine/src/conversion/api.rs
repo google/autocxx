@@ -63,8 +63,8 @@ impl ConvertError {
     /// In the future we need to use this to provide diagnostics or logging to the user,
     /// which ideally we'd somehow winkle into the generated bindings
     /// in a way that causes them a compile-time problem only if they try to
-    /// _use_ the affects functions. I don't know a way to do that. Otherwise,
-    /// we should output these things as warnings during the codegen phase. TODO.
+    /// _use_ the affects functions. I don't know a way to do that. Meanwhile,
+    /// we should output these things as warnings during the codegen phase.
     pub(crate) fn is_ignorable(&self) -> bool {
         match self {
             ConvertError::VirtualThisType(..)
