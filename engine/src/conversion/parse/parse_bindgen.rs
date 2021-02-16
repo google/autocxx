@@ -37,7 +37,6 @@ use super::parse_foreign_mod::ParseForeignMod;
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
-    type_converter: &'a mut TypeConverter,
     type_config: &'a TypeConfig,
     results: ParseResults,
     /// Here we track the last struct which bindgen told us about.
@@ -50,13 +49,12 @@ pub(crate) struct ParseBindgen<'a> {
 impl<'a> ParseBindgen<'a> {
     pub(crate) fn new(
         type_config: &'a TypeConfig,
-        type_converter: &'a mut TypeConverter,
     ) -> Self {
         ParseBindgen {
-            type_converter,
             type_config,
             results: ParseResults {
                 apis: Vec::new(),
+                type_converter: TypeConverter::new(),
                 use_stmts_by_mod: HashMap::new(),
             },
             latest_virtual_this_type: None,
@@ -160,9 +158,9 @@ impl<'a> ParseBindgen<'a> {
                 }
                 Item::Type(mut ity) => {
                     let tyname = TypeName::new(&ns, &ity.ident.to_string());
-                    let mut final_type = self.type_converter.convert_type(*ity.ty, &ns, false)?;
+                    let mut final_type = self.results.type_converter.convert_type(*ity.ty, &ns, false)?;
                     ity.ty = Box::new(final_type.ty.clone());
-                    self.type_converter.insert_typedef(tyname, final_type.ty);
+                    self.results.type_converter.insert_typedef(tyname, final_type.ty);
                     self.results.apis.append(&mut final_type.extra_apis);
                     self.results.apis.push(UnanalyzedApi {
                         id: ity.ident.clone(),
@@ -279,6 +277,6 @@ impl<'a> ParseBindgen<'a> {
             },
         };
         self.results.apis.push(api);
-        self.type_converter.push(tyname);
+        self.results.type_converter.push(tyname);
     }
 }

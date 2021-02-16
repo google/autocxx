@@ -27,7 +27,6 @@ use autocxx_parser::TypeConfig;
 pub(crate) use codegen_cpp::type_to_cpp::type_to_cpp;
 pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use codegen_cpp::CppCodegenResults;
-use parse::type_converter::TypeConverter;
 use syn::{Item, ItemMod};
 
 use crate::UnsafePolicy;
@@ -93,11 +92,10 @@ impl<'a> BridgeConverter<'a> {
                 // POD really are POD, and thusly mark any dependent types.
                 let byvalue_checker =
                     identify_byvalue_safe_types(&items_in_root, &self.type_config)?;
-                // Create a database to track all our types.
-                let mut type_converter = TypeConverter::new();
                 // Parse the bindgen mod.
-                let parser = ParseBindgen::new(&self.type_config, &mut type_converter);
+                let parser = ParseBindgen::new(&self.type_config);
                 let parse_results = parser.convert_items(items_in_root, exclude_utilities)?;
+                let mut type_converter = parse_results.type_converter;
                 // The code above will have contributed lots of Apis to self.apis.
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).

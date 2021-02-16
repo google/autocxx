@@ -20,7 +20,7 @@ use std::{
 };
 use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType};
 
-use super::codegen_cpp::AdditionalNeed;
+use super::{codegen_cpp::AdditionalNeed, parse::type_converter::TypeConverter};
 
 #[derive(Debug)]
 pub enum ConvertError {
@@ -204,6 +204,14 @@ impl<T: ApiAnalysis> Api<T> {
 /// Results of parsing the bindgen mod. This is what is passed from
 /// the parser to the code generation phase.
 pub(crate) struct ParseResults {
+    /// All APIs encountered.
     pub(crate) apis: Vec<Api<NullAnalysis>>,
+    /// A database containing known relationships between types.
+    /// In particular, any typedefs detected.
+    /// This should probably be replaced by extracting this information
+    /// from APIs as necessary later. TODO
+    pub(crate) type_converter: TypeConverter,
+    /// Any `use` statements which were found in each mod within
+    /// `bindgen`.
     pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>, // TODO future, move to metadata on APIs
 }
