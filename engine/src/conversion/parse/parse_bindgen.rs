@@ -47,9 +47,7 @@ pub(crate) struct ParseBindgen<'a> {
 }
 
 impl<'a> ParseBindgen<'a> {
-    pub(crate) fn new(
-        type_config: &'a TypeConfig,
-    ) -> Self {
+    pub(crate) fn new(type_config: &'a TypeConfig) -> Self {
         ParseBindgen {
             type_config,
             results: ParseResults {
@@ -80,12 +78,31 @@ impl<'a> ParseBindgen<'a> {
         items: Vec<Item>,
         exclude_utilities: bool,
     ) -> Result<ParseResults, ConvertError> {
+        let items = Self::find_items_in_root(items)?;
         if !exclude_utilities {
             generate_utilities(&mut self.results.apis);
         }
         let root_ns = Namespace::new();
         self.convert_mod_items(items, root_ns)?;
         Ok(self.results)
+    }
+
+    fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
+        for item in items {
+            match item {
+                Item::Mod(root_mod) => {
+                    // With namespaces enabled, bindgen always puts everything
+                    // in a mod called 'root'. We don't want to pass that
+                    // onto cxx, so jump right into it.
+                    assert!(root_mod.ident == "root");
+                    if let Some((_, items)) = root_mod.content {
+                        return Ok(items);
+                    }
+                }
+                _ => return Err(ConvertError::UnexpectedOuterItem),
+            }
+        }
+        Ok(Vec::new())
     }
 
     /// Interpret the bindgen-generated .rs for a particular
@@ -158,9 +175,14 @@ impl<'a> ParseBindgen<'a> {
                 }
                 Item::Type(mut ity) => {
                     let tyname = TypeName::new(&ns, &ity.ident.to_string());
-                    let mut final_type = self.results.type_converter.convert_type(*ity.ty, &ns, false)?;
+                    let mut final_type = self
+                        .results
+                        .type_converter
+                        .convert_type(*ity.ty, &ns, false)?;
                     ity.ty = Box::new(final_type.ty.clone());
-                    self.results.type_converter.insert_typedef(tyname, final_type.ty);
+                    self.results
+                        .type_converter
+                        .insert_typedef(tyname, final_type.ty);
                     self.results.apis.append(&mut final_type.extra_apis);
                     self.results.apis.push(UnanalyzedApi {
                         id: ity.ident.clone(),

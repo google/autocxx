@@ -32,10 +32,7 @@ use syn::{Item, ItemMod};
 use crate::UnsafePolicy;
 
 use self::{
-    analysis::{
-        gc::filter_apis_by_following_edges_from_allowlist,
-        pod::{analyze_pod_apis, identify_byvalue_safe_types},
-    },
+    analysis::{gc::filter_apis_by_following_edges_from_allowlist, pod::analyze_pod_apis},
     codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
 };
@@ -83,24 +80,20 @@ impl<'a> BridgeConverter<'a> {
         match &mut bindgen_mod.content {
             None => Err(ConvertError::NoContent),
             Some((_, items)) => {
-                // First let's look at this bindgen mod to find the items
-                // which we'll need to convert.
-                let items_to_process = items.drain(..).collect();
-                // And ensure that the namespace/mod structure is as expected.
-                let items_in_root = Self::find_items_in_root(items_to_process)?;
-                // Now, let's confirm that the items requested by the user to be
-                // POD really are POD, and thusly mark any dependent types.
-                let byvalue_checker =
-                    identify_byvalue_safe_types(&items_in_root, &self.type_config)?;
                 // Parse the bindgen mod.
+                let items_to_process = items.drain(..).collect();
                 let parser = ParseBindgen::new(&self.type_config);
-                let parse_results = parser.convert_items(items_in_root, exclude_utilities)?;
+                let parse_results = parser.convert_items(items_to_process, exclude_utilities)?;
+                // Inside parse_results, we now have a list of APIs and a few other things
+                // e.g. type relationships. The latter are stored in here...
                 let mut type_converter = parse_results.type_converter;
                 // The code above will have contributed lots of Apis to self.apis.
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
-                let analyzed_apis =
-                    analyze_pod_apis(parse_results.apis, &byvalue_checker, &mut type_converter)?;
+                // Specifically, let's confirm that the items requested by the user to be
+                // POD really are POD, and thusly mark any dependent types.
+                let (analyzed_apis, pod_list) =
+                    analyze_pod_apis(parse_results.apis, &self.type_config, &mut type_converter)?;
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions.
@@ -108,14 +101,12 @@ impl<'a> BridgeConverter<'a> {
                     analyzed_apis,
                     unsafe_policy,
                     &mut type_converter,
-                    &byvalue_checker,
+                    &pod_list,
                     self.type_config,
                 )?;
                 // We now garbage collect the ones we don't need...
-                let mut analyzed_apis = filter_apis_by_following_edges_from_allowlist(
-                    analyzed_apis,
-                    &self.type_config,
-                );
+                let mut analyzed_apis =
+                    filter_apis_by_following_edges_from_allowlist(analyzed_apis, &self.type_config);
                 // Determine what variably-sized C types (e.g. int) we need to include
                 analysis::ctypes::append_ctype_information(&mut analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
@@ -130,23 +121,5 @@ impl<'a> BridgeConverter<'a> {
                 Ok(CodegenResults { rs, cpp })
             }
         }
-    }
-
-    fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
-        for item in items {
-            match item {
-                Item::Mod(root_mod) => {
-                    // With namespaces enabled, bindgen always puts everything
-                    // in a mod called 'root'. We don't want to pass that
-                    // onto cxx, so jump right into it.
-                    assert!(root_mod.ident == "root");
-                    if let Some((_, items)) = root_mod.content {
-                        return Ok(items);
-                    }
-                }
-                _ => return Err(ConvertError::UnexpectedOuterItem),
-            }
-        }
-        Ok(Vec::new())
     }
 }
