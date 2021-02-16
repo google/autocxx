@@ -18,7 +18,7 @@ mod rust_name_tracker;
 
 use std::collections::{HashMap, HashSet};
 
-use autocxx_parser::{TypeDatabase, UnsafePolicy};
+use autocxx_parser::{TypeConfig, UnsafePolicy};
 use syn::{
     parse_quote, punctuated::Punctuated, FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType,
     Type, TypePtr, Visibility,
@@ -90,7 +90,7 @@ pub(crate) struct FnAnalyzer<'a> {
     type_converter: &'a mut TypeConverter,
     bridge_name_tracker: BridgeNameTracker,
     byvalue_checker: &'a ByValueChecker,
-    type_database: &'a TypeDatabase,
+    type_config: &'a TypeConfig,
     incomplete_types: HashSet<TypeName>,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
 }
@@ -110,7 +110,7 @@ impl<'a> FnAnalyzer<'a> {
         unsafe_policy: UnsafePolicy,
         type_converter: &'a mut TypeConverter,
         byvalue_checker: &'a ByValueChecker,
-        type_database: &'a TypeDatabase,
+        type_database: &'a TypeConfig,
     ) -> Result<Vec<Api<FnAnalysis>>, ConvertError> {
         let incomplete_types = apis
             .iter()
@@ -132,7 +132,7 @@ impl<'a> FnAnalyzer<'a> {
             type_converter,
             bridge_name_tracker: BridgeNameTracker::new(),
             byvalue_checker,
-            type_database,
+            type_config: type_database,
             incomplete_types,
             overload_trackers_by_mod: HashMap::new(),
         };
@@ -268,11 +268,11 @@ impl<'a> FnAnalyzer<'a> {
     }
 
     fn is_on_allowlist(&self, type_name: &TypeName) -> bool {
-        self.type_database.is_on_allowlist(&type_name.to_cpp_name())
+        self.type_config.is_on_allowlist(&type_name.to_cpp_name())
     }
 
     fn avoid_generating_type(&self, type_name: &TypeName) -> bool {
-        self.type_database.is_on_blocklist(&type_name.to_cpp_name())
+        self.type_config.is_on_blocklist(&type_name.to_cpp_name())
             || self.incomplete_types.contains(type_name)
     }
 

@@ -14,7 +14,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use autocxx_parser::TypeDatabase;
+use autocxx_parser::TypeConfig;
 
 use crate::{
     conversion::api::{Api, ApiAnalysis},
@@ -40,13 +40,13 @@ use crate::{
 ///    APIs either.
 pub(crate) fn filter_apis_by_following_edges_from_allowlist<T: ApiAnalysis>(
     mut apis: Vec<Api<T>>,
-    type_database: &TypeDatabase,
+    type_config: &TypeConfig,
 ) -> Vec<Api<T>> {
     let mut todos: Vec<_> = apis
         .iter()
         .filter(|api| {
             let tnforal = api.typename_for_allowlist();
-            type_database.is_on_allowlist(&tnforal.to_cpp_name())
+            type_config.is_on_allowlist(&tnforal.to_cpp_name())
         })
         .map(Api::typename)
         .collect();

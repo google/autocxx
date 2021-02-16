@@ -23,7 +23,7 @@ use crate::{
     types::Namespace,
     types::TypeName,
 };
-use autocxx_parser::TypeDatabase;
+use autocxx_parser::TypeConfig;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_quote, Fields, Item};
@@ -38,7 +38,7 @@ use super::parse_foreign_mod::ParseForeignMod;
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
     type_converter: &'a mut TypeConverter,
-    type_database: &'a TypeDatabase,
+    type_config: &'a TypeConfig,
     results: ParseResults,
     /// Here we track the last struct which bindgen told us about.
     /// Any subsequent "extern 'C'" blocks are methods belonging to that type,
@@ -49,12 +49,12 @@ pub(crate) struct ParseBindgen<'a> {
 
 impl<'a> ParseBindgen<'a> {
     pub(crate) fn new(
-        type_database: &'a TypeDatabase,
+        type_config: &'a TypeConfig,
         type_converter: &'a mut TypeConverter,
     ) -> Self {
         ParseBindgen {
             type_converter,
-            type_database,
+            type_config,
             results: ParseResults {
                 apis: Vec::new(),
                 use_stmts_by_mod: HashMap::new(),
@@ -227,7 +227,7 @@ impl<'a> ParseBindgen<'a> {
         bindgen_mod_item: Option<Item>,
     ) {
         let final_ident = make_ident(tyname.get_final_ident());
-        if self.type_database.is_on_blocklist(&tyname.to_cpp_name()) {
+        if self.type_config.is_on_blocklist(&tyname.to_cpp_name()) {
             return;
         }
         let tynamestring = tyname.to_cpp_name();

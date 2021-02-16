@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx_parser::TypeDatabase;
+use autocxx_parser::TypeConfig;
 use syn::{Item, Type, TypePath};
 
 use crate::{
@@ -23,16 +23,16 @@ use super::ByValueChecker;
 
 struct ByValueScanner<'a> {
     byvalue_checker: ByValueChecker,
-    type_database: &'a TypeDatabase,
+    type_config: &'a TypeConfig,
 }
 
 pub(crate) fn identify_byvalue_safe_types(
     items: &[Item],
-    type_database: &TypeDatabase,
+    type_database: &TypeConfig,
 ) -> Result<ByValueChecker, ConvertError> {
     let mut bvs = ByValueScanner {
         byvalue_checker: ByValueChecker::new(),
-        type_database,
+        type_config: type_database,
     };
     bvs.find_nested_pod_types(items)?;
     Ok(bvs.byvalue_checker)
@@ -82,7 +82,7 @@ impl<'a> ByValueScanner<'a> {
     fn find_nested_pod_types(&mut self, items: &[Item]) -> Result<(), ConvertError> {
         self.find_nested_pod_types_in_mod(items, &Namespace::new())?;
         let pod_requests = self
-            .type_database
+            .type_config
             .get_pod_requests()
             .iter()
             .map(|ty| TypeName::new_from_user_input(ty))

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx_parser::{TypeDatabase, UnsafePolicy};
+use autocxx_parser::{TypeConfig, UnsafePolicy};
 #[allow(unused_imports)]
 use syn::parse_quote;
 use syn::ItemMod;
@@ -30,8 +30,8 @@ use super::BridgeConverter;
 
 #[allow(dead_code)]
 fn do_test(input: ItemMod) {
-    let td = TypeDatabase::new();
-    let bc = BridgeConverter::new(&[], &td);
+    let tc = TypeConfig::new();
+    let bc = BridgeConverter::new(&[], &tc);
     let inclusions = "".into();
     bc.convert(input, true, UnsafePolicy::AllFunctionsSafe, inclusions)
         .unwrap();

@@ -19,7 +19,7 @@ use syn::{
     Token,
 };
 
-use crate::type_database::TypeDatabase;
+use crate::type_config::TypeConfig;
 
 #[derive(PartialEq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
@@ -64,7 +64,7 @@ pub struct IncludeCppConfig {
     pub inclusions: Vec<CppInclusion>,
     pub exclude_utilities: bool,
     pub unsafe_policy: UnsafePolicy,
-    pub type_database: TypeDatabase,
+    pub type_config: TypeConfig,
     pub parse_only: bool,
 }
 
@@ -78,7 +78,7 @@ impl Parse for IncludeCppConfig {
         let mut inclusions = Vec::new();
         let mut parse_only = false;
         let mut exclude_utilities = false;
-        let mut type_database = TypeDatabase::new();
+        let mut type_config = TypeConfig::new();
         let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
 
         while !input.is_empty() {
@@ -96,15 +96,15 @@ impl Parse for IncludeCppConfig {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
-                    type_database.add_to_allowlist(generate.value());
+                    type_config.add_to_allowlist(generate.value());
                     if ident == "generate_pod" {
-                        type_database.note_pod_request(generate.value());
+                        type_config.note_pod_request(generate.value());
                     }
                 } else if ident == "block" {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
-                    type_database.add_to_blocklist(generate.value());
+                    type_config.add_to_blocklist(generate.value());
                 } else if ident == "parse_only" {
                     parse_only = true;
                 } else if ident == "exclude_utilities" {
@@ -125,13 +125,13 @@ impl Parse for IncludeCppConfig {
             }
         }
         if !exclude_utilities {
-            type_database.add_to_allowlist("make_string".to_string());
+            type_config.add_to_allowlist("make_string".to_string());
         }
 
         Ok(IncludeCppConfig {
             inclusions,
             exclude_utilities,
-            type_database,
+            type_config,
             parse_only,
             unsafe_policy,
         })

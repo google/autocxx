@@ -23,7 +23,7 @@ mod utilities;
 
 use analysis::fun::FnAnalyzer;
 pub(crate) use api::ConvertError;
-use autocxx_parser::TypeDatabase;
+use autocxx_parser::TypeConfig;
 pub(crate) use codegen_cpp::type_to_cpp::type_to_cpp;
 pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use codegen_cpp::CppCodegenResults;
@@ -55,7 +55,7 @@ use self::{
 /// we need to be a bit more graceful, but for now, that's OK.
 pub(crate) struct BridgeConverter<'a> {
     include_list: &'a [String],
-    type_database: &'a TypeDatabase,
+    type_config: &'a TypeConfig,
 }
 
 /// C++ and Rust code generation output.
@@ -65,10 +65,10 @@ pub(crate) struct CodegenResults {
 }
 
 impl<'a> BridgeConverter<'a> {
-    pub fn new(include_list: &'a [String], type_database: &'a TypeDatabase) -> Self {
+    pub fn new(include_list: &'a [String], type_config: &'a TypeConfig) -> Self {
         Self {
             include_list,
-            type_database,
+            type_config,
         }
     }
 
@@ -92,11 +92,11 @@ impl<'a> BridgeConverter<'a> {
                 // Now, let's confirm that the items requested by the user to be
                 // POD really are POD, and thusly mark any dependent types.
                 let byvalue_checker =
-                    identify_byvalue_safe_types(&items_in_root, &self.type_database)?;
+                    identify_byvalue_safe_types(&items_in_root, &self.type_config)?;
                 // Create a database to track all our types.
                 let mut type_converter = TypeConverter::new();
                 // Parse the bindgen mod.
-                let parser = ParseBindgen::new(&self.type_database, &mut type_converter);
+                let parser = ParseBindgen::new(&self.type_config, &mut type_converter);
                 let parse_results = parser.convert_items(items_in_root, exclude_utilities)?;
                 // The code above will have contributed lots of Apis to self.apis.
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
@@ -111,12 +111,12 @@ impl<'a> BridgeConverter<'a> {
                     unsafe_policy,
                     &mut type_converter,
                     &byvalue_checker,
-                    self.type_database,
+                    self.type_config,
                 )?;
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis = filter_apis_by_following_edges_from_allowlist(
                     analyzed_apis,
-                    &self.type_database,
+                    &self.type_config,
                 );
                 // Determine what variably-sized C types (e.g. int) we need to include
                 analysis::ctypes::append_ctype_information(&mut analyzed_apis);

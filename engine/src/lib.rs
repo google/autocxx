@@ -201,7 +201,7 @@ impl IncludeCppEngine {
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
-        for a in self.config.type_database.allowlist() {
+        for a in self.config.type_config.allowlist() {
             // TODO - allowlist type/functions/separately
             builder = builder
                 .whitelist_type(a)
@@ -288,7 +288,7 @@ impl IncludeCppEngine {
             State::Generated(_) => panic!("Only call generate once"),
         }
 
-        if self.config.type_database.allowlist_is_empty() {
+        if self.config.type_config.allowlist_is_empty() {
             return Err(Error::NoGenerationRequested);
         }
 
@@ -303,7 +303,7 @@ impl IncludeCppEngine {
         let bindings = self.parse_bindings(bindings)?;
 
         let include_list = self.generate_include_list();
-        let converter = BridgeConverter::new(&include_list, &self.config.type_database);
+        let converter = BridgeConverter::new(&include_list, &self.config.type_config);
 
         let conversion = converter
             .convert(
