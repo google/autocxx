@@ -42,7 +42,6 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
             id: id.clone(),
             use_stmt: Use::Unused,
             deps: HashSet::new(),
-            id_for_allowlist: None,
             additional_cpp: Some(AdditionalNeed::CTypeTypedef(ctype.clone())),
             detail: ApiDetail::CType { id },
         });

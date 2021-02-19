@@ -361,7 +361,6 @@ impl TypeConverter {
             id: final_ident.clone(),
             use_stmt: Use::Unused,
             deps: HashSet::new(),
-            id_for_allowlist: None,
             detail: crate::conversion::api::ApiDetail::ConcreteType(TypeApiDetails {
                 fulltypath,
                 tynamestring,

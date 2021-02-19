@@ -105,7 +105,6 @@ impl ParseForeignMod {
                 id: fun.item.sig.ident.clone(),
                 use_stmt: Use::Unused, // filled in later - TODO make all these compile-time safe
                 deps: HashSet::new(),  // filled in later
-                id_for_allowlist: None, // filled in later
                 additional_cpp: None,  // filled in later
                 detail: ApiDetail::Function { fun, analysis: () },
             })

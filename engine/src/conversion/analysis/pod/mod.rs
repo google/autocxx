@@ -122,7 +122,6 @@ fn analyze_pod_api(
         id: api.id,
         use_stmt: api.use_stmt,
         deps: new_deps,
-        id_for_allowlist: api.id_for_allowlist,
         additional_cpp: api.additional_cpp,
         detail: api_detail,
     })

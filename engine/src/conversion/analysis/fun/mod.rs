@@ -57,6 +57,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) wrapper_function_needed: bool,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
+    pub(crate) id_for_allowlist: Option<Ident>,
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -100,7 +101,6 @@ struct FnAnalysisResult(
     Ident,
     Use,
     HashSet<TypeName>,
-    Option<Ident>,
     Option<AdditionalNeed>,
 );
 
@@ -163,7 +163,6 @@ impl<'a> FnAnalyzer<'a> {
             id: api.id,
             use_stmt: api.use_stmt,
             deps: api.deps,
-            id_for_allowlist: api.id_for_allowlist,
             additional_cpp: api.additional_cpp,
             detail: new_detail,
         }
@@ -175,7 +174,6 @@ impl<'a> FnAnalyzer<'a> {
     ) -> Result<Option<Api<FnAnalysis>>, ConvertError> {
         let mut new_deps = api.deps.clone();
         let mut new_use_stmt = api.use_stmt.clone();
-        let mut new_id_for_allowlist = api.id_for_allowlist.clone();
         let mut new_id = api.id;
         let mut new_additional_cpp = api.additional_cpp.clone();
         let api_detail = match api.detail {
@@ -186,17 +184,9 @@ impl<'a> FnAnalyzer<'a> {
                 let analysis = self.analyze_foreign_fn(&api.ns, &fun)?;
                 match analysis {
                     None => return Ok(None),
-                    Some(FnAnalysisResult(
-                        analysis,
-                        id,
-                        fn_uses,
-                        fn_deps,
-                        fn_id_for_allowlist,
-                        fn_additional_cpp,
-                    )) => {
+                    Some(FnAnalysisResult(analysis, id, fn_uses, fn_deps, fn_additional_cpp)) => {
                         new_deps = fn_deps;
                         new_use_stmt = fn_uses;
-                        new_id_for_allowlist = fn_id_for_allowlist;
                         new_additional_cpp = fn_additional_cpp;
                         new_id = id;
                         ApiDetail::Function { fun, analysis }
@@ -226,7 +216,6 @@ impl<'a> FnAnalyzer<'a> {
             id: new_id,
             use_stmt: new_use_stmt,
             deps: new_deps,
-            id_for_allowlist: new_id_for_allowlist,
             additional_cpp: new_additional_cpp,
             detail: api_detail,
         }))
@@ -582,11 +571,11 @@ impl<'a> FnAnalyzer<'a> {
                 wrapper_function_needed,
                 requires_unsafe,
                 vis,
+                id_for_allowlist,
             },
             id,
             use_stmt,
             deps,
-            id_for_allowlist,
             additional_cpp,
         )))
     }
@@ -758,5 +747,22 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
         (ref_params, ref_return)
+    }
+}
+
+impl Api<FnAnalysis> {
+    pub(crate) fn typename_for_allowlist(&self) -> TypeName {
+        let id_for_allowlist = match &self.detail {
+            ApiDetail::Function { fun: _, analysis } => analysis.id_for_allowlist.as_ref(),
+            _ => None,
+        };
+        let id_for_allowlist = match id_for_allowlist {
+            None => match &self.use_stmt {
+                Use::UsedWithAlias(alias) => alias,
+                _ => &self.id,
+            },
+            Some(id) => &id,
+        };
+        TypeName::new(&self.ns, &id_for_allowlist.to_string())
     }
 }

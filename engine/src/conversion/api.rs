@@ -176,7 +176,6 @@ pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) id: Ident,
     pub(crate) use_stmt: Use,
     pub(crate) deps: HashSet<TypeName>,
-    pub(crate) id_for_allowlist: Option<Ident>,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
     pub(crate) detail: ApiDetail<T>,
 }
@@ -186,17 +185,6 @@ pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 impl<T: ApiAnalysis> Api<T> {
     pub(crate) fn typename(&self) -> TypeName {
         TypeName::new(&self.ns, &self.id.to_string())
-    }
-
-    pub(crate) fn typename_for_allowlist(&self) -> TypeName {
-        let id_for_allowlist = match &self.id_for_allowlist {
-            None => match &self.use_stmt {
-                Use::UsedWithAlias(alias) => alias,
-                _ => &self.id,
-            },
-            Some(id) => &id,
-        };
-        TypeName::new(&self.ns, &id_for_allowlist.to_string())
     }
 }
 

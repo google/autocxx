@@ -156,7 +156,6 @@ impl<'a> ParseBindgen<'a> {
                         ns: ns.clone(),
                         deps: HashSet::new(),
                         use_stmt: Use::Unused,
-                        id_for_allowlist: None,
                         detail: ApiDetail::Const { const_item },
                         additional_cpp: None,
                     });
@@ -177,7 +176,6 @@ impl<'a> ParseBindgen<'a> {
                         ns: ns.clone(),
                         deps: final_type.types_encountered,
                         use_stmt: Use::Unused,
-                        id_for_allowlist: None,
                         additional_cpp: None,
                         detail: ApiDetail::Typedef { type_item: ity },
                     });
@@ -272,7 +270,6 @@ impl<'a> ParseBindgen<'a> {
             id: final_ident.clone(),
             use_stmt: Use::Used,
             deps,
-            id_for_allowlist: None,
             additional_cpp: None,
             detail: ApiDetail::Type {
                 ty_details: TypeApiDetails {
