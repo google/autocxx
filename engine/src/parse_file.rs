@@ -57,11 +57,6 @@ pub fn parse_file<P1: AsRef<Path>>(rs_file: P1) -> Result<ParsedFile, ParseError
     parse_file_contents(source)
 }
 
-pub fn parse_token_stream(ts: TokenStream) -> Result<ParsedFile, ParseError> {
-    let file = syn::parse2(ts).map_err(ParseError::Syntax)?;
-    parse_file_contents(file)
-}
-
 fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
     let mut results = Vec::new();
     for item in source.items {

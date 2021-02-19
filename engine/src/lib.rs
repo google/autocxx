@@ -53,7 +53,7 @@ use autocxx_bindgen as bindgen;
 
 #[cfg(any(test, feature = "build"))]
 pub use builder::{build, expect_build, BuilderBuild, BuilderError, BuilderResult, BuilderSuccess};
-pub use parse_file::{parse_file, parse_token_stream, ParseError, ParsedFile};
+pub use parse_file::{parse_file, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
 
