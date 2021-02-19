@@ -36,7 +36,7 @@ pub(crate) fn identify_byvalue_safe_types(
     for api in apis {
         match &api.detail {
             ApiDetail::Typedef { type_item } => {
-                let name = TypeName::new(&api.ns, &type_item.ident.to_string());
+                let name = api.typename();
                 let typedef_type = analyze_typedef_target(type_item.ty.as_ref());
                 match &typedef_type {
                     Some(typ) => {
@@ -54,9 +54,7 @@ pub(crate) fn identify_byvalue_safe_types(
             } => match bindgen_mod_item {
                 None => {}
                 Some(Item::Struct(s)) => byvalue_checker.ingest_struct(&s, &api.ns),
-                Some(Item::Enum(e)) => {
-                    byvalue_checker.ingest_pod_type(TypeName::new(&api.ns, &e.ident.to_string()))
-                }
+                Some(Item::Enum(_)) => byvalue_checker.ingest_pod_type(api.typename()),
                 _ => {}
             },
             _ => {}

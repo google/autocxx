@@ -121,7 +121,7 @@ impl<'a> FnAnalyzer<'a> {
                     is_forward_declaration,
                     bindgen_mod_item: _,
                     analysis: _,
-                } if is_forward_declaration => Some(TypeName::new(&api.ns, &api.id.to_string())),
+                } if is_forward_declaration => Some(api.typename()),
                 _ => None,
             })
             .collect();

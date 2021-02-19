@@ -73,6 +73,7 @@ fn analyze_pod_api(
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
 ) -> Result<Api<PodAnalysis>, ConvertError> {
+    let ty_id = api.typename();
     let mut new_deps = api.deps;
     let api_detail = match api.detail {
         // No changes to any of these...
@@ -90,7 +91,6 @@ fn analyze_pod_api(
             mut bindgen_mod_item,
             analysis: _,
         } => {
-            let ty_id = TypeName::new(&api.ns, &api.id.to_string());
             let type_kind = if is_forward_declaration {
                 TypeKind::ForwardDeclaration
             } else if byvalue_checker.is_pod(&ty_id) {
