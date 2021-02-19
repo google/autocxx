@@ -1,3 +1,6 @@
+//! Crate to `#include` C++ headers in your Rust code, and generate
+//! idiomatic bindings using `cxx`. See [include_cpp] for details.
+
 // Copyright 2020 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +21,10 @@
 // do anything - all the magic is handled entirely by
 // autocxx_macro::include_cpp_impl.
 
+#[allow(unused_imports)] // doc cross-reference only
+use autocxx_engine::IncludeCppEngine;
+
+#[cfg_attr(doc, aquamarine::aquamarine)]
 /// Include some C++ headers in your Rust project.
 ///
 /// This macro allows you to include one or more C++ headers within
@@ -51,13 +58,35 @@
 /// # Configuring the build
 ///
 /// To build this, you'll need to:
-/// * Build the C++ side of the bindings. You'll need to use the `autocxx-gen`
+/// * Run the `codegen` phase. You'll need to use the `autocxx-gen`
 ///   crate or the `autocxx-build` crate to process the .rs code into C++ header and
-///   implementation files.
-/// * Educate the procedural macro about where to find the C++ headers. Set the
-///   `AUTOCXX_INC` environment variable to a list of directories to search.
+///   implementation files. This will also generate `.rs` side bindings.
+/// * Educate the procedural macro about where to find the generated `.rs` bindings. Set the
+///   `AUTOCXX_RS` environment variable to a list of directories to search.
 ///   If you use `autocxx-build`, this happens automatically.
-
+///
+/// ```mermaid
+/// flowchart TB
+///     s(Rust source with include_cpp!)
+///     c(Existing C++ headers)
+///     cg(autocxx-gen or autocxx-build)
+///     genrs(Generated .rs file)
+///     gencpp(Generated .cpp and .h files)
+///     rsb(Rust/Cargo build)
+///     cppb(C++ build)
+///     l(Linker)
+///     s --> cg
+///     c --> cg
+///     cg --> genrs
+///     cg --> gencpp
+///     m(autocxx-macro)
+///     s --> m
+///     genrs-. included .->m
+///     m --> rsb
+///     gencpp --> cppb
+///     cppb --> l
+///     rsb --> l
+/// ```
 ///
 /// # Syntax
 ///
@@ -122,20 +151,22 @@
 /// let unique_ptr_to_cxx_string = "my_string".to_cpp();
 /// ```
 ///
-/// # Making other C++ types
+/// # Support for particular C++ features
+///
+/// ## Making other C++ types
 ///
 /// Types gain a `make_unique` associated function. At present they only
 /// gain this if they have an explicit C++ constructor; this is a limitation
 /// which should be resolved in future.
 /// This will (of course) return a `UniquePtr` containing that type.
 ///
-/// # Preprocessor symbols
+/// ## Preprocessor symbols
 ///
 /// `#define` and other preprocessor symbols will appear as constants.
 /// At present there is no way to do compile-time disablement of code
 /// (equivalent of `#ifdef`).
 ///
-/// # Integer types
+/// ## Integer types
 ///
 /// For C++ types with a defined size, just go ahead and use `u64`, `i32` etc.
 /// For types such as `int` or `unsigned long`, the hope is that you can
@@ -143,7 +174,7 @@
 /// For now, this doesn't quite work: instead you need to wrap these values
 /// in a newtype wrapper such as [c_int] or [c_ulong] in this crate.
 ///
-/// # String constants
+/// ## String constants
 ///
 /// Whether from a preprocessor symbol or from a C++ `char*` constant,
 /// strings appear as `[u8]` with a null terminator. To get a Rust string,
@@ -158,26 +189,26 @@
 /// assert_eq!(std::str::from_utf8(&ffi::BOB).unwrap().trim_end_matches(char::from(0)), "Hello");
 /// ```
 ///
-/// # Namespaces
+/// ## Namespaces
 ///
 /// The C++ namespace structure is reflected in mods within the generated
 /// ffi mod. However, at present there is an internal limitation that
 /// autocxx can't handle multiple symbols with the same identifier, even
 /// if they're in different namespaces. This will be fixed in future.
 ///
-/// # Overloads - and identifiers ending in digits
+/// ## Overloads - and identifiers ending in digits
 ///
 /// C++ allows function overloads; Rust doesn't. `autocxx` follows the lead
 /// of `bindgen` here and generating overloads as `func`, `func1`, `func2` etc.
 ///
-/// # C++ classes - why do I get warnings?
+/// ## C++ classes - why do I get warnings?
 ///
 /// autocxx is not currently able to distinguish a C++ struct from a C++ class.
 /// It currently assumes they're all structs. This results in warnings
 /// from most compilers, but could cause actual binary mismatches
 /// on some ABIs. This is a temporary known limitation.
 ///
-/// # Forward declarations
+/// ## Forward declarations
 ///
 /// A type which is incomplete in the C++ headers (i.e. represented only by a forward
 /// declaration) can't be held in a `UniquePtr` within Rust (because Rust can't know
@@ -185,7 +216,7 @@
 /// Naturally, such an object can't be passed by value either; it can still be
 /// referenced in Rust references.
 ///
-/// # Generic types
+/// ## Generic types
 ///
 /// If you're using one of the generic types which is supported natively by cxx,
 /// e.g. `std::unique_ptr`, it should work as you expect. For other generic types,
@@ -196,6 +227,11 @@
 /// but not really enough to do anything else with these types just yet. Hopefully,
 /// this will be improved in future. At present such types have a name
 /// `AutocxxConcrete{n}` but this may change in future.
+///
+/// # Internals
+///
+/// For documentation on how this all actually _works_, see
+/// [IncludeCppEngine].
 #[macro_export]
 macro_rules! include_cpp {
     (
@@ -318,8 +354,8 @@ macro_rules! usage {
 pub use autocxx_macro::include_cpp_impl;
 
 macro_rules! ctype_wrapper {
-    ($r:ident, $c:expr) => {
-        /// Newtype wrapper for a `$c`
+    ($r:ident, $c:expr, $d:expr) => {
+        #[doc=$d]
         #[derive(Debug, Eq, Clone, PartialEq, Hash)]
         #[allow(non_camel_case_types)]
         #[repr(transparent)]
@@ -332,11 +368,15 @@ macro_rules! ctype_wrapper {
     };
 }
 
-ctype_wrapper!(c_ulong, "c_ulong");
-ctype_wrapper!(c_long, "c_long");
-ctype_wrapper!(c_ushort, "c_ushort");
-ctype_wrapper!(c_short, "c_short");
-ctype_wrapper!(c_uint, "c_uint");
-ctype_wrapper!(c_int, "c_int");
-ctype_wrapper!(c_uchar, "c_uchar");
-ctype_wrapper!(c_char, "c_char");
+ctype_wrapper!(c_ulong, "c_ulong", "Newtype wrapper for an unsigned long");
+ctype_wrapper!(c_long, "c_long", "Newtype wrapper for a long");
+ctype_wrapper!(
+    c_ushort,
+    "c_ushort",
+    "Newtype wrapper for an unsigned short"
+);
+ctype_wrapper!(c_short, "c_short", "Newtype wrapper for an short");
+ctype_wrapper!(c_uint, "c_uint", "Newtype wrapper for an unsigned int");
+ctype_wrapper!(c_int, "c_int", "Newtype wrapper for an int");
+ctype_wrapper!(c_uchar, "c_uchar", "Newtype wrapper for an unsigned char");
+ctype_wrapper!(c_char, "c_char", "Newtype wrapper for a char");
