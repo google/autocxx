@@ -82,7 +82,7 @@ impl<'a> RsCodeGenerator<'a> {
             .into_iter()
             .map(|api| {
                 let gen = Self::generate_rs_for_api(&api.ns, api.detail);
-                ((api.ns, api.id, gen), api.additional_cpp)
+                ((api.ns, api.id, gen), api.additional_cpp.is_some())
             })
             .unzip();
         // And work out what we need for the bindgen mod.
@@ -103,9 +103,8 @@ impl<'a> RsCodeGenerator<'a> {
         // And a list of global items to include at the top level.
         let mut all_items: Vec<Item> = all_items.into_iter().flatten().collect();
         // And finally any C++ we need to generate. And by "we" I mean autocxx not cxx.
-        let additional_cpp_needs = remove_nones(additional_cpp_needs);
-        extern_c_mod_items
-            .extend(self.build_include_foreign_items(!additional_cpp_needs.is_empty()));
+        let has_additional_cpp_needs = additional_cpp_needs.into_iter().any(std::convert::identity);
+        extern_c_mod_items.extend(self.build_include_foreign_items(has_additional_cpp_needs));
         // We will always create an extern "C" mod even if bindgen
         // didn't generate one, e.g. because it only generated types.
         // We still want cxx to know about those types.
