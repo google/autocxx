@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// This is essentially mark-and-sweep garbage collection of the
-/// Apis that we've discovered. Why do we do this, you might wonder?
+/// [Api]s that we've discovered. Why do we do this, you might wonder?
 /// It seems a bit strange given that we pass an explicit allowlist
 /// to bindgen.
 /// There are two circumstances under which we want to discard

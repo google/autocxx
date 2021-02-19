@@ -70,6 +70,10 @@ impl<'a> BridgeConverter<'a> {
 
     /// Convert a TokenStream of bindgen-generated bindings to a form
     /// suitable for cxx.
+    ///
+    /// This is really the heart of autocxx. It parses the output of `bindgen`
+    /// (although really by "parse" we mean to interpret the structures already built
+    /// up by the `syn` crate).
     pub(crate) fn convert(
         &self,
         mut bindgen_mod: ItemMod,
@@ -87,16 +91,21 @@ impl<'a> BridgeConverter<'a> {
                 // Inside parse_results, we now have a list of APIs and a few other things
                 // e.g. type relationships. The latter are stored in here...
                 let mut type_converter = parse_results.type_converter;
-                // The code above will have contributed lots of Apis to self.apis.
+                // The code above will have contributed lots of `Api`s to self.apis.
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
                 // Specifically, let's confirm that the items requested by the user to be
-                // POD really are POD, and thusly mark any dependent types.
+                // POD really are POD, and duly mark any dependent types.
+                // This returns a new list of `Api`s, which will be parameterized with
+                // the analysis results. It also returns an object which can be used
+                // by subsequent phases to work out which objects are POD.
                 let (analyzed_apis, pod_list) =
                     analyze_pod_apis(parse_results.apis, &self.type_config, &mut type_converter)?;
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
-                // require C++ wrapper functions.
+                // require C++ wrapper functions. This is probably the most complex
+                // part of `autocxx`. Again, this returns a new set of `Api`s, but
+                // parameterized by a richer set of metadata.
                 let analyzed_apis = FnAnalyzer::analyze_functions(
                     analyzed_apis,
                     unsafe_policy,

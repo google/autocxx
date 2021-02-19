@@ -29,7 +29,7 @@ use syn::{
 };
 
 /// Results of some type conversion, annotated with a list of every type encountered,
-/// and optionally any extra API we need in order to use this type.
+/// and optionally any extra APIs we need in order to use this type.
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<TypeName>,
@@ -62,6 +62,20 @@ impl<T> Annotated<T> {
     }
 }
 
+/// A type which can convert from a type encountered in `bindgen`
+/// output to the sort of type we should represeent to `cxx`.
+/// As a simple example, `std::string` should be replaced
+/// with [CxxString]. This also involves keeping track
+/// of typedefs, and any instantiated concrete types.
+///
+/// This object is a bit of a pest. The information here
+/// is compiled during the parsing phase (which is why it lives
+/// in the parse mod) but is used during various other phases.
+/// As such it contributes to both the parsing and analysis phases.
+/// It's possible that the information here largely duplicates
+/// information stored elsewhere in the list of `Api`s, or can
+/// easily be moved into it, which would enable us to
+/// distribute this logic elsewhere.
 pub(crate) struct TypeConverter {
     types_found: Vec<TypeName>,
     typedefs: HashMap<TypeName, Type>,

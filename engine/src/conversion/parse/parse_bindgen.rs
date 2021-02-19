@@ -59,20 +59,8 @@ impl<'a> ParseBindgen<'a> {
         }
     }
 
-    /// Main function which goes through and performs conversion from
-    /// `bindgen`-style Rust output into `cxx::bridge`-style Rust input.
-    /// At present, it significantly rewrites the bindgen mod,
-    /// as well as generating an additional cxx::bridge mod, and an outer
-    /// mod with all sorts of 'use' statements. A valid alternative plan
-    /// might be to keep the bindgen mod untouched and _only_ generate
-    /// additional bindings, but the sticking point there is that it's not
-    /// obviously possible to stop folks allocating opaque types in the
-    /// bindgen mod. (We mark all types as opaque until we're told
-    /// otherwise, which is the opposite of what bindgen does, so we can't
-    /// just give it lots of directives to make all types opaque.)
-    /// One future option could be to provide a mode to bindgen where
-    /// everything is opaque unless specifically allowlisted to be
-    /// transparent.
+    /// Parses items found in the `bindgen` output and returns a set of
+    /// `Api`s together with some other data.
     pub(crate) fn convert_items(
         mut self,
         items: Vec<Item>,
@@ -200,7 +188,7 @@ impl<'a> ParseBindgen<'a> {
         mod_converter.finished(&mut self.results.apis);
 
         // We don't immediately blat 'use' statements into any particular
-        // Api. We'll squirrel them away and insert them into the output mod later
+        // `Api`. We'll squirrel them away and insert them into the output mod later
         // iff this mod ends up having any output items after garbage collection
         // of unnecessary APIs.
         let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);

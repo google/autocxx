@@ -100,6 +100,7 @@ pub(crate) struct TypeApiDetails {
     pub(crate) tynamestring: String,
 }
 
+/// An entry which needs to go into an `impl` block for a given type.
 pub(crate) struct ImplBlockDetails {
     pub(crate) item: ImplItem,
     pub(crate) ty: Ident,
@@ -130,18 +131,23 @@ impl ApiAnalysis for NullAnalysis {
 
 /// Different types of API we might encounter.
 pub(crate) enum ApiDetail<T: ApiAnalysis> {
+    /// A synthetic type we've manufactured in order to
+    /// concretize some templated C++ type.
     ConcreteType(TypeApiDetails),
+    /// A simple note that we want to make a constructor for
+    /// a `std::string` on the heap.
     StringConstructor,
+    /// A function. May include some analysis.
     Function {
         fun: FuncToConvert,
         analysis: T::FunAnalysis,
     },
-    Const {
-        const_item: ItemConst,
-    },
-    Typedef {
-        type_item: ItemType,
-    },
+    /// A constant.
+    Const { const_item: ItemConst },
+    /// A typedef.
+    Typedef { type_item: ItemType },
+    /// A type (struct or enum) encountered in the
+    /// `bindgen` output.
     Type {
         ty_details: TypeApiDetails,
         for_extern_c_ts: TokenStream,
@@ -149,29 +155,22 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
         bindgen_mod_item: Option<Item>,
         analysis: T::TypeAnalysis,
     },
-    CType {
-        id: Ident,
-    },
+    /// A variable-length C integer type (e.g. int, unsigned long).
+    CType { id: Ident },
 }
 
 /// Any API we encounter in the input bindgen rs which we might want to pass
-/// onto the output Rust or C++. This is not exactly a high level representation
-/// of the APIs we encounter - instead, we're mostly storing snippets of Rust
-/// syntax which we encountered in the bindgen mod and want to pass onto the
-/// resulting Rust mods. It may be that eventually this type turns into
-/// a higher level description of the APIs we find, possibly even an enum.
-/// That's the approach taken by both cxx and bindgen. This gives a cleaner
-/// separation between the parser and the codegen phases. However our case is
-/// a bit less normal because the code we generate actually includes most of
-/// the code we parse.
+/// onto the output Rust or C++.
 ///
 /// This type is parameterized over an `ApiAnalysis`. This is any additional
 /// information which we wish to apply to our knowledge of our APIs later
 /// during analysis phases. It might be a excessively traity to parameterize
 /// this type; we might be better off relying on an `Option<SomeKindOfAnalysis>`
-/// but for now I'm going to see if I can get away with parameterizing this type,
-/// since then I'll get compile-time errors if I try to refer to an analysis
-/// which hasn't yet been done.
+/// but for now it's working.
+///
+/// This is not as high-level as the equivalent types in `cxx` or `bindgen`,
+/// because sometimes we pass on the `bindgen` output directly in the
+/// Rust codegen output.
 pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) ns: Namespace,
     pub(crate) id: Ident,
@@ -202,16 +201,16 @@ impl<T: ApiAnalysis> Api<T> {
 }
 
 /// Results of parsing the bindgen mod. This is what is passed from
-/// the parser to the code generation phase.
+/// the parser to the analysis phases.
 pub(crate) struct ParseResults {
-    /// All APIs encountered.
-    pub(crate) apis: Vec<Api<NullAnalysis>>,
+    /// All APIs encountered. This is the main thing.
+    pub(crate) apis: Vec<UnanalyzedApi>,
     /// A database containing known relationships between types.
     /// In particular, any typedefs detected.
     /// This should probably be replaced by extracting this information
     /// from APIs as necessary later. TODO
     pub(crate) type_converter: TypeConverter,
     /// Any `use` statements which were found in each mod within
-    /// `bindgen`.
-    pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>, // TODO future, move to metadata on APIs
+    /// `bindgen`. TODO future, move into `apis`
+    pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
 }

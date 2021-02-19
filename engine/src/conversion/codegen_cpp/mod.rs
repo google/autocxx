@@ -72,7 +72,9 @@ struct AdditionalFunction {
 
 /// Details of additional generated C++.
 pub(crate) struct CppCodegenResults {
+    /// Declarations, for inclusion in some suitable header file.
     pub(crate) declarations: String,
+    /// Definitions, for inclusion in some suitable compilation unit.
     pub(crate) definitions: String,
 }
 

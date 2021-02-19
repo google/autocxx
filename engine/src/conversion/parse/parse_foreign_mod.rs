@@ -23,8 +23,8 @@ use syn::{ForeignItem, Ident, ImplItem, ItemImpl, Type};
 
 use super::super::api::Use;
 
-/// Converts a given bindgen-generated 'mod' into suitable
-/// cxx::bridge runes. In bindgen output, a given mod concerns
+/// Parses a given bindgen-generated 'mod' into suitable
+/// [Api]s. In bindgen output, a given mod concerns
 /// a specific C++ namespace.
 pub(crate) struct ParseForeignMod {
     ns: Namespace,

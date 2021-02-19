@@ -44,6 +44,8 @@ impl StructDetails {
 /// fully representable by cxx. For instance if it is a struct containing
 /// a struct containing a std::string, the answer is no, because that
 /// std::string contains a self-referential pointer.
+/// It is possible that this is duplicative of the information stored
+/// elsewhere in the `Api` list and could possibly be removed or simplified.
 pub struct ByValueChecker {
     // Mapping from type name to whether it is safe to be POD
     results: HashMap<TypeName, StructDetails>,

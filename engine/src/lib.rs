@@ -268,7 +268,7 @@ impl IncludeCppEngine {
     /// out a ton of Rust code corresponding to all the types and functions
     /// defined in C++. We'll then post-process that bindgen output
     /// into a form suitable for ingestion by `cxx`.
-    /// (It's the `bridge_converter` mod which does that.)
+    /// (It's the `BridgeConverter` mod which does that.)
     /// Along the way, the `bridge_converter` might tell us of additional
     /// C++ code which we should generate, e.g. wrappers to move things
     /// into and out of `UniquePtr`s.

@@ -25,6 +25,8 @@ use crate::{
 
 use super::fun::FnAnalysis;
 
+/// Spot any variable-length C types (e.g. unsigned long)
+/// used in the [Api]s and append those as extra APIs.
 pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
     let ctypes: HashSet<_> = apis
         .iter()

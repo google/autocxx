@@ -26,6 +26,8 @@ use crate::{
 
 use super::ByValueChecker;
 
+/// Scan APIs to work out which are by-value safe. Constructs a [ByValueChecker]
+/// that others can use to query the results.
 pub(crate) fn identify_byvalue_safe_types(
     apis: &[UnanalyzedApi],
     type_config: &TypeConfig,

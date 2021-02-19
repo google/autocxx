@@ -39,6 +39,11 @@ impl ApiAnalysis for PodAnalysis {
     type FunAnalysis = ();
 }
 
+/// In our set of APIs, work out which ones are safe to represent
+/// by value in Rust (e.g. they don't have a destructor) and record
+/// as such. Return a set of APIs annotated with extra metadata,
+/// and an object which can be used to query the POD status of any
+/// type whether or not it's one of the [Api]s.
 pub(crate) fn analyze_pod_apis(
     apis: Vec<UnanalyzedApi>,
     type_config: &TypeConfig,

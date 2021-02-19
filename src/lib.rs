@@ -67,7 +67,7 @@
 /// * `#include "cpp_header.h"`: a header filename to parse and include
 /// * `generate!("type_or_function_name")`: a type or function name whose declaration
 ///   should be made available to C++.
-/// * Possibly, `safety!(unsafe)` - see discussion of [unsafe] later.
+/// * Possibly, `safety!(unsafe)` - see discussion of `unsafe` later.
 ///
 /// Other directives are possible as documented in this crate.
 ///
