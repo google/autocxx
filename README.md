@@ -4,9 +4,31 @@
 [![crates.io](https://img.shields.io/crates/d/autocxx)](https://crates.io/crates/autocxx)
 [![docs.rs](https://docs.rs/autocxx/badge.svg)](https://docs.rs/autocxx)
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/8.0.0/mermaid.min.js"></script>
+<script>
+var config = {
+    startOnReady:true,
+    theme: 'forest',
+    flowchart:{
+            useMaxWidth:false,
+            htmlLabels:true
+        }
+};
+mermaid.initialize(config);
+mermaid.init(undefined, '.language-mermaid');
+</script>
+
 This project is a tool for calling C++ from Rust in a heavily automated, but safe, fashion.
 
 The intention is that it has all the fluent safety from [cxx](https://github.com/dtolnay/cxx) whilst generating interfaces automatically from existing C++ headers using a variant of [bindgen](https://docs.rs/bindgen/0.54.1/bindgen/). Think of autocxx as glue which plugs bindgen into cxx.
+
+ <pre><code class="language-mermaid">graph LR
+A--&gt;B
+</code></pre>
+
+<div class="mermaid">graph LR
+A--&gt;B
+</div>
 
 # Overview
 
