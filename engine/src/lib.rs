@@ -158,6 +158,7 @@ pub trait RebuildDependencyRecorder: std::fmt::Debug {
 /// ```mermaid
 /// flowchart TB
 ///     s[(C++ headers)]
+///     s --> lc
 ///     rss[(.rs input)]
 ///     rss --> parser
 ///     parser --> include_cpp_conf
@@ -167,7 +168,6 @@ pub trait RebuildDependencyRecorder: std::fmt::Debug {
 ///     parser[File parser]
 ///     subgraph bindgen[autocxx_bindgen]
 ///     lc[libclang parse]
-///     s --> lc
 ///     bir(bindgen IR)
 ///     lc --> bir
 ///     end
