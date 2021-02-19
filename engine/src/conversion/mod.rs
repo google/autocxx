@@ -87,7 +87,7 @@ impl<'a> BridgeConverter<'a> {
                 // Parse the bindgen mod.
                 let items_to_process = items.drain(..).collect();
                 let parser = ParseBindgen::new(&self.type_config);
-                let parse_results = parser.convert_items(items_to_process, exclude_utilities)?;
+                let parse_results = parser.parse_items(items_to_process, exclude_utilities)?;
                 // Inside parse_results, we now have a list of APIs and a few other things
                 // e.g. type relationships. The latter are stored in here...
                 let mut type_converter = parse_results.type_converter;
