@@ -1,3 +1,7 @@
+//! The core of the `autocxx` engine, used by both the
+//! `autocxx_macro` and also code generators (e.g. `autocxx_build`).
+//! See [IncludeCppEngine] for general description of how this engine works.
+
 // Copyright 2020 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,7 +57,7 @@ use autocxx_bindgen as bindgen;
 
 #[cfg(any(test, feature = "build"))]
 pub use builder::{build, expect_build, BuilderBuild, BuilderError, BuilderResult, BuilderSuccess};
-pub use parse_file::{parse_file, parse_token_stream, ParseError, ParsedFile};
+pub use parse_file::{parse_file, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
 
@@ -61,15 +65,21 @@ pub use cxx_gen::HEADER;
 /// us. This doesn't enable clients to avoid depending on the cxx
 /// crate too, unfortunately, since generated cxx::bridge code
 /// refers explicitly to ::cxx. See
-/// https://github.com/google/autocxx/issues/36
+/// <https://github.com/google/autocxx/issues/36>
 pub use cxx;
 
+/// Some C++ content which should be written to disk and built.
 pub struct CppFilePair {
+    /// Declarations to go into a header file.
     pub header: Vec<u8>,
+    /// Implementations to go into a .cpp file.
     pub implementation: Vec<u8>,
+    /// The name which should be used for the header file
+    /// (important as it may be `#include`d elsewhere)
     pub header_name: String,
 }
 
+/// All generated C++ content which should be written to disk.
 pub struct GeneratedCpp(pub Vec<CppFilePair>);
 
 /// Errors which may occur in generating bindings for these C++
@@ -110,6 +120,7 @@ impl Display for Error {
     }
 }
 
+/// Result type.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 struct GenerationResults {
@@ -132,8 +143,109 @@ pub trait RebuildDependencyRecorder: std::fmt::Debug {
     fn record_header_file_dependency(&self, filename: &str);
 }
 
-/// Core of the autocxx engine. See `generate` for most details
-/// on how this works.
+#[cfg_attr(doc, aquamarine::aquamarine)]
+/// Core of the autocxx engine.
+///
+/// The basic idea is this. We will run `bindgen` which will spit
+/// out a ton of Rust code corresponding to all the types and functions
+/// defined in C++. We'll then post-process that bindgen output
+/// into a form suitable for ingestion by `cxx`.
+/// (It's the `BridgeConverter` mod which does that.)
+/// Along the way, the `bridge_converter` might tell us of additional
+/// C++ code which we should generate, e.g. wrappers to move things
+/// into and out of `UniquePtr`s.
+///
+/// ```mermaid
+/// flowchart TB
+///     s[(C++ headers)]
+///     rss[(.rs input)]
+///     rss --> parser
+///     parser --> include_cpp_conf
+///     cpp_output[(C++ output)]
+///     rs_output[(.rs output)]
+///     subgraph autocxx[autocxx_engine]
+///     parser[File parser]
+///     subgraph bindgen[autocxx_bindgen]
+///     lc[libclang parse]
+///     s --> lc
+///     bir(bindgen IR)
+///     lc --> bir
+///     end
+///     bgo(bindgen generated bindings)
+///     bir --> bgo
+///     include_cpp_conf(Config from include_cpp)
+///     syn[Parse with syn]
+///     bgo --> syn
+///     conv[['conversion' mod: see below]]
+///     syn --> conv
+///     rsgen(Generated .rs TokenStream)
+///     conv --> rsgen
+///     subgraph cxx_gen
+///     cxx_codegen[cxx_gen C++ codegen]
+///     end
+///     rsgen --> cxx_codegen
+///     end
+///     conv -- autocxx C++ codegen --> cpp_output
+///     rsgen -- autocxx .rs codegen --> rs_output
+///     cxx_codegen -- cxx C++ codegen --> cpp_output
+///     subgraph rustc [rustc build]
+///     subgraph autocxx_macro
+///     include_cpp[autocxx include_cpp macro]
+///     end
+///     subgraph cxx
+///     cxxm[cxx procedural macro]
+///     end
+///     comprs(Fully expanded Rust code)
+///     end
+///     rs_output-. included .->include_cpp
+///     include_cpp --> cxxm
+///     cxxm --> comprs
+///     rss --> rustc
+///     include_cpp_conf -. used to configure .-> bindgen
+///     include_cpp_conf --> conv
+///     link[linker]
+///     cpp_output --> link
+///     comprs --> link
+/// ```
+///
+/// Here's a zoomed-in view of the "conversion" part:
+///
+/// ```mermaid
+/// flowchart TB
+///     syn[(syn parse)]
+///     apis(Unanalyzed APIs)
+///     subgraph parse
+///     tc(TypeConverter)
+///     syn ==> parse_bindgen
+///     end
+///     parse_bindgen ==> apis
+///     parse_bindgen -.-> tc
+///     subgraph analysis
+///     pod[POD analysis]
+///     tc -.-> pod
+///     apis ==> pod
+///     podapis(APIs with POD analysis)
+///     podlist(ByValueChecker)
+///     pod ==> podapis
+///     pod -.-> podlist
+///     fun[Function materialization analysis]
+///     tc -.-> fun
+///     podapis ==> fun
+///     podlist -.-> fun
+///     funapis(APIs with function analysis)
+///     fun ==> funapis
+///     gc[Garbage collection]
+///     funapis ==> gc
+///     ctypes[C int analysis]
+///     gc ==> ctypes
+///     ctypes ==> finalapis
+///     end
+///     finalapis(Analyzed APIs)
+///     codegenrs(.rs codegen)
+///     codegencpp(.cpp codegen)
+///     finalapis ==> codegenrs
+///     finalapis ==> codegencpp
+/// ```
 pub struct IncludeCppEngine {
     config: IncludeCppConfig,
     state: State,
@@ -264,14 +376,7 @@ impl IncludeCppEngine {
     /// Most errors occur at this stage as we fail to interpret the C++
     /// headers properly.
     ///
-    /// The basic idea is this. We will run `bindgen` which will spit
-    /// out a ton of Rust code corresponding to all the types and functions
-    /// defined in C++. We'll then post-process that bindgen output
-    /// into a form suitable for ingestion by `cxx`.
-    /// (It's the `BridgeConverter` mod which does that.)
-    /// Along the way, the `bridge_converter` might tell us of additional
-    /// C++ code which we should generate, e.g. wrappers to move things
-    /// into and out of `UniquePtr`s.
+    /// See documentation for this type for flow diagrams and more details.
     pub fn generate(
         &mut self,
         inc_dirs: &str,
