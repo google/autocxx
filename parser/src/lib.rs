@@ -14,7 +14,7 @@
 
 mod config;
 pub mod file_locations;
-mod type_database;
+mod type_config;
 
 use std::{
     collections::hash_map::DefaultHasher,
@@ -30,7 +30,7 @@ use syn::{
     Macro,
 };
 
-pub use type_database::TypeDatabase;
+pub use type_config::TypeConfig;
 
 /// Core of the autocxx engine. See `generate` for most details
 /// on how this works.

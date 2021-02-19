@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod fun_codegen;
 mod impl_item_creator;
 mod namespace_organizer;
 mod non_pod_struct;
+mod unqualify;
 
 use std::collections::HashMap;
 
-// Neither of the following should need to be exposed outside
+// The following should not need to be exposed outside
 // codegen_rs but currently Rust codegen happens everywhere... TODO
 pub(crate) use non_pod_struct::make_non_pod;
 
@@ -28,11 +30,15 @@ use crate::types::{make_ident, Namespace};
 use impl_item_creator::create_impl_items;
 
 use self::{
+    fun_codegen::gen_function,
     namespace_organizer::{HasNs, NamespaceEntries},
     non_pod_struct::new_non_pod_struct,
 };
 
-use super::api::{Api, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, Use};
+use super::{
+    analysis::fun::FnAnalysis,
+    api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, Use},
+};
 use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
@@ -41,10 +47,7 @@ fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
     input.into_iter().flatten().collect()
 }
 
-/// Type which handles generation of code.
-/// "Code" here includes a list of Items to expose in Rust,
-/// and also a list of "additional C++ needs" which can be passed
-/// to the C++ code generator.
+/// Type which handles generation of Rust code.
 /// In practice, much of the "generation" involves connecting together
 /// existing lumps of code within the Api structures.
 pub(crate) struct RsCodeGenerator<'a> {
@@ -56,7 +59,7 @@ pub(crate) struct RsCodeGenerator<'a> {
 impl<'a> RsCodeGenerator<'a> {
     /// Generate code for a set of APIs that was discovered during parsing.
     pub(crate) fn generate_rs_code(
-        all_apis: Vec<Api>,
+        all_apis: Vec<Api<FnAnalysis>>,
         include_list: &'a [String],
         use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
         bindgen_mod: ItemMod,
@@ -69,7 +72,7 @@ impl<'a> RsCodeGenerator<'a> {
         c.rs_codegen(all_apis)
     }
 
-    fn rs_codegen(mut self, all_apis: Vec<Api>) -> Vec<Item> {
+    fn rs_codegen(mut self, all_apis: Vec<Api<FnAnalysis>>) -> Vec<Item> {
         // ... and now let's start to generate the output code.
         // First, the hierarchy of mods containing lots of 'use' statements
         // which is the final API exposed as 'ffi'.
@@ -78,10 +81,8 @@ impl<'a> RsCodeGenerator<'a> {
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
-                (
-                    (api.ns, api.id, Self::generate_rs_for_api(api.detail)),
-                    api.additional_cpp,
-                )
+                let gen = Self::generate_rs_for_api(&api.ns, api.detail);
+                ((api.ns, api.id, gen), api.additional_cpp.is_some())
             })
             .unzip();
         // And work out what we need for the bindgen mod.
@@ -102,9 +103,8 @@ impl<'a> RsCodeGenerator<'a> {
         // And a list of global items to include at the top level.
         let mut all_items: Vec<Item> = all_items.into_iter().flatten().collect();
         // And finally any C++ we need to generate. And by "we" I mean autocxx not cxx.
-        let additional_cpp_needs = remove_nones(additional_cpp_needs);
-        extern_c_mod_items
-            .extend(self.build_include_foreign_items(!additional_cpp_needs.is_empty()));
+        let has_additional_cpp_needs = additional_cpp_needs.into_iter().any(std::convert::identity);
+        extern_c_mod_items.extend(self.build_include_foreign_items(has_additional_cpp_needs));
         // We will always create an extern "C" mod even if bindgen
         // didn't generate one, e.g. because it only generated types.
         // We still want cxx to know about those types.
@@ -161,15 +161,15 @@ impl<'a> RsCodeGenerator<'a> {
 
     /// Generate lots of 'use' statements to pull cxxbridge items into the output
     /// mod hierarchy according to C++ namespaces.
-    fn generate_final_use_statements(input_items: &[Api]) -> Vec<Item> {
+    fn generate_final_use_statements<T: ApiAnalysis>(input_items: &[Api<T>]) -> Vec<Item> {
         let mut output_items = Vec::new();
         let ns_entries = NamespaceEntries::new(input_items);
         Self::append_child_use_namespace(&ns_entries, &mut output_items);
         output_items
     }
 
-    fn append_child_use_namespace(
-        ns_entries: &NamespaceEntries<Api>,
+    fn append_child_use_namespace<T: ApiAnalysis>(
+        ns_entries: &NamespaceEntries<Api<T>>,
         output_items: &mut Vec<Item>,
     ) {
         for item in ns_entries.entries() {
@@ -257,7 +257,7 @@ impl<'a> RsCodeGenerator<'a> {
         output_items
     }
 
-    fn generate_rs_for_api(api_detail: ApiDetail) -> RsCodegenResult {
+    fn generate_rs_for_api(ns: &Namespace, api_detail: ApiDetail<FnAnalysis>) -> RsCodegenResult {
         match api_detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
@@ -283,7 +283,7 @@ impl<'a> RsCodeGenerator<'a> {
                 impl_entry: None,
             },
             ApiDetail::ConcreteType(ty_details) => {
-                let global_items = Self::generate_extern_type_impl(TypeKind::NonPOD, &ty_details);
+                let global_items = Self::generate_extern_type_impl(TypeKind::NonPod, &ty_details);
                 let final_ident = &ty_details.final_ident;
                 RsCodegenResult {
                     global_items,
@@ -297,16 +297,7 @@ impl<'a> RsCodeGenerator<'a> {
                     impl_entry: None,
                 }
             }
-            ApiDetail::Function {
-                extern_c_mod_item,
-                impl_entry,
-            } => RsCodegenResult {
-                impl_entry,
-                global_items: Vec::new(),
-                bridge_items: Vec::new(),
-                extern_c_mod_item: Some(extern_c_mod_item),
-                bindgen_mod_item: None,
-            },
+            ApiDetail::Function { fun: _, analysis } => gen_function(ns, analysis),
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
                 impl_entry: None,
@@ -324,12 +315,13 @@ impl<'a> RsCodeGenerator<'a> {
             ApiDetail::Type {
                 ty_details,
                 for_extern_c_ts,
-                type_kind,
+                is_forward_declaration: _,
                 bindgen_mod_item,
+                analysis,
             } => RsCodegenResult {
-                global_items: Self::generate_extern_type_impl(type_kind, &ty_details),
+                global_items: Self::generate_extern_type_impl(analysis, &ty_details),
                 impl_entry: None,
-                bridge_items: match type_kind {
+                bridge_items: match analysis {
                     TypeKind::ForwardDeclaration => Vec::new(),
                     _ => create_impl_items(&ty_details.final_ident),
                 },
@@ -352,7 +344,7 @@ impl<'a> RsCodeGenerator<'a> {
         let tynamestring = &ty_details.tynamestring;
         let fulltypath = &ty_details.fulltypath;
         let kind_item = match type_kind {
-            TypeKind::POD => "Trivial",
+            TypeKind::Pod => "Trivial",
             _ => "Opaque",
         };
         let kind_item = make_ident(kind_item);
@@ -371,13 +363,13 @@ impl HasNs for (Namespace, Ident, RsCodegenResult) {
     }
 }
 
-impl HasNs for Api {
+impl<T: ApiAnalysis> HasNs for Api<T> {
     fn get_namespace(&self) -> &Namespace {
         &self.ns
     }
 }
 
-struct RsCodegenResult {
+pub(crate) struct RsCodegenResult {
     extern_c_mod_item: Option<ForeignItem>,
     bridge_items: Vec<Item>,
     global_items: Vec<Item>,

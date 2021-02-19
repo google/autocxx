@@ -25,9 +25,10 @@ use type_to_cpp::type_to_cpp;
 
 use self::function_wrapper::FunctionWrapperPayload;
 
-use super::api::Api;
+use super::api::{Api, ApiAnalysis};
 
 /// Instructions for new C++ which we need to generate.
+#[derive(Clone)]
 pub(crate) enum AdditionalNeed {
     MakeStringConstructor,
     FunctionWrapper(Box<FunctionWrapper>),
@@ -71,7 +72,9 @@ struct AdditionalFunction {
 
 /// Details of additional generated C++.
 pub(crate) struct CppCodegenResults {
+    /// Declarations, for inclusion in some suitable header file.
     pub(crate) declarations: String,
+    /// Definitions, for inclusion in some suitable compilation unit.
     pub(crate) definitions: String,
 }
 
@@ -87,7 +90,10 @@ pub(crate) struct CppCodeGenerator {
 }
 
 impl CppCodeGenerator {
-    pub(crate) fn generate_cpp_code(inclusions: String, apis: &[Api]) -> Option<CppCodegenResults> {
+    pub(crate) fn generate_cpp_code<T: ApiAnalysis>(
+        inclusions: String,
+        apis: &[Api<T>],
+    ) -> Option<CppCodegenResults> {
         let mut gen = CppCodeGenerator::new(inclusions);
         gen.add_needs(apis.iter().filter_map(|api| api.additional_cpp.as_ref()));
         gen.generate()

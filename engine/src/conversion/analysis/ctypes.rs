@@ -14,16 +14,20 @@
 
 use std::collections::HashSet;
 
-use crate::known_types::KNOWN_TYPES;
+use crate::{conversion::api::Api, known_types::KNOWN_TYPES};
 use crate::{
     conversion::{
-        api::{Api, ApiDetail, Use},
+        api::{ApiDetail, Use},
         codegen_cpp::AdditionalNeed,
     },
     types::{make_ident, Namespace},
 };
 
-pub(crate) fn append_ctype_information(apis: &mut Vec<Api>) {
+use super::fun::FnAnalysis;
+
+/// Spot any variable-length C types (e.g. unsigned long)
+/// used in the [Api]s and append those as extra APIs.
+pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
     let ctypes: HashSet<_> = apis
         .iter()
         .map(|api| api.deps.iter())
@@ -38,7 +42,6 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<Api>) {
             id: id.clone(),
             use_stmt: Use::Unused,
             deps: HashSet::new(),
-            id_for_allowlist: None,
             additional_cpp: Some(AdditionalNeed::CTypeTypedef(ctype.clone())),
             detail: ApiDetail::CType { id },
         });

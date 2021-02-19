@@ -12,83 +12,68 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx_parser::TypeDatabase;
+use autocxx_parser::TypeConfig;
 use syn::{Item, Type, TypePath};
 
 use crate::{
-    conversion::ConvertError, known_types::KNOWN_TYPES, types::Namespace, types::TypeName,
+    conversion::{
+        api::{ApiDetail, UnanalyzedApi},
+        ConvertError,
+    },
+    known_types::KNOWN_TYPES,
+    types::TypeName,
 };
 
 use super::ByValueChecker;
 
-struct ByValueScanner<'a> {
-    byvalue_checker: ByValueChecker,
-    type_database: &'a TypeDatabase,
-}
-
+/// Scan APIs to work out which are by-value safe. Constructs a [ByValueChecker]
+/// that others can use to query the results.
 pub(crate) fn identify_byvalue_safe_types(
-    items: &[Item],
-    type_database: &TypeDatabase,
+    apis: &[UnanalyzedApi],
+    type_config: &TypeConfig,
 ) -> Result<ByValueChecker, ConvertError> {
-    let mut bvs = ByValueScanner {
-        byvalue_checker: ByValueChecker::new(),
-        type_database,
-    };
-    bvs.find_nested_pod_types(items)?;
-    Ok(bvs.byvalue_checker)
+    let mut byvalue_checker = ByValueChecker::new();
+    for api in apis {
+        match &api.detail {
+            ApiDetail::Typedef { type_item } => {
+                let name = api.typename();
+                let typedef_type = analyze_typedef_target(type_item.ty.as_ref());
+                match &typedef_type {
+                    Some(typ) => {
+                        byvalue_checker.ingest_simple_typedef(name, TypeName::from_type_path(&typ))
+                    }
+                    None => byvalue_checker.ingest_nonpod_type(name),
+                }
+            }
+            ApiDetail::Type {
+                ty_details: _,
+                for_extern_c_ts: _,
+                is_forward_declaration: _,
+                bindgen_mod_item,
+                analysis: _,
+            } => match bindgen_mod_item {
+                None => {}
+                Some(Item::Struct(s)) => byvalue_checker.ingest_struct(&s, &api.ns),
+                Some(Item::Enum(_)) => byvalue_checker.ingest_pod_type(api.typename()),
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+    let pod_requests = type_config
+        .get_pod_requests()
+        .iter()
+        .map(|ty| TypeName::new_from_user_input(ty))
+        .collect();
+    byvalue_checker
+        .satisfy_requests(pod_requests)
+        .map_err(ConvertError::UnsafePodType)?;
+    Ok(byvalue_checker)
 }
 
-impl<'a> ByValueScanner<'a> {
-    fn find_nested_pod_types_in_mod(
-        &mut self,
-        items: &[Item],
-        ns: &Namespace,
-    ) -> Result<(), ConvertError> {
-        for item in items {
-            match item {
-                Item::Struct(s) => self.byvalue_checker.ingest_struct(s, ns),
-                Item::Enum(e) => self
-                    .byvalue_checker
-                    .ingest_pod_type(TypeName::new(&ns, &e.ident.to_string())),
-                Item::Type(ity) => {
-                    let name = TypeName::new(ns, &ity.ident.to_string());
-                    let typedef_type = Self::analyze_typedef_target(ity.ty.as_ref());
-                    match &typedef_type {
-                        Some(typ) => self
-                            .byvalue_checker
-                            .ingest_simple_typedef(name, TypeName::from_type_path(&typ)),
-                        None => self.byvalue_checker.ingest_nonpod_type(name),
-                    }
-                }
-                Item::Mod(itm) => {
-                    if let Some((_, nested_items)) = &itm.content {
-                        let new_ns = ns.push(itm.ident.to_string());
-                        self.find_nested_pod_types_in_mod(nested_items, &new_ns)?;
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    fn analyze_typedef_target(ty: &Type) -> Option<TypePath> {
-        match ty {
-            Type::Path(typ) => KNOWN_TYPES.known_type_substitute_path(&typ),
-            _ => None,
-        }
-    }
-
-    fn find_nested_pod_types(&mut self, items: &[Item]) -> Result<(), ConvertError> {
-        self.find_nested_pod_types_in_mod(items, &Namespace::new())?;
-        let pod_requests = self
-            .type_database
-            .get_pod_requests()
-            .iter()
-            .map(|ty| TypeName::new_from_user_input(ty))
-            .collect();
-        self.byvalue_checker
-            .satisfy_requests(pod_requests)
-            .map_err(ConvertError::UnsafePODType)
+fn analyze_typedef_target(ty: &Type) -> Option<TypePath> {
+    match ty {
+        Type::Path(typ) => KNOWN_TYPES.known_type_substitute_path(&typ),
+        _ => None,
     }
 }

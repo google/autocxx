@@ -16,13 +16,13 @@
 /// At present this is very minimal; in future we should roll
 /// known_types.rs into this and possibly other things as well.
 #[derive(Default, Hash)]
-pub struct TypeDatabase {
+pub struct TypeConfig {
     pod_requests: Vec<String>,
     allowlist: Vec<String>, // not TypeName as it may be funcs not types.
     blocklist: Vec<String>, // not TypeName as it may be funcs not types.
 }
 
-impl TypeDatabase {
+impl TypeConfig {
     pub fn new() -> Self {
         Self::default()
     }

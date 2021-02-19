@@ -21,8 +21,9 @@ mod conversion_tests;
 mod parse;
 mod utilities;
 
+use analysis::fun::FnAnalyzer;
 pub(crate) use api::ConvertError;
-use autocxx_parser::TypeDatabase;
+use autocxx_parser::TypeConfig;
 pub(crate) use codegen_cpp::type_to_cpp::type_to_cpp;
 pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use codegen_cpp::CppCodegenResults;
@@ -31,9 +32,7 @@ use syn::{Item, ItemMod};
 use crate::UnsafePolicy;
 
 use self::{
-    analysis::{
-        gc::filter_apis_by_following_edges_from_allowlist, pod::identify_byvalue_safe_types,
-    },
+    analysis::{gc::filter_apis_by_following_edges_from_allowlist, pod::analyze_pod_apis},
     codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
 };
@@ -52,7 +51,7 @@ use self::{
 /// we need to be a bit more graceful, but for now, that's OK.
 pub(crate) struct BridgeConverter<'a> {
     include_list: &'a [String],
-    type_database: &'a TypeDatabase,
+    type_config: &'a TypeConfig,
 }
 
 /// C++ and Rust code generation output.
@@ -62,15 +61,19 @@ pub(crate) struct CodegenResults {
 }
 
 impl<'a> BridgeConverter<'a> {
-    pub fn new(include_list: &'a [String], type_database: &'a TypeDatabase) -> Self {
+    pub fn new(include_list: &'a [String], type_config: &'a TypeConfig) -> Self {
         Self {
             include_list,
-            type_database,
+            type_config,
         }
     }
 
     /// Convert a TokenStream of bindgen-generated bindings to a form
     /// suitable for cxx.
+    ///
+    /// This is really the heart of autocxx. It parses the output of `bindgen`
+    /// (although really by "parse" we mean to interpret the structures already built
+    /// up by the `syn` crate).
     pub(crate) fn convert(
         &self,
         mut bindgen_mod: ItemMod,
@@ -81,31 +84,45 @@ impl<'a> BridgeConverter<'a> {
         match &mut bindgen_mod.content {
             None => Err(ConvertError::NoContent),
             Some((_, items)) => {
-                // First let's look at this bindgen mod to find the items
-                // which we'll need to convert.
-                let items_to_process = items.drain(..).collect();
-                // And ensure that the namespace/mod structure is as expected.
-                let items_in_root = Self::find_items_in_root(items_to_process)?;
-                // Now, let's confirm that the items requested by the user to be
-                // POD really are POD, and thusly mark any dependent types.
-                let byvalue_checker =
-                    identify_byvalue_safe_types(&items_in_root, &self.type_database)?;
                 // Parse the bindgen mod.
-                let parser = ParseBindgen::new(byvalue_checker, &self.type_database, unsafe_policy);
-                let parse_results = parser.convert_items(items_in_root, exclude_utilities)?;
-                // The code above will have contributed lots of Apis to self.apis.
+                let items_to_process = items.drain(..).collect();
+                let parser = ParseBindgen::new(&self.type_config);
+                let parse_results = parser.parse_items(items_to_process, exclude_utilities)?;
+                // Inside parse_results, we now have a list of APIs and a few other things
+                // e.g. type relationships. The latter are stored in here...
+                let mut type_converter = parse_results.type_converter;
+                // The code above will have contributed lots of `Api`s to self.apis.
+                // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
+                // versus which need to be opaque).
+                // Specifically, let's confirm that the items requested by the user to be
+                // POD really are POD, and duly mark any dependent types.
+                // This returns a new list of `Api`s, which will be parameterized with
+                // the analysis results. It also returns an object which can be used
+                // by subsequent phases to work out which objects are POD.
+                let (analyzed_apis, pod_list) =
+                    analyze_pod_apis(parse_results.apis, &self.type_config, &mut type_converter)?;
+                // Next, figure out how we materialize different functions.
+                // Some will be simple entries in the cxx::bridge module; others will
+                // require C++ wrapper functions. This is probably the most complex
+                // part of `autocxx`. Again, this returns a new set of `Api`s, but
+                // parameterized by a richer set of metadata.
+                let analyzed_apis = FnAnalyzer::analyze_functions(
+                    analyzed_apis,
+                    unsafe_policy,
+                    &mut type_converter,
+                    &pod_list,
+                    self.type_config,
+                )?;
                 // We now garbage collect the ones we don't need...
-                let mut apis = filter_apis_by_following_edges_from_allowlist(
-                    parse_results.apis,
-                    &self.type_database,
-                );
+                let mut analyzed_apis =
+                    filter_apis_by_following_edges_from_allowlist(analyzed_apis, &self.type_config);
                 // Determine what variably-sized C types (e.g. int) we need to include
-                analysis::ctypes::append_ctype_information(&mut apis);
+                analysis::ctypes::append_ctype_information(&mut analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
-                let cpp = CppCodeGenerator::generate_cpp_code(inclusions, &apis);
+                let cpp = CppCodeGenerator::generate_cpp_code(inclusions, &analyzed_apis);
                 let rs = RsCodeGenerator::generate_rs_code(
-                    apis,
+                    analyzed_apis,
                     self.include_list,
                     parse_results.use_stmts_by_mod,
                     bindgen_mod,
@@ -113,23 +130,5 @@ impl<'a> BridgeConverter<'a> {
                 Ok(CodegenResults { rs, cpp })
             }
         }
-    }
-
-    fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
-        for item in items {
-            match item {
-                Item::Mod(root_mod) => {
-                    // With namespaces enabled, bindgen always puts everything
-                    // in a mod called 'root'. We don't want to pass that
-                    // onto cxx, so jump right into it.
-                    assert!(root_mod.ident == "root");
-                    if let Some((_, items)) = root_mod.content {
-                        return Ok(items);
-                    }
-                }
-                _ => return Err(ConvertError::UnexpectedOuterItem),
-            }
-        }
-        Ok(Vec::new())
     }
 }

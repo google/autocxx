@@ -201,7 +201,7 @@ impl IncludeCppEngine {
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
-        for a in self.config.type_database.allowlist() {
+        for a in self.config.type_config.allowlist() {
             // TODO - allowlist type/functions/separately
             builder = builder
                 .whitelist_type(a)
@@ -268,7 +268,7 @@ impl IncludeCppEngine {
     /// out a ton of Rust code corresponding to all the types and functions
     /// defined in C++. We'll then post-process that bindgen output
     /// into a form suitable for ingestion by `cxx`.
-    /// (It's the `bridge_converter` mod which does that.)
+    /// (It's the `BridgeConverter` mod which does that.)
     /// Along the way, the `bridge_converter` might tell us of additional
     /// C++ code which we should generate, e.g. wrappers to move things
     /// into and out of `UniquePtr`s.
@@ -288,7 +288,7 @@ impl IncludeCppEngine {
             State::Generated(_) => panic!("Only call generate once"),
         }
 
-        if self.config.type_database.allowlist_is_empty() {
+        if self.config.type_config.allowlist_is_empty() {
             return Err(Error::NoGenerationRequested);
         }
 
@@ -303,7 +303,7 @@ impl IncludeCppEngine {
         let bindings = self.parse_bindings(bindings)?;
 
         let include_list = self.generate_include_list();
-        let converter = BridgeConverter::new(&include_list, &self.config.type_database);
+        let converter = BridgeConverter::new(&include_list, &self.config.type_config);
 
         let conversion = converter
             .convert(

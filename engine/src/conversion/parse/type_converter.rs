@@ -15,7 +15,7 @@
 use crate::{
     conversion::codegen_cpp::AdditionalNeed,
     conversion::{
-        api::{Api, TypeApiDetails, Use},
+        api::{TypeApiDetails, UnanalyzedApi, Use},
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -29,11 +29,11 @@ use syn::{
 };
 
 /// Results of some type conversion, annotated with a list of every type encountered,
-/// and optionally any extra API we need in order to use this type.
+/// and optionally any extra APIs we need in order to use this type.
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<TypeName>,
-    pub(crate) extra_apis: Vec<Api>,
+    pub(crate) extra_apis: Vec<UnanalyzedApi>,
     pub(crate) requires_unsafe: bool,
 }
 
@@ -41,7 +41,7 @@ impl<T> Annotated<T> {
     fn new(
         ty: T,
         types_encountered: HashSet<TypeName>,
-        extra_apis: Vec<Api>,
+        extra_apis: Vec<UnanalyzedApi>,
         requires_unsafe: bool,
     ) -> Self {
         Self {
@@ -62,6 +62,20 @@ impl<T> Annotated<T> {
     }
 }
 
+/// A type which can convert from a type encountered in `bindgen`
+/// output to the sort of type we should represeent to `cxx`.
+/// As a simple example, `std::string` should be replaced
+/// with [CxxString]. This also involves keeping track
+/// of typedefs, and any instantiated concrete types.
+///
+/// This object is a bit of a pest. The information here
+/// is compiled during the parsing phase (which is why it lives
+/// in the parse mod) but is used during various other phases.
+/// As such it contributes to both the parsing and analysis phases.
+/// It's possible that the information here largely duplicates
+/// information stored elsewhere in the list of `Api`s, or can
+/// easily be moved into it, which would enable us to
+/// distribute this logic elsewhere.
 pub(crate) struct TypeConverter {
     types_found: Vec<TypeName>,
     typedefs: HashMap<TypeName, Type>,
@@ -337,17 +351,16 @@ impl TypeConverter {
         }))
     }
 
-    fn add_concrete_type(&self, tyname: &TypeName, rs_definition: &Type) -> Api {
+    fn add_concrete_type(&self, tyname: &TypeName, rs_definition: &Type) -> UnanalyzedApi {
         let final_ident = make_ident(tyname.get_final_ident());
-        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(|x| make_ident(x)).collect();
+        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(make_ident).collect();
         fulltypath.push(final_ident.clone());
         let tynamestring = tyname.to_cpp_name();
-        Api {
+        UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
             use_stmt: Use::Unused,
             deps: HashSet::new(),
-            id_for_allowlist: None,
             detail: crate::conversion::api::ApiDetail::ConcreteType(TypeApiDetails {
                 fulltypath,
                 tynamestring,
@@ -360,7 +373,10 @@ impl TypeConverter {
         }
     }
 
-    fn get_templated_typename(&mut self, rs_definition: &Type) -> (TypeName, Option<Api>) {
+    fn get_templated_typename(
+        &mut self,
+        rs_definition: &Type,
+    ) -> (TypeName, Option<UnanalyzedApi>) {
         let count = self.concrete_templates.len();
         // We just use this as a hash key, essentially.
         let cpp_definition = type_to_cpp(rs_definition);

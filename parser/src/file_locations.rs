@@ -105,15 +105,18 @@ impl FileLocationStrategy {
     /// From a build script, inform cargo how to set environment variables
     /// to make them available to the procedural macro.
     pub fn set_cargo_env_vars_for_build(&self) {
-        match self {
-            FileLocationStrategy::Custom(_) => {
-                println!(
-                    "cargo:rustc-env={}={}",
-                    AUTOCXX_RS,
-                    self.get_rs_dir().to_str().unwrap()
-                );
-            }
-            _ => {}
+        if let FileLocationStrategy::Custom(_) = self {
+            println!(
+                "cargo:rustc-env={}={}",
+                AUTOCXX_RS,
+                self.get_rs_dir().to_str().unwrap()
+            );
         }
+    }
+}
+
+impl Default for FileLocationStrategy {
+    fn default() -> Self {
+        Self::new()
     }
 }

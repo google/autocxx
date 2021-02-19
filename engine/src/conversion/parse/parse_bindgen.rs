@@ -16,43 +16,29 @@ use std::{collections::HashMap, collections::HashSet};
 
 use crate::{
     conversion::{
-        analysis::pod::ByValueChecker,
-        api::{ApiDetail, ParseResults, TypeApiDetails, TypeKind},
-        codegen_rs::make_non_pod,
+        api::{ApiDetail, ParseResults, TypeApiDetails, UnanalyzedApi},
         ConvertError,
     },
     types::make_ident,
     types::Namespace,
     types::TypeName,
-    UnsafePolicy,
 };
-use autocxx_parser::TypeDatabase;
+use autocxx_parser::TypeConfig;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_quote, Fields, Item, ItemStruct, Type};
+use syn::{parse_quote, Fields, Item};
 
 use super::{
-    super::{
-        api::{Api, Use},
-        utilities::generate_utilities,
-    },
-    bridge_name_tracker::BridgeNameTracker,
-    rust_name_tracker::RustNameTracker,
+    super::{api::Use, utilities::generate_utilities},
     type_converter::TypeConverter,
 };
 
-use super::parse_foreign_mod::{ForeignModParseCallbacks, ParseForeignMod};
+use super::parse_foreign_mod::ParseForeignMod;
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
-    type_converter: TypeConverter,
-    byvalue_checker: ByValueChecker,
-    type_database: &'a TypeDatabase,
-    bridge_name_tracker: BridgeNameTracker,
-    rust_name_tracker: RustNameTracker,
-    incomplete_types: HashSet<TypeName>,
+    type_config: &'a TypeConfig,
     results: ParseResults,
-    unsafe_policy: UnsafePolicy,
     /// Here we track the last struct which bindgen told us about.
     /// Any subsequent "extern 'C'" blocks are methods belonging to that type,
     /// even if the 'this' is actually recorded as void in the
@@ -61,104 +47,86 @@ pub(crate) struct ParseBindgen<'a> {
 }
 
 impl<'a> ParseBindgen<'a> {
-    pub(crate) fn new(
-        byvalue_checker: ByValueChecker,
-        type_database: &'a TypeDatabase,
-        unsafe_policy: UnsafePolicy,
-    ) -> Self {
+    pub(crate) fn new(type_config: &'a TypeConfig) -> Self {
         ParseBindgen {
-            type_converter: TypeConverter::new(),
-            byvalue_checker,
-            bridge_name_tracker: BridgeNameTracker::new(),
-            rust_name_tracker: RustNameTracker::new(),
-            type_database,
-            incomplete_types: HashSet::new(),
+            type_config,
             results: ParseResults {
                 apis: Vec::new(),
+                type_converter: TypeConverter::new(),
                 use_stmts_by_mod: HashMap::new(),
             },
-            unsafe_policy,
             latest_virtual_this_type: None,
         }
     }
 
-    /// Main function which goes through and performs conversion from
-    /// `bindgen`-style Rust output into `cxx::bridge`-style Rust input.
-    /// At present, it significantly rewrites the bindgen mod,
-    /// as well as generating an additional cxx::bridge mod, and an outer
-    /// mod with all sorts of 'use' statements. A valid alternative plan
-    /// might be to keep the bindgen mod untouched and _only_ generate
-    /// additional bindings, but the sticking point there is that it's not
-    /// obviously possible to stop folks allocating opaque types in the
-    /// bindgen mod. (We mark all types as opaque until we're told
-    /// otherwise, which is the opposite of what bindgen does, so we can't
-    /// just give it lots of directives to make all types opaque.)
-    /// One future option could be to provide a mode to bindgen where
-    /// everything is opaque unless specifically allowlisted to be
-    /// transparent.
-    pub(crate) fn convert_items(
+    /// Parses items found in the `bindgen` output and returns a set of
+    /// `Api`s together with some other data.
+    pub(crate) fn parse_items(
         mut self,
         items: Vec<Item>,
         exclude_utilities: bool,
     ) -> Result<ParseResults, ConvertError> {
+        let items = Self::find_items_in_root(items)?;
         if !exclude_utilities {
             generate_utilities(&mut self.results.apis);
         }
         let root_ns = Namespace::new();
-        self.convert_mod_items(items, root_ns)?;
+        self.parse_mod_items(items, root_ns)?;
         Ok(self.results)
+    }
+
+    fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
+        for item in items {
+            match item {
+                Item::Mod(root_mod) => {
+                    // With namespaces enabled, bindgen always puts everything
+                    // in a mod called 'root'. We don't want to pass that
+                    // onto cxx, so jump right into it.
+                    assert!(root_mod.ident == "root");
+                    if let Some((_, items)) = root_mod.content {
+                        return Ok(items);
+                    }
+                }
+                _ => return Err(ConvertError::UnexpectedOuterItem),
+            }
+        }
+        Ok(Vec::new())
     }
 
     /// Interpret the bindgen-generated .rs for a particular
     /// mod, which corresponds to a C++ namespace.
-    fn convert_mod_items(&mut self, items: Vec<Item>, ns: Namespace) -> Result<(), ConvertError> {
+    fn parse_mod_items(&mut self, items: Vec<Item>, ns: Namespace) -> Result<(), ConvertError> {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
         let mut mod_converter = ParseForeignMod::new(ns.clone());
         let mut use_statements_for_this_mod = Vec::new();
         for item in items {
             match item {
-                Item::ForeignMod(mut fm) => {
-                    let items = fm.items;
-                    fm.items = Vec::new();
-                    mod_converter
-                        .convert_foreign_mod_items(items, self.latest_virtual_this_type.clone())?;
+                Item::ForeignMod(fm) => {
+                    mod_converter.convert_foreign_mod_items(
+                        fm.items,
+                        self.latest_virtual_this_type.clone(),
+                    )?;
                 }
-                Item::Struct(mut s) => {
+                Item::Struct(s) => {
                     if s.ident.to_string().ends_with("__bindgen_vtable") {
                         continue;
                     }
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
-                    let type_kind = if Self::spot_forward_declaration(&s.fields) {
-                        self.incomplete_types.insert(tyname.clone());
-                        TypeKind::ForwardDeclaration
-                    } else if self.byvalue_checker.is_pod(&tyname) {
-                        TypeKind::POD
-                    } else {
-                        TypeKind::NonPOD
-                    };
-                    // We either leave a bindgen struct untouched, or we completely
-                    // replace its contents with opaque nonsense.
-                    let field_types = match type_kind {
-                        TypeKind::POD => self.get_struct_field_types(&ns, &s)?,
-                        _ => {
-                            make_non_pod(&mut s);
-                            HashSet::new()
-                        }
-                    };
+                    let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
                     // cxx::bridge can't cope with type aliases to generic
                     // types at the moment.
-                    self.generate_type(
+                    self.parse_type(
                         tyname.clone(),
-                        type_kind,
-                        field_types,
+                        is_forward_declaration,
+                        HashSet::new(),
                         Some(Item::Struct(s)),
                     );
                     self.latest_virtual_this_type = Some(tyname);
                 }
                 Item::Enum(e) => {
                     let tyname = TypeName::new(&ns, &e.ident.to_string());
-                    self.generate_type(tyname, TypeKind::POD, HashSet::new(), Some(Item::Enum(e)));
+                    self.parse_type(tyname, false, HashSet::new(), Some(Item::Enum(e)));
                 }
                 Item::Impl(imp) => {
                     // We *mostly* ignore all impl blocks generated by bindgen.
@@ -173,7 +141,7 @@ impl<'a> ParseBindgen<'a> {
                 Item::Mod(itm) => {
                     if let Some((_, items)) = itm.content {
                         let new_ns = ns.push(itm.ident.to_string());
-                        self.convert_mod_items(items, new_ns)?;
+                        self.parse_mod_items(items, new_ns)?;
                     }
                 }
                 Item::Use(_) => {
@@ -183,28 +151,31 @@ impl<'a> ParseBindgen<'a> {
                     // The following puts this constant into
                     // the global namespace which is bug
                     // https://github.com/google/autocxx/issues/133
-                    self.add_api(Api {
+                    self.results.apis.push(UnanalyzedApi {
                         id: const_item.ident.clone(),
                         ns: ns.clone(),
                         deps: HashSet::new(),
                         use_stmt: Use::Unused,
-                        id_for_allowlist: None,
                         detail: ApiDetail::Const { const_item },
                         additional_cpp: None,
                     });
                 }
                 Item::Type(mut ity) => {
                     let tyname = TypeName::new(&ns, &ity.ident.to_string());
-                    let mut final_type = self.type_converter.convert_type(*ity.ty, &ns, false)?;
+                    let mut final_type = self
+                        .results
+                        .type_converter
+                        .convert_type(*ity.ty, &ns, false)?;
                     ity.ty = Box::new(final_type.ty.clone());
-                    self.type_converter.insert_typedef(tyname, final_type.ty);
+                    self.results
+                        .type_converter
+                        .insert_typedef(tyname, final_type.ty);
                     self.results.apis.append(&mut final_type.extra_apis);
-                    self.add_api(Api {
+                    self.results.apis.push(UnanalyzedApi {
                         id: ity.ident.clone(),
                         ns: ns.clone(),
                         deps: final_type.types_encountered,
                         use_stmt: Use::Unused,
-                        id_for_allowlist: None,
                         additional_cpp: None,
                         detail: ApiDetail::Typedef { type_item: ity },
                     });
@@ -212,10 +183,10 @@ impl<'a> ParseBindgen<'a> {
                 _ => return Err(ConvertError::UnexpectedItemInMod),
             }
         }
-        mod_converter.finished(self)?;
+        mod_converter.finished(&mut self.results.apis);
 
         // We don't immediately blat 'use' statements into any particular
-        // Api. We'll squirrel them away and insert them into the output mod later
+        // `Api`. We'll squirrel them away and insert them into the output mod later
         // iff this mod ends up having any output items after garbage collection
         // of unnecessary APIs.
         let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
@@ -242,20 +213,6 @@ impl<'a> ParseBindgen<'a> {
         Ok(())
     }
 
-    fn get_struct_field_types(
-        &mut self,
-        ns: &Namespace,
-        s: &ItemStruct,
-    ) -> Result<HashSet<TypeName>, ConvertError> {
-        let mut results = HashSet::new();
-        for f in &s.fields {
-            let annotated = self.type_converter.convert_type(f.ty.clone(), ns, false)?;
-            self.results.apis.extend(annotated.extra_apis);
-            results.extend(annotated.types_encountered);
-        }
-        Ok(results)
-    }
-
     fn spot_forward_declaration(s: &Fields) -> bool {
         s.iter()
             .filter_map(|f| f.ident.as_ref())
@@ -268,15 +225,15 @@ impl<'a> ParseBindgen<'a> {
     /// is aware of the type, and 'use' statements for the final
     /// output mod hierarchy. All are stored in the Api which
     /// this adds.
-    fn generate_type(
+    fn parse_type(
         &mut self,
         tyname: TypeName,
-        type_kind: TypeKind,
+        is_forward_declaration: bool,
         deps: HashSet<TypeName>,
         bindgen_mod_item: Option<Item>,
     ) {
         let final_ident = make_ident(tyname.get_final_ident());
-        if self.type_database.is_on_blocklist(&tyname.to_cpp_name()) {
+        if self.type_config.is_on_blocklist(&tyname.to_cpp_name()) {
             return;
         }
         let tynamestring = tyname.to_cpp_name();
@@ -293,7 +250,7 @@ impl<'a> ParseBindgen<'a> {
             TokenStream2::new()
         };
 
-        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(|x| make_ident(x)).collect();
+        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(make_ident).collect();
         for_extern_c_ts.extend(quote! {
             type #final_ident = super::bindgen::root::
         });
@@ -308,12 +265,11 @@ impl<'a> ParseBindgen<'a> {
             #final_ident;
         });
         fulltypath.push(final_ident.clone());
-        let api = Api {
+        let api = UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
             use_stmt: Use::Used,
             deps,
-            id_for_allowlist: None,
             additional_cpp: None,
             detail: ApiDetail::Type {
                 ty_details: TypeApiDetails {
@@ -322,65 +278,12 @@ impl<'a> ParseBindgen<'a> {
                     tynamestring,
                 },
                 for_extern_c_ts,
-                type_kind,
+                is_forward_declaration,
                 bindgen_mod_item,
+                analysis: (),
             },
         };
-        self.add_api(api);
-        self.type_converter.push(tyname);
-    }
-}
-
-impl<'a> ForeignModParseCallbacks for ParseBindgen<'a> {
-    fn convert_boxed_type(
-        &mut self,
-        ty: Box<Type>,
-        ns: &Namespace,
-        convert_ptrs_to_reference: bool,
-    ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError> {
-        let annotated =
-            self.type_converter
-                .convert_boxed_type(ty, ns, convert_ptrs_to_reference)?;
-        self.results.apis.extend(annotated.extra_apis);
-        Ok((
-            annotated.ty,
-            annotated.types_encountered,
-            annotated.requires_unsafe,
-        ))
-    }
-
-    fn is_pod(&self, ty: &TypeName) -> bool {
-        self.byvalue_checker.is_pod(ty)
-    }
-
-    fn add_api(&mut self, api: Api) {
         self.results.apis.push(api);
-    }
-
-    fn get_cxx_bridge_name(
-        &mut self,
-        type_name: Option<&str>,
-        found_name: &str,
-        ns: &Namespace,
-    ) -> String {
-        self.bridge_name_tracker
-            .get_unique_cxx_bridge_name(type_name, found_name, ns)
-    }
-
-    fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool {
-        self.rust_name_tracker.ok_to_use_rust_name(rust_name)
-    }
-
-    fn is_on_allowlist(&self, type_name: &TypeName) -> bool {
-        self.type_database.is_on_allowlist(&type_name.to_cpp_name())
-    }
-
-    fn avoid_generating_type(&self, type_name: &TypeName) -> bool {
-        self.type_database.is_on_blocklist(&type_name.to_cpp_name())
-            || self.incomplete_types.contains(type_name)
-    }
-
-    fn should_be_unsafe(&self) -> bool {
-        self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
+        self.results.type_converter.push(tyname);
     }
 }
