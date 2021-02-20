@@ -292,7 +292,7 @@ impl IncludeCppEngine {
 
     fn make_bindgen_builder(&self, inc_dirs: &[PathBuf]) -> bindgen::Builder {
         let mut builder = bindgen::builder()
-            .clang_args(&["-x", "c++", "-std=c++14"])
+            .clang_args(&["-x", "c++", "-std=c++14", "-DBINDGEN"])
             .derive_copy(false)
             .derive_debug(false)
             .default_enum_style(bindgen::EnumVariation::Rust {

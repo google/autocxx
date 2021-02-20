@@ -25,7 +25,10 @@ use type_to_cpp::type_to_cpp;
 
 use self::function_wrapper::FunctionWrapperPayload;
 
-use super::api::{Api, ApiAnalysis};
+use super::{
+    api::{Api, ApiAnalysis},
+    ConvertError,
+};
 
 /// Instructions for new C++ which we need to generate.
 #[derive(Clone)]
@@ -93,10 +96,10 @@ impl CppCodeGenerator {
     pub(crate) fn generate_cpp_code<T: ApiAnalysis>(
         inclusions: String,
         apis: &[Api<T>],
-    ) -> Option<CppCodegenResults> {
+    ) -> Result<Option<CppCodegenResults>, ConvertError> {
         let mut gen = CppCodeGenerator::new(inclusions);
-        gen.add_needs(apis.iter().filter_map(|api| api.additional_cpp.as_ref()));
-        gen.generate()
+        gen.add_needs(apis.iter().filter_map(|api| api.additional_cpp.as_ref()))?;
+        Ok(gen.generate())
     }
 
     fn new(inclusions: String) -> Self {
@@ -106,19 +109,23 @@ impl CppCodeGenerator {
         }
     }
 
-    fn add_needs<'a>(&mut self, additions: impl Iterator<Item = &'a AdditionalNeed>) {
+    fn add_needs<'a>(
+        &mut self,
+        additions: impl Iterator<Item = &'a AdditionalNeed>,
+    ) -> Result<(), ConvertError> {
         for need in additions {
             match need {
                 AdditionalNeed::MakeStringConstructor => self.generate_string_constructor(),
                 AdditionalNeed::FunctionWrapper(by_value_wrapper) => {
-                    self.generate_by_value_wrapper(by_value_wrapper)
+                    self.generate_by_value_wrapper(by_value_wrapper)?
                 }
                 AdditionalNeed::CTypeTypedef(tn) => self.generate_ctype_typedef(tn),
                 AdditionalNeed::ConcreteTemplatedTypeTypedef(tn, def) => {
-                    self.generate_typedef(tn, type_to_cpp(&def))
+                    self.generate_typedef(tn, type_to_cpp(&def)?)
                 }
             }
         }
+        Ok(())
     }
 
     fn generate(&self) -> Option<CppCodegenResults> {
@@ -180,7 +187,7 @@ impl CppCodeGenerator {
         })
     }
 
-    fn generate_by_value_wrapper(&mut self, details: &FunctionWrapper) {
+    fn generate_by_value_wrapper(&mut self, details: &FunctionWrapper) -> Result<(), ConvertError> {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
         // We could easily do this the other way round, and when
@@ -204,22 +211,31 @@ impl CppCodeGenerator {
                 format!("arg{}", counter)
             }
         };
-        let args = details
+        let args: Result<Vec<_>, _> = details
             .argument_conversion
             .iter()
             .enumerate()
-            .map(|(counter, ty)| format!("{} {}", ty.unconverted_type(), get_arg_name(counter)))
-            .join(", ");
+            .map(|(counter, ty)| {
+                Ok(format!(
+                    "{} {}",
+                    ty.unconverted_type()?,
+                    get_arg_name(counter)
+                ))
+            })
+            .collect();
+        let args = args?.join(", ");
         let ret_type = details
             .return_conversion
             .as_ref()
-            .map_or("void".to_string(), |x| x.converted_type());
+            .map_or(Ok("void".to_string()), |x| x.converted_type())?;
         let declaration = format!("{} {}({})", ret_type, name, args);
-        let mut arg_list = details
+        let arg_list: Result<Vec<_>, _> = details
             .argument_conversion
             .iter()
             .enumerate()
-            .map(|(counter, conv)| conv.conversion(&get_arg_name(counter)));
+            .map(|(counter, conv)| conv.conversion(&get_arg_name(counter)))
+            .collect();
+        let mut arg_list = arg_list?.into_iter();
         let receiver = if is_a_method { arg_list.next() } else { None };
         let arg_list = arg_list.join(", ");
         let mut underlying_function_call = match &details.payload {
@@ -246,7 +262,7 @@ impl CppCodeGenerator {
         };
         if let Some(ret) = &details.return_conversion {
             underlying_function_call =
-                format!("return {}", ret.conversion(&underlying_function_call));
+                format!("return {}", ret.conversion(&underlying_function_call)?);
         };
         let definition = format!("{} {{ {}; }}", declaration, underlying_function_call,);
         let declaration = format!("{};", declaration);
@@ -255,7 +271,8 @@ impl CppCodeGenerator {
             declaration,
             definition,
             headers: vec![Header::system("memory")],
-        })
+        });
+        Ok(())
     }
 
     fn generate_ctype_typedef(&mut self, tn: &TypeName) {

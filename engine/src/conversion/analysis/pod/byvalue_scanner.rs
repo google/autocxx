@@ -33,6 +33,7 @@ pub(crate) fn identify_byvalue_safe_types(
     type_config: &TypeConfig,
 ) -> Result<ByValueChecker, ConvertError> {
     let mut byvalue_checker = ByValueChecker::new();
+    byvalue_checker.ingest_blocklist(type_config.get_blocklist());
     for api in apis {
         match &api.detail {
             ApiDetail::Typedef { type_item } => {

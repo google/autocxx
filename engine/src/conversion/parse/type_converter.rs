@@ -261,7 +261,7 @@ impl TypeConverter {
                 // Oh poop. It's a generic type which cxx won't be able to handle.
                 // We'll have to come up with a concrete type in both the cxx::bridge (in Rust)
                 // and a corresponding typedef in C++.
-                let (new_tn, api) = self.get_templated_typename(&Type::Path(typ));
+                let (new_tn, api) = self.get_templated_typename(&Type::Path(typ))?;
                 typ = new_tn.to_type_path();
                 extra_apis.extend(api.into_iter());
                 types_encountered.remove(&tn);
@@ -376,19 +376,19 @@ impl TypeConverter {
     fn get_templated_typename(
         &mut self,
         rs_definition: &Type,
-    ) -> (TypeName, Option<UnanalyzedApi>) {
+    ) -> Result<(TypeName, Option<UnanalyzedApi>), ConvertError> {
         let count = self.concrete_templates.len();
         // We just use this as a hash key, essentially.
-        let cpp_definition = type_to_cpp(rs_definition);
+        let cpp_definition = type_to_cpp(rs_definition)?;
         let e = self.concrete_templates.get(&cpp_definition);
         match e {
-            Some(tn) => (tn.clone(), None),
+            Some(tn) => Ok((tn.clone(), None)),
             None => {
                 let tn = TypeName::new(&Namespace::new(), &format!("AutocxxConcrete{}", count));
                 self.concrete_templates
                     .insert(cpp_definition.clone(), tn.clone());
                 let api = self.add_concrete_type(&tn, rs_definition);
-                (tn, Some(api))
+                Ok((tn, Some(api)))
             }
         }
     }
