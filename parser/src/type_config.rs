@@ -66,4 +66,8 @@ impl TypeConfig {
     pub fn is_on_blocklist(&self, cpp_name: &str) -> bool {
         self.blocklist.contains(&cpp_name.to_string())
     }
+
+    pub fn get_blocklist(&self) -> impl Iterator<Item = &String> {
+        self.blocklist.iter()
+    }
 }

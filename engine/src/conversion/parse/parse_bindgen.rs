@@ -101,13 +101,18 @@ impl<'a> ParseBindgen<'a> {
         let mut mod_converter = ParseForeignMod::new(ns.clone());
         let mut use_statements_for_this_mod = Vec::new();
         for item in items {
-            let r = self.parse_item(item, &mut mod_converter, &ns, &mut use_statements_for_this_mod);
+            let r = self.parse_item(
+                item,
+                &mut mod_converter,
+                &ns,
+                &mut use_statements_for_this_mod,
+            );
             match r {
                 Err(err) if err.is_ignorable() => {
                     eprintln!("Ignored item discovered whilst parsing: {}", err)
                 }
                 Err(_) => r.unwrap(),
-                Ok(_) => {},
+                Ok(_) => {}
             }
         }
         mod_converter.finished(&mut self.results.apis);
@@ -139,14 +144,16 @@ impl<'a> ParseBindgen<'a> {
             .insert(ns, use_statements_for_this_mod);
     }
 
-    fn parse_item(&mut self, item: Item, mod_converter: &mut ParseForeignMod, ns: &Namespace, use_statements_for_this_mod: &mut Vec<Item>) -> Result<(),ConvertError> {
+    fn parse_item(
+        &mut self,
+        item: Item,
+        mod_converter: &mut ParseForeignMod,
+        ns: &Namespace,
+        use_statements_for_this_mod: &mut Vec<Item>,
+    ) -> Result<(), ConvertError> {
         match item {
-            Item::ForeignMod(fm) => {
-                mod_converter.convert_foreign_mod_items(
-                    fm.items,
-                    self.latest_virtual_this_type.clone(),
-                )
-            }
+            Item::ForeignMod(fm) => mod_converter
+                .convert_foreign_mod_items(fm.items, self.latest_virtual_this_type.clone()),
             Item::Struct(s) => {
                 if s.ident.to_string().ends_with("__bindgen_vtable") {
                     return Ok(());

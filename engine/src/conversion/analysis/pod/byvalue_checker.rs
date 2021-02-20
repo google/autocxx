@@ -65,6 +65,14 @@ impl ByValueChecker {
         ByValueChecker { results }
     }
 
+    pub fn ingest_blocklist<'a>(&mut self, blocklist: impl Iterator<Item = &'a String>) {
+        for blocklisted in blocklist {
+            let tn = TypeName::new_from_user_input(blocklisted);
+            let safety = PodState::UnsafeToBePod(format!("type {} is on the blocklist", &tn));
+            self.results.insert(tn, StructDetails::new(safety));
+        }
+    }
+
     pub fn ingest_struct(&mut self, def: &ItemStruct, ns: &Namespace) {
         // For this struct, work out whether it _could_ be safe as a POD.
         let tyname = TypeName::new(ns, &def.ident.to_string());
