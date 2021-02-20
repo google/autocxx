@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::type_to_cpp;
+use crate::conversion::{type_to_cpp, ConvertError};
 use crate::{known_types::type_lacks_copy_constructor, types::Namespace};
 use syn::{parse_quote, Ident, Type};
 
@@ -55,14 +55,14 @@ impl ArgumentConversion {
         !matches!(self.conversion, ArgumentConversionType::None)
     }
 
-    pub(crate) fn unconverted_type(&self) -> String {
+    pub(crate) fn unconverted_type(&self) -> Result<String, ConvertError> {
         match self.conversion {
             ArgumentConversionType::FromUniquePtrToValue => self.wrapped_type(),
             _ => self.unwrapped_type_as_string(),
         }
     }
 
-    pub(crate) fn converted_type(&self) -> String {
+    pub(crate) fn converted_type(&self) -> Result<String, ConvertError> {
         match self.conversion {
             ArgumentConversionType::FromValueToUniquePtr => self.wrapped_type(),
             _ => self.unwrapped_type_as_string(),
@@ -83,16 +83,19 @@ impl ArgumentConversion {
         }
     }
 
-    fn unwrapped_type_as_string(&self) -> String {
+    fn unwrapped_type_as_string(&self) -> Result<String, ConvertError> {
         type_to_cpp(&self.unwrapped_type)
     }
 
-    fn wrapped_type(&self) -> String {
-        format!("std::unique_ptr<{}>", self.unwrapped_type_as_string())
+    fn wrapped_type(&self) -> Result<String, ConvertError> {
+        Ok(format!(
+            "std::unique_ptr<{}>",
+            self.unwrapped_type_as_string()?
+        ))
     }
 
-    pub(crate) fn conversion(&self, var_name: &str) -> String {
-        match self.conversion {
+    pub(crate) fn conversion(&self, var_name: &str) -> Result<String, ConvertError> {
+        Ok(match self.conversion {
             ArgumentConversionType::None => {
                 if type_lacks_copy_constructor(&self.unwrapped_type) {
                     format!("std::move({})", var_name)
@@ -103,10 +106,10 @@ impl ArgumentConversion {
             ArgumentConversionType::FromUniquePtrToValue => format!("std::move(*{})", var_name),
             ArgumentConversionType::FromValueToUniquePtr => format!(
                 "std::make_unique<{}>({})",
-                self.unconverted_type(),
+                self.unconverted_type()?,
                 var_name
             ),
-        }
+        })
     }
 
     fn make_unique_ptr_type(&self) -> Type {

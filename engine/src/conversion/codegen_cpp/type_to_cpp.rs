@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::TypeName;
-use itertools::Itertools;
+use crate::{conversion::ConvertError, types::TypeName};
+use quote::ToTokens;
 use syn::{Token, Type};
 
-pub(crate) fn type_to_cpp(ty: &Type) -> String {
+pub(crate) fn type_to_cpp(ty: &Type) -> Result<String, ConvertError> {
     match ty {
         Type::Path(typ) => {
             // If this is a std::unique_ptr we do need to pass
@@ -35,36 +35,34 @@ pub(crate) fn type_to_cpp(ty: &Type) -> String {
                 panic!("Pin<...> didn't contain the inner types we expected");
             }
             let suffix = match &typ.path.segments.last().unwrap().arguments {
-                syn::PathArguments::AngleBracketed(ab) => Some(
-                    ab.args
+                syn::PathArguments::AngleBracketed(ab) => {
+                    let results: Result<Vec<_>, _> = ab
+                        .args
                         .iter()
                         .map(|x| match x {
                             syn::GenericArgument::Type(gat) => type_to_cpp(gat),
-                            _ => "".to_string(),
+                            _ => Ok("".to_string()),
                         })
-                        .join(", "),
-                ),
+                        .collect();
+                    Some(results?.join(", "))
+                }
                 syn::PathArguments::None | syn::PathArguments::Parenthesized(_) => None,
             };
             match suffix {
-                None => root,
-                Some(suffix) => format!("{}<{}>", root, suffix),
+                None => Ok(root),
+                Some(suffix) => Ok(format!("{}<{}>", root, suffix)),
             }
         }
-        Type::Reference(typr) => {
-            format!(
-                "{}{}&",
-                get_mut_string(&typr.mutability),
-                type_to_cpp(typr.elem.as_ref())
-            )
-        }
-        Type::Ptr(typp) => {
-            format!(
-                "{}{}*",
-                get_mut_string(&typp.mutability),
-                type_to_cpp(typp.elem.as_ref())
-            )
-        }
+        Type::Reference(typr) => Ok(format!(
+            "{}{}&",
+            get_mut_string(&typr.mutability),
+            type_to_cpp(typr.elem.as_ref())?
+        )),
+        Type::Ptr(typp) => Ok(format!(
+            "{}{}*",
+            get_mut_string(&typp.mutability),
+            type_to_cpp(typp.elem.as_ref())?
+        )),
         Type::Array(_)
         | Type::BareFn(_)
         | Type::Group(_)
@@ -76,8 +74,10 @@ pub(crate) fn type_to_cpp(ty: &Type) -> String {
         | Type::Slice(_)
         | Type::TraitObject(_)
         | Type::Tuple(_)
-        | Type::Verbatim(_) => panic!("Unsupported type"),
-        _ => panic!("Unknown type"),
+        | Type::Verbatim(_) => Err(ConvertError::UnsupportedType(
+            ty.to_token_stream().to_string(),
+        )),
+        _ => Err(ConvertError::UnknownType(ty.to_token_stream().to_string())),
     }
 }
 

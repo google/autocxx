@@ -22,7 +22,7 @@ use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType};
 
 use super::{codegen_cpp::AdditionalNeed, parse::type_converter::TypeConverter};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ConvertError {
     NoContent,
     UnsafePodType(String),
@@ -36,6 +36,8 @@ pub enum ConvertError {
     ConflictingTemplatedArgsWithTypedef(TypeName),
     UnacceptableParam(String),
     NotOneInputReference(String),
+    UnsupportedType(String),
+    UnknownType(String),
 }
 
 impl Display for ConvertError {
@@ -53,6 +55,8 @@ impl Display for ConvertError {
             ConvertError::ConflictingTemplatedArgsWithTypedef(tn) => write!(f, "Type {} has templated arguments and so does the typedef to which it points", tn)?,
             ConvertError::UnacceptableParam(fn_name) => write!(f, "Function {} has a parameter or return type which is either on the blocklist or a forward declaration", fn_name)?,
             ConvertError::NotOneInputReference(fn_name) => write!(f, "Function {} has a return reference parameter, but 0 or >1 input reference parameters, so the lifetime of the output reference cannot be deduced.", fn_name)?,
+            ConvertError::UnsupportedType(ty_desc) => write!(f, "Encountered type not yet supported by autocxx: {}", ty_desc)?,
+            ConvertError::UnknownType(ty_desc) => write!(f, "Encountered type not yet known by autocxx: {}", ty_desc)?,
         }
         Ok(())
     }
@@ -72,6 +76,7 @@ impl ConvertError {
                 | ConvertError::UnsupportedBuiltInType(..)
                 | ConvertError::UnacceptableParam(..)
                 | ConvertError::NotOneInputReference(..)
+                | ConvertError::UnsupportedType(..)
         )
     }
 }

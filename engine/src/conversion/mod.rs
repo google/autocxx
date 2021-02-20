@@ -120,7 +120,7 @@ impl<'a> BridgeConverter<'a> {
                 analysis::ctypes::append_ctype_information(&mut analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
-                let cpp = CppCodeGenerator::generate_cpp_code(inclusions, &analyzed_apis);
+                let cpp = CppCodeGenerator::generate_cpp_code(inclusions, &analyzed_apis)?;
                 let rs = RsCodeGenerator::generate_rs_code(
                     analyzed_apis,
                     self.include_list,
