@@ -20,9 +20,10 @@ mod codegen_rs;
 mod conversion_tests;
 mod parse;
 mod utilities;
+mod convert_error;
 
 use analysis::fun::FnAnalyzer;
-pub(crate) use api::ConvertError;
+pub(crate) use convert_error::ConvertError;
 use autocxx_parser::TypeConfig;
 pub(crate) use codegen_cpp::type_to_cpp::type_to_cpp;
 pub(crate) use codegen_cpp::CppCodeGenerator;
