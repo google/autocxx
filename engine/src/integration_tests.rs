@@ -3596,8 +3596,7 @@ fn test_double() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/222
-fn test_bindgen_makes_opaque() {
+fn test_issues_217_222() {
     let hdr = indoc! {"
     #include <string>
     #include <cstdint>
@@ -3621,7 +3620,7 @@ fn test_bindgen_makes_opaque() {
      public:
       Replacements() {
       }
-      void SetScheme(const CHAR* s) {
+      void SetScheme(const CHAR*) {
       }
       uint16_t a;
     };
@@ -3637,7 +3636,7 @@ fn test_bindgen_makes_opaque() {
          using StringPieceT = BasicStringPiece<STR>;
          using ParentT = Replacements<CharT>;
          using SetterFun = void (ParentT::*)(const CharT*, const Component&);
-         void SetImpl(SetterFun fun, StringPieceT str) {
+         void SetImpl(SetterFun, StringPieceT) {
         }
         public:
         void SetSchemeStr(const CharT* str) { SetImpl(&ParentT::SetScheme, str); }
@@ -3647,7 +3646,7 @@ fn test_bindgen_makes_opaque() {
         public:
         typedef StringPieceReplacements<std::string> UrlReplacements;
         GURL() {}
-        GURL ReplaceComponents(const Replacements<char>& replacements) const {
+        GURL ReplaceComponents(const Replacements<char>&) const {
             return GURL();
         }
         uint16_t a;
