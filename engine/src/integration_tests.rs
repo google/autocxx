@@ -860,6 +860,43 @@ fn test_take_nonpod_by_ptr_in_method() {
     run_test("", hdr, rs, &["A", "Bob"], &[]);
 }
 
+#[ignore]
+#[test]
+fn test_take_nonpod_by_ptr_in_wrapped_method() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct C {
+            uint32_t a;
+        };
+        struct Bob {
+            uint32_t a;
+        };
+        #include <cstdint>
+        class A {
+        public:
+            A() {};
+            uint32_t take_bob(const Bob* a, C) {
+                return a->a;
+            }
+            std::unique_ptr<Bob> make_bob(uint32_t a, C) {
+                auto b = std::make_unique<Bob>();
+                b->a = a;
+                return b;
+            }
+            uint16_t a;
+        };
+
+    "};
+    let rs = quote! {
+        let a = ffi::A::make_unique();
+        let c = ffi::C::make_unique();
+        let b = a.as_ref().unwrap().make_bob(12, c);
+        assert_eq!(unsafe { a.as_ref().unwrap().take_bob(&b, c) }, 12);
+    };
+    run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
+}
+
 #[test]
 fn test_take_nonpod_by_mut_ref() {
     let cxx = indoc! {"
