@@ -3307,6 +3307,45 @@ fn test_typedef_to_ulong() {
 }
 
 #[test]
+fn test_ulong_method() {
+    let hdr = indoc! {"
+    class A {
+        public:
+        A() {};
+        unsigned long daft(unsigned long a) const { return a; }
+    };
+    "};
+    let rs = quote! {
+        let a = ffi::A::make_unique();
+        assert_eq!(a.as_ref().unwrap().daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/224
+fn test_ulong_wrapped_method() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    struct B {
+        B() {};
+        uint32_t a;
+    };
+    class A {
+        public:
+        A() {};
+        unsigned long daft(unsigned long a, B extra) const { return a; }
+    };
+    "};
+    let rs = quote! {
+        let b = ffi::B::make_unique();
+        let a = ffi::A::make_unique();
+        assert_eq!(a.as_ref().unwrap().daft(autocxx::c_ulong(34), b), autocxx::c_ulong(34));
+    };
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
 fn test_reserved_name() {
     let hdr = indoc! {"
         #include <cstdint>
