@@ -116,6 +116,7 @@ fn analyze_pod_api(
                 analysis: type_kind,
             }
         }
+        ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
     };
     Ok(Api {
         ns: api.ns,

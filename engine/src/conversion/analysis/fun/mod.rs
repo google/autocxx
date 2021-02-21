@@ -207,6 +207,7 @@ impl<'a> FnAnalyzer<'a> {
                 bindgen_mod_item,
                 analysis,
             },
+            ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
         };
         Ok(Some(Api {
             ns: api.ns,

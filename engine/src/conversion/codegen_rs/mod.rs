@@ -81,7 +81,7 @@ impl<'a> RsCodeGenerator<'a> {
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
-                let gen = Self::generate_rs_for_api(&api.ns, api.detail);
+                let gen = Self::generate_rs_for_api(&api.ns, &api.id, api.detail);
                 ((api.ns, api.id, gen), api.additional_cpp.is_some())
             })
             .unzip();
@@ -257,7 +257,7 @@ impl<'a> RsCodeGenerator<'a> {
         output_items
     }
 
-    fn generate_rs_for_api(ns: &Namespace, api_detail: ApiDetail<FnAnalysis>) -> RsCodegenResult {
+    fn generate_rs_for_api(ns: &Namespace, id: &Ident, api_detail: ApiDetail<FnAnalysis>) -> RsCodegenResult {
         match api_detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
@@ -336,6 +336,17 @@ impl<'a> RsCodeGenerator<'a> {
                     type #id = autocxx::#id;
                 })),
                 bindgen_mod_item: None,
+            },
+            ApiDetail::OpaqueTypedef => {
+                RsCodegenResult {
+                    global_items: Vec::new(),
+                    impl_entry: None,
+                    bridge_items: create_impl_items(id),
+                    extern_c_mod_item: Some(ForeignItem::Type(parse_quote! {
+                        type #id;
+                    })),
+                    bindgen_mod_item: None,
+                }
             },
         }
     }
