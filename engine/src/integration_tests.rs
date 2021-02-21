@@ -3595,6 +3595,79 @@ fn test_double() {
     run_test("", hdr, rs, &["daft"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/222
+fn test_bindgen_makes_opaque() {
+    let hdr = indoc! {"
+    #include <string>
+    #include <cstdint>
+
+    template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+         typedef size_t size_type;
+         typedef typename STRING_TYPE::traits_type traits_type;
+         typedef typename STRING_TYPE::value_type value_type;
+         typedef const value_type* pointer;
+         typedef const value_type& reference;
+         typedef const value_type& const_reference;
+         typedef ptrdiff_t difference_type;
+         typedef const value_type* const_iterator;
+         typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
+         static const size_type npos;
+    };
+
+    template<typename CHAR>
+    class Replacements {
+     public:
+      Replacements() {
+      }
+      void SetScheme(const CHAR* s) {
+      }
+      uint16_t a;
+    };
+
+    struct Component {
+        uint16_t a;
+    };
+
+    template <typename STR>
+    class StringPieceReplacements : public Replacements<typename STR::value_type> {
+        private:
+         using CharT = typename STR::value_type;
+         using StringPieceT = BasicStringPiece<STR>;
+         using ParentT = Replacements<CharT>;
+         using SetterFun = void (ParentT::*)(const CharT*, const Component&);
+         void SetImpl(SetterFun fun, StringPieceT str) {
+        }
+        public:
+        void SetSchemeStr(const CharT* str) { SetImpl(&ParentT::SetScheme, str); }
+    };
+
+    class GURL {
+        public:
+        typedef StringPieceReplacements<std::string> UrlReplacements;
+        GURL() {}
+        GURL ReplaceComponents(const Replacements<char>& replacements) const {
+            return GURL();
+        }
+        uint16_t a;
+    };
+    "};
+    let rs = quote! {
+        ffi::GURL::make_unique();
+    };
+    // The block! directives here are to avoid running into
+    // https://github.com/rust-lang/rust-bindgen/pull/1975
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["GURL"],
+        &[],
+        Some(quote! { block!("StringPiece") block!("Replacements") }),
+    );
+}
+
 // Yet to test:
 // 5. Using templated types.
 // 6. Ifdef
