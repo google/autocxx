@@ -14,9 +14,7 @@
 
 use crate::types::{Namespace, TypeName};
 use proc_macro2::TokenStream;
-use std::{
-    collections::{HashMap, HashSet},
-};
+use std::collections::{HashMap, HashSet};
 use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType};
 
 use super::{codegen_cpp::AdditionalNeed, parse::type_converter::TypeConverter};
@@ -119,10 +117,6 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
 pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) ns: Namespace,
     pub(crate) id: Ident,
-    /// Whether the final output namespace should be populated with a `use`
-    /// statement for this API. That is, whether this should be directly
-    /// accessible by consumers of autocxx generated code.
-    pub(crate) use_stmt: Use,
     /// Any dependencies of this API, such that during garbage collection
     /// we can ensure to keep them.
     pub(crate) deps: HashSet<TypeName>,

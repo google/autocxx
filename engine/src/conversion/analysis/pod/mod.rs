@@ -120,7 +120,6 @@ fn analyze_pod_api(
     Ok(Api {
         ns: api.ns,
         id: api.id,
-        use_stmt: api.use_stmt,
         deps: new_deps,
         additional_cpp: api.additional_cpp,
         detail: api_detail,

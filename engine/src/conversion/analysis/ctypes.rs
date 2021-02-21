@@ -16,10 +16,7 @@ use std::collections::HashSet;
 
 use crate::{conversion::api::Api, known_types::KNOWN_TYPES};
 use crate::{
-    conversion::{
-        api::{ApiDetail, Use},
-        codegen_cpp::AdditionalNeed,
-    },
+    conversion::{api::ApiDetail, codegen_cpp::AdditionalNeed},
     types::{make_ident, Namespace},
 };
 
@@ -40,7 +37,6 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
         apis.push(Api {
             ns: Namespace::new(),
             id: id.clone(),
-            use_stmt: Use::Unused,
             deps: HashSet::new(),
             additional_cpp: Some(AdditionalNeed::CTypeTypedef(ctype.clone())),
             detail: ApiDetail::CType { id },

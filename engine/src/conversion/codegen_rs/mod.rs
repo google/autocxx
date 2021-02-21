@@ -161,20 +161,20 @@ impl<'a> RsCodeGenerator<'a> {
 
     /// Generate lots of 'use' statements to pull cxxbridge items into the output
     /// mod hierarchy according to C++ namespaces.
-    fn generate_final_use_statements<T: ApiAnalysis>(input_items: &[Api<T>]) -> Vec<Item> {
+    fn generate_final_use_statements(input_items: &[Api<FnAnalysis>]) -> Vec<Item> {
         let mut output_items = Vec::new();
         let ns_entries = NamespaceEntries::new(input_items);
         Self::append_child_use_namespace(&ns_entries, &mut output_items);
         output_items
     }
 
-    fn append_child_use_namespace<T: ApiAnalysis>(
-        ns_entries: &NamespaceEntries<Api<T>>,
+    fn append_child_use_namespace(
+        ns_entries: &NamespaceEntries<Api<FnAnalysis>>,
         output_items: &mut Vec<Item>,
     ) {
         for item in ns_entries.entries() {
             let id = &item.id;
-            match &item.use_stmt {
+            match &item.use_stmt() {
                 Use::UsedWithAlias(alias) => output_items.push(Item::Use(parse_quote!(
                     pub use cxxbridge :: #id as #alias;
                 ))),

@@ -28,10 +28,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_quote, Fields, Item};
 
-use super::{
-    super::{api::Use, utilities::generate_utilities},
-    type_converter::TypeConverter,
-};
+use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
 
 use super::parse_foreign_mod::ParseForeignMod;
 
@@ -206,7 +203,6 @@ impl<'a> ParseBindgen<'a> {
                     id: const_item.ident.clone(),
                     ns: ns.clone(),
                     deps: HashSet::new(),
-                    use_stmt: Use::Unused,
                     detail: ApiDetail::Const { const_item },
                     additional_cpp: None,
                 });
@@ -227,7 +223,6 @@ impl<'a> ParseBindgen<'a> {
                     id: ity.ident.clone(),
                     ns: ns.clone(),
                     deps: final_type.types_encountered,
-                    use_stmt: Use::Unused,
                     additional_cpp: None,
                     detail: ApiDetail::Typedef { type_item: ity },
                 });
@@ -292,7 +287,6 @@ impl<'a> ParseBindgen<'a> {
         let api = UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
-            use_stmt: Use::Used,
             deps,
             additional_cpp: None,
             detail: ApiDetail::Type {

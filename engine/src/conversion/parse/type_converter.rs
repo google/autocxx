@@ -15,7 +15,7 @@
 use crate::{
     conversion::codegen_cpp::AdditionalNeed,
     conversion::{
-        api::{TypeApiDetails, UnanalyzedApi, Use},
+        api::{TypeApiDetails, UnanalyzedApi},
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -359,7 +359,6 @@ impl TypeConverter {
         UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
-            use_stmt: Use::Unused,
             deps: HashSet::new(),
             detail: crate::conversion::api::ApiDetail::ConcreteType(TypeApiDetails {
                 fulltypath,

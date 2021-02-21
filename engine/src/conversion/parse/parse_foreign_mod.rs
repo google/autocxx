@@ -21,8 +21,6 @@ use crate::{
 use std::collections::{HashMap, HashSet};
 use syn::{ForeignItem, Ident, ImplItem, ItemImpl, Type};
 
-use super::super::api::Use;
-
 /// Parses a given bindgen-generated 'mod' into suitable
 /// [Api]s. In bindgen output, a given mod concerns
 /// a specific C++ namespace.
@@ -103,9 +101,8 @@ impl ParseForeignMod {
             apis.push(UnanalyzedApi {
                 ns: self.ns.clone(),
                 id: fun.item.sig.ident.clone(),
-                use_stmt: Use::Unused, // filled in later - TODO make all these compile-time safe
-                deps: HashSet::new(),  // filled in later
-                additional_cpp: None,  // filled in later
+                deps: HashSet::new(), // filled in later - TODO make compile-time safe
+                additional_cpp: None, // filled in later
                 detail: ApiDetail::Function { fun, analysis: () },
             })
         }
