@@ -3596,8 +3596,7 @@ fn test_double() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/222
-fn test_bindgen_makes_opaque() {
+fn test_issues_217_222() {
     let hdr = indoc! {"
     #include <string>
     #include <cstdint>
