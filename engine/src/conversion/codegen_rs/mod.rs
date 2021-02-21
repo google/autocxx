@@ -191,6 +191,7 @@ impl<'a> RsCodeGenerator<'a> {
             let child_id = make_ident(child_name);
             let mut new_mod: ItemMod = parse_quote!(
                 pub mod #child_id {
+                    #[allow(unused_imports)]
                     use super::cxxbridge;
                 }
             );
