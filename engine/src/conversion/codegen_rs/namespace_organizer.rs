@@ -30,6 +30,10 @@ impl<'a, T: HasNs> NamespaceEntries<'a, T> {
         Self::sort_by_inner_namespace(api_refs, 0)
     }
 
+    pub(crate) fn is_empty(&self) -> bool {
+        self.entries.is_empty() && self.children.iter().all(|(_, child)| child.is_empty())
+    }
+
     pub(crate) fn entries(&self) -> &[&'a T] {
         &self.entries
     }

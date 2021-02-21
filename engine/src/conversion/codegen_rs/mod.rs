@@ -185,6 +185,9 @@ impl<'a> RsCodeGenerator<'a> {
             };
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
+            if child_ns_entries.is_empty() {
+                continue;
+            }
             let child_id = make_ident(child_name);
             let mut new_mod: ItemMod = parse_quote!(
                 pub mod #child_id {
