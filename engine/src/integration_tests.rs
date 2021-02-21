@@ -3620,7 +3620,7 @@ fn test_issues_217_222() {
      public:
       Replacements() {
       }
-      void SetScheme(const CHAR* s) {
+      void SetScheme(const CHAR*) {
       }
       uint16_t a;
     };
@@ -3636,7 +3636,7 @@ fn test_issues_217_222() {
          using StringPieceT = BasicStringPiece<STR>;
          using ParentT = Replacements<CharT>;
          using SetterFun = void (ParentT::*)(const CharT*, const Component&);
-         void SetImpl(SetterFun fun, StringPieceT str) {
+         void SetImpl(SetterFun, StringPieceT) {
         }
         public:
         void SetSchemeStr(const CharT* str) { SetImpl(&ParentT::SetScheme, str); }
@@ -3646,7 +3646,7 @@ fn test_issues_217_222() {
         public:
         typedef StringPieceReplacements<std::string> UrlReplacements;
         GURL() {}
-        GURL ReplaceComponents(const Replacements<char>& replacements) const {
+        GURL ReplaceComponents(const Replacements<char>&) const {
             return GURL();
         }
         uint16_t a;
