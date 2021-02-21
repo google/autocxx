@@ -82,7 +82,7 @@ fn analyze_pod_api(
         ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
         ApiDetail::Typedef { type_item } => ApiDetail::Typedef { type_item },
-        ApiDetail::CType { id } => ApiDetail::CType { id },
+        ApiDetail::CType => ApiDetail::CType,
         // Just changes to this one...
         ApiDetail::Type {
             ty_details,

@@ -328,7 +328,7 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_c_mod_item: Some(ForeignItem::Verbatim(for_extern_c_ts)),
                 bindgen_mod_item,
             },
-            ApiDetail::CType { id } => RsCodegenResult {
+            ApiDetail::CType => RsCodegenResult {
                 global_items: Vec::new(),
                 impl_entry: None,
                 bridge_items: Vec::new(),

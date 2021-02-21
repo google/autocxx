@@ -99,7 +99,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
         analysis: T::TypeAnalysis,
     },
     /// A variable-length C integer type (e.g. int, unsigned long).
-    CType { id: Ident },
+    CType,
     /// A typedef which doesn't point to any actual useful kind of
     /// type, but instead to something which `bindgen` couldn't figure out
     /// and has therefore itself made opaque and mysterious.
