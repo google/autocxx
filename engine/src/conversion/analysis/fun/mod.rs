@@ -58,6 +58,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
     pub(crate) id_for_allowlist: Option<Ident>,
+    pub(crate) use_stmt: Use,
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -99,7 +100,6 @@ pub(crate) struct FnAnalyzer<'a> {
 struct FnAnalysisResult(
     FnAnalysisBody,
     Ident,
-    Use,
     HashSet<TypeName>,
     Option<AdditionalNeed>,
 );
@@ -161,7 +161,6 @@ impl<'a> FnAnalyzer<'a> {
         Api {
             ns: api.ns,
             id: api.id,
-            use_stmt: api.use_stmt,
             deps: api.deps,
             additional_cpp: api.additional_cpp,
             detail: new_detail,
@@ -173,7 +172,6 @@ impl<'a> FnAnalyzer<'a> {
         api: Api<PodAnalysis>,
     ) -> Result<Option<Api<FnAnalysis>>, ConvertError> {
         let mut new_deps = api.deps.clone();
-        let mut new_use_stmt = api.use_stmt.clone();
         let mut new_id = api.id;
         let mut new_additional_cpp = api.additional_cpp.clone();
         let api_detail = match api.detail {
@@ -184,9 +182,8 @@ impl<'a> FnAnalyzer<'a> {
                 let analysis = self.analyze_foreign_fn(&api.ns, &fun)?;
                 match analysis {
                     None => return Ok(None),
-                    Some(FnAnalysisResult(analysis, id, fn_uses, fn_deps, fn_additional_cpp)) => {
+                    Some(FnAnalysisResult(analysis, id, fn_deps, fn_additional_cpp)) => {
                         new_deps = fn_deps;
-                        new_use_stmt = fn_uses;
                         new_additional_cpp = fn_additional_cpp;
                         new_id = id;
                         ApiDetail::Function { fun, analysis }
@@ -195,7 +192,7 @@ impl<'a> FnAnalyzer<'a> {
             }
             ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
             ApiDetail::Typedef { type_item } => ApiDetail::Typedef { type_item },
-            ApiDetail::CType { id } => ApiDetail::CType { id },
+            ApiDetail::CType => ApiDetail::CType,
             // Just changes to this one...
             ApiDetail::Type {
                 ty_details,
@@ -210,11 +207,11 @@ impl<'a> FnAnalyzer<'a> {
                 bindgen_mod_item,
                 analysis,
             },
+            ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
         };
         Ok(Some(Api {
             ns: api.ns,
             id: new_id,
-            use_stmt: new_use_stmt,
             deps: new_deps,
             additional_cpp: new_additional_cpp,
             detail: api_detail,
@@ -572,9 +569,9 @@ impl<'a> FnAnalyzer<'a> {
                 requires_unsafe,
                 vis,
                 id_for_allowlist,
+                use_stmt,
             },
             id,
-            use_stmt,
             deps,
             additional_cpp,
         )))
@@ -756,13 +753,31 @@ impl Api<FnAnalysis> {
             ApiDetail::Function { fun: _, analysis } => analysis.id_for_allowlist.as_ref(),
             _ => None,
         };
+        let usage = self.use_stmt();
         let id_for_allowlist = match id_for_allowlist {
-            None => match &self.use_stmt {
+            None => match &usage {
                 Use::UsedWithAlias(alias) => alias,
                 _ => &self.id,
             },
             Some(id) => &id,
         };
         TypeName::new(&self.ns, &id_for_allowlist.to_string())
+    }
+
+    /// Whether the final output namespace should be populated with a `use`
+    /// statement for this API. That is, whether this should be directly
+    /// accessible by consumers of autocxx generated code.
+    pub(crate) fn use_stmt(&self) -> Use {
+        match &self.detail {
+            ApiDetail::Type {
+                ty_details: _,
+                for_extern_c_ts: _,
+                is_forward_declaration: _,
+                bindgen_mod_item: _,
+                analysis: _,
+            } => Use::Used,
+            ApiDetail::Function { fun: _, analysis } => analysis.use_stmt.clone(),
+            _ => Use::Unused,
+        }
     }
 }

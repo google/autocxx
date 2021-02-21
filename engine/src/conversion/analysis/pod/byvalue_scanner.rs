@@ -24,7 +24,7 @@ use crate::{
     types::TypeName,
 };
 
-use super::ByValueChecker;
+use super::{ByValueChecker};
 
 /// Scan APIs to work out which are by-value safe. Constructs a [ByValueChecker]
 /// that others can use to query the results.
@@ -58,6 +58,7 @@ pub(crate) fn identify_byvalue_safe_types(
                 Some(Item::Enum(_)) => byvalue_checker.ingest_pod_type(api.typename()),
                 _ => {}
             },
+            ApiDetail::OpaqueTypedef => byvalue_checker.ingest_nonpod_type(api.typename()),
             _ => {}
         }
     }

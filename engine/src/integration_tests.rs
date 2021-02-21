@@ -3776,8 +3776,67 @@ fn test_issues_217_222() {
     );
 }
 
+#[test]
+#[ignore] // https://github.com/rust-lang/rust-bindgen/pull/1975, https://github.com/google/autocxx/issues/106
+fn test_dependent_qualified_type() {
+    let hdr = indoc! {"
+    #include <stddef.h>
+    struct MyString {
+        typedef char value_type;
+    };
+    template<typename T> struct MyStringView {
+        typedef typename T::value_type view_value_type;
+        const view_value_type* start;
+        size_t length;
+    };
+    const char* HELLO = \"hello\";
+    MyStringView<MyString> make_string_view() {
+        MyStringView<MyString> r;
+        r.start = HELLO;
+        r.length = 2;
+        return r;
+    }
+    size_t take_string_view(const MyStringView<MyString>& bit) {
+        return bit.length;
+    }
+    "};
+    let rs = quote! {
+        let sv = ffi::make_string_view();
+        assert_eq!(ffi::take_string_view(sv.as_ref().unwrap()), 2);
+    };
+    run_test("", hdr, rs, &["take_string_view", "make_string_view"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/rust-lang/rust-bindgen/pull/1975, https://github.com/google/autocxx/issues/106
+fn test_simple_dependent_qualified_type() {
+    let hdr = indoc! {"
+    #include <stddef.h>
+    #include <stdint.h>
+    struct MyString {
+        typedef char value_type;
+    };
+    template<typename T> struct MyStringView {
+        typedef typename T::value_type view_value_type;
+        const view_value_type* start;
+        size_t length;
+    };
+    typedef MyStringView<MyString>::view_value_type MyChar;
+    MyChar make_char() {
+        return 'a';
+    }
+    uint32_t take_char(MyChar c) {
+        return static_cast<unsigned char>(c);
+    }
+    "};
+    let rs = quote! {
+        let c = ffi::make_char();
+        assert_eq!(ffi::take_char(c), 97);
+    };
+    run_test("", hdr, rs, &["make_char", "take_char"], &[]);
+}
+
 // Yet to test:
-// 5. Using templated types.
 // 6. Ifdef
 // 7. Pointers (including out params)
 // 10. ExcludeUtilities

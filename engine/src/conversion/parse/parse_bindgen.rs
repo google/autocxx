@@ -26,12 +26,9 @@ use crate::{
 use autocxx_parser::TypeConfig;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_quote, Fields, Item};
+use syn::{Fields, Ident, Item, parse_quote};
 
-use super::{
-    super::{api::Use, utilities::generate_utilities},
-    type_converter::TypeConverter,
-};
+use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
 
 use super::parse_foreign_mod::ParseForeignMod;
 
@@ -206,7 +203,6 @@ impl<'a> ParseBindgen<'a> {
                     id: const_item.ident.clone(),
                     ns: ns.clone(),
                     deps: HashSet::new(),
-                    use_stmt: Use::Unused,
                     detail: ApiDetail::Const { const_item },
                     additional_cpp: None,
                 });
@@ -214,24 +210,32 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Type(mut ity) => {
                 let tyname = TypeName::new(ns, &ity.ident.to_string());
-                let mut final_type = self
+                let type_conversion_results = self
                     .results
                     .type_converter
-                    .convert_type(*ity.ty, ns, false)?;
-                ity.ty = Box::new(final_type.ty.clone());
-                self.results
-                    .type_converter
-                    .insert_typedef(tyname, final_type.ty);
-                self.results.apis.append(&mut final_type.extra_apis);
-                self.results.apis.push(UnanalyzedApi {
-                    id: ity.ident.clone(),
-                    ns: ns.clone(),
-                    deps: final_type.types_encountered,
-                    use_stmt: Use::Unused,
-                    additional_cpp: None,
-                    detail: ApiDetail::Typedef { type_item: ity },
-                });
-                Ok(())
+                    .convert_type(*ity.ty, ns, false);
+                match type_conversion_results {
+                    Err(ConvertError::OpaqueTypeFound) => {
+                        self.add_opaque_type(ity.ident, ns.clone());
+                        Ok(())
+                    },
+                    Err(err) => Err(err),
+                    Ok(mut final_type) => {
+                        ity.ty = Box::new(final_type.ty.clone());
+                        self.results
+                            .type_converter
+                            .insert_typedef(tyname, final_type.ty);
+                        self.results.apis.append(&mut final_type.extra_apis);
+                        self.results.apis.push(UnanalyzedApi {
+                            id: ity.ident.clone(),
+                            ns: ns.clone(),
+                            deps: final_type.types_encountered,
+                            additional_cpp: None,
+                            detail: ApiDetail::Typedef { type_item: ity },
+                        });
+                        Ok(())
+                    }
+                }
             }
             _ => Err(ConvertError::UnexpectedItemInMod),
         }
@@ -241,6 +245,16 @@ impl<'a> ParseBindgen<'a> {
         s.iter()
             .filter_map(|f| f.ident.as_ref())
             .any(|id| id == "_unused")
+    }
+
+    fn add_opaque_type(&mut self, id: Ident, ns: Namespace) {
+        self.results.apis.push(UnanalyzedApi {
+            id,
+            ns,
+            deps: HashSet::new(),
+            additional_cpp: None,
+            detail: ApiDetail::OpaqueTypedef,
+        });      
     }
 
     /// Record the Api for a type, e.g. enum or struct.
@@ -292,7 +306,6 @@ impl<'a> ParseBindgen<'a> {
         let api = UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
-            use_stmt: Use::Used,
             deps,
             additional_cpp: None,
             detail: ApiDetail::Type {

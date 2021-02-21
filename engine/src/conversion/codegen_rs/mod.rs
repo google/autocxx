@@ -81,7 +81,7 @@ impl<'a> RsCodeGenerator<'a> {
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
-                let gen = Self::generate_rs_for_api(&api.ns, api.detail);
+                let gen = Self::generate_rs_for_api(&api.ns, &api.id, api.detail);
                 ((api.ns, api.id, gen), api.additional_cpp.is_some())
             })
             .unzip();
@@ -161,20 +161,20 @@ impl<'a> RsCodeGenerator<'a> {
 
     /// Generate lots of 'use' statements to pull cxxbridge items into the output
     /// mod hierarchy according to C++ namespaces.
-    fn generate_final_use_statements<T: ApiAnalysis>(input_items: &[Api<T>]) -> Vec<Item> {
+    fn generate_final_use_statements(input_items: &[Api<FnAnalysis>]) -> Vec<Item> {
         let mut output_items = Vec::new();
         let ns_entries = NamespaceEntries::new(input_items);
         Self::append_child_use_namespace(&ns_entries, &mut output_items);
         output_items
     }
 
-    fn append_child_use_namespace<T: ApiAnalysis>(
-        ns_entries: &NamespaceEntries<Api<T>>,
+    fn append_child_use_namespace(
+        ns_entries: &NamespaceEntries<Api<FnAnalysis>>,
         output_items: &mut Vec<Item>,
     ) {
         for item in ns_entries.entries() {
             let id = &item.id;
-            match &item.use_stmt {
+            match &item.use_stmt() {
                 Use::UsedWithAlias(alias) => output_items.push(Item::Use(parse_quote!(
                     pub use cxxbridge :: #id as #alias;
                 ))),
@@ -261,7 +261,7 @@ impl<'a> RsCodeGenerator<'a> {
         output_items
     }
 
-    fn generate_rs_for_api(ns: &Namespace, api_detail: ApiDetail<FnAnalysis>) -> RsCodegenResult {
+    fn generate_rs_for_api(ns: &Namespace, id: &Ident, api_detail: ApiDetail<FnAnalysis>) -> RsCodegenResult {
         match api_detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
@@ -332,7 +332,7 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_c_mod_item: Some(ForeignItem::Verbatim(for_extern_c_ts)),
                 bindgen_mod_item,
             },
-            ApiDetail::CType { id } => RsCodegenResult {
+            ApiDetail::CType => RsCodegenResult {
                 global_items: Vec::new(),
                 impl_entry: None,
                 bridge_items: Vec::new(),
@@ -340,6 +340,17 @@ impl<'a> RsCodeGenerator<'a> {
                     type #id = autocxx::#id;
                 })),
                 bindgen_mod_item: None,
+            },
+            ApiDetail::OpaqueTypedef => {
+                RsCodegenResult {
+                    global_items: Vec::new(),
+                    impl_entry: None,
+                    bridge_items: create_impl_items(id),
+                    extern_c_mod_item: Some(ForeignItem::Type(parse_quote! {
+                        type #id;
+                    })),
+                    bindgen_mod_item: None,
+                }
             },
         }
     }

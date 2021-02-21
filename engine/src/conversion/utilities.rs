@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{
-    api::{UnanalyzedApi, Use},
-    codegen_cpp::AdditionalNeed,
-};
+use super::{api::UnanalyzedApi, codegen_cpp::AdditionalNeed};
 use crate::types::{make_ident, Namespace};
 use std::collections::HashSet;
 
@@ -32,7 +29,6 @@ pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>) {
     apis.push(UnanalyzedApi {
         ns: Namespace::new(),
         id: make_ident("make_string"),
-        use_stmt: Use::Unused,
         deps: HashSet::new(),
         detail: super::api::ApiDetail::StringConstructor,
         additional_cpp: Some(AdditionalNeed::MakeStringConstructor),

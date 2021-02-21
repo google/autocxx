@@ -82,7 +82,7 @@ fn analyze_pod_api(
         ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
         ApiDetail::Typedef { type_item } => ApiDetail::Typedef { type_item },
-        ApiDetail::CType { id } => ApiDetail::CType { id },
+        ApiDetail::CType => ApiDetail::CType,
         // Just changes to this one...
         ApiDetail::Type {
             ty_details,
@@ -116,11 +116,11 @@ fn analyze_pod_api(
                 analysis: type_kind,
             }
         }
+        ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
     };
     Ok(Api {
         ns: api.ns,
         id: api.id,
-        use_stmt: api.use_stmt,
         deps: new_deps,
         additional_cpp: api.additional_cpp,
         detail: api_detail,
