@@ -14,6 +14,7 @@
 
 use std::{collections::HashMap, collections::HashSet};
 
+use crate::known_types::KNOWN_TYPES;
 use crate::{
     conversion::{
         api::{ApiDetail, ParseResults, TypeApiDetails, UnanalyzedApi},
@@ -125,24 +126,16 @@ impl<'a> ParseBindgen<'a> {
                 #(#supers)::*
             ::cxxbridge;
         }));
-        for thing in &["UniquePtr", "CxxString"] {
-            let thing = make_ident(thing);
+        // In future, generate these only on-demand
+        // to avoid bloating the output bindings.
+        // Or better still, fully qualify all paths used within the bindgen mod.
+        // https://github.com/google/autocxx/issues/236
+        for use_path in KNOWN_TYPES.get_bindgen_use_paths() {
             use_statements_for_this_mod.push(Item::Use(parse_quote! {
                 #[allow(unused_imports)]
-                use cxx:: #thing;
+                use #use_path;
             }));
         }
-        for thing in &["c_ulong", "c_long"] {
-            let thing = make_ident(thing);
-            use_statements_for_this_mod.push(Item::Use(parse_quote! {
-                #[allow(unused_imports)]
-                use autocxx:: #thing;
-            }));
-        }
-        use_statements_for_this_mod.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use std::pin::Pin;
-        }));
         self.results
             .use_stmts_by_mod
             .insert(ns, use_statements_for_this_mod);

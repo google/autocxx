@@ -27,6 +27,14 @@ enum PreludePolicy {
     IncludeTemplated,
 }
 
+#[derive(Debug)]
+enum Qualification {
+    None,
+    Cxx,
+    Autocxx,
+    StdPin,
+}
+
 /// Details about known special types, mostly primitives.
 #[derive(Debug)]
 struct TypeDetails {
@@ -49,6 +57,9 @@ struct TypeDetails {
     is_cxx_container: bool,
     /// Any extra non-canonical names
     extra_non_canonical_name: Option<String>,
+    /// Whether this needs to be qualified when used in bindgen
+    /// bindings.
+    qualification: Qualification,
 }
 
 impl TypeDetails {
@@ -61,6 +72,7 @@ impl TypeDetails {
         is_ctype: bool,
         is_cxx_container: bool,
         extra_non_canonical_name: Option<String>,
+        qualification: Qualification,
     ) -> Self {
         TypeDetails {
             rs_name,
@@ -71,6 +83,7 @@ impl TypeDetails {
             is_ctype,
             is_cxx_container,
             extra_non_canonical_name,
+            qualification,
         }
     }
 
@@ -168,6 +181,21 @@ impl TypeDatabase {
         }
     }
 
+    /// Return the set of paths which should be `use`d in each bindgen mod
+    /// (i.e. C++ namespace). Ideally we'd fully qualify all these types instead.
+    /// This is https://github.com/google/autocxx/issues/236.
+    pub(crate) fn get_bindgen_use_paths(&self) -> impl Iterator<Item = TypePath> + '_ {
+        self.by_rs_name.values().filter_map(|td| {
+            let id = make_ident(&td.rs_name);
+            match &td.qualification {
+                Qualification::None => None,
+                Qualification::Cxx => Some(parse_quote! { cxx::#id }),
+                Qualification::Autocxx => Some(parse_quote! { autocxx::#id }),
+                Qualification::StdPin => Some(parse_quote! { std::pin::#id }),
+            }
+        })
+    }
+
     /// Here we substitute any names which we know are Special from
     /// our type database, e.g. std::unique_ptr -> UniquePtr.
     /// We strip off and ignore
@@ -214,6 +242,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         true,
         None,
+        Qualification::Cxx,
     ));
     do_insert(TypeDetails::new(
         "CxxVector".into(),
@@ -224,6 +253,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         true,
         None,
+        Qualification::Cxx,
     ));
     do_insert(TypeDetails::new(
         "SharedPtr".into(),
@@ -234,6 +264,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         true,
         None,
+        Qualification::Cxx,
     ));
     do_insert(TypeDetails::new(
         "CxxString".into(),
@@ -244,6 +275,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
+        Qualification::Cxx,
     ));
     do_insert(TypeDetails::new(
         "str".into(),
@@ -254,6 +286,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
+        Qualification::None,
     ));
     do_insert(TypeDetails::new(
         "String".into(),
@@ -264,6 +297,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
+        Qualification::None,
     ));
     for (cpp_type, rust_type) in (3..7)
         .map(|x| 2i32.pow(x))
@@ -284,6 +318,7 @@ fn create_type_database() -> TypeDatabase {
             false,
             false,
             None,
+            Qualification::None,
         ));
     }
     do_insert(TypeDetails::new(
@@ -295,6 +330,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
+        Qualification::None,
     ));
 
     do_insert(TypeDetails::new(
@@ -306,6 +342,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
+        Qualification::StdPin,
     ));
 
     let mut insert_ctype = |cname: &str| {
@@ -318,6 +355,7 @@ fn create_type_database() -> TypeDatabase {
             true,
             false,
             Some(format!("std::os::raw::c_{}", cname)),
+            Qualification::Autocxx,
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
         let td = TypeDetails::new(
@@ -329,6 +367,7 @@ fn create_type_database() -> TypeDatabase {
             true,
             false,
             Some(format!("std::os::raw::c_u{}", cname)),
+            Qualification::Autocxx,
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
     };
@@ -347,6 +386,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
+        Qualification::None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
@@ -359,6 +399,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
+        Qualification::None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
