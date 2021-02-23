@@ -47,6 +47,8 @@ struct TypeDetails {
     /// if we encounter such a type as a generic, we'll replace it with
     /// a concrete instantiation.
     is_cxx_container: bool,
+    /// Any extra non-canonical names
+    extra_non_canonical_name: Option<String>,
 }
 
 impl TypeDetails {
@@ -58,6 +60,7 @@ impl TypeDetails {
         de_referencicate: bool,
         is_ctype: bool,
         is_cxx_container: bool,
+        extra_non_canonical_name: Option<String>,
     ) -> Self {
         TypeDetails {
             rs_name,
@@ -67,6 +70,7 @@ impl TypeDetails {
             de_referencicate,
             is_ctype,
             is_cxx_container,
+            extra_non_canonical_name,
         }
     }
 
@@ -107,7 +111,7 @@ impl TypeDetails {
 /// Database of known types.
 pub(crate) struct TypeDatabase {
     by_rs_name: HashMap<TypeName, TypeDetails>,
-    by_cppname: HashMap<TypeName, TypeName>,
+    canonical_names: HashMap<TypeName, TypeName>,
 }
 
 lazy_static! {
@@ -121,7 +125,7 @@ impl TypeDatabase {
         // when we encounter something like 'std::unique_ptr'
         // in the bindgen-generated bindings, we'll immediately
         // start to refer to that as 'UniquePtr' henceforth.
-        let canonical_name = self.by_cppname.get(ty).unwrap_or(ty);
+        let canonical_name = self.canonical_names.get(ty).unwrap_or(ty);
         self.by_rs_name.get(canonical_name)
     }
 
@@ -209,6 +213,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         true,
+        None,
     ));
     do_insert(TypeDetails::new(
         "CxxVector".into(),
@@ -218,6 +223,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         true,
+        None,
     ));
     do_insert(TypeDetails::new(
         "SharedPtr".into(),
@@ -227,6 +233,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         true,
+        None,
     ));
     do_insert(TypeDetails::new(
         "CxxString".into(),
@@ -236,6 +243,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         false,
+        None,
     ));
     do_insert(TypeDetails::new(
         "str".into(),
@@ -245,6 +253,7 @@ fn create_type_database() -> TypeDatabase {
         true,
         false,
         false,
+        None,
     ));
     do_insert(TypeDetails::new(
         "String".into(),
@@ -254,6 +263,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         false,
+        None,
     ));
     for (cpp_type, rust_type) in (3..7)
         .map(|x| 2i32.pow(x))
@@ -273,6 +283,7 @@ fn create_type_database() -> TypeDatabase {
             false,
             false,
             false,
+            None,
         ));
     }
     do_insert(TypeDetails::new(
@@ -283,6 +294,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         false,
+        None,
     ));
 
     do_insert(TypeDetails::new(
@@ -293,27 +305,30 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         false,
+        None,
     ));
 
     let mut insert_ctype = |cname: &str| {
         let td = TypeDetails::new(
-            format!("std::os::raw::c_{}", cname),
+            format!("c_{}", cname),
             cname.into(),
             true,
             PreludePolicy::Exclude,
             false,
             true,
             false,
+            Some(format!("std::os::raw::c_{}", cname)),
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
         let td = TypeDetails::new(
-            format!("std::os::raw::c_u{}", cname),
+            format!("c_u{}", cname),
             format!("unsigned {}", cname),
             true,
             PreludePolicy::Exclude,
             false,
             true,
             false,
+            Some(format!("std::os::raw::c_u{}", cname)),
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
     };
@@ -331,6 +346,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         false,
+        None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
@@ -342,20 +358,25 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         false,
+        None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
     let mut by_cppname = HashMap::new();
     for td in by_rs_name.values() {
-        by_cppname.insert(
-            TypeName::new_from_user_input(&td.cpp_name),
-            TypeName::new_from_user_input(&td.rs_name),
-        );
+        let rs_name = TypeName::new_from_user_input(&td.rs_name);
+        if let Some(extra_non_canonical_name) = &td.extra_non_canonical_name {
+            by_cppname.insert(
+                TypeName::new_from_user_input(extra_non_canonical_name),
+                rs_name.clone(),
+            );
+        }
+        by_cppname.insert(TypeName::new_from_user_input(&td.cpp_name), rs_name);
     }
 
     TypeDatabase {
         by_rs_name,
-        by_cppname,
+        canonical_names: by_cppname,
     }
 }
 

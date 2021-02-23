@@ -132,6 +132,13 @@ impl<'a> ParseBindgen<'a> {
                 use cxx:: #thing;
             }));
         }
+        for thing in &["c_ulong", "c_long"] {
+            let thing = make_ident(thing);
+            use_statements_for_this_mod.push(Item::Use(parse_quote! {
+                #[allow(unused_imports)]
+                use autocxx:: #thing;
+            }));
+        }
         use_statements_for_this_mod.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]
             use std::pin::Pin;

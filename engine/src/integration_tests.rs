@@ -3393,7 +3393,6 @@ fn test_ulong_method() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/224
 fn test_ulong_wrapped_method() {
     let hdr = indoc! {"
     #include <cstdint>
