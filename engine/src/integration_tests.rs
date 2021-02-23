@@ -3344,7 +3344,7 @@ fn test_forward_declaration() {
             B() {}
             uint32_t a;
             void daft(const A&) {}
-            void daft2(std::unique_ptr<A> a) {}
+            void daft2(std::unique_ptr<A>) {}
         };
     "};
     let rs = quote! {
