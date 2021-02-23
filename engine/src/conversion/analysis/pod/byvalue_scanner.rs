@@ -24,7 +24,7 @@ use crate::{
     types::TypeName,
 };
 
-use super::{ByValueChecker};
+use super::ByValueChecker;
 
 /// Scan APIs to work out which are by-value safe. Constructs a [ByValueChecker]
 /// that others can use to query the results.
