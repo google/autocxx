@@ -25,7 +25,7 @@ categories = ["development-tools::ffi", "api-bindings"]
 
 [dependencies]
 autocxx-engine = { version="0.5.1", path="../../engine", features = ["build"] }
-env_logger = "0.8.1"
+env_logger = "0.8.2"
 
 [dependencies.syn]
 version = "1.0"

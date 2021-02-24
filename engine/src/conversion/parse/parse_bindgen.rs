@@ -14,6 +14,7 @@
 
 use std::{collections::HashMap, collections::HashSet};
 
+use crate::known_types::KNOWN_TYPES;
 use crate::{
     conversion::{
         api::{ApiDetail, ParseResults, TypeApiDetails, UnanalyzedApi},
@@ -26,7 +27,7 @@ use crate::{
 use autocxx_parser::TypeConfig;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Fields, Ident, Item, parse_quote};
+use syn::{parse_quote, Fields, Ident, Item};
 
 use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
 
@@ -125,17 +126,16 @@ impl<'a> ParseBindgen<'a> {
                 #(#supers)::*
             ::cxxbridge;
         }));
-        for thing in &["UniquePtr", "CxxString"] {
-            let thing = make_ident(thing);
+        // In future, generate these only on-demand
+        // to avoid bloating the output bindings.
+        // Or better still, fully qualify all paths used within the bindgen mod.
+        // https://github.com/google/autocxx/issues/236
+        for use_path in KNOWN_TYPES.get_bindgen_use_paths() {
             use_statements_for_this_mod.push(Item::Use(parse_quote! {
                 #[allow(unused_imports)]
-                use cxx:: #thing;
+                use #use_path;
             }));
         }
-        use_statements_for_this_mod.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use std::pin::Pin;
-        }));
         self.results
             .use_stmts_by_mod
             .insert(ns, use_statements_for_this_mod);
@@ -210,15 +210,13 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Type(mut ity) => {
                 let tyname = TypeName::new(ns, &ity.ident.to_string());
-                let type_conversion_results = self
-                    .results
-                    .type_converter
-                    .convert_type(*ity.ty, ns, false);
+                let type_conversion_results =
+                    self.results.type_converter.convert_type(*ity.ty, ns, false);
                 match type_conversion_results {
                     Err(ConvertError::OpaqueTypeFound) => {
                         self.add_opaque_type(ity.ident, ns.clone());
                         Ok(())
-                    },
+                    }
                     Err(err) => Err(err),
                     Ok(mut final_type) => {
                         ity.ty = Box::new(final_type.ty.clone());
@@ -254,7 +252,7 @@ impl<'a> ParseBindgen<'a> {
             deps: HashSet::new(),
             additional_cpp: None,
             detail: ApiDetail::OpaqueTypedef,
-        });      
+        });
     }
 
     /// Record the Api for a type, e.g. enum or struct.

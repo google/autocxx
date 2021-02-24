@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use crate::{conversion::api::Api, known_types::KNOWN_TYPES};
+use syn::Ident;
+
+use crate::{conversion::api::Api, known_types::KNOWN_TYPES, types::TypeName};
 use crate::{
     conversion::{api::ApiDetail, codegen_cpp::AdditionalNeed},
     types::{make_ident, Namespace},
@@ -25,20 +27,19 @@ use super::fun::FnAnalysis;
 /// Spot any variable-length C types (e.g. unsigned long)
 /// used in the [Api]s and append those as extra APIs.
 pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
-    let ctypes: HashSet<_> = apis
+    let ctypes: HashMap<Ident, TypeName> = apis
         .iter()
         .map(|api| api.deps.iter())
         .flatten()
         .filter(|ty| KNOWN_TYPES.is_ctype(ty))
-        .cloned()
+        .map(|ty| (make_ident(ty.get_final_ident()), ty.clone()))
         .collect();
-    for ctype in ctypes {
-        let id = make_ident(ctype.get_final_ident());
+    for (id, tn) in ctypes {
         apis.push(Api {
             ns: Namespace::new(),
-            id: id.clone(),
+            id,
             deps: HashSet::new(),
-            additional_cpp: Some(AdditionalNeed::CTypeTypedef(ctype.clone())),
+            additional_cpp: Some(AdditionalNeed::CTypeTypedef(tn)),
             detail: ApiDetail::CType,
         });
     }
