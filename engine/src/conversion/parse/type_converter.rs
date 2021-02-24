@@ -116,7 +116,7 @@ impl TypeConverter {
         ns: &Namespace,
         mut convert_ptrs_to_reference: bool,
     ) -> Result<Annotated<Type>, ConvertError> {
-        if !cfg!(pointers) {
+        if !cfg!(feature="pointers") {
             convert_ptrs_to_reference = true;
         }
         let result = match ty {

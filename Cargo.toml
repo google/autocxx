@@ -23,6 +23,9 @@ edition = "2018"
 keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
 
+[features]
+pointers = [ "autocxx-engine/pointers" ]
+
 [dependencies]
 autocxx-macro = { path="macro", version="0.5.1" }
 autocxx-engine = { path="engine", version="0.5.1" }
