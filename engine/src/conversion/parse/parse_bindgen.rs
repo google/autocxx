@@ -119,13 +119,6 @@ impl<'a> ParseBindgen<'a> {
         // `Api`. We'll squirrel them away and insert them into the output mod later
         // iff this mod ends up having any output items after garbage collection
         // of unnecessary APIs.
-        let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
-        use_statements_for_this_mod.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use self::
-                #(#supers)::*
-            ::cxxbridge;
-        }));
         // In future, generate these only on-demand
         // to avoid bloating the output bindings.
         // Or better still, fully qualify all paths used within the bindgen mod.
