@@ -872,14 +872,13 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
         struct Bob {
             uint32_t a;
         };
-        #include <cstdint>
         class A {
         public:
             A() {};
-            uint32_t take_bob(const Bob* a, C) {
+            uint32_t take_bob(const Bob* a, C) const {
                 return a->a;
             }
-            std::unique_ptr<Bob> make_bob(uint32_t a, C) {
+            std::unique_ptr<Bob> make_bob(uint32_t a, C) const {
                 auto b = std::make_unique<Bob>();
                 b->a = a;
                 return b;
@@ -893,6 +892,40 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
         let c = ffi::C::make_unique();
         let b = a.as_ref().unwrap().make_bob(12, c);
         assert_eq!(unsafe { a.as_ref().unwrap().take_bob(&b, c) }, 12);
+    };
+    run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
+}
+
+#[ignore]
+#[test]
+fn test_take_char_by_ptr_in_wrapped_method() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct C {
+            uint32_t a;
+        };
+        class A {
+        public:
+            A() {};
+            uint32_t take_char(const char* a, C) const {
+                return a[0];
+            }
+            std::unique_ptr<char> make_char(uint32_t a, C) const {
+                return std::make_unique<char>(a);
+            }
+            uint16_t a;
+        };
+
+    "};
+    let rs = quote! {
+        let a = ffi::A::make_unique();
+        let c = ffi::C::make_unique();
+        let ch = a.as_ref().unwrap().make_char(12, c);
+        assert_eq!(unsafe { a.as_ref().unwrap().take_char(&ch, c) }, 12);
+        let raw = ch.into_raw();
+        assert_eq!(unsafe { *raw, 12 });
+        unsafe { UniquePtr::from_raw(raw) } // will drop
     };
     run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
 }
