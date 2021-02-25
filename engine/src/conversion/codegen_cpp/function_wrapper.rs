@@ -115,7 +115,7 @@ impl ArgumentConversion {
     fn make_unique_ptr_type(&self) -> Type {
         let innerty = &self.unwrapped_type;
         parse_quote! {
-            UniquePtr < #innerty >
+            cxx::UniquePtr < #innerty >
         }
     }
 }

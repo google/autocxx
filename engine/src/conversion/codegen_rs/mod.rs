@@ -206,6 +206,13 @@ impl<'a> RsCodeGenerator<'a> {
     fn append_uses_for_ns(&mut self, items: &mut Vec<Item>, ns: &Namespace) {
         let mut use_stmts = self.use_stmts_by_mod.remove(&ns).unwrap_or_default();
         items.append(&mut use_stmts);
+        let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
+        items.push(Item::Use(parse_quote! {
+            #[allow(unused_imports)]
+            use self::
+                #(#supers)::*
+            ::cxxbridge;
+        }));
     }
 
     fn append_child_bindgen_namespace(

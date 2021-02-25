@@ -14,7 +14,6 @@
 
 use std::{collections::HashMap, collections::HashSet};
 
-use crate::known_types::KNOWN_TYPES;
 use crate::{
     conversion::{
         api::{ApiDetail, ParseResults, TypeApiDetails, UnanalyzedApi},
@@ -27,7 +26,7 @@ use crate::{
 use autocxx_parser::TypeConfig;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_quote, Fields, Ident, Item};
+use syn::{Fields, Ident, Item};
 
 use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
 
@@ -119,23 +118,6 @@ impl<'a> ParseBindgen<'a> {
         // `Api`. We'll squirrel them away and insert them into the output mod later
         // iff this mod ends up having any output items after garbage collection
         // of unnecessary APIs.
-        let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
-        use_statements_for_this_mod.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use self::
-                #(#supers)::*
-            ::cxxbridge;
-        }));
-        // In future, generate these only on-demand
-        // to avoid bloating the output bindings.
-        // Or better still, fully qualify all paths used within the bindgen mod.
-        // https://github.com/google/autocxx/issues/236
-        for use_path in KNOWN_TYPES.get_bindgen_use_paths() {
-            use_statements_for_this_mod.push(Item::Use(parse_quote! {
-                #[allow(unused_imports)]
-                use #use_path;
-            }));
-        }
         self.results
             .use_stmts_by_mod
             .insert(ns, use_statements_for_this_mod);
