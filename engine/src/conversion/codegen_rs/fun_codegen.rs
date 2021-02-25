@@ -44,10 +44,14 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
     let requires_unsafe = analysis.requires_unsafe;
     let params = analysis.params;
     let vis = analysis.vis;
-    // CUT HERE
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
+    let unsafety: Option<Unsafe> = if requires_unsafe {
+        Some(parse_quote!(unsafe))
+    } else {
+        None
+    };
     if cxxbridge_name != rust_name {
         if let Some(type_name) = &self_ty {
             // Method, or static method.
@@ -58,6 +62,7 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
                 &cxxbridge_name,
                 &rust_name,
                 &ret_type,
+                &unsafety,
             ));
         }
     }
@@ -100,11 +105,6 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
             .unwrap()
     };
     // At last, actually generate the cxx::bridge entry.
-    let unsafety: Option<Unsafe> = if requires_unsafe {
-        Some(parse_quote!(unsafe))
-    } else {
-        None
-    };
     let extern_c_mod_item = ForeignItem::Fn(parse_quote!(
         #(#namespace_attr)*
         #(#rust_name_attr)*
@@ -128,6 +128,7 @@ fn generate_method_impl(
     cxxbridge_name: &Ident,
     rust_name: &str,
     ret_type: &ReturnType,
+    unsafety: &Option<Unsafe>,
 ) -> Box<ImplBlockDetails> {
     let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
     let mut arg_list = Vec::new();
@@ -147,7 +148,7 @@ fn generate_method_impl(
     let rust_name = make_ident(&rust_name);
     Box::new(ImplBlockDetails {
         item: ImplItem::Method(parse_quote! {
-            pub fn #rust_name ( #wrapper_params ) #ret_type {
+            pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
                 cxxbridge::#cxxbridge_name ( #(#arg_list),* )
             }
         }),
