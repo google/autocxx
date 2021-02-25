@@ -379,4 +379,3 @@ ctype_wrapper!(c_short, "c_short", "Newtype wrapper for an short");
 ctype_wrapper!(c_uint, "c_uint", "Newtype wrapper for an unsigned int");
 ctype_wrapper!(c_int, "c_int", "Newtype wrapper for an int");
 ctype_wrapper!(c_uchar, "c_uchar", "Newtype wrapper for an unsigned char");
-ctype_wrapper!(c_char, "c_char", "Newtype wrapper for a char");

@@ -165,20 +165,18 @@ impl ByValueChecker {
         Ok(())
     }
 
+    /// Return whether a given type is POD (i.e. can be represented by value in Rust) or not.
+    /// Unless we've got a definite record that it _is_, we return false.
+    /// Some types won't be in our `results` map. For example: (a) AutocxxConcrete types
+    /// which we've synthesized; (b) types we couldn't parse but returned ignorable
+    /// errors so that we could continue. Assume non-POD for all such cases.
     pub fn is_pod(&self, ty_id: &TypeName) -> bool {
-        if !ty_id.has_namespace() && ty_id.get_final_ident().starts_with("AutocxxConcrete") {
-            // Type we created at conversion time.
-            return false;
-        }
         matches!(
-            self.results.get(ty_id).unwrap_or_else(|| panic!(
-                "Type {} not known to byvalue_checker",
-                ty_id.to_string()
-            )),
-            StructDetails {
+            self.results.get(ty_id),
+            Some(StructDetails {
                 state: PodState::IsPod,
                 dependent_structs: _,
-            }
+            })
         )
     }
 

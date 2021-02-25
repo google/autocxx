@@ -33,6 +33,7 @@ enum Qualification {
     Cxx,
     Autocxx,
     StdPin,
+    StdOsRaw,
 }
 
 /// Details about known special types, mostly primitives.
@@ -192,6 +193,7 @@ impl TypeDatabase {
                 Qualification::Cxx => Some(parse_quote! { cxx::#id }),
                 Qualification::Autocxx => Some(parse_quote! { autocxx::#id }),
                 Qualification::StdPin => Some(parse_quote! { std::pin::#id }),
+                Qualification::StdOsRaw => Some(parse_quote! { std::os::raw::#id }),
             }
         })
     }
@@ -375,7 +377,6 @@ fn create_type_database() -> TypeDatabase {
     insert_ctype("long");
     insert_ctype("int");
     insert_ctype("short");
-    insert_ctype("char");
 
     let td = TypeDetails::new(
         "f32".into(),
@@ -400,6 +401,19 @@ fn create_type_database() -> TypeDatabase {
         false,
         None,
         Qualification::None,
+    );
+    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+
+    let td = TypeDetails::new(
+        "c_char".into(),
+        "char".into(),
+        true,
+        PreludePolicy::Exclude,
+        false,
+        false,
+        false,
+        Some("std::os::raw::c_char".into()),
+        Qualification::StdOsRaw,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
