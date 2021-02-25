@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use itertools::Itertools;
 use proc_macro2::Span;
 use std::iter::Peekable;
 use std::{fmt::Display, sync::Arc};
@@ -97,6 +96,7 @@ impl<'a> IntoIterator for &'a Namespace {
 pub struct TypeName(Namespace, String);
 
 impl TypeName {
+    #[cfg(test)]
     pub(crate) fn from_ident(id: &Ident) -> Self {
         Self(Namespace::new(), id.to_string())
     }
@@ -109,26 +109,10 @@ impl TypeName {
             // This is a C++ type prefixed with a namespace,
             // e.g. std::string or something the user has defined.
             Self::from_segments(seg_iter) // all but 'root'
-        } else if first_seg == "std" {
+        } else {
             // This is actually a Rust type e.g.
             // std::os::raw::c_ulong. Start iterating from the beginning again.
             Self::from_segments(typ.path.segments.iter().peekable())
-        } else {
-            // This is a primitive e.g. u32
-            if seg_iter.next().is_some() {
-                // Oh, dear.
-                let type_name = typ
-                    .path
-                    .segments
-                    .iter()
-                    .map(|s| s.ident.to_string())
-                    .join("::");
-                panic!(
-                    "Unable to handle type found in bindgen output: {}",
-                    type_name
-                );
-            }
-            Self::from_ident(&first_seg)
         }
     }
 

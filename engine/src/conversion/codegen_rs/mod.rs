@@ -213,7 +213,6 @@ impl<'a> RsCodeGenerator<'a> {
                 #(#supers)::*
             ::cxxbridge;
         }));
-
     }
 
     fn append_child_bindgen_namespace(
