@@ -798,7 +798,7 @@ fn test_take_nonpod_by_ref() {
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
-#[ignore]
+#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr() {
     let cxx = indoc! {"
@@ -827,7 +827,7 @@ fn test_take_nonpod_by_ptr() {
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
-#[ignore]
+#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr_in_method() {
     let hdr = indoc! {"
@@ -860,7 +860,7 @@ fn test_take_nonpod_by_ptr_in_method() {
     run_test("", hdr, rs, &["A", "Bob"], &[]);
 }
 
-#[ignore]
+#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr_in_wrapped_method() {
     let hdr = indoc! {"
@@ -896,7 +896,7 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
     run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
 }
 
-#[ignore]
+#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_char_by_ptr_in_wrapped_method() {
     let hdr = indoc! {"
