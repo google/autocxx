@@ -257,7 +257,7 @@ mod tests {
         let mut bvc = ByValueChecker::new();
         let t: ItemStruct = parse_quote! {
             struct Bar {
-                a: UniquePtr<CxxString>,
+                a: cxx::UniquePtr<CxxString>,
                 b: i64,
             }
         };
