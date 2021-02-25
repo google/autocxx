@@ -412,7 +412,7 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         false,
-        None,
+        Some("std::os::raw::c_char".into()),
         Qualification::StdOsRaw,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
