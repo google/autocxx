@@ -906,7 +906,9 @@ fn test_take_char_by_ptr_in_wrapped_method() {
         #include <cstdint>
         #include <memory>
         struct C {
+            C() { test = \"hi\"; }
             uint32_t a;
+            char* test;
         };
         class A {
         public:
@@ -914,8 +916,8 @@ fn test_take_char_by_ptr_in_wrapped_method() {
             uint32_t take_char(const char* a, C) const {
                 return a[0];
             }
-            std::unique_ptr<char> make_char(uint32_t a, C) const {
-                return std::make_unique<char>(a);
+            const char* make_char(C extra) const {
+                return extra.test;
             }
             uint16_t a;
         };
@@ -923,14 +925,13 @@ fn test_take_char_by_ptr_in_wrapped_method() {
     "};
     let rs = quote! {
         let a = ffi::A::make_unique();
-        let c = ffi::C::make_unique();
-        let ch = a.as_ref().unwrap().make_char(12, c);
-        assert_eq!(unsafe { a.as_ref().unwrap().take_char(&ch, c) }, 12);
-        let raw = ch.into_raw();
-        assert_eq!(unsafe { *raw, 12 });
-        unsafe { UniquePtr::from_raw(raw) } // will drop
+        let c1 = ffi::C::make_unique();
+        let c2 = ffi::C::make_unique();
+        let ch = a.as_ref().unwrap().make_char(c1);
+        assert_eq!(unsafe { ch.as_ref()}.unwrap(), &104i8);
+        assert_eq!(unsafe { a.as_ref().unwrap().take_char(ch, c2) }, 104);
     };
-    run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
+    run_test("", hdr, rs, &["A", "C"], &[]);
 }
 
 #[test]
