@@ -664,32 +664,28 @@ fn test_take_pod_by_ref_and_ptr() {
 #[test]
 #[cfg(feature = "pointers")]
 fn test_return_pod_by_ref_and_ptr() {
-    let cxx = indoc! {"
-        B& return_b_ref(const A& a) {
-            return &a.b;
-        }
-        B* return_b_ptr(const A& a) {
-            return &a.b;
-        }
-    "};
     let hdr = indoc! {"
         #include <cstdint>
-        struct A {
-            B b;
-        };
         struct B {
             uint32_t a;
         };
-        B& return_b_ref(const A& a);
-        B* return_b_ptr(const A& a);
+        struct A {
+            B b;
+        };
+        const B& return_b_ref(const A& a) {
+            return a.b;
+        }
+        const B* return_b_ptr(const A& a) {
+            return &a.b;
+        }
     "};
     let rs = quote! {
-        let a = ffi::B { b: ffi::A { a: 3 } };
+        let a = ffi::A { b: ffi::B { a: 3 } };
         assert_eq!(ffi::return_b_ref(&a).a, 3);
         let b_ptr = ffi::return_b_ptr(&a);
-        assert_eq!(unsafe { *b_ptr }.a, 3);
+        assert_eq!(unsafe { b_ptr.as_ref() }.unwrap().a, 3);
     };
-    run_test(cxx, hdr, rs, &["return_b_ref", "return_b_ptr"], &["A", "B"]);
+    run_test("", hdr, rs, &["return_b_ref", "return_b_ptr"], &["A", "B"]);
 }
 
 #[test]
@@ -798,9 +794,9 @@ fn test_take_nonpod_by_ref() {
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
-#[ignore]
+#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
-fn test_take_nonpod_by_ptr() {
+fn test_take_nonpod_by_ptr_simple() {
     let cxx = indoc! {"
         uint32_t take_bob(const Bob* a) {
             return a->a;
@@ -822,12 +818,14 @@ fn test_take_nonpod_by_ptr() {
     "};
     let rs = quote! {
         let a = ffi::make_bob(12);
-        assert_eq!(unsafe { ffi::take_bob(&a) }, 12);
+        let a_ptr = a.into_raw();
+        assert_eq!(unsafe { ffi::take_bob(a_ptr) }, 12);
+        unsafe { cxx::UniquePtr::from_raw(a_ptr) }; // so we drop
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
-#[ignore]
+#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr_in_method() {
     let hdr = indoc! {"
@@ -840,10 +838,10 @@ fn test_take_nonpod_by_ptr_in_method() {
         class A {
         public:
             A() {};
-            uint32_t take_bob(const Bob* a) {
+            uint32_t take_bob(const Bob* a) const {
                 return a->a;
             }
-            std::unique_ptr<Bob> make_bob(uint32_t a) {
+            std::unique_ptr<Bob> make_bob(uint32_t a) const {
                 auto b = std::make_unique<Bob>();
                 b->a = a;
                 return b;
@@ -855,18 +853,21 @@ fn test_take_nonpod_by_ptr_in_method() {
     let rs = quote! {
         let a = ffi::A::make_unique();
         let b = a.as_ref().unwrap().make_bob(12);
-        assert_eq!(unsafe { a.as_ref().unwrap().take_bob(&b) }, 12);
+        let b_ptr = b.into_raw();
+        assert_eq!(unsafe { a.as_ref().unwrap().take_bob(b_ptr) }, 12);
+        unsafe { cxx::UniquePtr::from_raw(b_ptr) }; // so we drop
     };
     run_test("", hdr, rs, &["A", "Bob"], &[]);
 }
 
-#[ignore]
+#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr_in_wrapped_method() {
     let hdr = indoc! {"
         #include <cstdint>
         #include <memory>
         struct C {
+            C() {}
             uint32_t a;
         };
         struct Bob {
@@ -878,7 +879,7 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
             uint32_t take_bob(const Bob* a, C) const {
                 return a->a;
             }
-            std::unique_ptr<Bob> make_bob(uint32_t a, C) const {
+            std::unique_ptr<Bob> make_bob(uint32_t a) const {
                 auto b = std::make_unique<Bob>();
                 b->a = a;
                 return b;
@@ -890,20 +891,24 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
     let rs = quote! {
         let a = ffi::A::make_unique();
         let c = ffi::C::make_unique();
-        let b = a.as_ref().unwrap().make_bob(12, c);
-        assert_eq!(unsafe { a.as_ref().unwrap().take_bob(&b, c) }, 12);
+        let b = a.as_ref().unwrap().make_bob(12);
+        let b_ptr = b.into_raw();
+        assert_eq!(unsafe { a.as_ref().unwrap().take_bob(b_ptr, c) }, 12);
+        unsafe { cxx::UniquePtr::from_raw(b_ptr) }; // so we drop
     };
     run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
 }
 
-#[ignore]
+#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_char_by_ptr_in_wrapped_method() {
     let hdr = indoc! {"
         #include <cstdint>
         #include <memory>
         struct C {
+            C() { test = \"hi\"; }
             uint32_t a;
+            char* test;
         };
         class A {
         public:
@@ -911,8 +916,8 @@ fn test_take_char_by_ptr_in_wrapped_method() {
             uint32_t take_char(const char* a, C) const {
                 return a[0];
             }
-            std::unique_ptr<char> make_char(uint32_t a, C) const {
-                return std::make_unique<char>(a);
+            const char* make_char(C extra) const {
+                return extra.test;
             }
             uint16_t a;
         };
@@ -920,14 +925,13 @@ fn test_take_char_by_ptr_in_wrapped_method() {
     "};
     let rs = quote! {
         let a = ffi::A::make_unique();
-        let c = ffi::C::make_unique();
-        let ch = a.as_ref().unwrap().make_char(12, c);
-        assert_eq!(unsafe { a.as_ref().unwrap().take_char(&ch, c) }, 12);
-        let raw = ch.into_raw();
-        assert_eq!(unsafe { *raw, 12 });
-        unsafe { UniquePtr::from_raw(raw) } // will drop
+        let c1 = ffi::C::make_unique();
+        let c2 = ffi::C::make_unique();
+        let ch = a.as_ref().unwrap().make_char(c1);
+        assert_eq!(unsafe { ch.as_ref()}.unwrap(), &104i8);
+        assert_eq!(unsafe { a.as_ref().unwrap().take_char(ch, c2) }, 104);
     };
-    run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
+    run_test("", hdr, rs, &["A", "C"], &[]);
 }
 
 #[test]
