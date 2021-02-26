@@ -800,7 +800,7 @@ fn test_take_nonpod_by_ref() {
 
 #[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
-fn test_take_nonpod_by_ptr() {
+fn test_take_nonpod_by_ptr_simple() {
     let cxx = indoc! {"
         uint32_t take_bob(const Bob* a) {
             return a->a;
@@ -822,7 +822,9 @@ fn test_take_nonpod_by_ptr() {
     "};
     let rs = quote! {
         let a = ffi::make_bob(12);
-        assert_eq!(unsafe { ffi::take_bob(&a) }, 12);
+        let a_ptr = a.into_raw();
+        assert_eq!(unsafe { ffi::take_bob(a_ptr) }, 12);
+        unsafe { cxx::UniquePtr::from_raw(a_ptr) }; // so we drop
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
