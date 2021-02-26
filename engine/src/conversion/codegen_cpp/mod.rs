@@ -25,10 +25,7 @@ use type_to_cpp::type_to_cpp;
 
 use self::function_wrapper::FunctionWrapperPayload;
 
-use super::{
-    api::{Api, ApiAnalysis},
-    ConvertError,
-};
+use super::{analysis::fun::FnAnalysis, api::Api, ConvertError};
 
 /// Instructions for new C++ which we need to generate.
 #[derive(Clone)]
@@ -93,12 +90,12 @@ pub(crate) struct CppCodeGenerator {
 }
 
 impl CppCodeGenerator {
-    pub(crate) fn generate_cpp_code<T: ApiAnalysis>(
+    pub(crate) fn generate_cpp_code(
         inclusions: String,
-        apis: &[Api<T>],
+        apis: &[Api<FnAnalysis>],
     ) -> Result<Option<CppCodegenResults>, ConvertError> {
         let mut gen = CppCodeGenerator::new(inclusions);
-        gen.add_needs(apis.iter().filter_map(|api| api.additional_cpp.as_ref()))?;
+        gen.add_needs(apis.iter().filter_map(|api| api.additional_cpp()))?;
         Ok(gen.generate())
     }
 
@@ -109,19 +106,19 @@ impl CppCodeGenerator {
         }
     }
 
-    fn add_needs<'a>(
+    fn add_needs(
         &mut self,
-        additions: impl Iterator<Item = &'a AdditionalNeed>,
+        additions: impl Iterator<Item = AdditionalNeed>,
     ) -> Result<(), ConvertError> {
         for need in additions {
             match need {
                 AdditionalNeed::MakeStringConstructor => self.generate_string_constructor(),
                 AdditionalNeed::FunctionWrapper(by_value_wrapper) => {
-                    self.generate_by_value_wrapper(by_value_wrapper)?
+                    self.generate_by_value_wrapper(&by_value_wrapper)?
                 }
-                AdditionalNeed::CTypeTypedef(tn) => self.generate_ctype_typedef(tn),
+                AdditionalNeed::CTypeTypedef(tn) => self.generate_ctype_typedef(&tn),
                 AdditionalNeed::ConcreteTemplatedTypeTypedef(tn, def) => {
-                    self.generate_typedef(tn, type_to_cpp(&def)?)
+                    self.generate_typedef(&tn, type_to_cpp(&def)?)
                 }
             }
         }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{api::UnanalyzedApi, codegen_cpp::AdditionalNeed};
+use super::api::UnanalyzedApi;
 use crate::types::{make_ident, Namespace};
 use std::collections::HashSet;
 
@@ -31,6 +31,5 @@ pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>) {
         id: make_ident("make_string"),
         deps: HashSet::new(),
         detail: super::api::ApiDetail::StringConstructor,
-        additional_cpp: Some(AdditionalNeed::MakeStringConstructor),
     });
 }

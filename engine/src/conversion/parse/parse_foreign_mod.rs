@@ -102,7 +102,6 @@ impl ParseForeignMod {
                 ns: self.ns.clone(),
                 id: fun.item.sig.ident.clone(),
                 deps: HashSet::new(), // filled in later - TODO make compile-time safe
-                additional_cpp: None, // filled in later
                 detail: ApiDetail::Function { fun, analysis: () },
             })
         }

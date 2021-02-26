@@ -78,8 +78,9 @@ impl<'a> RsCodeGenerator<'a> {
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
+                let more_cpp_needed = api.additional_cpp().is_some();
                 let gen = Self::generate_rs_for_api(&api.ns, &api.id, api.detail);
-                ((api.ns, api.id, gen), api.additional_cpp.is_some())
+                ((api.ns, api.id, gen), more_cpp_needed)
             })
             .unzip();
         // And work out what we need for the bindgen mod.
@@ -300,7 +301,7 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: None,
                 impl_entry: None,
             },
-            ApiDetail::ConcreteType(ty_details) => {
+            ApiDetail::ConcreteType { ty_details, .. } => {
                 let global_items = Self::generate_extern_type_impl(TypeKind::NonPod, &ty_details);
                 let final_ident = &ty_details.final_ident;
                 RsCodegenResult {
@@ -346,7 +347,7 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_c_mod_item: Some(ForeignItem::Verbatim(for_extern_c_ts)),
                 bindgen_mod_item,
             },
-            ApiDetail::CType => RsCodegenResult {
+            ApiDetail::CType { .. } => RsCodegenResult {
                 global_items: Vec::new(),
                 impl_entry: None,
                 bridge_items: Vec::new(),

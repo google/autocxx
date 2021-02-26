@@ -59,6 +59,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) vis: Visibility,
     pub(crate) id_for_allowlist: Option<Ident>,
     pub(crate) use_stmt: Use,
+    pub(crate) additional_cpp: Option<AdditionalNeed>,
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -97,12 +98,7 @@ pub(crate) struct FnAnalyzer<'a> {
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
 }
 
-struct FnAnalysisResult(
-    FnAnalysisBody,
-    Ident,
-    HashSet<TypeName>,
-    Option<AdditionalNeed>,
-);
+struct FnAnalysisResult(FnAnalysisBody, Ident, HashSet<TypeName>);
 
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
@@ -155,14 +151,19 @@ impl<'a> FnAnalyzer<'a> {
     /// a new analysis phase prior to the POD analysis which materializes these types.
     fn make_extra_api_nonpod(api: UnanalyzedApi) -> Api<FnAnalysis> {
         let new_detail = match api.detail {
-            ApiDetail::ConcreteType(stuff) => ApiDetail::ConcreteType(stuff),
+            ApiDetail::ConcreteType {
+                ty_details,
+                additional_cpp,
+            } => ApiDetail::ConcreteType {
+                ty_details,
+                additional_cpp,
+            },
             _ => panic!("Function analysis created an extra API which wasn't a concrete type"),
         };
         Api {
             ns: api.ns,
             id: api.id,
             deps: api.deps,
-            additional_cpp: api.additional_cpp,
             detail: new_detail,
         }
     }
@@ -173,18 +174,22 @@ impl<'a> FnAnalyzer<'a> {
     ) -> Result<Option<Api<FnAnalysis>>, ConvertError> {
         let mut new_deps = api.deps.clone();
         let mut new_id = api.id;
-        let mut new_additional_cpp = api.additional_cpp.clone();
         let api_detail = match api.detail {
             // No changes to any of these...
-            ApiDetail::ConcreteType(details) => ApiDetail::ConcreteType(details),
+            ApiDetail::ConcreteType {
+                ty_details,
+                additional_cpp,
+            } => ApiDetail::ConcreteType {
+                ty_details,
+                additional_cpp,
+            },
             ApiDetail::StringConstructor => ApiDetail::StringConstructor,
             ApiDetail::Function { fun, analysis: _ } => {
                 let analysis = self.analyze_foreign_fn(&api.ns, &fun)?;
                 match analysis {
                     None => return Ok(None),
-                    Some(FnAnalysisResult(analysis, id, fn_deps, fn_additional_cpp)) => {
+                    Some(FnAnalysisResult(analysis, id, fn_deps)) => {
                         new_deps = fn_deps;
-                        new_additional_cpp = fn_additional_cpp;
                         new_id = id;
                         ApiDetail::Function { fun, analysis }
                     }
@@ -192,7 +197,7 @@ impl<'a> FnAnalyzer<'a> {
             }
             ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
             ApiDetail::Typedef { type_item } => ApiDetail::Typedef { type_item },
-            ApiDetail::CType => ApiDetail::CType,
+            ApiDetail::CType { typename } => ApiDetail::CType { typename },
             // Just changes to this one...
             ApiDetail::Type {
                 ty_details,
@@ -213,7 +218,6 @@ impl<'a> FnAnalyzer<'a> {
             ns: api.ns,
             id: new_id,
             deps: new_deps,
-            additional_cpp: new_additional_cpp,
             detail: api_detail,
         }))
     }
@@ -570,10 +574,10 @@ impl<'a> FnAnalyzer<'a> {
                 vis,
                 id_for_allowlist,
                 use_stmt,
+                additional_cpp,
             },
             id,
             deps,
-            additional_cpp,
         )))
     }
 
@@ -778,6 +782,25 @@ impl Api<FnAnalysis> {
             } => Use::Used,
             ApiDetail::Function { fun: _, analysis } => analysis.use_stmt.clone(),
             _ => Use::Unused,
+        }
+    }
+
+    /// Whether this API requires generation of additional C++, and if so,
+    /// what.
+    /// This seems an odd place for this function (as opposed to in the [codegen_rs]
+    /// module) but, as it happens, even our Rust codegen phase needs to know if
+    /// more C++ is needed (so it can add #includes in the cxx mod).
+    /// And we can't answer the question _prior_ to this function analysis phase.
+    pub(crate) fn additional_cpp(&self) -> Option<AdditionalNeed> {
+        match &self.detail {
+            ApiDetail::Function { fun: _, analysis } => analysis.additional_cpp.clone(),
+            ApiDetail::StringConstructor => Some(AdditionalNeed::MakeStringConstructor),
+            ApiDetail::ConcreteType {
+                ty_details: _,
+                additional_cpp,
+            } => Some(additional_cpp.clone()),
+            ApiDetail::CType { typename } => Some(AdditionalNeed::CTypeTypedef(typename.clone())),
+            _ => None,
         }
     }
 }

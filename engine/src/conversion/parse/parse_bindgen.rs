@@ -162,7 +162,7 @@ impl<'a> ParseBindgen<'a> {
                     panic!("Unexpected 'use' path in bindgen output")
                 }
                 Ok(()) // we do not add this to any API since we generate equivalent
-                // use statements in our codegen phase.
+                       // use statements in our codegen phase.
             }
             Item::Const(const_item) => {
                 // The following puts this constant into
@@ -173,7 +173,6 @@ impl<'a> ParseBindgen<'a> {
                     ns: ns.clone(),
                     deps: HashSet::new(),
                     detail: ApiDetail::Const { const_item },
-                    additional_cpp: None,
                 });
                 Ok(())
             }
@@ -197,7 +196,6 @@ impl<'a> ParseBindgen<'a> {
                             id: ity.ident.clone(),
                             ns: ns.clone(),
                             deps: final_type.types_encountered,
-                            additional_cpp: None,
                             detail: ApiDetail::Typedef { type_item: ity },
                         });
                         Ok(())
@@ -219,7 +217,6 @@ impl<'a> ParseBindgen<'a> {
             id,
             ns,
             deps: HashSet::new(),
-            additional_cpp: None,
             detail: ApiDetail::OpaqueTypedef,
         });
     }
@@ -282,7 +279,6 @@ impl<'a> ParseBindgen<'a> {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
             deps,
-            additional_cpp: None,
             detail: ApiDetail::Type {
                 ty_details: TypeApiDetails {
                     fulltypath,
