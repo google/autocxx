@@ -842,10 +842,10 @@ fn test_take_nonpod_by_ptr_in_method() {
         class A {
         public:
             A() {};
-            uint32_t take_bob(const Bob* a) {
+            uint32_t take_bob(const Bob* a) const {
                 return a->a;
             }
-            std::unique_ptr<Bob> make_bob(uint32_t a) {
+            std::unique_ptr<Bob> make_bob(uint32_t a) const {
                 auto b = std::make_unique<Bob>();
                 b->a = a;
                 return b;
@@ -857,7 +857,9 @@ fn test_take_nonpod_by_ptr_in_method() {
     let rs = quote! {
         let a = ffi::A::make_unique();
         let b = a.as_ref().unwrap().make_bob(12);
-        assert_eq!(unsafe { a.as_ref().unwrap().take_bob(&b) }, 12);
+        let b_ptr = b.into_raw();
+        assert_eq!(unsafe { a.as_ref().unwrap().take_bob(b_ptr) }, 12);
+        unsafe { cxx::UniquePtr::from_raw(b_ptr) }; // so we drop
     };
     run_test("", hdr, rs, &["A", "Bob"], &[]);
 }
