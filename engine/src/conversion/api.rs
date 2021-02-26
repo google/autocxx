@@ -14,7 +14,7 @@
 
 use crate::types::{Namespace, TypeName};
 use proc_macro2::TokenStream;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType};
 
 use super::{codegen_cpp::AdditionalNeed, parse::type_converter::TypeConverter};
@@ -151,7 +151,4 @@ pub(crate) struct ParseResults {
     /// This should probably be replaced by extracting this information
     /// from APIs as necessary later. TODO
     pub(crate) type_converter: TypeConverter,
-    /// Any `use` statements which were found in each mod within
-    /// `bindgen`. TODO future, move into `apis`
-    pub(crate) use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
 }

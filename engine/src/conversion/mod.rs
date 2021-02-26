@@ -125,7 +125,6 @@ impl<'a> BridgeConverter<'a> {
                 let rs = RsCodeGenerator::generate_rs_code(
                     analyzed_apis,
                     self.include_list,
-                    parse_results.use_stmts_by_mod,
                     bindgen_mod,
                 );
                 Ok(CodegenResults { rs, cpp })
