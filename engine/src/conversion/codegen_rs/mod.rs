@@ -52,7 +52,6 @@ fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
 /// existing lumps of code within the Api structures.
 pub(crate) struct RsCodeGenerator<'a> {
     include_list: &'a [String],
-    use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
     bindgen_mod: ItemMod,
 }
 
@@ -61,12 +60,10 @@ impl<'a> RsCodeGenerator<'a> {
     pub(crate) fn generate_rs_code(
         all_apis: Vec<Api<FnAnalysis>>,
         include_list: &'a [String],
-        use_stmts_by_mod: HashMap<Namespace, Vec<Item>>,
         bindgen_mod: ItemMod,
     ) -> Vec<Item> {
         let c = Self {
             include_list,
-            use_stmts_by_mod,
             bindgen_mod,
         };
         c.rs_codegen(all_apis)
@@ -204,14 +201,20 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn append_uses_for_ns(&mut self, items: &mut Vec<Item>, ns: &Namespace) {
-        let mut use_stmts = self.use_stmts_by_mod.remove(&ns).unwrap_or_default();
-        items.append(&mut use_stmts);
-        let supers = std::iter::repeat(make_ident("super")).take(ns.depth() + 2);
+        let super_duper = std::iter::repeat(make_ident("super")); // I'll get my coat
+        let supers = super_duper.clone().take(ns.depth() + 2);
         items.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]
             use self::
                 #(#supers)::*
             ::cxxbridge;
+        }));
+        let supers = super_duper.take(ns.depth() + 1);
+        items.push(Item::Use(parse_quote! {
+            #[allow(unused_imports)]
+            use self::
+                #(#supers)::*
+            ::root;
         }));
     }
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{collections::HashMap, collections::HashSet};
+use std::collections::HashSet;
 
 use crate::{
     conversion::{
@@ -26,7 +26,7 @@ use crate::{
 use autocxx_parser::TypeConfig;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Fields, Ident, Item};
+use syn::{Fields, Ident, Item, UseTree};
 
 use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
 
@@ -50,7 +50,6 @@ impl<'a> ParseBindgen<'a> {
             results: ParseResults {
                 apis: Vec::new(),
                 type_converter: TypeConverter::new(),
-                use_stmts_by_mod: HashMap::new(),
             },
             latest_virtual_this_type: None,
         }
@@ -96,14 +95,8 @@ impl<'a> ParseBindgen<'a> {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
         let mut mod_converter = ParseForeignMod::new(ns.clone());
-        let mut use_statements_for_this_mod = Vec::new();
         for item in items {
-            let r = self.parse_item(
-                item,
-                &mut mod_converter,
-                &ns,
-                &mut use_statements_for_this_mod,
-            );
+            let r = self.parse_item(item, &mut mod_converter, &ns);
             match r {
                 Err(err) if err.is_ignorable() => {
                     eprintln!("Ignored item discovered whilst parsing: {}", err)
@@ -113,14 +106,6 @@ impl<'a> ParseBindgen<'a> {
             }
         }
         mod_converter.finished(&mut self.results.apis);
-
-        // We don't immediately blat 'use' statements into any particular
-        // `Api`. We'll squirrel them away and insert them into the output mod later
-        // iff this mod ends up having any output items after garbage collection
-        // of unnecessary APIs.
-        self.results
-            .use_stmts_by_mod
-            .insert(ns, use_statements_for_this_mod);
     }
 
     fn parse_item(
@@ -128,7 +113,6 @@ impl<'a> ParseBindgen<'a> {
         item: Item,
         mod_converter: &mut ParseForeignMod,
         ns: &Namespace,
-        use_statements_for_this_mod: &mut Vec<Item>,
     ) -> Result<(), ConvertError> {
         match item {
             Item::ForeignMod(fm) => mod_converter
@@ -173,9 +157,12 @@ impl<'a> ParseBindgen<'a> {
                 }
                 Ok(())
             }
-            Item::Use(_) => {
-                use_statements_for_this_mod.push(item);
-                Ok(())
+            Item::Use(use_item) => {
+                if Self::get_last_use_ident(&use_item.tree).to_string() != "root" {
+                    panic!("Unexpected 'use' path in bindgen output")
+                }
+                Ok(()) // we do not add this to any API since we generate equivalent
+                // use statements in our codegen phase.
             }
             Item::Const(const_item) => {
                 // The following puts this constant into
@@ -235,6 +222,14 @@ impl<'a> ParseBindgen<'a> {
             additional_cpp: None,
             detail: ApiDetail::OpaqueTypedef,
         });
+    }
+
+    fn get_last_use_ident(p: &UseTree) -> &Ident {
+        match p {
+            UseTree::Name(n) => &n.ident,
+            UseTree::Path(p) => Self::get_last_use_ident(&p.tree),
+            _ => panic!("Unexpected type of 'use' statement found in bindgen bindings"),
+        }
     }
 
     /// Record the Api for a type, e.g. enum or struct.
