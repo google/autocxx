@@ -363,14 +363,14 @@ fn create_type_database() -> TypeDatabase {
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
     let td = TypeDetails::new(
-        "cxx::c_char".into(),
+        "std::os::raw::c_char".into(),
         "char".into(),
         true,
         PreludePolicy::Exclude,
         false,
         false,
         false,
-        Some("std::os::raw::c_char".into()),
+        None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
