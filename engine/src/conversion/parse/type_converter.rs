@@ -360,15 +360,17 @@ impl TypeConverter {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
             deps: HashSet::new(),
-            detail: crate::conversion::api::ApiDetail::ConcreteType(TypeApiDetails {
-                fulltypath,
-                tynamestring,
-                final_ident,
-            }),
-            additional_cpp: Some(AdditionalNeed::ConcreteTemplatedTypeTypedef(
-                tyname.clone(),
-                Box::new(rs_definition.clone()),
-            )),
+            detail: crate::conversion::api::ApiDetail::ConcreteType {
+                ty_details: TypeApiDetails {
+                    fulltypath,
+                    tynamestring,
+                    final_ident,
+                },
+                additional_cpp: AdditionalNeed::ConcreteTemplatedTypeTypedef(
+                    tyname.clone(),
+                    Box::new(rs_definition.clone()),
+                ),
+            },
         }
     }
 

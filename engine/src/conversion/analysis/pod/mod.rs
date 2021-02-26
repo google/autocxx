@@ -77,12 +77,18 @@ fn analyze_pod_api(
     let mut new_deps = api.deps;
     let api_detail = match api.detail {
         // No changes to any of these...
-        ApiDetail::ConcreteType(details) => ApiDetail::ConcreteType(details),
+        ApiDetail::ConcreteType {
+            ty_details,
+            additional_cpp,
+        } => ApiDetail::ConcreteType {
+            ty_details,
+            additional_cpp,
+        },
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
         ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
         ApiDetail::Typedef { type_item } => ApiDetail::Typedef { type_item },
-        ApiDetail::CType => ApiDetail::CType,
+        ApiDetail::CType { typename } => ApiDetail::CType { typename },
         // Just changes to this one...
         ApiDetail::Type {
             ty_details,
@@ -122,7 +128,6 @@ fn analyze_pod_api(
         ns: api.ns,
         id: api.id,
         deps: new_deps,
-        additional_cpp: api.additional_cpp,
         detail: api_detail,
     })
 }

@@ -18,7 +18,7 @@ use syn::Ident;
 
 use crate::{conversion::api::Api, known_types::KNOWN_TYPES, types::TypeName};
 use crate::{
-    conversion::{api::ApiDetail, codegen_cpp::AdditionalNeed},
+    conversion::api::ApiDetail,
     types::{make_ident, Namespace},
 };
 
@@ -39,8 +39,7 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
             ns: Namespace::new(),
             id,
             deps: HashSet::new(),
-            additional_cpp: Some(AdditionalNeed::CTypeTypedef(tn)),
-            detail: ApiDetail::CType,
+            detail: ApiDetail::CType { typename: tn },
         });
     }
 }
