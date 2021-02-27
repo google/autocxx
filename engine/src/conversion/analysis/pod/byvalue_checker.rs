@@ -60,7 +60,7 @@ impl ByValueChecker {
             } else {
                 PodState::UnsafeToBePod(format!("type {} is not safe for POD", tn))
             };
-            results.insert(tn, StructDetails::new(safety));
+            results.insert(tn.clone(), StructDetails::new(safety));
         }
         ByValueChecker { results }
     }

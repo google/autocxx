@@ -149,11 +149,12 @@ impl TypeDatabase {
 
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
-    pub(crate) fn get_pod_safe_types(&self) -> Vec<(TypeName, bool)> {
+    pub(crate) fn get_pod_safe_types<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = (&'a TypeName, bool)> + 'a {
         self.by_rs_name
             .iter()
-            .map(|(tn, td)| (tn.clone(), td.by_value_safe))
-            .collect()
+            .map(|(tn, td)| (tn, td.by_value_safe))
     }
 
     /// Whether this TypePath should be treated as a value in C++

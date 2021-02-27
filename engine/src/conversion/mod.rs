@@ -100,7 +100,7 @@ impl<'a> BridgeConverter<'a> {
                 // This returns a new list of `Api`s, which will be parameterized with
                 // the analysis results. It also returns an object which can be used
                 // by subsequent phases to work out which objects are POD.
-                let (analyzed_apis, pod_list) =
+                let analyzed_apis =
                     analyze_pod_apis(parse_results.apis, &self.type_config, &mut type_converter)?;
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
@@ -111,7 +111,6 @@ impl<'a> BridgeConverter<'a> {
                     analyzed_apis,
                     unsafe_policy,
                     &mut type_converter,
-                    &pod_list,
                     self.type_config,
                 )?;
                 // We now garbage collect the ones we don't need...

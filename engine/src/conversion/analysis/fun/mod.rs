@@ -16,6 +16,7 @@ mod bridge_name_tracker;
 mod overload_tracker;
 mod rust_name_tracker;
 
+use crate::known_types::KNOWN_TYPES;
 use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::{TypeConfig, UnsafePolicy};
@@ -42,7 +43,7 @@ use self::{
     rust_name_tracker::RustNameTracker,
 };
 
-use super::pod::{ByValueChecker, PodAnalysis};
+use super::pod::PodAnalysis;
 
 pub(crate) struct FnAnalysisBody {
     pub(crate) rename_using_rust_attr: bool,
@@ -92,7 +93,7 @@ pub(crate) struct FnAnalyzer<'a> {
     extra_apis: Vec<UnanalyzedApi>,
     type_converter: &'a mut TypeConverter,
     bridge_name_tracker: BridgeNameTracker,
-    byvalue_checker: &'a ByValueChecker,
+    pod_safe_types: HashSet<TypeName>,
     type_config: &'a TypeConfig,
     incomplete_types: HashSet<TypeName>,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
@@ -105,32 +106,18 @@ impl<'a> FnAnalyzer<'a> {
         apis: Vec<Api<PodAnalysis>>,
         unsafe_policy: UnsafePolicy,
         type_converter: &'a mut TypeConverter,
-        byvalue_checker: &'a ByValueChecker,
         type_database: &'a TypeConfig,
     ) -> Result<Vec<Api<FnAnalysis>>, ConvertError> {
-        let incomplete_types = apis
-            .iter()
-            .filter_map(|api| match api.detail {
-                ApiDetail::Type {
-                    ty_details: _,
-                    for_extern_c_ts: _,
-                    is_forward_declaration,
-                    bindgen_mod_item: _,
-                    analysis: _,
-                } if is_forward_declaration => Some(api.typename()),
-                _ => None,
-            })
-            .collect();
         let mut me = Self {
             unsafe_policy,
             rust_name_tracker: RustNameTracker::new(),
             extra_apis: Vec::new(),
             type_converter,
             bridge_name_tracker: BridgeNameTracker::new(),
-            byvalue_checker,
             type_config: type_database,
-            incomplete_types,
+            incomplete_types: Self::build_incomplete_type_set(&apis),
             overload_trackers_by_mod: HashMap::new(),
+            pod_safe_types: Self::build_pod_safe_type_set(&apis),
         };
         let mut results = Vec::new();
         for api in apis {
@@ -144,6 +131,49 @@ impl<'a> FnAnalyzer<'a> {
         }
         results.extend(me.extra_apis.into_iter().map(Self::make_extra_api_nonpod));
         Ok(results)
+    }
+
+    fn build_incomplete_type_set(apis: &Vec<Api<PodAnalysis>>) -> HashSet<TypeName> {
+        apis.iter()
+            .filter_map(|api| match api.detail {
+                ApiDetail::Type {
+                    ty_details: _,
+                    for_extern_c_ts: _,
+                    is_forward_declaration: true,
+                    bindgen_mod_item: _,
+                    analysis: _,
+                } => Some(api.typename()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn build_pod_safe_type_set(apis: &Vec<Api<PodAnalysis>>) -> HashSet<TypeName> {
+        apis.iter()
+            .filter_map(|api| match api.detail {
+                ApiDetail::Type {
+                    ty_details: _,
+                    for_extern_c_ts: _,
+                    is_forward_declaration: _,
+                    bindgen_mod_item: _,
+                    analysis: TypeKind::Pod,
+                } => Some(api.typename()),
+                _ => None,
+            })
+            .chain(
+                KNOWN_TYPES
+                    .get_pod_safe_types()
+                    .filter_map(
+                        |(tn, is_pod_safe)| {
+                            if is_pod_safe {
+                                Some(tn.clone())
+                            } else {
+                                None
+                            }
+                        },
+                    ),
+            )
+            .collect()
     }
 
     /// Processing functions sometimes results in new types being materialized.
@@ -237,10 +267,6 @@ impl<'a> FnAnalyzer<'a> {
             annotated.types_encountered,
             annotated.requires_unsafe,
         ))
-    }
-
-    fn is_pod(&self, ty: &TypeName) -> bool {
-        self.byvalue_checker.is_pod(ty)
     }
 
     fn get_cxx_bridge_name(
@@ -669,7 +695,7 @@ impl<'a> FnAnalyzer<'a> {
     {
         match ty {
             Type::Path(p) => {
-                if self.is_pod(&TypeName::from_type_path(p)) {
+                if self.pod_safe_types.contains(&TypeName::from_type_path(p)) {
                     ArgumentConversion::new_unconverted(ty.clone())
                 } else {
                     conversion_direction(ty.clone())

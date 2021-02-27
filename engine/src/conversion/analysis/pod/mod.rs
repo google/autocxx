@@ -18,7 +18,7 @@ mod byvalue_scanner;
 use std::collections::HashSet;
 
 use autocxx_parser::TypeConfig;
-pub(crate) use byvalue_checker::ByValueChecker;
+use byvalue_checker::ByValueChecker;
 use byvalue_scanner::identify_byvalue_safe_types;
 use syn::{Item, ItemStruct};
 
@@ -48,7 +48,7 @@ pub(crate) fn analyze_pod_apis(
     apis: Vec<UnanalyzedApi>,
     type_config: &TypeConfig,
     type_converter: &mut TypeConverter,
-) -> Result<(Vec<Api<PodAnalysis>>, ByValueChecker), ConvertError> {
+) -> Result<Vec<Api<PodAnalysis>>, ConvertError> {
     let byvalue_checker = identify_byvalue_safe_types(&apis, type_config)?;
     let mut extra_apis = Vec::new();
     let mut results: Vec<_> = apis
@@ -64,7 +64,7 @@ pub(crate) fn analyze_pod_apis(
         .collect::<Result<Vec<_>, ConvertError>>()?;
     assert!(more_extra_apis.is_empty());
     results.append(&mut more_results);
-    Ok((results, byvalue_checker))
+    Ok(results)
 }
 
 fn analyze_pod_api(
