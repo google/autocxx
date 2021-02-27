@@ -225,13 +225,10 @@ pub trait RebuildDependencyRecorder: std::fmt::Debug {
 ///     tc -.-> pod
 ///     apis ==> pod
 ///     podapis(APIs with POD analysis)
-///     podlist(ByValueChecker)
 ///     pod ==> podapis
-///     pod -.-> podlist
 ///     fun[Function materialization analysis]
 ///     tc -.-> fun
 ///     podapis ==> fun
-///     podlist -.-> fun
 ///     funapis(APIs with function analysis)
 ///     fun ==> funapis
 ///     gc[Garbage collection]

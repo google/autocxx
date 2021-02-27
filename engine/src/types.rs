@@ -96,11 +96,6 @@ impl<'a> IntoIterator for &'a Namespace {
 pub struct TypeName(Namespace, String);
 
 impl TypeName {
-    #[cfg(test)]
-    pub(crate) fn from_ident(id: &Ident) -> Self {
-        Self(Namespace::new(), id.to_string())
-    }
-
     /// From a TypePath which starts with 'root'
     pub(crate) fn from_type_path(typ: &TypePath) -> Self {
         let mut seg_iter = typ.path.segments.iter().peekable();
