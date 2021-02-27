@@ -206,7 +206,11 @@ impl ByValueChecker {
 mod tests {
     use super::ByValueChecker;
     use crate::types::{Namespace, TypeName};
-    use syn::{parse_quote, ItemStruct};
+    use syn::{parse_quote, Ident, ItemStruct};
+
+    fn ty_from_ident(id: &Ident) -> TypeName {
+        TypeName::new_from_user_input(&id.to_string())
+    }
 
     #[test]
     fn test_primitive_by_itself() {
@@ -224,7 +228,7 @@ mod tests {
                 b: i64,
             }
         };
-        let t_id = TypeName::from_ident(&t.ident);
+        let t_id = ty_from_ident(&t.ident);
         bvc.ingest_struct(&t, &Namespace::new());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
@@ -246,7 +250,7 @@ mod tests {
                 b: i64,
             }
         };
-        let t_id = TypeName::from_ident(&t.ident);
+        let t_id = ty_from_ident(&t.ident);
         bvc.ingest_struct(&t, &Namespace::new());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
@@ -261,7 +265,7 @@ mod tests {
                 b: i64,
             }
         };
-        let t_id = TypeName::from_ident(&t.ident);
+        let t_id = ty_from_ident(&t.ident);
         bvc.ingest_struct(&t, &Namespace::new());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
@@ -276,7 +280,7 @@ mod tests {
                 b: i64,
             }
         };
-        let t_id = TypeName::from_ident(&t.ident);
+        let t_id = ty_from_ident(&t.ident);
         bvc.ingest_struct(&t, &Namespace::new());
         assert!(bvc.satisfy_requests(vec![t_id]).is_err());
     }
