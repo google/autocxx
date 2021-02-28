@@ -12,10 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::known_types::KNOWN_TYPES;
 use crate::types::{Namespace, TypeName};
+use crate::{
+    conversion::{
+        api::{ApiDetail, UnanalyzedApi},
+        ConvertError,
+    },
+    known_types::KNOWN_TYPES,
+};
+use autocxx_parser::TypeConfig;
 use std::collections::HashMap;
-use syn::{ItemStruct, Type};
+use syn::{Item, ItemStruct, Type};
 
 #[derive(Clone)]
 enum PodState {
@@ -65,15 +72,72 @@ impl ByValueChecker {
         ByValueChecker { results }
     }
 
-    pub fn ingest_blocklist<'a>(&mut self, blocklist: impl Iterator<Item = &'a String>) {
-        for blocklisted in blocklist {
+    /// Scan APIs to work out which are by-value safe. Constructs a [ByValueChecker]
+    /// that others can use to query the results.
+    pub(crate) fn new_from_apis(
+        apis: &[UnanalyzedApi],
+        type_config: &TypeConfig,
+    ) -> Result<ByValueChecker, ConvertError> {
+        let mut byvalue_checker = ByValueChecker::new();
+        for blocklisted in type_config.get_blocklist() {
             let tn = TypeName::new_from_user_input(blocklisted);
             let safety = PodState::UnsafeToBePod(format!("type {} is on the blocklist", &tn));
-            self.results.insert(tn, StructDetails::new(safety));
+            byvalue_checker
+                .results
+                .insert(tn, StructDetails::new(safety));
         }
+        for api in apis {
+            match &api.detail {
+                ApiDetail::Typedef { type_item } => {
+                    let name = api.typename();
+                    let typedef_type = match type_item.ty.as_ref() {
+                        Type::Path(typ) => KNOWN_TYPES.known_type_substitute_path(&typ),
+                        _ => None,
+                    };
+                    match &typedef_type {
+                        Some(typ) => {
+                            byvalue_checker.results.insert(
+                                name,
+                                StructDetails::new(PodState::IsAlias(TypeName::from_type_path(
+                                    typ,
+                                ))),
+                            );
+                        }
+                        None => byvalue_checker.ingest_nonpod_type(name),
+                    }
+                }
+                ApiDetail::Type {
+                    ty_details: _,
+                    for_extern_c_ts: _,
+                    is_forward_declaration: _,
+                    bindgen_mod_item,
+                    analysis: _,
+                } => match bindgen_mod_item {
+                    None => {}
+                    Some(Item::Struct(s)) => byvalue_checker.ingest_struct(&s, &api.ns),
+                    Some(Item::Enum(_)) => {
+                        byvalue_checker
+                            .results
+                            .insert(api.typename(), StructDetails::new(PodState::IsPod));
+                    }
+                    _ => {}
+                },
+                ApiDetail::OpaqueTypedef => byvalue_checker.ingest_nonpod_type(api.typename()),
+                _ => {}
+            }
+        }
+        let pod_requests = type_config
+            .get_pod_requests()
+            .iter()
+            .map(|ty| TypeName::new_from_user_input(ty))
+            .collect();
+        byvalue_checker
+            .satisfy_requests(pod_requests)
+            .map_err(ConvertError::UnsafePodType)?;
+        Ok(byvalue_checker)
     }
 
-    pub fn ingest_struct(&mut self, def: &ItemStruct, ns: &Namespace) {
+    fn ingest_struct(&mut self, def: &ItemStruct, ns: &Namespace) {
         // For this struct, work out whether it _could_ be safe as a POD.
         let tyname = TypeName::new(ns, &def.ident.to_string());
         let mut field_safety_problem = PodState::SafeToBePod;
@@ -96,8 +160,7 @@ impl ByValueChecker {
                 }
             }
         }
-        let has_vtable = Self::has_vtable(def);
-        if has_vtable {
+        if Self::has_vtable(def) {
             let reason = format!(
                 "Type {} could not be POD because it has virtual functions.",
                 tyname
@@ -109,17 +172,7 @@ impl ByValueChecker {
         self.results.insert(tyname, my_details);
     }
 
-    pub fn ingest_pod_type(&mut self, tyname: TypeName) {
-        self.results
-            .insert(tyname, StructDetails::new(PodState::IsPod));
-    }
-
-    pub fn ingest_simple_typedef(&mut self, tyname: TypeName, target: TypeName) {
-        self.results
-            .insert(tyname, StructDetails::new(PodState::IsAlias(target)));
-    }
-
-    pub fn ingest_nonpod_type(&mut self, tyname: TypeName) {
+    fn ingest_nonpod_type(&mut self, tyname: TypeName) {
         let new_reason = format!("Type {} is a typedef to a complex type", tyname);
         self.results.insert(
             tyname,
@@ -127,7 +180,7 @@ impl ByValueChecker {
         );
     }
 
-    pub fn satisfy_requests(&mut self, mut requests: Vec<TypeName>) -> Result<(), String> {
+    fn satisfy_requests(&mut self, mut requests: Vec<TypeName>) -> Result<(), String> {
         while !requests.is_empty() {
             let ty_id = requests.remove(requests.len() - 1);
             let deets = self.results.get_mut(&ty_id);

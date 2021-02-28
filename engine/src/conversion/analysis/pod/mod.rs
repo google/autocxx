@@ -13,13 +13,11 @@
 // limitations under the License.
 
 mod byvalue_checker;
-mod byvalue_scanner;
 
 use std::collections::HashSet;
 
 use autocxx_parser::TypeConfig;
 use byvalue_checker::ByValueChecker;
-use byvalue_scanner::identify_byvalue_safe_types;
 use syn::{Item, ItemStruct};
 
 use crate::{
@@ -49,7 +47,11 @@ pub(crate) fn analyze_pod_apis(
     type_config: &TypeConfig,
     type_converter: &mut TypeConverter,
 ) -> Result<Vec<Api<PodAnalysis>>, ConvertError> {
-    let byvalue_checker = identify_byvalue_safe_types(&apis, type_config)?;
+    // This next line will return an error if any of the 'generate_pod'
+    // directives from the user can't be met because, for instance,
+    // a type contains a std::string or some other type which can't be
+    // held safely by value in Rust.
+    let byvalue_checker = ByValueChecker::new_from_apis(&apis, type_config)?;
     let mut extra_apis = Vec::new();
     let mut results: Vec<_> = apis
         .into_iter()
