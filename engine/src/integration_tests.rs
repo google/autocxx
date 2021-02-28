@@ -384,6 +384,24 @@ fn test_give_up_int() {
 }
 
 #[test]
+#[ignore] // because we don't yet implement UniquePtr etc. for autocxx::c_int and friends
+fn test_give_up_ctype() {
+    let cxx = indoc! {"
+        std::unique_ptr<int> give_up() {
+            return std::make_unique<int>(12);
+        }
+    "};
+    let hdr = indoc! {"
+        #include <memory>
+        std::unique_ptr<int> give_up();
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_up().as_ref().unwrap(), autocxx::c_int(12));
+    };
+    run_test(cxx, hdr, rs, &["give_up"], &[]);
+}
+
+#[test]
 fn test_give_string_up() {
     let cxx = indoc! {"
         std::unique_ptr<std::string> give_str_up() {
