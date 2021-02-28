@@ -47,6 +47,10 @@ pub(crate) fn analyze_pod_apis(
     type_config: &TypeConfig,
     type_converter: &mut TypeConverter,
 ) -> Result<Vec<Api<PodAnalysis>>, ConvertError> {
+    // This next line will return an error if any of the 'generate_pod'
+    // directives from the user can't be met because, for instance,
+    // a type contains a std::string or some other type which can't be
+    // held safely by value in Rust.
     let byvalue_checker = ByValueChecker::new_from_apis(&apis, type_config)?;
     let mut extra_apis = Vec::new();
     let mut results: Vec<_> = apis
