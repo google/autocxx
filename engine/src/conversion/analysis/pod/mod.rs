@@ -13,13 +13,11 @@
 // limitations under the License.
 
 mod byvalue_checker;
-mod byvalue_scanner;
 
 use std::collections::HashSet;
 
 use autocxx_parser::TypeConfig;
 use byvalue_checker::ByValueChecker;
-use byvalue_scanner::identify_byvalue_safe_types;
 use syn::{Item, ItemStruct};
 
 use crate::{
@@ -49,7 +47,7 @@ pub(crate) fn analyze_pod_apis(
     type_config: &TypeConfig,
     type_converter: &mut TypeConverter,
 ) -> Result<Vec<Api<PodAnalysis>>, ConvertError> {
-    let byvalue_checker = identify_byvalue_safe_types(&apis, type_config)?;
+    let byvalue_checker = ByValueChecker::new_from_apis(&apis, type_config)?;
     let mut extra_apis = Vec::new();
     let mut results: Vec<_> = apis
         .into_iter()
