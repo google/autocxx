@@ -282,9 +282,9 @@ impl IncludeCppEngine {
         // See:
         // * https://github.com/dtolnay/cxx/pull/41
         // * https://github.com/alexcrichton/cc-rs/issues/169
-        inc_dirs
-            .map(|p| dunce::canonicalize(&p).map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p)))
-            .collect()
+        Ok(inc_dirs
+            //.map(|p| dunce::canonicalize(&p).map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p)))
+            .collect())
     }
 
     fn make_bindgen_builder(&self, inc_dirs: &[PathBuf]) -> bindgen::Builder {
