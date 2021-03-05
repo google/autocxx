@@ -83,11 +83,12 @@ fn main() {
                     Arg::with_name("generate-exact")
                         .long("generate-exact")
                         .value_name("NUM")
-                        .help("always generate this number of .cc and .h files")
+                        .help("always generate this number of .cc files")
                         .takes_value(true),
                 ),
         )
         .subcommand(SubCommand::with_name("gen-rs").help("Generate expanded Rust file."))
+        .subcommand(SubCommand::with_name("gen-rs-inc").help("Generate includable Rust files."))
         .get_matches();
     let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap())
         .expect("Unable to parse Rust file and interpret autocxx macro");
@@ -133,6 +134,11 @@ fn main() {
         let mut ts = TokenStream::new();
         parsed_file.to_tokens(&mut ts);
         write_to_file(&outdir, "gen.rs".to_string(), ts.to_string().as_bytes());
+    } else if matches.subcommand_matches("gen-rs-inc").is_some() {
+        for include_cxx in parsed_file.get_autocxxes() {
+            let fname = include_cxx.get_rs_filename();
+            write_to_file(&outdir, fname, include_cxx.generate_rs().to_string().as_bytes());
+        }
     } else {
         panic!("Must specify a subcommand");
     }
