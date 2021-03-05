@@ -52,7 +52,10 @@ fn main() {
         )
         .arg(
             Arg::with_name("inc")
+                .short("I")
                 .long("inc")
+                .multiple(true)
+                .number_of_values(1)
                 .value_name("INCLUDE DIRS")
                 .help("include path")
                 .takes_value(true),
@@ -88,12 +91,12 @@ fn main() {
         .get_matches();
     let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap())
         .expect("Unable to parse Rust file and interpret autocxx macro");
-    let incs = matches.value_of("inc").unwrap_or("");
+    let incs = matches.values_of("inc").unwrap_or_default().collect::<Vec<_>>().join(":"); // TODO UNIX-specific
     // In future, we should provide an option to write a .d file here
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56
     parsed_file
-        .resolve_all(incs, None)
+        .resolve_all(&incs, None)
         .expect("Unable to resolve macro");
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
     if let Some(matches) = matches.subcommand_matches("gen-cpp") {
