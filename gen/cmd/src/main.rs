@@ -17,7 +17,7 @@ use clap::{crate_authors, crate_version, App, Arg, SubCommand};
 use indoc::indoc;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::{fs::File, path::Path};
 
@@ -142,6 +142,16 @@ fn write_cpp_file(outdir: &Path, pattern: &str, cpp: &str, counter: usize, conte
 
 fn write_to_file(dir: &Path, filename: String, content: &[u8]) {
     let path = dir.join(filename);
+    {
+        let f = File::open(&path);
+        if let Ok(mut f) = f {
+            let mut existing_content = Vec::new();
+            let r = f.read_to_end(&mut existing_content);
+            if r.is_ok() && existing_content == content {
+                return; // don't change timestamp on existing file unnecessarily
+            }
+        }
+    }
     let mut f = File::create(&path).expect("Unable to create file");
     f.write_all(content).expect("Unable to write file");
 }

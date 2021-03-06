@@ -133,7 +133,7 @@ impl<'a> FnAnalyzer<'a> {
         Ok(results)
     }
 
-    fn build_incomplete_type_set(apis: &Vec<Api<PodAnalysis>>) -> HashSet<TypeName> {
+    fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<TypeName> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
@@ -148,7 +148,7 @@ impl<'a> FnAnalyzer<'a> {
             .collect()
     }
 
-    fn build_pod_safe_type_set(apis: &Vec<Api<PodAnalysis>>) -> HashSet<TypeName> {
+    fn build_pod_safe_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<TypeName> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {

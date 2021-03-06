@@ -158,7 +158,7 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Use(use_item) => {
-                if Self::get_last_use_ident(&use_item.tree).to_string() != "root" {
+                if *Self::get_last_use_ident(&use_item.tree) != "root" {
                     panic!("Unexpected 'use' path in bindgen output")
                 }
                 Ok(()) // we do not add this to any API since we generate equivalent
