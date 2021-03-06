@@ -85,6 +85,7 @@ fn main() {
                 ),
         )
         .subcommand(SubCommand::with_name("gen-rs").help("Generate expanded Rust file."))
+        .subcommand(SubCommand::with_name("gen-rs-inc").help("Generate includable Rust file."))
         .get_matches();
     let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap())
         .expect("Unable to parse Rust file and interpret autocxx macro");
@@ -131,6 +132,19 @@ fn main() {
         let mut ts = TokenStream::new();
         parsed_file.to_tokens(&mut ts);
         write_to_file(&outdir, "gen.rs".to_string(), ts.to_string().as_bytes());
+    }
+    if matches.subcommand_matches("gen-inc-rs").is_some() {
+        let autocxxes = parsed_file.get_autocxxes();
+        if autocxxes.len() == 0 {
+            panic!("No include_cpp! found in this rs file");
+        }
+        if autocxxes.len() > 1 {
+            panic!("Multiple include_cpp! found in this rs file");
+        }
+        for include_cxx in autocxxes {
+            let ts = include_cxx.generate_rs();
+            write_to_file(&outdir, "gen.rs".to_string(), ts.to_string().as_bytes());
+        }
     }
 }
 
