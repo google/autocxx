@@ -126,12 +126,11 @@ fn main() {
                 counter += 1;
             }
         }
-    } else if matches.subcommand_matches("gen-rs").is_some() {
+    }
+    if matches.subcommand_matches("gen-rs").is_some() {
         let mut ts = TokenStream::new();
         parsed_file.to_tokens(&mut ts);
         write_to_file(&outdir, "gen.rs".to_string(), ts.to_string().as_bytes());
-    } else {
-        panic!("Must specify a subcommand");
     }
 }
 
