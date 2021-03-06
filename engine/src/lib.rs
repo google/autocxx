@@ -93,8 +93,6 @@ pub enum Error {
     Parsing(syn::Error),
     /// No `include_cpp!` macro could be found.
     NoAutoCxxInc,
-    /// The include directories specified were incorreect.
-    CouldNotCanoncalizeIncludeDir(PathBuf),
     /// Some error occcurred in converting the bindgen-style
     /// bindings to safe cxx bindings.
     Conversion(conversion::ConvertError),
@@ -112,7 +110,6 @@ impl Display for Error {
             Error::Bindgen(_) => write!(f, "Bindgen was unable to generate the initial .rs bindings for this file. This may indicate a parsing problem with the C++ headers.")?,
             Error::Parsing(err) => write!(f, "The Rust file could not be parsede: {}", err)?,
             Error::NoAutoCxxInc => write!(f, "No C++ include directory was provided.")?,
-            Error::CouldNotCanoncalizeIncludeDir(pb) => write!(f, "One of the C++ include directories provided ({}) did not appear to exist or could otherwise not be made into a canonical path.", pb.to_string_lossy())?,
             Error::Conversion(err) => write!(f, "autocxx could not generate the requested bindings. {}", err)?,
             Error::NoGenerationRequested => write!(f, "No 'generate' or 'generate_pod' directives were found, so we would not generate any Rust bindings despite the inclusion of C++ headers.")?,
         }
@@ -275,18 +272,6 @@ impl IncludeCppEngine {
         )
     }
 
-    fn canonize_inc_dirs(inc_dirs: &str) -> Result<Vec<PathBuf>> {
-        let inc_dirs = std::env::split_paths(&inc_dirs);
-        // On Windows, the canonical path begins with a UNC prefix that cannot be passed to
-        // the MSVC compiler, so dunce::canonicalize() is used instead of std::fs::canonicalize()
-        // See:
-        // * https://github.com/dtolnay/cxx/pull/41
-        // * https://github.com/alexcrichton/cc-rs/issues/169
-        inc_dirs
-            .map(|p| dunce::canonicalize(&p).map_err(|_| Error::CouldNotCanoncalizeIncludeDir(p)))
-            .collect()
-    }
-
     fn make_bindgen_builder(&self, inc_dirs: &[PathBuf]) -> bindgen::Builder {
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14", "-DBINDGEN"])
@@ -379,7 +364,7 @@ impl IncludeCppEngine {
         inc_dirs: &str,
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     ) -> Result<()> {
-        let inc_dirs = Self::canonize_inc_dirs(inc_dirs)?;
+        let inc_dirs = std::env::split_paths(&inc_dirs).collect::<Vec<_>>();
 
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect

@@ -37,7 +37,6 @@ lazy_static = "1.4"
 indoc = "1.0"
 autocxx-bindgen = "0.57.1"
 itertools = "0.9"
-dunce = "1.0.1"
 cc = { version = "1.0", optional = true }
 unzip-n = "0.1.2"
 cxx-gen = "0.7.29"
