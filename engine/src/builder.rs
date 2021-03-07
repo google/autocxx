@@ -134,7 +134,7 @@ where
 
     let mut parsed_file = crate::parse_file(rs_file).map_err(BuilderError::ParseError)?;
     parsed_file
-        .resolve_all(&autocxx_inc, dependency_recorder)
+        .resolve_all(autocxx_inc, dependency_recorder)
         .map_err(BuilderError::ParseError)?;
     build_with_existing_parsed_file(parsed_file, cxxdir, incdir, rsdir)
 }
@@ -180,21 +180,16 @@ fn ensure_created(dir: &Path) -> Result<(), BuilderError> {
         .map_err(|e| BuilderError::UnableToCreateDirectory(e, dir.to_path_buf()))
 }
 
-fn build_autocxx_inc<I, T>(paths: I, extra_path: &Path) -> String
+fn build_autocxx_inc<I, T>(paths: I, extra_path: &Path) -> Vec<PathBuf>
 where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
-    let mut all_paths: Vec<_> = paths
+    paths
         .into_iter()
         .map(|p| PathBuf::from(p.as_ref()))
-        .collect();
-    all_paths.push(extra_path.to_path_buf());
-    std::env::join_paths(all_paths)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string()
+        .chain(std::iter::once(extra_path.to_path_buf()))
+        .collect()
 }
 
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) -> Result<PathBuf, BuilderError> {

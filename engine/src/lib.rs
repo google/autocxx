@@ -288,10 +288,12 @@ impl IncludeCppEngine {
             builder = builder.blacklist_item(item);
         }
 
-        for inc_dir in inc_dirs {
-            // TODO work with OsStrs here to avoid the .display()
-            builder = builder.clang_arg(format!("-I{}", inc_dir.display()));
-        }
+        builder = builder.clang_args(inc_dirs.into_iter().map(|i| {
+            format!(
+                "-I{}",
+                i.to_str().expect("Non-UTF8 content in include path")
+            )
+        }));
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
@@ -361,11 +363,9 @@ impl IncludeCppEngine {
     /// See documentation for this type for flow diagrams and more details.
     pub fn generate(
         &mut self,
-        inc_dirs: &str,
+        inc_dirs: Vec<PathBuf>,
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     ) -> Result<()> {
-        let inc_dirs = std::env::split_paths(&inc_dirs).collect::<Vec<_>>();
-
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
         // valid C++ header files or linkers to allow a complete build.
