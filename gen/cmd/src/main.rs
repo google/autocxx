@@ -55,7 +55,10 @@ fn main() {
         )
         .arg(
             Arg::with_name("inc")
+                .short("I")
                 .long("inc")
+                .multiple(true)
+                .number_of_values(1)
                 .value_name("INCLUDE DIRS")
                 .help("include path")
                 .takes_value(true),
@@ -91,7 +94,11 @@ fn main() {
         .get_matches();
     let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap())
         .expect("Unable to parse Rust file and interpret autocxx macro");
-    let incs = matches.value_of("inc").unwrap_or("");
+    let incs = matches
+        .values_of("inc")
+        .unwrap_or_default()
+        .map(PathBuf::from)
+        .collect();
     // In future, we should provide an option to write a .d file here
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56

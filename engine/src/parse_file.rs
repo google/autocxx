@@ -15,7 +15,7 @@
 use crate::{Error as EngineError, IncludeCppEngine, RebuildDependencyRecorder};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use std::{fmt::Display, io::Read};
+use std::{fmt::Display, io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
 use syn::Item;
 
@@ -109,7 +109,7 @@ impl ParsedFile {
 
     pub fn resolve_all(
         &mut self,
-        autocxx_inc: &str,
+        autocxx_inc: Vec<PathBuf>,
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     ) -> Result<(), ParseError> {
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
@@ -123,7 +123,7 @@ impl ParsedFile {
                 ))),
             };
             include_cpp
-                .generate(autocxx_inc, dep_recorder)
+                .generate(autocxx_inc.clone(), dep_recorder)
                 .map_err(ParseError::MacroParseFail)?
         }
         Ok(())
