@@ -125,7 +125,8 @@ variable such that the macro can discover the location of the .rs file which was
 If you use the `build.rs` cargo integration, this happens automatically. You'll also need
 to ensure that you build and link against the C++ code. Again, if you use the Cargo integrationm
 and follow the pattern of the `demo` example, this is fairly automatic because we use
-`cc` for this.
+`cc` for this. (There's also the option of `AUTOCXX_RS_FILE` if your build system needs to
+specify the precise file name used for the `.rs` file which is `include!`ed).
 
 You'll also want to ensure that the code generation (both Rust and C++ code) happens whenever
 any included header file changes. This is now handled automatically by our

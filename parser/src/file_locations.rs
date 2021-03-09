@@ -23,8 +23,16 @@ use std::path::PathBuf;
 /// not available. We need to give provision for custom locations
 /// and we need our code generator build script to be able to pass
 /// locations through to the proc macro by env vars.
+///
+/// On the whole this class concerns itself with directory names
+/// and allows the actual file name to be determined elsewhere
+/// (based on a hash of the contents of `include_cpp!`.) But
+/// some types of build system need to know the precise file _name_
+/// produced by the codegen phase and passed into the macro phase,
+/// so we have a `AUTOCXX_RS_FILE` option for that.
 pub enum FileLocationStrategy {
     Custom(PathBuf),
+    FromAutocxxRsFile(PathBuf),
     FromAutocxxRs(PathBuf),
     FromOutDir(PathBuf),
     UnknownMaybeFromOutdir,
@@ -33,15 +41,19 @@ pub enum FileLocationStrategy {
 static BUILD_DIR_NAME: &str = "autocxx-build-dir";
 static RS_DIR_NAME: &str = "rs";
 static AUTOCXX_RS: &str = "AUTOCXX_RS";
+static AUTOCXX_RS_FILE: &str = "AUTOCXX_RS_FILE";
 
 impl FileLocationStrategy {
     pub fn new() -> Self {
-        match std::env::var_os(AUTOCXX_RS) {
-            None => match std::env::var_os("OUT_DIR") {
-                None => FileLocationStrategy::UnknownMaybeFromOutdir,
-                Some(od) => FileLocationStrategy::FromOutDir(PathBuf::from(od)),
+        match std::env::var_os(AUTOCXX_RS_FILE) {
+            Some(of) => FileLocationStrategy::FromAutocxxRsFile(PathBuf::from(of)),
+            None => match std::env::var_os(AUTOCXX_RS) {
+                None => match std::env::var_os("OUT_DIR") {
+                    None => FileLocationStrategy::UnknownMaybeFromOutdir,
+                    Some(od) => FileLocationStrategy::FromOutDir(PathBuf::from(od)),
+                },
+                Some(acrs) => FileLocationStrategy::FromAutocxxRs(PathBuf::from(acrs)),
             },
-            Some(acrs) => FileLocationStrategy::FromAutocxxRs(PathBuf::from(acrs)),
         }
     }
 
@@ -72,6 +84,14 @@ impl FileLocationStrategy {
                     include!(concat!(env!("OUT_DIR"), #fname));
                 }
             }
+            FileLocationStrategy::FromAutocxxRsFile(fname) => {
+                let fname = fname
+                    .to_str()
+                    .expect("AUTOCXX_RS_FILE environment variable contained non-UTF8 characters");
+                quote! {
+                    include!( #fname )
+                }
+            }
         }
     }
 
@@ -82,6 +102,9 @@ impl FileLocationStrategy {
             FileLocationStrategy::FromOutDir(out_dir) => out_dir.join(BUILD_DIR_NAME),
             FileLocationStrategy::UnknownMaybeFromOutdir => {
                 panic!("Could not determine OUT_DIR or AUTOCXX_RS dir")
+            }
+            FileLocationStrategy::FromAutocxxRsFile(_) => {
+                panic!("It's invalid to set AUTOCXX_RS_FILE during the codegen phase.")
             }
         };
         root.join(suffix)

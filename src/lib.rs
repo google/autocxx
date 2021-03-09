@@ -63,7 +63,10 @@ use autocxx_engine::IncludeCppEngine;
 ///   implementation files. This will also generate `.rs` side bindings.
 /// * Educate the procedural macro about where to find the generated `.rs` bindings. Set the
 ///   `AUTOCXX_RS` environment variable to a list of directories to search.
-///   If you use `autocxx-build`, this happens automatically.
+///   If you use `autocxx-build`, this happens automatically. (You can alternatively
+///   specify `AUTOCXX_RS_FILE` to give a precise filename as opposed to a directory to search,
+///   though this isn't recommended unless your build system specifically requires it
+///   because it allows only a single `include_cpp!` block per `.rs` file.)
 ///
 /// ```mermaid
 /// flowchart TB
