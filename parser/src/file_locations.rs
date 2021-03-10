@@ -89,7 +89,7 @@ impl FileLocationStrategy {
                     .to_str()
                     .expect("AUTOCXX_RS_FILE environment variable contained non-UTF8 characters");
                 quote! {
-                    include!( #fname )
+                    include!( #fname );
                 }
             }
         }
