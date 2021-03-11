@@ -3890,6 +3890,34 @@ fn test_simple_dependent_qualified_type() {
     run_test("", hdr, rs, &["make_char", "take_char"], &[]);
 }
 
+#[test]
+fn test_no_constructor_make_unique() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    struct A {
+        uint32_t a;
+    };
+    "};
+    let rs = quote! {
+        ffi::A::make_unique();
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_no_constructor_pod_make_unique() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    struct A {
+        uint32_t a;
+    };
+    "};
+    let rs = quote! {
+        ffi::A::make_unique();
+    };
+    run_test("", hdr, rs, &[], &["A"]);
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Pointers (including out params)
