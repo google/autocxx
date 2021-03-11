@@ -88,6 +88,9 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
         fun: FuncToConvert,
         analysis: T::FunAnalysis,
     },
+    /// A function which wasn't in the original bindgen which we
+    /// have invented.
+    SynthesizedFunction { analysis: T::FunAnalysis },
     /// A constant.
     Const { const_item: ItemConst },
     /// A typedef.

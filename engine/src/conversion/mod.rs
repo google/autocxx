@@ -118,6 +118,8 @@ impl<'a> BridgeConverter<'a> {
                     filter_apis_by_following_edges_from_allowlist(analyzed_apis, &self.type_config);
                 // Determine what variably-sized C types (e.g. int) we need to include
                 analysis::ctypes::append_ctype_information(&mut analyzed_apis);
+                // And any additional constructors.
+                analysis::constructor::add_missing_constructors(&mut analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
                 let cpp = CppCodeGenerator::generate_cpp_code(inclusions, &analyzed_apis)?;

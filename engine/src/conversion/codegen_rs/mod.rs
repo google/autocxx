@@ -317,6 +317,7 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             }
             ApiDetail::Function { fun: _, analysis } => gen_function(ns, analysis),
+            ApiDetail::SynthesizedFunction { analysis } => gen_function(ns, analysis),
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
                 impl_entry: None,
