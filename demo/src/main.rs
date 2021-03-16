@@ -16,10 +16,19 @@ use autocxx::include_cpp;
 
 include_cpp! {
     #include "input.h"
+    #include "ortools/base/commandlineflags.h"
+    #include "ortools/base/integral_types.h"
+    #include "ortools/base/logging.h"
+    #include "ortools/base/map_util.h"
+    #include "ortools/constraint_solver/constraint_solveri.h"
     safety!(unsafe_ffi)
     generate!("DoMath")
+    generate!("operations_research::Solver") // using example of nqueens.cpp
 }
+
+use ffi::ToCppString;
 
 fn main() {
     println!("Hello, world! - C++ math should say 12={}", ffi::DoMath(4));
+    let _ = ffi::operations_research::Solver::make_unique("hello".to_cpp());
 }

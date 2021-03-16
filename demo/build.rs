@@ -17,7 +17,14 @@ fn main() {
     // C++ codegen and the macro codegen appears to be run from different
     // working directories.
     let path = std::path::PathBuf::from("src").canonicalize().unwrap();
-    let mut b = autocxx_build::build("src/main.rs", &[&path]).unwrap();
+    let oopath = std::path::PathBuf::from("or-tools").canonicalize().unwrap();
+    let deppath = std::path::PathBuf::from("or-tools/dependencies/install/include")
+        .canonicalize()
+        .unwrap();
+    let genpath = std::path::PathBuf::from("or-tools/ortools/gen")
+        .canonicalize()
+        .unwrap();
+    let mut b = autocxx_build::build("src/main.rs", &[&path, &oopath, &deppath, &genpath]).unwrap();
     b.flag_if_supported("-std=c++14").compile("autocxx-demo");
 
     println!("cargo:rerun-if-changed=src/main.rs");
