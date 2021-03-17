@@ -3557,6 +3557,19 @@ fn test_typedef_to_ulong() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/259
+fn test_generate_typedef_to_ulong() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        typedef uint32_t fish_t;
+    "};
+    let rs = quote! {
+        let _: ffi::fish_t;
+    };
+    run_test("", hdr, rs, &[], &["fish_t"]);
+}
+
+#[test]
 fn test_ulong_method() {
     let hdr = indoc! {"
     class A {
