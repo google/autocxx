@@ -2986,6 +2986,36 @@ fn test_conflicting_usings() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/275
+fn test_conflicting_usings_with_self_declaration1() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <cstddef>
+        struct common_params {
+            using difference_type = ptrdiff_t;
+        };
+        template <typename Params>
+        class btree_node {
+            public:
+            using difference_type = typename Params::difference_type;
+            Params params;
+        };
+        template <typename Tree>
+        class btree_container {
+            public:
+            using difference_type = typename Tree::difference_type;
+            void clear() {}
+            Tree b;
+            uint32_t a;
+        };
+        typedef btree_container<btree_node<common_params>> my_tree;
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &["my_tree"], &[]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/106
 fn test_string_templated_typedef() {
     let hdr = indoc! {"
