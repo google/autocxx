@@ -285,7 +285,7 @@ impl IncludeCppEngine {
             .generate_inline_functions(true)
             .layout_tests(false); // TODO revisit later
         for item in known_types::get_initial_blocklist() {
-            builder = builder.blacklist_item(item);
+            builder = builder.blocklist_item(item);
         }
 
         builder = builder.clang_args(inc_dirs.into_iter().map(|i| {
@@ -300,9 +300,9 @@ impl IncludeCppEngine {
         for a in self.config.type_config.allowlist() {
             // TODO - allowlist type/functions/separately
             builder = builder
-                .whitelist_type(a)
-                .whitelist_function(a)
-                .whitelist_var(a);
+                .allowlist_type(a)
+                .allowlist_function(a)
+                .allowlist_var(a);
         }
 
         builder
