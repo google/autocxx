@@ -2965,6 +2965,27 @@ fn test_enum_typedef() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/264
+fn test_conflicting_usings() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <cstddef>
+        typedef size_t diff;
+        struct A {
+            using diff = diff;
+            diff a;
+        };
+        struct B {
+            using diff = diff;
+            diff a;
+        };
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &[], &["A", "B"]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/106
 fn test_string_templated_typedef() {
     let hdr = indoc! {"
