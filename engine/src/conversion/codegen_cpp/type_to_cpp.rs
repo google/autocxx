@@ -63,8 +63,8 @@ pub(crate) fn type_to_cpp(ty: &Type) -> Result<String, ConvertError> {
             get_mut_string(&typp.mutability),
             type_to_cpp(typp.elem.as_ref())?
         )),
-        Type::Array(_)
-        | Type::BareFn(_)
+        Type::Array(tyarr) => Ok(format!("{}*", type_to_cpp(tyarr.elem.as_ref())?)),
+        Type::BareFn(_)
         | Type::Group(_)
         | Type::ImplTrait(_)
         | Type::Infer(_)

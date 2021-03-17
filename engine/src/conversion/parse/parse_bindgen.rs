@@ -14,6 +14,7 @@
 
 use std::collections::HashSet;
 
+use crate::conversion::parse::type_converter::Annotated;
 use crate::{
     conversion::{
         api::{ApiDetail, ParseResults, TypeApiDetails, TypedefKind, UnanalyzedApi},
@@ -230,6 +231,13 @@ impl<'a> ParseBindgen<'a> {
                         Ok(())
                     }
                     Err(err) => Err(err),
+                    Ok(Annotated {
+                        ty: syn::Type::Path(ref typ),
+                        ..
+                    }) if TypeName::from_type_path(typ) == tyname => {
+                        log::info!("Found typedef TO ITSELF. Sigh.");
+                        Ok(())
+                    }
                     Ok(mut final_type) => {
                         ity.ty = Box::new(final_type.ty.clone());
                         self.results
@@ -248,7 +256,10 @@ impl<'a> ParseBindgen<'a> {
                     }
                 }
             }
-            _ => Err(ConvertError::UnexpectedItemInMod),
+            _ => {
+                log::info!("Unexpected item: {:?}", item);
+                Err(ConvertError::UnexpectedItemInMod)
+            }
         }
     }
 

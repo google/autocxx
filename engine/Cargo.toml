@@ -47,8 +47,8 @@ aquamarine = "0.1.5" # docs
 
 [dependencies.syn]
 version = "1.0.39"
-features = [ "full" ]
-#features = [ "full", "extra-traits" ]
+#features = [ "full" ]
+features = [ "full", "extra-traits" ]
 
 [dev-dependencies]
 tempfile = "3.1"
