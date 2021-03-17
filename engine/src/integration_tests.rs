@@ -2801,7 +2801,25 @@ fn test_string_constant() {
 }
 
 #[test]
-#[ignore]
+fn test_pod_constant_harmless_inside_type() {
+    // Check that the presence of this constant doesn't break anything.
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+        struct Anna {
+            uint32_t a;
+            const Bob BOB = Bob { 10 };
+        };
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &[], &["Anna"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/93
 fn test_pod_constant() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2809,6 +2827,44 @@ fn test_pod_constant() {
             uint32_t a;
         };
         const Bob BOB = Bob { 10 };
+    "};
+    let rs = quote! {
+        let a = &ffi::BOB;
+        assert_eq!(a.a, 10);
+    };
+    run_test("", hdr, rs, &["BOB"], &["Bob"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/262
+fn test_pod_static_harmless_inside_type() {
+    // Check that the presence of this constant doesn't break anything.
+    // Remove this test when the following one is enabled.
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+        struct Anna {
+            uint32_t a;
+            static Bob BOB;
+        };
+        Bob Anna::BOB = Bob { 10 };
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &[], &["Anna"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/93
+fn test_pod_static() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+        static Bob BOB = Bob { 10 };
     "};
     let rs = quote! {
         let a = &ffi::BOB;
