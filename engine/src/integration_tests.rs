@@ -2965,6 +2965,57 @@ fn test_enum_typedef() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/264
+fn test_conflicting_usings() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <cstddef>
+        typedef size_t diff;
+        struct A {
+            using diff = diff;
+            diff a;
+        };
+        struct B {
+            using diff = diff;
+            diff a;
+        };
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &[], &["A", "B"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/275
+fn test_conflicting_usings_with_self_declaration1() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <cstddef>
+        struct common_params {
+            using difference_type = ptrdiff_t;
+        };
+        template <typename Params>
+        class btree_node {
+            public:
+            using difference_type = typename Params::difference_type;
+            Params params;
+        };
+        template <typename Tree>
+        class btree_container {
+            public:
+            using difference_type = typename Tree::difference_type;
+            void clear() {}
+            Tree b;
+            uint32_t a;
+        };
+        typedef btree_container<btree_node<common_params>> my_tree;
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &["my_tree"], &[]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/106
 fn test_string_templated_typedef() {
     let hdr = indoc! {"
@@ -3503,6 +3554,19 @@ fn test_typedef_to_ulong() {
         assert_eq!(ffi::daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
     };
     run_test("", hdr, rs, &["daft"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/259
+fn test_generate_typedef_to_ulong() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        typedef uint32_t fish_t;
+    "};
+    let rs = quote! {
+        let _: ffi::fish_t;
+    };
+    run_test("", hdr, rs, &[], &["fish_t"]);
 }
 
 #[test]
