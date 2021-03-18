@@ -180,6 +180,26 @@ RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test  integration_tests::tes
 This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
 in `engine/src/conversion`. See [https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCpp.html] for documentation and diagrams on how the engine works.
 
+# Reporting bugs
+
+If you've found a problem, and you're reading this, *thank you*! Your diligence
+in reporting the bug is much appreciated and will make `autocxx` better. In
+order of preference here's how we would like to hear about your problem:
+
+* Raise a pull request adding a new failing integration test to
+  `engine/src/integration_tests.rs`.
+* Minimize the test using `tools/reduce`, something like this:
+  `target/debug/autocxx-reduce -d "safety!(unsafe_ffi)" -d
+  'generate_pod!("A")' -I ~/my-include-dir -h my-header.h -p
+  problem-error-message`
+  This is a wrapper for the amazing `creduce` which will take thousands of lines
+  of C++, preprocess it, and then identify the minimum required lines to
+  reproduce the same problem.
+* Use the C++ preprocessor to give a single complete C++ file which demonstrates
+  the problem, along with the `include_cpp!` directive you use.
+* Failing all else, run with `RUST_LOG=info` and send the _entire_ log to us.
+  This will include a ton of bindgen output.
+
 # Credits
 
 David Tolnay did much of the hard work here, by inventing the underlying cxx crate, and in fact nearly all of the parsing infrastructure on which this crate depends. `bindgen` is also awesome. This crate stands on the shoulders of giants!
