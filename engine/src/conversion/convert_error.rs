@@ -33,6 +33,7 @@ pub enum ConvertError {
     UnsupportedType(String),
     UnknownType(String),
     OpaqueTypeFound,
+    StaticData(String),
 }
 
 impl Display for ConvertError {
@@ -52,7 +53,8 @@ impl Display for ConvertError {
             ConvertError::NotOneInputReference(fn_name) => write!(f, "Function {} has a return reference parameter, but 0 or >1 input reference parameters, so the lifetime of the output reference cannot be deduced.", fn_name)?,
             ConvertError::UnsupportedType(ty_desc) => write!(f, "Encountered type not yet supported by autocxx: {}", ty_desc)?,
             ConvertError::UnknownType(ty_desc) => write!(f, "Encountered type not yet known by autocxx: {}", ty_desc)?,
-            ConvertError::OpaqueTypeFound => write!(f, "Bindgen generated an opaque type (an empty array) somewhere other than a typedef")?
+            ConvertError::OpaqueTypeFound => write!(f, "Bindgen generated an opaque type (an empty array) somewhere other than a typedef")?,
+            ConvertError::StaticData(ty_desc) => write!(f, "Encountered mutable static data, not yet supported: {}", ty_desc)?,
         }
         Ok(())
     }
@@ -73,6 +75,7 @@ impl ConvertError {
                 | ConvertError::UnacceptableParam(..)
                 | ConvertError::NotOneInputReference(..)
                 | ConvertError::UnsupportedType(..)
+                | ConvertError::StaticData(..)
         )
     }
 }

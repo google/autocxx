@@ -55,18 +55,35 @@ impl ParseForeignMod {
         virtual_this_type: Option<TypeName>,
     ) -> Result<(), ConvertError> {
         for i in foreign_mod_items {
-            match i {
-                ForeignItem::Fn(item) => {
-                    self.funcs_to_convert.push(FuncToConvert {
-                        item,
-                        virtual_this_type: virtual_this_type.clone(),
-                        self_ty: None,
-                    });
+            let r = self.parse_foreign_item(i, &virtual_this_type);
+            match r {
+                Err(err) if err.is_ignorable() => {
+                    eprintln!("Ignored item discovered whilst parsing: {}", err)
                 }
-                _ => return Err(ConvertError::UnexpectedForeignItem),
+                Err(_) => r.unwrap(),
+                Ok(_) => {}
             }
         }
         Ok(())
+    }
+
+    fn parse_foreign_item(
+        &mut self,
+        i: ForeignItem,
+        virtual_this_type: &Option<TypeName>,
+    ) -> Result<(), ConvertError> {
+        match i {
+            ForeignItem::Fn(item) => {
+                self.funcs_to_convert.push(FuncToConvert {
+                    item,
+                    virtual_this_type: virtual_this_type.clone(),
+                    self_ty: None,
+                });
+                Ok(())
+            }
+            ForeignItem::Static(item) => Err(ConvertError::StaticData(item.ident.to_string())),
+            _ => Err(ConvertError::UnexpectedForeignItem),
+        }
     }
 
     /// Record information from impl blocks encountered in bindgen

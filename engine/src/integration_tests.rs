@@ -2836,7 +2836,6 @@ fn test_pod_constant() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/262
 fn test_pod_static_harmless_inside_type() {
     // Check that the presence of this constant doesn't break anything.
     // Remove this test when the following one is enabled.
