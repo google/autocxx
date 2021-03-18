@@ -34,7 +34,7 @@ cxx = "1.0.29" # ... also needed because expansion of type_id refers to ::cxx
 aquamarine = "0.1.5" # docs
 
 [workspace]
-members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo"]
+members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce"]
 
 #[patch.crates-io]
 #cxx = { path="../cxx" }
