@@ -2813,8 +2813,7 @@ fn test_pod_constant_harmless_inside_type() {
             const Bob BOB = Bob { 10 };
         };
     "};
-    let rs = quote! {
-    };
+    let rs = quote! {};
     run_test("", hdr, rs, &[], &["Anna"]);
 }
 
@@ -2851,8 +2850,7 @@ fn test_pod_static_harmless_inside_type() {
         };
         Bob Anna::BOB = Bob { 10 };
     "};
-    let rs = quote! {
-    };
+    let rs = quote! {};
     run_test("", hdr, rs, &[], &["Anna"]);
 }
 
