@@ -4026,6 +4026,24 @@ fn test_simple_dependent_qualified_type() {
     run_test("", hdr, rs, &["make_char", "take_char"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/266
+fn test_take_array() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    uint32_t take_array(const uint32_t a[4]) {
+        return a[0] + a[2];
+    }
+    "};
+    let rs = quote! {
+        let c: [u32; 4usize] = [ 10, 20, 30, 40 ];
+        let c = c as *const [_];
+        assert_eq!(ffi::take_array(&c), 40);
+    };
+    run_test("", hdr, rs, &["take_array"], &[]);
+}
+
+
 // Yet to test:
 // 6. Ifdef
 // 7. Pointers (including out params)
