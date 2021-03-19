@@ -14,6 +14,7 @@
 
 use std::collections::HashSet;
 
+use crate::conversion::parse::type_converter::Annotated;
 use crate::{
     conversion::{
         api::{ApiDetail, ParseResults, TypeApiDetails, TypedefKind, UnanalyzedApi},
@@ -186,6 +187,9 @@ impl<'a> ParseBindgen<'a> {
                                 #(#segs)::* :: #id
                             };
                             let other_tyname = TypeName::from_type_path(&newpath);
+                            if tyname == other_tyname {
+                                return Err(ConvertError::InfinitelyRecursiveTypedef(tyname));
+                            }
                             self.results
                                 .type_converter
                                 .insert_typedef(tyname, Type::Path(newpath.clone()));
@@ -230,6 +234,12 @@ impl<'a> ParseBindgen<'a> {
                         Ok(())
                     }
                     Err(err) => Err(err),
+                    Ok(Annotated {
+                        ty: syn::Type::Path(ref typ),
+                        ..
+                    }) if TypeName::from_type_path(typ) == tyname => {
+                        Err(ConvertError::InfinitelyRecursiveTypedef(tyname))
+                    }
                     Ok(mut final_type) => {
                         ity.ty = Box::new(final_type.ty.clone());
                         self.results
