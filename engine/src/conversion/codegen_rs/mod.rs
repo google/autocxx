@@ -37,7 +37,9 @@ use self::{
 
 use super::{
     analysis::fun::FnAnalysis,
-    api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, Use},
+    api::{
+        Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, TypedefKind, Use,
+    },
 };
 use quote::quote;
 
@@ -324,12 +326,15 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_c_mod_item: None,
                 bindgen_mod_item: None,
             },
-            ApiDetail::Typedef { type_item } => RsCodegenResult {
-                global_items: Vec::new(),
-                impl_entry: None,
-                bridge_items: Vec::new(),
+            ApiDetail::Typedef { payload } => RsCodegenResult {
                 extern_c_mod_item: None,
-                bindgen_mod_item: Some(Item::Type(type_item)),
+                bridge_items: Vec::new(),
+                global_items: Vec::new(),
+                bindgen_mod_item: Some(match payload {
+                    TypedefKind::Type(type_item) => Item::Type(type_item),
+                    TypedefKind::Use(use_item) => Item::Use(use_item),
+                }),
+                impl_entry: None,
             },
             ApiDetail::Type {
                 ty_details,
