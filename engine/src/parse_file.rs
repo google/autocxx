@@ -58,6 +58,7 @@ pub fn parse_file<P1: AsRef<Path>>(rs_file: P1) -> Result<ParsedFile, ParseError
     let mut file = std::fs::File::open(rs_file).map_err(ParseError::FileOpen)?;
     file.read_to_string(&mut source)
         .map_err(ParseError::FileRead)?;
+    proc_macro2::fallback::force();
     let source = syn::parse_file(&source).map_err(ParseError::Syntax)?;
     parse_file_contents(source)
 }
