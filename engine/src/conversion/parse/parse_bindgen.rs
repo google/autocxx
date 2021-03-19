@@ -235,8 +235,7 @@ impl<'a> ParseBindgen<'a> {
                         ty: syn::Type::Path(ref typ),
                         ..
                     }) if TypeName::from_type_path(typ) == tyname => {
-                        log::info!("Found typedef TO ITSELF. Sigh.");
-                        Ok(())
+                        Err(ConvertError::InfinitelyRecursiveTypedef)
                     }
                     Ok(mut final_type) => {
                         ity.ty = Box::new(final_type.ty.clone());
