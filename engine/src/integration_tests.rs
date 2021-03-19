@@ -2944,24 +2944,7 @@ fn test_struct_templated_typedef() {
 }
 
 #[test]
-fn test_enum_typedef_harmless() {
-    let hdr = indoc! {"
-        enum ConstraintSolverParameters_TrailCompression : int {
-            ConstraintSolverParameters_TrailCompression_NO_COMPRESSION = 0,
-            ConstraintSolverParameters_TrailCompression_COMPRESS_WITH_ZLIB = 1,
-            ConstraintSolverParameters_TrailCompression_ConstraintSolverParameters_TrailCompression_INT_MIN_SENTINEL_DO_NOT_USE_ = -2147483648,
-            ConstraintSolverParameters_TrailCompression_ConstraintSolverParameters_TrailCompression_INT_MAX_SENTINEL_DO_NOT_USE_ = 2147483647
-        };
-        typedef ConstraintSolverParameters_TrailCompression TrailCompression;
-    "};
-    let rs = quote! {};
-    run_test("", hdr, rs, &[], &[]);
-}
-
-#[test]
-#[ignore] // https://github.com/google/autocxx/issues/259
-fn test_enum_typedef_works() {
-    // Remove the previous test when enabling
+fn test_enum_typedef() {
     let hdr = indoc! {"
         enum ConstraintSolverParameters_TrailCompression : int {
             ConstraintSolverParameters_TrailCompression_NO_COMPRESSION = 0,
