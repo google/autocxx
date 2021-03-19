@@ -288,7 +288,7 @@ impl IncludeCppEngine {
             builder = builder.blocklist_item(item);
         }
 
-        builder = builder.clang_args(inc_dirs.into_iter().map(|i| {
+        builder = builder.clang_args(inc_dirs.iter().map(|i| {
             format!(
                 "-I{}",
                 i.to_str().expect("Non-UTF8 content in include path")

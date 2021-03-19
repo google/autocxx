@@ -131,9 +131,9 @@ impl Parse for IncludeCppConfig {
         Ok(IncludeCppConfig {
             inclusions,
             exclude_utilities,
+            unsafe_policy,
             type_config,
             parse_only,
-            unsafe_policy,
         })
     }
 }

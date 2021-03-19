@@ -237,10 +237,7 @@ fn create_rs_file(rs_path: &Path, directives: &[String]) -> Result<(), std::io::
     Ok(())
 }
 
-fn create_concatenated_header(
-    headers: &[&str],
-    listing_path: &PathBuf,
-) -> Result<(), std::io::Error> {
+fn create_concatenated_header(headers: &[&str], listing_path: &Path) -> Result<(), std::io::Error> {
     announce_progress("Creating preprocessed header");
     let mut file = File::create(listing_path)?;
     for header in headers {

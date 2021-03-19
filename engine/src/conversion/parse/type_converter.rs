@@ -363,8 +363,8 @@ impl TypeConverter {
             detail: crate::conversion::api::ApiDetail::ConcreteType {
                 ty_details: TypeApiDetails {
                     fulltypath,
-                    tynamestring,
                     final_ident,
+                    tynamestring,
                 },
                 additional_cpp: AdditionalNeed::ConcreteTemplatedTypeTypedef(
                     tyname.clone(),
