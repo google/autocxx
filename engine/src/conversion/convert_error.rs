@@ -34,6 +34,7 @@ pub enum ConvertError {
     UnknownType(String),
     OpaqueTypeFound,
     StaticData(String),
+    InfinitelyRecursiveTypedef(TypeName),
 }
 
 impl Display for ConvertError {
@@ -55,6 +56,7 @@ impl Display for ConvertError {
             ConvertError::UnknownType(ty_desc) => write!(f, "Encountered type not yet known by autocxx: {}", ty_desc)?,
             ConvertError::OpaqueTypeFound => write!(f, "Bindgen generated an opaque type (an empty array) somewhere other than a typedef")?,
             ConvertError::StaticData(ty_desc) => write!(f, "Encountered mutable static data, not yet supported: {}", ty_desc)?,
+            ConvertError::InfinitelyRecursiveTypedef(tn) => write!(f, "Encountered typedef to itself - this is a known bindgen bug: {}", tn.to_cpp_name())?,
         }
         Ok(())
     }
@@ -76,6 +78,7 @@ impl ConvertError {
                 | ConvertError::NotOneInputReference(..)
                 | ConvertError::UnsupportedType(..)
                 | ConvertError::StaticData(..)
+                | ConvertError::InfinitelyRecursiveTypedef(..)
         )
     }
 }
