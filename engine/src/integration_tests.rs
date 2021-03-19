@@ -2981,7 +2981,6 @@ fn test_conflicting_usings() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/275
 fn test_conflicting_usings_with_self_declaration1() {
     let hdr = indoc! {"
         #include <cstdint>

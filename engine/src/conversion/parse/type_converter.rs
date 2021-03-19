@@ -176,7 +176,7 @@ impl TypeConverter {
         mut typ: TypePath,
         ns: &Namespace,
     ) -> Result<Annotated<Type>, ConvertError> {
-        let mut types_encountered = HashSet::new();
+        // First, qualify any unqualified paths.
         if typ.path.segments.iter().next().unwrap().ident != "root" {
             let ty = TypeName::from_type_path(&typ);
             // If the type looks like it is unqualified, check we know it
@@ -201,43 +201,18 @@ impl TypeConverter {
             }
         }
 
-        typ.path.segments = typ
-            .path
-            .segments
-            .into_iter()
-            .map(|s| -> Result<PathSegment, ConvertError> {
-                let ident = &s.ident;
-                let args = match s.arguments {
-                    PathArguments::AngleBracketed(mut ab) => {
-                        let mut innerty = self.convert_punctuated(ab.args, ns)?;
-                        ab.args = innerty.ty;
-                        types_encountered.extend(innerty.types_encountered.drain());
-                        PathArguments::AngleBracketed(ab)
-                    }
-                    _ => s.arguments,
-                };
-                Ok(parse_quote!( #ident #args ))
-            })
-            .collect::<Result<_, _>>()?;
+        let original_tn = TypeName::from_type_path(&typ);
+        let mut deps = HashSet::new();
 
-        let mut last_seg_args = Self::get_last_segment_args(&typ);
-
-        let mut tn = TypeName::from_type_path(&typ);
-        types_encountered.insert(tn.clone());
-        // Let's see if this is a typedef.
-        let typ = match self.resolve_typedef(&tn) {
-            None => typ,
+        // Now convert this type itself.
+        deps.insert(original_tn.clone());
+        // First let's see if this is a typedef.
+        let (typ, tn) = match self.resolve_typedef(&original_tn) {
+            None => (typ, original_tn),
             Some(Type::Path(resolved_tp)) => {
-                types_encountered.insert(TypeName::from_type_path(&resolved_tp));
-                let typedef_target_args = Self::get_last_segment_args(&resolved_tp);
-                if let Some(typedef_target_args) = typedef_target_args {
-                    if last_seg_args.is_some() {
-                        return Err(ConvertError::ConflictingTemplatedArgsWithTypedef(tn));
-                    }
-                    last_seg_args = Some(typedef_target_args);
-                    tn = TypeName::from_type_path(&resolved_tp);
-                }
-                resolved_tp.clone()
+                let resolved_tn = TypeName::from_type_path(&resolved_tp);
+                deps.insert(resolved_tn.clone());
+                (resolved_tp.clone(), resolved_tn)
             }
             Some(other) => {
                 return Ok(Annotated::new(
@@ -249,45 +224,64 @@ impl TypeConverter {
             }
         };
 
-        // This will strip off any path arguments...
-        let mut typ = KNOWN_TYPES.known_type_substitute_path(&typ).unwrap_or(typ);
+        // Now let's see if it's a known type.
+        let mut typ = match KNOWN_TYPES.known_type_substitute_path(&typ) {
+            Some(mut substitute_type) => {
+                if let Some(last_seg_args) =
+                    typ.path.segments.into_iter().last().map(|ps| ps.arguments)
+                {
+                    let last_seg = substitute_type.path.segments.last_mut().unwrap();
+                    last_seg.arguments = last_seg_args;
+                }
+                substitute_type
+            }
+            None => typ,
+        };
+
         let mut extra_apis = Vec::new();
-        // but then we'll put them back again as necessary.
-        if let Some(last_seg_args) = last_seg_args {
-            let last_seg = typ.path.segments.last_mut().unwrap();
-            last_seg.arguments = last_seg_args;
-            // Is it one of the things built into cxx?
-            if !KNOWN_TYPES.is_cxx_acceptable_generic(&tn) {
+
+        // Finally let's see if it's generic.
+        if Self::is_generic(&typ) {
+            if KNOWN_TYPES.is_cxx_acceptable_generic(&tn) {
+                // this is a type of generic understood by cxx (e.g. CxxVector)
+                // so let's convert any generic type arguments. This recurses.
+                typ.path.segments = typ
+                    .path
+                    .segments
+                    .into_iter()
+                    .map(|s| -> Result<PathSegment, ConvertError> {
+                        let ident = &s.ident;
+                        let args = match s.arguments {
+                            PathArguments::AngleBracketed(mut ab) => {
+                                let mut innerty = self.convert_punctuated(ab.args, ns)?;
+                                ab.args = innerty.ty;
+                                deps.extend(innerty.types_encountered.drain());
+                                PathArguments::AngleBracketed(ab)
+                            }
+                            _ => s.arguments,
+                        };
+                        Ok(parse_quote!( #ident #args ))
+                    })
+                    .collect::<Result<_, _>>()?;
+            } else {
                 // Oh poop. It's a generic type which cxx won't be able to handle.
                 // We'll have to come up with a concrete type in both the cxx::bridge (in Rust)
                 // and a corresponding typedef in C++.
                 let (new_tn, api) = self.get_templated_typename(&Type::Path(typ))?;
-                typ = new_tn.to_type_path();
                 extra_apis.extend(api.into_iter());
-                types_encountered.remove(&tn);
-                types_encountered.insert(new_tn);
+                deps.remove(&tn);
+                typ = new_tn.to_type_path();
+                deps.insert(new_tn);
             }
-        }
-        Ok(Annotated::new(
-            Type::Path(typ),
-            types_encountered,
-            extra_apis,
-            false,
-        ))
+        };
+        Ok(Annotated::new(Type::Path(typ), deps, extra_apis, false))
     }
 
-    fn get_last_segment_args(typ: &TypePath) -> Option<PathArguments> {
-        let mut seg_iter = typ.path.segments.iter().peekable();
-        while let Some(seg) = seg_iter.next() {
-            if !seg.arguments.is_empty() {
-                if seg_iter.peek().is_some() {
-                    panic!("Did not expect bindgen to create a type with path arguments on a non-final segment")
-                } else {
-                    return Some(seg.arguments.clone());
-                }
-            }
+    fn is_generic(typ: &TypePath) -> bool {
+        match typ.path.segments.last() {
+            None => false,
+            Some(s) => !s.arguments.is_empty(),
         }
-        None
     }
 
     fn convert_punctuated<P>(
