@@ -2954,8 +2954,7 @@ fn test_enum_typedef_harmless() {
         };
         typedef ConstraintSolverParameters_TrailCompression TrailCompression;
     "};
-    let rs = quote! {
-    };
+    let rs = quote! {};
     run_test("", hdr, rs, &[], &[]);
 }
 
@@ -3569,7 +3568,6 @@ fn test_typedef_to_ulong() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/259
 fn test_generate_typedef_to_ulong() {
     let hdr = indoc! {"
         #include <cstdint>

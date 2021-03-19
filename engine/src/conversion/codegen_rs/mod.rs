@@ -181,6 +181,9 @@ impl<'a> RsCodeGenerator<'a> {
                 Use::Used => output_items.push(Item::Use(parse_quote!(
                     pub use cxxbridge :: #id;
                 ))),
+                Use::UsedFromBindgen => {
+                    output_items.push(Self::generate_bindgen_use_stmt(&item.ns, id))
+                }
                 Use::Unused => {}
             };
         }
@@ -371,6 +374,15 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: None,
             },
         }
+    }
+
+    fn generate_bindgen_use_stmt(ns: &Namespace, id: &Ident) -> Item {
+        let prefix = ["bindgen", "root"].iter().map(make_ident);
+        let ns = ns.iter().map(make_ident);
+        let segs = prefix.chain(ns).chain(std::iter::once(id.clone()));
+        Item::Use(parse_quote! {
+            pub use #(#segs)::*;
+        })
     }
 
     fn generate_extern_type_impl(type_kind: TypeKind, ty_details: &TypeApiDetails) -> Vec<Item> {
