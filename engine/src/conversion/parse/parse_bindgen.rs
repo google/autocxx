@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{ApiDetail, ParseResults, TypeApiDetails, UnanalyzedApi},
+        api::{ApiDetail, ParseResults, TypeApiDetails, TypedefKind, UnanalyzedApi},
         ConvertError,
     },
     types::make_ident,
@@ -26,7 +26,7 @@ use crate::{
 use autocxx_parser::TypeConfig;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Fields, Ident, Item, UseTree};
+use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
 
 use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
 
@@ -158,11 +158,49 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Use(use_item) => {
-                if *Self::get_last_use_ident(&use_item.tree) != "root" {
-                    panic!("Unexpected 'use' path in bindgen output")
+                let mut segs = Vec::new();
+                let mut tree = &use_item.tree;
+                loop {
+                    match tree {
+                        UseTree::Path(up) => {
+                            segs.push(up.ident.clone());
+                            tree = &up.tree;
+                        }
+                        UseTree::Name(un) if un.ident == "root" => break, // we do not add this to any API since we generate equivalent
+                        // use statements in our codegen phase.
+                        UseTree::Rename(urn) => {
+                            let id = &urn.ident;
+                            let tyname = TypeName::new(ns, &id.to_string());
+                            let other_id = &urn.rename;
+                            if segs.remove(0) != "self" {
+                                panic!("Path didn't start with self");
+                            }
+                            if segs.remove(0) != "super" {
+                                panic!("Path didn't start with self::super");
+                            }
+                            let newpath: TypePath = parse_quote! {
+                                #(#segs)::* :: #other_id
+                            };
+                            let other_tyname = TypeName::from_type_path(&newpath);
+                            self.results
+                                .type_converter
+                                .insert_typedef(tyname, Type::Path(newpath));
+                            let mut deps = HashSet::new();
+                            deps.insert(other_tyname);
+                            self.results.apis.push(UnanalyzedApi {
+                                id: id.clone(),
+                                ns: ns.clone(),
+                                deps,
+                                detail: ApiDetail::Typedef {
+                                    payload: TypedefKind::Use(use_item),
+                                },
+                            });
+                            break;
+                        }
+                        _ => panic!("Unexpected 'use' syntax encountered"),
+                    }
                 }
-                Ok(()) // we do not add this to any API since we generate equivalent
-                       // use statements in our codegen phase.
+                Ok(())
             }
             Item::Const(const_item) => {
                 // The following puts this constant into
@@ -196,7 +234,9 @@ impl<'a> ParseBindgen<'a> {
                             id: ity.ident.clone(),
                             ns: ns.clone(),
                             deps: final_type.types_encountered,
-                            detail: ApiDetail::Typedef { type_item: ity },
+                            detail: ApiDetail::Typedef {
+                                payload: TypedefKind::Type(ity),
+                            },
                         });
                         Ok(())
                     }
@@ -219,14 +259,6 @@ impl<'a> ParseBindgen<'a> {
             deps: HashSet::new(),
             detail: ApiDetail::OpaqueTypedef,
         });
-    }
-
-    fn get_last_use_ident(p: &UseTree) -> &Ident {
-        match p {
-            UseTree::Name(n) => &n.ident,
-            UseTree::Path(p) => Self::get_last_use_ident(&p.tree),
-            _ => panic!("Unexpected type of 'use' statement found in bindgen bindings"),
-        }
     }
 
     /// Record the Api for a type, e.g. enum or struct.

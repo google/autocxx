@@ -226,7 +226,7 @@ impl<'a> FnAnalyzer<'a> {
                 }
             }
             ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
-            ApiDetail::Typedef { type_item } => ApiDetail::Typedef { type_item },
+            ApiDetail::Typedef { payload } => ApiDetail::Typedef { payload },
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
             // Just changes to this one...
             ApiDetail::Type {

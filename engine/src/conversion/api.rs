@@ -15,7 +15,7 @@
 use crate::types::{Namespace, TypeName};
 use proc_macro2::TokenStream;
 use std::collections::HashSet;
-use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType};
+use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse};
 
 use super::{codegen_cpp::AdditionalNeed, parse::type_converter::TypeConverter};
 
@@ -72,6 +72,11 @@ impl ApiAnalysis for NullAnalysis {
     type FunAnalysis = ();
 }
 
+pub(crate) enum TypedefKind {
+    Type(ItemType),
+    Use(ItemUse),
+}
+
 /// Different types of API we might encounter.
 pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A synthetic type we've manufactured in order to
@@ -90,8 +95,9 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     },
     /// A constant.
     Const { const_item: ItemConst },
-    /// A typedef.
-    Typedef { type_item: ItemType },
+    /// A typedef found in the bindgen output which we wish
+    /// to pass on in our output
+    Typedef { payload: TypedefKind },
     /// A type (struct or enum) encountered in the
     /// `bindgen` output.
     Type {
