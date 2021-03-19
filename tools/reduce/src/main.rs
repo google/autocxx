@@ -82,6 +82,15 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("creduce")
+                .long("creduce")
+                .required(true)
+                .value_name("PATH")
+                .help("creduce binary location")
+                .default_value("/usr/bin/creduce")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("output")
                 .short("o")
                 .long("output")
@@ -141,6 +150,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         &rs_path,
     )?;
     run_creduce(
+        matches.value_of("creduce").unwrap(),
         &interestingness_test,
         &concat_path,
         matches.values_of("creduce-args").unwrap_or_default(),
@@ -167,12 +177,13 @@ fn print_minimized_case(concat_path: &Path) -> Result<(), std::io::Error> {
 }
 
 fn run_creduce<'a>(
+    creduce_cmd: &str,
     interestingness_test: &Path,
     concat_path: &Path,
     creduce_args: impl Iterator<Item = &'a str>,
 ) -> Result<(), std::io::Error> {
     announce_progress("creduce");
-    Command::new("/usr/bin/creduce")
+    Command::new(creduce_cmd)
         .arg(interestingness_test.to_str().unwrap())
         .arg(concat_path.to_str().unwrap())
         .args(creduce_args)
