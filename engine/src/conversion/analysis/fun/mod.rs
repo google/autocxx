@@ -807,6 +807,7 @@ impl Api<FnAnalysis> {
                 analysis: _,
             } => Use::Used,
             ApiDetail::Function { fun: _, analysis } => analysis.use_stmt.clone(),
+            ApiDetail::Typedef { .. } => Use::UsedFromBindgen,
             _ => Use::Unused,
         }
     }
