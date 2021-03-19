@@ -178,21 +178,27 @@ impl<'a> ParseBindgen<'a> {
                             if segs.remove(0) != "super" {
                                 panic!("Path didn't start with self::super");
                             }
+                            // This is similar to the path encountered within 'tree'
+                            // but without the self::super prefix which is unhelpful
+                            // in our output mod, because we prefer relative paths
+                            // (we're nested in another mod)
                             let newpath: TypePath = parse_quote! {
-                                #(#segs)::* :: #other_id
+                                #(#segs)::* :: #id
                             };
                             let other_tyname = TypeName::from_type_path(&newpath);
                             self.results
                                 .type_converter
-                                .insert_typedef(tyname, Type::Path(newpath));
+                                .insert_typedef(tyname, Type::Path(newpath.clone()));
                             let mut deps = HashSet::new();
                             deps.insert(other_tyname);
                             self.results.apis.push(UnanalyzedApi {
-                                id: id.clone(),
+                                id: other_id.clone(),
                                 ns: ns.clone(),
                                 deps,
                                 detail: ApiDetail::Typedef {
-                                    payload: TypedefKind::Use(use_item),
+                                    payload: TypedefKind::Use(parse_quote! {
+                                        pub use #newpath as #other_id;
+                                    }),
                                 },
                             });
                             break;
