@@ -170,9 +170,9 @@ impl<'a> ParseBindgen<'a> {
                         UseTree::Name(un) if un.ident == "root" => break, // we do not add this to any API since we generate equivalent
                         // use statements in our codegen phase.
                         UseTree::Rename(urn) => {
-                            let id = &urn.ident;
-                            let tyname = TypeName::new(ns, &id.to_string());
-                            let other_id = &urn.rename;
+                            let old_id = &urn.ident;
+                            let new_id = &urn.rename;
+                            let new_tyname = TypeName::new(ns, &new_id.to_string());
                             if segs.remove(0) != "self" {
                                 panic!("Path didn't start with self");
                             }
@@ -183,25 +183,25 @@ impl<'a> ParseBindgen<'a> {
                             // but without the self::super prefix which is unhelpful
                             // in our output mod, because we prefer relative paths
                             // (we're nested in another mod)
-                            let newpath: TypePath = parse_quote! {
-                                #(#segs)::* :: #id
+                            let old_path: TypePath = parse_quote! {
+                                #(#segs)::* :: #old_id
                             };
-                            let other_tyname = TypeName::from_type_path(&newpath);
-                            if tyname == other_tyname {
-                                return Err(ConvertError::InfinitelyRecursiveTypedef(tyname));
+                            let old_tyname = TypeName::from_type_path(&old_path);
+                            if new_tyname == old_tyname {
+                                return Err(ConvertError::InfinitelyRecursiveTypedef(new_tyname));
                             }
                             self.results
                                 .type_converter
-                                .insert_typedef(tyname, Type::Path(newpath.clone()));
+                                .insert_typedef(new_tyname, Type::Path(old_path.clone()));
                             let mut deps = HashSet::new();
-                            deps.insert(other_tyname);
+                            deps.insert(old_tyname);
                             self.results.apis.push(UnanalyzedApi {
-                                id: other_id.clone(),
+                                id: new_id.clone(),
                                 ns: ns.clone(),
                                 deps,
                                 detail: ApiDetail::Typedef {
                                     payload: TypedefKind::Use(parse_quote! {
-                                        pub use #newpath as #other_id;
+                                        pub use #old_path as #new_id;
                                     }),
                                 },
                             });
