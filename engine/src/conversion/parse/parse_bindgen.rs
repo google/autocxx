@@ -44,6 +44,14 @@ pub(crate) struct ParseBindgen<'a> {
     latest_virtual_this_type: Option<TypeName>,
 }
 
+struct ConvertErrorWithIdent(ConvertError, Option<Ident>);
+
+impl std::fmt::Debug for ConvertErrorWithIdent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 impl<'a> ParseBindgen<'a> {
     pub(crate) fn new(type_config: &'a TypeConfig) -> Self {
         ParseBindgen {
@@ -99,8 +107,18 @@ impl<'a> ParseBindgen<'a> {
         for item in items {
             let r = self.parse_item(item, &mut mod_converter, &ns);
             match r {
-                Err(err) if err.is_ignorable() => {
-                    eprintln!("Ignored item discovered whilst parsing: {}", err)
+                Err(err) if err.0.is_ignorable() => {
+                    eprintln!("Ignored item discovered whilst parsing: {}", err.0);
+                    // Mark that we ignored an item such that dependent things
+                    // also can be ignored.
+                    if let Some(id) = err.1 {
+                        self.results.apis.push(UnanalyzedApi {
+                            ns: ns.clone(),
+                            id,
+                            deps: HashSet::new(),
+                            detail: ApiDetail::IgnoredItem,
+                        })
+                    }
                 }
                 Err(_) => r.unwrap(),
                 Ok(_) => {}
@@ -114,10 +132,13 @@ impl<'a> ParseBindgen<'a> {
         item: Item,
         mod_converter: &mut ParseForeignMod,
         ns: &Namespace,
-    ) -> Result<(), ConvertError> {
+    ) -> Result<(), ConvertErrorWithIdent> {
         match item {
-            Item::ForeignMod(fm) => mod_converter
-                .convert_foreign_mod_items(fm.items, self.latest_virtual_this_type.clone()),
+            Item::ForeignMod(fm) => {
+                mod_converter
+                    .convert_foreign_mod_items(fm.items, self.latest_virtual_this_type.clone());
+                Ok(())
+            }
             Item::Struct(s) => {
                 if s.ident.to_string().ends_with("__bindgen_vtable") {
                     return Ok(());
@@ -188,7 +209,10 @@ impl<'a> ParseBindgen<'a> {
                             };
                             let old_tyname = TypeName::from_type_path(&old_path);
                             if new_tyname == old_tyname {
-                                return Err(ConvertError::InfinitelyRecursiveTypedef(new_tyname));
+                                return Err(ConvertErrorWithIdent(
+                                    ConvertError::InfinitelyRecursiveTypedef(new_tyname),
+                                    Some(new_id.clone()),
+                                ));
                             }
                             self.results
                                 .type_converter
@@ -233,13 +257,14 @@ impl<'a> ParseBindgen<'a> {
                         self.add_opaque_type(ity.ident, ns.clone());
                         Ok(())
                     }
-                    Err(err) => Err(err),
+                    Err(err) => Err(ConvertErrorWithIdent(err, Some(ity.ident))),
                     Ok(Annotated {
                         ty: syn::Type::Path(ref typ),
                         ..
-                    }) if TypeName::from_type_path(typ) == tyname => {
-                        Err(ConvertError::InfinitelyRecursiveTypedef(tyname))
-                    }
+                    }) if TypeName::from_type_path(typ) == tyname => Err(ConvertErrorWithIdent(
+                        ConvertError::InfinitelyRecursiveTypedef(tyname),
+                        Some(ity.ident),
+                    )),
                     Ok(mut final_type) => {
                         ity.ty = Box::new(final_type.ty.clone());
                         self.results
@@ -258,7 +283,10 @@ impl<'a> ParseBindgen<'a> {
                     }
                 }
             }
-            _ => Err(ConvertError::UnexpectedItemInMod),
+            _ => Err(ConvertErrorWithIdent(
+                ConvertError::UnexpectedItemInMod,
+                None,
+            )),
         }
     }
 

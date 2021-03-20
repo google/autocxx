@@ -53,7 +53,7 @@ impl ParseForeignMod {
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
         virtual_this_type: Option<TypeName>,
-    ) -> Result<(), ConvertError> {
+    ) {
         for i in foreign_mod_items {
             let r = self.parse_foreign_item(i, &virtual_this_type);
             match r {
@@ -64,7 +64,6 @@ impl ParseForeignMod {
                 Ok(_) => {}
             }
         }
-        Ok(())
     }
 
     fn parse_foreign_item(

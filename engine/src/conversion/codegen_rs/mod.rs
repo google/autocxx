@@ -373,6 +373,16 @@ impl<'a> RsCodeGenerator<'a> {
                 })),
                 bindgen_mod_item: None,
             },
+            ApiDetail::IgnoredItem => RsCodegenResult {
+                // In future it would be terrific to output something
+                // here which results in autocomplete in IDEs revealing
+                // the reason why this was ignored.
+                global_items: Vec::new(),
+                impl_entry: None,
+                bridge_items: Vec::new(),
+                extern_c_mod_item: None,
+                bindgen_mod_item: None,
+            },
         }
     }
 
