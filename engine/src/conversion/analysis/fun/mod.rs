@@ -243,6 +243,7 @@ impl<'a> FnAnalyzer<'a> {
                 analysis,
             },
             ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
+            ApiDetail::IgnoredItem => ApiDetail::IgnoredItem,
         };
         Ok(Some(Api {
             ns: api.ns,

@@ -118,6 +118,11 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// type, but instead to something which `bindgen` couldn't figure out
     /// and has therefore itself made opaque and mysterious.
     OpaqueTypedef,
+    /// Some item which couldn't be processed by autocxx for some reason.
+    /// We will have emitted a warning message about this, but we want
+    /// to mark that it's ignored so that we don't attempt to process
+    /// dependent items.
+    IgnoredItem,
 }
 
 /// Any API we encounter in the input bindgen rs which we might want to pass
