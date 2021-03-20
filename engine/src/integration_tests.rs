@@ -4037,6 +4037,92 @@ fn test_take_array() {
     run_test("", hdr, rs, &["take_array"], &[]);
 }
 
+#[test]
+fn test_issue_264() {
+    let hdr = indoc! {"
+    namespace a {
+        typedef int b;
+        inline namespace c {}
+        template <typename> class aa;
+        namespace c {
+        template <typename d, typename = d, typename = aa<d>> class e;
+        }
+        typedef e<char> f;
+        template <typename g, typename, template <typename> typename> struct h {
+          using i = g;
+        };
+        template <typename g, template <typename> class k> using j = h<g, void, k>;
+        template <typename g, template <typename> class k>
+        using m = typename j<g, k>::i;
+        template <typename> struct l { typedef b ab; };
+        template <typename p> class aa {
+        public:
+          typedef p n;
+        };
+        struct r {
+          template <typename p> using o = typename p::c;
+        };
+        template <typename ad> struct u : r {
+          typedef typename ad::n n;
+          using ae = m<n, o>;
+          template <typename af, typename> struct v { using i = typename l<f>::ab; };
+          using ab = typename v<ad, ae>::i;
+        };
+        } // namespace a
+        namespace q {
+        template <typename ad> struct w : a::u<ad> {};
+        } // namespace q
+        namespace a {
+        namespace c {
+        template <typename, typename, typename ad> class e {
+          typedef q::w<ad> s;
+        public:
+          typedef typename s::ab ab;
+        };
+        } // namespace c
+        } // namespace a
+        namespace ag {
+        namespace ah {
+        typedef a::f::ab t;
+        class ai {
+          t aj;
+        };
+        class al;
+        namespace am {
+        class an {
+        public:
+          void ao(ai);
+        };
+        } // namespace am
+        class ap {
+        public:
+          al aq();
+        };
+        class ar {
+          am::an as;
+        };
+        class al {
+          ar at;
+        };
+        struct au {
+          ap av;
+        };
+        } // namespace ah
+        } // namespace ag
+        namespace operations_research {
+        class aw {
+          ag::ah::au ax;
+        };
+        class Solver {
+          aw ay;
+        };
+        } // namespace operations_research
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Pointers (including out params)
