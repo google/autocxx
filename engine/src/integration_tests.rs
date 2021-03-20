@@ -707,6 +707,35 @@ fn test_return_pod_by_ref_and_ptr() {
 }
 
 #[test]
+#[cfg(feature = "pointers")]
+#[ignore] // https://github.com/google/autocxx/issues/291
+  // https://github.com/google/autocxx/issues/268
+fn test_vec_of_ptrs_ignored() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <vector>
+        struct A {
+            uint32_t a;
+        };
+        inline uint32_t take_vec_ptr(std::vector<A*> params) {
+            return params.size();
+        }
+        inline std::vector<A*> get_some() {
+            std::vector<A*> l;
+            return l;
+        }
+    "};
+    // Enable when/if cxx supports pointers in vectors.
+    // Meanwhile these APIs should be ignored and this test should pass.
+    // https://github.com/google/autocxx/issues/268
+    let rs = quote! {
+        // let a = ffi::get_some();
+        // assert_eq!(ffi::take_vec_ptr(a), 0);
+    };
+    run_test("", hdr, rs, &["take_vec_ptr", "get_some"], &[]);
+}
+
+#[test]
 fn test_take_pod_by_mut_ref() {
     let cxx = indoc! {"
         uint32_t take_bob(Bob& a) {
