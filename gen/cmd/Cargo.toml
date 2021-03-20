@@ -14,7 +14,7 @@
 
 [package]
 name = "autocxx-gen"
-version = "0.5.1"
+version = "0.5.2"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -24,7 +24,7 @@ keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
 
 [dependencies]
-autocxx-engine = { version="0.5.1", path="../../engine" }
+autocxx-engine = { version="0.5.2", path="../../engine" }
 clap = "~2.33"
 indoc = "1.0"
 quote = "1.0.7"
