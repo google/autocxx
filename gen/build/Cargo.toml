@@ -14,7 +14,7 @@
 
 [package]
 name = "autocxx-build"
-version = "0.5.1"
+version = "0.5.2"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -27,7 +27,7 @@ categories = ["development-tools::ffi", "api-bindings"]
 pointers = [ "autocxx-engine/pointers" ]
 
 [dependencies]
-autocxx-engine = { version="0.5.1", path="../../engine", features = ["build"] }
+autocxx-engine = { version="0.5.2", path="../../engine", features = ["build"] }
 env_logger = "0.8.2"
 
 [dependencies.syn]
