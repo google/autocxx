@@ -34,7 +34,7 @@ aquamarine = "0.1" # docs
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce"]
 exclude = ["examples/s2"]
 
-#[patch.crates-io]
-#cxx = { path="../cxx" }
-#cxx-gen = { path="../cxx/gen/lib" }
+[patch.crates-io]
+cxx = { path="../cxx" }
+cxx-gen = { path="../cxx/gen/lib" }
 #autocxx-bindgen = { path="../bindgen" }

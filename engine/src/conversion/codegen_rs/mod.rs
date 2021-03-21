@@ -131,7 +131,7 @@ impl<'a> RsCodeGenerator<'a> {
         include_list: &'a [String],
         bindgen_mod: ItemMod,
         config: &'a IncludeCppConfig,
-    ) -> Vec<Item> {
+    ) -> (Vec<Item>, TokenStream) {
         let c = Self {
             include_list,
             bindgen_mod,
@@ -141,7 +141,7 @@ impl<'a> RsCodeGenerator<'a> {
         c.rs_codegen(all_apis)
     }
 
-    fn rs_codegen(mut self, all_apis: Vec<Api<FnAnalysis>>) -> Vec<Item> {
+    fn rs_codegen(mut self, all_apis: Vec<Api<FnAnalysis>>) -> (Vec<Item>, TokenStream) {
         // ... and now let's start to generate the output code.
         // First let's see if we plan to generate the string construction utilities, as this will affect
         // what 'use' statements we need here and there.
@@ -202,19 +202,16 @@ impl<'a> RsCodeGenerator<'a> {
             })];
             all_items.push(Item::Mod(self.bindgen_mod));
         }
-        all_items.push(Item::Mod(parse_quote! {
+        let cxxbridge_mod = quote! {
             #[cxx::bridge]
             mod cxxbridge {
                 #(#bridge_items)*
             }
-        }));
-
-        all_items.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use bindgen::root;
-        }));
+        };
+        let cxxbridge_mod_converted = cxx_gen::generate_rs(cxxbridge_mod.clone()).unwrap();
+        all_items.push(Item::Mod(syn::parse2(cxxbridge_mod_converted).unwrap()));
         all_items.append(&mut use_statements);
-        all_items
+        (all_items, cxxbridge_mod)
     }
 
     fn make_foreign_mod_unsafe(ifm: ItemForeignMod) -> Item {

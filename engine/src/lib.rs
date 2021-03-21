@@ -126,6 +126,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 struct GenerationResults {
     item_mod: ItemMod,
     cpp: Option<CppFilePair>,
+    bridge_mod: TokenStream2,
     inc_dirs: Vec<PathBuf>,
 }
 enum State {
@@ -390,6 +391,7 @@ impl IncludeCppEngine {
             .convert(bindings, self.config.unsafe_policy.clone(), header_contents)
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;
+        let bridge_mod = conversion.bridge_mod;
         let mut new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]
             #[allow(dead_code)]
@@ -407,6 +409,7 @@ impl IncludeCppEngine {
             item_mod: new_bindings,
             cpp: conversion.cpp,
             inc_dirs,
+            bridge_mod,
         }));
         Ok(())
     }
@@ -493,7 +496,7 @@ impl CppBuildable for IncludeCppEngine {
             State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
             State::NotGenerated => panic!("Call generate() first"),
             State::Generated(gen_results) => {
-                let rs = gen_results.item_mod.to_token_stream();
+                let rs = gen_results.bridge_mod.clone();
                 files.push(do_cxx_cpp_generation(rs)?);
                 if let Some(cpp_file_pair) = &gen_results.cpp {
                     files.push(cpp_file_pair.clone());
