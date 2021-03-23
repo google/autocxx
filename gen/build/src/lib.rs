@@ -23,7 +23,11 @@ use std::{ffi::OsStr, path::Path};
 /// more from a build.rs file.
 /// You need to provide the Rust file path and the iterator of paths
 /// which should be used as include directories.
-pub fn build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> Result<BuilderBuild, BuilderError>
+pub fn build<P1, I, T>(
+    rs_file: P1,
+    autocxx_incs: I,
+    definitions: &[impl AsRef<str>],
+) -> Result<BuilderBuild, BuilderError>
 where
     P1: AsRef<Path>,
     I: IntoIterator<Item = T>,
@@ -33,6 +37,7 @@ where
     engine_build(
         rs_file,
         autocxx_incs,
+        definitions,
         Some(Box::new(CargoRebuildDependencyRecorder)),
     )
     .map(|r| r.0)
@@ -40,7 +45,11 @@ where
 
 /// Builds successfully, or exits the process displaying a suitable
 /// message.
-pub fn expect_build<P1, I, T>(rs_file: P1, autocxx_incs: I) -> BuilderBuild
+pub fn expect_build<P1, I, T>(
+    rs_file: P1,
+    autocxx_incs: I,
+    definitions: &[impl AsRef<str>],
+) -> BuilderBuild
 where
     P1: AsRef<Path>,
     I: IntoIterator<Item = T>,
@@ -50,6 +59,7 @@ where
     engine_expect_build(
         rs_file,
         autocxx_incs,
+        definitions,
         Some(Box::new(CargoRebuildDependencyRecorder)),
     )
     .0

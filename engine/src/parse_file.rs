@@ -116,6 +116,7 @@ impl ParsedFile {
     pub fn resolve_all(
         &mut self,
         autocxx_inc: Vec<PathBuf>,
+        definitions: &[impl AsRef<str>],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     ) -> Result<(), ParseError> {
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
@@ -128,8 +129,9 @@ impl ParsedFile {
                     inner_dep_recorder.clone(),
                 ))),
             };
+            let defs: Vec<String> = definitions.iter().map(|d| d.as_ref().to_string()).collect();
             include_cpp
-                .generate(autocxx_inc.clone(), dep_recorder)
+                .generate(autocxx_inc.clone(), &defs, dep_recorder)
                 .map_err(ParseError::AutocxxCodegenError)?
         }
         Ok(())
