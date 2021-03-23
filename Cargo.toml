@@ -30,7 +30,7 @@ pointers = [ "autocxx-engine/pointers" ]
 autocxx-macro = { path="macro", version="0.5.2" }
 autocxx-engine = { path="engine", version="0.5.2" } # so that
   # we can refer to autocxx_engine::cxx. But even that isn't sufficient...
-cxx = "1.0.29" # ... also needed because expansion of type_id refers to ::cxx
+cxx = "1.0.34" # ... also needed because expansion of type_id refers to ::cxx
 aquamarine = "0.1.5" # docs
 
 [workspace]
