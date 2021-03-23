@@ -653,7 +653,6 @@ fn test_take_pod_by_ref() {
 }
 
 #[test]
-#[cfg(feature = "pointers")]
 fn test_take_pod_by_ref_and_ptr() {
     let cxx = indoc! {"
         uint32_t take_bob_ref(const Bob& a) {
@@ -680,7 +679,6 @@ fn test_take_pod_by_ref_and_ptr() {
 }
 
 #[test]
-#[cfg(feature = "pointers")]
 fn test_return_pod_by_ref_and_ptr() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -812,7 +810,6 @@ fn test_take_nonpod_by_ref() {
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
-#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr_simple() {
     let cxx = indoc! {"
@@ -843,7 +840,6 @@ fn test_take_nonpod_by_ptr_simple() {
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
-#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr_in_method() {
     let hdr = indoc! {"
@@ -878,7 +874,6 @@ fn test_take_nonpod_by_ptr_in_method() {
     run_test("", hdr, rs, &["A", "Bob"], &[]);
 }
 
-#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr_in_wrapped_method() {
     let hdr = indoc! {"
@@ -917,7 +912,6 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
     run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
 }
 
-#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_char_by_ptr_in_wrapped_method() {
     let hdr = indoc! {"
@@ -4125,7 +4119,7 @@ fn test_issue_264() {
 
 // Yet to test:
 // 6. Ifdef
-// 7. Pointers (including out params)
+// 7. Out param pointers
 // 10. ExcludeUtilities
 // Stuff which requires much more thought:
 // 1. Shared pointers
