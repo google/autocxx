@@ -4117,6 +4117,45 @@ fn test_issue_264() {
     run_test("", hdr, rs, &["operations_research::Solver"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/268
+fn test_vector_of_pointers() {
+    let hdr = indoc! {"
+        namespace std {
+        template <typename> class vector;
+        }
+        namespace operations_research {
+        class a;
+        class Solver {
+        public:
+          struct b c(std::vector<a *>);
+        };
+        class a {};
+        } // namespace operations_research
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/268
+fn test_pointer_to_pointer() {
+    let hdr = indoc! {"
+        namespace operations_research {
+        class a;
+        class Solver {
+        public:
+          struct b c(a **);
+        };
+        class a {};
+        } // namespace operations_research
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Out param pointers
