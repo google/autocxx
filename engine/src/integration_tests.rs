@@ -688,10 +688,10 @@ fn test_return_pod_by_ref_and_ptr() {
         struct A {
             B b;
         };
-        const B& return_b_ref(const A& a) {
+        inline const B& return_b_ref(const A& a) {
             return a.b;
         }
-        const B* return_b_ptr(const A& a) {
+        inline const B* return_b_ptr(const A& a) {
             return &a.b;
         }
     "};
