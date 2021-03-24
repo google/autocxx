@@ -4173,7 +4173,7 @@ fn test_defines_effective() {
     let hdr = indoc! {"
         #include <cstdint>
         #ifdef FOO
-        uint32_t a() { return 4; }
+        inline uint32_t a() { return 4; }
         #endif
     "};
     let rs = quote! {
