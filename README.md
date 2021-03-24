@@ -191,7 +191,7 @@ order of preference here's how we would like to hear about your problem:
 * Minimize the test using `tools/reduce`, something like this:
   `target/debug/autocxx-reduce -d "safety!(unsafe_ffi)" -d
   'generate_pod!("A")' -I ~/my-include-dir -h my-header.h -p
-  problem-error-message`
+  problem-error-message -- --remove-pass pass_line_markers`
   This is a wrapper for the amazing `creduce` which will take thousands of lines
   of C++, preprocess it, and then identify the minimum required lines to
   reproduce the same problem.

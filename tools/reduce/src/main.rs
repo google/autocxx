@@ -32,7 +32,8 @@ Command line utility to minimize autocxx bug cases.
 
 This is a wrapper for creduce.
 
-Sometimes we hit https://github.com/csmith-project/creduce/issues/195
+Example command-line:
+autocxx-reduce -I my-inc-dir -h my-header -d 'generate!(\"MyClass\")' -k -- --n 64 --remove-pass pass_line_markers
 "};
 
 fn main() {
