@@ -14,6 +14,8 @@
 
 use std::fmt::Display;
 
+use syn::Ident;
+
 use crate::types::{Namespace, TypeName};
 
 #[derive(Debug, Clone)]
@@ -35,6 +37,14 @@ pub enum ConvertError {
     OpaqueTypeFound,
     StaticData(String),
     InfinitelyRecursiveTypedef(TypeName),
+    UnexpectedUseStatement(Option<Ident>),
+}
+
+fn format_maybe_identifier(id: &Option<Ident>) -> String {
+    match id {
+        Some(id) => id.to_string(),
+        None => "<unknown>".into(),
+    }
 }
 
 impl Display for ConvertError {
@@ -57,6 +67,7 @@ impl Display for ConvertError {
             ConvertError::OpaqueTypeFound => write!(f, "Bindgen generated an opaque type (an empty array) somewhere other than a typedef")?,
             ConvertError::StaticData(ty_desc) => write!(f, "Encountered mutable static data, not yet supported: {}", ty_desc)?,
             ConvertError::InfinitelyRecursiveTypedef(tn) => write!(f, "Encountered typedef to itself - this is a known bindgen bug: {}", tn.to_cpp_name())?,
+            ConvertError::UnexpectedUseStatement(maybe_ident) => write!(f, "Unexpected 'use' statement encountered: {}", format_maybe_identifier(maybe_ident))?,
         }
         Ok(())
     }
@@ -79,6 +90,7 @@ impl ConvertError {
                 | ConvertError::UnsupportedType(..)
                 | ConvertError::StaticData(..)
                 | ConvertError::InfinitelyRecursiveTypedef(..)
+                | ConvertError::UnexpectedUseStatement(..)
         )
     }
 }

@@ -231,7 +231,12 @@ impl<'a> ParseBindgen<'a> {
                             });
                             break;
                         }
-                        _ => panic!("Unexpected 'use' syntax encountered"),
+                        _ => {
+                            return Err(ConvertErrorWithIdent(
+                                ConvertError::UnexpectedUseStatement(segs.into_iter().last()),
+                                None,
+                            ))
+                        }
                     }
                 }
                 Ok(())
