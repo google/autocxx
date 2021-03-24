@@ -4118,6 +4118,30 @@ fn test_issue_264() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/305
+fn test_get_pure_virtual() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        class A {
+        public:
+            virtual uint32_t get_val() const = 0;
+        };
+        class B : public A {
+        public:
+            virtual uint32_t get_val() const { return 3; }
+        };
+        const B b;
+        inline const A* get_a() { return &b; };
+    "};
+    let rs = quote! {
+        let a = ffi::get_a();
+        let a_ref = unsafe { a.as_ref() }.unwrap();
+        assert_eq!(a_ref.get_val(), 3);
+    };
+    run_test("", hdr, rs, &["get_a"], &[]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/268
 fn test_vector_of_pointers() {
     let hdr = indoc! {"
