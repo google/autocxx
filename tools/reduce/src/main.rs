@@ -219,7 +219,7 @@ fn create_interestingness_test(
         #!/bin/sh
 
         DIR=$(pwd)
-        {} -o $DIR -I $DIR {} --gen-rs-complete --gen-cpp  2>&1 | grep \"{}\"  >/dev/null 2>&1
+        {} -o $DIR -I $DIR {} --gen-rs-complete 2>&1 | grep \"{}\"  >/dev/null 2>&1
     "},
         gen.to_str().unwrap(),
         rs_file.to_str().unwrap(),
