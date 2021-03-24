@@ -52,6 +52,16 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("define")
+                .short("D")
+                .long("define")
+                .multiple(true)
+                .number_of_values(1)
+                .value_name("DEFINE")
+                .help("macro definition")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("header")
                 .short("h")
                 .long("header")
@@ -128,11 +138,12 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         .unwrap_or_default()
         .map(PathBuf::from)
         .collect();
+    let defs: Vec<_> = matches.values_of("define").unwrap_or_default().collect();
     let headers: Vec<_> = matches.values_of("header").unwrap_or_default().collect();
     let listing_path = tmp_dir.path().join("listing.h");
     create_concatenated_header(&headers, &listing_path)?;
     let concat_path = tmp_dir.path().join("concat.h");
-    preprocess(&listing_path, &concat_path, &incs)?;
+    preprocess(&listing_path, &concat_path, &incs, &defs)?;
     let rs_path = tmp_dir.path().join("input.rs");
     let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
         .chain(
@@ -250,12 +261,16 @@ fn preprocess(
     listing_path: &Path,
     preprocess_path: &Path,
     incs: &[PathBuf],
+    defs: &[&str],
 ) -> Result<(), std::io::Error> {
     announce_progress("Preprocessing");
     let mut cmd = Command::new("clang++");
     cmd.arg("-E");
     for inc in incs {
         cmd.arg(format!("-I{}", inc.to_str().unwrap()));
+    }
+    for def in defs {
+        cmd.arg(format!("-D{}", def));
     }
     cmd.arg(listing_path.to_str().unwrap());
     let output = cmd.output().expect("failed to preprocess").stdout;
