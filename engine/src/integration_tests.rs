@@ -4132,6 +4132,33 @@ fn test_issue_264() {
 }
 
 #[test]
+fn test_unexpected_use() {
+    // https://github.com/google/autocxx/issues/303
+    let hdr = indoc! {"
+        typedef int a;
+        namespace b {
+        namespace c {
+        enum d : a;
+        }
+        } // namespace b
+        namespace {
+        using d = b::c::d;
+        }
+        namespace content {
+        class RenderFrameHost {
+        public:
+            RenderFrameHost() {}
+        d e;
+        };
+        } // namespace content
+        "};
+    let rs = quote! {
+        let _ = ffi::content::RenderFrameHost::make_unique();
+    };
+    run_test("", hdr, rs, &["content::RenderFrameHost"], &[]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/305
 fn test_get_pure_virtual() {
     let hdr = indoc! {"
