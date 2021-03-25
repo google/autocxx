@@ -24,8 +24,7 @@ use crate::{
 };
 use std::collections::{HashMap, HashSet};
 use syn::{
-    parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
-    TypePath, TypePtr,
+    parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, Type, TypePath, TypePtr,
 };
 
 /// Results of some type conversion, annotated with a list of every type encountered,
@@ -242,24 +241,12 @@ impl TypeConverter {
             if KNOWN_TYPES.is_cxx_acceptable_generic(&tn) {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
-                typ.path.segments = typ
-                    .path
-                    .segments
-                    .into_iter()
-                    .map(|s| -> Result<PathSegment, ConvertError> {
-                        let ident = &s.ident;
-                        let args = match s.arguments {
-                            PathArguments::AngleBracketed(mut ab) => {
-                                let mut innerty = self.convert_punctuated(ab.args, ns)?;
-                                ab.args = innerty.ty;
-                                deps.extend(innerty.types_encountered.drain());
-                                PathArguments::AngleBracketed(ab)
-                            }
-                            _ => s.arguments,
-                        };
-                        Ok(parse_quote!( #ident #args ))
-                    })
-                    .collect::<Result<_, _>>()?;
+                let s = typ.path.segments.last_mut().unwrap();
+                if let PathArguments::AngleBracketed(ref mut ab) = s.arguments {
+                    let mut innerty = self.convert_punctuated(ab.args.clone(), ns)?;
+                    ab.args = innerty.ty;
+                    deps.extend(innerty.types_encountered.drain());
+                }
             } else {
                 // Oh poop. It's a generic type which cxx won't be able to handle.
                 // We'll have to come up with a concrete type in both the cxx::bridge (in Rust)
