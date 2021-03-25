@@ -24,7 +24,8 @@ use crate::{
 };
 use std::collections::{HashMap, HashSet};
 use syn::{
-    parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, Type, TypePath, TypePtr,
+    parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
+    TypePath, TypePtr,
 };
 
 /// Results of some type conversion, annotated with a list of every type encountered,
@@ -237,12 +238,11 @@ impl TypeConverter {
         let mut extra_apis = Vec::new();
 
         // Finally let's see if it's generic.
-        if Self::is_generic(&typ) {
+        if let Some(last_seg) = Self::get_generic_args(&mut typ) {
             if KNOWN_TYPES.is_cxx_acceptable_generic(&tn) {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
-                let s = typ.path.segments.last_mut().unwrap();
-                if let PathArguments::AngleBracketed(ref mut ab) = s.arguments {
+                if let PathArguments::AngleBracketed(ref mut ab) = last_seg.arguments {
                     let mut innerty = self.convert_punctuated(ab.args.clone(), ns)?;
                     ab.args = innerty.ty;
                     deps.extend(innerty.types_encountered.drain());
@@ -257,14 +257,14 @@ impl TypeConverter {
                 typ = new_tn.to_type_path();
                 deps.insert(new_tn);
             }
-        };
+        }
         Ok(Annotated::new(Type::Path(typ), deps, extra_apis, false))
     }
 
-    fn is_generic(typ: &TypePath) -> bool {
-        match typ.path.segments.last() {
-            None => false,
-            Some(s) => !s.arguments.is_empty(),
+    fn get_generic_args(typ: &mut TypePath) -> Option<&mut PathSegment> {
+        match typ.path.segments.last_mut() {
+            Some(s) if !s.arguments.is_empty() => Some(s),
+            _ => None,
         }
     }
 
