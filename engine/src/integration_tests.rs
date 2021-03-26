@@ -4184,6 +4184,7 @@ fn test_get_pure_virtual() {
 
 #[test]
 fn test_vector_of_pointers() {
+    // Just ensures the troublesome API is ignored
     let hdr = indoc! {"
         #include <vector>
         namespace operations_research {
@@ -4201,6 +4202,7 @@ fn test_vector_of_pointers() {
 
 #[test]
 fn test_pointer_to_pointer() {
+    // Just ensures the troublesome API is ignored
     let hdr = indoc! {"
         namespace operations_research {
         class a;

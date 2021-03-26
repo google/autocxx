@@ -39,6 +39,7 @@ pub enum ConvertError {
     InfinitelyRecursiveTypedef(TypeName),
     UnexpectedUseStatement(Option<Ident>),
     TemplatedTypeContainingNonPathArg(TypeName),
+    InvalidPointee,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -70,6 +71,7 @@ impl Display for ConvertError {
             ConvertError::InfinitelyRecursiveTypedef(tn) => write!(f, "Encountered typedef to itself - this is a known bindgen bug: {}", tn.to_cpp_name())?,
             ConvertError::UnexpectedUseStatement(maybe_ident) => write!(f, "Unexpected 'use' statement encountered: {}", format_maybe_identifier(maybe_ident))?,
             ConvertError::TemplatedTypeContainingNonPathArg(tn) => write!(f, "Type {} was parameterized over something complex which we don't yet support", tn)?,
+            ConvertError::InvalidPointee => write!(f, "Pointer pointed to something unsupported")?,
         }
         Ok(())
     }
@@ -94,6 +96,7 @@ impl ConvertError {
                 | ConvertError::InfinitelyRecursiveTypedef(..)
                 | ConvertError::UnexpectedUseStatement(..)
                 | ConvertError::TemplatedTypeContainingNonPathArg(..)
+                | ConvertError::InvalidPointee
         )
     }
 }

@@ -19,7 +19,7 @@ use crate::{
 use indoc::indoc;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
-use syn::{parse_quote, GenericArgument, PathArguments, Type, TypePath};
+use syn::{parse_quote, GenericArgument, PathArguments, Type, TypePath, TypePtr};
 
 /// Whether this type should be included in the 'prelude'
 /// passed to bindgen, and if so, how.
@@ -456,5 +456,12 @@ pub(crate) fn confirm_inner_type_is_acceptable_generic_payload(
             }
             Ok(())
         }
+    }
+}
+
+pub(crate) fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertError> {
+    match *ptr.elem {
+        Type::Path(..) => Ok(()),
+        _ => Err(ConvertError::InvalidPointee),
     }
 }

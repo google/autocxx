@@ -154,6 +154,7 @@ impl TypeConverter {
                 self.convert_ptr_to_reference(ptr, ns)?
             }
             Type::Ptr(mut ptr) => {
+                crate::known_types::ensure_pointee_is_valid(&ptr)?;
                 let innerty = self.convert_boxed_type(ptr.elem, ns, false)?;
                 ptr.elem = innerty.ty;
                 Annotated::new(
