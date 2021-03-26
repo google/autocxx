@@ -4183,12 +4183,9 @@ fn test_get_pure_virtual() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/268
 fn test_vector_of_pointers() {
     let hdr = indoc! {"
-        namespace std {
-        template <typename> class vector;
-        }
+        #include <vector>
         namespace operations_research {
         class a;
         class Solver {
@@ -4203,7 +4200,6 @@ fn test_vector_of_pointers() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/268
 fn test_pointer_to_pointer() {
     let hdr = indoc! {"
         namespace operations_research {

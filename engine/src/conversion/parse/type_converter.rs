@@ -242,6 +242,10 @@ impl TypeConverter {
             if KNOWN_TYPES.is_cxx_acceptable_generic(&tn) {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
+                crate::known_types::confirm_inner_type_is_acceptable_generic_payload(
+                    &last_seg.arguments,
+                    &tn,
+                )?;
                 if let PathArguments::AngleBracketed(ref mut ab) = last_seg.arguments {
                     let mut innerty = self.convert_punctuated(ab.args.clone(), ns)?;
                     ab.args = innerty.ty;
