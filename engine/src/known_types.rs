@@ -55,6 +55,7 @@ struct TypeDetails {
 }
 
 impl TypeDetails {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         rs_name: String,
         cpp_name: String,
@@ -152,9 +153,7 @@ impl TypeDatabase {
 
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
-    pub(crate) fn get_pod_safe_types<'a>(
-        &'a self,
-    ) -> impl Iterator<Item = (&'a TypeName, bool)> + 'a {
+    pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (&TypeName, bool)> {
         self.by_rs_name
             .iter()
             .map(|(tn, td)| (tn, td.by_value_safe))
