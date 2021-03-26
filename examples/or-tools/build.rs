@@ -13,18 +13,16 @@
 // limitations under the License.
 
 fn main() {
-include_cpp! {
-    #include "ortools/base/commandlineflags.h"
-    #include "ortools/base/integral_types.h"
-    #include "ortools/base/logging.h"
-    #include "ortools/base/map_util.h"
-    #include "ortools/constraint_solver/constraint_solveri.h"
-    safety!(unsafe_ffi)
-    generate!("operations_research::Solver") // using example of nqueens.cpp
-}
+    let oopath = std::path::PathBuf::from("or-tools").canonicalize().unwrap();
+    let deppath = std::path::PathBuf::from("or-tools/dependencies/install/include")
+        .canonicalize()
+        .unwrap();
+    let genpath = std::path::PathBuf::from("or-tools/ortools/gen")
+        .canonicalize()
+        .unwrap();
+    let defs: Vec<String> = Vec::new();
+    let mut b = autocxx_build::build("src/main.rs", &[&oopath, &deppath, &genpath], &defs).unwrap();
+    b.flag_if_supported("-std=c++14").compile("autocxx-demo");
 
-use ffi::ToCppString;
-
-fn main() {
-    let _ = ffi::operations_research::Solver::make_unique("hello".to_cpp());
+    println!("cargo:rerun-if-changed=src/main.rs");
 }
