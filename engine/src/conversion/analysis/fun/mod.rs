@@ -62,6 +62,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) id_for_allowlist: Option<Ident>,
     pub(crate) use_stmt: Use,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
+    pub(crate) is_pure_virtual: bool,
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -70,7 +71,7 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) self_type: Option<TypeName>,
     was_reference: bool,
     deps: HashSet<TypeName>,
-    virtual_this_encountered: bool,
+    is_virtual: bool,
     requires_unsafe: bool,
 }
 
@@ -305,6 +306,7 @@ impl<'a> FnAnalyzer<'a> {
     ) -> Result<Option<FnAnalysisResult>, ConvertError> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
+        let is_pure_virtual = Self::has_attr(&fun, "bindgen_pure_virtual");
         // This function is one of the most complex parts of our conversion.
         // It needs to consider:
         // 1. Rejecting destructors entirely.
@@ -357,7 +359,10 @@ impl<'a> FnAnalyzer<'a> {
             .filter_map(|pd| pd.self_type.as_ref())
             .next()
             .cloned();
-        let virtual_this_encountered = param_details.iter().any(|pd| pd.virtual_this_encountered);
+        let is_virtual = param_details.iter().any(|pd| pd.is_virtual);
+        if is_pure_virtual {
+            assert!(is_virtual);
+        }
         let requires_unsafe = param_details.iter().any(|pd| pd.requires_unsafe);
 
         let is_static_method = if self_ty.is_none() {
@@ -485,7 +490,7 @@ impl<'a> FnAnalyzer<'a> {
             || ret_type_conversion_needed
             || is_static_method
             || differently_named_method
-            || virtual_this_encountered;
+            || is_virtual;
 
         let mut additional_cpp = None;
 
@@ -603,6 +608,7 @@ impl<'a> FnAnalyzer<'a> {
                 id_for_allowlist,
                 use_stmt,
                 additional_cpp,
+                is_pure_virtual,
             },
             id,
             deps,
@@ -625,7 +631,7 @@ impl<'a> FnAnalyzer<'a> {
                 let mut pt = pt.clone();
                 let mut self_type = None;
                 let old_pat = *pt.pat;
-                let mut virtual_this_encountered = false;
+                let mut is_virtual = false;
                 let mut treat_as_reference = false;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
@@ -636,7 +642,7 @@ impl<'a> FnAnalyzer<'a> {
                                 Type::Path(typ) => {
                                     let mut this_type = TypeName::from_type_path(typ);
                                     if this_type.is_cvoid() {
-                                        virtual_this_encountered = true;
+                                        is_virtual = true;
                                         this_type = virtual_this.ok_or_else(|| {
                                             ConvertError::VirtualThisType(
                                                 ns.clone(),
@@ -687,7 +693,7 @@ impl<'a> FnAnalyzer<'a> {
                         conversion,
                         was_reference,
                         deps,
-                        virtual_this_encountered,
+                        is_virtual,
                         requires_unsafe,
                     },
                 )
@@ -781,6 +787,10 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
         (ref_params, ref_return)
+    }
+
+    fn has_attr(fun: &ForeignItemFn, attr_name: &str) -> bool {
+        fun.attrs.iter().any(|at| at.path.is_ident(attr_name))
     }
 }
 
