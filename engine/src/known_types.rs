@@ -438,15 +438,14 @@ pub(crate) fn confirm_inner_type_is_acceptable_generic_payload(
         PathArguments::AngleBracketed(ab) => {
             for inner in &ab.args {
                 match inner {
-                    GenericArgument::Type(Type::Path(typ)) => match typ.path.segments.last() {
-                        Some(more_generics) => {
+                    GenericArgument::Type(Type::Path(typ)) => {
+                        if let Some(more_generics) = typ.path.segments.last() {
                             confirm_inner_type_is_acceptable_generic_payload(
                                 &more_generics.arguments,
                                 desc,
                             )?;
                         }
-                        None => {}
-                    },
+                    }
                     _ => {
                         return Err(ConvertError::TemplatedTypeContainingNonPathArg(
                             desc.clone(),
