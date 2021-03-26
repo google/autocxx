@@ -122,11 +122,13 @@ impl ParsedFile {
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
             dep_recorder.map(Rc::from);
         for include_cpp in self.get_autocxxes_mut() {
-            let dep_recorder: Option<Box<dyn RebuildDependencyRecorder>> =
-                inner_dep_recorder.as_ref().map(|inner_dep_recorder| {
-                    Box::new(CompositeDepRecorder::new(inner_dep_recorder.clone()))
-                        as Box<dyn RebuildDependencyRecorder>
-                });
+            let dep_recorder: Option<Box<dyn RebuildDependencyRecorder>> = match &inner_dep_recorder
+            {
+                None => None,
+                Some(inner_dep_recorder) => Some(Box::new(CompositeDepRecorder::new(
+                    inner_dep_recorder.clone(),
+                ))),
+            };
             let defs: Vec<String> = definitions.iter().map(|d| d.as_ref().to_string()).collect();
             include_cpp
                 .generate(autocxx_inc.clone(), &defs, dep_recorder)
