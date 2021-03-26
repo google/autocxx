@@ -20,6 +20,7 @@ use crate::known_types::KNOWN_TYPES;
 use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::{TypeConfig, UnsafePolicy};
+use proc_macro2::Span;
 use syn::{
     parse_quote, punctuated::Punctuated, FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType,
     Type, TypePtr, Visibility,
@@ -643,8 +644,13 @@ impl<'a> FnAnalyzer<'a> {
                                             )
                                         })?;
                                         let this_type_path = this_type.to_type_path();
+                                        let const_token = if mutability.is_some() {
+                                            None
+                                        } else {
+                                            Some(syn::Token![const](Span::call_site()))
+                                        };
                                         pt.ty = Box::new(parse_quote! {
-                                            * #mutability #this_type_path
+                                            * #mutability #const_token #this_type_path
                                         });
                                     }
                                     Ok(this_type)

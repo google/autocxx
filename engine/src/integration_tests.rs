@@ -3696,7 +3696,6 @@ fn test_virtual_fns() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/313
 fn test_const_virtual_fns() {
     let hdr = indoc! {"
         #include <cstdint>
