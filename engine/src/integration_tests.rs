@@ -3696,6 +3696,34 @@ fn test_virtual_fns() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/313
+fn test_const_virtual_fns() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        class A {
+        public:
+            A(uint32_t num) : b(num) {}
+            virtual uint32_t foo(uint32_t a) const { return a+1; };
+            virtual ~A() {}
+            uint32_t b;
+        };
+        class B: public A {
+        public:
+            B() : A(3), c(4) {}
+            virtual uint32_t foo(uint32_t a) const { return a+2; };
+            uint32_t c;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::A::make_unique(12);
+        assert_eq!(a.foo(2), 3);
+        let b = ffi::B::make_unique();
+        assert_eq!(b.foo(2), 4);
+    };
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/197
 fn test_virtual_fns_inheritance() {
     let hdr = indoc! {"
