@@ -27,7 +27,7 @@ categories = ["development-tools::ffi", "api-bindings"]
 autocxx-macro = { path="macro", version="0.5.3" }
 autocxx-engine = { path="engine", version="0.5.3" } # so that
   # we can refer to autocxx_engine::cxx. But even that isn't sufficient...
-cxx = ">=1.0.34,<1.0.37" # ... also needed because expansion of type_id refers to ::cxx
+cxx = "1.0.38" # ... also needed because expansion of type_id refers to ::cxx
 aquamarine = "0.1.5" # docs
 
 [workspace]
