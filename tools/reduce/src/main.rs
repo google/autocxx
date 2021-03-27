@@ -166,7 +166,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         &interestingness_test,
         &concat_path,
         matches.values_of("creduce-args").unwrap_or_default(),
-    )?;
+    );
     let output_path = matches.value_of("output");
     match output_path {
         None => print_minimized_case(&concat_path)?,
@@ -193,7 +193,7 @@ fn run_creduce<'a>(
     interestingness_test: &Path,
     concat_path: &Path,
     creduce_args: impl Iterator<Item = &'a str>,
-) -> Result<(), std::io::Error> {
+) {
     announce_progress("creduce");
     Command::new(creduce_cmd)
         .arg(interestingness_test.to_str().unwrap())
@@ -201,7 +201,6 @@ fn run_creduce<'a>(
         .args(creduce_args)
         .status()
         .expect("failed to creduce");
-    Ok(())
 }
 
 fn create_interestingness_test(

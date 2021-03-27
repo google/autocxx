@@ -55,6 +55,7 @@ struct TypeDetails {
 }
 
 impl TypeDetails {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         rs_name: String,
         cpp_name: String,
@@ -152,9 +153,7 @@ impl TypeDatabase {
 
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
-    pub(crate) fn get_pod_safe_types<'a>(
-        &'a self,
-    ) -> impl Iterator<Item = (&'a TypeName, bool)> + 'a {
+    pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (&TypeName, bool)> {
         self.by_rs_name
             .iter()
             .map(|(tn, td)| (tn, td.by_value_safe))
@@ -438,15 +437,14 @@ pub(crate) fn confirm_inner_type_is_acceptable_generic_payload(
         PathArguments::AngleBracketed(ab) => {
             for inner in &ab.args {
                 match inner {
-                    GenericArgument::Type(Type::Path(typ)) => match typ.path.segments.last() {
-                        Some(more_generics) => {
+                    GenericArgument::Type(Type::Path(typ)) => {
+                        if let Some(more_generics) = typ.path.segments.last() {
                             confirm_inner_type_is_acceptable_generic_payload(
                                 &more_generics.arguments,
                                 desc,
                             )?;
                         }
-                        None => {}
-                    },
+                    }
                     _ => {
                         return Err(ConvertError::TemplatedTypeContainingNonPathArg(
                             desc.clone(),
