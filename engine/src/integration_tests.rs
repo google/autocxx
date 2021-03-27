@@ -3696,7 +3696,6 @@ fn test_virtual_fns() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/313
 fn test_const_virtual_fns() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -4187,7 +4186,6 @@ fn test_unexpected_use() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/305
 fn test_get_pure_virtual() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -4207,7 +4205,7 @@ fn test_get_pure_virtual() {
         let a_ref = unsafe { a.as_ref() }.unwrap();
         assert_eq!(a_ref.get_val(), 3);
     };
-    run_test("", hdr, rs, &["get_a"], &[]);
+    run_test("", hdr, rs, &["A", "get_a"], &[]);
 }
 
 #[test]

@@ -34,8 +34,8 @@ use crate::UnsafePolicy;
 
 use self::{
     analysis::{
-        gc::filter_apis_by_following_edges_from_allowlist, pod::analyze_pod_apis,
-        remove_ignored::filter_apis_by_ignored_dependents,
+        abstract_types::mark_types_abstract, gc::filter_apis_by_following_edges_from_allowlist,
+        pod::analyze_pod_apis, remove_ignored::filter_apis_by_ignored_dependents,
     },
     codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
@@ -110,12 +110,16 @@ impl<'a> BridgeConverter<'a> {
                 // require C++ wrapper functions. This is probably the most complex
                 // part of `autocxx`. Again, this returns a new set of `Api`s, but
                 // parameterized by a richer set of metadata.
-                let analyzed_apis = FnAnalyzer::analyze_functions(
+                let mut analyzed_apis = FnAnalyzer::analyze_functions(
                     analyzed_apis,
                     unsafe_policy,
                     &mut type_converter,
                     self.type_config,
                 )?;
+                // If any of those functions turned out to be pure virtual, don't attempt
+                // to generate UniquePtr implementations for the type, since it can't
+                // be instantiated.
+                mark_types_abstract(&mut analyzed_apis);
                 // During parsing or subsequent processing we might have encountered
                 // items which we couldn't process due to as-yet-unsupported features.
                 // There might be other items depending on such things. Let's remove them

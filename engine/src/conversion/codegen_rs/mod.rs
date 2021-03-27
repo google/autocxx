@@ -348,9 +348,10 @@ impl<'a> RsCodeGenerator<'a> {
             } => RsCodegenResult {
                 global_items: Self::generate_extern_type_impl(analysis, &ty_details),
                 impl_entry: None,
-                bridge_items: match analysis {
-                    TypeKind::ForwardDeclaration => Vec::new(),
-                    _ => create_impl_items(&ty_details.final_ident),
+                bridge_items: if analysis.can_be_instantiated() {
+                    create_impl_items(&ty_details.final_ident)
+                } else {
+                    Vec::new()
                 },
                 extern_c_mod_item: Some(ForeignItem::Verbatim(for_extern_c_ts)),
                 bindgen_mod_item,

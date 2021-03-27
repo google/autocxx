@@ -24,6 +24,16 @@ pub(crate) enum TypeKind {
     Pod,                // trivial. Can be moved and copied in Rust.
     NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
     ForwardDeclaration, // no full C++ declaration available - can't even generate UniquePtr
+    Abstract, // has pure virtual members - can't even generate UniquePtr
+}
+
+impl TypeKind {
+    pub(crate) fn can_be_instantiated(&self) -> bool {
+        match self {
+            TypeKind::Pod | TypeKind::NonPod => true,
+            TypeKind::ForwardDeclaration | TypeKind::Abstract => false,
+        }
+    }
 }
 
 /// Whether and how this type should be exposed in the mods constructed
