@@ -12,20 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub(crate) mod function_wrapper;
+mod function_wrapper_cpp;
 pub(crate) mod type_to_cpp;
 
 use crate::types::TypeName;
 use itertools::Itertools;
 use std::collections::HashSet;
 use syn::Type;
-
-use function_wrapper::FunctionWrapper;
 use type_to_cpp::type_to_cpp;
 
-use self::function_wrapper::FunctionWrapperPayload;
-
-use super::{analysis::fun::FnAnalysis, api::Api, ConvertError};
+use super::{
+    analysis::fun::{
+        function_wrapper::{FunctionWrapper, FunctionWrapperPayload},
+        FnAnalysis,
+    },
+    api::Api,
+    ConvertError,
+};
 
 /// Instructions for new C++ which we need to generate.
 #[derive(Clone)]
@@ -230,7 +233,7 @@ impl CppCodeGenerator {
             .argument_conversion
             .iter()
             .enumerate()
-            .map(|(counter, conv)| conv.conversion(&get_arg_name(counter)))
+            .map(|(counter, conv)| conv.cpp_conversion(&get_arg_name(counter)))
             .collect();
         let mut arg_list = arg_list?.into_iter();
         let receiver = if is_a_method { arg_list.next() } else { None };
@@ -259,7 +262,7 @@ impl CppCodeGenerator {
         };
         if let Some(ret) = &details.return_conversion {
             underlying_function_call =
-                format!("return {}", ret.conversion(&underlying_function_call)?);
+                format!("return {}", ret.cpp_conversion(&underlying_function_call)?);
         };
         let definition = format!("{} {{ {}; }}", declaration, underlying_function_call,);
         let declaration = format!("{};", declaration);

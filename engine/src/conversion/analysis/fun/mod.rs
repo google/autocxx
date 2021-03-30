@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod bridge_name_tracker;
+pub(crate) mod function_wrapper;
 mod overload_tracker;
 mod rust_name_tracker;
 
@@ -20,6 +21,7 @@ use crate::known_types::KNOWN_TYPES;
 use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::{TypeConfig, UnsafePolicy};
+use function_wrapper::{FunctionWrapper, FunctionWrapperPayload, TypeConversionPolicy};
 use proc_macro2::Span;
 use syn::{
     parse_quote, punctuated::Punctuated, FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType,
@@ -29,10 +31,7 @@ use syn::{
 use crate::{
     conversion::{
         api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
-        codegen_cpp::{
-            function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
-            AdditionalNeed,
-        },
+        codegen_cpp::AdditionalNeed,
         parse::type_converter::TypeConverter,
         ConvertError,
     },
@@ -66,7 +65,7 @@ pub(crate) struct FnAnalysisBody {
 }
 
 pub(crate) struct ArgumentAnalysis {
-    pub(crate) conversion: ArgumentConversion,
+    pub(crate) conversion: TypeConversionPolicy,
     pub(crate) name: Pat,
     pub(crate) self_type: Option<TypeName>,
     was_reference: bool,
@@ -77,7 +76,7 @@ pub(crate) struct ArgumentAnalysis {
 
 pub(crate) struct ReturnTypeAnalysis {
     rt: ReturnType,
-    conversion: Option<ArgumentConversion>,
+    conversion: Option<TypeConversionPolicy>,
     was_reference: bool,
     deps: HashSet<TypeName>,
 }
@@ -99,6 +98,7 @@ pub(crate) struct FnAnalyzer<'a> {
     type_config: &'a TypeConfig,
     incomplete_types: HashSet<TypeName>,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
+    generate_utilities: bool,
 }
 
 struct FnAnalysisResult(FnAnalysisBody, Ident, HashSet<TypeName>);
@@ -120,6 +120,7 @@ impl<'a> FnAnalyzer<'a> {
             incomplete_types: Self::build_incomplete_type_set(&apis),
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
+            generate_utilities: Self::should_generate_utilities(&apis),
         };
         let mut results = Vec::new();
         for api in apis {
@@ -133,6 +134,11 @@ impl<'a> FnAnalyzer<'a> {
         }
         results.extend(me.extra_apis.into_iter().map(Self::make_extra_api_nonpod));
         Ok(results)
+    }
+
+    fn should_generate_utilities(apis: &[Api<PodAnalysis>]) -> bool {
+        apis.iter()
+            .any(|api| matches!(api.detail, ApiDetail::StringConstructor))
     }
 
     fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<TypeName> {
@@ -454,7 +460,7 @@ impl<'a> FnAnalyzer<'a> {
                 rt: parse_quote! {
                     -> #constructed_type
                 },
-                conversion: Some(ArgumentConversion::new_to_unique_ptr(parse_quote! {
+                conversion: Some(TypeConversionPolicy::new_to_unique_ptr(parse_quote! {
                     #constructed_type
                 })),
                 was_reference: false,
@@ -480,10 +486,10 @@ impl<'a> FnAnalyzer<'a> {
         let ret_type_conversion = return_analysis.conversion;
 
         // Do we need to convert either parameters or return type?
-        let param_conversion_needed = param_details.iter().any(|b| b.conversion.work_needed());
+        let param_conversion_needed = param_details.iter().any(|b| b.conversion.cpp_work_needed());
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
-            .map_or(false, |x| x.work_needed());
+            .map_or(false, |x| x.cpp_work_needed());
         let differently_named_method = self_ty.is_some() && (cxxbridge_name != rust_name);
         let wrapper_function_needed = param_conversion_needed
             || ret_type_conversion_needed
@@ -694,28 +700,34 @@ impl<'a> FnAnalyzer<'a> {
         })
     }
 
-    fn conversion_details<F>(&self, ty: &Type, conversion_direction: F) -> ArgumentConversion
-    where
-        F: FnOnce(Type) -> ArgumentConversion,
-    {
+    fn argument_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
         match ty {
             Type::Path(p) => {
-                if self.pod_safe_types.contains(&TypeName::from_type_path(p)) {
-                    ArgumentConversion::new_unconverted(ty.clone())
+                let tn = TypeName::from_type_path(p);
+                if self.pod_safe_types.contains(&tn) {
+                    TypeConversionPolicy::new_unconverted(ty.clone())
+                } else if KNOWN_TYPES.convertible_from_strs(&tn) && self.generate_utilities {
+                    TypeConversionPolicy::new_from_str(ty.clone())
                 } else {
-                    conversion_direction(ty.clone())
+                    TypeConversionPolicy::new_from_unique_ptr(ty.clone())
                 }
             }
-            _ => ArgumentConversion::new_unconverted(ty.clone()),
+            _ => TypeConversionPolicy::new_unconverted(ty.clone()),
         }
     }
 
-    fn argument_conversion_details(&self, ty: &Type) -> ArgumentConversion {
-        self.conversion_details(ty, ArgumentConversion::new_from_unique_ptr)
-    }
-
-    fn return_type_conversion_details(&self, ty: &Type) -> ArgumentConversion {
-        self.conversion_details(ty, ArgumentConversion::new_to_unique_ptr)
+    fn return_type_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
+        match ty {
+            Type::Path(p) => {
+                let tn = TypeName::from_type_path(p);
+                if self.pod_safe_types.contains(&tn) {
+                    TypeConversionPolicy::new_unconverted(ty.clone())
+                } else {
+                    TypeConversionPolicy::new_to_unique_ptr(ty.clone())
+                }
+            }
+            _ => TypeConversionPolicy::new_unconverted(ty.clone()),
+        }
     }
 
     fn convert_return_type(
