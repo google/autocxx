@@ -197,8 +197,11 @@ order of preference here's how we would like to hear about your problem:
   reproduce the same problem.
 * Use the C++ preprocessor to give a single complete C++ file which demonstrates
   the problem, along with the `include_cpp!` directive you use.
-* Failing all else, run with `RUST_LOG=info` and send the _entire_ log to us.
-  This will include a ton of bindgen output.
+* Failing all else, build using
+  `cargo clean -p <your package name> && RUST_LOG=autocxx_engine=info cargo build -vvv`
+  and send the _entire_ log to us. This will include two key bits of logging:
+  the C++ bindings as distilled by `bindgen`, and then the version which
+  we've converted and moulded to be suitable for use by `cxx`.
 
 # Credits
 
