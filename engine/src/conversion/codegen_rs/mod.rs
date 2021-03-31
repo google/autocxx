@@ -36,11 +36,25 @@ use self::{
 };
 
 use super::{analysis::fun::{FnAnalysis, FnAnalysisBody}, api::{
-        Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, TypedefKind, Use,
+        Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, TypedefKind,
     }};
 use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
+
+/// Whether and how this type should be exposed in the mods constructed
+/// for actual end-user use.
+#[derive(Clone)]
+enum Use {
+    /// Not used
+    Unused,
+    /// Uses from cxx::bridge
+    Used,
+    /// 'use' points to cxx::bridge with a different name
+    UsedWithAlias(Ident),
+    /// 'use' directive points to bindgen
+    UsedFromBindgen,
+}
 
 fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
     input.into_iter().flatten().collect()
