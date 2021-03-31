@@ -376,7 +376,7 @@ impl<'a> FnAnalyzer<'a> {
 
         let self_ty = self_ty; // prevent subsequent mut'ing
 
-        // Work out naming.
+        // Work out naming, part one.
         let mut rust_name;
         let mut is_constructor = false;
         // bindgen may have mangled the name either because it's invalid Rust
@@ -545,55 +545,39 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
 
-        // Bits copied from below
-        let mut use_alias_required = None;
-        let mut rename_using_rust_attr = false;
-        if cxxbridge_name == rust_name {
-            if self_ty.is_none() {
-                // Mark that this name is now occupied in the output
-                // namespace of cxx, so that future functions we encounter
-                // with the same name instead get called something else.
-                self.ok_to_use_rust_name(&rust_name);
-            }
-        } else {
-            // Now we've made a brand new function, we need to plumb it back
-            // into place such that users can call it just as if it were
-            // the original function.
-            if self_ty.is_none() {
+        let requires_unsafe = requires_unsafe || self.should_be_unsafe();
+        let vis = func_information.item.vis.clone();
+
+        // Naming, part two.
+        // Work out our final naming strategy.
+        let rust_name_ident = make_ident(&rust_name);
+        let (rename_using_rust_attr, id, rename_in_output_mod, id_for_allowlist) =
+            if let Some(self_ty) = self_ty.as_ref() {
+                // Method.
+                (
+                    false,
+                    rust_name_ident,
+                    None,
+                    make_ident(self_ty.get_final_ident()),
+                )
+            } else {
+                // Function.
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
                 // There is a global space of rust_names even if they're in
                 // different namespaces.
                 let rust_name_ok = self.ok_to_use_rust_name(&rust_name);
-                if rust_name_ok {
-                    rename_using_rust_attr = true;
+                if cxxbridge_name != rust_name {
+                    if rust_name_ok {
+                        (true, rust_name_ident.clone(), None, rust_name_ident)
+                    } else {
+                        (false, cxxbridge_name.clone(), Some(rust_name_ident.clone()), rust_name_ident)
+                    }
                 } else {
-                    use_alias_required = Some(make_ident(&rust_name));
+                    (false, rust_name_ident.clone(), None, rust_name_ident)
                 }
-            }
-        }
+            };
 
-        let requires_unsafe = requires_unsafe || self.should_be_unsafe();
-        let vis = func_information.item.vis.clone();
-
-        let (id, rename_in_output_mod, id_for_allowlist) = if let Some(self_ty) = self_ty.as_ref() {
-            (
-                make_ident(&rust_name),
-                None,
-                make_ident(self_ty.clone().get_final_ident()),
-            )
-        } else {
-            match use_alias_required {
-                None => (make_ident(&rust_name), None, make_ident(&rust_name)),
-                Some(alias) => (
-                    cxxbridge_name.clone(),
-                    Some(alias.clone()),
-                    alias,
-                ),
-            }
-        };
-
-        // TODO work out what 'id' was used for
         Ok(Some(FnAnalysisResult(
             FnAnalysisBody {
                 rename_using_rust_attr,
