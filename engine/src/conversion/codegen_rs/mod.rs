@@ -36,14 +36,26 @@ use self::{
 };
 
 use super::{
-    analysis::fun::FnAnalysis,
-    api::{
-        Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, TypedefKind, Use,
-    },
+    analysis::fun::{FnAnalysis, FnAnalysisBody},
+    api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, TypedefKind},
 };
 use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
+
+/// Whether and how this type should be exposed in the mods constructed
+/// for actual end-user use.
+#[derive(Clone)]
+enum Use {
+    /// Not used
+    Unused,
+    /// Uses from cxx::bridge
+    UsedFromCxxBridge,
+    /// 'use' points to cxx::bridge with a different name
+    UsedFromCxxBridgeWithAlias(Ident),
+    /// 'use' directive points to bindgen
+    UsedFromBindgen,
+}
 
 fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
     input.into_iter().flatten().collect()
@@ -175,11 +187,13 @@ impl<'a> RsCodeGenerator<'a> {
     ) {
         for item in ns_entries.entries() {
             let id = &item.id;
-            match &item.use_stmt() {
-                Use::UsedWithAlias(alias) => output_items.push(Item::Use(parse_quote!(
-                    pub use cxxbridge :: #id as #alias;
-                ))),
-                Use::Used => output_items.push(Item::Use(parse_quote!(
+            match Self::use_stmt_for_api(&item) {
+                Use::UsedFromCxxBridgeWithAlias(alias) => {
+                    output_items.push(Item::Use(parse_quote!(
+                        pub use cxxbridge :: #id as #alias;
+                    )))
+                }
+                Use::UsedFromCxxBridge => output_items.push(Item::Use(parse_quote!(
                     pub use cxxbridge :: #id;
                 ))),
                 Use::UsedFromBindgen => {
@@ -223,6 +237,44 @@ impl<'a> RsCodeGenerator<'a> {
                 #(#supers)::*
             ::root;
         }));
+    }
+
+    /// Whether the final output namespace should be populated with a `use`
+    /// statement for this API. That is, whether this should be directly
+    /// accessible by consumers of autocxx generated code.
+    fn use_stmt_for_api(api: &Api<FnAnalysis>) -> Use {
+        match &api.detail {
+            ApiDetail::Type { .. } => Use::UsedFromCxxBridge,
+            ApiDetail::Function {
+                fun: _,
+                analysis:
+                    FnAnalysisBody {
+                        self_ty: Some(..), // method
+                        ..
+                    },
+            } => Use::Unused,
+            ApiDetail::Function {
+                fun: _,
+                analysis:
+                    FnAnalysisBody {
+                        self_ty: None,
+                        rename_in_output_mod: Some(alias), // function, renamed in output mod
+                                                           // to avoid conflicts in cxx::bridge naming
+                        ..
+                    },
+            } => Use::UsedFromCxxBridgeWithAlias(alias.clone()),
+            ApiDetail::Function {
+                fun: _,
+                analysis:
+                    FnAnalysisBody {
+                        self_ty: None,
+                        rename_in_output_mod: None, // any other function
+                        ..
+                    },
+            } => Use::UsedFromCxxBridge,
+            ApiDetail::Typedef { .. } => Use::UsedFromBindgen,
+            _ => Use::Unused,
+        }
     }
 
     fn append_child_bindgen_namespace(

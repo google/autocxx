@@ -36,20 +36,6 @@ impl TypeKind {
     }
 }
 
-/// Whether and how this type should be exposed in the mods constructed
-/// for actual end-user use.
-#[derive(Clone)]
-pub(crate) enum Use {
-    /// Not used
-    Unused,
-    /// Uses from cxx::bridge
-    Used,
-    /// 'use' points to cxx::bridge with a different name
-    UsedWithAlias(Ident),
-    /// 'use' directive points to bindgen
-    UsedFromBindgen,
-}
-
 /// Common details for types of API which are a type and will require
 /// us to generate an ExternType.
 pub(crate) struct TypeApiDetails {

@@ -28,7 +28,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi, Use},
+        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
         codegen_cpp::{
             function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
             AdditionalNeed,
@@ -60,7 +60,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
     pub(crate) id_for_allowlist: Ident,
-    pub(crate) use_stmt: Use,
+    pub(crate) rename_in_output_mod: Option<Ident>,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
     pub(crate) is_pure_virtual: bool,
 }
@@ -374,10 +374,9 @@ impl<'a> FnAnalyzer<'a> {
             false
         };
 
-        let is_a_method = self_ty.is_some();
         let self_ty = self_ty; // prevent subsequent mut'ing
 
-        // Work out naming.
+        // Work out naming, part one.
         let mut rust_name;
         let mut is_constructor = false;
         // bindgen may have mangled the name either because it's invalid Rust
@@ -521,7 +520,7 @@ impl<'a> FnAnalyzer<'a> {
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
-                is_a_method: is_a_method && !is_constructor && !is_static_method,
+                is_a_method: self_ty.is_some() && !is_constructor && !is_static_method,
             })));
             // Now modify the cxx::bridge entry we're going to make.
             if let Some(conversion) = ret_type_conversion {
@@ -546,55 +545,44 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
 
-        // Bits copied from below
-        let mut use_alias_required = None;
-        let mut rename_using_rust_attr = false;
-        if cxxbridge_name == rust_name {
-            if !is_a_method {
-                // Mark that this name is now occupied in the output
-                // namespace of cxx, so that future functions we encounter
-                // with the same name instead get called something else.
-                self.ok_to_use_rust_name(&rust_name);
-            }
-        } else {
-            // Now we've made a brand new function, we need to plumb it back
-            // into place such that users can call it just as if it were
-            // the original function.
-            if self_ty.is_none() {
+        let requires_unsafe = requires_unsafe || self.should_be_unsafe();
+        let vis = func_information.item.vis.clone();
+
+        // Naming, part two.
+        // Work out our final naming strategy.
+        let rust_name_ident = make_ident(&rust_name);
+        let (rename_using_rust_attr, id, rename_in_output_mod, id_for_allowlist) =
+            if let Some(self_ty) = self_ty.as_ref() {
+                // Method.
+                (
+                    false,
+                    rust_name_ident,
+                    None,
+                    make_ident(self_ty.get_final_ident()),
+                )
+            } else {
+                // Function.
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
                 // There is a global space of rust_names even if they're in
                 // different namespaces.
                 let rust_name_ok = self.ok_to_use_rust_name(&rust_name);
-                if rust_name_ok {
-                    rename_using_rust_attr = true;
+                if cxxbridge_name != rust_name {
+                    if rust_name_ok {
+                        (true, rust_name_ident.clone(), None, rust_name_ident)
+                    } else {
+                        (
+                            false,
+                            cxxbridge_name.clone(),
+                            Some(rust_name_ident.clone()),
+                            rust_name_ident,
+                        )
+                    }
                 } else {
-                    use_alias_required = Some(make_ident(&rust_name));
+                    (false, rust_name_ident.clone(), None, rust_name_ident)
                 }
-            }
-        }
+            };
 
-        let requires_unsafe = requires_unsafe || self.should_be_unsafe();
-        let vis = func_information.item.vis.clone();
-
-        let (id, use_stmt, id_for_allowlist) = if is_a_method {
-            (
-                make_ident(&rust_name),
-                Use::Unused,
-                make_ident(self_ty.as_ref().unwrap().clone().get_final_ident()),
-            )
-        } else {
-            match use_alias_required {
-                None => (make_ident(&rust_name), Use::Used, make_ident(&rust_name)),
-                Some(alias) => (
-                    cxxbridge_name.clone(),
-                    Use::UsedWithAlias(alias.clone()),
-                    alias,
-                ),
-            }
-        };
-
-        // TODO work out what 'id' was used for
         Ok(Some(FnAnalysisResult(
             FnAnalysisBody {
                 rename_using_rust_attr,
@@ -610,7 +598,7 @@ impl<'a> FnAnalyzer<'a> {
                 requires_unsafe,
                 vis,
                 id_for_allowlist,
-                use_stmt,
+                rename_in_output_mod,
                 additional_cpp,
                 is_pure_virtual,
             },
@@ -805,24 +793,6 @@ impl Api<FnAnalysis> {
             _ => &self.id,
         };
         TypeName::new(&self.ns, &id_for_allowlist.to_string())
-    }
-
-    /// Whether the final output namespace should be populated with a `use`
-    /// statement for this API. That is, whether this should be directly
-    /// accessible by consumers of autocxx generated code.
-    pub(crate) fn use_stmt(&self) -> Use {
-        match &self.detail {
-            ApiDetail::Type {
-                ty_details: _,
-                for_extern_c_ts: _,
-                is_forward_declaration: _,
-                bindgen_mod_item: _,
-                analysis: _,
-            } => Use::Used,
-            ApiDetail::Function { fun: _, analysis } => analysis.use_stmt.clone(),
-            ApiDetail::Typedef { .. } => Use::UsedFromBindgen,
-            _ => Use::Unused,
-        }
     }
 
     /// Whether this API requires generation of additional C++, and if so,
