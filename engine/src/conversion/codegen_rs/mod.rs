@@ -230,13 +230,7 @@ impl<'a> RsCodeGenerator<'a> {
     /// accessible by consumers of autocxx generated code.
     fn use_stmt_for_api(api: &Api<FnAnalysis>) -> Use {
         match &api.detail {
-            ApiDetail::Type {
-                ty_details: _,
-                for_extern_c_ts: _,
-                is_forward_declaration: _,
-                bindgen_mod_item: _,
-                analysis: _,
-            } => Use::Used,
+            ApiDetail::Type { .. } => Use::Used,
             ApiDetail::Function { fun: _, analysis } => analysis.use_stmt.clone(),
             ApiDetail::Typedef { .. } => Use::UsedFromBindgen,
             _ => Use::Unused,
