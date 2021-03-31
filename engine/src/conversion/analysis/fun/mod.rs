@@ -59,7 +59,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) wrapper_function_needed: bool,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
-    pub(crate) id_for_allowlist: Option<Ident>,
+    pub(crate) id_for_allowlist: Ident,
     pub(crate) use_stmt: Use,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
     pub(crate) is_pure_virtual: bool,
@@ -581,12 +581,16 @@ impl<'a> FnAnalyzer<'a> {
             (
                 make_ident(&rust_name),
                 Use::Unused,
-                self_ty.clone().map(|ty| make_ident(ty.get_final_ident())),
+                make_ident(self_ty.as_ref().unwrap().clone().get_final_ident()),
             )
         } else {
             match use_alias_required {
-                None => (make_ident(&rust_name), Use::Used, None),
-                Some(alias) => (cxxbridge_name.clone(), Use::UsedWithAlias(alias), None),
+                None => (make_ident(&rust_name), Use::Used, make_ident(&rust_name)),
+                Some(alias) => (
+                    cxxbridge_name.clone(),
+                    Use::UsedWithAlias(alias.clone()),
+                    alias,
+                ),
             }
         };
 
@@ -797,16 +801,8 @@ impl<'a> FnAnalyzer<'a> {
 impl Api<FnAnalysis> {
     pub(crate) fn typename_for_allowlist(&self) -> TypeName {
         let id_for_allowlist = match &self.detail {
-            ApiDetail::Function { fun: _, analysis } => analysis.id_for_allowlist.as_ref(),
-            _ => None,
-        };
-        let usage = self.use_stmt();
-        let id_for_allowlist = match id_for_allowlist {
-            None => match &usage {
-                Use::UsedWithAlias(alias) => alias,
-                _ => &self.id,
-            },
-            Some(id) => &id,
+            ApiDetail::Function { fun: _, analysis } => &analysis.id_for_allowlist,
+            _ => &self.id,
         };
         TypeName::new(&self.ns, &id_for_allowlist.to_string())
     }
