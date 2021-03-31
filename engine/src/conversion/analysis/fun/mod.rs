@@ -374,7 +374,6 @@ impl<'a> FnAnalyzer<'a> {
             false
         };
 
-        let is_a_method = self_ty.is_some();
         let self_ty = self_ty; // prevent subsequent mut'ing
 
         // Work out naming.
@@ -521,7 +520,7 @@ impl<'a> FnAnalyzer<'a> {
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
-                is_a_method: is_a_method && !is_constructor && !is_static_method,
+                is_a_method: self_ty.is_some() && !is_constructor && !is_static_method,
             })));
             // Now modify the cxx::bridge entry we're going to make.
             if let Some(conversion) = ret_type_conversion {
@@ -550,7 +549,7 @@ impl<'a> FnAnalyzer<'a> {
         let mut use_alias_required = None;
         let mut rename_using_rust_attr = false;
         if cxxbridge_name == rust_name {
-            if !is_a_method {
+            if self_ty.is_none() {
                 // Mark that this name is now occupied in the output
                 // namespace of cxx, so that future functions we encounter
                 // with the same name instead get called something else.
@@ -577,11 +576,11 @@ impl<'a> FnAnalyzer<'a> {
         let requires_unsafe = requires_unsafe || self.should_be_unsafe();
         let vis = func_information.item.vis.clone();
 
-        let (id, use_stmt, id_for_allowlist) = if is_a_method {
+        let (id, use_stmt, id_for_allowlist) = if let Some(self_ty) = self_ty.as_ref() {
             (
                 make_ident(&rust_name),
                 Use::Unused,
-                make_ident(self_ty.as_ref().unwrap().clone().get_final_ident()),
+                make_ident(self_ty.clone().get_final_ident()),
             )
         } else {
             match use_alias_required {
