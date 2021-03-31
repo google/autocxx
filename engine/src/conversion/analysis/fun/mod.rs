@@ -571,7 +571,12 @@ impl<'a> FnAnalyzer<'a> {
                     if rust_name_ok {
                         (true, rust_name_ident.clone(), None, rust_name_ident)
                     } else {
-                        (false, cxxbridge_name.clone(), Some(rust_name_ident.clone()), rust_name_ident)
+                        (
+                            false,
+                            cxxbridge_name.clone(),
+                            Some(rust_name_ident.clone()),
+                            rust_name_ident,
+                        )
                     }
                 } else {
                     (false, rust_name_ident.clone(), None, rust_name_ident)

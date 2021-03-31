@@ -50,9 +50,9 @@ enum Use {
     /// Not used
     Unused,
     /// Uses from cxx::bridge
-    Used,
+    UsedFromCxxBridge,
     /// 'use' points to cxx::bridge with a different name
-    UsedWithAlias(Ident),
+    UsedFromCxxBridgeWithAlias(Ident),
     /// 'use' directive points to bindgen
     UsedFromBindgen,
 }
@@ -188,10 +188,12 @@ impl<'a> RsCodeGenerator<'a> {
         for item in ns_entries.entries() {
             let id = &item.id;
             match Self::use_stmt_for_api(&item) {
-                Use::UsedWithAlias(alias) => output_items.push(Item::Use(parse_quote!(
-                    pub use cxxbridge :: #id as #alias;
-                ))),
-                Use::Used => output_items.push(Item::Use(parse_quote!(
+                Use::UsedFromCxxBridgeWithAlias(alias) => {
+                    output_items.push(Item::Use(parse_quote!(
+                        pub use cxxbridge :: #id as #alias;
+                    )))
+                }
+                Use::UsedFromCxxBridge => output_items.push(Item::Use(parse_quote!(
                     pub use cxxbridge :: #id;
                 ))),
                 Use::UsedFromBindgen => {
@@ -242,7 +244,7 @@ impl<'a> RsCodeGenerator<'a> {
     /// accessible by consumers of autocxx generated code.
     fn use_stmt_for_api(api: &Api<FnAnalysis>) -> Use {
         match &api.detail {
-            ApiDetail::Type { .. } => Use::Used,
+            ApiDetail::Type { .. } => Use::UsedFromCxxBridge,
             ApiDetail::Function {
                 fun: _,
                 analysis:
@@ -260,7 +262,7 @@ impl<'a> RsCodeGenerator<'a> {
                                                            // to avoid conflicts in cxx::bridge naming
                         ..
                     },
-            } => Use::UsedWithAlias(alias.clone()),
+            } => Use::UsedFromCxxBridgeWithAlias(alias.clone()),
             ApiDetail::Function {
                 fun: _,
                 analysis:
@@ -269,7 +271,7 @@ impl<'a> RsCodeGenerator<'a> {
                         rename_in_output_mod: None, // any other function
                         ..
                     },
-            } => Use::Used,
+            } => Use::UsedFromCxxBridge,
             ApiDetail::Typedef { .. } => Use::UsedFromBindgen,
             _ => Use::Unused,
         }
