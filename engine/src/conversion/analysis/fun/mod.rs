@@ -807,24 +807,6 @@ impl Api<FnAnalysis> {
         TypeName::new(&self.ns, &id_for_allowlist.to_string())
     }
 
-    /// Whether the final output namespace should be populated with a `use`
-    /// statement for this API. That is, whether this should be directly
-    /// accessible by consumers of autocxx generated code.
-    pub(crate) fn use_stmt(&self) -> Use {
-        match &self.detail {
-            ApiDetail::Type {
-                ty_details: _,
-                for_extern_c_ts: _,
-                is_forward_declaration: _,
-                bindgen_mod_item: _,
-                analysis: _,
-            } => Use::Used,
-            ApiDetail::Function { fun: _, analysis } => analysis.use_stmt.clone(),
-            ApiDetail::Typedef { .. } => Use::UsedFromBindgen,
-            _ => Use::Unused,
-        }
-    }
-
     /// Whether this API requires generation of additional C++, and if so,
     /// what.
     /// This seems an odd place for this function (as opposed to in the [codegen_rs]
