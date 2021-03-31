@@ -35,12 +35,9 @@ use self::{
     non_pod_struct::new_non_pod_struct,
 };
 
-use super::{
-    analysis::fun::FnAnalysis,
-    api::{
+use super::{analysis::fun::{FnAnalysis, FnAnalysisBody}, api::{
         Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, TypedefKind, Use,
-    },
-};
+    }};
 use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
@@ -231,7 +228,21 @@ impl<'a> RsCodeGenerator<'a> {
     fn use_stmt_for_api(api: &Api<FnAnalysis>) -> Use {
         match &api.detail {
             ApiDetail::Type { .. } => Use::Used,
-            ApiDetail::Function { fun: _, analysis } => analysis.use_stmt.clone(),
+            ApiDetail::Function { fun: _, analysis: FnAnalysisBody {
+                self_ty: Some(..), // method
+                ..
+            } } => Use::Unused,
+            ApiDetail::Function { fun: _, analysis: FnAnalysisBody {
+                self_ty: None,
+                rename_in_output_mod: Some(alias), // function, renamed in output mod
+                    // to avoid conflicts in cxx::bridge naming
+                ..
+            } } => Use::UsedWithAlias(alias.clone()),
+            ApiDetail::Function { fun: _, analysis: FnAnalysisBody {
+                self_ty: None,
+                rename_in_output_mod: None, // any other function
+                ..
+            } } => Use::Used,
             ApiDetail::Typedef { .. } => Use::UsedFromBindgen,
             _ => Use::Unused,
         }

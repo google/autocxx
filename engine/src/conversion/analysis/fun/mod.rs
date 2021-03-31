@@ -28,7 +28,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi, Use},
+        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
         codegen_cpp::{
             function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
             AdditionalNeed,
@@ -60,7 +60,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
     pub(crate) id_for_allowlist: Ident,
-    pub(crate) use_stmt: Use,
+    pub(crate) rename_in_output_mod: Option<Ident>,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
     pub(crate) is_pure_virtual: bool,
 }
@@ -576,18 +576,18 @@ impl<'a> FnAnalyzer<'a> {
         let requires_unsafe = requires_unsafe || self.should_be_unsafe();
         let vis = func_information.item.vis.clone();
 
-        let (id, use_stmt, id_for_allowlist) = if let Some(self_ty) = self_ty.as_ref() {
+        let (id, rename_in_output_mod, id_for_allowlist) = if let Some(self_ty) = self_ty.as_ref() {
             (
                 make_ident(&rust_name),
-                Use::Unused,
+                None,
                 make_ident(self_ty.clone().get_final_ident()),
             )
         } else {
             match use_alias_required {
-                None => (make_ident(&rust_name), Use::Used, make_ident(&rust_name)),
+                None => (make_ident(&rust_name), None, make_ident(&rust_name)),
                 Some(alias) => (
                     cxxbridge_name.clone(),
-                    Use::UsedWithAlias(alias.clone()),
+                    Some(alias.clone()),
                     alias,
                 ),
             }
@@ -609,7 +609,7 @@ impl<'a> FnAnalyzer<'a> {
                 requires_unsafe,
                 vis,
                 id_for_allowlist,
-                use_stmt,
+                rename_in_output_mod,
                 additional_cpp,
                 is_pure_virtual,
             },
