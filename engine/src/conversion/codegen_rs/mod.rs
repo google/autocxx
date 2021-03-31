@@ -118,8 +118,9 @@ impl<'a> RsCodeGenerator<'a> {
         // to set the 'contents' field of the ItemMod
         // structures directly.
         if !bindgen_root_items.is_empty() {
+            self.bindgen_mod.vis = parse_quote! {};
             self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(parse_quote! {
-                pub mod root {
+                pub(super) mod root {
                     #(#bindgen_root_items)*
                 }
             })];
@@ -127,7 +128,7 @@ impl<'a> RsCodeGenerator<'a> {
         }
         all_items.push(Item::Mod(parse_quote! {
             #[cxx::bridge]
-            pub mod cxxbridge {
+            mod cxxbridge {
                 #(#bridge_items)*
             }
         }));
