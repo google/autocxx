@@ -292,7 +292,29 @@ fn create_type_database() -> TypeDatabase {
         None,
         RustConvertFrom::None,
     ));
-    for (cpp_type, rust_type) in (3..7)
+    do_insert(TypeDetails::new(
+        "i8".into(),
+        "int8_t".into(),
+        true,
+        PreludePolicy::Exclude,
+        false,
+        false,
+        false,
+        Some("std::os::raw::c_schar".into()),
+        RustConvertFrom::None,
+    ));
+    do_insert(TypeDetails::new(
+        "u8".into(),
+        "uint8_t".into(),
+        true,
+        PreludePolicy::Exclude,
+        false,
+        false,
+        false,
+        Some("std::os::raw::c_uchar".into()),
+        RustConvertFrom::None,
+    ));
+    for (cpp_type, rust_type) in (4..7)
         .map(|x| 2i32.pow(x))
         .map(|x| {
             vec![
