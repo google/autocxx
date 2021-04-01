@@ -4387,6 +4387,52 @@ fn test_c_uchar() {
     run_test("", hdr, rs, &["operations_research::Solver"], &[]);
 }
 
+#[test]
+fn test_string_transparent_function() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        inline uint32_t take_string(std::string a) { return a.size(); }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::take_string("hello"), 5);
+    };
+    run_test("", hdr, rs, &["take_string"], &[]);
+}
+
+#[test]
+fn test_string_transparent_method() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        struct A {
+            A() {}
+            inline uint32_t take_string(std::string a) const { return a.size(); }
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::A::make_unique();
+        assert_eq!(a.take_string("hello"), 5);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_string_transparent_static_method() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        struct A {
+            A() {}
+            static inline uint32_t take_string(std::string a) { return a.size(); }
+        };
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::A::take_string("hello"), 5);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Out param pointers

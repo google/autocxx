@@ -24,7 +24,6 @@ mod utilities;
 
 use analysis::fun::FnAnalyzer;
 use autocxx_parser::TypeConfig;
-pub(crate) use codegen_cpp::type_to_cpp::type_to_cpp;
 pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use codegen_cpp::CppCodegenResults;
 pub(crate) use convert_error::ConvertError;

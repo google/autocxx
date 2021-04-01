@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
     parse::Parser, parse_quote, punctuated::Punctuated, token::Unsafe, Attribute, FnArg,
-    ForeignItem, Ident, ImplItem, ReturnType,
+    ForeignItem, Ident, ImplItem, Item, ReturnType,
 };
 
 use super::{
     unqualify::{unqualify_params, unqualify_ret_type},
-    RsCodegenResult,
+    RsCodegenResult, Use,
 };
 use crate::types::make_ident;
 use crate::{
@@ -52,7 +53,19 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
     } else {
         None
     };
-    if cxxbridge_name != rust_name {
+    let any_param_needs_rust_conversion = param_details
+        .iter()
+        .any(|pd| pd.conversion.rust_work_needed());
+    let rust_wrapper_needed =
+        any_param_needs_rust_conversion || (cxxbridge_name != rust_name && self_ty.is_some());
+    let mut materialization = match self_ty {
+        Some(..) => Use::Unused,
+        None => match analysis.rename_in_output_mod {
+            None => Use::UsedFromCxxBridge,
+            Some(alias) => Use::UsedFromCxxBridgeWithAlias(alias),
+        },
+    };
+    if rust_wrapper_needed {
         if let Some(type_name) = &self_ty {
             // Method, or static method.
             impl_entry = Some(generate_method_impl(
@@ -60,6 +73,14 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
                 is_constructor,
                 type_name,
                 &cxxbridge_name,
+                &rust_name,
+                &ret_type,
+                &unsafety,
+            ));
+        } else {
+            // Generate plain old function
+            materialization = Use::Custom(generate_function_impl(
+                &param_details,
                 &rust_name,
                 &ret_type,
                 &unsafety,
@@ -117,7 +138,30 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
         global_items: Vec::new(),
         bindgen_mod_item: None,
         impl_entry,
+        materialization,
     }
+}
+
+fn generate_arg_lists(
+    param_details: &[ArgumentAnalysis],
+    is_constructor: bool,
+) -> (Punctuated<FnArg, syn::Token![,]>, Vec<TokenStream>) {
+    let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
+    let mut arg_list = Vec::new();
+
+    for pd in param_details {
+        let type_name = pd.conversion.rust_wrapper_unconverted_type();
+        let wrapper_arg_name = if pd.self_type.is_some() && !is_constructor {
+            parse_quote!(self)
+        } else {
+            pd.name.clone()
+        };
+        wrapper_params.push(parse_quote!(
+            #wrapper_arg_name: #type_name
+        ));
+        arg_list.push(pd.conversion.rust_conversion(wrapper_arg_name));
+    }
+    (wrapper_params, arg_list)
 }
 
 /// Generate an 'impl Type { methods-go-here }' item
@@ -130,21 +174,7 @@ fn generate_method_impl(
     ret_type: &ReturnType,
     unsafety: &Option<Unsafe>,
 ) -> Box<ImplBlockDetails> {
-    let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
-    let mut arg_list = Vec::new();
-    for pd in param_details {
-        let type_name = pd.conversion.converted_rust_type();
-        let wrapper_arg_name = if pd.self_type.is_some() && !is_constructor {
-            parse_quote!(self)
-        } else {
-            pd.name.clone()
-        };
-        wrapper_params.push(parse_quote!(
-            #wrapper_arg_name: #type_name
-        ));
-        arg_list.push(wrapper_arg_name);
-    }
-
+    let (wrapper_params, arg_list) = generate_arg_lists(param_details, is_constructor);
     let rust_name = make_ident(&rust_name);
     Box::new(ImplBlockDetails {
         item: ImplItem::Method(parse_quote! {
@@ -153,5 +183,21 @@ fn generate_method_impl(
             }
         }),
         ty: make_ident(impl_block_type_name.get_final_ident()),
+    })
+}
+
+/// Generate a function call wrapper
+fn generate_function_impl(
+    param_details: &[ArgumentAnalysis],
+    rust_name: &str,
+    ret_type: &ReturnType,
+    unsafety: &Option<Unsafe>,
+) -> Item {
+    let (wrapper_params, arg_list) = generate_arg_lists(param_details, false);
+    let rust_name = make_ident(&rust_name);
+    Item::Fn(parse_quote! {
+        pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
+            cxxbridge::#rust_name ( #(#arg_list),* )
+        }
     })
 }
