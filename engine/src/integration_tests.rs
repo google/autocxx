@@ -4304,73 +4304,29 @@ fn test_cvoid() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/261
 fn test_c_schar() {
     let hdr = indoc! {"
-        namespace a {
-        template <typename, typename> struct b;
-        template <typename> class allocator;
-        typedef char c;
-        } // namespace a
-        namespace absl {
-        namespace {
-        namespace u {
-        template <class> struct d {
-          struct e;
-          struct f;
-        };
-        template <class g> using h = typename d<g>::e;
-        template <class g> using i = typename d<g>::f;
-        using j = signed char;
-        template <class, class, class, class> class k {
-          class iterator {
-            j l;
-          };
-        };
-        template <class m, class e, class f, class n> class v : k<m, e, f, n> {};
-        template <class, class> struct o;
-        } // namespace u
-        template <class p, class q, class e = u::h<p>, class f = u::i<p>,
-                  class r = a::allocator<a::b<p, q>>>
-        class s : u::v<u::o<p, q>, e, f, r> {};
-        } // namespace
-        } // namespace absl
-        namespace operations_research {
-        class t;
-        class Solver {
-          absl::s<t, a::c> w;
-        };
-        } // namespace operations_research
+        inline signed char a() {
+            return 8;
+        }
     "};
-    let rs = quote! {};
-    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+    let rs = quote! {
+        assert_eq!(ffi::a(), 8);
+    };
+    run_test("", hdr, rs, &["a"], &[]);
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/261
 fn test_c_uchar() {
     let hdr = indoc! {"
-        typedef unsigned char a;
-        namespace b {
-        namespace {
-        typedef a c;
-        class d {
-        c e;
-        };
-        } // namespace
-        namespace f {
-        class g : d {};
-        } // namespace f
-        } // namespace b
-        namespace operations_research {
-        class h : b::f::g {};
-        class Solver {
-        h i;
-        };
-        } // namespace operations_research
+        inline unsigned char a() {
+            return 8;
+        }
     "};
-    let rs = quote! {};
-    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+    let rs = quote! {
+        assert_eq!(ffi::a(), 8);
+    };
+    run_test("", hdr, rs, &["a"], &[]);
 }
 
 #[test]
