@@ -408,6 +408,19 @@ fn create_type_database() -> TypeDatabase {
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
+    let td = TypeDetails::new(
+        "autocxx::c_void".into(),
+        "void".into(),
+        false,
+        PreludePolicy::Exclude,
+        false,
+        true,
+        false,
+        Some(format!("std::os::raw::c_void")),
+        RustConvertFrom::None,
+    );
+    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+
     let mut by_cppname = HashMap::new();
     for td in by_rs_name.values() {
         let rs_name = TypeName::new_from_user_input(&td.rs_name);
