@@ -29,7 +29,7 @@ include_cpp!(
     generate!("Bob")
 )
 
-let a = ffi::base::Bob::make_unique("hello".into());
+let a = ffi::base::Bob::make_unique("hello");
 a.do_a_thing();
 ```
 
@@ -132,7 +132,7 @@ You'll also want to ensure that the code generation (both Rust and C++ code) hap
 any included header file changes. This is now handled automatically by our
 `build.rs` integration, but is not yet done for the standalone `autocxx-gen` tool.
 
-[https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html#configuring-the-build] for a diagram.
+See [here](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html#configuring-the-build) for a diagram.
 
 Finally, this interop inevitably involves lots of fiddly small functions. It's likely to perform
 far better if you can achieve cross-language LTO. https://github.com/dtolnay/cxx/issues/371
@@ -178,7 +178,7 @@ RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test  integration_tests::tes
 ```
 
 This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
-in `engine/src/conversion`. See [https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCpp.html] for documentation and diagrams on how the engine works.
+in `engine/src/conversion`. See [here](https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCpp.html) for documentation and diagrams on how the engine works.
 
 # Reporting bugs
 
