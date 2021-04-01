@@ -40,6 +40,7 @@ pub enum ConvertError {
     UnexpectedUseStatement(Option<Ident>),
     TemplatedTypeContainingNonPathArg(TypeName),
     InvalidPointee,
+    DidNotGenerateAnything(String),
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -72,6 +73,7 @@ impl Display for ConvertError {
             ConvertError::UnexpectedUseStatement(maybe_ident) => write!(f, "Unexpected 'use' statement encountered: {}", format_maybe_identifier(maybe_ident))?,
             ConvertError::TemplatedTypeContainingNonPathArg(tn) => write!(f, "Type {} was parameterized over something complex which we don't yet support", tn)?,
             ConvertError::InvalidPointee => write!(f, "Pointer pointed to something unsupported")?,
+            ConvertError::DidNotGenerateAnything(directive) => write!(f, "The 'generate' or 'generate_pod' directive for '{}' did not result in any code being generated. Perhaps this was mis-spelled or you didn't qualify the name with any namespaces? Otherwise please report a bug.", directive)?,
         }
         Ok(())
     }
