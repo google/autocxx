@@ -4282,40 +4282,25 @@ fn test_function_pointer_template() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/265
 fn test_cvoid() {
     let hdr = indoc! {"
-        namespace a {
-        namespace b {
-        namespace c {
-        class d {
-        public:
-          void e(void *);
-        };
-        } // namespace c
-        class f {
-          c::d g;
-        };
-        namespace c {
-        class h {
-          f arena;
-        };
-        } // namespace c
-        class i {
-          c::h j;
-        };
-        class k : i {};
-        } // namespace b
-        } // namespace a
-        namespace operations_research {
-        class l : a::b::k {};
-        class Solver {
-          l m;
-        };
-        } // namespace operations_research
+        #include <memory>
+        #include <cstdint>
+        inline void* a() {
+            return static_cast<void*>(new int(3));
+        }
+        inline uint32_t b(void* p) {
+            auto val = *(static_cast<int*>(p));
+            delete p;
+            return val;
+        }
     "};
-    let rs = quote! {};
-    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+    let rs = quote! {
+        let ptr = ffi::a();
+        let res = unsafe { ffi::b(ptr) };
+        assert_eq!(res, 3);
+    };
+    run_test("", hdr, rs, &["a", "b"], &[]);
 }
 
 #[test]

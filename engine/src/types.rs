@@ -194,7 +194,7 @@ impl TypeName {
     }
 
     pub(crate) fn is_cvoid(&self) -> bool {
-        self.to_cpp_name() == "std::os::raw::c_void"
+        self.to_cpp_name() == "void"
     }
 }
 
