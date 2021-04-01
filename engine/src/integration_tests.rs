@@ -1242,7 +1242,7 @@ fn test_pod_method() {
         let a = ffi::Bob { a: 12, b: 13 };
         assert_eq!(a.get_bob(), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
+    run_test(cxx, hdr, rs, &[], &["Bob"]);
 }
 
 #[test]
@@ -1265,7 +1265,7 @@ fn test_pod_mut_method() {
         let mut a = Box::pin(ffi::Bob { a: 12, b: 13 });
         assert_eq!(a.as_mut().get_bob(), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
+    run_test(cxx, hdr, rs, &[], &["Bob"]);
 }
 
 #[test]
@@ -1397,7 +1397,7 @@ fn test_method_pass_pod_by_value() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+    run_test(cxx, hdr, rs, &[], &["Bob", "Anna"]);
 }
 
 #[test]
@@ -1421,7 +1421,7 @@ fn test_inline_method() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
-    run_test("", hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+    run_test("", hdr, rs, &[], &["Bob", "Anna"]);
 }
 
 #[test]
@@ -1448,7 +1448,7 @@ fn test_method_pass_pod_by_reference() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(&a), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+    run_test(cxx, hdr, rs, &[], &["Bob", "Anna"]);
 }
 
 #[test]
@@ -1475,7 +1475,7 @@ fn test_method_pass_pod_by_mut_reference() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a.as_mut()), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+    run_test(cxx, hdr, rs, &[], &["Bob", "Anna"]);
 }
 
 #[test]
@@ -1503,7 +1503,7 @@ fn test_method_pass_pod_by_up() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(cxx::UniquePtr::new(a)), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+    run_test(cxx, hdr, rs, &[], &["Bob", "Anna"]);
 }
 
 #[test]
@@ -1538,13 +1538,7 @@ fn test_method_pass_nonpod_by_value() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
-    run_test(
-        cxx,
-        hdr,
-        rs,
-        &["take_bob", "Anna", "give_anna", "get_bob"],
-        &["Bob"],
-    );
+    run_test(cxx, hdr, rs, &["Anna", "give_anna", "get_bob"], &["Bob"]);
 }
 
 #[test]
@@ -1583,13 +1577,7 @@ fn test_method_pass_nonpod_by_value_with_up() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a, a2), 12);
     };
-    run_test(
-        cxx,
-        hdr,
-        rs,
-        &["take_bob", "Anna", "give_anna", "get_bob"],
-        &["Bob"],
-    );
+    run_test(cxx, hdr, rs, &["Anna", "give_anna", "get_bob"], &["Bob"]);
 }
 
 #[test]
@@ -1624,7 +1612,7 @@ fn test_method_pass_nonpod_by_reference() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a.as_ref().unwrap()), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Anna", "give_anna"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
 }
 
 #[test]
@@ -1659,7 +1647,7 @@ fn test_method_pass_nonpod_by_mut_reference() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a.as_mut().unwrap()), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Anna", "give_anna"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
 }
 
 #[test]
@@ -1695,7 +1683,7 @@ fn test_method_pass_nonpod_by_up() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "give_anna"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["give_anna"], &["Bob"]);
 }
 
 #[test]
@@ -1726,7 +1714,7 @@ fn test_method_return_nonpod_by_value() {
         let a = b.get_anna();
         assert!(!a.is_null());
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Anna", "get_anna"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["Anna", "get_anna"], &["Bob"]);
 }
 
 #[test]
@@ -1831,7 +1819,7 @@ fn test_method_return_string_by_value() {
         let a = b.get_msg();
         assert!(a.as_ref().unwrap() == "hello");
     };
-    run_test(cxx, hdr, rs, &["take_bob", "get_msg"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["get_msg"], &["Bob"]);
 }
 
 #[test]

@@ -77,6 +77,7 @@ impl<'a> ParseBindgen<'a> {
         }
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
+        self.confirm_all_generate_directives_obeyed()?;
         Ok(self.results)
     }
 
@@ -374,5 +375,22 @@ impl<'a> ParseBindgen<'a> {
         };
         self.results.apis.push(api);
         self.results.type_converter.push(tyname);
+    }
+
+    fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertError> {
+        let api_names: HashSet<_> = self
+            .results
+            .apis
+            .iter()
+            .map(|api| api.typename().to_cpp_name())
+            .collect();
+        for generate_directive in self.type_config.allowlist() {
+            if !api_names.contains(generate_directive) {
+                return Err(ConvertError::DidNotGenerateAnything(
+                    generate_directive.into(),
+                ));
+            }
+        }
+        Ok(())
     }
 }
