@@ -145,14 +145,17 @@ use autocxx_engine::IncludeCppEngine;
 ///
 /// # Making strings
 ///
-/// Unless you use [exclude_utilities], you will find a trait called
-/// `ffi::ToCppString` which you can use to convert any Rust string into a C++
-/// `std::unique_ptr<std::string>` like this:
+/// Functions that accept a `std::string` will actually accept anything that
+/// implements a trait called `ffi::ToCppString`. That may either be a
+/// `UniquePtr<CxxString>` or just a plain old Rust string - which will be
+/// converted transparently to a C++ string.
 ///
-/// ```ignore
-/// use ffi::ToCpp;
-/// let unique_ptr_to_cxx_string = "my_string".to_cpp();
-/// ```
+/// This trait, and its implementations, are not present in the `autocxx`
+/// documentation because they're dynamically generated in _your_ code
+/// so that they can call through to a `make_string` implementation in
+/// the C++ that we're injecting into your C++ build system.
+///
+/// None of that happens if you use `exclude_utilities`.
 ///
 /// # Support for particular C++ features
 ///
