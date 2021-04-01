@@ -2533,6 +2533,7 @@ fn test_give_nonpod_typedef_by_value() {
           // against bindgen. TODO. Then after that was fixed we could look at
           // whether it's worth fixing this by parsing the contents of the impl'ed
           // methods.
+          // https://github.com/google/autocxx/issues/331
 fn test_conflicting_static_functions() {
     let cxx = indoc! {"
         Bob Bob::create() { Bob a; return a; }
@@ -4431,27 +4432,6 @@ fn test_string_transparent_static_method() {
         assert_eq!(ffi::A::take_string("hello"), 5);
     };
     run_test("", hdr, rs, &["A"], &[]);
-}
-
-#[test]
-#[ignore] // https://github.com/google/autocxx/issues/331
-fn test_multiple_static_nonpod() {
-    let hdr = indoc! {"
-        #include <cstdint>
-        struct A {
-            static inline A make() { return A(); }
-            uint32_t a;
-        };
-        struct B {
-            static inline B make() { return B(); }
-            uint32_t a;
-        };
-    "};
-    let rs = quote! {
-        let _ = ffi::A::make_a();
-        let _ = ffi::B::make_b();
-    };
-    run_test("", hdr, rs, &["A", "B"], &[]);
 }
 
 // Yet to test:
