@@ -37,6 +37,7 @@ enum Behavior {
     CxxContainerNotByValueSafe,
     CxxString,
     RustStr,
+    RustString,
     RustByValue,
     CByValue,
     CVariableLengthByValue,
@@ -158,6 +159,7 @@ impl TypeDatabase {
                 match td.behavior {
                     Behavior::CxxContainerByValueSafe
                     | Behavior::RustStr
+                    | Behavior::RustString
                     | Behavior::RustByValue
                     | Behavior::CByValue
                     | Behavior::CVariableLengthByValue => true,
@@ -275,7 +277,7 @@ fn create_type_database() -> TypeDatabase {
     do_insert(TypeDetails::new(
         "String".into(),
         "rust::String".into(),
-        Behavior::RustByValue,
+        Behavior::RustString,
         PreludePolicy::IncludeNormal,
         None,
     ));
