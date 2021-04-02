@@ -50,14 +50,14 @@ struct TypeDetails {
 
 impl TypeDetails {
     fn new(
-        rs_name: String,
-        cpp_name: String,
+        rs_name: impl Into<String>,
+        cpp_name: impl Into<String>,
         behavior: Behavior,
         extra_non_canonical_name: Option<String>,
     ) -> Self {
         TypeDetails {
-            rs_name,
-            cpp_name,
+            rs_name: rs_name.into(),
+            cpp_name: cpp_name.into(),
             behavior,
             extra_non_canonical_name,
         }
@@ -232,50 +232,50 @@ fn create_type_database() -> TypeDatabase {
         |td: TypeDetails| by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
     do_insert(TypeDetails::new(
-        "cxx::UniquePtr".into(),
-        "std::unique_ptr".into(),
+        "cxx::UniquePtr",
+        "std::unique_ptr",
         Behavior::CxxContainerByValueSafe,
         None,
     ));
     do_insert(TypeDetails::new(
-        "cxx::CxxVector".into(),
-        "std::vector".into(),
+        "cxx::CxxVector",
+        "std::vector",
         Behavior::CxxContainerNotByValueSafe,
         None,
     ));
     do_insert(TypeDetails::new(
-        "cxx::SharedPtr".into(),
-        "std::shared_ptr".into(),
+        "cxx::SharedPtr",
+        "std::shared_ptr",
         Behavior::CxxContainerByValueSafe,
         None,
     ));
     do_insert(TypeDetails::new(
-        "cxx::CxxString".into(),
-        "std::string".into(),
+        "cxx::CxxString",
+        "std::string",
         Behavior::CxxString,
         None,
     ));
     do_insert(TypeDetails::new(
-        "str".into(),
-        "rust::Str".into(),
+        "str",
+        "rust::Str",
         Behavior::RustStr,
         None,
     ));
     do_insert(TypeDetails::new(
-        "String".into(),
-        "rust::String".into(),
+        "String",
+        "rust::String",
         Behavior::RustString,
         None,
     ));
     do_insert(TypeDetails::new(
-        "i8".into(),
-        "int8_t".into(),
+        "i8",
+        "int8_t",
         Behavior::CByValue,
         Some("std::os::raw::c_schar".into()),
     ));
     do_insert(TypeDetails::new(
-        "u8".into(),
-        "uint8_t".into(),
+        "u8",
+        "uint8_t",
         Behavior::CByValue,
         Some("std::os::raw::c_uchar".into()),
     ));
@@ -296,16 +296,11 @@ fn create_type_database() -> TypeDatabase {
             None,
         ));
     }
-    do_insert(TypeDetails::new(
-        "bool".into(),
-        "bool".into(),
-        Behavior::CByValue,
-        None,
-    ));
+    do_insert(TypeDetails::new("bool", "bool", Behavior::CByValue, None));
 
     do_insert(TypeDetails::new(
-        "std::pin::Pin".into(),
-        "Pin".into(),
+        "std::pin::Pin",
+        "Pin",
         Behavior::RustByValue, // because this is actually Pin<&something>
         None,
     ));
@@ -313,7 +308,7 @@ fn create_type_database() -> TypeDatabase {
     let mut insert_ctype = |cname: &str| {
         let td = TypeDetails::new(
             format!("autocxx::c_{}", cname),
-            cname.into(),
+            cname,
             Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_{}", cname)),
         );
@@ -331,23 +326,18 @@ fn create_type_database() -> TypeDatabase {
     insert_ctype("int");
     insert_ctype("short");
 
-    let td = TypeDetails::new("f32".into(), "float".into(), Behavior::CByValue, None);
+    let td = TypeDetails::new("f32", "float", Behavior::CByValue, None);
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
-    let td = TypeDetails::new("f64".into(), "double".into(), Behavior::CByValue, None);
+    let td = TypeDetails::new("f64", "double", Behavior::CByValue, None);
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
-    let td = TypeDetails::new(
-        "std::os::raw::c_char".into(),
-        "char".into(),
-        Behavior::CByValue,
-        None,
-    );
+    let td = TypeDetails::new("std::os::raw::c_char", "char", Behavior::CByValue, None);
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
     let td = TypeDetails::new(
-        "autocxx::c_void".into(),
-        "void".into(),
+        "autocxx::c_void",
+        "void",
         Behavior::CVoid,
         Some(format!("std::os::raw::c_void")),
     );
