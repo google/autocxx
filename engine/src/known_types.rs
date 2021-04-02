@@ -21,15 +21,6 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use syn::{parse_quote, GenericArgument, PathArguments, Type, TypePath, TypePtr};
 
-/// Whether this type should be included in the 'prelude'
-/// passed to bindgen, and if so, how.
-#[derive(Debug)]
-enum PreludePolicy {
-    Exclude,
-    IncludeNormal,
-    IncludeTemplated,
-}
-
 //// The behavior of the type.
 #[derive(Debug)]
 enum Behavior {
@@ -53,40 +44,40 @@ struct TypeDetails {
     cpp_name: String,
     //// The behavior of the type.
     behavior: Behavior,
-    /// Whether and how to include this in the prelude given to bindgen.
-    prelude_policy: PreludePolicy,
     /// Any extra non-canonical names
     extra_non_canonical_name: Option<String>,
 }
 
 impl TypeDetails {
-    #[allow(clippy::too_many_arguments)]
     fn new(
         rs_name: String,
         cpp_name: String,
         behavior: Behavior,
-        prelude_policy: PreludePolicy,
         extra_non_canonical_name: Option<String>,
     ) -> Self {
         TypeDetails {
             rs_name,
             cpp_name,
             behavior,
-            prelude_policy,
             extra_non_canonical_name,
         }
     }
 
+    /// Whether and how to include this in the prelude given to bindgen.
     fn get_prelude_entry(&self) -> Option<String> {
-        match self.prelude_policy {
-            PreludePolicy::Exclude => None,
-            PreludePolicy::IncludeNormal | PreludePolicy::IncludeTemplated => {
+        match self.behavior {
+            Behavior::RustString
+            | Behavior::RustStr
+            | Behavior::CxxString
+            | Behavior::CxxContainerByValueSafe
+            | Behavior::CxxContainerNotByValueSafe => {
                 let tn = TypeName::new_from_user_input(&self.rs_name);
                 let cxx_name = tn.get_final_ident();
-                let (templating, payload) = match self.prelude_policy {
-                    PreludePolicy::IncludeNormal => ("", "char* ptr"),
-                    PreludePolicy::IncludeTemplated => ("template<typename T> ", "T* ptr"),
-                    _ => unreachable!(),
+                let (templating, payload) = match self.behavior {
+                    Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => {
+                        ("template<typename T> ", "T* ptr")
+                    }
+                    _ => ("", "char* ptr"),
                 };
                 Some(format!(
                     indoc! {"
@@ -101,6 +92,7 @@ impl TypeDetails {
                     self.cpp_name, templating, cxx_name, payload
                 ))
             }
+            _ => None,
         }
     }
 
@@ -243,56 +235,48 @@ fn create_type_database() -> TypeDatabase {
         "cxx::UniquePtr".into(),
         "std::unique_ptr".into(),
         Behavior::CxxContainerByValueSafe,
-        PreludePolicy::IncludeTemplated,
         None,
     ));
     do_insert(TypeDetails::new(
         "cxx::CxxVector".into(),
         "std::vector".into(),
         Behavior::CxxContainerNotByValueSafe,
-        PreludePolicy::IncludeTemplated,
         None,
     ));
     do_insert(TypeDetails::new(
         "cxx::SharedPtr".into(),
         "std::shared_ptr".into(),
         Behavior::CxxContainerByValueSafe,
-        PreludePolicy::IncludeTemplated,
         None,
     ));
     do_insert(TypeDetails::new(
         "cxx::CxxString".into(),
         "std::string".into(),
         Behavior::CxxString,
-        PreludePolicy::IncludeNormal,
         None,
     ));
     do_insert(TypeDetails::new(
         "str".into(),
         "rust::Str".into(),
         Behavior::RustStr,
-        PreludePolicy::IncludeNormal,
         None,
     ));
     do_insert(TypeDetails::new(
         "String".into(),
         "rust::String".into(),
         Behavior::RustString,
-        PreludePolicy::IncludeNormal,
         None,
     ));
     do_insert(TypeDetails::new(
         "i8".into(),
         "int8_t".into(),
         Behavior::CByValue,
-        PreludePolicy::Exclude,
         Some("std::os::raw::c_schar".into()),
     ));
     do_insert(TypeDetails::new(
         "u8".into(),
         "uint8_t".into(),
         Behavior::CByValue,
-        PreludePolicy::Exclude,
         Some("std::os::raw::c_uchar".into()),
     ));
     for (cpp_type, rust_type) in (4..7)
@@ -309,7 +293,6 @@ fn create_type_database() -> TypeDatabase {
             rust_type,
             cpp_type,
             Behavior::CByValue,
-            PreludePolicy::Exclude,
             None,
         ));
     }
@@ -317,7 +300,6 @@ fn create_type_database() -> TypeDatabase {
         "bool".into(),
         "bool".into(),
         Behavior::CByValue,
-        PreludePolicy::Exclude,
         None,
     ));
 
@@ -325,7 +307,6 @@ fn create_type_database() -> TypeDatabase {
         "std::pin::Pin".into(),
         "Pin".into(),
         Behavior::RustByValue, // because this is actually Pin<&something>
-        PreludePolicy::Exclude,
         None,
     ));
 
@@ -334,7 +315,6 @@ fn create_type_database() -> TypeDatabase {
             format!("autocxx::c_{}", cname),
             cname.into(),
             Behavior::CVariableLengthByValue,
-            PreludePolicy::Exclude,
             Some(format!("std::os::raw::c_{}", cname)),
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
@@ -342,7 +322,6 @@ fn create_type_database() -> TypeDatabase {
             format!("autocxx::c_u{}", cname),
             format!("unsigned {}", cname),
             Behavior::CVariableLengthByValue,
-            PreludePolicy::Exclude,
             Some(format!("std::os::raw::c_u{}", cname)),
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
@@ -352,29 +331,16 @@ fn create_type_database() -> TypeDatabase {
     insert_ctype("int");
     insert_ctype("short");
 
-    let td = TypeDetails::new(
-        "f32".into(),
-        "float".into(),
-        Behavior::CByValue,
-        PreludePolicy::Exclude,
-        None,
-    );
+    let td = TypeDetails::new("f32".into(), "float".into(), Behavior::CByValue, None);
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
-    let td = TypeDetails::new(
-        "f64".into(),
-        "double".into(),
-        Behavior::CByValue,
-        PreludePolicy::Exclude,
-        None,
-    );
+    let td = TypeDetails::new("f64".into(), "double".into(), Behavior::CByValue, None);
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
     let td = TypeDetails::new(
         "std::os::raw::c_char".into(),
         "char".into(),
         Behavior::CByValue,
-        PreludePolicy::Exclude,
         None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
@@ -383,7 +349,6 @@ fn create_type_database() -> TypeDatabase {
         "autocxx::c_void".into(),
         "void".into(),
         Behavior::CVoid,
-        PreludePolicy::Exclude,
         Some(format!("std::os::raw::c_void")),
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
