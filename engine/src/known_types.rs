@@ -59,10 +59,6 @@ struct TypeDetails {
     de_referencicate: bool,
     /// Is a C type whose size is not fixed (e.g. int, short)
     is_ctype: bool,
-    /// Whether this is a container type cxx allows. Otherwise,
-    /// if we encounter such a type as a generic, we'll replace it with
-    /// a concrete instantiation.
-    is_cxx_container: bool,
     /// Any extra non-canonical names
     extra_non_canonical_name: Option<String>,
 }
@@ -76,7 +72,6 @@ impl TypeDetails {
         prelude_policy: PreludePolicy,
         de_referencicate: bool,
         is_ctype: bool,
-        is_cxx_container: bool,
         extra_non_canonical_name: Option<String>,
     ) -> Self {
         TypeDetails {
@@ -86,7 +81,6 @@ impl TypeDetails {
             prelude_policy,
             de_referencicate,
             is_ctype,
-            is_cxx_container,
             extra_non_canonical_name,
         }
     }
@@ -223,8 +217,16 @@ impl TypeDatabase {
         self.get(ty).map(|td| td.is_ctype).unwrap_or(false)
     }
 
+    /// Whether this is a generic type acceptable to cxx. Otherwise,
+    /// if we encounter a generic, we'll replace it with a synthesized concrete
+    /// type.
     pub(crate) fn is_cxx_acceptable_generic(&self, ty: &TypeName) -> bool {
-        self.get(ty).map(|x| x.is_cxx_container).unwrap_or(false)
+        self.get(ty)
+            .map(|x| match x.behavior {
+                Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => true,
+                _ => false,
+            })
+            .unwrap_or(false)
     }
 
     pub(crate) fn convertible_from_strs(&self, ty: &TypeName) -> bool {
@@ -247,7 +249,6 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::IncludeTemplated,
         false,
         false,
-        true,
         None,
     ));
     do_insert(TypeDetails::new(
@@ -257,7 +258,6 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::IncludeTemplated,
         false,
         false,
-        true,
         None,
     ));
     do_insert(TypeDetails::new(
@@ -267,7 +267,6 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::IncludeTemplated,
         false,
         false,
-        true,
         None,
     ));
     do_insert(TypeDetails::new(
@@ -275,7 +274,6 @@ fn create_type_database() -> TypeDatabase {
         "std::string".into(),
         Behavior::CxxString,
         PreludePolicy::IncludeNormal,
-        false,
         false,
         false,
         None,
@@ -287,7 +285,6 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::IncludeNormal,
         true,
         false,
-        false,
         None,
     ));
     do_insert(TypeDetails::new(
@@ -295,7 +292,6 @@ fn create_type_database() -> TypeDatabase {
         "rust::String".into(),
         Behavior::RustByValue,
         PreludePolicy::IncludeNormal,
-        false,
         false,
         false,
         None,
@@ -307,7 +303,6 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::Exclude,
         false,
         false,
-        false,
         Some("std::os::raw::c_schar".into()),
     ));
     do_insert(TypeDetails::new(
@@ -315,7 +310,6 @@ fn create_type_database() -> TypeDatabase {
         "uint8_t".into(),
         Behavior::CByValue,
         PreludePolicy::Exclude,
-        false,
         false,
         false,
         Some("std::os::raw::c_uchar".into()),
@@ -337,7 +331,6 @@ fn create_type_database() -> TypeDatabase {
             PreludePolicy::Exclude,
             false,
             false,
-            false,
             None,
         ));
     }
@@ -348,7 +341,6 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::Exclude,
         false,
         false,
-        false,
         None,
     ));
 
@@ -357,7 +349,6 @@ fn create_type_database() -> TypeDatabase {
         "Pin".into(),
         Behavior::RustByValue, // because this is actually Pin<&something>
         PreludePolicy::Exclude,
-        false,
         false,
         false,
         None,
@@ -371,7 +362,6 @@ fn create_type_database() -> TypeDatabase {
             PreludePolicy::Exclude,
             false,
             true,
-            false,
             Some(format!("std::os::raw::c_{}", cname)),
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
@@ -382,7 +372,6 @@ fn create_type_database() -> TypeDatabase {
             PreludePolicy::Exclude,
             false,
             true,
-            false,
             Some(format!("std::os::raw::c_u{}", cname)),
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
@@ -399,7 +388,6 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::Exclude,
         false,
         false,
-        false,
         None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
@@ -409,7 +397,6 @@ fn create_type_database() -> TypeDatabase {
         "double".into(),
         Behavior::CByValue,
         PreludePolicy::Exclude,
-        false,
         false,
         false,
         None,
@@ -423,7 +410,6 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::Exclude,
         false,
         false,
-        false,
         None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
@@ -435,7 +421,6 @@ fn create_type_database() -> TypeDatabase {
         PreludePolicy::Exclude,
         false,
         true,
-        false,
         Some(format!("std::os::raw::c_void")),
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
