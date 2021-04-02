@@ -30,13 +30,7 @@ enum PreludePolicy {
     IncludeTemplated,
 }
 
-/// Whether callers passing in this type can convert from something different.
-#[derive(Debug)]
-enum RustConvertFrom {
-    None,
-    Str,
-}
-
+//// The behavior of the type.
 #[derive(Debug)]
 enum Behavior {
     CxxContainerByValueSafe,
@@ -56,6 +50,7 @@ struct TypeDetails {
     rs_name: String,
     /// C++ equivalent name for a Rust type.
     cpp_name: String,
+    /// The behavior of the type.
     kind: Behavior,
     /// Whether this can be safely represented by value.
     by_value_safe: bool,
@@ -72,8 +67,6 @@ struct TypeDetails {
     is_cxx_container: bool,
     /// Any extra non-canonical names
     extra_non_canonical_name: Option<String>,
-    /// Whether callers passing in this type can convert from something different.
-    rust_convert_from: RustConvertFrom,
 }
 
 impl TypeDetails {
@@ -88,7 +81,6 @@ impl TypeDetails {
         is_ctype: bool,
         is_cxx_container: bool,
         extra_non_canonical_name: Option<String>,
-        rust_convert_from: RustConvertFrom,
     ) -> Self {
         TypeDetails {
             rs_name,
@@ -100,7 +92,6 @@ impl TypeDetails {
             is_ctype,
             is_cxx_container,
             extra_non_canonical_name,
-            rust_convert_from,
         }
     }
 
@@ -230,7 +221,7 @@ impl TypeDatabase {
 
     pub(crate) fn convertible_from_strs(&self, ty: &TypeName) -> bool {
         self.get(ty)
-            .map(|x| matches!(x.rust_convert_from, RustConvertFrom::Str))
+            .map(|x| matches!(x.kind, Behavior::CxxString))
             .unwrap_or(false)
     }
 }
@@ -251,7 +242,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         true,
         None,
-        RustConvertFrom::None,
     ));
     do_insert(TypeDetails::new(
         "cxx::CxxVector".into(),
@@ -263,7 +253,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         true,
         None,
-        RustConvertFrom::None,
     ));
     do_insert(TypeDetails::new(
         "cxx::SharedPtr".into(),
@@ -275,7 +264,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         true,
         None,
-        RustConvertFrom::None,
     ));
     do_insert(TypeDetails::new(
         "cxx::CxxString".into(),
@@ -287,7 +275,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
-        RustConvertFrom::Str,
     ));
     do_insert(TypeDetails::new(
         "str".into(),
@@ -299,7 +286,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
-        RustConvertFrom::None,
     ));
     do_insert(TypeDetails::new(
         "String".into(),
@@ -311,7 +297,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
-        RustConvertFrom::None,
     ));
     do_insert(TypeDetails::new(
         "i8".into(),
@@ -323,7 +308,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         Some("std::os::raw::c_schar".into()),
-        RustConvertFrom::None,
     ));
     do_insert(TypeDetails::new(
         "u8".into(),
@@ -335,7 +319,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         Some("std::os::raw::c_uchar".into()),
-        RustConvertFrom::None,
     ));
     for (cpp_type, rust_type) in (4..7)
         .map(|x| 2i32.pow(x))
@@ -357,7 +340,6 @@ fn create_type_database() -> TypeDatabase {
             false,
             false,
             None,
-            RustConvertFrom::None,
         ));
     }
     do_insert(TypeDetails::new(
@@ -370,7 +352,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
-        RustConvertFrom::None,
     ));
 
     do_insert(TypeDetails::new(
@@ -383,7 +364,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
-        RustConvertFrom::None,
     ));
 
     let mut insert_ctype = |cname: &str| {
@@ -397,7 +377,6 @@ fn create_type_database() -> TypeDatabase {
             true,
             false,
             Some(format!("std::os::raw::c_{}", cname)),
-            RustConvertFrom::None,
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
         let td = TypeDetails::new(
@@ -410,7 +389,6 @@ fn create_type_database() -> TypeDatabase {
             true,
             false,
             Some(format!("std::os::raw::c_u{}", cname)),
-            RustConvertFrom::None,
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
     };
@@ -429,7 +407,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
-        RustConvertFrom::None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
@@ -443,7 +420,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
-        RustConvertFrom::None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
@@ -457,7 +433,6 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
         None,
-        RustConvertFrom::None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
@@ -471,7 +446,6 @@ fn create_type_database() -> TypeDatabase {
         true,
         false,
         Some(format!("std::os::raw::c_void")),
-        RustConvertFrom::None,
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
