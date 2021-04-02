@@ -50,10 +50,8 @@ struct TypeDetails {
     rs_name: String,
     /// C++ equivalent name for a Rust type.
     cpp_name: String,
-    /// The behavior of the type.
-    kind: Behavior,
-    /// Whether this can be safely represented by value.
-    by_value_safe: bool,
+    //// The behavior of the type.
+    behavior: Behavior,
     /// Whether and how to include this in the prelude given to bindgen.
     prelude_policy: PreludePolicy,
     /// Whether this is a & on the Rust side but a value on the C++
@@ -74,8 +72,7 @@ impl TypeDetails {
     fn new(
         rs_name: String,
         cpp_name: String,
-        kind: Behavior,
-        by_value_safe: bool,
+        behavior: Behavior,
         prelude_policy: PreludePolicy,
         de_referencicate: bool,
         is_ctype: bool,
@@ -85,8 +82,7 @@ impl TypeDetails {
         TypeDetails {
             rs_name,
             cpp_name,
-            kind,
-            by_value_safe,
+            behavior,
             prelude_policy,
             de_referencicate,
             is_ctype,
@@ -171,9 +167,21 @@ impl TypeDatabase {
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
     pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (&TypeName, bool)> {
-        self.by_rs_name
-            .iter()
-            .map(|(tn, td)| (tn, td.by_value_safe))
+        self.by_rs_name.iter().map(|(tn, td)| {
+            (
+                tn,
+                match td.behavior {
+                    Behavior::CxxContainerByValueSafe
+                    | Behavior::RustStr
+                    | Behavior::RustByValue
+                    | Behavior::CByValue
+                    | Behavior::CVariableLengthByValue => true,
+                    Behavior::CxxString
+                    | Behavior::CxxContainerNotByValueSafe
+                    | Behavior::CVoid => false,
+                },
+            )
+        })
     }
 
     /// Whether this TypePath should be treated as a value in C++
@@ -221,7 +229,7 @@ impl TypeDatabase {
 
     pub(crate) fn convertible_from_strs(&self, ty: &TypeName) -> bool {
         self.get(ty)
-            .map(|x| matches!(x.kind, Behavior::CxxString))
+            .map(|x| matches!(x.behavior, Behavior::CxxString))
             .unwrap_or(false)
     }
 }
@@ -236,7 +244,6 @@ fn create_type_database() -> TypeDatabase {
         "cxx::UniquePtr".into(),
         "std::unique_ptr".into(),
         Behavior::CxxContainerByValueSafe,
-        true,
         PreludePolicy::IncludeTemplated,
         false,
         false,
@@ -247,7 +254,6 @@ fn create_type_database() -> TypeDatabase {
         "cxx::CxxVector".into(),
         "std::vector".into(),
         Behavior::CxxContainerNotByValueSafe,
-        false,
         PreludePolicy::IncludeTemplated,
         false,
         false,
@@ -258,7 +264,6 @@ fn create_type_database() -> TypeDatabase {
         "cxx::SharedPtr".into(),
         "std::shared_ptr".into(),
         Behavior::CxxContainerByValueSafe,
-        true,
         PreludePolicy::IncludeTemplated,
         false,
         false,
@@ -269,7 +274,6 @@ fn create_type_database() -> TypeDatabase {
         "cxx::CxxString".into(),
         "std::string".into(),
         Behavior::CxxString,
-        false,
         PreludePolicy::IncludeNormal,
         false,
         false,
@@ -280,7 +284,6 @@ fn create_type_database() -> TypeDatabase {
         "str".into(),
         "rust::Str".into(),
         Behavior::RustStr,
-        true,
         PreludePolicy::IncludeNormal,
         true,
         false,
@@ -291,7 +294,6 @@ fn create_type_database() -> TypeDatabase {
         "String".into(),
         "rust::String".into(),
         Behavior::RustByValue,
-        true,
         PreludePolicy::IncludeNormal,
         false,
         false,
@@ -302,7 +304,6 @@ fn create_type_database() -> TypeDatabase {
         "i8".into(),
         "int8_t".into(),
         Behavior::CByValue,
-        true,
         PreludePolicy::Exclude,
         false,
         false,
@@ -313,7 +314,6 @@ fn create_type_database() -> TypeDatabase {
         "u8".into(),
         "uint8_t".into(),
         Behavior::CByValue,
-        true,
         PreludePolicy::Exclude,
         false,
         false,
@@ -334,7 +334,6 @@ fn create_type_database() -> TypeDatabase {
             rust_type,
             cpp_type,
             Behavior::CByValue,
-            true,
             PreludePolicy::Exclude,
             false,
             false,
@@ -346,7 +345,6 @@ fn create_type_database() -> TypeDatabase {
         "bool".into(),
         "bool".into(),
         Behavior::CByValue,
-        true,
         PreludePolicy::Exclude,
         false,
         false,
@@ -357,8 +355,7 @@ fn create_type_database() -> TypeDatabase {
     do_insert(TypeDetails::new(
         "std::pin::Pin".into(),
         "Pin".into(),
-        Behavior::RustByValue,
-        true, // because this is actually Pin<&something>
+        Behavior::RustByValue, // because this is actually Pin<&something>
         PreludePolicy::Exclude,
         false,
         false,
@@ -371,7 +368,6 @@ fn create_type_database() -> TypeDatabase {
             format!("autocxx::c_{}", cname),
             cname.into(),
             Behavior::CVariableLengthByValue,
-            true,
             PreludePolicy::Exclude,
             false,
             true,
@@ -383,7 +379,6 @@ fn create_type_database() -> TypeDatabase {
             format!("autocxx::c_u{}", cname),
             format!("unsigned {}", cname),
             Behavior::CVariableLengthByValue,
-            true,
             PreludePolicy::Exclude,
             false,
             true,
@@ -401,7 +396,6 @@ fn create_type_database() -> TypeDatabase {
         "f32".into(),
         "float".into(),
         Behavior::CByValue,
-        true,
         PreludePolicy::Exclude,
         false,
         false,
@@ -414,7 +408,6 @@ fn create_type_database() -> TypeDatabase {
         "f64".into(),
         "double".into(),
         Behavior::CByValue,
-        true,
         PreludePolicy::Exclude,
         false,
         false,
@@ -427,7 +420,6 @@ fn create_type_database() -> TypeDatabase {
         "std::os::raw::c_char".into(),
         "char".into(),
         Behavior::CByValue,
-        true,
         PreludePolicy::Exclude,
         false,
         false,
@@ -440,7 +432,6 @@ fn create_type_database() -> TypeDatabase {
         "autocxx::c_void".into(),
         "void".into(),
         Behavior::CVoid,
-        false,
         PreludePolicy::Exclude,
         false,
         true,
