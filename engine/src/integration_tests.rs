@@ -2510,18 +2510,6 @@ fn test_give_nonpod_typedef_by_value() {
 }
 
 #[test]
-#[ignore] // bindgen creates functions called create and create1,
-          // then impl blocks for Bob and Fred which call them from methods each
-          // called simply 'create'. Because of this mismatch we have no way to know
-          // that 'create1' is a static function, and this fails. We _could_ parse
-          // the contents of the impl block methods in order to find out what is
-          // actually being called, but currently bindgen in fact gets this wrong,
-          // and calls 'create' from both of them. The first step to getting this
-          // working would therefore be to make a minimal test case and file it
-          // against bindgen. TODO. Then after that was fixed we could look at
-          // whether it's worth fixing this by parsing the contents of the impl'ed
-          // methods.
-          // https://github.com/google/autocxx/issues/331
 fn test_conflicting_static_functions() {
     let cxx = indoc! {"
         Bob Bob::create() { Bob a; return a; }
