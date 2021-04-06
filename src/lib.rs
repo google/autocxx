@@ -145,14 +145,17 @@ use autocxx_engine::IncludeCppEngine;
 ///
 /// # Making strings
 ///
-/// Unless you use [exclude_utilities], you will find a trait called
-/// `ffi::ToCppString` which you can use to convert any Rust string into a C++
-/// `std::unique_ptr<std::string>` like this:
+/// Functions that accept a `std::string` will actually accept anything that
+/// implements a trait called `ffi::ToCppString`. That may either be a
+/// `UniquePtr<CxxString>` or just a plain old Rust string - which will be
+/// converted transparently to a C++ string.
 ///
-/// ```ignore
-/// use ffi::ToCpp;
-/// let unique_ptr_to_cxx_string = "my_string".to_cpp();
-/// ```
+/// This trait, and its implementations, are not present in the `autocxx`
+/// documentation because they're dynamically generated in _your_ code
+/// so that they can call through to a `make_string` implementation in
+/// the C++ that we're injecting into your C++ build system.
+///
+/// None of that happens if you use `exclude_utilities`.
 ///
 /// # Support for particular C++ features
 ///
@@ -382,3 +385,13 @@ ctype_wrapper!(c_short, "c_short", "Newtype wrapper for an short");
 ctype_wrapper!(c_uint, "c_uint", "Newtype wrapper for an unsigned int");
 ctype_wrapper!(c_int, "c_int", "Newtype wrapper for an int");
 ctype_wrapper!(c_uchar, "c_uchar", "Newtype wrapper for an unsigned char");
+
+/// Newtype wrapper for a C void. Only useful as a `*c_void`
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct c_void(pub ::std::os::raw::c_void);
+
+unsafe impl autocxx_engine::cxx::ExternType for c_void {
+    type Id = autocxx_engine::cxx::type_id!(c_void);
+    type Kind = autocxx_engine::cxx::kind::Trivial;
+}

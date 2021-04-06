@@ -29,8 +29,13 @@ pub enum ParseError {
     FileRead(std::io::Error),
     /// The .rs file couldn't be parsed.
     Syntax(syn::Error),
-    /// The include CPP macro could not be parsed.
-    MacroParseFail(EngineError),
+    /// The include CPP macro could not be expanded into
+    /// Rust bindings to C++, because of some problem during the conversion
+    /// process. This could be anything from a C++ parsing error to some
+    /// C++ feature that autocxx can't yet handle and isn't able to skip
+    /// over. It could also cover errors in your syntax of the `include_cpp`
+    /// macro or the directives inside.
+    AutocxxCodegenError(EngineError),
 }
 
 impl Display for ParseError {
@@ -39,7 +44,7 @@ impl Display for ParseError {
             ParseError::FileOpen(err) => write!(f, "Unable to open file: {}", err)?,
             ParseError::FileRead(err) => write!(f, "Unable to read file: {}", err)?,
             ParseError::Syntax(err) => write!(f, "Syntax error parsing Rust file: {}", err)?,
-            ParseError::MacroParseFail(err) => {
+            ParseError::AutocxxCodegenError(err) => {
                 write!(f, "Unable to parse include_cpp! macro: {}", err)?
             }
         }
@@ -53,6 +58,7 @@ pub fn parse_file<P1: AsRef<Path>>(rs_file: P1) -> Result<ParsedFile, ParseError
     let mut file = std::fs::File::open(rs_file).map_err(ParseError::FileOpen)?;
     file.read_to_string(&mut source)
         .map_err(ParseError::FileRead)?;
+    proc_macro2::fallback::force();
     let source = syn::parse_file(&source).map_err(ParseError::Syntax)?;
     parse_file_contents(source)
 }
@@ -63,7 +69,7 @@ fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
         if let Item::Macro(ref mac) = item {
             if mac.mac.path.is_ident("include_cpp") {
                 let include_cpp = crate::IncludeCppEngine::new_from_syn(mac.mac.clone())
-                    .map_err(ParseError::MacroParseFail)?;
+                    .map_err(ParseError::AutocxxCodegenError)?;
                 results.push(Segment::Autocxx(include_cpp));
                 continue;
             }
@@ -110,6 +116,7 @@ impl ParsedFile {
     pub fn resolve_all(
         &mut self,
         autocxx_inc: Vec<PathBuf>,
+        definitions: &[impl AsRef<str>],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     ) -> Result<(), ParseError> {
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
@@ -122,9 +129,10 @@ impl ParsedFile {
                     inner_dep_recorder.clone(),
                 ))),
             };
+            let defs: Vec<String> = definitions.iter().map(|d| d.as_ref().to_string()).collect();
             include_cpp
-                .generate(autocxx_inc.clone(), dep_recorder)
-                .map_err(ParseError::MacroParseFail)?
+                .generate(autocxx_inc.clone(), &defs, dep_recorder)
+                .map_err(ParseError::AutocxxCodegenError)?
         }
         Ok(())
     }

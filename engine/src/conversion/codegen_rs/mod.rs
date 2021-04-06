@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod fun_codegen;
+mod function_wrapper_rs;
 mod impl_item_creator;
 mod namespace_organizer;
 mod non_pod_struct;
@@ -37,11 +38,69 @@ use self::{
 
 use super::{
     analysis::fun::FnAnalysis,
-    api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, Use},
+    api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, TypedefKind},
 };
 use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
+
+/// Whether and how this type should be exposed in the mods constructed
+/// for actual end-user use.
+#[derive(Clone)]
+enum Use {
+    /// Not used
+    Unused,
+    /// Uses from cxx::bridge
+    UsedFromCxxBridge,
+    /// 'use' points to cxx::bridge with a different name
+    UsedFromCxxBridgeWithAlias(Ident),
+    /// 'use' directive points to bindgen
+    UsedFromBindgen,
+    /// Some kind of custom item
+    Custom(Box<Item>),
+}
+
+fn get_string_items() -> Vec<Item> {
+    [
+        Item::Trait(parse_quote! {
+            pub trait ToCppString {
+                fn to_cpp(self) -> cxx::UniquePtr<cxx::CxxString>;
+            }
+        }),
+        // We can't just impl<T: AsRef<str>> ToCppString for T
+        // because the compiler says that this trait could be implemented
+        // in future for cxx::UniquePtr<cxx::CxxString>. Fair enough.
+        Item::Impl(parse_quote! {
+            impl ToCppString for &str {
+                fn to_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                    cxxbridge::make_string(self)
+                }
+            }
+        }),
+        Item::Impl(parse_quote! {
+            impl ToCppString for String {
+                fn to_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                    cxxbridge::make_string(&self)
+                }
+            }
+        }),
+        Item::Impl(parse_quote! {
+            impl ToCppString for &String {
+                fn to_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                    cxxbridge::make_string(self)
+                }
+            }
+        }),
+        Item::Impl(parse_quote! {
+            impl ToCppString for cxx::UniquePtr<cxx::CxxString> {
+                fn to_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                    self
+                }
+            }
+        }),
+    ]
+    .to_vec()
+}
 
 fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
     input.into_iter().flatten().collect()
@@ -71,9 +130,11 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn rs_codegen(mut self, all_apis: Vec<Api<FnAnalysis>>) -> Vec<Item> {
         // ... and now let's start to generate the output code.
-        // First, the hierarchy of mods containing lots of 'use' statements
-        // which is the final API exposed as 'ffi'.
-        let mut use_statements = Self::generate_final_use_statements(&all_apis);
+        // First let's see if we plan to generate the string construction utilities, as this will affect
+        // what 'use' statements we need here and there.
+        let generate_utilities = all_apis
+            .iter()
+            .any(|api| matches!(&api.detail, ApiDetail::StringConstructor));
         // Now let's generate the Rust code.
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
@@ -83,9 +144,13 @@ impl<'a> RsCodeGenerator<'a> {
                 ((api.ns, api.id, gen), more_cpp_needed)
             })
             .unzip();
+        // First, the hierarchy of mods containing lots of 'use' statements
+        // which is the final API exposed as 'ffi'.
+        let mut use_statements =
+            Self::generate_final_use_statements(&rs_codegen_results_and_namespaces);
         // And work out what we need for the bindgen mod.
-        let bindgen_root_items =
-            self.generate_final_bindgen_mods(&rs_codegen_results_and_namespaces);
+        let bindgen_root_items = self
+            .generate_final_bindgen_mods(&rs_codegen_results_and_namespaces, generate_utilities);
         // Both of the above ('use' hierarchy and bindgen mod) are organized into
         // sub-mods by namespace. From here on, things are flat.
         let (_, _, rs_codegen_results) =
@@ -116,8 +181,9 @@ impl<'a> RsCodeGenerator<'a> {
         // to set the 'contents' field of the ItemMod
         // structures directly.
         if !bindgen_root_items.is_empty() {
+            self.bindgen_mod.vis = parse_quote! {};
             self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(parse_quote! {
-                pub mod root {
+                pub(super) mod root {
                     #(#bindgen_root_items)*
                 }
             })];
@@ -125,9 +191,14 @@ impl<'a> RsCodeGenerator<'a> {
         }
         all_items.push(Item::Mod(parse_quote! {
             #[cxx::bridge]
-            pub mod cxxbridge {
+            mod cxxbridge {
                 #(#bridge_items)*
             }
+        }));
+
+        all_items.push(Item::Use(parse_quote! {
+            #[allow(unused_imports)]
+            use bindgen::root;
         }));
         all_items.append(&mut use_statements);
         all_items
@@ -159,7 +230,9 @@ impl<'a> RsCodeGenerator<'a> {
 
     /// Generate lots of 'use' statements to pull cxxbridge items into the output
     /// mod hierarchy according to C++ namespaces.
-    fn generate_final_use_statements(input_items: &[Api<FnAnalysis>]) -> Vec<Item> {
+    fn generate_final_use_statements(
+        input_items: &[(Namespace, Ident, RsCodegenResult)],
+    ) -> Vec<Item> {
         let mut output_items = Vec::new();
         let ns_entries = NamespaceEntries::new(input_items);
         Self::append_child_use_namespace(&ns_entries, &mut output_items);
@@ -167,19 +240,22 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn append_child_use_namespace(
-        ns_entries: &NamespaceEntries<Api<FnAnalysis>>,
+        ns_entries: &NamespaceEntries<(Namespace, Ident, RsCodegenResult)>,
         output_items: &mut Vec<Item>,
     ) {
-        for item in ns_entries.entries() {
-            let id = &item.id;
-            match &item.use_stmt() {
-                Use::UsedWithAlias(alias) => output_items.push(Item::Use(parse_quote!(
-                    pub use cxxbridge :: #id as #alias;
-                ))),
-                Use::Used => output_items.push(Item::Use(parse_quote!(
+        for (ns, id, codegen) in ns_entries.entries() {
+            match &codegen.materialization {
+                Use::UsedFromCxxBridgeWithAlias(alias) => {
+                    output_items.push(Item::Use(parse_quote!(
+                        pub use cxxbridge :: #id as #alias;
+                    )))
+                }
+                Use::UsedFromCxxBridge => output_items.push(Item::Use(parse_quote!(
                     pub use cxxbridge :: #id;
                 ))),
+                Use::UsedFromBindgen => output_items.push(Self::generate_bindgen_use_stmt(ns, id)),
                 Use::Unused => {}
+                Use::Custom(item) => output_items.push(*item.clone()),
             };
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
@@ -201,7 +277,12 @@ impl<'a> RsCodeGenerator<'a> {
         }
     }
 
-    fn append_uses_for_ns(&mut self, items: &mut Vec<Item>, ns: &Namespace) {
+    fn append_uses_for_ns(
+        &mut self,
+        items: &mut Vec<Item>,
+        ns: &Namespace,
+        generate_utilities: bool,
+    ) {
         let super_duper = std::iter::repeat(make_ident("super")); // I'll get my coat
         let supers = super_duper.clone().take(ns.depth() + 2);
         items.push(Item::Use(parse_quote! {
@@ -210,6 +291,15 @@ impl<'a> RsCodeGenerator<'a> {
                 #(#supers)::*
             ::cxxbridge;
         }));
+        if generate_utilities {
+            let supers = super_duper.clone().take(ns.depth() + 2);
+            items.push(Item::Use(parse_quote! {
+                #[allow(unused_imports)]
+                use self::
+                    #(#supers)::*
+                ::ToCppString;
+            }));
+        }
         let supers = super_duper.take(ns.depth() + 1);
         items.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]
@@ -224,6 +314,7 @@ impl<'a> RsCodeGenerator<'a> {
         ns_entries: &NamespaceEntries<(Namespace, Ident, RsCodegenResult)>,
         output_items: &mut Vec<Item>,
         ns: &Namespace,
+        generate_utilities: bool,
     ) {
         let mut impl_entries_by_type: HashMap<_, Vec<_>> = HashMap::new();
         for item in ns_entries.entries() {
@@ -247,13 +338,18 @@ impl<'a> RsCodeGenerator<'a> {
             let child_id = make_ident(child_name);
 
             let mut inner_output_items = Vec::new();
-            self.append_child_bindgen_namespace(child_ns_entries, &mut inner_output_items, &new_ns);
+            self.append_child_bindgen_namespace(
+                child_ns_entries,
+                &mut inner_output_items,
+                &new_ns,
+                generate_utilities,
+            );
             if !inner_output_items.is_empty() {
                 let mut new_mod: ItemMod = parse_quote!(
                     pub mod #child_id {
                     }
                 );
-                self.append_uses_for_ns(&mut inner_output_items, &new_ns);
+                self.append_uses_for_ns(&mut inner_output_items, &new_ns, generate_utilities);
                 new_mod.content.as_mut().unwrap().1 = inner_output_items;
                 output_items.push(Item::Mod(new_mod));
             }
@@ -263,12 +359,18 @@ impl<'a> RsCodeGenerator<'a> {
     fn generate_final_bindgen_mods(
         &mut self,
         input_items: &[(Namespace, Ident, RsCodegenResult)],
+        generate_utilities: bool,
     ) -> Vec<Item> {
         let mut output_items = Vec::new();
         let ns = Namespace::new();
         let ns_entries = NamespaceEntries::new(input_items);
-        self.append_child_bindgen_namespace(&ns_entries, &mut output_items, &ns);
-        self.append_uses_for_ns(&mut output_items, &ns);
+        self.append_child_bindgen_namespace(
+            &ns_entries,
+            &mut output_items,
+            &ns,
+            generate_utilities,
+        );
+        self.append_uses_for_ns(&mut output_items, &ns, generate_utilities);
         output_items
     }
 
@@ -282,24 +384,11 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
                     fn make_string(str_: &str) -> UniquePtr<CxxString>;
                 ))),
-                //additional_cpp: Some(AdditionalNeed::MakeStringConstructor),
                 bridge_items: Vec::new(),
-                global_items: vec![
-                    Item::Trait(parse_quote! {
-                        pub trait ToCppString {
-                            fn to_cpp(&self) -> cxx::UniquePtr<cxx::CxxString>;
-                        }
-                    }),
-                    Item::Impl(parse_quote! {
-                        impl ToCppString for str {
-                            fn to_cpp(&self) -> cxx::UniquePtr<cxx::CxxString> {
-                                cxxbridge::make_string(self)
-                            }
-                        }
-                    }),
-                ],
+                global_items: get_string_items(),
                 bindgen_mod_item: None,
                 impl_entry: None,
+                materialization: Use::Unused,
             },
             ApiDetail::ConcreteType { ty_details, .. } => {
                 let global_items = Self::generate_extern_type_impl(TypeKind::NonPod, &ty_details);
@@ -314,6 +403,7 @@ impl<'a> RsCodeGenerator<'a> {
                         ty_details.final_ident,
                     ))),
                     impl_entry: None,
+                    materialization: Use::Unused,
                 }
             }
             ApiDetail::Function { fun: _, analysis } => gen_function(ns, analysis),
@@ -324,13 +414,18 @@ impl<'a> RsCodeGenerator<'a> {
                 bridge_items: Vec::new(),
                 extern_c_mod_item: None,
                 bindgen_mod_item: None,
+                materialization: Use::Unused,
             },
-            ApiDetail::Typedef { type_item } => RsCodegenResult {
-                global_items: Vec::new(),
-                impl_entry: None,
-                bridge_items: Vec::new(),
+            ApiDetail::Typedef { payload } => RsCodegenResult {
                 extern_c_mod_item: None,
-                bindgen_mod_item: Some(Item::Type(type_item)),
+                bridge_items: Vec::new(),
+                global_items: Vec::new(),
+                bindgen_mod_item: Some(match payload {
+                    TypedefKind::Type(type_item) => Item::Type(type_item),
+                    TypedefKind::Use(use_item) => Item::Use(use_item),
+                }),
+                impl_entry: None,
+                materialization: Use::UsedFromBindgen,
             },
             ApiDetail::Type {
                 ty_details,
@@ -341,12 +436,14 @@ impl<'a> RsCodeGenerator<'a> {
             } => RsCodegenResult {
                 global_items: Self::generate_extern_type_impl(analysis, &ty_details),
                 impl_entry: None,
-                bridge_items: match analysis {
-                    TypeKind::ForwardDeclaration => Vec::new(),
-                    _ => create_impl_items(&ty_details.final_ident),
+                bridge_items: if analysis.can_be_instantiated() {
+                    create_impl_items(&ty_details.final_ident)
+                } else {
+                    Vec::new()
                 },
                 extern_c_mod_item: Some(ForeignItem::Verbatim(for_extern_c_ts)),
                 bindgen_mod_item,
+                materialization: Use::UsedFromCxxBridge,
             },
             ApiDetail::CType { .. } => RsCodegenResult {
                 global_items: Vec::new(),
@@ -356,6 +453,7 @@ impl<'a> RsCodeGenerator<'a> {
                     type #id = autocxx::#id;
                 })),
                 bindgen_mod_item: None,
+                materialization: Use::Unused,
             },
             ApiDetail::OpaqueTypedef => RsCodegenResult {
                 global_items: Vec::new(),
@@ -365,8 +463,29 @@ impl<'a> RsCodeGenerator<'a> {
                     type #id;
                 })),
                 bindgen_mod_item: None,
+                materialization: Use::Unused,
+            },
+            ApiDetail::IgnoredItem => RsCodegenResult {
+                // In future it would be terrific to output something
+                // here which results in autocomplete in IDEs revealing
+                // the reason why this was ignored.
+                global_items: Vec::new(),
+                impl_entry: None,
+                bridge_items: Vec::new(),
+                extern_c_mod_item: None,
+                bindgen_mod_item: None,
+                materialization: Use::Unused,
             },
         }
+    }
+
+    fn generate_bindgen_use_stmt(ns: &Namespace, id: &Ident) -> Item {
+        let prefix = ["bindgen", "root"].iter().map(make_ident);
+        let ns = ns.iter().map(make_ident);
+        let segs = prefix.chain(ns).chain(std::iter::once(id.clone()));
+        Item::Use(parse_quote! {
+            pub use #(#segs)::*;
+        })
     }
 
     fn generate_extern_type_impl(type_kind: TypeKind, ty_details: &TypeApiDetails) -> Vec<Item> {
@@ -404,4 +523,5 @@ pub(crate) struct RsCodegenResult {
     global_items: Vec<Item>,
     bindgen_mod_item: Option<Item>,
     impl_entry: Option<Box<ImplBlockDetails>>,
+    materialization: Use,
 }

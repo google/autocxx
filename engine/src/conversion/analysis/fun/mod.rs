@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod bridge_name_tracker;
+pub(crate) mod function_wrapper;
 mod overload_tracker;
 mod rust_name_tracker;
 
@@ -20,6 +21,8 @@ use crate::known_types::KNOWN_TYPES;
 use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::{TypeConfig, UnsafePolicy};
+use function_wrapper::{FunctionWrapper, FunctionWrapperPayload, TypeConversionPolicy};
+use proc_macro2::Span;
 use syn::{
     parse_quote, punctuated::Punctuated, FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType,
     Type, TypePtr, Visibility,
@@ -27,11 +30,8 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi, Use},
-        codegen_cpp::{
-            function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
-            AdditionalNeed,
-        },
+        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
+        codegen_cpp::AdditionalNeed,
         parse::type_converter::TypeConverter,
         ConvertError,
     },
@@ -58,24 +58,25 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) wrapper_function_needed: bool,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
-    pub(crate) id_for_allowlist: Option<Ident>,
-    pub(crate) use_stmt: Use,
+    pub(crate) id_for_allowlist: Ident,
+    pub(crate) rename_in_output_mod: Option<Ident>,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
+    pub(crate) is_pure_virtual: bool,
 }
 
 pub(crate) struct ArgumentAnalysis {
-    pub(crate) conversion: ArgumentConversion,
+    pub(crate) conversion: TypeConversionPolicy,
     pub(crate) name: Pat,
     pub(crate) self_type: Option<TypeName>,
     was_reference: bool,
     deps: HashSet<TypeName>,
-    virtual_this_encountered: bool,
+    is_virtual: bool,
     requires_unsafe: bool,
 }
 
 pub(crate) struct ReturnTypeAnalysis {
     rt: ReturnType,
-    conversion: Option<ArgumentConversion>,
+    conversion: Option<TypeConversionPolicy>,
     was_reference: bool,
     deps: HashSet<TypeName>,
 }
@@ -97,6 +98,7 @@ pub(crate) struct FnAnalyzer<'a> {
     type_config: &'a TypeConfig,
     incomplete_types: HashSet<TypeName>,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
+    generate_utilities: bool,
 }
 
 struct FnAnalysisResult(FnAnalysisBody, Ident, HashSet<TypeName>);
@@ -118,6 +120,7 @@ impl<'a> FnAnalyzer<'a> {
             incomplete_types: Self::build_incomplete_type_set(&apis),
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
+            generate_utilities: Self::should_generate_utilities(&apis),
         };
         let mut results = Vec::new();
         for api in apis {
@@ -131,6 +134,11 @@ impl<'a> FnAnalyzer<'a> {
         }
         results.extend(me.extra_apis.into_iter().map(Self::make_extra_api_nonpod));
         Ok(results)
+    }
+
+    fn should_generate_utilities(apis: &[Api<PodAnalysis>]) -> bool {
+        apis.iter()
+            .any(|api| matches!(api.detail, ApiDetail::StringConstructor))
     }
 
     fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<TypeName> {
@@ -226,7 +234,7 @@ impl<'a> FnAnalyzer<'a> {
                 }
             }
             ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
-            ApiDetail::Typedef { type_item } => ApiDetail::Typedef { type_item },
+            ApiDetail::Typedef { payload } => ApiDetail::Typedef { payload },
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
             // Just changes to this one...
             ApiDetail::Type {
@@ -246,6 +254,7 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::SynthesizedFunction { analysis: _ } => {
                 panic!("Should not yet be any synthesized fns")
             }
+            ApiDetail::IgnoredItem => ApiDetail::IgnoredItem,
         };
         Ok(Some(Api {
             ns: api.ns,
@@ -306,6 +315,7 @@ impl<'a> FnAnalyzer<'a> {
     ) -> Result<Option<FnAnalysisResult>, ConvertError> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
+        let is_pure_virtual = Self::has_attr(&fun, "bindgen_pure_virtual");
         // This function is one of the most complex parts of our conversion.
         // It needs to consider:
         // 1. Rejecting destructors entirely.
@@ -358,7 +368,10 @@ impl<'a> FnAnalyzer<'a> {
             .filter_map(|pd| pd.self_type.as_ref())
             .next()
             .cloned();
-        let virtual_this_encountered = param_details.iter().any(|pd| pd.virtual_this_encountered);
+        let is_virtual = param_details.iter().any(|pd| pd.is_virtual);
+        if is_pure_virtual {
+            assert!(is_virtual);
+        }
         let requires_unsafe = param_details.iter().any(|pd| pd.requires_unsafe);
 
         let is_static_method = if self_ty.is_none() {
@@ -370,10 +383,9 @@ impl<'a> FnAnalyzer<'a> {
             false
         };
 
-        let is_a_method = self_ty.is_some();
         let self_ty = self_ty; // prevent subsequent mut'ing
 
-        // Work out naming.
+        // Work out naming, part one.
         let mut rust_name;
         let mut is_constructor = false;
         // bindgen may have mangled the name either because it's invalid Rust
@@ -451,7 +463,7 @@ impl<'a> FnAnalyzer<'a> {
                 rt: parse_quote! {
                     -> #constructed_type
                 },
-                conversion: Some(ArgumentConversion::new_to_unique_ptr(parse_quote! {
+                conversion: Some(TypeConversionPolicy::new_to_unique_ptr(parse_quote! {
                     #constructed_type
                 })),
                 was_reference: false,
@@ -477,16 +489,16 @@ impl<'a> FnAnalyzer<'a> {
         let ret_type_conversion = return_analysis.conversion;
 
         // Do we need to convert either parameters or return type?
-        let param_conversion_needed = param_details.iter().any(|b| b.conversion.work_needed());
+        let param_conversion_needed = param_details.iter().any(|b| b.conversion.cpp_work_needed());
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
-            .map_or(false, |x| x.work_needed());
+            .map_or(false, |x| x.cpp_work_needed());
         let differently_named_method = self_ty.is_some() && (cxxbridge_name != rust_name);
         let wrapper_function_needed = param_conversion_needed
             || ret_type_conversion_needed
             || is_static_method
             || differently_named_method
-            || virtual_this_encountered;
+            || is_virtual;
 
         let mut additional_cpp = None;
 
@@ -517,7 +529,7 @@ impl<'a> FnAnalyzer<'a> {
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
-                is_a_method: is_a_method && !is_constructor && !is_static_method,
+                is_a_method: self_ty.is_some() && !is_constructor && !is_static_method,
             })));
             // Now modify the cxx::bridge entry we're going to make.
             if let Some(conversion) = ret_type_conversion {
@@ -542,51 +554,44 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
 
-        // Bits copied from below
-        let mut use_alias_required = None;
-        let mut rename_using_rust_attr = false;
-        if cxxbridge_name == rust_name {
-            if !is_a_method {
-                // Mark that this name is now occupied in the output
-                // namespace of cxx, so that future functions we encounter
-                // with the same name instead get called something else.
-                self.ok_to_use_rust_name(&rust_name);
-            }
-        } else {
-            // Now we've made a brand new function, we need to plumb it back
-            // into place such that users can call it just as if it were
-            // the original function.
-            if self_ty.is_none() {
+        let requires_unsafe = requires_unsafe || self.should_be_unsafe();
+        let vis = func_information.item.vis.clone();
+
+        // Naming, part two.
+        // Work out our final naming strategy.
+        let rust_name_ident = make_ident(&rust_name);
+        let (rename_using_rust_attr, id, rename_in_output_mod, id_for_allowlist) =
+            if let Some(self_ty) = self_ty.as_ref() {
+                // Method.
+                (
+                    false,
+                    rust_name_ident,
+                    None,
+                    make_ident(self_ty.get_final_ident()),
+                )
+            } else {
+                // Function.
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
                 // There is a global space of rust_names even if they're in
                 // different namespaces.
                 let rust_name_ok = self.ok_to_use_rust_name(&rust_name);
-                if rust_name_ok {
-                    rename_using_rust_attr = true;
+                if cxxbridge_name != rust_name {
+                    if rust_name_ok {
+                        (true, rust_name_ident.clone(), None, rust_name_ident)
+                    } else {
+                        (
+                            false,
+                            cxxbridge_name.clone(),
+                            Some(rust_name_ident.clone()),
+                            rust_name_ident,
+                        )
+                    }
                 } else {
-                    use_alias_required = Some(make_ident(&rust_name));
+                    (false, rust_name_ident.clone(), None, rust_name_ident)
                 }
-            }
-        }
+            };
 
-        let requires_unsafe = requires_unsafe || self.should_be_unsafe();
-        let vis = func_information.item.vis.clone();
-
-        let (id, use_stmt, id_for_allowlist) = if is_a_method {
-            (
-                make_ident(&rust_name),
-                Use::Unused,
-                self_ty.clone().map(|ty| make_ident(ty.get_final_ident())),
-            )
-        } else {
-            match use_alias_required {
-                None => (make_ident(&rust_name), Use::Used, None),
-                Some(alias) => (cxxbridge_name.clone(), Use::UsedWithAlias(alias), None),
-            }
-        };
-
-        // TODO work out what 'id' was used for
         Ok(Some(FnAnalysisResult(
             FnAnalysisBody {
                 rename_using_rust_attr,
@@ -602,8 +607,9 @@ impl<'a> FnAnalyzer<'a> {
                 requires_unsafe,
                 vis,
                 id_for_allowlist,
-                use_stmt,
+                rename_in_output_mod,
                 additional_cpp,
+                is_pure_virtual,
             },
             id,
             deps,
@@ -626,7 +632,7 @@ impl<'a> FnAnalyzer<'a> {
                 let mut pt = pt.clone();
                 let mut self_type = None;
                 let old_pat = *pt.pat;
-                let mut virtual_this_encountered = false;
+                let mut is_virtual = false;
                 let mut treat_as_reference = false;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
@@ -636,8 +642,8 @@ impl<'a> FnAnalyzer<'a> {
                             }) => match elem.as_ref() {
                                 Type::Path(typ) => {
                                     let mut this_type = TypeName::from_type_path(typ);
-                                    if this_type.is_cvoid() {
-                                        virtual_this_encountered = true;
+                                    if this_type.is_cvoid() && pp.ident == "this" {
+                                        is_virtual = true;
                                         this_type = virtual_this.ok_or_else(|| {
                                             ConvertError::VirtualThisType(
                                                 ns.clone(),
@@ -645,8 +651,13 @@ impl<'a> FnAnalyzer<'a> {
                                             )
                                         })?;
                                         let this_type_path = this_type.to_type_path();
+                                        let const_token = if mutability.is_some() {
+                                            None
+                                        } else {
+                                            Some(syn::Token![const](Span::call_site()))
+                                        };
                                         pt.ty = Box::new(parse_quote! {
-                                            * #mutability #this_type_path
+                                            * #mutability #const_token #this_type_path
                                         });
                                     }
                                     Ok(this_type)
@@ -683,7 +694,7 @@ impl<'a> FnAnalyzer<'a> {
                         conversion,
                         was_reference,
                         deps,
-                        virtual_this_encountered,
+                        is_virtual,
                         requires_unsafe,
                     },
                 )
@@ -692,28 +703,34 @@ impl<'a> FnAnalyzer<'a> {
         })
     }
 
-    fn conversion_details<F>(&self, ty: &Type, conversion_direction: F) -> ArgumentConversion
-    where
-        F: FnOnce(Type) -> ArgumentConversion,
-    {
+    fn argument_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
         match ty {
             Type::Path(p) => {
-                if self.pod_safe_types.contains(&TypeName::from_type_path(p)) {
-                    ArgumentConversion::new_unconverted(ty.clone())
+                let tn = TypeName::from_type_path(p);
+                if self.pod_safe_types.contains(&tn) {
+                    TypeConversionPolicy::new_unconverted(ty.clone())
+                } else if KNOWN_TYPES.convertible_from_strs(&tn) && self.generate_utilities {
+                    TypeConversionPolicy::new_from_str(ty.clone())
                 } else {
-                    conversion_direction(ty.clone())
+                    TypeConversionPolicy::new_from_unique_ptr(ty.clone())
                 }
             }
-            _ => ArgumentConversion::new_unconverted(ty.clone()),
+            _ => TypeConversionPolicy::new_unconverted(ty.clone()),
         }
     }
 
-    fn argument_conversion_details(&self, ty: &Type) -> ArgumentConversion {
-        self.conversion_details(ty, ArgumentConversion::new_from_unique_ptr)
-    }
-
-    fn return_type_conversion_details(&self, ty: &Type) -> ArgumentConversion {
-        self.conversion_details(ty, ArgumentConversion::new_to_unique_ptr)
+    fn return_type_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
+        match ty {
+            Type::Path(p) => {
+                let tn = TypeName::from_type_path(p);
+                if self.pod_safe_types.contains(&tn) {
+                    TypeConversionPolicy::new_unconverted(ty.clone())
+                } else {
+                    TypeConversionPolicy::new_to_unique_ptr(ty.clone())
+                }
+            }
+            _ => TypeConversionPolicy::new_unconverted(ty.clone()),
+        }
     }
 
     fn convert_return_type(
@@ -778,40 +795,19 @@ impl<'a> FnAnalyzer<'a> {
         }
         (ref_params, ref_return)
     }
+
+    fn has_attr(fun: &ForeignItemFn, attr_name: &str) -> bool {
+        fun.attrs.iter().any(|at| at.path.is_ident(attr_name))
+    }
 }
 
 impl Api<FnAnalysis> {
     pub(crate) fn typename_for_allowlist(&self) -> TypeName {
         let id_for_allowlist = match &self.detail {
-            ApiDetail::Function { fun: _, analysis } => analysis.id_for_allowlist.as_ref(),
-            _ => None,
-        };
-        let usage = self.use_stmt();
-        let id_for_allowlist = match id_for_allowlist {
-            None => match &usage {
-                Use::UsedWithAlias(alias) => alias,
-                _ => &self.id,
-            },
-            Some(id) => &id,
+            ApiDetail::Function { fun: _, analysis } => &analysis.id_for_allowlist,
+            _ => &self.id,
         };
         TypeName::new(&self.ns, &id_for_allowlist.to_string())
-    }
-
-    /// Whether the final output namespace should be populated with a `use`
-    /// statement for this API. That is, whether this should be directly
-    /// accessible by consumers of autocxx generated code.
-    pub(crate) fn use_stmt(&self) -> Use {
-        match &self.detail {
-            ApiDetail::Type {
-                ty_details: _,
-                for_extern_c_ts: _,
-                is_forward_declaration: _,
-                bindgen_mod_item: _,
-                analysis: _,
-            } => Use::Used,
-            ApiDetail::Function { fun: _, analysis } => analysis.use_stmt.clone(),
-            _ => Use::Unused,
-        }
     }
 
     /// Whether this API requires generation of additional C++, and if so,

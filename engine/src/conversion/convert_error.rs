@@ -14,6 +14,8 @@
 
 use std::fmt::Display;
 
+use syn::Ident;
+
 use crate::types::{Namespace, TypeName};
 
 #[derive(Debug, Clone)]
@@ -33,6 +35,19 @@ pub enum ConvertError {
     UnsupportedType(String),
     UnknownType(String),
     OpaqueTypeFound,
+    StaticData(String),
+    InfinitelyRecursiveTypedef(TypeName),
+    UnexpectedUseStatement(Option<Ident>),
+    TemplatedTypeContainingNonPathArg(TypeName),
+    InvalidPointee,
+    DidNotGenerateAnything(String),
+}
+
+fn format_maybe_identifier(id: &Option<Ident>) -> String {
+    match id {
+        Some(id) => id.to_string(),
+        None => "<unknown>".into(),
+    }
 }
 
 impl Display for ConvertError {
@@ -52,7 +67,13 @@ impl Display for ConvertError {
             ConvertError::NotOneInputReference(fn_name) => write!(f, "Function {} has a return reference parameter, but 0 or >1 input reference parameters, so the lifetime of the output reference cannot be deduced.", fn_name)?,
             ConvertError::UnsupportedType(ty_desc) => write!(f, "Encountered type not yet supported by autocxx: {}", ty_desc)?,
             ConvertError::UnknownType(ty_desc) => write!(f, "Encountered type not yet known by autocxx: {}", ty_desc)?,
-            ConvertError::OpaqueTypeFound => write!(f, "Bindgen generated an opaque type (an empty array) somewhere other than a typedef")?
+            ConvertError::OpaqueTypeFound => write!(f, "Bindgen generated an opaque type (an empty array) somewhere other than a typedef")?,
+            ConvertError::StaticData(ty_desc) => write!(f, "Encountered mutable static data, not yet supported: {}", ty_desc)?,
+            ConvertError::InfinitelyRecursiveTypedef(tn) => write!(f, "Encountered typedef to itself - this is a known bindgen bug: {}", tn.to_cpp_name())?,
+            ConvertError::UnexpectedUseStatement(maybe_ident) => write!(f, "Unexpected 'use' statement encountered: {}", format_maybe_identifier(maybe_ident))?,
+            ConvertError::TemplatedTypeContainingNonPathArg(tn) => write!(f, "Type {} was parameterized over something complex which we don't yet support", tn)?,
+            ConvertError::InvalidPointee => write!(f, "Pointer pointed to something unsupported")?,
+            ConvertError::DidNotGenerateAnything(directive) => write!(f, "The 'generate' or 'generate_pod' directive for '{}' did not result in any code being generated. Perhaps this was mis-spelled or you didn't qualify the name with any namespaces? Otherwise please report a bug.", directive)?,
         }
         Ok(())
     }
@@ -73,6 +94,11 @@ impl ConvertError {
                 | ConvertError::UnacceptableParam(..)
                 | ConvertError::NotOneInputReference(..)
                 | ConvertError::UnsupportedType(..)
+                | ConvertError::StaticData(..)
+                | ConvertError::InfinitelyRecursiveTypedef(..)
+                | ConvertError::UnexpectedUseStatement(..)
+                | ConvertError::TemplatedTypeContainingNonPathArg(..)
+                | ConvertError::InvalidPointee
         )
     }
 }

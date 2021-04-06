@@ -114,6 +114,7 @@ fn run_test(
         generate,
         generate_pods,
         None,
+        &[],
     )
     .unwrap()
 }
@@ -126,6 +127,7 @@ fn run_test_ex(
     generate: &[&str],
     generate_pods: &[&str],
     extra_directives: Option<TokenStream>,
+    defines: &[&str],
 ) {
     do_run_test(
         cxx_code,
@@ -134,6 +136,7 @@ fn run_test_ex(
         generate,
         generate_pods,
         extra_directives,
+        defines,
     )
     .unwrap()
 }
@@ -152,6 +155,7 @@ fn run_test_expect_fail(
         generate,
         generate_pods,
         None,
+        &[],
     )
     .expect_err("Unexpected success");
 }
@@ -171,6 +175,7 @@ fn do_run_test(
     generate: &[&str],
     generate_pods: &[&str],
     extra_directives: Option<TokenStream>,
+    definitions: &[&str],
 ) -> Result<(), TestError> {
     // Step 1: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
@@ -226,6 +231,7 @@ fn do_run_test(
     let build_results = crate::builder::build_to_custom_directory(
         &rs_path,
         &[tdir.path()],
+        &definitions,
         Some(target_dir.clone()),
         None,
     )
@@ -241,6 +247,13 @@ fn do_run_test(
         let cxx_code = format!("#include \"{}\"\n{}", "input.h", cxx_code);
         let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
         b.file(cxx_path);
+    }
+
+    for d in definitions {
+        let mut it = d.split("=");
+        let k = it.next().unwrap();
+        let v = it.next();
+        b.define(k, v);
     }
 
     b.out_dir(&target_dir)
@@ -653,7 +666,6 @@ fn test_take_pod_by_ref() {
 }
 
 #[test]
-#[cfg(feature = "pointers")]
 fn test_take_pod_by_ref_and_ptr() {
     let cxx = indoc! {"
         uint32_t take_bob_ref(const Bob& a) {
@@ -680,7 +692,6 @@ fn test_take_pod_by_ref_and_ptr() {
 }
 
 #[test]
-#[cfg(feature = "pointers")]
 fn test_return_pod_by_ref_and_ptr() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -690,10 +701,10 @@ fn test_return_pod_by_ref_and_ptr() {
         struct A {
             B b;
         };
-        const B& return_b_ref(const A& a) {
+        inline const B& return_b_ref(const A& a) {
             return a.b;
         }
-        const B* return_b_ptr(const A& a) {
+        inline const B* return_b_ptr(const A& a) {
             return &a.b;
         }
     "};
@@ -812,7 +823,6 @@ fn test_take_nonpod_by_ref() {
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
-#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr_simple() {
     let cxx = indoc! {"
@@ -843,7 +853,6 @@ fn test_take_nonpod_by_ptr_simple() {
     run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob"], &[]);
 }
 
-#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr_in_method() {
     let hdr = indoc! {"
@@ -878,7 +887,6 @@ fn test_take_nonpod_by_ptr_in_method() {
     run_test("", hdr, rs, &["A", "Bob"], &[]);
 }
 
-#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_nonpod_by_ptr_in_wrapped_method() {
     let hdr = indoc! {"
@@ -917,7 +925,6 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
     run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
 }
 
-#[cfg_attr(not(feature = "pointers"), ignore)]
 #[test]
 fn test_take_char_by_ptr_in_wrapped_method() {
     let hdr = indoc! {"
@@ -1235,7 +1242,7 @@ fn test_pod_method() {
         let a = ffi::Bob { a: 12, b: 13 };
         assert_eq!(a.get_bob(), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
+    run_test(cxx, hdr, rs, &[], &["Bob"]);
 }
 
 #[test]
@@ -1258,7 +1265,7 @@ fn test_pod_mut_method() {
         let mut a = Box::pin(ffi::Bob { a: 12, b: 13 });
         assert_eq!(a.as_mut().get_bob(), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
+    run_test(cxx, hdr, rs, &[], &["Bob"]);
 }
 
 #[test]
@@ -1390,7 +1397,7 @@ fn test_method_pass_pod_by_value() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+    run_test(cxx, hdr, rs, &[], &["Bob", "Anna"]);
 }
 
 #[test]
@@ -1414,7 +1421,7 @@ fn test_inline_method() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
-    run_test("", hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+    run_test("", hdr, rs, &[], &["Bob", "Anna"]);
 }
 
 #[test]
@@ -1441,7 +1448,7 @@ fn test_method_pass_pod_by_reference() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(&a), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+    run_test(cxx, hdr, rs, &[], &["Bob", "Anna"]);
 }
 
 #[test]
@@ -1468,7 +1475,7 @@ fn test_method_pass_pod_by_mut_reference() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a.as_mut()), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+    run_test(cxx, hdr, rs, &[], &["Bob", "Anna"]);
 }
 
 #[test]
@@ -1496,7 +1503,7 @@ fn test_method_pass_pod_by_up() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(cxx::UniquePtr::new(a)), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob"], &["Bob", "Anna"]);
+    run_test(cxx, hdr, rs, &[], &["Bob", "Anna"]);
 }
 
 #[test]
@@ -1531,13 +1538,7 @@ fn test_method_pass_nonpod_by_value() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
-    run_test(
-        cxx,
-        hdr,
-        rs,
-        &["take_bob", "Anna", "give_anna", "get_bob"],
-        &["Bob"],
-    );
+    run_test(cxx, hdr, rs, &["Anna", "give_anna", "get_bob"], &["Bob"]);
 }
 
 #[test]
@@ -1576,13 +1577,7 @@ fn test_method_pass_nonpod_by_value_with_up() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a, a2), 12);
     };
-    run_test(
-        cxx,
-        hdr,
-        rs,
-        &["take_bob", "Anna", "give_anna", "get_bob"],
-        &["Bob"],
-    );
+    run_test(cxx, hdr, rs, &["Anna", "give_anna", "get_bob"], &["Bob"]);
 }
 
 #[test]
@@ -1617,7 +1612,7 @@ fn test_method_pass_nonpod_by_reference() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a.as_ref().unwrap()), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Anna", "give_anna"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
 }
 
 #[test]
@@ -1652,7 +1647,7 @@ fn test_method_pass_nonpod_by_mut_reference() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a.as_mut().unwrap()), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Anna", "give_anna"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
 }
 
 #[test]
@@ -1688,7 +1683,7 @@ fn test_method_pass_nonpod_by_up() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
-    run_test(cxx, hdr, rs, &["take_bob", "give_anna"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["give_anna"], &["Bob"]);
 }
 
 #[test]
@@ -1719,7 +1714,7 @@ fn test_method_return_nonpod_by_value() {
         let a = b.get_anna();
         assert!(!a.is_null());
     };
-    run_test(cxx, hdr, rs, &["take_bob", "Anna", "get_anna"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["Anna", "get_anna"], &["Bob"]);
 }
 
 #[test]
@@ -1824,7 +1819,7 @@ fn test_method_return_string_by_value() {
         let a = b.get_msg();
         assert!(a.as_ref().unwrap() == "hello");
     };
-    run_test(cxx, hdr, rs, &["take_bob", "get_msg"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["get_msg"], &["Bob"]);
 }
 
 #[test]
@@ -1981,6 +1976,7 @@ fn test_multiple_classes_with_methods() {
         ],
         &["TrivialStruct", "TrivialClass"],
         None,
+        &[],
     );
 }
 
@@ -2514,17 +2510,6 @@ fn test_give_nonpod_typedef_by_value() {
 }
 
 #[test]
-#[ignore] // bindgen creates functions called create and create1,
-          // then impl blocks for Bob and Fred which call them from methods each
-          // called simply 'create'. Because of this mismatch we have no way to know
-          // that 'create1' is a static function, and this fails. We _could_ parse
-          // the contents of the impl block methods in order to find out what is
-          // actually being called, but currently bindgen in fact gets this wrong,
-          // and calls 'create' from both of them. The first step to getting this
-          // working would therefore be to make a minimal test case and file it
-          // against bindgen. TODO. Then after that was fixed we could look at
-          // whether it's worth fixing this by parsing the contents of the impl'ed
-          // methods.
 fn test_conflicting_static_functions() {
     let cxx = indoc! {"
         Bob Bob::create() { Bob a; return a; }
@@ -2801,7 +2786,24 @@ fn test_string_constant() {
 }
 
 #[test]
-#[ignore]
+fn test_pod_constant_harmless_inside_type() {
+    // Check that the presence of this constant doesn't break anything.
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+        struct Anna {
+            uint32_t a;
+            const Bob BOB = Bob { 10 };
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &[], &["Anna"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/93
 fn test_pod_constant() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -2809,6 +2811,42 @@ fn test_pod_constant() {
             uint32_t a;
         };
         const Bob BOB = Bob { 10 };
+    "};
+    let rs = quote! {
+        let a = &ffi::BOB;
+        assert_eq!(a.a, 10);
+    };
+    run_test("", hdr, rs, &["BOB"], &["Bob"]);
+}
+
+#[test]
+fn test_pod_static_harmless_inside_type() {
+    // Check that the presence of this constant doesn't break anything.
+    // Remove this test when the following one is enabled.
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+        struct Anna {
+            uint32_t a;
+            static Bob BOB;
+        };
+        Bob Anna::BOB = Bob { 10 };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &[], &["Anna"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/93
+fn test_pod_static() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+        static Bob BOB = Bob { 10 };
     "};
     let rs = quote! {
         let a = &ffi::BOB;
@@ -2888,6 +2926,71 @@ fn test_struct_templated_typedef() {
         ffi::Origin::make_unique();
     };
     run_test("", hdr, rs, &["Origin"], &[]);
+}
+
+#[test]
+fn test_enum_typedef() {
+    let hdr = indoc! {"
+        enum ConstraintSolverParameters_TrailCompression : int {
+            ConstraintSolverParameters_TrailCompression_NO_COMPRESSION = 0,
+            ConstraintSolverParameters_TrailCompression_COMPRESS_WITH_ZLIB = 1,
+            ConstraintSolverParameters_TrailCompression_ConstraintSolverParameters_TrailCompression_INT_MIN_SENTINEL_DO_NOT_USE_ = -2147483648,
+            ConstraintSolverParameters_TrailCompression_ConstraintSolverParameters_TrailCompression_INT_MAX_SENTINEL_DO_NOT_USE_ = 2147483647
+        };
+        typedef ConstraintSolverParameters_TrailCompression TrailCompression;
+    "};
+    let rs = quote! {
+        let _ = ffi::TrailCompression::ConstraintSolverParameters_TrailCompression_NO_COMPRESSION;
+    };
+    run_test("", hdr, rs, &["TrailCompression"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/264
+fn test_conflicting_usings() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <cstddef>
+        typedef size_t diff;
+        struct A {
+            using diff = diff;
+            diff a;
+        };
+        struct B {
+            using diff = diff;
+            diff a;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &[], &["A", "B"]);
+}
+
+#[test]
+fn test_conflicting_usings_with_self_declaration1() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <cstddef>
+        struct common_params {
+            using difference_type = ptrdiff_t;
+        };
+        template <typename Params>
+        class btree_node {
+            public:
+            using difference_type = typename Params::difference_type;
+            Params params;
+        };
+        template <typename Tree>
+        class btree_container {
+            public:
+            using difference_type = typename Tree::difference_type;
+            void clear() {}
+            Tree b;
+            uint32_t a;
+        };
+        typedef btree_container<btree_node<common_params>> my_tree;
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["my_tree"], &[]);
 }
 
 #[test]
@@ -3432,6 +3535,18 @@ fn test_typedef_to_ulong() {
 }
 
 #[test]
+fn test_generate_typedef_to_ulong() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        typedef uint32_t fish_t;
+    "};
+    let rs = quote! {
+        let _: ffi::fish_t;
+    };
+    run_test("", hdr, rs, &[], &["fish_t"]);
+}
+
+#[test]
 fn test_ulong_method() {
     let hdr = indoc! {"
     class A {
@@ -3553,6 +3668,33 @@ fn test_virtual_fns() {
         assert_eq!(a.pin_mut().foo(2), 3);
         let mut b = ffi::B::make_unique();
         assert_eq!(b.pin_mut().foo(2), 4);
+    };
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
+fn test_const_virtual_fns() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        class A {
+        public:
+            A(uint32_t num) : b(num) {}
+            virtual uint32_t foo(uint32_t a) const { return a+1; };
+            virtual ~A() {}
+            uint32_t b;
+        };
+        class B: public A {
+        public:
+            B() : A(3), c(4) {}
+            virtual uint32_t foo(uint32_t a) const { return a+2; };
+            uint32_t c;
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::A::make_unique(12);
+        assert_eq!(a.foo(2), 3);
+        let b = ffi::B::make_unique();
+        assert_eq!(b.foo(2), 4);
     };
     run_test("", hdr, rs, &["A", "B"], &[]);
 }
@@ -3827,6 +3969,7 @@ fn test_issues_217_222() {
         &["GURL"],
         &[],
         Some(quote! { block!("StringPiece") block!("Replacements") }),
+        &[],
     );
 }
 
@@ -3918,9 +4061,327 @@ fn test_no_constructor_pod_make_unique() {
     run_test("", hdr, rs, &[], &["A"]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/266
+fn test_take_array() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    uint32_t take_array(const uint32_t a[4]) {
+        return a[0] + a[2];
+    }
+    "};
+    let rs = quote! {
+        let c: [u32; 4usize] = [ 10, 20, 30, 40 ];
+        let c = c as *const [_];
+        assert_eq!(ffi::take_array(&c), 40);
+    };
+    run_test("", hdr, rs, &["take_array"], &[]);
+}
+
+#[test]
+fn test_issue_264() {
+    let hdr = indoc! {"
+    namespace a {
+        typedef int b;
+        inline namespace c {}
+        template <typename> class aa;
+        namespace c {
+        template <typename d, typename = d, typename = aa<d>> class e;
+        }
+        typedef e<char> f;
+        template <typename g, typename, template <typename> typename> struct h {
+          using i = g;
+        };
+        template <typename g, template <typename> class k> using j = h<g, void, k>;
+        template <typename g, template <typename> class k>
+        using m = typename j<g, k>::i;
+        template <typename> struct l { typedef b ab; };
+        template <typename p> class aa {
+        public:
+          typedef p n;
+        };
+        struct r {
+          template <typename p> using o = typename p::c;
+        };
+        template <typename ad> struct u : r {
+          typedef typename ad::n n;
+          using ae = m<n, o>;
+          template <typename af, typename> struct v { using i = typename l<f>::ab; };
+          using ab = typename v<ad, ae>::i;
+        };
+        } // namespace a
+        namespace q {
+        template <typename ad> struct w : a::u<ad> {};
+        } // namespace q
+        namespace a {
+        namespace c {
+        template <typename, typename, typename ad> class e {
+          typedef q::w<ad> s;
+        public:
+          typedef typename s::ab ab;
+        };
+        } // namespace c
+        } // namespace a
+        namespace ag {
+        namespace ah {
+        typedef a::f::ab t;
+        class ai {
+          t aj;
+        };
+        class al;
+        namespace am {
+        class an {
+        public:
+          void ao(ai);
+        };
+        } // namespace am
+        class ap {
+        public:
+          al aq();
+        };
+        class ar {
+          am::an as;
+        };
+        class al {
+          ar at;
+        };
+        struct au {
+          ap av;
+        };
+        } // namespace ah
+        } // namespace ag
+        namespace operations_research {
+        class aw {
+          ag::ah::au ax;
+        };
+        class Solver {
+          aw ay;
+        };
+        } // namespace operations_research
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+}
+
+#[test]
+fn test_unexpected_use() {
+    // https://github.com/google/autocxx/issues/303
+    let hdr = indoc! {"
+        typedef int a;
+        namespace b {
+        namespace c {
+        enum d : a;
+        }
+        } // namespace b
+        namespace {
+        using d = b::c::d;
+        }
+        namespace content {
+        class RenderFrameHost {
+        public:
+            RenderFrameHost() {}
+        d e;
+        };
+        } // namespace content
+        "};
+    let rs = quote! {
+        let _ = ffi::content::RenderFrameHost::make_unique();
+    };
+    run_test("", hdr, rs, &["content::RenderFrameHost"], &[]);
+}
+
+#[test]
+fn test_get_pure_virtual() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        class A {
+        public:
+            virtual uint32_t get_val() const = 0;
+        };
+        class B : public A {
+        public:
+            virtual uint32_t get_val() const { return 3; }
+        };
+        const B b;
+        inline const A* get_a() { return &b; };
+    "};
+    let rs = quote! {
+        let a = ffi::get_a();
+        let a_ref = unsafe { a.as_ref() }.unwrap();
+        assert_eq!(a_ref.get_val(), 3);
+    };
+    run_test("", hdr, rs, &["A", "get_a"], &[]);
+}
+
+#[test]
+fn test_vector_of_pointers() {
+    // Just ensures the troublesome API is ignored
+    let hdr = indoc! {"
+        #include <vector>
+        namespace operations_research {
+        class a;
+        class Solver {
+        public:
+          struct b c(std::vector<a *>);
+        };
+        class a {};
+        } // namespace operations_research
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+}
+
+#[test]
+fn test_pointer_to_pointer() {
+    // Just ensures the troublesome API is ignored
+    let hdr = indoc! {"
+        namespace operations_research {
+        class a;
+        class Solver {
+        public:
+          struct b c(a **);
+        };
+        class a {};
+        } // namespace operations_research
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+}
+
+#[test]
+fn test_defines_effective() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #ifdef FOO
+        inline uint32_t a() { return 4; }
+        #endif
+    "};
+    let rs = quote! {
+        ffi::a();
+    };
+    run_test_ex("", hdr, rs, &["a"], &[], None, &["FOO"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/227
+fn test_function_pointer_template() {
+    let hdr = indoc! {"
+        typedef int a;
+        namespace std {
+        template <typename> class b;
+        }
+        typedef a c;
+        namespace operations_research {
+        class d;
+        class Solver {
+        public:
+            typedef std::b<c()> IndexEvaluator3;
+            d e(IndexEvaluator3);
+        };
+        class d {};
+        } // namespace operations_research
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+}
+
+#[test]
+fn test_cvoid() {
+    let hdr = indoc! {"
+        #include <memory>
+        #include <cstdint>
+        inline void* a() {
+            return static_cast<void*>(new int(3));
+        }
+        inline uint32_t b(void* p) {
+            auto val = *(static_cast<int*>(p));
+            delete p;
+            return val;
+        }
+    "};
+    let rs = quote! {
+        let ptr = ffi::a();
+        let res = unsafe { ffi::b(ptr) };
+        assert_eq!(res, 3);
+    };
+    run_test("", hdr, rs, &["a", "b"], &[]);
+}
+
+#[test]
+fn test_c_schar() {
+    let hdr = indoc! {"
+        inline signed char a() {
+            return 8;
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::a(), 8);
+    };
+    run_test("", hdr, rs, &["a"], &[]);
+}
+
+#[test]
+fn test_c_uchar() {
+    let hdr = indoc! {"
+        inline unsigned char a() {
+            return 8;
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::a(), 8);
+    };
+    run_test("", hdr, rs, &["a"], &[]);
+}
+
+#[test]
+fn test_string_transparent_function() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        inline uint32_t take_string(std::string a) { return a.size(); }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::take_string("hello"), 5);
+    };
+    run_test("", hdr, rs, &["take_string"], &[]);
+}
+
+#[test]
+fn test_string_transparent_method() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        struct A {
+            A() {}
+            inline uint32_t take_string(std::string a) const { return a.size(); }
+        };
+    "};
+    let rs = quote! {
+        let a = ffi::A::make_unique();
+        assert_eq!(a.take_string("hello"), 5);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_string_transparent_static_method() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+        struct A {
+            A() {}
+            static inline uint32_t take_string(std::string a) { return a.size(); }
+        };
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::A::take_string("hello"), 5);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
 // Yet to test:
 // 6. Ifdef
-// 7. Pointers (including out params)
+// 7. Out param pointers
 // 10. ExcludeUtilities
 // Stuff which requires much more thought:
 // 1. Shared pointers

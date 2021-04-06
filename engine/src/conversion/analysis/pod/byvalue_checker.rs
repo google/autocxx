@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::{Namespace, TypeName};
+use crate::{
+    conversion::api::TypedefKind,
+    types::{Namespace, TypeName},
+};
 use crate::{
     conversion::{
         api::{ApiDetail, UnanalyzedApi},
@@ -88,11 +91,14 @@ impl ByValueChecker {
         }
         for api in apis {
             match &api.detail {
-                ApiDetail::Typedef { type_item } => {
+                ApiDetail::Typedef { payload } => {
                     let name = api.typename();
-                    let typedef_type = match type_item.ty.as_ref() {
-                        Type::Path(typ) => KNOWN_TYPES.known_type_substitute_path(&typ),
-                        _ => None,
+                    let typedef_type = match payload {
+                        TypedefKind::Type(type_item) => match type_item.ty.as_ref() {
+                            Type::Path(typ) => KNOWN_TYPES.known_type_substitute_path(&typ),
+                            _ => None,
+                        },
+                        TypedefKind::Use(_) => None,
                     };
                     match &typedef_type {
                         Some(typ) => {

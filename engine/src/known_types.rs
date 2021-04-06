@@ -12,19 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::{make_ident, TypeName};
+use crate::{
+    conversion::ConvertError,
+    types::{make_ident, TypeName},
+};
 use indoc::indoc;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
-use syn::{parse_quote, Type, TypePath};
+use syn::{parse_quote, GenericArgument, PathArguments, Type, TypePath, TypePtr};
 
-/// Whether this type should be included in the 'prelude'
-/// passed to bindgen, and if so, how.
+//// The behavior of the type.
 #[derive(Debug)]
-enum PreludePolicy {
-    Exclude,
-    IncludeNormal,
-    IncludeTemplated,
+enum Behavior {
+    CxxContainerByValueSafe,
+    CxxContainerNotByValueSafe,
+    CxxString,
+    RustStr,
+    RustString,
+    RustByValue,
+    CByValue,
+    CVariableLengthByValue,
+    CVoid,
 }
 
 /// Details about known special types, mostly primitives.
@@ -34,56 +42,42 @@ struct TypeDetails {
     rs_name: String,
     /// C++ equivalent name for a Rust type.
     cpp_name: String,
-    /// Whether this can be safely represented by value.
-    by_value_safe: bool,
-    /// Whether and how to include this in the prelude given to bindgen.
-    prelude_policy: PreludePolicy,
-    /// Whether this is a & on the Rust side but a value on the C++
-    /// side. Only applies to &str.
-    de_referencicate: bool,
-    /// Is a C type whose size is not fixed (e.g. int, short)
-    is_ctype: bool,
-    /// Whether this is a container type cxx allows. Otherwise,
-    /// if we encounter such a type as a generic, we'll replace it with
-    /// a concrete instantiation.
-    is_cxx_container: bool,
+    //// The behavior of the type.
+    behavior: Behavior,
     /// Any extra non-canonical names
     extra_non_canonical_name: Option<String>,
 }
 
 impl TypeDetails {
     fn new(
-        rs_name: String,
-        cpp_name: String,
-        by_value_safe: bool,
-        prelude_policy: PreludePolicy,
-        de_referencicate: bool,
-        is_ctype: bool,
-        is_cxx_container: bool,
+        rs_name: impl Into<String>,
+        cpp_name: impl Into<String>,
+        behavior: Behavior,
         extra_non_canonical_name: Option<String>,
     ) -> Self {
         TypeDetails {
-            rs_name,
-            cpp_name,
-            by_value_safe,
-            prelude_policy,
-            de_referencicate,
-            is_ctype,
-            is_cxx_container,
+            rs_name: rs_name.into(),
+            cpp_name: cpp_name.into(),
+            behavior,
             extra_non_canonical_name,
         }
     }
 
+    /// Whether and how to include this in the prelude given to bindgen.
     fn get_prelude_entry(&self) -> Option<String> {
-        match self.prelude_policy {
-            PreludePolicy::Exclude => None,
-            PreludePolicy::IncludeNormal | PreludePolicy::IncludeTemplated => {
+        match self.behavior {
+            Behavior::RustString
+            | Behavior::RustStr
+            | Behavior::CxxString
+            | Behavior::CxxContainerByValueSafe
+            | Behavior::CxxContainerNotByValueSafe => {
                 let tn = TypeName::new_from_user_input(&self.rs_name);
                 let cxx_name = tn.get_final_ident();
-                let (templating, payload) = match self.prelude_policy {
-                    PreludePolicy::IncludeNormal => ("", "char* ptr"),
-                    PreludePolicy::IncludeTemplated => ("template<typename T> ", "T* ptr"),
-                    _ => unreachable!(),
+                let (templating, payload) = match self.behavior {
+                    Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => {
+                        ("template<typename T> ", "T* ptr")
+                    }
+                    _ => ("", "char* ptr"),
                 };
                 Some(format!(
                     indoc! {"
@@ -98,6 +92,7 @@ impl TypeDetails {
                     self.cpp_name, templating, cxx_name, payload
                 ))
             }
+            _ => None,
         }
     }
 
@@ -149,12 +144,23 @@ impl TypeDatabase {
 
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
-    pub(crate) fn get_pod_safe_types<'a>(
-        &'a self,
-    ) -> impl Iterator<Item = (&'a TypeName, bool)> + 'a {
-        self.by_rs_name
-            .iter()
-            .map(|(tn, td)| (tn, td.by_value_safe))
+    pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (&TypeName, bool)> {
+        self.by_rs_name.iter().map(|(tn, td)| {
+            (
+                tn,
+                match td.behavior {
+                    Behavior::CxxContainerByValueSafe
+                    | Behavior::RustStr
+                    | Behavior::RustString
+                    | Behavior::RustByValue
+                    | Behavior::CByValue
+                    | Behavior::CVariableLengthByValue => true,
+                    Behavior::CxxString
+                    | Behavior::CxxContainerNotByValueSafe
+                    | Behavior::CVoid => false,
+                },
+            )
+        })
     }
 
     /// Whether this TypePath should be treated as a value in C++
@@ -162,12 +168,9 @@ impl TypeDatabase {
     /// (C++ name) which is &str in Rust.
     pub(crate) fn should_dereference_in_cpp(&self, typ: &TypePath) -> bool {
         let tn = TypeName::from_type_path(typ);
-        let td = self.get(&tn);
-        if let Some(td) = td {
-            td.de_referencicate
-        } else {
-            false
-        }
+        self.get(&tn)
+            .map(|td| matches!(td.behavior, Behavior::RustStr))
+            .unwrap_or(false)
     }
 
     /// Here we substitute any names which we know are Special from
@@ -192,12 +195,37 @@ impl TypeDatabase {
         self.get(ty).map(|td| td.to_type_path())
     }
 
+    /// Whether this is one of the ctypes (mostly variable length integers)
+    /// which we need to wrap.
     pub(crate) fn is_ctype(&self, ty: &TypeName) -> bool {
-        self.get(ty).map(|td| td.is_ctype).unwrap_or(false)
+        self.get(ty)
+            .map(|td| {
+                matches!(
+                    td.behavior,
+                    Behavior::CVariableLengthByValue | Behavior::CVoid
+                )
+            })
+            .unwrap_or(false)
     }
 
+    /// Whether this is a generic type acceptable to cxx. Otherwise,
+    /// if we encounter a generic, we'll replace it with a synthesized concrete
+    /// type.
     pub(crate) fn is_cxx_acceptable_generic(&self, ty: &TypeName) -> bool {
-        self.get(ty).map(|x| x.is_cxx_container).unwrap_or(false)
+        self.get(ty)
+            .map(|x| {
+                matches!(
+                    x.behavior,
+                    Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn convertible_from_strs(&self, ty: &TypeName) -> bool {
+        self.get(ty)
+            .map(|x| matches!(x.behavior, Behavior::CxxString))
+            .unwrap_or(false)
     }
 }
 
@@ -208,66 +236,54 @@ fn create_type_database() -> TypeDatabase {
         |td: TypeDetails| by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
     do_insert(TypeDetails::new(
-        "cxx::UniquePtr".into(),
-        "std::unique_ptr".into(),
-        true,
-        PreludePolicy::IncludeTemplated,
-        false,
-        false,
-        true,
+        "cxx::UniquePtr",
+        "std::unique_ptr",
+        Behavior::CxxContainerByValueSafe,
         None,
     ));
     do_insert(TypeDetails::new(
-        "cxx::CxxVector".into(),
-        "std::vector".into(),
-        false,
-        PreludePolicy::IncludeTemplated,
-        false,
-        false,
-        true,
+        "cxx::CxxVector",
+        "std::vector",
+        Behavior::CxxContainerNotByValueSafe,
         None,
     ));
     do_insert(TypeDetails::new(
-        "cxx::SharedPtr".into(),
-        "std::shared_ptr".into(),
-        true,
-        PreludePolicy::IncludeTemplated,
-        false,
-        false,
-        true,
+        "cxx::SharedPtr",
+        "std::shared_ptr",
+        Behavior::CxxContainerByValueSafe,
         None,
     ));
     do_insert(TypeDetails::new(
-        "cxx::CxxString".into(),
-        "std::string".into(),
-        false,
-        PreludePolicy::IncludeNormal,
-        false,
-        false,
-        false,
+        "cxx::CxxString",
+        "std::string",
+        Behavior::CxxString,
         None,
     ));
     do_insert(TypeDetails::new(
-        "str".into(),
-        "rust::Str".into(),
-        true,
-        PreludePolicy::IncludeNormal,
-        true,
-        false,
-        false,
+        "str",
+        "rust::Str",
+        Behavior::RustStr,
         None,
     ));
     do_insert(TypeDetails::new(
-        "String".into(),
-        "rust::String".into(),
-        true,
-        PreludePolicy::IncludeNormal,
-        false,
-        false,
-        false,
+        "String",
+        "rust::String",
+        Behavior::RustString,
         None,
     ));
-    for (cpp_type, rust_type) in (3..7)
+    do_insert(TypeDetails::new(
+        "i8",
+        "int8_t",
+        Behavior::CByValue,
+        Some("std::os::raw::c_schar".into()),
+    ));
+    do_insert(TypeDetails::new(
+        "u8",
+        "uint8_t",
+        Behavior::CByValue,
+        Some("std::os::raw::c_uchar".into()),
+    ));
+    for (cpp_type, rust_type) in (4..7)
         .map(|x| 2i32.pow(x))
         .map(|x| {
             vec![
@@ -280,56 +296,31 @@ fn create_type_database() -> TypeDatabase {
         do_insert(TypeDetails::new(
             rust_type,
             cpp_type,
-            true,
-            PreludePolicy::Exclude,
-            false,
-            false,
-            false,
+            Behavior::CByValue,
             None,
         ));
     }
-    do_insert(TypeDetails::new(
-        "bool".into(),
-        "bool".into(),
-        true,
-        PreludePolicy::Exclude,
-        false,
-        false,
-        false,
-        None,
-    ));
+    do_insert(TypeDetails::new("bool", "bool", Behavior::CByValue, None));
 
     do_insert(TypeDetails::new(
-        "std::pin::Pin".into(),
-        "Pin".into(),
-        true, // because this is actually Pin<&something>
-        PreludePolicy::Exclude,
-        false,
-        false,
-        false,
+        "std::pin::Pin",
+        "Pin",
+        Behavior::RustByValue, // because this is actually Pin<&something>
         None,
     ));
 
     let mut insert_ctype = |cname: &str| {
         let td = TypeDetails::new(
             format!("autocxx::c_{}", cname),
-            cname.into(),
-            true,
-            PreludePolicy::Exclude,
-            false,
-            true,
-            false,
+            cname,
+            Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_{}", cname)),
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
         let td = TypeDetails::new(
             format!("autocxx::c_u{}", cname),
             format!("unsigned {}", cname),
-            true,
-            PreludePolicy::Exclude,
-            false,
-            true,
-            false,
+            Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_u{}", cname)),
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
@@ -339,39 +330,20 @@ fn create_type_database() -> TypeDatabase {
     insert_ctype("int");
     insert_ctype("short");
 
-    let td = TypeDetails::new(
-        "f32".into(),
-        "float".into(),
-        true,
-        PreludePolicy::Exclude,
-        false,
-        false,
-        false,
-        None,
-    );
+    let td = TypeDetails::new("f32", "float", Behavior::CByValue, None);
+    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+
+    let td = TypeDetails::new("f64", "double", Behavior::CByValue, None);
+    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+
+    let td = TypeDetails::new("std::os::raw::c_char", "char", Behavior::CByValue, None);
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
     let td = TypeDetails::new(
-        "f64".into(),
-        "double".into(),
-        true,
-        PreludePolicy::Exclude,
-        false,
-        false,
-        false,
-        None,
-    );
-    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
-
-    let td = TypeDetails::new(
-        "std::os::raw::c_char".into(),
-        "char".into(),
-        true,
-        PreludePolicy::Exclude,
-        false,
-        false,
-        false,
-        None,
+        "autocxx::c_void",
+        "void",
+        Behavior::CVoid,
+        Some("std::os::raw::c_void".into()),
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
@@ -418,5 +390,46 @@ pub(crate) fn type_lacks_copy_constructor(ty: &Type) -> bool {
             tn.to_cpp_name().starts_with("std::unique_ptr")
         }
         _ => false,
+    }
+}
+
+pub(crate) fn confirm_inner_type_is_acceptable_generic_payload(
+    path_args: &PathArguments,
+    desc: &TypeName,
+) -> Result<(), ConvertError> {
+    // For now, all supported generics accept the same payloads. This
+    // may change in future in which case we'll need to accept more arguments here.
+    match path_args {
+        PathArguments::None => Ok(()),
+        PathArguments::Parenthesized(_) => Err(ConvertError::TemplatedTypeContainingNonPathArg(
+            desc.clone(),
+        )),
+        PathArguments::AngleBracketed(ab) => {
+            for inner in &ab.args {
+                match inner {
+                    GenericArgument::Type(Type::Path(typ)) => {
+                        if let Some(more_generics) = typ.path.segments.last() {
+                            confirm_inner_type_is_acceptable_generic_payload(
+                                &more_generics.arguments,
+                                desc,
+                            )?;
+                        }
+                    }
+                    _ => {
+                        return Err(ConvertError::TemplatedTypeContainingNonPathArg(
+                            desc.clone(),
+                        ))
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+pub(crate) fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertError> {
+    match *ptr.elem {
+        Type::Path(..) => Ok(()),
+        _ => Err(ConvertError::InvalidPointee),
     }
 }

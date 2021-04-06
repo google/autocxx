@@ -14,9 +14,10 @@
 
 use std::collections::HashSet;
 
+use crate::conversion::parse::type_converter::Annotated;
 use crate::{
     conversion::{
-        api::{ApiDetail, ParseResults, TypeApiDetails, UnanalyzedApi},
+        api::{ApiDetail, ParseResults, TypeApiDetails, TypedefKind, UnanalyzedApi},
         ConvertError,
     },
     types::make_ident,
@@ -26,7 +27,7 @@ use crate::{
 use autocxx_parser::TypeConfig;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Fields, Ident, Item, UseTree};
+use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
 
 use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
 
@@ -41,6 +42,14 @@ pub(crate) struct ParseBindgen<'a> {
     /// even if the 'this' is actually recorded as void in the
     /// function signature.
     latest_virtual_this_type: Option<TypeName>,
+}
+
+struct ConvertErrorWithIdent(ConvertError, Option<Ident>);
+
+impl std::fmt::Debug for ConvertErrorWithIdent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 impl<'a> ParseBindgen<'a> {
@@ -68,6 +77,7 @@ impl<'a> ParseBindgen<'a> {
         }
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
+        self.confirm_all_generate_directives_obeyed()?;
         Ok(self.results)
     }
 
@@ -98,8 +108,18 @@ impl<'a> ParseBindgen<'a> {
         for item in items {
             let r = self.parse_item(item, &mut mod_converter, &ns);
             match r {
-                Err(err) if err.is_ignorable() => {
-                    eprintln!("Ignored item discovered whilst parsing: {}", err)
+                Err(err) if err.0.is_ignorable() => {
+                    eprintln!("Ignored item discovered whilst parsing: {}", err.0);
+                    // Mark that we ignored an item such that dependent things
+                    // also can be ignored.
+                    if let Some(id) = err.1 {
+                        self.results.apis.push(UnanalyzedApi {
+                            ns: ns.clone(),
+                            id,
+                            deps: HashSet::new(),
+                            detail: ApiDetail::IgnoredItem,
+                        })
+                    }
                 }
                 Err(_) => r.unwrap(),
                 Ok(_) => {}
@@ -113,10 +133,13 @@ impl<'a> ParseBindgen<'a> {
         item: Item,
         mod_converter: &mut ParseForeignMod,
         ns: &Namespace,
-    ) -> Result<(), ConvertError> {
+    ) -> Result<(), ConvertErrorWithIdent> {
         match item {
-            Item::ForeignMod(fm) => mod_converter
-                .convert_foreign_mod_items(fm.items, self.latest_virtual_this_type.clone()),
+            Item::ForeignMod(fm) => {
+                mod_converter
+                    .convert_foreign_mod_items(fm.items, self.latest_virtual_this_type.clone());
+                Ok(())
+            }
             Item::Struct(s) => {
                 if s.ident.to_string().ends_with("__bindgen_vtable") {
                     return Ok(());
@@ -158,11 +181,66 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Use(use_item) => {
-                if *Self::get_last_use_ident(&use_item.tree) != "root" {
-                    panic!("Unexpected 'use' path in bindgen output")
+                let mut segs = Vec::new();
+                let mut tree = &use_item.tree;
+                loop {
+                    match tree {
+                        UseTree::Path(up) => {
+                            segs.push(up.ident.clone());
+                            tree = &up.tree;
+                        }
+                        UseTree::Name(un) if un.ident == "root" => break, // we do not add this to any API since we generate equivalent
+                        // use statements in our codegen phase.
+                        UseTree::Rename(urn) => {
+                            let old_id = &urn.ident;
+                            let new_id = &urn.rename;
+                            let new_tyname = TypeName::new(ns, &new_id.to_string());
+                            if segs.remove(0) != "self" {
+                                panic!("Path didn't start with self");
+                            }
+                            if segs.remove(0) != "super" {
+                                panic!("Path didn't start with self::super");
+                            }
+                            // This is similar to the path encountered within 'tree'
+                            // but without the self::super prefix which is unhelpful
+                            // in our output mod, because we prefer relative paths
+                            // (we're nested in another mod)
+                            let old_path: TypePath = parse_quote! {
+                                #(#segs)::* :: #old_id
+                            };
+                            let old_tyname = TypeName::from_type_path(&old_path);
+                            if new_tyname == old_tyname {
+                                return Err(ConvertErrorWithIdent(
+                                    ConvertError::InfinitelyRecursiveTypedef(new_tyname),
+                                    Some(new_id.clone()),
+                                ));
+                            }
+                            self.results
+                                .type_converter
+                                .insert_typedef(new_tyname, Type::Path(old_path.clone()));
+                            let mut deps = HashSet::new();
+                            deps.insert(old_tyname);
+                            self.results.apis.push(UnanalyzedApi {
+                                id: new_id.clone(),
+                                ns: ns.clone(),
+                                deps,
+                                detail: ApiDetail::Typedef {
+                                    payload: TypedefKind::Use(parse_quote! {
+                                        pub use #old_path as #new_id;
+                                    }),
+                                },
+                            });
+                            break;
+                        }
+                        _ => {
+                            return Err(ConvertErrorWithIdent(
+                                ConvertError::UnexpectedUseStatement(segs.into_iter().last()),
+                                None,
+                            ))
+                        }
+                    }
                 }
-                Ok(()) // we do not add this to any API since we generate equivalent
-                       // use statements in our codegen phase.
+                Ok(())
             }
             Item::Const(const_item) => {
                 // The following puts this constant into
@@ -185,7 +263,14 @@ impl<'a> ParseBindgen<'a> {
                         self.add_opaque_type(ity.ident, ns.clone());
                         Ok(())
                     }
-                    Err(err) => Err(err),
+                    Err(err) => Err(ConvertErrorWithIdent(err, Some(ity.ident))),
+                    Ok(Annotated {
+                        ty: syn::Type::Path(ref typ),
+                        ..
+                    }) if TypeName::from_type_path(typ) == tyname => Err(ConvertErrorWithIdent(
+                        ConvertError::InfinitelyRecursiveTypedef(tyname),
+                        Some(ity.ident),
+                    )),
                     Ok(mut final_type) => {
                         ity.ty = Box::new(final_type.ty.clone());
                         self.results
@@ -196,13 +281,18 @@ impl<'a> ParseBindgen<'a> {
                             id: ity.ident.clone(),
                             ns: ns.clone(),
                             deps: final_type.types_encountered,
-                            detail: ApiDetail::Typedef { type_item: ity },
+                            detail: ApiDetail::Typedef {
+                                payload: TypedefKind::Type(ity),
+                            },
                         });
                         Ok(())
                     }
                 }
             }
-            _ => Err(ConvertError::UnexpectedItemInMod),
+            _ => Err(ConvertErrorWithIdent(
+                ConvertError::UnexpectedItemInMod,
+                None,
+            )),
         }
     }
 
@@ -219,14 +309,6 @@ impl<'a> ParseBindgen<'a> {
             deps: HashSet::new(),
             detail: ApiDetail::OpaqueTypedef,
         });
-    }
-
-    fn get_last_use_ident(p: &UseTree) -> &Ident {
-        match p {
-            UseTree::Name(n) => &n.ident,
-            UseTree::Path(p) => Self::get_last_use_ident(&p.tree),
-            _ => panic!("Unexpected type of 'use' statement found in bindgen bindings"),
-        }
     }
 
     /// Record the Api for a type, e.g. enum or struct.
@@ -293,5 +375,22 @@ impl<'a> ParseBindgen<'a> {
         };
         self.results.apis.push(api);
         self.results.type_converter.push(tyname);
+    }
+
+    fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertError> {
+        let api_names: HashSet<_> = self
+            .results
+            .apis
+            .iter()
+            .map(|api| api.typename().to_cpp_name())
+            .collect();
+        for generate_directive in self.type_config.allowlist() {
+            if !api_names.contains(generate_directive) {
+                return Err(ConvertError::DidNotGenerateAnything(
+                    generate_directive.into(),
+                ));
+            }
+        }
+        Ok(())
     }
 }

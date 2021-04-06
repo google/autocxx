@@ -29,7 +29,7 @@ include_cpp!(
     generate!("Bob")
 )
 
-let a = ffi::base::Bob::make_unique("hello".into());
+let a = ffi::base::Bob::make_unique("hello");
 a.do_a_thing();
 ```
 
@@ -132,7 +132,7 @@ You'll also want to ensure that the code generation (both Rust and C++ code) hap
 any included header file changes. This is now handled automatically by our
 `build.rs` integration, but is not yet done for the standalone `autocxx-gen` tool.
 
-[https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html#configuring-the-build] for a diagram.
+See [here](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html#configuring-the-build) for a diagram.
 
 Finally, this interop inevitably involves lots of fiddly small functions. It's likely to perform
 far better if you can achieve cross-language LTO. https://github.com/dtolnay/cxx/issues/371
@@ -178,7 +178,30 @@ RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test  integration_tests::tes
 ```
 
 This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
-in `engine/src/conversion`. See [https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCpp.html] for documentation and diagrams on how the engine works.
+in `engine/src/conversion`. See [here](https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCpp.html) for documentation and diagrams on how the engine works.
+
+# Reporting bugs
+
+If you've found a problem, and you're reading this, *thank you*! Your diligence
+in reporting the bug is much appreciated and will make `autocxx` better. In
+order of preference here's how we would like to hear about your problem:
+
+* Raise a pull request adding a new failing integration test to
+  `engine/src/integration_tests.rs`.
+* Minimize the test using `tools/reduce`, something like this:
+  `target/debug/autocxx-reduce -d "safety!(unsafe_ffi)" -d
+  'generate_pod!("A")' -I ~/my-include-dir -h my-header.h -p
+  problem-error-message -- --remove-pass pass_line_markers`
+  This is a wrapper for the amazing `creduce` which will take thousands of lines
+  of C++, preprocess it, and then identify the minimum required lines to
+  reproduce the same problem.
+* Use the C++ preprocessor to give a single complete C++ file which demonstrates
+  the problem, along with the `include_cpp!` directive you use.
+* Failing all else, build using
+  `cargo clean -p <your package name> && RUST_LOG=autocxx_engine=info cargo build -vvv`
+  and send the _entire_ log to us. This will include two key bits of logging:
+  the C++ bindings as distilled by `bindgen`, and then the version which
+  we've converted and moulded to be suitable for use by `cxx`.
 
 # Credits
 

@@ -15,7 +15,7 @@
 use crate::types::{Namespace, TypeName};
 use proc_macro2::TokenStream;
 use std::collections::HashSet;
-use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType};
+use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse};
 
 use super::{codegen_cpp::AdditionalNeed, parse::type_converter::TypeConverter};
 
@@ -24,15 +24,16 @@ pub(crate) enum TypeKind {
     Pod,                // trivial. Can be moved and copied in Rust.
     NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
     ForwardDeclaration, // no full C++ declaration available - can't even generate UniquePtr
+    Abstract, // has pure virtual members - can't even generate UniquePtr
 }
 
-/// Whether and how this type should be exposed in the mods constructed
-/// for actual end-user use.
-#[derive(Clone)]
-pub(crate) enum Use {
-    Unused,
-    Used,
-    UsedWithAlias(Ident),
+impl TypeKind {
+    pub(crate) fn can_be_instantiated(&self) -> bool {
+        match self {
+            TypeKind::Pod | TypeKind::NonPod => true,
+            TypeKind::ForwardDeclaration | TypeKind::Abstract => false,
+        }
+    }
 }
 
 /// Common details for types of API which are a type and will require
@@ -72,6 +73,11 @@ impl ApiAnalysis for NullAnalysis {
     type FunAnalysis = ();
 }
 
+pub(crate) enum TypedefKind {
+    Type(ItemType),
+    Use(ItemUse),
+}
+
 /// Different types of API we might encounter.
 pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A synthetic type we've manufactured in order to
@@ -93,8 +99,9 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     SynthesizedFunction { analysis: T::FunAnalysis },
     /// A constant.
     Const { const_item: ItemConst },
-    /// A typedef.
-    Typedef { type_item: ItemType },
+    /// A typedef found in the bindgen output which we wish
+    /// to pass on in our output
+    Typedef { payload: TypedefKind },
     /// A type (struct or enum) encountered in the
     /// `bindgen` output.
     Type {
@@ -110,6 +117,11 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// type, but instead to something which `bindgen` couldn't figure out
     /// and has therefore itself made opaque and mysterious.
     OpaqueTypedef,
+    /// Some item which couldn't be processed by autocxx for some reason.
+    /// We will have emitted a warning message about this, but we want
+    /// to mark that it's ignored so that we don't attempt to process
+    /// dependent items.
+    IgnoredItem,
 }
 
 /// Any API we encounter in the input bindgen rs which we might want to pass

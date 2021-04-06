@@ -272,7 +272,11 @@ impl IncludeCppEngine {
         )
     }
 
-    fn make_bindgen_builder(&self, inc_dirs: &[PathBuf]) -> bindgen::Builder {
+    fn make_bindgen_builder(
+        &self,
+        inc_dirs: &[PathBuf],
+        definitions: &[impl AsRef<str>],
+    ) -> bindgen::Builder {
         let mut builder = bindgen::builder()
             .clang_args(&["-x", "c++", "-std=c++14", "-DBINDGEN"])
             .derive_copy(false)
@@ -285,24 +289,25 @@ impl IncludeCppEngine {
             .generate_inline_functions(true)
             .layout_tests(false); // TODO revisit later
         for item in known_types::get_initial_blocklist() {
-            builder = builder.blacklist_item(item);
+            builder = builder.blocklist_item(item);
         }
 
-        builder = builder.clang_args(inc_dirs.into_iter().map(|i| {
+        builder = builder.clang_args(inc_dirs.iter().map(|i| {
             format!(
                 "-I{}",
                 i.to_str().expect("Non-UTF8 content in include path")
             )
         }));
+        builder = builder.clang_args(definitions.iter().map(|d| format!("-D{}", d.as_ref())));
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
         for a in self.config.type_config.allowlist() {
             // TODO - allowlist type/functions/separately
             builder = builder
-                .whitelist_type(a)
-                .whitelist_function(a)
-                .whitelist_var(a);
+                .allowlist_type(a)
+                .allowlist_function(a)
+                .allowlist_var(a);
         }
 
         builder
@@ -364,6 +369,7 @@ impl IncludeCppEngine {
     pub fn generate(
         &mut self,
         inc_dirs: Vec<PathBuf>,
+        definitions: &[impl AsRef<str>],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     ) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
@@ -379,7 +385,7 @@ impl IncludeCppEngine {
             return Err(Error::NoGenerationRequested);
         }
 
-        let mut builder = self.make_bindgen_builder(&inc_dirs);
+        let mut builder = self.make_bindgen_builder(&inc_dirs, &definitions);
         if let Some(dep_recorder) = dep_recorder {
             builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
         }

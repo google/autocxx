@@ -103,6 +103,16 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("define")
+                .short("D")
+                .long("define")
+                .multiple(true)
+                .number_of_values(1)
+                .value_name("DEFINITION")
+                .help("preprocessor macro definition")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("cpp-extension")
                 .long("cpp-extension")
                 .value_name("EXTENSION")
@@ -159,11 +169,12 @@ fn main() {
         .unwrap_or_default()
         .map(PathBuf::from)
         .collect();
+    let definitions: Vec<_> = matches.values_of("define").unwrap_or_default().collect();
     // In future, we should provide an option to write a .d file here
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56
     parsed_file
-        .resolve_all(incs, None)
+        .resolve_all(incs, &definitions, None)
         .expect("Unable to resolve macro");
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
     let desired_number = matches

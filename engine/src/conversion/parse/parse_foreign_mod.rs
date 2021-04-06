@@ -19,7 +19,7 @@ use crate::{
     types::{Namespace, TypeName},
 };
 use std::collections::{HashMap, HashSet};
-use syn::{ForeignItem, Ident, ImplItem, ItemImpl, Type};
+use syn::{Block, Expr, ExprCall, ForeignItem, Ident, ImplItem, ItemImpl, Stmt, Type};
 
 /// Parses a given bindgen-generated 'mod' into suitable
 /// [Api]s. In bindgen output, a given mod concerns
@@ -53,20 +53,36 @@ impl ParseForeignMod {
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
         virtual_this_type: Option<TypeName>,
-    ) -> Result<(), ConvertError> {
+    ) {
         for i in foreign_mod_items {
-            match i {
-                ForeignItem::Fn(item) => {
-                    self.funcs_to_convert.push(FuncToConvert {
-                        item,
-                        virtual_this_type: virtual_this_type.clone(),
-                        self_ty: None,
-                    });
+            let r = self.parse_foreign_item(i, &virtual_this_type);
+            match r {
+                Err(err) if err.is_ignorable() => {
+                    eprintln!("Ignored item discovered whilst parsing: {}", err)
                 }
-                _ => return Err(ConvertError::UnexpectedForeignItem),
+                Err(_) => r.unwrap(),
+                Ok(_) => {}
             }
         }
-        Ok(())
+    }
+
+    fn parse_foreign_item(
+        &mut self,
+        i: ForeignItem,
+        virtual_this_type: &Option<TypeName>,
+    ) -> Result<(), ConvertError> {
+        match i {
+            ForeignItem::Fn(item) => {
+                self.funcs_to_convert.push(FuncToConvert {
+                    item,
+                    virtual_this_type: virtual_this_type.clone(),
+                    self_ty: None,
+                });
+                Ok(())
+            }
+            ForeignItem::Static(item) => Err(ConvertError::StaticData(item.ident.to_string())),
+            _ => Err(ConvertError::UnexpectedForeignItem),
+        }
     }
 
     /// Record information from impl blocks encountered in bindgen
@@ -81,7 +97,10 @@ impl ParseForeignMod {
                 let effective_fun_name = if itm.sig.ident == "new" {
                     ty_id.clone()
                 } else {
-                    itm.sig.ident
+                    match get_called_function(&itm.block) {
+                        Some(id) => id.clone(),
+                        None => itm.sig.ident,
+                    }
                 };
                 self.method_receivers.insert(
                     effective_fun_name,
@@ -105,5 +124,36 @@ impl ParseForeignMod {
                 detail: ApiDetail::Function { fun, analysis: () },
             })
         }
+    }
+}
+
+/// bindgen sometimes generates an impl fn called a which calls
+/// a function called a1(), if it's dealing with conflicting names.
+/// We actually care about the name a1, so we have to parse the
+/// name of the actual function call inside the block's body.
+fn get_called_function(block: &Block) -> Option<&Ident> {
+    match block.stmts.first() {
+        Some(Stmt::Expr(Expr::Call(ExprCall { func, .. }))) => match **func {
+            Expr::Path(ref exp) => exp.path.segments.first().map(|ps| &ps.ident),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::get_called_function;
+    use syn::parse_quote;
+    use syn::Block;
+
+    #[test]
+    fn test_get_called_function() {
+        let b: Block = parse_quote! {
+            {
+                call_foo()
+            }
+        };
+        assert_eq!(get_called_function(&b).unwrap().to_string(), "call_foo");
     }
 }
