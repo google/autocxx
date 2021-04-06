@@ -192,12 +192,12 @@ fn generate_function_impl(
     rust_name: &str,
     ret_type: &ReturnType,
     unsafety: &Option<Unsafe>,
-) -> Item {
+) -> Box<Item> {
     let (wrapper_params, arg_list) = generate_arg_lists(param_details, false);
     let rust_name = make_ident(&rust_name);
-    Item::Fn(parse_quote! {
+    Box::new(Item::Fn(parse_quote! {
         pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
             cxxbridge::#rust_name ( #(#arg_list),* )
         }
-    })
+    }))
 }

@@ -57,7 +57,7 @@ enum Use {
     /// 'use' directive points to bindgen
     UsedFromBindgen,
     /// Some kind of custom item
-    Custom(Item),
+    Custom(Box<Item>),
 }
 
 fn get_string_items() -> Vec<Item> {
@@ -255,7 +255,7 @@ impl<'a> RsCodeGenerator<'a> {
                 ))),
                 Use::UsedFromBindgen => output_items.push(Self::generate_bindgen_use_stmt(ns, id)),
                 Use::Unused => {}
-                Use::Custom(item) => output_items.push(item.clone()),
+                Use::Custom(item) => output_items.push(*item.clone()),
             };
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
