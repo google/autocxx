@@ -32,7 +32,7 @@ impl TypeConversionPolicy {
     pub(super) fn rust_conversion(&self, var: Pat) -> TokenStream {
         match self.rust_conversion {
             RustConversionType::None => quote! { #var },
-            RustConversionType::FromStr => quote! ( #var .to_cpp() ),
+            RustConversionType::FromStr => quote! ( #var .into_cpp() ),
         }
     }
 }

@@ -64,7 +64,7 @@ fn get_string_items() -> Vec<Item> {
     [
         Item::Trait(parse_quote! {
             pub trait ToCppString {
-                fn to_cpp(self) -> cxx::UniquePtr<cxx::CxxString>;
+                fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString>;
             }
         }),
         // We can't just impl<T: AsRef<str>> ToCppString for T
@@ -72,28 +72,28 @@ fn get_string_items() -> Vec<Item> {
         // in future for cxx::UniquePtr<cxx::CxxString>. Fair enough.
         Item::Impl(parse_quote! {
             impl ToCppString for &str {
-                fn to_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
                     cxxbridge::make_string(self)
                 }
             }
         }),
         Item::Impl(parse_quote! {
             impl ToCppString for String {
-                fn to_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
                     cxxbridge::make_string(&self)
                 }
             }
         }),
         Item::Impl(parse_quote! {
             impl ToCppString for &String {
-                fn to_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
                     cxxbridge::make_string(self)
                 }
             }
         }),
         Item::Impl(parse_quote! {
             impl ToCppString for cxx::UniquePtr<cxx::CxxString> {
-                fn to_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
                     self
                 }
             }
