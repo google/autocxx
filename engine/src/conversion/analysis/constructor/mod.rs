@@ -17,7 +17,7 @@ use syn::{parse_quote, punctuated::Punctuated, Type};
 
 use super::fun::function_wrapper::{FunctionWrapper, FunctionWrapperPayload, TypeConversionPolicy};
 use super::fun::{FnAnalysis, FnAnalysisBody};
-use crate::conversion::api::Api;
+use crate::conversion::api::{Api, TypeKind};
 use crate::conversion::codegen_cpp::AdditionalNeed;
 use crate::{
     conversion::api::ApiDetail,
@@ -42,7 +42,8 @@ pub(crate) fn add_missing_constructors(apis: &mut Vec<Api<FnAnalysis>>) {
                     .entry(analysis.self_ty.as_ref().unwrap().clone())
                     .or_default() += 1;
             }
-            ApiDetail::Type { .. } => {
+            ApiDetail::Type { analysis: TypeKind::Pod, .. } |
+            ApiDetail::Type { analysis: TypeKind::NonPod, .. }  => {
                 constructors_by_type.entry(api.typename()).or_default();
             }
             _ => {}
