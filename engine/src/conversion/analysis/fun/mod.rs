@@ -639,7 +639,7 @@ impl<'a> FnAnalyzer<'a> {
                             }) => match elem.as_ref() {
                                 Type::Path(typ) => {
                                     let mut this_type = TypeName::from_type_path(typ);
-                                    if this_type.is_cvoid() && pp.ident.to_string() == "this" {
+                                    if this_type.is_cvoid() && pp.ident == "this" {
                                         is_virtual = true;
                                         this_type = virtual_this.ok_or_else(|| {
                                             ConvertError::VirtualThisType(
