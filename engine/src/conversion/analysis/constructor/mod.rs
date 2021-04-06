@@ -15,13 +15,10 @@
 use std::collections::{HashMap, HashSet};
 use syn::{parse_quote, punctuated::Punctuated, Type};
 
+use super::fun::function_wrapper::{FunctionWrapper, FunctionWrapperPayload, TypeConversionPolicy};
 use super::fun::{FnAnalysis, FnAnalysisBody};
 use crate::conversion::api::Api;
-use crate::conversion::api::Use;
-use crate::conversion::codegen_cpp::{
-    function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
-    AdditionalNeed,
-};
+use crate::conversion::codegen_cpp::AdditionalNeed;
 use crate::{
     conversion::api::ApiDetail,
     types::{make_ident, TypeName},
@@ -58,7 +55,7 @@ pub(crate) fn add_missing_constructors(apis: &mut Vec<Api<FnAnalysis>>) {
     for (count, ty) in types_needing_constructors {
         let tp = ty.to_type_path();
         let fn_name = format!("autocxx_synthesized_constructor{}", count);
-        let conv = ArgumentConversion::new_to_unique_ptr(Type::Path(tp));
+        let conv = TypeConversionPolicy::new_to_unique_ptr(Type::Path(tp));
         let ret_type = conv.unconverted_rust_type();
         apis.push(Api {
             ns: ty.get_namespace().clone(),
@@ -70,7 +67,7 @@ pub(crate) fn add_missing_constructors(apis: &mut Vec<Api<FnAnalysis>>) {
                     cxxbridge_name: make_ident(&fn_name),
                     rust_name: "make_unique".into(),
                     params: Punctuated::new(),
-                    self_ty: Some(ty),
+                    self_ty: Some(ty.clone()),
                     ret_type: parse_quote! { -> #ret_type },
                     is_constructor: true,
                     param_details: Vec::new(),
@@ -78,8 +75,8 @@ pub(crate) fn add_missing_constructors(apis: &mut Vec<Api<FnAnalysis>>) {
                     wrapper_function_needed: false,
                     requires_unsafe: false,
                     vis: parse_quote! { pub },
-                    id_for_allowlist: None,
-                    use_stmt: Use::Unused,
+                    id_for_allowlist: make_ident(ty.get_final_ident()),
+                    is_pure_virtual: false,
                     additional_cpp: Some(AdditionalNeed::FunctionWrapper(Box::new(
                         FunctionWrapper {
                             payload: FunctionWrapperPayload::Constructor,
@@ -89,6 +86,7 @@ pub(crate) fn add_missing_constructors(apis: &mut Vec<Api<FnAnalysis>>) {
                             is_a_method: false,
                         },
                     ))),
+                    rename_in_output_mod: None,
                 },
             },
         })

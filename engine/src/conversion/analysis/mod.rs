@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub(crate) mod constructor;
 pub(crate) mod abstract_types;
+pub(crate) mod constructor;
 pub(crate) mod ctypes;
 pub(crate) mod fun;
 pub(crate) mod gc;
