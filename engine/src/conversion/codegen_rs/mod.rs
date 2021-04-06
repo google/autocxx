@@ -246,13 +246,11 @@ impl<'a> RsCodeGenerator<'a> {
         for (ns, id, codegen) in ns_entries.entries() {
             match &codegen.materialization {
                 Use::UsedFromCxxBridgeWithAlias(alias) => {
-                    output_items.push(Item::Use(parse_quote!(
-                        pub use cxxbridge :: #id as #alias;
-                    )))
+                    output_items.push(Self::generate_cxx_use_stmt(ns, id, Some(alias)))
                 }
-                Use::UsedFromCxxBridge => output_items.push(Item::Use(parse_quote!(
-                    pub use cxxbridge :: #id;
-                ))),
+                Use::UsedFromCxxBridge => {
+                    output_items.push(Self::generate_cxx_use_stmt(ns, id, None))
+                }
                 Use::UsedFromBindgen => output_items.push(Self::generate_bindgen_use_stmt(ns, id)),
                 Use::Unused => {}
                 Use::Custom(item) => output_items.push(*item.clone()),
@@ -265,8 +263,6 @@ impl<'a> RsCodeGenerator<'a> {
             let child_id = make_ident(child_name);
             let mut new_mod: ItemMod = parse_quote!(
                 pub mod #child_id {
-                    #[allow(unused_imports)]
-                    use super::cxxbridge;
                 }
             );
             Self::append_child_use_namespace(
@@ -478,10 +474,25 @@ impl<'a> RsCodeGenerator<'a> {
         }
     }
 
+    fn generate_cxx_use_stmt(ns: &Namespace, id: &Ident, alias: Option<&Ident>) -> Item {
+        let segs = Self::find_output_mod_root(ns)
+            .chain(std::iter::once(make_ident("cxxbridge")))
+            .chain(std::iter::once(id.clone()));
+        Item::Use(match alias {
+            None => parse_quote! {
+                pub use #(#segs)::*;
+            },
+            Some(alias) => parse_quote! {
+                pub use #(#segs)::* as #alias;
+            },
+        })
+    }
+
     fn generate_bindgen_use_stmt(ns: &Namespace, id: &Ident) -> Item {
-        let prefix = ["bindgen", "root"].iter().map(make_ident);
-        let ns = ns.iter().map(make_ident);
-        let segs = prefix.chain(ns).chain(std::iter::once(id.clone()));
+        let segs = Self::find_output_mod_root(ns)
+            .chain(["bindgen", "root"].iter().map(make_ident))
+            .chain(ns.iter().map(make_ident))
+            .chain(std::iter::once(id.clone()));
         Item::Use(parse_quote! {
             pub use #(#segs)::*;
         })
@@ -501,6 +512,10 @@ impl<'a> RsCodeGenerator<'a> {
                 type Kind = cxx::kind::#kind_item;
             }
         })]
+    }
+
+    fn find_output_mod_root(ns: &Namespace) -> impl Iterator<Item = Ident> {
+        std::iter::repeat(make_ident("super")).take(ns.depth())
     }
 }
 
