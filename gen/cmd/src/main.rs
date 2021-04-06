@@ -17,7 +17,6 @@ mod cmd_test;
 
 use autocxx_engine::parse_file;
 use clap::{crate_authors, crate_version, App, Arg, ArgGroup};
-use indoc::indoc;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::io::{Read, Write};
@@ -26,7 +25,7 @@ use std::{fs::File, path::Path};
 
 pub(crate) static BLANK: &str = "// Blank autocxx placeholder";
 
-static LONG_HELP: &str = indoc! {"
+static LONG_HELP: &str = "
 Command line utility to expand the Rust 'autocxx' include_cpp! directive.
 
 This tool can generate both the C++ and Rust side binding code for
@@ -70,7 +69,7 @@ a) Have exactly one include_cpp directive in each source .rs file
 b) Set AUTOCXX_RS_FILE when using autocxx_macro.
 c) Teach your build system always that the outputs of this tool
    are always guaranteed to be gen0.include.rs, gen0.cc and gen1.cc.
-"};
+";
 
 fn main() {
     let matches = App::new("autocxx-gen")

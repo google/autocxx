@@ -91,6 +91,7 @@ fn analyze_pod_api(
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
         ApiDetail::Typedef { payload } => ApiDetail::Typedef { payload },
         ApiDetail::CType { typename } => ApiDetail::CType { typename },
+        ApiDetail::SynthesizedFunction { analysis } => ApiDetail::SynthesizedFunction { analysis },
         // Just changes to this one...
         ApiDetail::Type {
             ty_details,

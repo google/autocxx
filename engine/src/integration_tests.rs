@@ -4034,6 +4034,34 @@ fn test_simple_dependent_qualified_type() {
 }
 
 #[test]
+fn test_no_constructor_make_unique() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    struct A {
+        uint32_t a;
+    };
+    "};
+    let rs = quote! {
+        ffi::A::make_unique();
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_no_constructor_pod_make_unique() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    struct A {
+        uint32_t a;
+    };
+    "};
+    let rs = quote! {
+        ffi::A::make_unique();
+    };
+    run_test("", hdr, rs, &[], &["A"]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/266
 fn test_take_array() {
     let hdr = indoc! {"

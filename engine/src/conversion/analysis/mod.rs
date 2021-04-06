@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub(crate) mod abstract_types;
+pub(crate) mod constructor;
 pub(crate) mod ctypes;
 pub(crate) mod fun;
 pub(crate) mod gc;

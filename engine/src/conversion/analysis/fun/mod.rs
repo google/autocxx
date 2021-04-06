@@ -251,6 +251,9 @@ impl<'a> FnAnalyzer<'a> {
                 analysis,
             },
             ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
+            ApiDetail::SynthesizedFunction { analysis: _ } => {
+                panic!("Should not yet be any synthesized fns")
+            }
             ApiDetail::IgnoredItem => ApiDetail::IgnoredItem,
         };
         Ok(Some(Api {
@@ -816,6 +819,7 @@ impl Api<FnAnalysis> {
     pub(crate) fn additional_cpp(&self) -> Option<AdditionalNeed> {
         match &self.detail {
             ApiDetail::Function { fun: _, analysis } => analysis.additional_cpp.clone(),
+            ApiDetail::SynthesizedFunction { analysis } => analysis.additional_cpp.clone(),
             ApiDetail::StringConstructor => Some(AdditionalNeed::MakeStringConstructor),
             ApiDetail::ConcreteType {
                 ty_details: _,
