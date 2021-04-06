@@ -72,7 +72,7 @@ pub(crate) fn add_missing_constructors(apis: &mut Vec<Api<FnAnalysis>>) {
                     is_constructor: true,
                     param_details: Vec::new(),
                     cpp_call_name: fn_name.clone(),
-                    wrapper_function_needed: false,
+                    wrapper_function_needed: true,
                     requires_unsafe: false,
                     vis: parse_quote! { pub },
                     id_for_allowlist: make_ident(ty.get_final_ident()),
