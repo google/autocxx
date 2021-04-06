@@ -2463,6 +2463,22 @@ fn test_use_pod_typedef() {
     run_test(cxx, hdr, rs, &[], &["Bob"]);
 }
 
+#[test]
+fn test_typedef_to_ns() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace A {
+            template<typename T>
+            struct C {
+                T* t;
+            };
+            typedef C<char> B;
+        }
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A::B"], &[]);
+}
+
 #[ignore] // we don't yet allow typedefs to be listed in allow_pod
 #[test]
 fn test_use_pod_typedef_with_allowpod() {
@@ -4044,8 +4060,7 @@ fn test_private_constructor_make_unique() {
         uint32_t a;
     };
     "};
-    let rs = quote! {
-    };
+    let rs = quote! {};
     run_test("", hdr, rs, &["A"], &[]);
 }
 
