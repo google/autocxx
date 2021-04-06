@@ -16,7 +16,7 @@ use autocxx_engine::{
     build as engine_build, expect_build as engine_expect_build, BuilderBuild, BuilderError,
     RebuildDependencyRecorder,
 };
-use std::io::Write;
+use std::{collections::HashSet, io::Write, sync::Mutex};
 use std::{ffi::OsStr, path::Path};
 
 /// Build autocxx C++ files and return a cc::Build you can use to build
@@ -38,7 +38,7 @@ where
         rs_file,
         autocxx_incs,
         definitions,
-        Some(Box::new(CargoRebuildDependencyRecorder)),
+        Some(Box::new(CargoRebuildDependencyRecorder::new())),
     )
     .map(|r| r.0)
 }
@@ -60,7 +60,7 @@ where
         rs_file,
         autocxx_incs,
         definitions,
-        Some(Box::new(CargoRebuildDependencyRecorder)),
+        Some(Box::new(CargoRebuildDependencyRecorder::new())),
     )
     .0
 }
@@ -72,10 +72,23 @@ fn setup_logging() {
 }
 
 #[derive(Debug)]
-struct CargoRebuildDependencyRecorder;
+struct CargoRebuildDependencyRecorder {
+    printed_already: Mutex<HashSet<String>>,
+}
+
+impl CargoRebuildDependencyRecorder {
+    fn new() -> Self {
+        Self {
+            printed_already: Mutex::new(HashSet::new()),
+        }
+    }
+}
 
 impl RebuildDependencyRecorder for CargoRebuildDependencyRecorder {
     fn record_header_file_dependency(&self, filename: &str) {
-        println!("cargo:rerun-if-changed={}", filename);
+        let mut already = self.printed_already.lock().unwrap();
+        if already.insert(filename.into()) {
+            println!("cargo:rerun-if-changed={}", filename);
+        }
     }
 }
