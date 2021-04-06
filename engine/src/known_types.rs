@@ -199,9 +199,11 @@ impl TypeDatabase {
     /// which we need to wrap.
     pub(crate) fn is_ctype(&self, ty: &TypeName) -> bool {
         self.get(ty)
-            .map(|td| match td.behavior {
-                Behavior::CVariableLengthByValue | Behavior::CVoid => true,
-                _ => false,
+            .map(|td| {
+                matches!(
+                    td.behavior,
+                    Behavior::CVariableLengthByValue | Behavior::CVoid
+                )
             })
             .unwrap_or(false)
     }
@@ -211,9 +213,11 @@ impl TypeDatabase {
     /// type.
     pub(crate) fn is_cxx_acceptable_generic(&self, ty: &TypeName) -> bool {
         self.get(ty)
-            .map(|x| match x.behavior {
-                Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => true,
-                _ => false,
+            .map(|x| {
+                matches!(
+                    x.behavior,
+                    Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe
+                )
             })
             .unwrap_or(false)
     }
@@ -339,7 +343,7 @@ fn create_type_database() -> TypeDatabase {
         "autocxx::c_void",
         "void",
         Behavior::CVoid,
-        Some(format!("std::os::raw::c_void")),
+        Some("std::os::raw::c_void".into()),
     );
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
 
