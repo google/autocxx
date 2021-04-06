@@ -2117,7 +2117,7 @@ fn test_overload_functions() {
         use ffi::ToCppString;
         ffi::daft(32);
         ffi::daft1(8);
-        ffi::daft2("hello".to_cpp());
+        ffi::daft2("hello".into_cpp());
         let b = ffi::Fred { a: 3 };
         ffi::daft3(b);
         let c = ffi::Norma::make_unique();
@@ -2164,7 +2164,7 @@ fn test_overload_numeric_functions() {
         use ffi::ToCppString;
         ffi::daft(32);
         ffi::daft1(8);
-        ffi::daft2("hello".to_cpp());
+        ffi::daft2("hello".into_cpp());
         let b = ffi::Fred { a: 3 };
         ffi::daft3(b);
         let c = ffi::Norma::make_unique();
@@ -2212,7 +2212,7 @@ fn test_overload_methods() {
         let a = ffi::Bob { a: 12 };
         a.daft(32);
         a.daft1(8);
-        a.daft2("hello".to_cpp());
+        a.daft2("hello".into_cpp());
         let b = ffi::Fred { a: 3 };
         a.daft3(b);
         let c = ffi::Norma::make_unique();
@@ -2413,7 +2413,7 @@ fn test_static_func_wrapper() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        ffi::A::CreateA("a".to_cpp(), "b".to_cpp());
+        ffi::A::CreateA("a".into_cpp(), "b".into_cpp());
     };
     run_test("", hdr, rs, &["A"], &[]);
 }
@@ -2766,7 +2766,7 @@ fn test_make_string() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        let a = "hello".to_cpp();
+        let a = "hello".into_cpp();
         assert_eq!(a.to_str().unwrap(), "hello");
     };
     run_test("", hdr, rs, &["Bob"], &[]);
@@ -3616,7 +3616,7 @@ fn test_generic_type() {
     let rs = quote! {
         use ffi::ToCppString;
         let item = ffi::Secondary::make_unique();
-        assert_eq!(item.take_c("hello".to_cpp()), 15)
+        assert_eq!(item.take_c("hello".into_cpp()), 15)
     };
     run_test("", hdr, rs, &["Secondary"], &[]);
 }
@@ -3786,7 +3786,7 @@ fn test_typedef_to_std() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        assert_eq!(ffi::take_str("hello".to_cpp()), 5);
+        assert_eq!(ffi::take_str("hello".into_cpp()), 5);
     };
     run_test("", hdr, rs, &["take_str"], &[]);
 }
@@ -3803,7 +3803,7 @@ fn test_typedef_to_up_in_fn_call() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        assert_eq!(ffi::take_str("hello".to_cpp()), 5);
+        assert_eq!(ffi::take_str("hello".into_cpp()), 5);
     };
     run_test("", hdr, rs, &["take_str"], &[]);
 }
@@ -3848,7 +3848,7 @@ fn test_typedef_to_std_in_struct() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        assert_eq!(ffi::take_a(ffi::make_a("hello".to_cpp())), 5);
+        assert_eq!(ffi::take_a(ffi::make_a("hello".into_cpp())), 5);
     };
     run_test("", hdr, rs, &["make_a", "take_a"], &[]);
 }
@@ -3873,7 +3873,7 @@ fn test_typedef_to_up_in_struct() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        assert_eq!(ffi::take_a(ffi::make_a("hello".to_cpp())), 5);
+        assert_eq!(ffi::take_a(ffi::make_a("hello".into_cpp())), 5);
     };
     run_test("", hdr, rs, &["make_a", "take_a"], &[]);
 }
