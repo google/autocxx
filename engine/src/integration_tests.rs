@@ -4034,6 +4034,22 @@ fn test_simple_dependent_qualified_type() {
 }
 
 #[test]
+fn test_private_constructor_make_unique() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    struct A {
+    private:
+        A() {};
+    public:
+        uint32_t a;
+    };
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/266
 fn test_take_array() {
     let hdr = indoc! {"
