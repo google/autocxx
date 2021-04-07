@@ -13,11 +13,14 @@
 // limitations under the License.
 
 fn main() {
-    let path = std::path::PathBuf::from("src");
+    // It's necessary to use an absolute path here because the
+    // C++ codegen and the macro codegen appears to be run from different
+    // working directories.
+    let path = std::path::PathBuf::from("s2geometry/src");
+    let path2 = std::path::PathBuf::from("src");
     let defs: Vec<String> = Vec::new();
-    let mut b = autocxx_build::build("src/main.rs", &[&path], &defs).unwrap();
-    b.flag_if_supported("-std=c++14").compile("autocxx-demo");
-
+    let mut b = autocxx_build::build("src/main.rs", &[&path, &path2], &defs).unwrap();
+    b.flag_if_supported("-std=c++14")
+        .compile("autocxx-s2-example");
     println!("cargo:rerun-if-changed=src/main.rs");
-    println!("cargo:rerun-if-changed=src/input.h");
 }
