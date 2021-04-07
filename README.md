@@ -33,7 +33,7 @@ let a = ffi::base::Bob::make_unique("hello");
 a.do_a_thing();
 ```
 
-See [demo/src/main.rs](demo/src/main.rs) for a real example.
+See [demo/src/main.rs](demo/src/main.rs) for a basic example, and the [examples](examples/) directory for more.
 
 The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string` - so the Rust code should not typically require use of unsafe code, unlike with normal `bindgen` bindings.
 
