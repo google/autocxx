@@ -39,14 +39,13 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
     let param_details = analysis.param_details;
     let cpp_call_name = analysis.cpp_call_name;
     let wrapper_function_needed = analysis.cpp_wrapper.is_some();
-    let requires_unsafe = analysis.requires_unsafe;
     let params = analysis.params;
     let vis = analysis.vis;
     let kind = analysis.kind;
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
-    let unsafety: Option<Unsafe> = if requires_unsafe {
+    let unsafety: Option<Unsafe> = if analysis.requires_unsafe {
         Some(parse_quote!(unsafe))
     } else {
         None
