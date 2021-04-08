@@ -512,14 +512,12 @@ impl<'a> FnAnalyzer<'a> {
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
             .map_or(false, |x| x.cpp_work_needed());
-        let differently_named_method =
-            matches!(kind, FnKind::Method(..)) && (cxxbridge_name != rust_name);
         let wrapper_function_needed = match kind {
             FnKind::Method(_, MethodKind::Static)
             | FnKind::Method(_, MethodKind::Virtual)
             | FnKind::Method(_, MethodKind::PureVirtual) => true,
+            FnKind::Method(..) if cxxbridge_name != rust_name => true,
             _ if param_conversion_needed => true,
-            _ if differently_named_method => true,
             _ if ret_type_conversion_needed => true,
             _ => false,
         };
@@ -558,15 +556,8 @@ impl<'a> FnAnalyzer<'a> {
                     false,
                 ),
             };
-            additional_cpp = Some(AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
-                payload,
-                wrapper_function_name: cxxbridge_name.clone(),
-                return_conversion: ret_type_conversion.clone(),
-                argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
-                is_a_method: has_receiver,
-            })));
             // Now modify the cxx::bridge entry we're going to make.
-            if let Some(conversion) = ret_type_conversion {
+            if let Some(ref conversion) = ret_type_conversion {
                 let new_ret_type = conversion.unconverted_rust_type();
                 ret_type = parse_quote!(
                     -> #new_ret_type
@@ -588,6 +579,14 @@ impl<'a> FnAnalyzer<'a> {
                     #arg_name: #type_name
                 ));
             }
+
+            additional_cpp = Some(AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
+                payload,
+                wrapper_function_name: cxxbridge_name.clone(),
+                return_conversion: ret_type_conversion,
+                argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
+                is_a_method: has_receiver,
+            })));
         }
 
         let requires_unsafe = requires_unsafe || self.should_be_unsafe();
