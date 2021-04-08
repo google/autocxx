@@ -511,6 +511,11 @@ impl<'a> FnAnalyzer<'a> {
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
             .map_or(false, |x| x.cpp_work_needed());
+        // If possible, we'll put knowledge of the C++ API directly into the cxx::bridge
+        // mod. However, there are various circumstances where cxx can't work with the existing
+        // C++ API and we need to create a C++ wrapper function which is more cxx-compliant.
+        // That wrapper function is included in the cxx::bridge, and calls through to the
+        // original function.
         let wrapper_function_needed = match kind {
             FnKind::Method(_, MethodKind::Static)
             | FnKind::Method(_, MethodKind::Virtual)
