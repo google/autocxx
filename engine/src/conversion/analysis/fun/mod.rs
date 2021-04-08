@@ -840,7 +840,7 @@ impl Api<FnAnalysis> {
                 FnKind::Method(ref self_ty, _) => self_ty.clone(),
                 FnKind::Function => TypeName::new(&self.ns, &analysis.rust_name),
             },
-            _ => TypeName::new(&self.ns, &self.id.to_string()),
+            _ => self.typename(),
         }
     }
 
