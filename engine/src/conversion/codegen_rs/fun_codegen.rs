@@ -26,7 +26,7 @@ use super::{
 use crate::types::make_ident;
 use crate::{
     conversion::{
-        analysis::fun::{ArgumentAnalysis, FnAnalysisBody},
+        analysis::fun::{ArgumentAnalysis, FnAnalysisBody, FnKind, MethodKind},
         api::ImplBlockDetails,
     },
     types::{Namespace, TypeName},
@@ -36,15 +36,14 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
     let rename_using_rust_attr = analysis.rename_using_rust_attr;
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = analysis.rust_name;
-    let self_ty = analysis.self_ty;
     let ret_type = analysis.ret_type;
-    let is_constructor = analysis.is_constructor;
     let param_details = analysis.param_details;
     let cpp_call_name = analysis.cpp_call_name;
     let wrapper_function_needed = analysis.wrapper_function_needed;
     let requires_unsafe = analysis.requires_unsafe;
     let params = analysis.params;
     let vis = analysis.vis;
+    let kind = analysis.kind;
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
@@ -56,21 +55,21 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
     let any_param_needs_rust_conversion = param_details
         .iter()
         .any(|pd| pd.conversion.rust_work_needed());
-    let rust_wrapper_needed =
-        any_param_needs_rust_conversion || (cxxbridge_name != rust_name && self_ty.is_some());
-    let mut materialization = match self_ty {
-        Some(..) => Use::Unused,
-        None => match analysis.rename_in_output_mod {
+    let rust_wrapper_needed = any_param_needs_rust_conversion
+        || (cxxbridge_name != rust_name && matches!(kind, FnKind::Method(..)));
+    let mut materialization = match kind {
+        FnKind::Method(..) => Use::Unused,
+        FnKind::Function => match analysis.rename_in_output_mod {
             None => Use::UsedFromCxxBridge,
             Some(alias) => Use::UsedFromCxxBridgeWithAlias(alias),
         },
     };
     if rust_wrapper_needed {
-        if let Some(type_name) = &self_ty {
+        if let FnKind::Method(ref type_name, ref method_kind) = kind {
             // Method, or static method.
             impl_entry = Some(generate_method_impl(
                 &param_details,
-                is_constructor,
+                matches!(method_kind, MethodKind::Constructor),
                 type_name,
                 &cxxbridge_name,
                 &rust_name,
