@@ -39,7 +39,7 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
     let ret_type = analysis.ret_type;
     let param_details = analysis.param_details;
     let cpp_call_name = analysis.cpp_call_name;
-    let wrapper_function_needed = analysis.additional_cpp.is_some();
+    let wrapper_function_needed = analysis.cpp_wrapper.is_some();
     let requires_unsafe = analysis.requires_unsafe;
     let params = analysis.params;
     let vis = analysis.vis;

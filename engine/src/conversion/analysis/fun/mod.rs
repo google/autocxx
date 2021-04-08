@@ -71,7 +71,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) vis: Visibility,
     pub(crate) id_for_allowlist: Ident,
     pub(crate) rename_in_output_mod: Option<Ident>,
-    pub(crate) additional_cpp: Option<AdditionalNeed>,
+    pub(crate) cpp_wrapper: Option<AdditionalNeed>,
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -526,10 +526,9 @@ impl<'a> FnAnalyzer<'a> {
             _ => false,
         };
 
-        let additional_cpp = if wrapper_function_needed {
+        let cpp_wrapper = if wrapper_function_needed {
             // Generate a new layer of C++ code to wrap/unwrap parameters
             // and return values into/out of std::unique_ptrs.
-            // First give instructions to generate the additional C++.
             let cpp_construction_ident = make_ident(&cpp_call_name);
             let joiner = if cxxbridge_name.to_string().ends_with('_') {
                 ""
@@ -612,19 +611,17 @@ impl<'a> FnAnalyzer<'a> {
                 // There is a global space of rust_names even if they're in
                 // different namespaces.
                 let rust_name_ok = self.ok_to_use_rust_name(&rust_name);
-                if cxxbridge_name != rust_name {
-                    if rust_name_ok {
-                        (true, rust_name_ident.clone(), None, rust_name_ident)
-                    } else {
-                        (
-                            false,
-                            cxxbridge_name.clone(),
-                            Some(rust_name_ident.clone()),
-                            rust_name_ident,
-                        )
-                    }
-                } else {
+                if cxxbridge_name == rust_name {
                     (false, rust_name_ident.clone(), None, rust_name_ident)
+                } else if rust_name_ok {
+                    (true, rust_name_ident.clone(), None, rust_name_ident)
+                } else {
+                    (
+                        false,
+                        cxxbridge_name.clone(),
+                        Some(rust_name_ident.clone()),
+                        rust_name_ident,
+                    )
                 }
             }
         };
@@ -643,7 +640,7 @@ impl<'a> FnAnalyzer<'a> {
                 vis,
                 id_for_allowlist,
                 rename_in_output_mod,
-                additional_cpp,
+                cpp_wrapper,
             },
             id,
             deps,
@@ -852,7 +849,7 @@ impl Api<FnAnalysis> {
     /// And we can't answer the question _prior_ to this function analysis phase.
     pub(crate) fn additional_cpp(&self) -> Option<AdditionalNeed> {
         match &self.detail {
-            ApiDetail::Function { fun: _, analysis } => analysis.additional_cpp.clone(),
+            ApiDetail::Function { fun: _, analysis } => analysis.cpp_wrapper.clone(),
             ApiDetail::StringConstructor => Some(AdditionalNeed::MakeStringConstructor),
             ApiDetail::ConcreteType {
                 ty_details: _,
