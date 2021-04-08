@@ -67,7 +67,6 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) ret_type: ReturnType,
     pub(crate) param_details: Vec<ArgumentAnalysis>,
     pub(crate) cpp_call_name: String,
-    pub(crate) wrapper_function_needed: bool,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
     pub(crate) id_for_allowlist: Ident,
@@ -522,9 +521,7 @@ impl<'a> FnAnalyzer<'a> {
             _ => false,
         };
 
-        let mut additional_cpp = None;
-
-        if wrapper_function_needed {
+        let additional_cpp = if wrapper_function_needed {
             // Generate a new layer of C++ code to wrap/unwrap parameters
             // and return values into/out of std::unique_ptrs.
             // First give instructions to generate the additional C++.
@@ -580,14 +577,16 @@ impl<'a> FnAnalyzer<'a> {
                 ));
             }
 
-            additional_cpp = Some(AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
+            Some(AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
                 payload,
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion,
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
                 is_a_method: has_receiver,
-            })));
-        }
+            })))
+        } else {
+            None
+        };
 
         let requires_unsafe = requires_unsafe || self.should_be_unsafe();
         let vis = func_information.item.vis.clone();
@@ -635,7 +634,6 @@ impl<'a> FnAnalyzer<'a> {
                 ret_type,
                 param_details,
                 cpp_call_name,
-                wrapper_function_needed,
                 requires_unsafe,
                 vis,
                 id_for_allowlist,
