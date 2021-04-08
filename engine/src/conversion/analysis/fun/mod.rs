@@ -94,7 +94,7 @@ pub(crate) struct ArgumentAnalysis {
     requires_unsafe: bool,
 }
 
-pub(crate) struct ReturnTypeAnalysis {
+struct ReturnTypeAnalysis {
     rt: ReturnType,
     conversion: Option<TypeConversionPolicy>,
     was_reference: bool,
