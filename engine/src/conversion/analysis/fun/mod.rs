@@ -58,10 +58,22 @@ pub(crate) enum FnKind {
     Method(TypeName, MethodKind),
 }
 
+/// Strategy for ensuring that the final, callable, Rust name
+/// is what the user originally expected.
+pub(crate) enum RustRenameStrategy {
+    /// cxx::bridge name matches user expectations
+    None,
+    /// We can rename using the #[rust_name] attribute in the cxx::bridge
+    RenameUsingRustAttr,
+    /// Even the #[rust_name] attribute would cause conflicts, and we need
+    /// to use a 'use XYZ as ABC'
+    RenameInOutputMod(Ident),
+}
+
 pub(crate) struct FnAnalysisBody {
-    pub(crate) rename_using_rust_attr: bool,
     pub(crate) cxxbridge_name: Ident,
     pub(crate) rust_name: String,
+    pub(crate) rust_rename_strategy: RustRenameStrategy,
     pub(crate) params: Punctuated<FnArg, syn::Token![,]>,
     pub(crate) kind: FnKind,
     pub(crate) ret_type: ReturnType,
@@ -69,7 +81,6 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) cpp_call_name: String,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
-    pub(crate) rename_in_output_mod: Option<Ident>,
     pub(crate) cpp_wrapper: Option<AdditionalNeed>,
 }
 
@@ -597,8 +608,8 @@ impl<'a> FnAnalyzer<'a> {
         // Naming, part two.
         // Work out our final naming strategy.
         let rust_name_ident = make_ident(&rust_name);
-        let (rename_using_rust_attr, id, rename_in_output_mod) = match kind {
-            FnKind::Method(..) => (false, rust_name_ident, None),
+        let (id, rust_rename_strategy) = match kind {
+            FnKind::Method(..) => (rust_name_ident, RustRenameStrategy::None),
             FnKind::Function => {
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
@@ -606,20 +617,23 @@ impl<'a> FnAnalyzer<'a> {
                 // different namespaces.
                 let rust_name_ok = self.ok_to_use_rust_name(&rust_name);
                 if cxxbridge_name == rust_name {
-                    (false, rust_name_ident, None)
+                    (rust_name_ident, RustRenameStrategy::None)
                 } else if rust_name_ok {
-                    (true, rust_name_ident, None)
+                    (rust_name_ident, RustRenameStrategy::RenameUsingRustAttr)
                 } else {
-                    (false, cxxbridge_name.clone(), Some(rust_name_ident))
+                    (
+                        cxxbridge_name.clone(),
+                        RustRenameStrategy::RenameInOutputMod(rust_name_ident),
+                    )
                 }
             }
         };
 
         Ok(Some(FnAnalysisResult(
             FnAnalysisBody {
-                rename_using_rust_attr,
                 cxxbridge_name,
                 rust_name,
+                rust_rename_strategy,
                 params,
                 kind,
                 ret_type,
@@ -627,7 +641,6 @@ impl<'a> FnAnalyzer<'a> {
                 cpp_call_name,
                 requires_unsafe,
                 vis,
-                rename_in_output_mod,
                 cpp_wrapper,
             },
             id,
