@@ -32,7 +32,7 @@ use crate::{
     types::{Namespace, TypeName},
 };
 
-pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodegenResult {
+pub(super) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodegenResult {
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = analysis.rust_name;
     let ret_type = analysis.ret_type;

@@ -557,7 +557,9 @@ impl<T: ApiAnalysis> HasNs for Api<T> {
     }
 }
 
-pub(crate) struct RsCodegenResult {
+/// Snippets of code generated from a particular API.
+/// These are then concatenated together into the final generated code.
+struct RsCodegenResult {
     extern_c_mod_item: Option<ForeignItem>,
     bridge_items: Vec<Item>,
     global_items: Vec<Item>,
