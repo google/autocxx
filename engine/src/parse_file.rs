@@ -122,6 +122,7 @@ impl ParsedFile {
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
             dep_recorder.map(Rc::from);
         for include_cpp in self.get_autocxxes_mut() {
+            #[allow(clippy::manual_map)] // because of dyn shenanigans
             let dep_recorder: Option<Box<dyn RebuildDependencyRecorder>> = match &inner_dep_recorder
             {
                 None => None,

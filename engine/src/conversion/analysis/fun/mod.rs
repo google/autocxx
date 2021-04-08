@@ -58,21 +58,30 @@ pub(crate) enum FnKind {
     Method(TypeName, MethodKind),
 }
 
+/// Strategy for ensuring that the final, callable, Rust name
+/// is what the user originally expected.
+pub(crate) enum RustRenameStrategy {
+    /// cxx::bridge name matches user expectations
+    None,
+    /// We can rename using the #[rust_name] attribute in the cxx::bridge
+    RenameUsingRustAttr,
+    /// Even the #[rust_name] attribute would cause conflicts, and we need
+    /// to use a 'use XYZ as ABC'
+    RenameInOutputMod(Ident),
+}
+
 pub(crate) struct FnAnalysisBody {
-    pub(crate) rename_using_rust_attr: bool,
     pub(crate) cxxbridge_name: Ident,
     pub(crate) rust_name: String,
+    pub(crate) rust_rename_strategy: RustRenameStrategy,
     pub(crate) params: Punctuated<FnArg, syn::Token![,]>,
     pub(crate) kind: FnKind,
     pub(crate) ret_type: ReturnType,
     pub(crate) param_details: Vec<ArgumentAnalysis>,
     pub(crate) cpp_call_name: String,
-    pub(crate) wrapper_function_needed: bool,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
-    pub(crate) id_for_allowlist: Ident,
-    pub(crate) rename_in_output_mod: Option<Ident>,
-    pub(crate) additional_cpp: Option<AdditionalNeed>,
+    pub(crate) cpp_wrapper: Option<AdditionalNeed>,
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -512,24 +521,24 @@ impl<'a> FnAnalyzer<'a> {
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
             .map_or(false, |x| x.cpp_work_needed());
-        let differently_named_method =
-            matches!(kind, FnKind::Method(..)) && (cxxbridge_name != rust_name);
+        // If possible, we'll put knowledge of the C++ API directly into the cxx::bridge
+        // mod. However, there are various circumstances where cxx can't work with the existing
+        // C++ API and we need to create a C++ wrapper function which is more cxx-compliant.
+        // That wrapper function is included in the cxx::bridge, and calls through to the
+        // original function.
         let wrapper_function_needed = match kind {
             FnKind::Method(_, MethodKind::Static)
             | FnKind::Method(_, MethodKind::Virtual)
             | FnKind::Method(_, MethodKind::PureVirtual) => true,
+            FnKind::Method(..) if cxxbridge_name != rust_name => true,
             _ if param_conversion_needed => true,
-            _ if differently_named_method => true,
             _ if ret_type_conversion_needed => true,
             _ => false,
         };
 
-        let mut additional_cpp = None;
-
-        if wrapper_function_needed {
+        let cpp_wrapper = if wrapper_function_needed {
             // Generate a new layer of C++ code to wrap/unwrap parameters
             // and return values into/out of std::unique_ptrs.
-            // First give instructions to generate the additional C++.
             let cpp_construction_ident = make_ident(&cpp_call_name);
             let joiner = if cxxbridge_name.to_string().ends_with('_') {
                 ""
@@ -558,15 +567,8 @@ impl<'a> FnAnalyzer<'a> {
                     false,
                 ),
             };
-            additional_cpp = Some(AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
-                payload,
-                wrapper_function_name: cxxbridge_name.clone(),
-                return_conversion: ret_type_conversion.clone(),
-                argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
-                is_a_method: has_receiver,
-            })));
             // Now modify the cxx::bridge entry we're going to make.
-            if let Some(conversion) = ret_type_conversion {
+            if let Some(ref conversion) = ret_type_conversion {
                 let new_ret_type = conversion.unconverted_rust_type();
                 ret_type = parse_quote!(
                     -> #new_ret_type
@@ -588,7 +590,17 @@ impl<'a> FnAnalyzer<'a> {
                     #arg_name: #type_name
                 ));
             }
-        }
+
+            Some(AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
+                payload,
+                wrapper_function_name: cxxbridge_name.clone(),
+                return_conversion: ret_type_conversion,
+                argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
+                is_a_method: has_receiver,
+            })))
+        } else {
+            None
+        };
 
         let requires_unsafe = requires_unsafe || self.should_be_unsafe();
         let vis = func_information.item.vis.clone();
@@ -596,52 +608,40 @@ impl<'a> FnAnalyzer<'a> {
         // Naming, part two.
         // Work out our final naming strategy.
         let rust_name_ident = make_ident(&rust_name);
-        let (rename_using_rust_attr, id, rename_in_output_mod, id_for_allowlist) = match kind {
-            FnKind::Method(ref self_ty, _) => (
-                false,
-                rust_name_ident,
-                None,
-                make_ident(self_ty.get_final_ident()),
-            ),
+        let (id, rust_rename_strategy) = match kind {
+            FnKind::Method(..) => (rust_name_ident, RustRenameStrategy::None),
             FnKind::Function => {
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
                 // There is a global space of rust_names even if they're in
                 // different namespaces.
                 let rust_name_ok = self.ok_to_use_rust_name(&rust_name);
-                if cxxbridge_name != rust_name {
-                    if rust_name_ok {
-                        (true, rust_name_ident.clone(), None, rust_name_ident)
-                    } else {
-                        (
-                            false,
-                            cxxbridge_name.clone(),
-                            Some(rust_name_ident.clone()),
-                            rust_name_ident,
-                        )
-                    }
+                if cxxbridge_name == rust_name {
+                    (rust_name_ident, RustRenameStrategy::None)
+                } else if rust_name_ok {
+                    (rust_name_ident, RustRenameStrategy::RenameUsingRustAttr)
                 } else {
-                    (false, rust_name_ident.clone(), None, rust_name_ident)
+                    (
+                        cxxbridge_name.clone(),
+                        RustRenameStrategy::RenameInOutputMod(rust_name_ident),
+                    )
                 }
             }
         };
 
         Ok(Some(FnAnalysisResult(
             FnAnalysisBody {
-                rename_using_rust_attr,
                 cxxbridge_name,
                 rust_name,
+                rust_rename_strategy,
                 params,
                 kind,
                 ret_type,
                 param_details,
                 cpp_call_name,
-                wrapper_function_needed,
                 requires_unsafe,
                 vis,
-                id_for_allowlist,
-                rename_in_output_mod,
-                additional_cpp,
+                cpp_wrapper,
             },
             id,
             deps,
@@ -835,11 +835,13 @@ impl<'a> FnAnalyzer<'a> {
 
 impl Api<FnAnalysis> {
     pub(crate) fn typename_for_allowlist(&self) -> TypeName {
-        let id_for_allowlist = match &self.detail {
-            ApiDetail::Function { fun: _, analysis } => &analysis.id_for_allowlist,
-            _ => &self.id,
-        };
-        TypeName::new(&self.ns, &id_for_allowlist.to_string())
+        match &self.detail {
+            ApiDetail::Function { fun: _, analysis } => match analysis.kind {
+                FnKind::Method(ref self_ty, _) => self_ty.clone(),
+                FnKind::Function => TypeName::new(&self.ns, &analysis.rust_name),
+            },
+            _ => TypeName::new(&self.ns, &self.id.to_string()),
+        }
     }
 
     /// Whether this API requires generation of additional C++, and if so,
@@ -850,7 +852,7 @@ impl Api<FnAnalysis> {
     /// And we can't answer the question _prior_ to this function analysis phase.
     pub(crate) fn additional_cpp(&self) -> Option<AdditionalNeed> {
         match &self.detail {
-            ApiDetail::Function { fun: _, analysis } => analysis.additional_cpp.clone(),
+            ApiDetail::Function { fun: _, analysis } => analysis.cpp_wrapper.clone(),
             ApiDetail::StringConstructor => Some(AdditionalNeed::MakeStringConstructor),
             ApiDetail::ConcreteType {
                 ty_details: _,

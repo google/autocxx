@@ -26,20 +26,19 @@ use super::{
 use crate::types::make_ident;
 use crate::{
     conversion::{
-        analysis::fun::{ArgumentAnalysis, FnAnalysisBody, FnKind, MethodKind},
+        analysis::fun::{ArgumentAnalysis, FnAnalysisBody, FnKind, MethodKind, RustRenameStrategy},
         api::ImplBlockDetails,
     },
     types::{Namespace, TypeName},
 };
 
 pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodegenResult {
-    let rename_using_rust_attr = analysis.rename_using_rust_attr;
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = analysis.rust_name;
     let ret_type = analysis.ret_type;
     let param_details = analysis.param_details;
     let cpp_call_name = analysis.cpp_call_name;
-    let wrapper_function_needed = analysis.wrapper_function_needed;
+    let wrapper_function_needed = analysis.cpp_wrapper.is_some();
     let requires_unsafe = analysis.requires_unsafe;
     let params = analysis.params;
     let vis = analysis.vis;
@@ -52,18 +51,26 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
     } else {
         None
     };
+    let rust_name_attr: Vec<_> = match &analysis.rust_rename_strategy {
+        RustRenameStrategy::RenameUsingRustAttr => Attribute::parse_outer
+            .parse2(quote!(
+                #[rust_name = #rust_name]
+            ))
+            .unwrap(),
+        _ => Vec::new(),
+    };
+    let mut materialization = match kind {
+        FnKind::Method(..) => Use::Unused,
+        FnKind::Function => match analysis.rust_rename_strategy {
+            RustRenameStrategy::RenameInOutputMod(alias) => Use::UsedFromCxxBridgeWithAlias(alias),
+            _ => Use::UsedFromCxxBridge,
+        },
+    };
     let any_param_needs_rust_conversion = param_details
         .iter()
         .any(|pd| pd.conversion.rust_work_needed());
     let rust_wrapper_needed = any_param_needs_rust_conversion
         || (cxxbridge_name != rust_name && matches!(kind, FnKind::Method(..)));
-    let mut materialization = match kind {
-        FnKind::Method(..) => Use::Unused,
-        FnKind::Function => match analysis.rename_in_output_mod {
-            None => Use::UsedFromCxxBridge,
-            Some(alias) => Use::UsedFromCxxBridgeWithAlias(alias),
-        },
-    };
     if rust_wrapper_needed {
         if let FnKind::Method(ref type_name, ref method_kind) = kind {
             // Method, or static method.
@@ -86,15 +93,6 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
             ));
         }
     }
-    let rust_name_attr: Vec<_> = if rename_using_rust_attr {
-        Attribute::parse_outer
-            .parse2(quote!(
-                #[rust_name = #rust_name]
-            ))
-            .unwrap()
-    } else {
-        Vec::new()
-    };
     if cxxbridge_name != cpp_call_name && !wrapper_function_needed {
         cpp_name_attr = Attribute::parse_outer
             .parse2(quote!(
