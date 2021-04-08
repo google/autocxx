@@ -25,8 +25,6 @@ use crate::{
     types::TypeName,
 };
 use autocxx_parser::TypeConfig;
-use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
 use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
 
 use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
@@ -328,34 +326,12 @@ impl<'a> ParseBindgen<'a> {
         if self.type_config.is_on_blocklist(&tyname.to_cpp_name()) {
             return;
         }
-        let tynamestring = tyname.to_cpp_name();
-        let mut for_extern_c_ts = if tyname.has_namespace() {
-            let ns_string = tyname
-                .ns_segment_iter()
-                .cloned()
-                .collect::<Vec<String>>()
-                .join("::");
-            quote! {
-                #[namespace = #ns_string]
-            }
-        } else {
-            TokenStream2::new()
-        };
-
         let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(make_ident).collect();
-        for_extern_c_ts.extend(quote! {
-            type #final_ident = super::bindgen::root::
-        });
         for segment in tyname.ns_segment_iter() {
             let id = make_ident(segment);
-            for_extern_c_ts.extend(quote! {
-                #id::
-            });
             fulltypath.push(id);
         }
-        for_extern_c_ts.extend(quote! {
-            #final_ident;
-        });
+        let tynamestring = tyname.to_cpp_name();
         fulltypath.push(final_ident.clone());
         let api = UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
@@ -367,7 +343,6 @@ impl<'a> ParseBindgen<'a> {
                     final_ident,
                     tynamestring,
                 },
-                for_extern_c_ts,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis: (),

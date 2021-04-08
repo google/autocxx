@@ -25,6 +25,7 @@ use std::collections::HashMap;
 // codegen_rs but currently Rust codegen happens everywhere... TODO
 pub(crate) use non_pod_struct::make_non_pod;
 
+use proc_macro2::TokenStream;
 use syn::{parse_quote, ForeignItem, Ident, Item, ItemForeignMod, ItemMod};
 
 use crate::types::{make_ident, Namespace};
@@ -424,7 +425,6 @@ impl<'a> RsCodeGenerator<'a> {
             },
             ApiDetail::Type {
                 ty_details,
-                for_extern_c_ts,
                 is_forward_declaration: _,
                 bindgen_mod_item,
                 analysis,
@@ -436,7 +436,9 @@ impl<'a> RsCodeGenerator<'a> {
                 } else {
                     Vec::new()
                 },
-                extern_c_mod_item: Some(ForeignItem::Verbatim(for_extern_c_ts)),
+                extern_c_mod_item: Some(ForeignItem::Verbatim(Self::generate_cxxbridge_type(
+                    ns, id,
+                ))),
                 bindgen_mod_item,
                 materialization: Use::UsedFromCxxBridge,
             },
@@ -512,6 +514,30 @@ impl<'a> RsCodeGenerator<'a> {
                 type Kind = cxx::kind::#kind_item;
             }
         })]
+    }
+
+    fn generate_cxxbridge_type(ns: &Namespace, id: &Ident) -> TokenStream {
+        let mut for_extern_c_ts = if !ns.is_empty() {
+            let ns_string = ns.iter().cloned().collect::<Vec<String>>().join("::");
+            quote! {
+                #[namespace = #ns_string]
+            }
+        } else {
+            TokenStream::new()
+        };
+
+        for_extern_c_ts.extend(quote! {
+            type #id = super::bindgen::root::
+        });
+        for_extern_c_ts.extend(ns.iter().map(make_ident).map(|id| {
+            quote! {
+                #id::
+            }
+        }));
+        for_extern_c_ts.extend(quote! {
+            #id;
+        });
+        for_extern_c_ts
     }
 
     fn find_output_mod_root(ns: &Namespace) -> impl Iterator<Item = Ident> {

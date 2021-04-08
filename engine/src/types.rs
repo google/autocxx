@@ -148,10 +148,6 @@ impl TypeName {
         &self.1
     }
 
-    pub(crate) fn has_namespace(&self) -> bool {
-        !self.0.is_empty()
-    }
-
     pub(crate) fn get_namespace(&self) -> &Namespace {
         &self.0
     }

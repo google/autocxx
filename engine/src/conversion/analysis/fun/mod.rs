@@ -166,7 +166,6 @@ impl<'a> FnAnalyzer<'a> {
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
                     ty_details: _,
-                    for_extern_c_ts: _,
                     is_forward_declaration: true,
                     bindgen_mod_item: _,
                     analysis: _,
@@ -181,7 +180,6 @@ impl<'a> FnAnalyzer<'a> {
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
                     ty_details: _,
-                    for_extern_c_ts: _,
                     is_forward_declaration: _,
                     bindgen_mod_item: _,
                     analysis: TypeKind::Pod,
@@ -259,13 +257,11 @@ impl<'a> FnAnalyzer<'a> {
             // Just changes to this one...
             ApiDetail::Type {
                 ty_details,
-                for_extern_c_ts,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis,
             } => ApiDetail::Type {
                 ty_details,
-                for_extern_c_ts,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis,

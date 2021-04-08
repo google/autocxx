@@ -94,7 +94,6 @@ fn analyze_pod_api(
         // Just changes to this one...
         ApiDetail::Type {
             ty_details,
-            for_extern_c_ts,
             is_forward_declaration,
             mut bindgen_mod_item,
             analysis: _,
@@ -118,7 +117,6 @@ fn analyze_pod_api(
             };
             ApiDetail::Type {
                 ty_details,
-                for_extern_c_ts,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis: type_kind,
