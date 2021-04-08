@@ -69,7 +69,6 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) cpp_call_name: String,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
-    pub(crate) id_for_allowlist: Ident,
     pub(crate) rename_in_output_mod: Option<Ident>,
     pub(crate) cpp_wrapper: Option<AdditionalNeed>,
 }
@@ -598,13 +597,8 @@ impl<'a> FnAnalyzer<'a> {
         // Naming, part two.
         // Work out our final naming strategy.
         let rust_name_ident = make_ident(&rust_name);
-        let (rename_using_rust_attr, id, rename_in_output_mod, id_for_allowlist) = match kind {
-            FnKind::Method(ref self_ty, _) => (
-                false,
-                rust_name_ident,
-                None,
-                make_ident(self_ty.get_final_ident()),
-            ),
+        let (rename_using_rust_attr, id, rename_in_output_mod) = match kind {
+            FnKind::Method(..) => (false, rust_name_ident, None),
             FnKind::Function => {
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
@@ -612,16 +606,11 @@ impl<'a> FnAnalyzer<'a> {
                 // different namespaces.
                 let rust_name_ok = self.ok_to_use_rust_name(&rust_name);
                 if cxxbridge_name == rust_name {
-                    (false, rust_name_ident.clone(), None, rust_name_ident)
+                    (false, rust_name_ident, None)
                 } else if rust_name_ok {
-                    (true, rust_name_ident.clone(), None, rust_name_ident)
+                    (true, rust_name_ident, None)
                 } else {
-                    (
-                        false,
-                        cxxbridge_name.clone(),
-                        Some(rust_name_ident.clone()),
-                        rust_name_ident,
-                    )
+                    (false, cxxbridge_name.clone(), Some(rust_name_ident))
                 }
             }
         };
@@ -638,7 +627,6 @@ impl<'a> FnAnalyzer<'a> {
                 cpp_call_name,
                 requires_unsafe,
                 vis,
-                id_for_allowlist,
                 rename_in_output_mod,
                 cpp_wrapper,
             },
@@ -834,11 +822,13 @@ impl<'a> FnAnalyzer<'a> {
 
 impl Api<FnAnalysis> {
     pub(crate) fn typename_for_allowlist(&self) -> TypeName {
-        let id_for_allowlist = match &self.detail {
-            ApiDetail::Function { fun: _, analysis } => &analysis.id_for_allowlist,
-            _ => &self.id,
-        };
-        TypeName::new(&self.ns, &id_for_allowlist.to_string())
+        match &self.detail {
+            ApiDetail::Function { fun: _, analysis } => match analysis.kind {
+                FnKind::Method(ref self_ty, _) => self_ty.clone(),
+                FnKind::Function => TypeName::new(&self.ns, &analysis.rust_name),
+            },
+            _ => TypeName::new(&self.ns, &self.id.to_string()),
+        }
     }
 
     /// Whether this API requires generation of additional C++, and if so,
