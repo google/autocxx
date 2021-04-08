@@ -45,14 +45,26 @@ use self::{
 
 use super::pod::PodAnalysis;
 
+pub(crate) enum MethodKind {
+    Normal,
+    Constructor,
+    Static,
+    Virtual,
+    PureVirtual,
+}
+
+pub(crate) enum FnKind {
+    Function,
+    Method(TypeName, MethodKind),
+}
+
 pub(crate) struct FnAnalysisBody {
     pub(crate) rename_using_rust_attr: bool,
     pub(crate) cxxbridge_name: Ident,
     pub(crate) rust_name: String,
     pub(crate) params: Punctuated<FnArg, syn::Token![,]>,
-    pub(crate) self_ty: Option<TypeName>,
+    pub(crate) kind: FnKind,
     pub(crate) ret_type: ReturnType,
-    pub(crate) is_constructor: bool,
     pub(crate) param_details: Vec<ArgumentAnalysis>,
     pub(crate) cpp_call_name: String,
     pub(crate) wrapper_function_needed: bool,
@@ -61,7 +73,6 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) id_for_allowlist: Ident,
     pub(crate) rename_in_output_mod: Option<Ident>,
     pub(crate) additional_cpp: Option<AdditionalNeed>,
-    pub(crate) is_pure_virtual: bool,
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -312,7 +323,6 @@ impl<'a> FnAnalyzer<'a> {
     ) -> Result<Option<FnAnalysisResult>, ConvertError> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
-        let is_pure_virtual = Self::has_attr(&fun, "bindgen_pure_virtual");
         // This function is one of the most complex parts of our conversion.
         // It needs to consider:
         // 1. Rejecting destructors entirely.
@@ -360,31 +370,15 @@ impl<'a> FnAnalyzer<'a> {
             .map(|p| p.deps.iter().cloned())
             .flatten()
             .collect();
-        let mut self_ty = param_details
+        let self_ty = param_details
             .iter()
             .filter_map(|pd| pd.self_type.as_ref())
             .next()
             .cloned();
-        let is_virtual = param_details.iter().any(|pd| pd.is_virtual);
-        if is_pure_virtual {
-            assert!(is_virtual);
-        }
         let requires_unsafe = param_details.iter().any(|pd| pd.requires_unsafe);
-
-        let is_static_method = if self_ty.is_none() {
-            // Even if we can't find a 'self' parameter this could conceivably
-            // be a static method.
-            self_ty = func_information.self_ty.clone();
-            self_ty.is_some()
-        } else {
-            false
-        };
-
-        let self_ty = self_ty; // prevent subsequent mut'ing
 
         // Work out naming, part one.
         let mut rust_name;
-        let mut is_constructor = false;
         // bindgen may have mangled the name either because it's invalid Rust
         // syntax (e.g. a keyword like 'async') or it's an overload.
         // If the former, we respect that mangling. If the latter, we don't,
@@ -398,7 +392,20 @@ impl<'a> FnAnalyzer<'a> {
         } else {
             cpp_call_name.clone()
         };
-        if let Some(self_ty) = &self_ty {
+
+        // Let's spend some time figuring out the kind of this function (i.e. method,
+        // virtual function, etc.)
+        let (is_static_method, self_ty) = if self_ty.is_none() {
+            // Even if we can't find a 'self' parameter this could conceivably
+            // be a static method.
+            let self_ty = func_information.self_ty.clone();
+            (self_ty.is_some(), self_ty)
+        } else {
+            (false, self_ty)
+        };
+
+        let kind = if let Some(self_ty) = self_ty {
+            // Some kind of method.
             if !self.is_on_allowlist(&self_ty) {
                 // Bindgen will output methods for types which have been encountered
                 // virally as arguments on other allowlisted types. But we don't want
@@ -416,7 +423,7 @@ impl<'a> FnAnalyzer<'a> {
             // strip off the class name.
             let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
             rust_name = overload_tracker.get_method_real_name(&type_ident, ideal_rust_name);
-            if rust_name.starts_with(&type_ident) {
+            let method_kind = if rust_name.starts_with(&type_ident) {
                 // It's a constructor. bindgen generates
                 // fn new(this: *Type, ...args)
                 // We want
@@ -430,20 +437,35 @@ impl<'a> FnAnalyzer<'a> {
                 // Strip off the 'this' arg.
                 params = params.into_iter().skip(1).collect();
                 param_details.remove(0);
-                is_constructor = true;
-            }
+                MethodKind::Constructor
+            } else if is_static_method {
+                MethodKind::Static
+            } else if param_details.iter().any(|pd| pd.is_virtual) {
+                if Self::has_attr(&fun, "bindgen_pure_virtual") {
+                    MethodKind::PureVirtual
+                } else {
+                    MethodKind::Virtual
+                }
+            } else {
+                MethodKind::Normal
+            };
+            FnKind::Method(self_ty, method_kind)
         } else {
             // Not a method.
             // What shall we call this function? It may be overloaded.
             let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
             rust_name = overload_tracker.get_function_real_name(ideal_rust_name);
-        }
+            FnKind::Function
+        };
 
         // The name we use within the cxx::bridge mod may be different
         // from both the C++ name and the Rust name, because it's a flat
         // namespace so we might need to prepend some stuff to make it unique.
         let cxxbridge_name = self.get_cxx_bridge_name(
-            self_ty.as_ref().map(|ty| ty.get_final_ident()),
+            match kind {
+                FnKind::Method(ref self_ty, ..) => Some(self_ty.get_final_ident()),
+                FnKind::Function => None,
+            },
             &rust_name,
             &ns,
         );
@@ -451,8 +473,8 @@ impl<'a> FnAnalyzer<'a> {
 
         // Analyze the return type, just as we previously did for the
         // parameters.
-        let mut return_analysis = if is_constructor {
-            let self_ty = self_ty.as_ref().unwrap();
+        let mut return_analysis = if let FnKind::Method(ref self_ty, MethodKind::Constructor) = kind
+        {
             let constructed_type = self_ty.to_type_path();
             let mut these_deps = HashSet::new();
             these_deps.insert(self_ty.clone());
@@ -490,12 +512,17 @@ impl<'a> FnAnalyzer<'a> {
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
             .map_or(false, |x| x.cpp_work_needed());
-        let differently_named_method = self_ty.is_some() && (cxxbridge_name != rust_name);
-        let wrapper_function_needed = param_conversion_needed
-            || ret_type_conversion_needed
-            || is_static_method
-            || differently_named_method
-            || is_virtual;
+        let differently_named_method =
+            matches!(kind, FnKind::Method(..)) && (cxxbridge_name != rust_name);
+        let wrapper_function_needed = match kind {
+            FnKind::Method(_, MethodKind::Static)
+            | FnKind::Method(_, MethodKind::Virtual)
+            | FnKind::Method(_, MethodKind::PureVirtual) => true,
+            _ if param_conversion_needed => true,
+            _ if differently_named_method => true,
+            _ if ret_type_conversion_needed => true,
+            _ => false,
+        };
 
         let mut additional_cpp = None;
 
@@ -510,23 +537,33 @@ impl<'a> FnAnalyzer<'a> {
                 "_"
             };
             cxxbridge_name = make_ident(&format!("{}{}autocxx_wrapper", cxxbridge_name, joiner));
-            let payload = if is_constructor {
-                FunctionWrapperPayload::Constructor
-            } else if is_static_method {
-                FunctionWrapperPayload::StaticMethodCall(
-                    ns.clone(),
-                    make_ident(self_ty.as_ref().unwrap().get_final_ident()),
-                    cpp_construction_ident,
-                )
-            } else {
-                FunctionWrapperPayload::FunctionCall(ns.clone(), cpp_construction_ident)
+            let (payload, has_receiver) = match kind {
+                FnKind::Method(_, MethodKind::Constructor) => {
+                    (FunctionWrapperPayload::Constructor, false)
+                }
+                FnKind::Method(ref self_ty, MethodKind::Static) => (
+                    FunctionWrapperPayload::StaticMethodCall(
+                        ns.clone(),
+                        make_ident(self_ty.get_final_ident()),
+                        cpp_construction_ident,
+                    ),
+                    false,
+                ),
+                FnKind::Method(..) => (
+                    FunctionWrapperPayload::FunctionCall(ns.clone(), cpp_construction_ident),
+                    true,
+                ),
+                _ => (
+                    FunctionWrapperPayload::FunctionCall(ns.clone(), cpp_construction_ident),
+                    false,
+                ),
             };
             additional_cpp = Some(AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
                 payload,
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
-                is_a_method: self_ty.is_some() && !is_constructor && !is_static_method,
+                is_a_method: has_receiver,
             })));
             // Now modify the cxx::bridge entry we're going to make.
             if let Some(conversion) = ret_type_conversion {
@@ -540,7 +577,9 @@ impl<'a> FnAnalyzer<'a> {
             params.clear();
             for pd in &param_details {
                 let type_name = pd.conversion.converted_rust_type();
-                let arg_name = if pd.self_type.is_some() && !is_constructor {
+                let arg_name = if pd.self_type.is_some()
+                    && !matches!(kind, FnKind::Method(_, MethodKind::Constructor))
+                {
                     parse_quote!(autocxx_gen_this)
                 } else {
                     pd.name.clone()
@@ -557,17 +596,14 @@ impl<'a> FnAnalyzer<'a> {
         // Naming, part two.
         // Work out our final naming strategy.
         let rust_name_ident = make_ident(&rust_name);
-        let (rename_using_rust_attr, id, rename_in_output_mod, id_for_allowlist) =
-            if let Some(self_ty) = self_ty.as_ref() {
-                // Method.
-                (
-                    false,
-                    rust_name_ident,
-                    None,
-                    make_ident(self_ty.get_final_ident()),
-                )
-            } else {
-                // Function.
+        let (rename_using_rust_attr, id, rename_in_output_mod, id_for_allowlist) = match kind {
+            FnKind::Method(ref self_ty, _) => (
+                false,
+                rust_name_ident,
+                None,
+                make_ident(self_ty.get_final_ident()),
+            ),
+            FnKind::Function => {
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
                 // There is a global space of rust_names even if they're in
@@ -587,7 +623,8 @@ impl<'a> FnAnalyzer<'a> {
                 } else {
                     (false, rust_name_ident.clone(), None, rust_name_ident)
                 }
-            };
+            }
+        };
 
         Ok(Some(FnAnalysisResult(
             FnAnalysisBody {
@@ -595,9 +632,8 @@ impl<'a> FnAnalyzer<'a> {
                 cxxbridge_name,
                 rust_name,
                 params,
-                self_ty,
+                kind,
                 ret_type,
-                is_constructor,
                 param_details,
                 cpp_call_name,
                 wrapper_function_needed,
@@ -606,7 +642,6 @@ impl<'a> FnAnalyzer<'a> {
                 id_for_allowlist,
                 rename_in_output_mod,
                 additional_cpp,
-                is_pure_virtual,
             },
             id,
             deps,

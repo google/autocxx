@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::fun::{FnAnalysis, FnAnalysisBody};
+use super::fun::{FnAnalysis, FnAnalysisBody, FnKind, MethodKind};
 use crate::conversion::api::ApiDetail;
 use crate::conversion::api::{Api, TypeKind};
 use std::collections::HashSet;
@@ -26,8 +26,7 @@ pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
                 fun: _,
                 analysis:
                     FnAnalysisBody {
-                        is_pure_virtual: true,
-                        self_ty: Some(self_ty_name),
+                        kind: FnKind::Method(self_ty_name, MethodKind::PureVirtual),
                         ..
                     },
             } => Some(self_ty_name.clone()),
