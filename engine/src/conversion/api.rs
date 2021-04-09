@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::types::{Namespace, TypeName};
-use proc_macro2::TokenStream;
 use std::collections::HashSet;
 use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse};
 
@@ -103,7 +102,6 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// `bindgen` output.
     Type {
         ty_details: TypeApiDetails,
-        for_extern_c_ts: TokenStream,
         is_forward_declaration: bool,
         bindgen_mod_item: Option<Item>,
         analysis: T::TypeAnalysis,
