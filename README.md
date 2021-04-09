@@ -24,10 +24,10 @@ namespace base {
 ```rust
 use autocxx::include_cpp;
 
-include_cpp!(
+include_cpp!{
     #include "base/bob.h"
     generate!("Bob")
-)
+}
 
 let a = ffi::base::Bob::make_unique("hello");
 a.do_a_thing();
