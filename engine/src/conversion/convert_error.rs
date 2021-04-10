@@ -86,7 +86,7 @@ impl ConvertError {
     /// in a way that causes them a compile-time problem only if they try to
     /// _use_ the affects functions. I don't know a way to do that. Meanwhile,
     /// we should output these things as warnings during the codegen phase.
-    pub(crate) fn is_ignorable(&self) -> bool {
+    pub(super) fn is_ignorable(&self) -> bool {
         matches!(
             self,
             ConvertError::VirtualThisType(..)
@@ -100,5 +100,13 @@ impl ConvertError {
                 | ConvertError::TemplatedTypeContainingNonPathArg(..)
                 | ConvertError::InvalidPointee
         )
+    }
+}
+
+pub(crate) struct ConvertErrorWithIdent(pub(crate) ConvertError, pub(crate) Option<Ident>);
+
+impl std::fmt::Debug for ConvertErrorWithIdent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

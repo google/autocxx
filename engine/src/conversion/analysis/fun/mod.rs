@@ -17,7 +17,7 @@ pub(crate) mod function_wrapper;
 mod overload_tracker;
 mod rust_name_tracker;
 
-use crate::known_types::KNOWN_TYPES;
+use crate::{conversion::error_reporter::add_api_or_report_error, known_types::KNOWN_TYPES};
 use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::{TypeConfig, UnsafePolicy};
@@ -144,13 +144,7 @@ impl<'a> FnAnalyzer<'a> {
         };
         let mut results = Vec::new();
         for api in apis {
-            let r = me.analyze_fn_api(api);
-            match r {
-                Err(e) if e.is_ignorable() => eprintln!("Skipped function because: {}", e),
-                Err(e) => return Err(e),
-                Ok(Some(api)) => results.push(api),
-                Ok(None) => {}
-            }
+            add_api_or_report_error(api.typename(), &mut results, || me.analyze_fn_api(api))?;
         }
         results.extend(me.extra_apis.into_iter().map(Self::make_extra_api_nonpod));
         Ok(results)
@@ -267,7 +261,7 @@ impl<'a> FnAnalyzer<'a> {
                 analysis,
             },
             ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
-            ApiDetail::IgnoredItem => ApiDetail::IgnoredItem,
+            ApiDetail::IgnoredItem { err } => ApiDetail::IgnoredItem { err },
         };
         Ok(Some(Api {
             ns: api.ns,

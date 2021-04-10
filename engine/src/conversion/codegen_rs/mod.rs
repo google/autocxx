@@ -59,6 +59,8 @@ enum Use {
     UsedFromBindgen,
     /// Some kind of custom item
     Custom(Box<Item>),
+    /// Generate something to show that there's a problem with this type.
+    Err(String),
 }
 
 fn get_string_items() -> Vec<Item> {
@@ -255,6 +257,10 @@ impl<'a> RsCodeGenerator<'a> {
                 Use::UsedFromBindgen => output_items.push(Self::generate_bindgen_use_stmt(ns, id)),
                 Use::Unused => {}
                 Use::Custom(item) => output_items.push(*item.clone()),
+                Use::Err(msg) => output_items.push(parse_quote! {
+                    #[doc = #msg]
+                    pub struct #id;
+                }),
             };
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
@@ -462,16 +468,16 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: None,
                 materialization: Use::Unused,
             },
-            ApiDetail::IgnoredItem => RsCodegenResult {
-                // In future it would be terrific to output something
-                // here which results in autocomplete in IDEs revealing
-                // the reason why this was ignored.
-                global_items: Vec::new(),
-                impl_entry: None,
-                bridge_items: Vec::new(),
-                extern_c_mod_item: None,
-                bindgen_mod_item: None,
-                materialization: Use::Unused,
+            ApiDetail::IgnoredItem { err } => {
+                let err = format!("autocxx bindings couldn't be generated: {}", err);
+                RsCodegenResult {
+                    global_items: Vec::new(),
+                    impl_entry: None,
+                    bridge_items: Vec::new(),
+                    extern_c_mod_item: None,
+                    bindgen_mod_item: None,
+                    materialization: Use::Err(err),
+                }
             },
         }
     }

@@ -24,7 +24,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(
     let mut ignored_items: HashSet<_> = apis
         .iter()
         .filter_map(|api| {
-            if matches!(api.detail, ApiDetail::IgnoredItem) {
+            if matches!(api.detail, ApiDetail::IgnoredItem { .. }) {
                 Some(api.typename())
             } else {
                 None
