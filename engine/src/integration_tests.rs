@@ -17,11 +17,12 @@ use log::info;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use std::fs::File;
+use std::io::Read;
 use std::io::Write;
 use std::panic::RefUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use syn::Token;
+use syn::{Item, Token};
 use tempfile::{tempdir, TempDir};
 use test_env_log::test;
 
@@ -115,6 +116,7 @@ fn run_test(
         generate_pods,
         None,
         &[],
+        None,
     )
     .unwrap()
 }
@@ -128,6 +130,9 @@ fn run_test_ex(
     generate_pods: &[&str],
     extra_directives: Option<TokenStream>,
     defines: &[&str],
+    // A function applied to the resultant generated Rust code
+    // which can be used to inspect that code.
+    rust_code_checker: Option<Box<dyn FnOnce(syn::File) -> Result<(), TestError>>>,
 ) {
     do_run_test(
         cxx_code,
@@ -137,6 +142,7 @@ fn run_test_ex(
         generate_pods,
         extra_directives,
         defines,
+        rust_code_checker,
     )
     .unwrap()
 }
@@ -156,6 +162,7 @@ fn run_test_expect_fail(
         generate_pods,
         None,
         &[],
+        None,
     )
     .expect_err("Unexpected success");
 }
@@ -166,6 +173,11 @@ enum TestError {
     AutoCxx(crate::BuilderError),
     CppBuild(cc::Error),
     RsBuild,
+    NoRs,
+    RsFileOpen(std::io::Error),
+    RsFileRead(std::io::Error),
+    RsFileParse(syn::Error),
+    RsCodeExaminationFail,
 }
 
 fn do_run_test(
@@ -176,6 +188,7 @@ fn do_run_test(
     generate_pods: &[&str],
     extra_directives: Option<TokenStream>,
     definitions: &[&str],
+    rust_code_checker: Option<Box<dyn FnOnce(syn::File) -> Result<(), TestError>>>,
 ) -> Result<(), TestError> {
     // Step 1: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
@@ -238,6 +251,17 @@ fn do_run_test(
     .map_err(TestError::AutoCxx)?;
     let mut b = build_results.0;
     let generated_rs_files = build_results.1;
+
+    if let Some(rust_code_checker) = rust_code_checker {
+        let mut file = File::open(generated_rs_files.get(0).ok_or(TestError::NoRs)?)
+            .map_err(TestError::RsFileOpen)?;
+        let mut content = String::new();
+        file.read_to_string(&mut content)
+            .map_err(TestError::RsFileRead)?;
+
+        let ast = syn::parse_file(&content).map_err(TestError::RsFileParse)?;
+        rust_code_checker(ast)?;
+    }
 
     let target = rust_info::get().target_triple.unwrap();
 
@@ -1962,7 +1986,7 @@ fn test_multiple_classes_with_methods() {
         assert_eq!(oc.pin_mut().inc(), 4);
         assert_eq!(oc.pin_mut().inc(), 5);
     };
-    run_test_ex(
+    run_test(
         cxx,
         hdr,
         rs,
@@ -1975,8 +1999,6 @@ fn test_multiple_classes_with_methods() {
             "OpaqueClass",
         ],
         &["TrivialStruct", "TrivialClass"],
-        None,
-        &[],
     );
 }
 
@@ -3986,6 +4008,7 @@ fn test_issues_217_222() {
         &[],
         Some(quote! { block!("StringPiece") block!("Replacements") }),
         &[],
+        None,
     );
 }
 
@@ -4262,7 +4285,7 @@ fn test_defines_effective() {
     let rs = quote! {
         ffi::a();
     };
-    run_test_ex("", hdr, rs, &["a"], &[], None, &["FOO"]);
+    run_test_ex("", hdr, rs, &["a"], &[], None, &["FOO"], None);
 }
 
 #[test]
@@ -4380,6 +4403,71 @@ fn test_string_transparent_static_method() {
         assert_eq!(ffi::A::take_string("hello"), 5);
     };
     run_test("", hdr, rs, &["A"], &[]);
+}
+
+/// Generates a closure which can be used to ensure that the given symbol
+/// is mentioned in the output and has documentation attached.
+/// The idea is that this is what we do in cases where we can't generate code properly.
+fn make_error_finder(error_symbol: &str) -> Box<dyn FnOnce(syn::File) -> Result<(), TestError>> {
+    let error_symbol = error_symbol.to_string();
+    Box::new(move |f| {
+        let ffi_mod = f
+            .items
+            .into_iter()
+            .filter_map(|i| match i {
+                Item::Mod(itm) => Some(itm),
+                _ => None,
+            })
+            .next()
+            .ok_or(TestError::RsCodeExaminationFail)?;
+        // Ensure there's some kind of struct entry for this symboll
+        let foo = ffi_mod
+            .content
+            .ok_or(TestError::RsCodeExaminationFail)?
+            .1
+            .into_iter()
+            .filter_map(|i| match i {
+                Item::Struct(its) if its.ident.to_string() == error_symbol => Some(its),
+                _ => None,
+            })
+            .next()
+            .ok_or(TestError::RsCodeExaminationFail)?;
+        // Ensure doc attribute
+        foo.attrs
+            .into_iter()
+            .filter(|a| {
+                a.path
+                    .get_ident()
+                    .filter(|p| p.to_string() == "doc")
+                    .is_some()
+            })
+            .next()
+            .ok_or(TestError::RsCodeExaminationFail)?;
+        Ok(())
+    })
+}
+
+#[test]
+fn test_error_generated_for_static_data() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct A {
+            A() {}
+            uint32_t a;
+        };
+        static A FOO = A();
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["FOO"],
+        &[],
+        None,
+        &[],
+        Some(make_error_finder("FOO")),
+    );
 }
 
 // Yet to test:
