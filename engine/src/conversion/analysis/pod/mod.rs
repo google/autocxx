@@ -123,7 +123,7 @@ fn analyze_pod_api(
             }
         }
         ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
-        ApiDetail::IgnoredItem { err } => ApiDetail::IgnoredItem { err },
+        ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
     };
     Ok(Api {
         ns: api.ns,

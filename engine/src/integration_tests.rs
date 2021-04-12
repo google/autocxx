@@ -4529,12 +4529,16 @@ fn test_error_generated_for_array_dependent_method() {
         &[],
         None,
         &[],
-        Some(make_string_finder(["take_func", "couldn't be generated"].to_vec())),
+        Some(make_string_finder(
+            ["take_func", "couldn't be generated"].to_vec(),
+        )),
     );
 }
 
 /// Returns a closure which simply hunts for a given string in the results
-fn make_string_finder<'a>(error_texts: Vec<&str>) -> Box<dyn FnOnce(syn::File) -> Result<(), TestError> + '_> {
+fn make_string_finder<'a>(
+    error_texts: Vec<&str>,
+) -> Box<dyn FnOnce(syn::File) -> Result<(), TestError> + '_> {
     Box::new(|f| {
         let mut ts = TokenStream::new();
         f.to_tokens(&mut ts);
@@ -4572,7 +4576,9 @@ fn test_doc_passthru() {
         &["B"],
         None,
         &[],
-        Some(make_string_finder(["Giraffes", "Elephants", "Rhinos"].to_vec())),
+        Some(make_string_finder(
+            ["Giraffes", "Elephants", "Rhinos"].to_vec(),
+        )),
     );
 }
 

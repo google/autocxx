@@ -401,3 +401,12 @@ unsafe impl autocxx_engine::cxx::ExternType for c_void {
     type Id = autocxx_engine::cxx::type_id!(c_void);
     type Kind = autocxx_engine::cxx::kind::Trivial;
 }
+
+/// autocxx couldn't generate these bindings.
+/// If you come across a method, type or function which refers to this type,
+/// it indicates that autocxx couldn't generate that binding. A documentation
+/// comment should be attached indicating the reason.
+pub struct BindingGenerationFailure {
+    _unallocatable: [*const u8; 0],
+    _pinned: core::marker::PhantomData<core::marker::PhantomPinned>,
+}

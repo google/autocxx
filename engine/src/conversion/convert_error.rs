@@ -79,9 +79,39 @@ impl Display for ConvertError {
     }
 }
 
-pub(crate) struct ConvertErrorWithIdent(pub(crate) ConvertError, pub(crate) Option<Ident>);
+pub(crate) enum ErrorContext {
+    Item(Ident),
+    Method { self_ty: Ident, method: Ident },
+}
 
-impl std::fmt::Debug for ConvertErrorWithIdent {
+impl ErrorContext {
+    /// Return the ID in the output mod with which this should be associated
+    pub(crate) fn get_id(&self) -> &Ident {
+        match self {
+            ErrorContext::Item(id) => id,
+            ErrorContext::Method { self_ty, method: _ } => self_ty,
+        }
+    }
+}
+
+impl std::fmt::Display for ErrorContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorContext::Item(id) => write!(f, "{}", id),
+            ErrorContext::Method { self_ty, method } => write!(f, "{}::{}", self_ty, method),
+        }
+    }
+}
+
+pub(crate) struct ConvertErrorWithContext(pub(crate) ConvertError, pub(crate) Option<ErrorContext>);
+
+impl std::fmt::Debug for ConvertErrorWithContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Display for ConvertErrorWithContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }

@@ -15,7 +15,8 @@
 use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
     api::{FuncToConvert, UnanalyzedApi},
-    convert_error::ConvertErrorWithIdent,
+    convert_error::ConvertErrorWithContext,
+    convert_error::ErrorContext,
 };
 use crate::{
     conversion::api::ApiDetail,
@@ -73,7 +74,7 @@ impl ParseForeignMod {
         &mut self,
         i: ForeignItem,
         virtual_this_type: &Option<TypeName>,
-    ) -> Result<(), ConvertErrorWithIdent> {
+    ) -> Result<(), ConvertErrorWithContext> {
         match i {
             ForeignItem::Fn(item) => {
                 self.funcs_to_convert.push(FuncToConvert {
@@ -83,11 +84,11 @@ impl ParseForeignMod {
                 });
                 Ok(())
             }
-            ForeignItem::Static(item) => Err(ConvertErrorWithIdent(
+            ForeignItem::Static(item) => Err(ConvertErrorWithContext(
                 ConvertError::StaticData(item.ident.to_string()),
-                Some(item.ident),
+                Some(ErrorContext::Item(item.ident)),
             )),
-            _ => Err(ConvertErrorWithIdent(
+            _ => Err(ConvertErrorWithContext(
                 ConvertError::UnexpectedForeignItem,
                 None,
             )),

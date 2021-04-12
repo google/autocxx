@@ -42,6 +42,7 @@ use super::{
     analysis::fun::FnAnalysis,
     api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, TypedefKind},
 };
+use super::{convert_error::ErrorContext, ConvertError};
 use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
@@ -60,8 +61,6 @@ enum Use {
     UsedFromBindgen,
     /// Some kind of custom item
     Custom(Box<Item>),
-    /// Generate something to show that there's a problem with this type.
-    Err(String),
 }
 
 fn get_string_items() -> Vec<Item> {
@@ -258,10 +257,6 @@ impl<'a> RsCodeGenerator<'a> {
                 Use::UsedFromBindgen => output_items.push(Self::generate_bindgen_use_stmt(ns, id)),
                 Use::Unused => {}
                 Use::Custom(item) => output_items.push(*item.clone()),
-                Use::Err(msg) => output_items.push(parse_quote! {
-                    #[doc = #msg]
-                    pub struct #id;
-                }),
             };
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
@@ -469,17 +464,42 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: None,
                 materialization: Use::Unused,
             },
-            ApiDetail::IgnoredItem { err } => {
-                let err = format!("autocxx bindings couldn't be generated: {}", err);
-                RsCodegenResult {
-                    global_items: Vec::new(),
-                    impl_entry: None,
-                    bridge_items: Vec::new(),
-                    extern_c_mod_item: None,
-                    bindgen_mod_item: None,
-                    materialization: Use::Err(err),
-                }
-            }
+            ApiDetail::IgnoredItem { err, ctx } => Self::generate_error_entry(err, ctx),
+        }
+    }
+
+    /// Generates something in the output mod that will carry a docstring
+    /// explaining why a given type or function couldn't have bindings
+    /// generated.
+    fn generate_error_entry(err: ConvertError, ctx: ErrorContext) -> RsCodegenResult {
+        let err = format!("autocxx bindings couldn't be generated: {}", err);
+        let (impl_entry, materialization) = match ctx {
+            ErrorContext::Item(id) => (
+                None,
+                Use::Custom(Box::new(parse_quote! {
+                    #[doc = #err]
+                    pub struct #id;
+                })),
+            ),
+            ErrorContext::Method { self_ty, method } => (
+                Some(Box::new(ImplBlockDetails {
+                    item: parse_quote! {
+                        #[doc = #err]
+                        fn #method(_uhoh: autocxx::BindingGenerationFailure) {
+                        }
+                    },
+                    ty: self_ty,
+                })),
+                Use::Unused,
+            ),
+        };
+        RsCodegenResult {
+            global_items: Vec::new(),
+            impl_entry,
+            bridge_items: Vec::new(),
+            extern_c_mod_item: None,
+            bindgen_mod_item: None,
+            materialization,
         }
     }
 
