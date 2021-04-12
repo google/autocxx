@@ -28,7 +28,7 @@ autocxx-macro = { path="macro", version="0.5.4" }
 autocxx-engine = { path="engine", version="0.5.4" } # so that
   # we can refer to autocxx_engine::cxx. But even that isn't sufficient...
 cxx = "1.0.42" # ... also needed because expansion of type_id refers to ::cxx
-aquamarine = "0.1.5" # docs
+aquamarine = "0.1" # docs
 
 [workspace]
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce"]
