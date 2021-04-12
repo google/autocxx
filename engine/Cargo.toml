@@ -40,7 +40,7 @@ cxx-gen = "0.7.38"
 cxx = "1.0.42"
 autocxx-parser = { version = "0.5.4", path="../parser" }
 version_check = "0.9"
-aquamarine = "0.1.5" # docs
+aquamarine = "0.1" # docs
 
 [dependencies.syn]
 version = "1.0.39"
