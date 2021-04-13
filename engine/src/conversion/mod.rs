@@ -115,7 +115,7 @@ impl<'a> BridgeConverter<'a> {
                     unsafe_policy,
                     &mut type_converter,
                     self.type_config,
-                )?;
+                );
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.

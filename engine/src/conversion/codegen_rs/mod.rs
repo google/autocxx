@@ -478,7 +478,7 @@ impl<'a> RsCodeGenerator<'a> {
                     bindgen_mod_item: None,
                     materialization: Use::Err(err),
                 }
-            },
+            }
         }
     }
 

@@ -25,37 +25,26 @@ use std::collections::HashSet;
 /// Run some code which may generate a ConvertError.
 /// If it does, try to note the problem in our output APIs
 /// such that users will see documentation of the error.
-pub(crate) fn report_error<F, T>(
-    ns: &Namespace,
-    apis: &mut Vec<Api<impl ApiAnalysis>>,
-    fun: F,
-) -> Result<Option<T>, ConvertError>
+pub(crate) fn report_any_error<F, T>(ns: &Namespace, apis: &mut Vec<Api<impl ApiAnalysis>>, fun: F)
 where
     F: FnOnce() -> Result<T, ConvertErrorWithIdent>,
 {
     match fun() {
-        Ok(r) => Ok(Some(r)),
-        Err(ConvertErrorWithIdent(err, None)) if err.is_ignorable() => {
-            eprintln!("Ignored item: {}", err);
-            Ok(None)
+        Ok(_) => {}
+        Err(ConvertErrorWithIdent(err, None)) => {
+            eprintln!("Ignored item: {}", err)
         }
-        Err(ConvertErrorWithIdent(err, Some(id))) if err.is_ignorable() => {
+        Err(ConvertErrorWithIdent(err, Some(id))) => {
             eprintln!("Ignored item {}: {}", id.to_string(), err);
-            push_ignored_item(ns, id, err, apis);
-            Ok(None)
+            push_ignored_item(ns, id, err, apis)
         }
-        Err(ConvertErrorWithIdent(err, _)) => Err(err),
     }
 }
 
 /// Run some code which generates an API. Add that API, or if
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
-pub(crate) fn add_api_or_report_error<F, A>(
-    tn: TypeName,
-    apis: &mut Vec<Api<A>>,
-    fun: F,
-) -> Result<(), ConvertError>
+pub(crate) fn add_api_or_report_error<F, A>(tn: TypeName, apis: &mut Vec<Api<A>>, fun: F)
 where
     F: FnOnce() -> Result<Option<Api<A>>, ConvertError>,
     A: ApiAnalysis,
@@ -63,10 +52,9 @@ where
     match fun() {
         Ok(Some(api)) => {
             apis.push(api);
-            Ok(())
         }
-        Ok(None) => Ok(()),
-        Err(err) if err.is_ignorable() => {
+        Ok(None) => {}
+        Err(err) => {
             eprintln!("Ignored {}: {}", tn.to_string(), err);
             push_ignored_item(
                 tn.get_namespace(),
@@ -74,9 +62,7 @@ where
                 err,
                 apis,
             );
-            Ok(())
         }
-        Err(err) => Err(err),
     }
 }
 
