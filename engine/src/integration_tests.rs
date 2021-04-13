@@ -4360,6 +4360,21 @@ fn test_c_uchar() {
 }
 
 #[test]
+fn test_c_ulonglong() {
+    // We don't test all the different variable-length integer types which we populate.
+    // If one works, they probably all do. Hopefully.
+    let hdr = indoc! {"
+        inline unsigned long long a() {
+            return 8;
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::a(), autocxx::c_ulonglong(8));
+    };
+    run_test("", hdr, rs, &["a"], &[]);
+}
+
+#[test]
 fn test_string_transparent_function() {
     let hdr = indoc! {"
         #include <string>
