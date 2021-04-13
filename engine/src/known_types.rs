@@ -310,18 +310,19 @@ fn create_type_database() -> TypeDatabase {
     ));
 
     let mut insert_ctype = |cname: &str| {
+        let concatenated_name = cname.replace(" ", "");
         let td = TypeDetails::new(
-            format!("autocxx::c_{}", cname),
+            format!("autocxx::c_{}", concatenated_name),
             cname,
             Behavior::CVariableLengthByValue,
-            Some(format!("std::os::raw::c_{}", cname)),
+            Some(format!("std::os::raw::c_{}", concatenated_name)),
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
         let td = TypeDetails::new(
-            format!("autocxx::c_u{}", cname),
+            format!("autocxx::c_u{}", concatenated_name),
             format!("unsigned {}", cname),
             Behavior::CVariableLengthByValue,
-            Some(format!("std::os::raw::c_u{}", cname)),
+            Some(format!("std::os::raw::c_u{}", concatenated_name)),
         );
         by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
     };
@@ -329,6 +330,7 @@ fn create_type_database() -> TypeDatabase {
     insert_ctype("long");
     insert_ctype("int");
     insert_ctype("short");
+    insert_ctype("long long");
 
     let td = TypeDetails::new("f32", "float", Behavior::CByValue, None);
     by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);

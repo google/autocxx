@@ -374,6 +374,12 @@ macro_rules! ctype_wrapper {
     };
 }
 
+ctype_wrapper!(
+    c_ulonglong,
+    "c_ulonglong",
+    "Newtype wrapper for an unsigned long long"
+);
+ctype_wrapper!(c_longlong, "c_longlong", "Newtype wrapper for a long long");
 ctype_wrapper!(c_ulong, "c_ulong", "Newtype wrapper for an unsigned long");
 ctype_wrapper!(c_long, "c_long", "Newtype wrapper for a long");
 ctype_wrapper!(
