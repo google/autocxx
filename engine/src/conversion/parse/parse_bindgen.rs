@@ -14,7 +14,10 @@
 
 use std::collections::HashSet;
 
-use crate::conversion::parse::type_converter::Annotated;
+use crate::conversion::{
+    convert_error::ConvertErrorWithIdent, error_reporter::report_error,
+    parse::type_converter::Annotated,
+};
 use crate::{
     conversion::{
         api::{ApiDetail, ParseResults, TypeApiDetails, TypedefKind, UnanalyzedApi},
@@ -40,14 +43,6 @@ pub(crate) struct ParseBindgen<'a> {
     /// even if the 'this' is actually recorded as void in the
     /// function signature.
     latest_virtual_this_type: Option<TypeName>,
-}
-
-struct ConvertErrorWithIdent(ConvertError, Option<Ident>);
-
-impl std::fmt::Debug for ConvertErrorWithIdent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
 }
 
 impl<'a> ParseBindgen<'a> {
@@ -103,26 +98,14 @@ impl<'a> ParseBindgen<'a> {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
         let mut mod_converter = ParseForeignMod::new(ns.clone());
+        let mut more_apis = Vec::new();
         for item in items {
-            let r = self.parse_item(item, &mut mod_converter, &ns);
-            match r {
-                Err(err) if err.0.is_ignorable() => {
-                    eprintln!("Ignored item discovered whilst parsing: {}", err.0);
-                    // Mark that we ignored an item such that dependent things
-                    // also can be ignored.
-                    if let Some(id) = err.1 {
-                        self.results.apis.push(UnanalyzedApi {
-                            ns: ns.clone(),
-                            id,
-                            deps: HashSet::new(),
-                            detail: ApiDetail::IgnoredItem,
-                        })
-                    }
-                }
-                Err(_) => r.unwrap(),
-                Ok(_) => {}
-            }
+            report_error(&ns, &mut more_apis, || {
+                self.parse_item(item, &mut mod_converter, &ns)
+            })
+            .unwrap();
         }
+        self.results.apis.append(&mut more_apis);
         mod_converter.finished(&mut self.results.apis);
     }
 

@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::api::{FuncToConvert, UnanalyzedApi};
+use crate::conversion::error_reporter::report_error;
+use crate::conversion::{
+    api::{FuncToConvert, UnanalyzedApi},
+    convert_error::ConvertErrorWithIdent,
+};
 use crate::{
     conversion::api::ApiDetail,
     conversion::ConvertError,
@@ -36,6 +40,7 @@ pub(crate) struct ParseForeignMod {
     // may actually be methods (static or otherwise). Mapping from
     // function name to type name.
     method_receivers: HashMap<Ident, TypeName>,
+    ignored_apis: Vec<UnanalyzedApi>,
 }
 
 impl ParseForeignMod {
@@ -44,6 +49,7 @@ impl ParseForeignMod {
             ns,
             funcs_to_convert: Vec::new(),
             method_receivers: HashMap::new(),
+            ignored_apis: Vec::new(),
         }
     }
 
@@ -54,23 +60,21 @@ impl ParseForeignMod {
         foreign_mod_items: Vec<ForeignItem>,
         virtual_this_type: Option<TypeName>,
     ) {
+        let mut extra_apis = Vec::new();
         for i in foreign_mod_items {
-            let r = self.parse_foreign_item(i, &virtual_this_type);
-            match r {
-                Err(err) if err.is_ignorable() => {
-                    eprintln!("Ignored item discovered whilst parsing: {}", err)
-                }
-                Err(_) => r.unwrap(),
-                Ok(_) => {}
-            }
+            report_error(&self.ns.clone(), &mut extra_apis, || {
+                self.parse_foreign_item(i, &virtual_this_type)
+            })
+            .unwrap();
         }
+        self.ignored_apis.append(&mut extra_apis);
     }
 
     fn parse_foreign_item(
         &mut self,
         i: ForeignItem,
         virtual_this_type: &Option<TypeName>,
-    ) -> Result<(), ConvertError> {
+    ) -> Result<(), ConvertErrorWithIdent> {
         match i {
             ForeignItem::Fn(item) => {
                 self.funcs_to_convert.push(FuncToConvert {
@@ -80,8 +84,14 @@ impl ParseForeignMod {
                 });
                 Ok(())
             }
-            ForeignItem::Static(item) => Err(ConvertError::StaticData(item.ident.to_string())),
-            _ => Err(ConvertError::UnexpectedForeignItem),
+            ForeignItem::Static(item) => Err(ConvertErrorWithIdent(
+                ConvertError::StaticData(item.ident.to_string()),
+                Some(item.ident),
+            )),
+            _ => Err(ConvertErrorWithIdent(
+                ConvertError::UnexpectedForeignItem,
+                None,
+            )),
         }
     }
 
@@ -113,7 +123,8 @@ impl ParseForeignMod {
     /// Indicate that all foreign mods and all impl blocks have been
     /// fed into us, and we should process that information to generate
     /// the resulting APIs.
-    pub(crate) fn finished(&mut self, apis: &mut Vec<UnanalyzedApi>) {
+    pub(crate) fn finished(mut self, apis: &mut Vec<UnanalyzedApi>) {
+        apis.append(&mut self.ignored_apis);
         while !self.funcs_to_convert.is_empty() {
             let mut fun = self.funcs_to_convert.remove(0);
             fun.self_ty = self.method_receivers.get(&fun.item.sig.ident).cloned();
