@@ -24,10 +24,10 @@ namespace base {
 ```rust
 use autocxx::include_cpp;
 
-include_cpp!(
+include_cpp!{
     #include "base/bob.h"
     generate!("Bob")
-)
+}
 
 let a = ffi::base::Bob::make_unique("hello");
 a.do_a_thing();
@@ -63,26 +63,26 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Plain-old-data structs | Works |
 | std::unique_ptr of POD | Works |
 | std::unique_ptr of std::string | Works |
-| std::unique_ptr of opaque types | - |
+| std::unique_ptr of opaque types | Works |
 | Reference to POD | Works |
 | Reference to std::string | Works |
-| Classes | Works, but with warnings |
-| Methods | Works (classes give warnings) |
+| Classes | Works, [except on Windows](https://github.com/google/autocxx/issues/54) |
+| Methods | Works |
 | Int #defines | Works |
 | String #defines | Works |
 | Primitive constants | Works |
 | Enums | Works, though more thought needed |
 | #ifdef, #if etc. | - |
-| Typedefs | Infinite permutations, some of which work |
+| Typedefs | Works but there are always more permutations |
 | Structs containing UniquePtr | Works |
 | Structs containing strings | Works (opaque only) |
 | Passing opaque structs (owned by UniquePtr) into C++ functions which take them by value | Works |
-| Passing opaque structs (owned by UniquePtr) into C++ methods which take them by value | Works, but with non-ideal syntax |
-| Constructors/make_unique | Works, though probably many problems |
+| Passing opaque structs (owned by UniquePtr) into C++ methods which take them by value | Works |
+| Constructors/make_unique | Works |
 | Destructors | Works via cxx `UniquePtr` already |
 | Inline functions | Works |
 | Construction of std::unique_ptr<std::string> in Rust | Works |
-| Namespaces | Works, but a known limitation |
+| Namespaces | Works |
 | std::vector | Works |
 | Field access to opaque objects via UniquePtr | - |
 | Plain-old-data structs containing opaque fields | Impossible by design, but may not be ergonomic so may need more thought |
@@ -91,9 +91,10 @@ The project also contains test code which does this end-to-end, for all sorts of
 | Function pointers | - |
 | Unique ptrs to primitives | - |
 | Inheritance from pure virtual classes | - |
-| Generic (templated) types | Works though likely many problems |
+| Generic (templated) types | Works but no field access or methods |
+| Arrays | - |
 
-The plan is (roughly) to work through the above list of features and fix corner cases. This project is deliberately incremental. There are open questions about whether the end result is ergonomic and performant: specifically, whether it's acceptable to hold opaque C++ types always by `UniquePtr` in Rust. Until we know more, this project is considered experimental and we don't advise using it for anything in production.
+It's now at the point where it works for some use-cases. If you choose to use `autocxx` you should expect to encounter a selection of problems, but _some_ of your APIs will be usable. For others (e.g. those using arrays) you'll need to write manual bindings.
 
 # On safety
 
@@ -141,7 +142,8 @@ applies here too.
 
 # Directory structure
 
-* `demo` - a demo example
+* `demo` - a very simple demo example
+* `examples` - will gradually fill with more complex examples
 * `parser` - code which parses a single `include_cpp!` macro. Used by both the macro
   (which doesn't do much) and the code generator (which does much more, by means of
   `engine` below)
@@ -163,7 +165,8 @@ to `cxx`.
 However, most of the actual code is in `engine/src/conversion/mod.rs`.
 
 At the moment we're using a slightly branched version of `bindgen` called `autocxx-bindgen`.
-It's hoped this is temporary; some of our changes are sufficiently weird that it would be presumptious to try to get them accepted upstream until we're sure `autocxx` has roughly the right approach.
+It's hoped this is temporary; some of our changes are sufficiently weird that it would be
+presumptious to try to get them accepted upstream until we're sure `autocxx` has roughly the right approach.
 
 # How to develop
 
