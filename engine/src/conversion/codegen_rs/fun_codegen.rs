@@ -20,10 +20,11 @@ use syn::{
 };
 
 use super::{
+    doc_attr::get_doc_attr,
     unqualify::{unqualify_params, unqualify_ret_type},
     RsCodegenResult, Use,
 };
-use crate::types::make_ident;
+use crate::{conversion::api::FuncToConvert, types::make_ident};
 use crate::{
     conversion::{
         analysis::fun::{ArgumentAnalysis, FnAnalysisBody, FnKind, MethodKind, RustRenameStrategy},
@@ -32,7 +33,11 @@ use crate::{
     types::{Namespace, TypeName},
 };
 
-pub(super) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodegenResult {
+pub(super) fn gen_function(
+    ns: &Namespace,
+    fun: FuncToConvert,
+    analysis: FnAnalysisBody,
+) -> RsCodegenResult {
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = analysis.rust_name;
     let ret_type = analysis.ret_type;
@@ -42,6 +47,7 @@ pub(super) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
     let params = analysis.params;
     let vis = analysis.vis;
     let kind = analysis.kind;
+    let doc_attr = get_doc_attr(&fun.item.attrs);
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
@@ -81,6 +87,7 @@ pub(super) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
                 &rust_name,
                 &ret_type,
                 &unsafety,
+                &doc_attr,
             ));
         } else {
             // Generate plain old function
@@ -89,6 +96,7 @@ pub(super) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
                 &rust_name,
                 &ret_type,
                 &unsafety,
+                &doc_attr,
             ));
         }
     }
@@ -126,6 +134,7 @@ pub(super) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
         #(#namespace_attr)*
         #(#rust_name_attr)*
         #(#cpp_name_attr)*
+        #doc_attr
         #vis #unsafety fn #cxxbridge_name ( #params ) #ret_type;
     ));
     RsCodegenResult {
@@ -169,11 +178,13 @@ fn generate_method_impl(
     rust_name: &str,
     ret_type: &ReturnType,
     unsafety: &Option<Unsafe>,
+    doc_attr: &Option<Attribute>,
 ) -> Box<ImplBlockDetails> {
     let (wrapper_params, arg_list) = generate_arg_lists(param_details, is_constructor);
     let rust_name = make_ident(&rust_name);
     Box::new(ImplBlockDetails {
         item: ImplItem::Method(parse_quote! {
+            #doc_attr
             pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
                 cxxbridge::#cxxbridge_name ( #(#arg_list),* )
             }
@@ -188,10 +199,12 @@ fn generate_function_impl(
     rust_name: &str,
     ret_type: &ReturnType,
     unsafety: &Option<Unsafe>,
+    doc_attr: &Option<Attribute>,
 ) -> Box<Item> {
     let (wrapper_params, arg_list) = generate_arg_lists(param_details, false);
     let rust_name = make_ident(&rust_name);
     Box::new(Item::Fn(parse_quote! {
+        #doc_attr
         pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
             cxxbridge::#rust_name ( #(#arg_list),* )
         }
