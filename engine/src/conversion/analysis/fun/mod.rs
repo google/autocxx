@@ -129,7 +129,7 @@ impl<'a> FnAnalyzer<'a> {
         unsafe_policy: UnsafePolicy,
         type_converter: &'a mut TypeConverter,
         type_database: &'a TypeConfig,
-    ) -> Result<Vec<Api<FnAnalysis>>, ConvertError> {
+    ) -> Vec<Api<FnAnalysis>> {
         let mut me = Self {
             unsafe_policy,
             rust_name_tracker: RustNameTracker::new(),
@@ -144,10 +144,10 @@ impl<'a> FnAnalyzer<'a> {
         };
         let mut results = Vec::new();
         for api in apis {
-            add_api_or_report_error(api.typename(), &mut results, || me.analyze_fn_api(api))?;
+            add_api_or_report_error(api.typename(), &mut results, || me.analyze_fn_api(api));
         }
         results.extend(me.extra_apis.into_iter().map(Self::make_extra_api_nonpod));
-        Ok(results)
+        results
     }
 
     fn should_generate_utilities(apis: &[Api<PodAnalysis>]) -> bool {

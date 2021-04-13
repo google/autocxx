@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::error_reporter::report_error;
+use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
     api::{FuncToConvert, UnanalyzedApi},
     convert_error::ConvertErrorWithIdent,
@@ -62,10 +62,9 @@ impl ParseForeignMod {
     ) {
         let mut extra_apis = Vec::new();
         for i in foreign_mod_items {
-            report_error(&self.ns.clone(), &mut extra_apis, || {
+            report_any_error(&self.ns.clone(), &mut extra_apis, || {
                 self.parse_foreign_item(i, &virtual_this_type)
-            })
-            .unwrap();
+            });
         }
         self.ignored_apis.append(&mut extra_apis);
     }

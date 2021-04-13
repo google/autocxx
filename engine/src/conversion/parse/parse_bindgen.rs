@@ -15,7 +15,7 @@
 use std::collections::HashSet;
 
 use crate::conversion::{
-    convert_error::ConvertErrorWithIdent, error_reporter::report_error,
+    convert_error::ConvertErrorWithIdent, error_reporter::report_any_error,
     parse::type_converter::Annotated,
 };
 use crate::{
@@ -100,10 +100,9 @@ impl<'a> ParseBindgen<'a> {
         let mut mod_converter = ParseForeignMod::new(ns.clone());
         let mut more_apis = Vec::new();
         for item in items {
-            report_error(&ns, &mut more_apis, || {
+            report_any_error(&ns, &mut more_apis, || {
                 self.parse_item(item, &mut mod_converter, &ns)
-            })
-            .unwrap();
+            });
         }
         self.results.apis.append(&mut more_apis);
         mod_converter.finished(&mut self.results.apis);
