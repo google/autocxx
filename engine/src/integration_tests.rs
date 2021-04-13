@@ -16,6 +16,7 @@ use indoc::indoc;
 use log::info;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
+use quote::ToTokens;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
@@ -4420,26 +4421,29 @@ fn test_string_transparent_static_method() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+fn find_ffi_items(f: syn::File) -> Result<Vec<Item>, TestError> {
+    Ok(f.items
+        .into_iter()
+        .filter_map(|i| match i {
+            Item::Mod(itm) => Some(itm),
+            _ => None,
+        })
+        .next()
+        .ok_or(TestError::RsCodeExaminationFail)?
+        .content
+        .ok_or(TestError::RsCodeExaminationFail)?
+        .1)
+}
+
 /// Generates a closure which can be used to ensure that the given symbol
 /// is mentioned in the output and has documentation attached.
 /// The idea is that this is what we do in cases where we can't generate code properly.
 fn make_error_finder(error_symbol: &str) -> Box<dyn FnOnce(syn::File) -> Result<(), TestError>> {
     let error_symbol = error_symbol.to_string();
     Box::new(move |f| {
-        let ffi_mod = f
-            .items
-            .into_iter()
-            .filter_map(|i| match i {
-                Item::Mod(itm) => Some(itm),
-                _ => None,
-            })
-            .next()
-            .ok_or(TestError::RsCodeExaminationFail)?;
+        let ffi_items = find_ffi_items(f)?;
         // Ensure there's some kind of struct entry for this symboll
-        let foo = ffi_mod
-            .content
-            .ok_or(TestError::RsCodeExaminationFail)?
-            .1
+        let foo = ffi_items
             .into_iter()
             .filter_map(|i| match i {
                 Item::Struct(its) if its.ident.to_string() == error_symbol => Some(its),
@@ -4482,6 +4486,48 @@ fn test_error_generated_for_static_data() {
         None,
         &[],
         Some(make_error_finder("FOO")),
+    );
+}
+
+#[test]
+fn test_doc_passthru() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        /// Elephants!
+        struct A {
+            uint32_t a;
+        };
+        /// Giraffes!
+        struct B {
+            uint32_t a;
+        };
+        /// Rhinos!
+        inline uint32_t get_a() { return 3; }
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["A", "get_a"],
+        &["B"],
+        None,
+        &[],
+        Some(Box::new(|f| {
+            let mut ts = TokenStream::new();
+            f.to_tokens(&mut ts);
+            let toks = ts.to_string();
+            if !toks.contains("Giraffes") {
+                return Err(TestError::RsCodeExaminationFail);
+            };
+            if !toks.contains("Elephants") {
+                return Err(TestError::RsCodeExaminationFail);
+            };
+            if !toks.contains("Rhinos") {
+                return Err(TestError::RsCodeExaminationFail);
+            };
+            Ok(())
+        })),
     );
 }
 
