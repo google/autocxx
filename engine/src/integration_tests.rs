@@ -4489,6 +4489,7 @@ fn test_error_generated_for_static_data() {
     );
 }
 
+#[ignore] // https://github.com/google/autocxx/issues/359
 #[test]
 fn test_doc_passthru() {
     let hdr = indoc! {"
