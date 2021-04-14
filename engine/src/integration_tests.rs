@@ -4531,6 +4531,26 @@ fn test_doc_passthru() {
     );
 }
 
+#[test]
+fn test_closure() {
+    // Ensuring presence of this closure doesn't break other things
+    let hdr = indoc! {"
+    #include <functional>
+    #include <cstdint>
+
+    inline bool take_closure(std::function<bool(const uint32_t number)> fn) {
+        return fn(5);
+    }
+    inline uint32_t get_a() {
+        return 3;
+    }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::get_a(), 3);
+    };
+    run_test("", hdr, rs, &["get_a"], &[]);
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Out param pointers
