@@ -15,10 +15,9 @@
 use syn::Attribute;
 
 /// Returns the attribute (if any) which contains a doc comment.
-pub(super) fn get_doc_attr(attrs: &Vec<Attribute>) -> Option<Attribute> {
+pub(super) fn get_doc_attr(attrs: &[Attribute]) -> Option<Attribute> {
     attrs
         .iter()
-        .filter(|a| a.path.get_ident().iter().any(|p| p.to_string() == "doc"))
-        .next()
+        .find(|a| a.path.get_ident().iter().any(|p| *p == "doc"))
         .cloned()
 }
