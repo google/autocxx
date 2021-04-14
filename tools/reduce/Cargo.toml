@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 autocxx-gen = { version = "0.5.4", path="../../gen/cmd" }
+autocxx-engine = { version = "0.5.4", path="../../engine" }
 clap = "~2.33.0"
 tempfile = "3.1"
 indoc = "1.0"

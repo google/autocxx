@@ -15,7 +15,7 @@
 /// Central registry of all information known about types.
 /// At present this is very minimal; in future we should roll
 /// known_types.rs into this and possibly other things as well.
-#[derive(Default, Hash)]
+#[derive(Default, Hash, Debug)]
 pub struct TypeConfig {
     pod_requests: Vec<String>,
     allowlist: Vec<String>, // not TypeName as it may be funcs not types.

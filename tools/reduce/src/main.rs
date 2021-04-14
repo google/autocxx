@@ -23,6 +23,7 @@ use std::{
     process::Command,
 };
 
+use autocxx_engine::preprocess;
 use clap::{crate_authors, crate_version, App, Arg, ArgMatches};
 use indoc::indoc;
 use tempfile::TempDir;
@@ -144,6 +145,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     let listing_path = tmp_dir.path().join("listing.h");
     create_concatenated_header(&headers, &listing_path)?;
     let concat_path = tmp_dir.path().join("concat.h");
+    announce_progress("Preprocessing");
     preprocess(&listing_path, &concat_path, &incs, &defs)?;
     let rs_path = tmp_dir.path().join("input.rs");
     let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
@@ -253,32 +255,6 @@ fn create_concatenated_header(headers: &[&str], listing_path: &Path) -> Result<(
     let mut file = File::create(listing_path)?;
     for header in headers {
         file.write_all(format!("#include \"{}\"\n", header).as_bytes())?;
-    }
-    Ok(())
-}
-
-fn preprocess(
-    listing_path: &Path,
-    preprocess_path: &Path,
-    incs: &[PathBuf],
-    defs: &[&str],
-) -> Result<(), std::io::Error> {
-    announce_progress("Preprocessing");
-    let mut cmd = Command::new("clang++");
-    cmd.arg("-E");
-    for inc in incs {
-        cmd.arg(format!("-I{}", inc.to_str().unwrap()));
-    }
-    for def in defs {
-        cmd.arg(format!("-D{}", def));
-    }
-    cmd.arg(listing_path.to_str().unwrap());
-    let output = cmd.output().expect("failed to preprocess").stdout;
-    let output = std::str::from_utf8(&output).unwrap();
-    let mut file = File::create(preprocess_path)?;
-    for line in output.lines() {
-        file.write_all(line.as_bytes())?;
-        file.write_all("\n".as_bytes())?;
     }
     Ok(())
 }

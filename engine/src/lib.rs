@@ -39,6 +39,8 @@ use std::{
     hash::{Hash, Hasher},
     path::PathBuf,
 };
+use std::{fs::File, io::prelude::*, path::Path, process::Command};
+use tempfile::NamedTempFile;
 
 use quote::ToTokens;
 use syn::Result as ParseResult;
@@ -130,6 +132,8 @@ enum State {
     ParseOnly,
     Generated(Box<GenerationResults>),
 }
+
+const AUTOCXX_CLANG_ARGS: &[&str; 4] = &["-x", "c++", "-std=c++14", "-DBINDGEN"];
 
 /// Implement to learn of header files which get included
 /// by this build process, such that your build system can choose
@@ -280,7 +284,7 @@ impl IncludeCppEngine {
         definitions: &[impl AsRef<str>],
     ) -> bindgen::Builder {
         let mut builder = bindgen::builder()
-            .clang_args(&["-x", "c++", "-std=c++14", "-DBINDGEN"])
+            .clang_args(make_clang_args(inc_dirs, definitions))
             .derive_copy(false)
             .derive_debug(false)
             .default_enum_style(bindgen::EnumVariation::Rust {
@@ -293,14 +297,6 @@ impl IncludeCppEngine {
         for item in known_types::get_initial_blocklist() {
             builder = builder.blocklist_item(item);
         }
-
-        builder = builder.clang_args(inc_dirs.iter().map(|i| {
-            format!(
-                "-I{}",
-                i.to_str().expect("Non-UTF8 content in include path")
-            )
-        }));
-        builder = builder.clang_args(definitions.iter().map(|d| format!("-D{}", d.as_ref())));
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
@@ -385,6 +381,7 @@ impl IncludeCppEngine {
             builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
         }
         let header_contents = self.build_header();
+        self.dump_header_if_so_configured(&header_contents, &inc_dirs, &definitions);
         builder = builder.header_contents("example.hpp", &header_contents);
 
         let bindings = builder.generate().map_err(Error::Bindgen)?;
@@ -465,4 +462,52 @@ impl IncludeCppEngine {
             _ => panic!("Must call generate() before include_dirs()"),
         }
     }
+
+    fn dump_header_if_so_configured(
+        &self,
+        header: &str,
+        inc_dirs: &[PathBuf],
+        definitions: &[impl AsRef<str>],
+    ) {
+        if let Ok(output_path) = std::env::var("AUTOCXX_PREPROCESS") {
+            let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}", self.config, header);
+            let mut tf = NamedTempFile::new().unwrap();
+            write!(tf, "{}", input).unwrap();
+            let tp = tf.into_temp_path();
+            preprocess(&tp, &PathBuf::from(output_path), inc_dirs, definitions).unwrap();
+        }
+    }
+}
+
+fn make_clang_args<'a>(
+    incs: &'a [PathBuf],
+    defs: &'a [impl AsRef<str>],
+) -> impl Iterator<Item = String> + 'a {
+    incs.iter()
+        .map(|i| format!("-I{}", i.to_str().unwrap()))
+        .chain(defs.iter().map(|d| format!("-D{}", d.as_ref())))
+        .chain(AUTOCXX_CLANG_ARGS.iter().map(|s| s.to_string()))
+}
+
+/// Preprocess a file using the same options
+/// as is used by autocxx. Input: listing_path, output: preprocess_path.
+pub fn preprocess(
+    listing_path: &Path,
+    preprocess_path: &Path,
+    incs: &[PathBuf],
+    defs: &[impl AsRef<str>],
+) -> Result<(), std::io::Error> {
+    let mut cmd = Command::new("clang++");
+    cmd.arg("-E");
+    cmd.arg("-C");
+    cmd.args(make_clang_args(incs, defs));
+    cmd.arg(listing_path.to_str().unwrap());
+    let output = cmd.output().expect("failed to preprocess").stdout;
+    let output = std::str::from_utf8(&output).unwrap();
+    let mut file = File::create(preprocess_path)?;
+    for line in output.lines() {
+        file.write_all(line.as_bytes())?;
+        file.write_all("\n".as_bytes())?;
+    }
+    Ok(())
 }

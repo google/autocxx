@@ -52,14 +52,14 @@ impl Parse for UnsafePolicy {
     }
 }
 
-#[derive(Hash)]
+#[derive(Hash, Debug)]
 pub enum CppInclusion {
     #[allow(dead_code)]
     Define(String), // currently unused, may use in future.
     Header(String),
 }
 
-#[derive(Hash)]
+#[derive(Hash, Debug)]
 pub struct IncludeCppConfig {
     pub inclusions: Vec<CppInclusion>,
     pub exclude_utilities: bool,
