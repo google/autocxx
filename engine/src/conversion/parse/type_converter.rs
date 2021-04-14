@@ -22,6 +22,7 @@ use crate::{
     known_types::KNOWN_TYPES,
     types::{make_ident, Namespace, TypeName},
 };
+use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
 use syn::{
     parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
@@ -164,7 +165,7 @@ impl TypeConverter {
                     true,
                 )
             }
-            _ => Annotated::new(ty, HashSet::new(), Vec::new(), false),
+            _ => return Err(ConvertError::UnknownType(ty.to_token_stream().to_string())),
         };
         Ok(result)
     }
