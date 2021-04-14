@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod doc_attr;
 mod fun_codegen;
 mod function_wrapper_rs;
 mod impl_item_creator;
@@ -409,7 +410,7 @@ impl<'a> RsCodeGenerator<'a> {
                     materialization: Use::Unused,
                 }
             }
-            ApiDetail::Function { fun: _, analysis } => gen_function(ns, analysis),
+            ApiDetail::Function { fun, analysis } => gen_function(ns, fun, analysis),
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
                 impl_entry: None,

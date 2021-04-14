@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::doc_attr::get_doc_attr;
 use crate::types::make_ident;
 use proc_macro2::Ident;
 use quote::quote;
@@ -28,6 +29,7 @@ pub(crate) fn new_non_pod_struct(id: Ident) -> ItemStruct {
 }
 
 pub(crate) fn make_non_pod(s: &mut ItemStruct) {
+    // Keep only doc attrs, plus add a #[repr(C,packed)].
     // Thanks to dtolnay@ for this explanation of why the following
     // is needed:
     // If the real alignment of the C++ type is smaller and a reference
@@ -36,9 +38,12 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct) {
     // by Rust code
     // (see https://doc.rust-lang.org/1.47.0/reference/behavior-considered-undefined.html).
     // Rustc can use least-significant bits of the reference for other storage.
-    s.attrs = vec![parse_quote!(
-        #[repr(C, packed)]
-    )];
+    let attrs = get_doc_attr(&s.attrs)
+        .into_iter()
+        .chain(std::iter::once(parse_quote!(
+            #[repr(C, packed)]
+        )));
+    s.attrs = attrs.collect();
     // Now fill in fields. Usually, we just want a single field
     // but if this is a generic type we need to faff a bit.
     let generic_type_fields = s
