@@ -170,6 +170,7 @@ fn generate_arg_lists(
 }
 
 /// Generate an 'impl Type { methods-go-here }' item
+#[allow(clippy::clippy::too_many_arguments)] // it's true, but probably best for now
 fn generate_method_impl(
     param_details: &[ArgumentAnalysis],
     is_constructor: bool,
