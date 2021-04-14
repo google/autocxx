@@ -263,13 +263,15 @@ impl IncludeCppEngine {
     }
 
     fn build_header(&self) -> String {
-        join(
+        let full_header = join(
             self.config.inclusions.iter().map(|incl| match incl {
                 CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
                 CppInclusion::Header(path) => format!("#include \"{}\"\n", path),
             }),
             "",
-        )
+        );
+
+        format!("{}\n\n{}", KNOWN_TYPES.get_prelude(), full_header,)
     }
 
     fn make_bindgen_builder(
@@ -310,13 +312,6 @@ impl IncludeCppEngine {
                 .allowlist_var(a);
         }
 
-        builder
-    }
-
-    fn inject_header_into_bindgen(&self, mut builder: bindgen::Builder) -> bindgen::Builder {
-        let full_header = self.build_header();
-        let full_header = format!("{}\n\n{}", KNOWN_TYPES.get_prelude(), full_header,);
-        builder = builder.header_contents("example.hpp", &full_header);
         builder
     }
 
@@ -389,10 +384,10 @@ impl IncludeCppEngine {
         if let Some(dep_recorder) = dep_recorder {
             builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
         }
-        let bindings = self
-            .inject_header_into_bindgen(builder)
-            .generate()
-            .map_err(Error::Bindgen)?;
+        let header_contents = self.build_header();
+        builder = builder.header_contents("example.hpp", &header_contents);
+
+        let bindings = builder.generate().map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
 
         let include_list = self.generate_include_list();
