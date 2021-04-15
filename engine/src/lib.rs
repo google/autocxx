@@ -267,15 +267,13 @@ impl IncludeCppEngine {
     }
 
     fn build_header(&self) -> String {
-        let full_header = join(
+        join(
             self.config.inclusions.iter().map(|incl| match incl {
                 CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
                 CppInclusion::Header(path) => format!("#include \"{}\"\n", path),
             }),
             "",
-        );
-
-        format!("{}\n\n{}", KNOWN_TYPES.get_prelude(), full_header,)
+        )
     }
 
     fn make_bindgen_builder(
@@ -382,7 +380,8 @@ impl IncludeCppEngine {
         }
         let header_contents = self.build_header();
         self.dump_header_if_so_configured(&header_contents, &inc_dirs, &definitions);
-        builder = builder.header_contents("example.hpp", &header_contents);
+        let header_and_prelude = format!("{}\n\n{}", KNOWN_TYPES.get_prelude(), header_contents);
+        builder = builder.header_contents("example.hpp", &header_and_prelude);
 
         let bindings = builder.generate().map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
@@ -395,7 +394,7 @@ impl IncludeCppEngine {
                 bindings,
                 self.config.exclude_utilities,
                 self.config.unsafe_policy.clone(),
-                self.build_header(),
+                header_contents,
             )
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;
