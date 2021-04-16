@@ -17,7 +17,13 @@ pub(crate) mod function_wrapper;
 mod overload_tracker;
 mod rust_name_tracker;
 
-use crate::{conversion::error_reporter::add_api_or_report_error, known_types::KNOWN_TYPES};
+use crate::{
+    conversion::{
+        convert_error::ConvertErrorWithContext, convert_error::ErrorContext,
+        error_reporter::add_api_or_report_error,
+    },
+    known_types::KNOWN_TYPES,
+};
 use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::{TypeConfig, UnsafePolicy};
@@ -221,7 +227,7 @@ impl<'a> FnAnalyzer<'a> {
     fn analyze_fn_api(
         &mut self,
         api: Api<PodAnalysis>,
-    ) -> Result<Option<Api<FnAnalysis>>, ConvertError> {
+    ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
         let mut new_deps = api.deps.clone();
         let mut new_id = api.id;
         let api_detail = match api.detail {
@@ -261,7 +267,7 @@ impl<'a> FnAnalyzer<'a> {
                 analysis,
             },
             ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
-            ApiDetail::IgnoredItem { err } => ApiDetail::IgnoredItem { err },
+            ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
         };
         Ok(Some(Api {
             ns: api.ns,
@@ -319,7 +325,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         ns: &Namespace,
         func_information: &FuncToConvert,
-    ) -> Result<Option<FnAnalysisResult>, ConvertError> {
+    ) -> Result<Option<FnAnalysisResult>, ConvertErrorWithContext> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
         // This function is one of the most complex parts of our conversion.
@@ -355,12 +361,6 @@ impl<'a> FnAnalyzer<'a> {
                 )
             })
             .partition(Result::is_ok);
-        if let Some(problem) = bads.into_iter().next() {
-            match problem {
-                Err(e) => return Err(e),
-                _ => panic!("Err didn't contain en err"),
-            }
-        }
         let (mut params, mut param_details): (Punctuated<_, syn::Token![,]>, Vec<_>) =
             param_details.into_iter().map(Result::unwrap).unzip();
 
@@ -374,6 +374,29 @@ impl<'a> FnAnalyzer<'a> {
             .filter_map(|pd| pd.self_type.as_ref())
             .next()
             .cloned();
+
+        // If we encounter errors from here on, we can give some context around
+        // where the error occurred such that we can put a marker in the output
+        // Rust code to indicate that a problem occurred (benefiting people using
+        // rust-analyzer or similar). Make a closure to make this easy.
+        let rust_name_for_error = make_ident(&diagnostic_display_name);
+        let self_ty_for_error = self_ty.clone();
+        let contextualize_error = |err| match self_ty_for_error {
+            None => ConvertErrorWithContext(err, Some(ErrorContext::Item(rust_name_for_error))),
+            Some(self_ty) => ConvertErrorWithContext(
+                err,
+                Some(ErrorContext::Method {
+                    self_ty: make_ident(self_ty.get_final_ident()),
+                    method: rust_name_for_error,
+                }),
+            ),
+        };
+        if let Some(problem) = bads.into_iter().next() {
+            match problem {
+                Ok(_) => panic!("No error in the error"),
+                Err(problem) => return Err(contextualize_error(problem)),
+            }
+        }
         let requires_unsafe = param_details.iter().any(|pd| pd.requires_unsafe);
 
         // Work out naming, part one.
@@ -488,19 +511,30 @@ impl<'a> FnAnalyzer<'a> {
                 deps: these_deps,
             }
         } else {
-            self.convert_return_type(&fun.sig.output, &ns, reference_return)?
+            // We can't easily use map_err below because the borrow checker can't
+            // prove we don't use contextualize_error more than once.
+            let r = self.convert_return_type(&fun.sig.output, &ns, reference_return);
+            match r {
+                Err(err) => return Err(contextualize_error(err)),
+                Ok(r) => r,
+            }
         };
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
+
         if deps.iter().any(|tn| self.avoid_generating_type(tn)) {
-            return Err(ConvertError::UnacceptableParam(rust_name));
+            return Err(contextualize_error(ConvertError::UnacceptableParam(
+                rust_name,
+            )));
         }
         if return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
             // one reference as a parameter. Let's see...
             let num_input_references = param_details.iter().filter(|pd| pd.was_reference).count();
             if num_input_references != 1 {
-                return Err(ConvertError::NotOneInputReference(rust_name));
+                return Err(contextualize_error(ConvertError::NotOneInputReference(
+                    rust_name,
+                )));
             }
         }
         let mut ret_type = return_analysis.rt;

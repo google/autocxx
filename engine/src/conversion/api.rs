@@ -16,7 +16,10 @@ use crate::types::{Namespace, TypeName};
 use std::collections::HashSet;
 use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse};
 
-use super::{codegen_cpp::AdditionalNeed, parse::type_converter::TypeConverter, ConvertError};
+use super::{
+    codegen_cpp::AdditionalNeed, convert_error::ErrorContext, parse::type_converter::TypeConverter,
+    ConvertError,
+};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
@@ -116,7 +119,10 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// We will have emitted a warning message about this, but we want
     /// to mark that it's ignored so that we don't attempt to process
     /// dependent items.
-    IgnoredItem { err: ConvertError },
+    IgnoredItem {
+        err: ConvertError,
+        ctx: ErrorContext,
+    },
 }
 
 /// Any API we encounter in the input bindgen rs which we might want to pass

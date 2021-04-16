@@ -4487,6 +4487,69 @@ fn test_error_generated_for_static_data() {
 }
 
 #[test]
+fn test_error_generated_for_array_dependent_function() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <functional>
+        inline void take_func(std::function<bool(const uint32_t number)> fn) {
+        }
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["take_func"],
+        &[],
+        None,
+        &[],
+        Some(make_error_finder("take_func")),
+    );
+}
+
+#[test]
+fn test_error_generated_for_array_dependent_method() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <functional>
+        struct A {
+            void take_func(std::function<bool(const uint32_t number)> fn) {
+            }
+        };
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["A"],
+        &[],
+        None,
+        &[],
+        Some(make_string_finder(
+            ["take_func", "couldn't be generated"].to_vec(),
+        )),
+    );
+}
+
+/// Returns a closure which simply hunts for a given string in the results
+fn make_string_finder<'a>(
+    error_texts: Vec<&str>,
+) -> Box<dyn FnOnce(syn::File) -> Result<(), TestError> + '_> {
+    Box::new(|f| {
+        let mut ts = TokenStream::new();
+        f.to_tokens(&mut ts);
+        let toks = ts.to_string();
+        for msg in error_texts {
+            if !toks.contains(msg) {
+                return Err(TestError::RsCodeExaminationFail);
+            };
+        }
+        Ok(())
+    })
+}
+
+#[test]
 fn test_doc_passthru() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -4510,21 +4573,9 @@ fn test_doc_passthru() {
         &["B"],
         None,
         &[],
-        Some(Box::new(|f| {
-            let mut ts = TokenStream::new();
-            f.to_tokens(&mut ts);
-            let toks = ts.to_string();
-            if !toks.contains("Giraffes") {
-                return Err(TestError::RsCodeExaminationFail);
-            };
-            if !toks.contains("Elephants") {
-                return Err(TestError::RsCodeExaminationFail);
-            };
-            if !toks.contains("Rhinos") {
-                return Err(TestError::RsCodeExaminationFail);
-            };
-            Ok(())
-        })),
+        Some(make_string_finder(
+            ["Giraffes", "Elephants", "Rhinos"].to_vec(),
+        )),
     );
 }
 

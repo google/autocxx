@@ -15,7 +15,8 @@
 use std::collections::HashSet;
 
 use crate::conversion::{
-    convert_error::ConvertErrorWithIdent, error_reporter::report_any_error,
+    convert_error::{ConvertErrorWithContext, ErrorContext},
+    error_reporter::report_any_error,
     parse::type_converter::Annotated,
 };
 use crate::{
@@ -113,7 +114,7 @@ impl<'a> ParseBindgen<'a> {
         item: Item,
         mod_converter: &mut ParseForeignMod,
         ns: &Namespace,
-    ) -> Result<(), ConvertErrorWithIdent> {
+    ) -> Result<(), ConvertErrorWithContext> {
         match item {
             Item::ForeignMod(fm) => {
                 mod_converter
@@ -190,9 +191,9 @@ impl<'a> ParseBindgen<'a> {
                             };
                             let old_tyname = TypeName::from_type_path(&old_path);
                             if new_tyname == old_tyname {
-                                return Err(ConvertErrorWithIdent(
+                                return Err(ConvertErrorWithContext(
                                     ConvertError::InfinitelyRecursiveTypedef(new_tyname),
-                                    Some(new_id.clone()),
+                                    Some(ErrorContext::Item(new_id.clone())),
                                 ));
                             }
                             self.results
@@ -213,7 +214,7 @@ impl<'a> ParseBindgen<'a> {
                             break;
                         }
                         _ => {
-                            return Err(ConvertErrorWithIdent(
+                            return Err(ConvertErrorWithContext(
                                 ConvertError::UnexpectedUseStatement(segs.into_iter().last()),
                                 None,
                             ))
@@ -243,13 +244,16 @@ impl<'a> ParseBindgen<'a> {
                         self.add_opaque_type(ity.ident, ns.clone());
                         Ok(())
                     }
-                    Err(err) => Err(ConvertErrorWithIdent(err, Some(ity.ident))),
+                    Err(err) => Err(ConvertErrorWithContext(
+                        err,
+                        Some(ErrorContext::Item(ity.ident)),
+                    )),
                     Ok(Annotated {
                         ty: syn::Type::Path(ref typ),
                         ..
-                    }) if TypeName::from_type_path(typ) == tyname => Err(ConvertErrorWithIdent(
+                    }) if TypeName::from_type_path(typ) == tyname => Err(ConvertErrorWithContext(
                         ConvertError::InfinitelyRecursiveTypedef(tyname),
-                        Some(ity.ident),
+                        Some(ErrorContext::Item(ity.ident)),
                     )),
                     Ok(mut final_type) => {
                         ity.ty = Box::new(final_type.ty.clone());
@@ -269,7 +273,7 @@ impl<'a> ParseBindgen<'a> {
                     }
                 }
             }
-            _ => Err(ConvertErrorWithIdent(
+            _ => Err(ConvertErrorWithContext(
                 ConvertError::UnexpectedItemInMod,
                 None,
             )),

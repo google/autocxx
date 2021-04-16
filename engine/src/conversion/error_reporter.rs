@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use syn::Ident;
-
 use super::{
     api::{Api, ApiAnalysis, ApiDetail},
-    convert_error::ConvertErrorWithIdent,
+    convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
-use crate::types::{make_ident, Namespace, TypeName};
+use crate::types::{Namespace, TypeName};
 use std::collections::HashSet;
 
 /// Run some code which may generate a ConvertError.
@@ -27,16 +25,16 @@ use std::collections::HashSet;
 /// such that users will see documentation of the error.
 pub(crate) fn report_any_error<F, T>(ns: &Namespace, apis: &mut Vec<Api<impl ApiAnalysis>>, fun: F)
 where
-    F: FnOnce() -> Result<T, ConvertErrorWithIdent>,
+    F: FnOnce() -> Result<T, ConvertErrorWithContext>,
 {
     match fun() {
         Ok(_) => {}
-        Err(ConvertErrorWithIdent(err, None)) => {
+        Err(ConvertErrorWithContext(err, None)) => {
             eprintln!("Ignored item: {}", err)
         }
-        Err(ConvertErrorWithIdent(err, Some(id))) => {
-            eprintln!("Ignored item {}: {}", id.to_string(), err);
-            push_ignored_item(ns, id, err, apis)
+        Err(ConvertErrorWithContext(err, Some(ctx))) => {
+            eprintln!("Ignored item {}: {}", ctx.to_string(), err);
+            push_ignored_item(ns, ctx, err, apis)
         }
     }
 }
@@ -46,7 +44,7 @@ where
 /// output API such that users will see documentation for the problem.
 pub(crate) fn add_api_or_report_error<F, A>(tn: TypeName, apis: &mut Vec<Api<A>>, fun: F)
 where
-    F: FnOnce() -> Result<Option<Api<A>>, ConvertError>,
+    F: FnOnce() -> Result<Option<Api<A>>, ConvertErrorWithContext>,
     A: ApiAnalysis,
 {
     match fun() {
@@ -54,28 +52,26 @@ where
             apis.push(api);
         }
         Ok(None) => {}
-        Err(err) => {
+        Err(ConvertErrorWithContext(err, None)) => {
             eprintln!("Ignored {}: {}", tn.to_string(), err);
-            push_ignored_item(
-                tn.get_namespace(),
-                make_ident(tn.get_final_ident()),
-                err,
-                apis,
-            );
+        }
+        Err(ConvertErrorWithContext(err, Some(ctx))) => {
+            eprintln!("Ignored {}: {}", tn.to_string(), err);
+            push_ignored_item(tn.get_namespace(), ctx, err, apis);
         }
     }
 }
 
 fn push_ignored_item(
     ns: &Namespace,
-    id: Ident,
+    ctx: ErrorContext,
     err: ConvertError,
     apis: &mut Vec<Api<impl ApiAnalysis>>,
 ) {
     apis.push(Api {
         ns: ns.clone(),
-        id,
+        id: ctx.get_id().clone(),
         deps: HashSet::new(),
-        detail: ApiDetail::IgnoredItem { err },
+        detail: ApiDetail::IgnoredItem { err, ctx },
     });
 }

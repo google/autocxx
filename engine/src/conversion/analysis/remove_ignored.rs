@@ -16,6 +16,7 @@ use std::collections::HashSet;
 
 use super::fun::FnAnalysis;
 use crate::conversion::api::{Api, ApiDetail};
+use crate::conversion::convert_error::ErrorContext;
 
 /// Remove any APIs which depend on other items which have been ignored.
 pub(crate) fn filter_apis_by_ignored_dependents(
@@ -24,7 +25,13 @@ pub(crate) fn filter_apis_by_ignored_dependents(
     let mut ignored_items: HashSet<_> = apis
         .iter()
         .filter_map(|api| {
-            if matches!(api.detail, ApiDetail::IgnoredItem { .. }) {
+            if matches!(
+                api.detail,
+                ApiDetail::IgnoredItem {
+                    ctx: ErrorContext::Item(..),
+                    ..
+                }
+            ) {
                 Some(api.typename())
             } else {
                 None
