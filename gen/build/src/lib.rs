@@ -26,7 +26,7 @@ use std::{ffi::OsStr, path::Path};
 pub fn build<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
-    definitions: &[impl AsRef<str>],
+    extra_clang_args: &[&str],
 ) -> Result<BuilderBuild, BuilderError>
 where
     P1: AsRef<Path>,
@@ -37,7 +37,7 @@ where
     engine_build(
         rs_file,
         autocxx_incs,
-        definitions,
+        extra_clang_args,
         Some(Box::new(CargoRebuildDependencyRecorder::new())),
     )
     .map(|r| r.0)
@@ -48,7 +48,7 @@ where
 pub fn expect_build<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
-    definitions: &[impl AsRef<str>],
+    extra_clang_args: &[&str],
 ) -> BuilderBuild
 where
     P1: AsRef<Path>,
@@ -59,7 +59,7 @@ where
     engine_expect_build(
         rs_file,
         autocxx_incs,
-        definitions,
+        extra_clang_args,
         Some(Box::new(CargoRebuildDependencyRecorder::new())),
     )
     .0
