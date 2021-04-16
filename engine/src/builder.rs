@@ -65,7 +65,7 @@ pub type BuilderResult = Result<BuilderSuccess, BuilderError>;
 pub fn build<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
-    definitions: &[impl AsRef<str>],
+    extra_clang_args: &[&str],
     dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
 ) -> BuilderResult
 where
@@ -76,7 +76,7 @@ where
     build_to_custom_directory(
         rs_file,
         autocxx_incs,
-        definitions,
+        extra_clang_args,
         None,
         dependency_recorder,
     )
@@ -87,7 +87,7 @@ where
 pub fn expect_build<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
-    definitions: &[impl AsRef<str>],
+    extra_clang_args: &[&str],
     dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
 ) -> BuilderSuccess
 where
@@ -95,7 +95,7 @@ where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
-    build(rs_file, autocxx_incs, definitions, dependency_recorder).unwrap_or_else(|err| {
+    build(rs_file, autocxx_incs, extra_clang_args, dependency_recorder).unwrap_or_else(|err| {
         let _ = writeln!(io::stderr(), "\n\nautocxx error: {}\n\n", report(err));
         process::exit(1);
     })
@@ -110,7 +110,7 @@ fn report(err: BuilderError) -> String {
 pub(crate) fn build_to_custom_directory<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
-    definitions: &[impl AsRef<str>],
+    extra_clang_args: &[&str],
     custom_gendir: Option<PathBuf>,
     dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
 ) -> BuilderResult
@@ -143,7 +143,7 @@ where
 
     let mut parsed_file = crate::parse_file(rs_file).map_err(BuilderError::ParseError)?;
     parsed_file
-        .resolve_all(autocxx_inc, definitions, dependency_recorder)
+        .resolve_all(autocxx_inc, extra_clang_args, dependency_recorder)
         .map_err(BuilderError::ParseError)?;
     build_with_existing_parsed_file(parsed_file, cxxdir, incdir, rsdir)
 }

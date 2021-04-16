@@ -130,7 +130,7 @@ fn run_test_ex(
     generate: &[&str],
     generate_pods: &[&str],
     extra_directives: Option<TokenStream>,
-    defines: &[&str],
+    extra_clang_args: &[&str],
     // A function applied to the resultant generated Rust code
     // which can be used to inspect that code.
     rust_code_checker: Option<Box<dyn FnOnce(syn::File) -> Result<(), TestError>>>,
@@ -142,7 +142,7 @@ fn run_test_ex(
         generate,
         generate_pods,
         extra_directives,
-        defines,
+        extra_clang_args,
         rust_code_checker,
     )
     .unwrap()
@@ -188,7 +188,7 @@ fn do_run_test(
     generate: &[&str],
     generate_pods: &[&str],
     extra_directives: Option<TokenStream>,
-    definitions: &[&str],
+    extra_clang_args: &[&str],
     rust_code_checker: Option<Box<dyn FnOnce(syn::File) -> Result<(), TestError>>>,
 ) -> Result<(), TestError> {
     // Step 1: Write the C++ header snippet to a temp file
@@ -245,7 +245,7 @@ fn do_run_test(
     let build_results = crate::builder::build_to_custom_directory(
         &rs_path,
         &[tdir.path()],
-        &definitions,
+        &extra_clang_args,
         Some(target_dir.clone()),
         None,
     )
@@ -274,11 +274,8 @@ fn do_run_test(
         b.file(cxx_path);
     }
 
-    for d in definitions {
-        let mut it = d.split("=");
-        let k = it.next().unwrap();
-        let v = it.next();
-        b.define(k, v);
+    for a in extra_clang_args {
+        b.flag(a);
     }
 
     b.out_dir(&target_dir)
@@ -4286,7 +4283,7 @@ fn test_defines_effective() {
     let rs = quote! {
         ffi::a();
     };
-    run_test_ex("", hdr, rs, &["a"], &[], None, &["FOO"], None);
+    run_test_ex("", hdr, rs, &["a"], &[], None, &["-DFOO"], None);
 }
 
 #[test]

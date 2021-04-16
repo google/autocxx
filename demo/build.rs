@@ -14,8 +14,8 @@
 
 fn main() {
     let path = std::path::PathBuf::from("src");
-    let defs: Vec<String> = Vec::new();
-    let mut b = autocxx_build::build("src/main.rs", &[&path], &defs).unwrap();
+    let clang_args: [&str; 0] = [];
+    let mut b = autocxx_build::build("src/main.rs", &[&path], &clang_args).unwrap();
     b.flag_if_supported("-std=c++14").compile("autocxx-demo");
 
     println!("cargo:rerun-if-changed=src/main.rs");

@@ -279,10 +279,10 @@ impl IncludeCppEngine {
     fn make_bindgen_builder(
         &self,
         inc_dirs: &[PathBuf],
-        definitions: &[impl AsRef<str>],
+        extra_clang_args: &[&str],
     ) -> bindgen::Builder {
         let mut builder = bindgen::builder()
-            .clang_args(make_clang_args(inc_dirs, definitions))
+            .clang_args(make_clang_args(inc_dirs, extra_clang_args))
             .derive_copy(false)
             .derive_debug(false)
             .default_enum_style(bindgen::EnumVariation::Rust {
@@ -358,7 +358,7 @@ impl IncludeCppEngine {
     pub fn generate(
         &mut self,
         inc_dirs: Vec<PathBuf>,
-        definitions: &[impl AsRef<str>],
+        extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     ) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
@@ -374,12 +374,12 @@ impl IncludeCppEngine {
             return Err(Error::NoGenerationRequested);
         }
 
-        let mut builder = self.make_bindgen_builder(&inc_dirs, &definitions);
+        let mut builder = self.make_bindgen_builder(&inc_dirs, &extra_clang_args);
         if let Some(dep_recorder) = dep_recorder {
             builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
         }
         let header_contents = self.build_header();
-        self.dump_header_if_so_configured(&header_contents, &inc_dirs, &definitions);
+        self.dump_header_if_so_configured(&header_contents, &inc_dirs, &extra_clang_args);
         let header_and_prelude = format!("{}\n\n{}", KNOWN_TYPES.get_prelude(), header_contents);
         builder = builder.header_contents("example.hpp", &header_and_prelude);
 
@@ -466,26 +466,29 @@ impl IncludeCppEngine {
         &self,
         header: &str,
         inc_dirs: &[PathBuf],
-        definitions: &[impl AsRef<str>],
+        extra_clang_args: &[&str],
     ) {
         if let Ok(output_path) = std::env::var("AUTOCXX_PREPROCESS") {
             let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}", self.config, header);
             let mut tf = NamedTempFile::new().unwrap();
             write!(tf, "{}", input).unwrap();
             let tp = tf.into_temp_path();
-            preprocess(&tp, &PathBuf::from(output_path), inc_dirs, definitions).unwrap();
+            preprocess(&tp, &PathBuf::from(output_path), inc_dirs, extra_clang_args).unwrap();
         }
     }
 }
 
 fn make_clang_args<'a>(
     incs: &'a [PathBuf],
-    defs: &'a [impl AsRef<str>],
+    extra_args: &'a [&str],
 ) -> impl Iterator<Item = String> + 'a {
-    incs.iter()
-        .map(|i| format!("-I{}", i.to_str().unwrap()))
-        .chain(defs.iter().map(|d| format!("-D{}", d.as_ref())))
-        .chain(AUTOCXX_CLANG_ARGS.iter().map(|s| s.to_string()))
+    // AUTOCXX_CLANG_ARGS come first so that any defaults defined there(e.g. for the `-std`
+    // argument) can be overridden by extra_args.
+    AUTOCXX_CLANG_ARGS
+        .iter()
+        .map(|s| s.to_string())
+        .chain(incs.iter().map(|i| format!("-I{}", i.to_str().unwrap())))
+        .chain(extra_args.iter().map(|s| s.to_string()))
 }
 
 /// Preprocess a file using the same options
@@ -494,12 +497,12 @@ pub fn preprocess(
     listing_path: &Path,
     preprocess_path: &Path,
     incs: &[PathBuf],
-    defs: &[impl AsRef<str>],
+    extra_clang_args: &[&str],
 ) -> Result<(), std::io::Error> {
     let mut cmd = Command::new("clang++");
     cmd.arg("-E");
     cmd.arg("-C");
-    cmd.args(make_clang_args(incs, defs));
+    cmd.args(make_clang_args(incs, extra_clang_args));
     cmd.arg(listing_path.to_str().unwrap());
     let output = cmd.output().expect("failed to preprocess").stdout;
     let output = std::str::from_utf8(&output).unwrap();
