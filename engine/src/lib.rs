@@ -505,11 +505,7 @@ pub fn preprocess(
     cmd.args(make_clang_args(incs, extra_clang_args));
     cmd.arg(listing_path.to_str().unwrap());
     let output = cmd.output().expect("failed to preprocess").stdout;
-    let output = std::str::from_utf8(&output).unwrap();
     let mut file = File::create(preprocess_path)?;
-    for line in output.lines() {
-        file.write_all(line.as_bytes())?;
-        file.write_all("\n".as_bytes())?;
-    }
+    file.write_all(&output)?;
     Ok(())
 }
