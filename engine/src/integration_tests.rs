@@ -955,7 +955,7 @@ fn test_take_char_by_ptr_in_wrapped_method() {
         struct C {
             C() { test = \"hi\"; }
             uint32_t a;
-            char* test;
+            const char* test;
         };
         class A {
         public:
@@ -2111,11 +2111,11 @@ fn test_overload_constructors() {
 #[test]
 fn test_overload_functions() {
     let cxx = indoc! {"
-        void daft(uint32_t a) {}
-        void daft(uint8_t a) {}
-        void daft(std::string a) {}
-        void daft(Fred a) {}
-        void daft(Norma a) {}
+        void daft(uint32_t) {}
+        void daft(uint8_t) {}
+        void daft(std::string) {}
+        void daft(Fred) {}
+        void daft(Norma) {}
     "};
     let hdr = indoc! {"
         #include <cstdint>
@@ -2424,7 +2424,7 @@ fn test_static_func_wrapper() {
         #include <string>
         struct A {
             std::string a;
-            static A CreateA(std::string a, std::string b) {
+            static A CreateA(std::string a, std::string) {
                 A c;
                 c.a = a;
                 return c;
@@ -2554,10 +2554,12 @@ fn test_conflicting_static_functions() {
     let hdr = indoc! {"
         #include <cstdint>
         struct Bob {
+            Bob() {}
             uint32_t a;
             static Bob create();
         };
         struct Fred {
+            Fred() {}
             uint32_t b;
             static Fred create();
         };
@@ -3609,7 +3611,7 @@ fn test_ulong_wrapped_method() {
     class A {
         public:
         A() {};
-        unsigned long daft(unsigned long a, B extra) const { return a; }
+        unsigned long daft(unsigned long a, B) const { return a; }
     };
     "};
     let rs = quote! {
@@ -4318,8 +4320,9 @@ fn test_cvoid() {
             return static_cast<void*>(new int(3));
         }
         inline uint32_t b(void* p) {
-            auto val = *(static_cast<int*>(p));
-            delete p;
+            int* p_int = static_cast<int*>(p);
+            auto val = *p_int;
+            delete p_int;
             return val;
         }
     "};
@@ -4491,7 +4494,7 @@ fn test_error_generated_for_array_dependent_function() {
     let hdr = indoc! {"
         #include <cstdint>
         #include <functional>
-        inline void take_func(std::function<bool(const uint32_t number)> fn) {
+        inline void take_func(std::function<bool(const uint32_t number)>) {
         }
     "};
     let rs = quote! {};
@@ -4513,7 +4516,7 @@ fn test_error_generated_for_array_dependent_method() {
         #include <cstdint>
         #include <functional>
         struct A {
-            void take_func(std::function<bool(const uint32_t number)> fn) {
+            void take_func(std::function<bool(const uint32_t number)>) {
             }
         };
     "};
