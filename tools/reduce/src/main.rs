@@ -145,7 +145,10 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     let listing_path = tmp_dir.path().join("listing.h");
     create_concatenated_header(&headers, &listing_path)?;
     let concat_path = tmp_dir.path().join("concat.h");
-    announce_progress("Preprocessing");
+    announce_progress(&format!(
+        "Preprocessing {:?} to {:?}",
+        listing_path, concat_path
+    ));
     preprocess(&listing_path, &concat_path, &incs, &defs)?;
     let rs_path = tmp_dir.path().join("input.rs");
     let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
@@ -163,6 +166,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         matches.value_of("problem").unwrap(),
         &rs_path,
     )?;
+    run_interestingness_test(&interestingness_test);
     run_creduce(
         matches.value_of("creduce").unwrap(),
         &interestingness_test,
@@ -237,6 +241,15 @@ fn create_interestingness_test(
     perms.set_mode(0o700);
     std::fs::set_permissions(&test_path, perms)?;
     Ok(())
+}
+
+fn run_interestingness_test(test_path: &Path) {
+    announce_progress("Running interestingness test");
+    let status = Command::new(test_path).status().unwrap();
+    announce_progress(&format!(
+        "Have run interestingness test - result is {:?}",
+        status.code()
+    ));
 }
 
 fn create_rs_file(rs_path: &Path, directives: &[String]) -> Result<(), std::io::Error> {
