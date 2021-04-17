@@ -17,4 +17,3 @@ pub(crate) mod ctypes;
 pub(crate) mod fun;
 pub(crate) mod gc;
 pub(crate) mod pod; // hey, that rhymes
-pub(crate) mod remove_ignored;
