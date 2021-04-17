@@ -2554,12 +2554,12 @@ fn test_conflicting_static_functions() {
     let hdr = indoc! {"
         #include <cstdint>
         struct Bob {
-            Bob() {}
+            Bob() : a(0) {}
             uint32_t a;
             static Bob create();
         };
         struct Fred {
-            Fred() {}
+            Fred() : b(0) {}
             uint32_t b;
             static Fred create();
         };
