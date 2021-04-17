@@ -26,6 +26,7 @@ use std::{
 use autocxx_engine::preprocess;
 use clap::{crate_authors, crate_version, App, Arg, ArgMatches};
 use indoc::indoc;
+use itertools::Itertools;
 use tempfile::TempDir;
 
 static LONG_HELP: &str = indoc! {"
@@ -160,6 +161,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         )
         .collect();
     create_rs_file(&rs_path, &directives)?;
+    run_sample_gen_cmd(&rs_path, &tmp_dir.path())?;
     let interestingness_test = tmp_dir.path().join("test.sh");
     create_interestingness_test(
         &interestingness_test,
@@ -209,26 +211,55 @@ fn run_creduce<'a>(
         .expect("failed to creduce");
 }
 
+fn run_sample_gen_cmd(rs_file: &Path, tmp_dir: &Path) -> Result<(), std::io::Error> {
+    let (gen_cmd, args) = format_gen_cmd(rs_file, tmp_dir.to_str().unwrap())?;
+    let args = args.collect::<Vec<_>>();
+    let args_str = args.join(" ");
+    announce_progress(&format!(
+        "Running sample gen cmd: {} {}",
+        gen_cmd.to_str().unwrap(),
+        args_str
+    ));
+    Command::new(gen_cmd).args(args).status()?;
+    Ok(())
+}
+
+fn format_gen_cmd(
+    rs_file: &Path,
+    dir: &str,
+) -> Result<(PathBuf, impl Iterator<Item = String>), std::io::Error> {
+    let me = std::env::current_exe()?;
+    let gen = me.parent().unwrap().join("autocxx-gen");
+    let args = [
+        "-o".to_string(),
+        dir.to_string(),
+        "-I".to_string(),
+        dir.to_string(),
+        rs_file.to_str().unwrap().to_string(),
+        "--gen-rs-complete".to_string(),
+    ]
+    .to_vec();
+    Ok((gen, args.into_iter()))
+}
+
 fn create_interestingness_test(
     test_path: &Path,
     problem: &str,
     rs_file: &Path,
 ) -> Result<(), std::io::Error> {
     announce_progress("Creating interestingness test");
-    let me = std::env::current_exe()?;
-    let gen = me.parent().unwrap().join("autocxx-gen");
     // Ensure we refer to the input header by relative path
     // because creduce will invoke us in some other directory with
     // a copy thereof.
+    let (gen_cmd, mut args) = format_gen_cmd(rs_file, "$(pwd)")?;
+    let args = args.join(" ");
     let content = format!(
         indoc! {"
         #!/bin/sh
-
-        DIR=$(pwd)
-        {} -o $DIR -I $DIR {} --gen-rs-complete 2>&1 | grep \"{}\"  >/dev/null 2>&1
+        {} {} 2>&1 | grep \"{}\"  >/dev/null 2>&1
     "},
-        gen.to_str().unwrap(),
-        rs_file.to_str().unwrap(),
+        gen_cmd.to_str().unwrap(),
+        args,
         problem
     );
     println!("Interestingness test:\n{}", content);

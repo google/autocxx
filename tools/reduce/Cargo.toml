@@ -12,3 +12,4 @@ autocxx-engine = { version = "0.5.4", path="../../engine" }
 clap = "~2.33.0"
 tempfile = "3.1"
 indoc = "1.0"
+itertools = "0.10"
