@@ -21,7 +21,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-pub use config::{CppInclusion, IncludeCppConfig, UnsafePolicy};
+pub use config::{IncludeCppConfig, UnsafePolicy};
 use file_locations::FileLocationStrategy;
 use proc_macro2::TokenStream as TokenStream2;
 use syn::Result as ParseResult;

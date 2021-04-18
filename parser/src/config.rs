@@ -53,15 +53,8 @@ impl Parse for UnsafePolicy {
 }
 
 #[derive(Hash, Debug)]
-pub enum CppInclusion {
-    #[allow(dead_code)]
-    Define(String), // currently unused, may use in future.
-    Header(String),
-}
-
-#[derive(Hash, Debug)]
 pub struct IncludeCppConfig {
-    pub inclusions: Vec<CppInclusion>,
+    pub inclusions: Vec<String>,
     pub exclude_utilities: bool,
     pub unsafe_policy: UnsafePolicy,
     pub type_config: TypeConfig,
@@ -88,7 +81,7 @@ impl Parse for IncludeCppConfig {
                     return Err(syn::Error::new(ident.span(), "expected include"));
                 }
                 let hdr: syn::LitStr = input.parse()?;
-                inclusions.push(CppInclusion::Header(hdr.value()));
+                inclusions.push(hdr.value());
             } else {
                 let ident: syn::Ident = input.parse()?;
                 input.parse::<Option<syn::Token![!]>>()?;

@@ -29,7 +29,7 @@ mod builder;
 #[cfg(test)]
 mod integration_tests;
 
-use autocxx_parser::{CppInclusion, IncludeCppConfig, UnsafePolicy};
+use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::{BridgeConverter, CppCodegenResults};
 use parse_callbacks::AutocxxParseCallbacks;
 use proc_macro2::TokenStream as TokenStream2;
@@ -51,7 +51,7 @@ use syn::{
 
 use itertools::join;
 use known_types::known_types;
-use log::{info, warn};
+use log::info;
 
 /// We use a forked version of bindgen - for now.
 /// We hope to unfork.
@@ -268,10 +268,10 @@ impl IncludeCppEngine {
 
     fn build_header(&self) -> String {
         join(
-            self.config.inclusions.iter().map(|incl| match incl {
-                CppInclusion::Define(symbol) => format!("#define {}\n", symbol),
-                CppInclusion::Header(path) => format!("#include \"{}\"\n", path),
-            }),
+            self.config
+                .inclusions
+                .iter()
+                .map(|path| format!("#include \"{}\"\n", path)),
             "",
         )
     }
@@ -337,19 +337,6 @@ impl IncludeCppEngine {
         syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)
     }
 
-    fn generate_include_list(&self) -> Vec<String> {
-        let mut include_list = Vec::new();
-        for incl in &self.config.inclusions {
-            match incl {
-                CppInclusion::Header(ref hdr) => {
-                    include_list.push(hdr.clone());
-                }
-                CppInclusion::Define(_) => warn!("Currently no way to define! within cxx"),
-            }
-        }
-        include_list
-    }
-
     /// Actually examine the headers to find out what needs generating.
     /// Most errors occur at this stage as we fail to interpret the C++
     /// headers properly.
@@ -386,8 +373,7 @@ impl IncludeCppEngine {
         let bindings = builder.generate().map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
 
-        let include_list = self.generate_include_list();
-        let converter = BridgeConverter::new(&include_list, &self.config.type_config);
+        let converter = BridgeConverter::new(&self.config.inclusions, &self.config.type_config);
 
         let conversion = converter
             .convert(
