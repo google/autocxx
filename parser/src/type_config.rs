@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Central registry of all information known about types.
+/// Configuration about types.
 /// At present this is very minimal; in future we should roll
 /// known_types.rs into this and possibly other things as well.
 #[derive(Default, Hash, Debug)]
