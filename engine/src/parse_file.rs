@@ -93,24 +93,18 @@ enum Segment {
 
 impl ParsedFile {
     /// Get all the autocxxes in this parsed file.
-    pub fn get_autocxxes(&self) -> Vec<&IncludeCppEngine> {
-        self.0
-            .iter()
-            .filter_map(|s| match s {
-                Segment::Autocxx(includecpp) => Some(includecpp),
-                Segment::Other(_) => None,
-            })
-            .collect()
+    pub fn get_autocxxes(&self) -> impl Iterator<Item = &IncludeCppEngine> {
+        self.0.iter().filter_map(|s| match s {
+            Segment::Autocxx(includecpp) => Some(includecpp),
+            Segment::Other(_) => None,
+        })
     }
 
-    pub fn get_autocxxes_mut(&mut self) -> Vec<&mut IncludeCppEngine> {
-        self.0
-            .iter_mut()
-            .filter_map(|s| match s {
-                Segment::Autocxx(includecpp) => Some(includecpp),
-                Segment::Other(_) => None,
-            })
-            .collect()
+    pub fn get_autocxxes_mut(&mut self) -> impl Iterator<Item = &mut IncludeCppEngine> {
+        self.0.iter_mut().filter_map(|s| match s {
+            Segment::Autocxx(includecpp) => Some(includecpp),
+            Segment::Other(_) => None,
+        })
     }
 
     pub fn resolve_all(
