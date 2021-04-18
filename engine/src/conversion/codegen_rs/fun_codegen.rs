@@ -30,7 +30,7 @@ use crate::{
         analysis::fun::{ArgumentAnalysis, FnAnalysisBody, FnKind, MethodKind, RustRenameStrategy},
         api::ImplBlockDetails,
     },
-    types::{Namespace, TypeName},
+    types::{Namespace, QualifiedName},
 };
 
 pub(super) fn gen_function(
@@ -174,7 +174,7 @@ fn generate_arg_lists(
 fn generate_method_impl(
     param_details: &[ArgumentAnalysis],
     is_constructor: bool,
-    impl_block_type_name: &TypeName,
+    impl_block_type_name: &QualifiedName,
     cxxbridge_name: &Ident,
     rust_name: &str,
     ret_type: &ReturnType,

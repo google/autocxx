@@ -14,10 +14,10 @@
 
 use crate::{
     conversion::ConvertError,
-    types::{make_ident, TypeName},
+    types::{make_ident, QualifiedName},
 };
 use indoc::indoc;
-use lazy_static::lazy_static;
+use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use syn::{parse_quote, GenericArgument, PathArguments, Type, TypePath, TypePtr};
 
@@ -71,7 +71,7 @@ impl TypeDetails {
             | Behavior::CxxString
             | Behavior::CxxContainerByValueSafe
             | Behavior::CxxContainerNotByValueSafe => {
-                let tn = TypeName::new_from_user_input(&self.rs_name);
+                let tn = QualifiedName::new_from_user_input(&self.rs_name);
                 let cxx_name = tn.get_final_ident();
                 let (templating, payload) = match self.behavior {
                     Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => {
@@ -102,21 +102,27 @@ impl TypeDetails {
             #(#segs)::*
         }
     }
+
+    fn to_typename(&self) -> QualifiedName {
+        QualifiedName::new_from_user_input(&self.rs_name)
+    }
 }
 
 /// Database of known types.
+#[derive(Default)]
 pub(crate) struct TypeDatabase {
-    by_rs_name: HashMap<TypeName, TypeDetails>,
-    canonical_names: HashMap<TypeName, TypeName>,
+    by_rs_name: HashMap<QualifiedName, TypeDetails>,
+    canonical_names: HashMap<QualifiedName, QualifiedName>,
 }
 
-lazy_static! {
-    /// Database of known types.
-    pub(crate) static ref KNOWN_TYPES: TypeDatabase = create_type_database();
+/// Returns a database of known types.
+pub(crate) fn known_types() -> &'static TypeDatabase {
+    static KNOWN_TYPES: OnceCell<TypeDatabase> = OnceCell::new();
+    KNOWN_TYPES.get_or_init(create_type_database)
 }
 
 impl TypeDatabase {
-    fn get(&self, ty: &TypeName) -> Option<&TypeDetails> {
+    fn get(&self, ty: &QualifiedName) -> Option<&TypeDetails> {
         // The following line is important. It says that
         // when we encounter something like 'std::unique_ptr'
         // in the bindgen-generated bindings, we'll immediately
@@ -144,7 +150,7 @@ impl TypeDatabase {
 
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
-    pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (&TypeName, bool)> {
+    pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (&QualifiedName, bool)> {
         self.by_rs_name.iter().map(|(tn, td)| {
             (
                 tn,
@@ -167,7 +173,7 @@ impl TypeDatabase {
     /// but a reference in Rust. This only applies to rust::Str
     /// (C++ name) which is &str in Rust.
     pub(crate) fn should_dereference_in_cpp(&self, typ: &TypePath) -> bool {
-        let tn = TypeName::from_type_path(typ);
+        let tn = QualifiedName::from_type_path(typ);
         self.get(&tn)
             .map(|td| matches!(td.behavior, Behavior::RustStr))
             .unwrap_or(false)
@@ -179,25 +185,25 @@ impl TypeDatabase {
     /// any PathArguments within this TypePath - callers should
     /// put them back again if needs be.
     pub(crate) fn known_type_substitute_path(&self, typ: &TypePath) -> Option<TypePath> {
-        let tn = TypeName::from_type_path(typ);
+        let tn = QualifiedName::from_type_path(typ);
         self.get(&tn).map(|td| td.to_type_path())
     }
 
-    pub(crate) fn special_cpp_name(&self, rs: &TypeName) -> Option<String> {
+    pub(crate) fn special_cpp_name(&self, rs: &QualifiedName) -> Option<String> {
         self.get(rs).map(|x| x.cpp_name.to_string())
     }
 
-    pub(crate) fn is_known_type(&self, ty: &TypeName) -> bool {
+    pub(crate) fn is_known_type(&self, ty: &QualifiedName) -> bool {
         self.get(ty).is_some()
     }
 
-    pub(crate) fn known_type_type_path(&self, ty: &TypeName) -> Option<TypePath> {
+    pub(crate) fn known_type_type_path(&self, ty: &QualifiedName) -> Option<TypePath> {
         self.get(ty).map(|td| td.to_type_path())
     }
 
     /// Whether this is one of the ctypes (mostly variable length integers)
     /// which we need to wrap.
-    pub(crate) fn is_ctype(&self, ty: &TypeName) -> bool {
+    pub(crate) fn is_ctype(&self, ty: &QualifiedName) -> bool {
         self.get(ty)
             .map(|td| {
                 matches!(
@@ -211,7 +217,7 @@ impl TypeDatabase {
     /// Whether this is a generic type acceptable to cxx. Otherwise,
     /// if we encounter a generic, we'll replace it with a synthesized concrete
     /// type.
-    pub(crate) fn is_cxx_acceptable_generic(&self, ty: &TypeName) -> bool {
+    pub(crate) fn is_cxx_acceptable_generic(&self, ty: &QualifiedName) -> bool {
         self.get(ty)
             .map(|x| {
                 matches!(
@@ -222,62 +228,73 @@ impl TypeDatabase {
             .unwrap_or(false)
     }
 
-    pub(crate) fn convertible_from_strs(&self, ty: &TypeName) -> bool {
+    pub(crate) fn convertible_from_strs(&self, ty: &QualifiedName) -> bool {
         self.get(ty)
             .map(|x| matches!(x.behavior, Behavior::CxxString))
             .unwrap_or(false)
     }
+
+    fn insert(&mut self, td: TypeDetails) {
+        let rs_name = td.to_typename();
+        if let Some(extra_non_canonical_name) = &td.extra_non_canonical_name {
+            self.canonical_names.insert(
+                QualifiedName::new_from_user_input(extra_non_canonical_name),
+                rs_name.clone(),
+            );
+        }
+        self.canonical_names.insert(
+            QualifiedName::new_from_user_input(&td.cpp_name),
+            rs_name.clone(),
+        );
+        self.by_rs_name.insert(rs_name, td);
+    }
 }
 
 fn create_type_database() -> TypeDatabase {
-    let mut by_rs_name = HashMap::new();
-
-    let mut do_insert =
-        |td: TypeDetails| by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
-
-    do_insert(TypeDetails::new(
+    let mut db = TypeDatabase::default();
+    db.insert(TypeDetails::new(
         "cxx::UniquePtr",
         "std::unique_ptr",
         Behavior::CxxContainerByValueSafe,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "cxx::CxxVector",
         "std::vector",
         Behavior::CxxContainerNotByValueSafe,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "cxx::SharedPtr",
         "std::shared_ptr",
         Behavior::CxxContainerByValueSafe,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "cxx::CxxString",
         "std::string",
         Behavior::CxxString,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "str",
         "rust::Str",
         Behavior::RustStr,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "String",
         "rust::String",
         Behavior::RustString,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "i8",
         "int8_t",
         Behavior::CByValue,
         Some("std::os::raw::c_schar".into()),
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "u8",
         "uint8_t",
         Behavior::CByValue,
@@ -293,16 +310,16 @@ fn create_type_database() -> TypeDatabase {
         })
         .flatten()
     {
-        do_insert(TypeDetails::new(
+        db.insert(TypeDetails::new(
             rust_type,
             cpp_type,
             Behavior::CByValue,
             None,
         ));
     }
-    do_insert(TypeDetails::new("bool", "bool", Behavior::CByValue, None));
+    db.insert(TypeDetails::new("bool", "bool", Behavior::CByValue, None));
 
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "std::pin::Pin",
         "Pin",
         Behavior::RustByValue, // because this is actually Pin<&something>
@@ -311,20 +328,18 @@ fn create_type_database() -> TypeDatabase {
 
     let mut insert_ctype = |cname: &str| {
         let concatenated_name = cname.replace(" ", "");
-        let td = TypeDetails::new(
+        db.insert(TypeDetails::new(
             format!("autocxx::c_{}", concatenated_name),
             cname,
             Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_{}", concatenated_name)),
-        );
-        by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
-        let td = TypeDetails::new(
+        ));
+        db.insert(TypeDetails::new(
             format!("autocxx::c_u{}", concatenated_name),
             format!("unsigned {}", cname),
             Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_u{}", concatenated_name)),
-        );
-        by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+        ));
     };
 
     insert_ctype("long");
@@ -332,39 +347,21 @@ fn create_type_database() -> TypeDatabase {
     insert_ctype("short");
     insert_ctype("long long");
 
-    let td = TypeDetails::new("f32", "float", Behavior::CByValue, None);
-    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
-
-    let td = TypeDetails::new("f64", "double", Behavior::CByValue, None);
-    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
-
-    let td = TypeDetails::new("std::os::raw::c_char", "char", Behavior::CByValue, None);
-    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
-
-    let td = TypeDetails::new(
+    db.insert(TypeDetails::new("f32", "float", Behavior::CByValue, None));
+    db.insert(TypeDetails::new("f64", "double", Behavior::CByValue, None));
+    db.insert(TypeDetails::new(
+        "std::os::raw::c_char",
+        "char",
+        Behavior::CByValue,
+        None,
+    ));
+    db.insert(TypeDetails::new(
         "autocxx::c_void",
         "void",
         Behavior::CVoid,
         Some("std::os::raw::c_void".into()),
-    );
-    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
-
-    let mut by_cppname = HashMap::new();
-    for td in by_rs_name.values() {
-        let rs_name = TypeName::new_from_user_input(&td.rs_name);
-        if let Some(extra_non_canonical_name) = &td.extra_non_canonical_name {
-            by_cppname.insert(
-                TypeName::new_from_user_input(extra_non_canonical_name),
-                rs_name.clone(),
-            );
-        }
-        by_cppname.insert(TypeName::new_from_user_input(&td.cpp_name), rs_name);
-    }
-
-    TypeDatabase {
-        by_rs_name,
-        canonical_names: by_cppname,
-    }
+    ));
+    db
 }
 
 /// This is worked out basically using trial and error.
@@ -388,7 +385,7 @@ pub(crate) fn type_lacks_copy_constructor(ty: &Type) -> bool {
     // In future we may wish to look this up in KNOWN_TYPES.
     match ty {
         Type::Path(typ) => {
-            let tn = TypeName::from_type_path(typ);
+            let tn = QualifiedName::from_type_path(typ);
             tn.to_cpp_name().starts_with("std::unique_ptr")
         }
         _ => false,
@@ -397,7 +394,7 @@ pub(crate) fn type_lacks_copy_constructor(ty: &Type) -> bool {
 
 pub(crate) fn confirm_inner_type_is_acceptable_generic_payload(
     path_args: &PathArguments,
-    desc: &TypeName,
+    desc: &QualifiedName,
 ) -> Result<(), ConvertError> {
     // For now, all supported generics accept the same payloads. This
     // may change in future in which case we'll need to accept more arguments here.

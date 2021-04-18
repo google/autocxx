@@ -26,7 +26,7 @@ use crate::{
     },
     types::make_ident,
     types::Namespace,
-    types::TypeName,
+    types::QualifiedName,
 };
 use autocxx_parser::TypeConfig;
 use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
@@ -43,7 +43,7 @@ pub(crate) struct ParseBindgen<'a> {
     /// Any subsequent "extern 'C'" blocks are methods belonging to that type,
     /// even if the 'this' is actually recorded as void in the
     /// function signature.
-    latest_virtual_this_type: Option<TypeName>,
+    latest_virtual_this_type: Option<QualifiedName>,
 }
 
 impl<'a> ParseBindgen<'a> {
@@ -125,7 +125,7 @@ impl<'a> ParseBindgen<'a> {
                 if s.ident.to_string().ends_with("__bindgen_vtable") {
                     return Ok(());
                 }
-                let tyname = TypeName::new(ns, &s.ident.to_string());
+                let tyname = QualifiedName::new(ns, s.ident.clone());
                 let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
@@ -139,7 +139,7 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Enum(e) => {
-                let tyname = TypeName::new(ns, &e.ident.to_string());
+                let tyname = QualifiedName::new(ns, e.ident.clone());
                 self.parse_type(tyname, false, HashSet::new(), Some(Item::Enum(e)));
                 Ok(())
             }
@@ -175,7 +175,7 @@ impl<'a> ParseBindgen<'a> {
                         UseTree::Rename(urn) => {
                             let old_id = &urn.ident;
                             let new_id = &urn.rename;
-                            let new_tyname = TypeName::new(ns, &new_id.to_string());
+                            let new_tyname = QualifiedName::new(ns, new_id.clone());
                             if segs.remove(0) != "self" {
                                 panic!("Path didn't start with self");
                             }
@@ -189,7 +189,7 @@ impl<'a> ParseBindgen<'a> {
                             let old_path: TypePath = parse_quote! {
                                 #(#segs)::* :: #old_id
                             };
-                            let old_tyname = TypeName::from_type_path(&old_path);
+                            let old_tyname = QualifiedName::from_type_path(&old_path);
                             if new_tyname == old_tyname {
                                 return Err(ConvertErrorWithContext(
                                     ConvertError::InfinitelyRecursiveTypedef(new_tyname),
@@ -236,7 +236,7 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Type(mut ity) => {
-                let tyname = TypeName::new(ns, &ity.ident.to_string());
+                let tyname = QualifiedName::new(ns, ity.ident.clone());
                 let type_conversion_results =
                     self.results.type_converter.convert_type(*ity.ty, ns, false);
                 match type_conversion_results {
@@ -246,15 +246,17 @@ impl<'a> ParseBindgen<'a> {
                     }
                     Err(err) => Err(ConvertErrorWithContext(
                         err,
-                        Some(ErrorContext::Item(ity.ident)),
+                        Some(ErrorContext::Item(ity.ident.clone())),
                     )),
                     Ok(Annotated {
                         ty: syn::Type::Path(ref typ),
                         ..
-                    }) if TypeName::from_type_path(typ) == tyname => Err(ConvertErrorWithContext(
-                        ConvertError::InfinitelyRecursiveTypedef(tyname),
-                        Some(ErrorContext::Item(ity.ident)),
-                    )),
+                    }) if QualifiedName::from_type_path(typ) == tyname => {
+                        Err(ConvertErrorWithContext(
+                            ConvertError::InfinitelyRecursiveTypedef(tyname),
+                            Some(ErrorContext::Item(ity.ident)),
+                        ))
+                    }
                     Ok(mut final_type) => {
                         ity.ty = Box::new(final_type.ty.clone());
                         self.results
@@ -303,9 +305,9 @@ impl<'a> ParseBindgen<'a> {
     /// this adds.
     fn parse_type(
         &mut self,
-        tyname: TypeName,
+        tyname: QualifiedName,
         is_forward_declaration: bool,
-        deps: HashSet<TypeName>,
+        deps: HashSet<QualifiedName>,
         bindgen_mod_item: Option<Item>,
     ) {
         let final_ident = make_ident(tyname.get_final_ident());

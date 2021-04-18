@@ -96,13 +96,9 @@ where
     T: AsRef<OsStr>,
 {
     build(rs_file, autocxx_incs, extra_clang_args, dependency_recorder).unwrap_or_else(|err| {
-        let _ = writeln!(io::stderr(), "\n\nautocxx error: {}\n\n", report(err));
+        let _ = writeln!(io::stderr(), "\n\nautocxx error: {}\n\n", err);
         process::exit(1);
     })
-}
-
-fn report(err: BuilderError) -> String {
-    err.to_string()
 }
 
 /// Like build, but you can specify the location where files should be generated.

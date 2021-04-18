@@ -14,14 +14,14 @@
 
 use crate::{
     conversion::api::TypedefKind,
-    types::{Namespace, TypeName},
+    types::{Namespace, QualifiedName},
 };
 use crate::{
     conversion::{
         api::{ApiDetail, UnanalyzedApi},
         ConvertError,
     },
-    known_types::KNOWN_TYPES,
+    known_types::known_types,
 };
 use autocxx_parser::TypeConfig;
 use std::collections::HashMap;
@@ -32,13 +32,13 @@ enum PodState {
     UnsafeToBePod(String),
     SafeToBePod,
     IsPod,
-    IsAlias(TypeName),
+    IsAlias(QualifiedName),
 }
 
 #[derive(Clone)]
 struct StructDetails {
     state: PodState,
-    dependent_structs: Vec<TypeName>,
+    dependent_structs: Vec<QualifiedName>,
 }
 
 impl StructDetails {
@@ -58,13 +58,13 @@ impl StructDetails {
 /// elsewhere in the `Api` list and could possibly be removed or simplified.
 pub struct ByValueChecker {
     // Mapping from type name to whether it is safe to be POD
-    results: HashMap<TypeName, StructDetails>,
+    results: HashMap<QualifiedName, StructDetails>,
 }
 
 impl ByValueChecker {
     pub fn new() -> Self {
         let mut results = HashMap::new();
-        for (tn, by_value_safe) in KNOWN_TYPES.get_pod_safe_types() {
+        for (tn, by_value_safe) in known_types().get_pod_safe_types() {
             let safety = if by_value_safe {
                 PodState::IsPod
             } else {
@@ -83,7 +83,7 @@ impl ByValueChecker {
     ) -> Result<ByValueChecker, ConvertError> {
         let mut byvalue_checker = ByValueChecker::new();
         for blocklisted in type_config.get_blocklist() {
-            let tn = TypeName::new_from_user_input(blocklisted);
+            let tn = QualifiedName::new_from_user_input(blocklisted);
             let safety = PodState::UnsafeToBePod(format!("type {} is on the blocklist", &tn));
             byvalue_checker
                 .results
@@ -95,7 +95,7 @@ impl ByValueChecker {
                     let name = api.typename();
                     let typedef_type = match payload {
                         TypedefKind::Type(type_item) => match type_item.ty.as_ref() {
-                            Type::Path(typ) => KNOWN_TYPES.known_type_substitute_path(&typ),
+                            Type::Path(typ) => known_types().known_type_substitute_path(&typ),
                             _ => None,
                         },
                         TypedefKind::Use(_) => None,
@@ -104,9 +104,9 @@ impl ByValueChecker {
                         Some(typ) => {
                             byvalue_checker.results.insert(
                                 name,
-                                StructDetails::new(PodState::IsAlias(TypeName::from_type_path(
-                                    typ,
-                                ))),
+                                StructDetails::new(PodState::IsAlias(
+                                    QualifiedName::from_type_path(typ),
+                                )),
                             );
                         }
                         None => byvalue_checker.ingest_nonpod_type(name),
@@ -134,7 +134,7 @@ impl ByValueChecker {
         let pod_requests = type_config
             .get_pod_requests()
             .iter()
-            .map(|ty| TypeName::new_from_user_input(ty))
+            .map(|ty| QualifiedName::new_from_user_input(ty))
             .collect();
         byvalue_checker
             .satisfy_requests(pod_requests)
@@ -144,7 +144,7 @@ impl ByValueChecker {
 
     fn ingest_struct(&mut self, def: &ItemStruct, ns: &Namespace) {
         // For this struct, work out whether it _could_ be safe as a POD.
-        let tyname = TypeName::new(ns, &def.ident.to_string());
+        let tyname = QualifiedName::new(ns, def.ident.clone());
         let mut field_safety_problem = PodState::SafeToBePod;
         let fieldlist = Self::get_field_types(def);
         for ty_id in &fieldlist {
@@ -177,7 +177,7 @@ impl ByValueChecker {
         self.results.insert(tyname, my_details);
     }
 
-    fn ingest_nonpod_type(&mut self, tyname: TypeName) {
+    fn ingest_nonpod_type(&mut self, tyname: QualifiedName) {
         let new_reason = format!("Type {} is a typedef to a complex type", tyname);
         self.results.insert(
             tyname,
@@ -185,7 +185,7 @@ impl ByValueChecker {
         );
     }
 
-    fn satisfy_requests(&mut self, mut requests: Vec<TypeName>) -> Result<(), String> {
+    fn satisfy_requests(&mut self, mut requests: Vec<QualifiedName>) -> Result<(), String> {
         while !requests.is_empty() {
             let ty_id = requests.remove(requests.len() - 1);
             let deets = self.results.get_mut(&ty_id);
@@ -228,7 +228,7 @@ impl ByValueChecker {
     /// Some types won't be in our `results` map. For example: (a) AutocxxConcrete types
     /// which we've synthesized; (b) types we couldn't parse but returned ignorable
     /// errors so that we could continue. Assume non-POD for all such cases.
-    pub fn is_pod(&self, ty_id: &TypeName) -> bool {
+    pub fn is_pod(&self, ty_id: &QualifiedName) -> bool {
         matches!(
             self.results.get(ty_id),
             Some(StructDetails {
@@ -238,12 +238,12 @@ impl ByValueChecker {
         )
     }
 
-    fn get_field_types(def: &ItemStruct) -> Vec<TypeName> {
+    fn get_field_types(def: &ItemStruct) -> Vec<QualifiedName> {
         let mut results = Vec::new();
         for f in &def.fields {
             let fty = &f.ty;
             if let Type::Path(p) = fty {
-                results.push(TypeName::from_type_path(&p));
+                results.push(QualifiedName::from_type_path(&p));
             }
             // TODO handle anything else which bindgen might spit out, e.g. arrays?
         }
@@ -263,17 +263,17 @@ impl ByValueChecker {
 #[cfg(test)]
 mod tests {
     use super::ByValueChecker;
-    use crate::types::{Namespace, TypeName};
+    use crate::types::{Namespace, QualifiedName};
     use syn::{parse_quote, Ident, ItemStruct};
 
-    fn ty_from_ident(id: &Ident) -> TypeName {
-        TypeName::new_from_user_input(&id.to_string())
+    fn ty_from_ident(id: &Ident) -> QualifiedName {
+        QualifiedName::new_from_user_input(&id.to_string())
     }
 
     #[test]
     fn test_primitive_by_itself() {
         let bvc = ByValueChecker::new();
-        let t_id = TypeName::new_from_user_input("u32");
+        let t_id = QualifiedName::new_from_user_input("u32");
         assert!(bvc.is_pod(&t_id));
     }
 

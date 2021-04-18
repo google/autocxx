@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{conversion::ConvertError, types::TypeName};
+use crate::{conversion::ConvertError, types::QualifiedName};
 use quote::ToTokens;
 use syn::{Token, Type};
 
@@ -21,7 +21,7 @@ pub(crate) fn type_to_cpp(ty: &Type) -> Result<String, ConvertError> {
         Type::Path(typ) => {
             // If this is a std::unique_ptr we do need to pass
             // its argument through.
-            let root = TypeName::from_type_path(typ);
+            let root = QualifiedName::from_type_path(typ);
             let root = root.to_cpp_name();
             if root == "Pin" {
                 // Strip all Pins from type names when describing them in C++.

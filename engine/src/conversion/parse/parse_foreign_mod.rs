@@ -21,7 +21,7 @@ use crate::conversion::{
 use crate::{
     conversion::api::ApiDetail,
     conversion::ConvertError,
-    types::{Namespace, TypeName},
+    types::{Namespace, QualifiedName},
 };
 use std::collections::{HashMap, HashSet};
 use syn::{Block, Expr, ExprCall, ForeignItem, Ident, ImplItem, ItemImpl, Stmt, Type};
@@ -40,7 +40,7 @@ pub(crate) struct ParseForeignMod {
     // Evidence from 'impl' blocks about which of these items
     // may actually be methods (static or otherwise). Mapping from
     // function name to type name.
-    method_receivers: HashMap<Ident, TypeName>,
+    method_receivers: HashMap<Ident, QualifiedName>,
     ignored_apis: Vec<UnanalyzedApi>,
 }
 
@@ -59,7 +59,7 @@ impl ParseForeignMod {
     pub(crate) fn convert_foreign_mod_items(
         &mut self,
         foreign_mod_items: Vec<ForeignItem>,
-        virtual_this_type: Option<TypeName>,
+        virtual_this_type: Option<QualifiedName>,
     ) {
         let mut extra_apis = Vec::new();
         for i in foreign_mod_items {
@@ -73,7 +73,7 @@ impl ParseForeignMod {
     fn parse_foreign_item(
         &mut self,
         i: ForeignItem,
-        virtual_this_type: &Option<TypeName>,
+        virtual_this_type: &Option<QualifiedName>,
     ) -> Result<(), ConvertErrorWithContext> {
         match i {
             ForeignItem::Fn(item) => {
@@ -114,7 +114,7 @@ impl ParseForeignMod {
                 };
                 self.method_receivers.insert(
                     effective_fun_name,
-                    TypeName::new(&self.ns, &ty_id.to_string()),
+                    QualifiedName::new(&self.ns, ty_id.clone()),
                 );
             }
         }

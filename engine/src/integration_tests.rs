@@ -14,6 +14,7 @@
 
 use indoc::indoc;
 use log::info;
+use once_cell::sync::OnceCell;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use quote::ToTokens;
@@ -29,8 +30,9 @@ use test_env_log::test;
 
 const KEEP_TEMPDIRS: bool = false;
 
-lazy_static::lazy_static! {
-    static ref BUILDER: Mutex<LinkableTryBuilder> = Mutex::new(LinkableTryBuilder::new());
+fn get_builder() -> &'static Mutex<LinkableTryBuilder> {
+    static INSTANCE: OnceCell<Mutex<LinkableTryBuilder>> = OnceCell::new();
+    INSTANCE.get_or_init(|| Mutex::new(LinkableTryBuilder::new()))
 }
 
 /// TryBuild which maintains a directory of libraries to link.
@@ -287,7 +289,7 @@ fn do_run_test(
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
     // Step 8: use the trybuild crate to build the Rust file.
-    let r = BUILDER.lock().unwrap().build(
+    let r = get_builder().lock().unwrap().build(
         &target_dir,
         "autocxx-demo",
         &tdir.path(),

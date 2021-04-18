@@ -15,7 +15,7 @@
 mod function_wrapper_cpp;
 pub(crate) mod type_to_cpp;
 
-use crate::types::TypeName;
+use crate::types::QualifiedName;
 use itertools::Itertools;
 use std::collections::HashSet;
 use syn::Type;
@@ -35,8 +35,8 @@ use super::{
 pub(crate) enum AdditionalNeed {
     MakeStringConstructor,
     FunctionWrapper(Box<FunctionWrapper>),
-    CTypeTypedef(TypeName),
-    ConcreteTemplatedTypeTypedef(TypeName, Box<Type>),
+    CTypeTypedef(QualifiedName),
+    ConcreteTemplatedTypeTypedef(QualifiedName, Box<Type>),
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -275,12 +275,12 @@ impl CppCodeGenerator {
         Ok(())
     }
 
-    fn generate_ctype_typedef(&mut self, tn: &TypeName) {
+    fn generate_ctype_typedef(&mut self, tn: &QualifiedName) {
         let cpp_name = tn.to_cpp_name();
         self.generate_typedef(tn, cpp_name)
     }
 
-    fn generate_typedef(&mut self, tn: &TypeName, definition: String) {
+    fn generate_typedef(&mut self, tn: &QualifiedName, definition: String) {
         let our_name = tn.get_final_ident();
         self.additional_functions.push(AdditionalFunction {
             type_definition: format!("typedef {} {};", definition, our_name),
