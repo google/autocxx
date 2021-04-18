@@ -82,7 +82,7 @@ impl<'a> IntoIterator for &'a Namespace {
     }
 }
 
-/// Any time we store a type name, we should use this. Stores the type
+/// Any time we store a qualified name, we should use this. Stores the type
 /// and its namespace. Namespaces should be stored without any
 /// 'bindgen::root' prefix; that means a type not in any C++
 /// namespace should have an empty namespace segment list.
@@ -93,9 +93,9 @@ impl<'a> IntoIterator for &'a Namespace {
 /// from one to the other; `replace_type_path_without_arguments`
 /// does that.
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
-pub struct TypeName(Namespace, String);
+pub struct QualifiedName(Namespace, String);
 
-impl TypeName {
+impl QualifiedName {
     /// From a TypePath which starts with 'root'
     pub(crate) fn from_type_path(typ: &TypePath) -> Self {
         let mut seg_iter = typ.path.segments.iter().peekable();
@@ -194,7 +194,7 @@ impl TypeName {
     }
 }
 
-impl Display for TypeName {
+impl Display for QualifiedName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for seg in &self.0 {
             f.write_str(&seg)?;
@@ -206,13 +206,16 @@ impl Display for TypeName {
 
 #[cfg(test)]
 mod tests {
-    use super::TypeName;
+    use super::QualifiedName;
 
     #[test]
     fn test_ints() {
-        assert_eq!(TypeName::new_from_user_input("i8").to_cpp_name(), "int8_t");
         assert_eq!(
-            TypeName::new_from_user_input("u64").to_cpp_name(),
+            QualifiedName::new_from_user_input("i8").to_cpp_name(),
+            "int8_t"
+        );
+        assert_eq!(
+            QualifiedName::new_from_user_input("u64").to_cpp_name(),
             "uint64_t"
         );
     }

@@ -41,7 +41,7 @@ use crate::{
         parse::type_converter::TypeConverter,
         ConvertError,
     },
-    types::{make_ident, Namespace, TypeName},
+    types::{make_ident, Namespace, QualifiedName},
 };
 
 use self::{
@@ -61,7 +61,7 @@ pub(crate) enum MethodKind {
 
 pub(crate) enum FnKind {
     Function,
-    Method(TypeName, MethodKind),
+    Method(QualifiedName, MethodKind),
 }
 
 /// Strategy for ensuring that the final, callable, Rust name
@@ -93,9 +93,9 @@ pub(crate) struct FnAnalysisBody {
 pub(crate) struct ArgumentAnalysis {
     pub(crate) conversion: TypeConversionPolicy,
     pub(crate) name: Pat,
-    pub(crate) self_type: Option<TypeName>,
+    pub(crate) self_type: Option<QualifiedName>,
     was_reference: bool,
-    deps: HashSet<TypeName>,
+    deps: HashSet<QualifiedName>,
     is_virtual: bool,
     requires_unsafe: bool,
 }
@@ -104,7 +104,7 @@ struct ReturnTypeAnalysis {
     rt: ReturnType,
     conversion: Option<TypeConversionPolicy>,
     was_reference: bool,
-    deps: HashSet<TypeName>,
+    deps: HashSet<QualifiedName>,
 }
 
 pub(crate) struct FnAnalysis;
@@ -120,14 +120,14 @@ pub(crate) struct FnAnalyzer<'a> {
     extra_apis: Vec<UnanalyzedApi>,
     type_converter: &'a mut TypeConverter,
     bridge_name_tracker: BridgeNameTracker,
-    pod_safe_types: HashSet<TypeName>,
+    pod_safe_types: HashSet<QualifiedName>,
     type_config: &'a TypeConfig,
-    incomplete_types: HashSet<TypeName>,
+    incomplete_types: HashSet<QualifiedName>,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     generate_utilities: bool,
 }
 
-struct FnAnalysisResult(FnAnalysisBody, Ident, HashSet<TypeName>);
+struct FnAnalysisResult(FnAnalysisBody, Ident, HashSet<QualifiedName>);
 
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
@@ -161,7 +161,7 @@ impl<'a> FnAnalyzer<'a> {
             .any(|api| matches!(api.detail, ApiDetail::StringConstructor))
     }
 
-    fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<TypeName> {
+    fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
@@ -175,7 +175,7 @@ impl<'a> FnAnalyzer<'a> {
             .collect()
     }
 
-    fn build_pod_safe_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<TypeName> {
+    fn build_pod_safe_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
@@ -282,7 +282,7 @@ impl<'a> FnAnalyzer<'a> {
         ty: Box<Type>,
         ns: &Namespace,
         convert_ptrs_to_reference: bool,
-    ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError> {
+    ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool), ConvertError> {
         let annotated =
             self.type_converter
                 .convert_boxed_type(ty, ns, convert_ptrs_to_reference)?;
@@ -308,11 +308,11 @@ impl<'a> FnAnalyzer<'a> {
         self.rust_name_tracker.ok_to_use_rust_name(rust_name)
     }
 
-    fn is_on_allowlist(&self, type_name: &TypeName) -> bool {
+    fn is_on_allowlist(&self, type_name: &QualifiedName) -> bool {
         self.type_config.is_on_allowlist(&type_name.to_cpp_name())
     }
 
-    fn avoid_generating_type(&self, type_name: &TypeName) -> bool {
+    fn avoid_generating_type(&self, type_name: &QualifiedName) -> bool {
         self.type_config.is_on_blocklist(&type_name.to_cpp_name())
             || self.incomplete_types.contains(type_name)
     }
@@ -680,7 +680,7 @@ impl<'a> FnAnalyzer<'a> {
         arg: &FnArg,
         ns: &Namespace,
         fn_name: &str,
-        virtual_this: Option<TypeName>,
+        virtual_this: Option<QualifiedName>,
         reference_args: &HashSet<Ident>,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
@@ -697,7 +697,7 @@ impl<'a> FnAnalyzer<'a> {
                                 elem, mutability, ..
                             }) => match elem.as_ref() {
                                 Type::Path(typ) => {
-                                    let mut this_type = TypeName::from_type_path(typ);
+                                    let mut this_type = QualifiedName::from_type_path(typ);
                                     if this_type.is_cvoid() && pp.ident == "this" {
                                         is_virtual = true;
                                         this_type = virtual_this.ok_or_else(|| {
@@ -762,7 +762,7 @@ impl<'a> FnAnalyzer<'a> {
     fn argument_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
         match ty {
             Type::Path(p) => {
-                let tn = TypeName::from_type_path(p);
+                let tn = QualifiedName::from_type_path(p);
                 if self.pod_safe_types.contains(&tn) {
                     TypeConversionPolicy::new_unconverted(ty.clone())
                 } else if known_types().convertible_from_strs(&tn) && self.generate_utilities {
@@ -778,7 +778,7 @@ impl<'a> FnAnalyzer<'a> {
     fn return_type_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
         match ty {
             Type::Path(p) => {
-                let tn = TypeName::from_type_path(p);
+                let tn = QualifiedName::from_type_path(p);
                 if self.pod_safe_types.contains(&tn) {
                     TypeConversionPolicy::new_unconverted(ty.clone())
                 } else {
@@ -858,11 +858,11 @@ impl<'a> FnAnalyzer<'a> {
 }
 
 impl Api<FnAnalysis> {
-    pub(crate) fn typename_for_allowlist(&self) -> TypeName {
+    pub(crate) fn typename_for_allowlist(&self) -> QualifiedName {
         match &self.detail {
             ApiDetail::Function { fun: _, analysis } => match analysis.kind {
                 FnKind::Method(ref self_ty, _) => self_ty.clone(),
-                FnKind::Function => TypeName::new(&self.ns, &analysis.rust_name),
+                FnKind::Function => QualifiedName::new(&self.ns, &analysis.rust_name),
             },
             _ => self.typename(),
         }

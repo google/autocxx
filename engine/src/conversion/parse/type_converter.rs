@@ -20,7 +20,7 @@ use crate::{
         ConvertError,
     },
     known_types::known_types,
-    types::{make_ident, Namespace, TypeName},
+    types::{make_ident, Namespace, QualifiedName},
 };
 use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
@@ -33,7 +33,7 @@ use syn::{
 /// and optionally any extra APIs we need in order to use this type.
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
-    pub(crate) types_encountered: HashSet<TypeName>,
+    pub(crate) types_encountered: HashSet<QualifiedName>,
     pub(crate) extra_apis: Vec<UnanalyzedApi>,
     pub(crate) requires_unsafe: bool,
 }
@@ -41,7 +41,7 @@ pub(crate) struct Annotated<T> {
 impl<T> Annotated<T> {
     fn new(
         ty: T,
-        types_encountered: HashSet<TypeName>,
+        types_encountered: HashSet<QualifiedName>,
         extra_apis: Vec<UnanalyzedApi>,
         requires_unsafe: bool,
     ) -> Self {
@@ -78,9 +78,9 @@ impl<T> Annotated<T> {
 /// easily be moved into it, which would enable us to
 /// distribute this logic elsewhere.
 pub(crate) struct TypeConverter {
-    types_found: Vec<TypeName>,
-    typedefs: HashMap<TypeName, Type>,
-    concrete_templates: HashMap<String, TypeName>,
+    types_found: Vec<QualifiedName>,
+    typedefs: HashMap<QualifiedName, Type>,
+    concrete_templates: HashMap<String, QualifiedName>,
 }
 
 impl TypeConverter {
@@ -92,11 +92,11 @@ impl TypeConverter {
         }
     }
 
-    pub(crate) fn push(&mut self, ty: TypeName) {
+    pub(crate) fn push(&mut self, ty: QualifiedName) {
         self.types_found.push(ty);
     }
 
-    pub(crate) fn insert_typedef(&mut self, id: TypeName, target: Type) {
+    pub(crate) fn insert_typedef(&mut self, id: QualifiedName, target: Type) {
         self.typedefs.insert(id, target);
     }
 
@@ -177,7 +177,7 @@ impl TypeConverter {
     ) -> Result<Annotated<Type>, ConvertError> {
         // First, qualify any unqualified paths.
         if typ.path.segments.iter().next().unwrap().ident != "root" {
-            let ty = TypeName::from_type_path(&typ);
+            let ty = QualifiedName::from_type_path(&typ);
             // If the type looks like it is unqualified, check we know it
             // already, and if not, qualify it according to the current
             // namespace. This is a bit of a shortcut compared to having a full
@@ -200,7 +200,7 @@ impl TypeConverter {
             }
         }
 
-        let original_tn = TypeName::from_type_path(&typ);
+        let original_tn = QualifiedName::from_type_path(&typ);
         let mut deps = HashSet::new();
 
         // Now convert this type itself.
@@ -209,7 +209,7 @@ impl TypeConverter {
         let (typ, tn) = match self.resolve_typedef(&original_tn) {
             None => (typ, original_tn),
             Some(Type::Path(resolved_tp)) => {
-                let resolved_tn = TypeName::from_type_path(&resolved_tp);
+                let resolved_tn = QualifiedName::from_type_path(&resolved_tp);
                 deps.insert(resolved_tn.clone());
                 (resolved_tp.clone(), resolved_tn)
             }
@@ -304,10 +304,10 @@ impl TypeConverter {
         ))
     }
 
-    fn resolve_typedef<'b>(&'b self, tn: &TypeName) -> Option<&'b Type> {
+    fn resolve_typedef<'b>(&'b self, tn: &QualifiedName) -> Option<&'b Type> {
         self.typedefs.get(&tn).map(|resolution| match resolution {
             Type::Path(typ) => {
-                let tn = TypeName::from_type_path(typ);
+                let tn = QualifiedName::from_type_path(typ);
                 self.resolve_typedef(&tn).unwrap_or(resolution)
             }
             _ => resolution,
@@ -335,7 +335,7 @@ impl TypeConverter {
         }))
     }
 
-    fn add_concrete_type(&self, tyname: &TypeName, rs_definition: &Type) -> UnanalyzedApi {
+    fn add_concrete_type(&self, tyname: &QualifiedName, rs_definition: &Type) -> UnanalyzedApi {
         let final_ident = make_ident(tyname.get_final_ident());
         let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(make_ident).collect();
         fulltypath.push(final_ident.clone());
@@ -361,7 +361,7 @@ impl TypeConverter {
     fn get_templated_typename(
         &mut self,
         rs_definition: &Type,
-    ) -> Result<(TypeName, Option<UnanalyzedApi>), ConvertError> {
+    ) -> Result<(QualifiedName, Option<UnanalyzedApi>), ConvertError> {
         let count = self.concrete_templates.len();
         // We just use this as a hash key, essentially.
         let cpp_definition = type_to_cpp(rs_definition)?;
@@ -369,7 +369,8 @@ impl TypeConverter {
         match e {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
-                let tn = TypeName::new(&Namespace::new(), &format!("AutocxxConcrete{}", count));
+                let tn =
+                    QualifiedName::new(&Namespace::new(), &format!("AutocxxConcrete{}", count));
                 self.concrete_templates
                     .insert(cpp_definition.clone(), tn.clone());
                 let api = self.add_concrete_type(&tn, rs_definition);

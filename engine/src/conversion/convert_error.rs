@@ -16,7 +16,7 @@ use std::fmt::Display;
 
 use syn::Ident;
 
-use crate::types::{Namespace, TypeName};
+use crate::types::{Namespace, QualifiedName};
 
 #[derive(Debug, Clone)]
 pub enum ConvertError {
@@ -27,18 +27,18 @@ pub enum ConvertError {
     UnexpectedItemInMod,
     ComplexTypedefTarget(String),
     UnexpectedThisType(Namespace, String),
-    UnsupportedBuiltInType(TypeName),
+    UnsupportedBuiltInType(QualifiedName),
     VirtualThisType(Namespace, String),
-    ConflictingTemplatedArgsWithTypedef(TypeName),
+    ConflictingTemplatedArgsWithTypedef(QualifiedName),
     UnacceptableParam(String),
     NotOneInputReference(String),
     UnsupportedType(String),
     UnknownType(String),
     OpaqueTypeFound,
     StaticData(String),
-    InfinitelyRecursiveTypedef(TypeName),
+    InfinitelyRecursiveTypedef(QualifiedName),
     UnexpectedUseStatement(Option<Ident>),
-    TemplatedTypeContainingNonPathArg(TypeName),
+    TemplatedTypeContainingNonPathArg(QualifiedName),
     InvalidPointee,
     DidNotGenerateAnything(String),
 }

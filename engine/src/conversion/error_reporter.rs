@@ -17,7 +17,7 @@ use super::{
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
-use crate::types::{Namespace, TypeName};
+use crate::types::{Namespace, QualifiedName};
 use std::collections::HashSet;
 
 /// Run some code which may generate a ConvertError.
@@ -42,7 +42,7 @@ where
 /// Run some code which generates an API. Add that API, or if
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
-pub(crate) fn add_api_or_report_error<F, A>(tn: TypeName, apis: &mut Vec<Api<A>>, fun: F)
+pub(crate) fn add_api_or_report_error<F, A>(tn: QualifiedName, apis: &mut Vec<Api<A>>, fun: F)
 where
     F: FnOnce() -> Result<Option<Api<A>>, ConvertErrorWithContext>,
     A: ApiAnalysis,

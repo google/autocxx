@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::{Namespace, TypeName};
+use crate::types::{Namespace, QualifiedName};
 use std::collections::HashSet;
 use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse};
 
@@ -56,8 +56,8 @@ pub(crate) struct ImplBlockDetails {
 #[derive(Clone)]
 pub(crate) struct FuncToConvert {
     pub(crate) item: ForeignItemFn,
-    pub(crate) virtual_this_type: Option<TypeName>,
-    pub(crate) self_ty: Option<TypeName>,
+    pub(crate) virtual_this_type: Option<QualifiedName>,
+    pub(crate) self_ty: Option<QualifiedName>,
 }
 
 /// Layers of analysis which may be applied to decorate each API.
@@ -110,7 +110,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
         analysis: T::TypeAnalysis,
     },
     /// A variable-length C integer type (e.g. int, unsigned long).
-    CType { typename: TypeName },
+    CType { typename: QualifiedName },
     /// A typedef which doesn't point to any actual useful kind of
     /// type, but instead to something which `bindgen` couldn't figure out
     /// and has therefore itself made opaque and mysterious.
@@ -142,7 +142,7 @@ pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) id: Ident,
     /// Any dependencies of this API, such that during garbage collection
     /// we can ensure to keep them.
-    pub(crate) deps: HashSet<TypeName>,
+    pub(crate) deps: HashSet<QualifiedName>,
     /// Details of this specific API kind.
     pub(crate) detail: ApiDetail<T>,
 }
@@ -150,8 +150,8 @@ pub(crate) struct Api<T: ApiAnalysis> {
 pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 
 impl<T: ApiAnalysis> Api<T> {
-    pub(crate) fn typename(&self) -> TypeName {
-        TypeName::new(&self.ns, &self.id.to_string())
+    pub(crate) fn typename(&self) -> QualifiedName {
+        QualifiedName::new(&self.ns, &self.id.to_string())
     }
 }
 

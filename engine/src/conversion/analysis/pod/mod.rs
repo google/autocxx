@@ -27,7 +27,7 @@ use crate::{
         parse::type_converter::TypeConverter,
         ConvertError,
     },
-    types::{Namespace, TypeName},
+    types::{Namespace, QualifiedName},
 };
 
 pub(crate) struct PodAnalysis;
@@ -137,7 +137,7 @@ fn get_struct_field_types(
     type_converter: &mut TypeConverter,
     ns: &Namespace,
     s: &ItemStruct,
-    deps: &mut HashSet<TypeName>,
+    deps: &mut HashSet<QualifiedName>,
     extra_apis: &mut Vec<UnanalyzedApi>,
 ) -> Result<(), ConvertError> {
     for f in &s.fields {

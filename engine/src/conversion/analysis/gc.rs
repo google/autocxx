@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::TypeConfig;
 
-use crate::{conversion::api::Api, types::TypeName};
+use crate::{conversion::api::Api, types::QualifiedName};
 
 use super::fun::FnAnalysis;
 
@@ -49,7 +49,7 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
         })
         .map(Api::typename)
         .collect();
-    let mut by_typename: HashMap<TypeName, Vec<Api<FnAnalysis>>> = HashMap::new();
+    let mut by_typename: HashMap<QualifiedName, Vec<Api<FnAnalysis>>> = HashMap::new();
     for api in apis.drain(..) {
         let tn = api.typename();
         by_typename.entry(tn).or_default().push(api);
