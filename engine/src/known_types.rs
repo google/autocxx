@@ -102,6 +102,10 @@ impl TypeDetails {
             #(#segs)::*
         }
     }
+
+    fn to_typename(&self) -> TypeName {
+        TypeName::new_from_user_input(&self.rs_name)
+    }
 }
 
 /// Database of known types.
@@ -233,8 +237,7 @@ impl TypeDatabase {
 fn create_type_database() -> TypeDatabase {
     let mut by_rs_name = HashMap::new();
 
-    let mut do_insert =
-        |td: TypeDetails| by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+    let mut do_insert = |td: TypeDetails| by_rs_name.insert(td.to_typename(), td);
 
     do_insert(TypeDetails::new(
         "cxx::UniquePtr",
@@ -318,14 +321,14 @@ fn create_type_database() -> TypeDatabase {
             Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_{}", concatenated_name)),
         );
-        by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+        by_rs_name.insert(td.to_typename(), td);
         let td = TypeDetails::new(
             format!("autocxx::c_u{}", concatenated_name),
             format!("unsigned {}", cname),
             Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_u{}", concatenated_name)),
         );
-        by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+        by_rs_name.insert(td.to_typename(), td);
     };
 
     insert_ctype("long");
@@ -334,13 +337,13 @@ fn create_type_database() -> TypeDatabase {
     insert_ctype("long long");
 
     let td = TypeDetails::new("f32", "float", Behavior::CByValue, None);
-    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+    by_rs_name.insert(td.to_typename(), td);
 
     let td = TypeDetails::new("f64", "double", Behavior::CByValue, None);
-    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+    by_rs_name.insert(td.to_typename(), td);
 
     let td = TypeDetails::new("std::os::raw::c_char", "char", Behavior::CByValue, None);
-    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+    by_rs_name.insert(td.to_typename(), td);
 
     let td = TypeDetails::new(
         "autocxx::c_void",
@@ -348,11 +351,11 @@ fn create_type_database() -> TypeDatabase {
         Behavior::CVoid,
         Some("std::os::raw::c_void".into()),
     );
-    by_rs_name.insert(TypeName::new_from_user_input(&td.rs_name), td);
+    by_rs_name.insert(td.to_typename(), td);
 
     let mut by_cppname = HashMap::new();
     for td in by_rs_name.values() {
-        let rs_name = TypeName::new_from_user_input(&td.rs_name);
+        let rs_name = td.to_typename();
         if let Some(extra_non_canonical_name) = &td.extra_non_canonical_name {
             by_cppname.insert(
                 TypeName::new_from_user_input(extra_non_canonical_name),
