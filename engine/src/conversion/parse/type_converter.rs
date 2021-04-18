@@ -19,7 +19,7 @@ use crate::{
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
-    known_types::KNOWN_TYPES,
+    known_types::known_types,
     types::{make_ident, Namespace, TypeName},
 };
 use quote::ToTokens;
@@ -125,7 +125,7 @@ impl TypeConverter {
                     // doesn't simply get renamed to a different type _identifier_.
                     // This plain type-by-value (as far as bindgen is concerned)
                     // is actually a &str.
-                    if KNOWN_TYPES.should_dereference_in_cpp(newpp) {
+                    if known_types().should_dereference_in_cpp(newpp) {
                         Annotated::new(
                             Type::Reference(parse_quote! {
                                 &str
@@ -182,7 +182,7 @@ impl TypeConverter {
             // already, and if not, qualify it according to the current
             // namespace. This is a bit of a shortcut compared to having a full
             // resolution pass which can search all known namespaces.
-            if !KNOWN_TYPES.is_known_type(&ty) {
+            if !known_types().is_known_type(&ty) {
                 let num_segments = typ.path.segments.len();
                 if num_segments > 1 {
                     return Err(ConvertError::UnsupportedBuiltInType(ty));
@@ -224,7 +224,7 @@ impl TypeConverter {
         };
 
         // Now let's see if it's a known type.
-        let mut typ = match KNOWN_TYPES.known_type_substitute_path(&typ) {
+        let mut typ = match known_types().known_type_substitute_path(&typ) {
             Some(mut substitute_type) => {
                 if let Some(last_seg_args) =
                     typ.path.segments.into_iter().last().map(|ps| ps.arguments)
@@ -241,7 +241,7 @@ impl TypeConverter {
 
         // Finally let's see if it's generic.
         if let Some(last_seg) = Self::get_generic_args(&mut typ) {
-            if KNOWN_TYPES.is_cxx_acceptable_generic(&tn) {
+            if known_types().is_cxx_acceptable_generic(&tn) {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
                 crate::known_types::confirm_inner_type_is_acceptable_generic_payload(

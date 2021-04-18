@@ -22,7 +22,7 @@ use crate::{
         convert_error::ConvertErrorWithContext, convert_error::ErrorContext,
         error_reporter::add_api_or_report_error,
     },
-    known_types::KNOWN_TYPES,
+    known_types::known_types,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -187,7 +187,7 @@ impl<'a> FnAnalyzer<'a> {
                 _ => None,
             })
             .chain(
-                KNOWN_TYPES
+                known_types()
                     .get_pod_safe_types()
                     .filter_map(
                         |(tn, is_pod_safe)| {
@@ -765,7 +765,7 @@ impl<'a> FnAnalyzer<'a> {
                 let tn = TypeName::from_type_path(p);
                 if self.pod_safe_types.contains(&tn) {
                     TypeConversionPolicy::new_unconverted(ty.clone())
-                } else if KNOWN_TYPES.convertible_from_strs(&tn) && self.generate_utilities {
+                } else if known_types().convertible_from_strs(&tn) && self.generate_utilities {
                     TypeConversionPolicy::new_from_str(ty.clone())
                 } else {
                     TypeConversionPolicy::new_from_unique_ptr(ty.clone())

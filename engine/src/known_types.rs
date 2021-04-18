@@ -17,7 +17,7 @@ use crate::{
     types::{make_ident, TypeName},
 };
 use indoc::indoc;
-use lazy_static::lazy_static;
+use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use syn::{parse_quote, GenericArgument, PathArguments, Type, TypePath, TypePtr};
 
@@ -110,9 +110,10 @@ pub(crate) struct TypeDatabase {
     canonical_names: HashMap<TypeName, TypeName>,
 }
 
-lazy_static! {
-    /// Database of known types.
-    pub(crate) static ref KNOWN_TYPES: TypeDatabase = create_type_database();
+/// Returns a database of known types.
+pub(crate) fn known_types() -> &'static TypeDatabase {
+    static KNOWN_TYPES: OnceCell<TypeDatabase> = OnceCell::new();
+    KNOWN_TYPES.get_or_init(create_type_database)
 }
 
 impl TypeDatabase {

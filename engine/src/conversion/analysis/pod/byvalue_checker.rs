@@ -21,7 +21,7 @@ use crate::{
         api::{ApiDetail, UnanalyzedApi},
         ConvertError,
     },
-    known_types::KNOWN_TYPES,
+    known_types::known_types,
 };
 use autocxx_parser::TypeConfig;
 use std::collections::HashMap;
@@ -64,7 +64,7 @@ pub struct ByValueChecker {
 impl ByValueChecker {
     pub fn new() -> Self {
         let mut results = HashMap::new();
-        for (tn, by_value_safe) in KNOWN_TYPES.get_pod_safe_types() {
+        for (tn, by_value_safe) in known_types().get_pod_safe_types() {
             let safety = if by_value_safe {
                 PodState::IsPod
             } else {
@@ -95,7 +95,7 @@ impl ByValueChecker {
                     let name = api.typename();
                     let typedef_type = match payload {
                         TypedefKind::Type(type_item) => match type_item.ty.as_ref() {
-                            Type::Path(typ) => KNOWN_TYPES.known_type_substitute_path(&typ),
+                            Type::Path(typ) => known_types().known_type_substitute_path(&typ),
                             _ => None,
                         },
                         TypedefKind::Use(_) => None,

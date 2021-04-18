@@ -17,7 +17,7 @@ use std::iter::Peekable;
 use std::{fmt::Display, sync::Arc};
 use syn::{parse_quote, Ident, PathSegment, TypePath};
 
-use crate::known_types::KNOWN_TYPES;
+use crate::known_types::known_types;
 
 pub(crate) fn make_ident<S: AsRef<str>>(id: S) -> Ident {
     Ident::new(id.as_ref(), Span::call_site())
@@ -154,7 +154,7 @@ impl TypeName {
 
     /// Output the fully-qualified C++ name of this type.
     pub(crate) fn to_cpp_name(&self) -> String {
-        let special_cpp_name = KNOWN_TYPES.special_cpp_name(&self);
+        let special_cpp_name = known_types().special_cpp_name(&self);
         match special_cpp_name {
             Some(name) => name,
             None => {
@@ -170,7 +170,7 @@ impl TypeName {
     }
 
     pub(crate) fn to_type_path(&self) -> TypePath {
-        if let Some(known_type_path) = KNOWN_TYPES.known_type_type_path(self) {
+        if let Some(known_type_path) = known_types().known_type_type_path(self) {
             known_type_path
         } else {
             let root = "root".to_string();
