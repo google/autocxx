@@ -109,6 +109,7 @@ impl TypeDetails {
 }
 
 /// Database of known types.
+#[derive(Default)]
 pub(crate) struct TypeDatabase {
     by_rs_name: HashMap<TypeName, TypeDetails>,
     canonical_names: HashMap<TypeName, TypeName>,
@@ -232,56 +233,66 @@ impl TypeDatabase {
             .map(|x| matches!(x.behavior, Behavior::CxxString))
             .unwrap_or(false)
     }
+
+    fn insert(&mut self, td: TypeDetails) {
+        let rs_name = td.to_typename();
+        if let Some(extra_non_canonical_name) = &td.extra_non_canonical_name {
+            self.canonical_names.insert(
+                TypeName::new_from_user_input(extra_non_canonical_name),
+                rs_name.clone(),
+            );
+        }
+        self.canonical_names
+            .insert(TypeName::new_from_user_input(&td.cpp_name), rs_name.clone());
+        self.by_rs_name.insert(rs_name, td);
+    }
 }
 
 fn create_type_database() -> TypeDatabase {
-    let mut by_rs_name = HashMap::new();
-
-    let mut do_insert = |td: TypeDetails| by_rs_name.insert(td.to_typename(), td);
-
-    do_insert(TypeDetails::new(
+    let mut db = TypeDatabase::default();
+    db.insert(TypeDetails::new(
         "cxx::UniquePtr",
         "std::unique_ptr",
         Behavior::CxxContainerByValueSafe,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "cxx::CxxVector",
         "std::vector",
         Behavior::CxxContainerNotByValueSafe,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "cxx::SharedPtr",
         "std::shared_ptr",
         Behavior::CxxContainerByValueSafe,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "cxx::CxxString",
         "std::string",
         Behavior::CxxString,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "str",
         "rust::Str",
         Behavior::RustStr,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "String",
         "rust::String",
         Behavior::RustString,
         None,
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "i8",
         "int8_t",
         Behavior::CByValue,
         Some("std::os::raw::c_schar".into()),
     ));
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "u8",
         "uint8_t",
         Behavior::CByValue,
@@ -297,16 +308,16 @@ fn create_type_database() -> TypeDatabase {
         })
         .flatten()
     {
-        do_insert(TypeDetails::new(
+        db.insert(TypeDetails::new(
             rust_type,
             cpp_type,
             Behavior::CByValue,
             None,
         ));
     }
-    do_insert(TypeDetails::new("bool", "bool", Behavior::CByValue, None));
+    db.insert(TypeDetails::new("bool", "bool", Behavior::CByValue, None));
 
-    do_insert(TypeDetails::new(
+    db.insert(TypeDetails::new(
         "std::pin::Pin",
         "Pin",
         Behavior::RustByValue, // because this is actually Pin<&something>
@@ -315,20 +326,18 @@ fn create_type_database() -> TypeDatabase {
 
     let mut insert_ctype = |cname: &str| {
         let concatenated_name = cname.replace(" ", "");
-        let td = TypeDetails::new(
+        db.insert(TypeDetails::new(
             format!("autocxx::c_{}", concatenated_name),
             cname,
             Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_{}", concatenated_name)),
-        );
-        by_rs_name.insert(td.to_typename(), td);
-        let td = TypeDetails::new(
+        ));
+        db.insert(TypeDetails::new(
             format!("autocxx::c_u{}", concatenated_name),
             format!("unsigned {}", cname),
             Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_u{}", concatenated_name)),
-        );
-        by_rs_name.insert(td.to_typename(), td);
+        ));
     };
 
     insert_ctype("long");
@@ -336,39 +345,21 @@ fn create_type_database() -> TypeDatabase {
     insert_ctype("short");
     insert_ctype("long long");
 
-    let td = TypeDetails::new("f32", "float", Behavior::CByValue, None);
-    by_rs_name.insert(td.to_typename(), td);
-
-    let td = TypeDetails::new("f64", "double", Behavior::CByValue, None);
-    by_rs_name.insert(td.to_typename(), td);
-
-    let td = TypeDetails::new("std::os::raw::c_char", "char", Behavior::CByValue, None);
-    by_rs_name.insert(td.to_typename(), td);
-
-    let td = TypeDetails::new(
+    db.insert(TypeDetails::new("f32", "float", Behavior::CByValue, None));
+    db.insert(TypeDetails::new("f64", "double", Behavior::CByValue, None));
+    db.insert(TypeDetails::new(
+        "std::os::raw::c_char",
+        "char",
+        Behavior::CByValue,
+        None,
+    ));
+    db.insert(TypeDetails::new(
         "autocxx::c_void",
         "void",
         Behavior::CVoid,
         Some("std::os::raw::c_void".into()),
-    );
-    by_rs_name.insert(td.to_typename(), td);
-
-    let mut by_cppname = HashMap::new();
-    for td in by_rs_name.values() {
-        let rs_name = td.to_typename();
-        if let Some(extra_non_canonical_name) = &td.extra_non_canonical_name {
-            by_cppname.insert(
-                TypeName::new_from_user_input(extra_non_canonical_name),
-                rs_name.clone(),
-            );
-        }
-        by_cppname.insert(TypeName::new_from_user_input(&td.cpp_name), rs_name);
-    }
-
-    TypeDatabase {
-        by_rs_name,
-        canonical_names: by_cppname,
-    }
+    ));
+    db
 }
 
 /// This is worked out basically using trial and error.
