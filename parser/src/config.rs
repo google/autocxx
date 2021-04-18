@@ -75,15 +75,15 @@ impl Parse for IncludeCppConfig {
         let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
 
         while !input.is_empty() {
-            if input.parse::<Option<syn::Token![#]>>()?.is_some() {
-                let ident: syn::Ident = input.parse()?;
+            let has_hexathorpe = input.parse::<Option<syn::Token![#]>>()?.is_some();
+            let ident: syn::Ident = input.parse()?;
+            if has_hexathorpe {
                 if ident != "include" {
                     return Err(syn::Error::new(ident.span(), "expected include"));
                 }
                 let hdr: syn::LitStr = input.parse()?;
                 inclusions.push(hdr.value());
             } else {
-                let ident: syn::Ident = input.parse()?;
                 input.parse::<Option<syn::Token![!]>>()?;
                 if ident == "generate" || ident == "generate_pod" {
                     let args;
