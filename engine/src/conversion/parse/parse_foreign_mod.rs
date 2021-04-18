@@ -114,7 +114,7 @@ impl ParseForeignMod {
                 };
                 self.method_receivers.insert(
                     effective_fun_name,
-                    QualifiedName::new(&self.ns, &ty_id.to_string()),
+                    QualifiedName::new(&self.ns, ty_id.clone()),
                 );
             }
         }

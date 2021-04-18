@@ -125,7 +125,7 @@ impl<'a> ParseBindgen<'a> {
                 if s.ident.to_string().ends_with("__bindgen_vtable") {
                     return Ok(());
                 }
-                let tyname = QualifiedName::new(ns, &s.ident.to_string());
+                let tyname = QualifiedName::new(ns, s.ident.clone());
                 let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
@@ -139,7 +139,7 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Enum(e) => {
-                let tyname = QualifiedName::new(ns, &e.ident.to_string());
+                let tyname = QualifiedName::new(ns, e.ident.clone());
                 self.parse_type(tyname, false, HashSet::new(), Some(Item::Enum(e)));
                 Ok(())
             }
@@ -175,7 +175,7 @@ impl<'a> ParseBindgen<'a> {
                         UseTree::Rename(urn) => {
                             let old_id = &urn.ident;
                             let new_id = &urn.rename;
-                            let new_tyname = QualifiedName::new(ns, &new_id.to_string());
+                            let new_tyname = QualifiedName::new(ns, new_id.clone());
                             if segs.remove(0) != "self" {
                                 panic!("Path didn't start with self");
                             }
@@ -236,7 +236,7 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Type(mut ity) => {
-                let tyname = QualifiedName::new(ns, &ity.ident.to_string());
+                let tyname = QualifiedName::new(ns, ity.ident.clone());
                 let type_conversion_results =
                     self.results.type_converter.convert_type(*ity.ty, ns, false);
                 match type_conversion_results {
@@ -246,7 +246,7 @@ impl<'a> ParseBindgen<'a> {
                     }
                     Err(err) => Err(ConvertErrorWithContext(
                         err,
-                        Some(ErrorContext::Item(ity.ident)),
+                        Some(ErrorContext::Item(ity.ident.clone())),
                     )),
                     Ok(Annotated {
                         ty: syn::Type::Path(ref typ),

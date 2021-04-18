@@ -862,7 +862,7 @@ impl Api<FnAnalysis> {
         match &self.detail {
             ApiDetail::Function { fun: _, analysis } => match analysis.kind {
                 FnKind::Method(ref self_ty, _) => self_ty.clone(),
-                FnKind::Function => QualifiedName::new(&self.ns, &analysis.rust_name),
+                FnKind::Function => QualifiedName::new(&self.ns, make_ident(&analysis.rust_name)),
             },
             _ => self.typename(),
         }

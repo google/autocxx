@@ -124,7 +124,7 @@ impl QualifiedName {
     }
 
     /// Create from a type encountered in the code.
-    pub(crate) fn new(ns: &Namespace, id: &str) -> Self {
+    pub(crate) fn new(ns: &Namespace, id: Ident) -> Self {
         Self(ns.clone(), id.to_string())
     }
 

@@ -144,7 +144,7 @@ impl ByValueChecker {
 
     fn ingest_struct(&mut self, def: &ItemStruct, ns: &Namespace) {
         // For this struct, work out whether it _could_ be safe as a POD.
-        let tyname = QualifiedName::new(ns, &def.ident.to_string());
+        let tyname = QualifiedName::new(ns, def.ident.clone());
         let mut field_safety_problem = PodState::SafeToBePod;
         let fieldlist = Self::get_field_types(def);
         for ty_id in &fieldlist {

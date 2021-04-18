@@ -151,7 +151,7 @@ pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 
 impl<T: ApiAnalysis> Api<T> {
     pub(crate) fn typename(&self) -> QualifiedName {
-        QualifiedName::new(&self.ns, &self.id.to_string())
+        QualifiedName::new(&self.ns, self.id.clone())
     }
 }
 

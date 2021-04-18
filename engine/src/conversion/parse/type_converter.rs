@@ -369,8 +369,10 @@ impl TypeConverter {
         match e {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
-                let tn =
-                    QualifiedName::new(&Namespace::new(), &format!("AutocxxConcrete{}", count));
+                let tn = QualifiedName::new(
+                    &Namespace::new(),
+                    make_ident(&format!("AutocxxConcrete{}", count)),
+                );
                 self.concrete_templates
                     .insert(cpp_definition.clone(), tn.clone());
                 let api = self.add_concrete_type(&tn, rs_definition);
