@@ -18,5 +18,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --all --verbose
+    - name: Build docs
+      run: RUSTFLAGS="-D warnings" cargo doc --all --verbose --no-deps
     - name: Run tests
       run: cargo test --all --verbose
