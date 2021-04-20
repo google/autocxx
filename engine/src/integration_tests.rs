@@ -1560,7 +1560,7 @@ fn test_method_pass_nonpod_by_value() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
-    run_test(cxx, hdr, rs, &["Anna", "give_anna", "get_bob"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
 }
 
 #[test]
@@ -1599,7 +1599,7 @@ fn test_method_pass_nonpod_by_value_with_up() {
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a, a2), 12);
     };
-    run_test(cxx, hdr, rs, &["Anna", "give_anna", "get_bob"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
 }
 
 #[test]
@@ -1736,7 +1736,7 @@ fn test_method_return_nonpod_by_value() {
         let a = b.get_anna();
         assert!(!a.is_null());
     };
-    run_test(cxx, hdr, rs, &["Anna", "get_anna"], &["Bob"]);
+    run_test(cxx, hdr, rs, &["Anna"], &["Bob"]);
 }
 
 #[test]
@@ -1810,13 +1810,7 @@ fn test_method_pass_string_by_value() {
         let c = b.measure_string(a);
         assert_eq!(c, 5);
     };
-    run_test(
-        cxx,
-        hdr,
-        rs,
-        &["measure_string", "Bob", "get_msg"],
-        &["Bob"],
-    );
+    run_test(cxx, hdr, rs, &["Bob", "get_msg"], &["Bob"]);
 }
 
 #[test]
@@ -1841,7 +1835,7 @@ fn test_method_return_string_by_value() {
         let a = b.get_msg();
         assert!(a.as_ref().unwrap() == "hello");
     };
-    run_test(cxx, hdr, rs, &["get_msg"], &["Bob"]);
+    run_test(cxx, hdr, rs, &[], &["Bob"]);
 }
 
 #[test]
@@ -3630,6 +3624,32 @@ fn test_reserved_name() {
         assert_eq!(ffi::async_(34), 34);
     };
     run_test("", hdr, rs, &["async_"], &[]);
+}
+
+#[test]
+fn test_nested_type() {
+    // For the time being, we merely test that a nested type doesn't conflict with a top-level type
+    // of the same name. We can't create an instance of `A::B` yet because autocxx gets confused
+    // when we try to generate it. Bindgen imports the type as `A_B`, autocxx inserts this
+    // type name into generated C++ code, and the C++ compiler then fails to recognize the type.
+    let hdr = indoc! {"
+        struct A {
+            A() {}
+            struct B {
+                B() {}
+            };
+        };
+        struct B {
+            B() {}
+            void method_on_top_level_type() const {}
+        };
+    "};
+    let rs = quote! {
+        let _ = ffi::A::make_unique();
+        let b = ffi::B::make_unique();
+        b.as_ref().unwrap().method_on_top_level_type();
+    };
+    run_test("", hdr, rs, &["A", "B"], &[]);
 }
 
 #[test]
