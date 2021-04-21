@@ -4624,6 +4624,22 @@ fn test_closure() {
     run_test("", hdr, rs, &["get_a"], &[]);
 }
 
+#[test]
+fn test_blocklist_not_overly_broad() {
+    // This is a regression test. We used to block anything that starts with "rust" or "std",
+    // not just items in the "rust" and "std" namespaces. We therefore test that functions starting
+    // with "rust" or "std" get imported.
+    let hdr = indoc! {"
+    inline double rust_func() { }
+    inline double std_func() { }
+    "};
+    let rs = quote! {
+        ffi::rust_func();
+        ffi::std_func();
+    };
+    run_test("", hdr, rs, &["rust_func", "std_func"], &[]);
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Out param pointers
