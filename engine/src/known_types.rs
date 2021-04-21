@@ -368,15 +368,40 @@ fn create_type_database() -> TypeDatabase {
 /// Excluding std* and rust* is obvious, but the other items...
 /// in theory bindgen ought to be smart enough to work out that
 /// they're not used and therefore not generate code for them.
-/// But it doesm unless we blocklist them. This is obviously
+/// But it doesn't unless we blocklist them. This is obviously
 /// a bit sensitive to the particular STL in use so one day
 /// it would be good to dig into bindgen's behavior here - TODO.
-const BINDGEN_BLOCKLIST: &[&str] = &["std::.*", "__gnu.*", ".*mbstate_t.*", "rust::.*"];
+///
+/// We import types from `std::` as opaque types instead of
+/// blocklisting them entirely because
+/// *  It's what bindgen recommends:
+///    https://rust-lang.github.io/rust-bindgen/cpp.html
+/// *  We still pass APIs that use these types to cxx, and if we
+///    blocklisted these types entirely, cxx would complain that
+///    it doesn't know about them.
+const BINDGEN_BLOCKLIST: &[&str] = &["__gnu.*", ".*mbstate_t.*", "rust::.*"];
+const BINDGEN_FUNCTION_BLOCKLIST: &[&str] = &["std::.*"];
+const BINDGEN_OPAQUE_TYPES: &[&str] = &["std::.*"];
 
-/// Get the list of types to give to bindgen to ask it _not_ to
-/// generate code for.
-pub(crate) fn get_initial_blocklist() -> Vec<String> {
+/// Get a list of regexes that match items for which bindgen should
+/// _not_ generate code.
+pub(crate) fn get_bindgen_blocklist() -> Vec<String> {
     BINDGEN_BLOCKLIST.iter().map(|s| s.to_string()).collect()
+}
+
+/// Get a list of regexes that match functions for which bindgen should
+/// _not_ generate code.
+pub(crate) fn get_bindgen_function_blocklist() -> Vec<String> {
+    BINDGEN_FUNCTION_BLOCKLIST
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+/// Get a list of regexes that match type which bindgen should import
+/// as opaque types.
+pub(crate) fn get_bindgen_opaque_types() -> Vec<String> {
+    BINDGEN_OPAQUE_TYPES.iter().map(|s| s.to_string()).collect()
 }
 
 /// If a given type lacks a copy constructor, we should always use

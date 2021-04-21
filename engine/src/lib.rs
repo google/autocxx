@@ -291,8 +291,14 @@ impl IncludeCppEngine {
             .enable_cxx_namespaces()
             .generate_inline_functions(true)
             .layout_tests(false); // TODO revisit later
-        for item in known_types::get_initial_blocklist() {
+        for item in known_types::get_bindgen_blocklist() {
             builder = builder.blocklist_item(item);
+        }
+        for item in known_types::get_bindgen_function_blocklist() {
+            builder = builder.blocklist_function(item);
+        }
+        for item in known_types::get_bindgen_opaque_types() {
+            builder = builder.opaque_type(item);
         }
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent

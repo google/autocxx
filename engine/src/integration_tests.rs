@@ -276,18 +276,18 @@ fn do_run_test(
         b.file(cxx_path);
     }
 
-    for a in extra_clang_args {
-        b.flag(a);
-    }
-
     b.out_dir(&target_dir)
         .host(&target)
         .target(&target)
         .opt_level(1)
         .flag("-std=c++14")
-        .include(tdir.path())
-        .try_compile("autocxx-demo")
-        .map_err(TestError::CppBuild)?;
+        .include(tdir.path());
+    // Pass extra_clang_args last so that we have a chance to override the `-std` flag.
+    for a in extra_clang_args {
+        b.flag(a);
+    }
+    b.try_compile("autocxx-demo").map_err(TestError::CppBuild)?;
+
     // Step 8: use the trybuild crate to build the Rust file.
     let r = get_builder().lock().unwrap().build(
         &target_dir,
@@ -4638,6 +4638,30 @@ fn test_blocklist_not_overly_broad() {
         ffi::std_func();
     };
     run_test("", hdr, rs, &["rust_func", "std_func"], &[]);
+}
+
+#[test]
+fn test_stringview_ignored() {
+    // Test that APIs using std::string_view are ignored but do not otherwise cause errors.
+    // This is a regression test: We used to blocklist std::string_view but still import APIs that
+    // use it, which caused cxx to complain that it didn't know about the type.
+    // Once we actually support std::string_view, this test can be extended to actually call
+    // take_string_view().
+    let hdr = indoc! {"
+        #include <string_view>
+        void take_string_view(std::string_view) {}
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["take_string_view"],
+        &[],
+        None,
+        &["-std=c++17"],
+        None,
+    );
 }
 
 // Yet to test:
