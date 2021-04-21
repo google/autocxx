@@ -4630,8 +4630,8 @@ fn test_blocklist_not_overly_broad() {
     // not just items in the "rust" and "std" namespaces. We therefore test that functions starting
     // with "rust" or "std" get imported.
     let hdr = indoc! {"
-    inline double rust_func() { }
-    inline double std_func() { }
+    inline void rust_func() { }
+    inline void std_func() { }
     "};
     let rs = quote! {
         ffi::rust_func();
