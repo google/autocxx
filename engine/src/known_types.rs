@@ -371,7 +371,7 @@ fn create_type_database() -> TypeDatabase {
 /// But it doesm unless we blocklist them. This is obviously
 /// a bit sensitive to the particular STL in use so one day
 /// it would be good to dig into bindgen's behavior here - TODO.
-const BINDGEN_BLOCKLIST: &[&str] = &["std.*", "__gnu.*", ".*mbstate_t.*", "rust.*"];
+const BINDGEN_BLOCKLIST: &[&str] = &["std::.*", "__gnu.*", ".*mbstate_t.*", "rust::.*"];
 
 /// Get the list of types to give to bindgen to ask it _not_ to
 /// generate code for.
