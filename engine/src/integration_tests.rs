@@ -4691,14 +4691,16 @@ fn test_stringview_ignored() {
     // take_string_view().
     let hdr = indoc! {"
         #include <string_view>
+        #include <string>
         void take_string_view(std::string_view) {}
+        std::string_view return_string_view(std::string a) { return std::string_view(a); }
     "};
     let rs = quote! {};
     run_test_ex(
         "",
         hdr,
         rs,
-        &["take_string_view"],
+        &["take_string_view", "return_string_view"],
         &[],
         None,
         &["-std=c++17"],
