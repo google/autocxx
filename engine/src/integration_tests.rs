@@ -4145,6 +4145,30 @@ fn test_take_array() {
 }
 
 #[test]
+fn test_union_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    union A {
+        uint32_t a;
+        float b;
+    };
+    struct B {
+        B() :a(1) {}
+        uint32_t take_union(A) const {
+            return 3;
+        }
+        uint32_t get_a() const { return 2; }
+        uint32_t a;
+    };
+    "};
+    let rs = quote! {
+        let b = ffi::B::make_unique();
+        assert_eq!(b.get_a(), 2);
+    };
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
+#[test]
 fn test_issue_264() {
     let hdr = indoc! {"
     namespace a {
