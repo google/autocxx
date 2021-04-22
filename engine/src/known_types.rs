@@ -184,9 +184,26 @@ impl TypeDatabase {
     /// We strip off and ignore
     /// any PathArguments within this TypePath - callers should
     /// put them back again if needs be.
-    pub(crate) fn known_type_substitute_path(&self, typ: &TypePath) -> Option<TypePath> {
-        let tn = QualifiedName::from_type_path(typ);
-        self.get(&tn).map(|td| td.to_type_path())
+    pub(crate) fn consider_substitution(
+        &self,
+        tn: &QualifiedName,
+    ) -> Result<Option<TypePath>, ConvertError> {
+        match self.get(&tn) {
+            None => {
+                // Only allow types from std:: which we specifically understand,
+                // because we've told bindgen to block all the rest.
+                if tn
+                    .ns_segment_iter()
+                    .next()
+                    .filter(|seg| *seg == "std")
+                    .is_some()
+                {
+                    return Err(ConvertError::UnacceptableStdType(tn.clone()));
+                }
+                Ok(None)
+            }
+            Some(td) => Ok(Some(td.to_type_path())),
+        }
     }
 
     pub(crate) fn special_cpp_name(&self, rs: &QualifiedName) -> Option<String> {

@@ -4682,6 +4682,30 @@ fn test_blocklist_not_overly_broad() {
     run_test("", hdr, rs, &["rust_func", "std_func"], &[]);
 }
 
+#[test]
+fn test_stringview_ignored() {
+    // Test that APIs using std::string_view are ignored but do not otherwise cause errors.
+    // This is a regression test: We used to blocklist std::string_view but still import APIs that
+    // use it, which caused cxx to complain that it didn't know about the type.
+    // Once we actually support std::string_view, this test can be extended to actually call
+    // take_string_view().
+    let hdr = indoc! {"
+        #include <string_view>
+        void take_string_view(std::string_view) {}
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["take_string_view"],
+        &[],
+        None,
+        &["-std=c++17"],
+        None,
+    );
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Out param pointers
