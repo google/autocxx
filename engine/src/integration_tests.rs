@@ -3052,6 +3052,24 @@ fn test_string_templated_typedef() {
     run_test("", hdr, rs, &["Origin"], &[]);
 }
 
+#[test]
+fn test_associated_type_problem() {
+    // Regression test for a potential bindgen bug
+    let hdr = indoc! {"
+        namespace a {
+        template <typename> class b {};
+        } // namespace a
+        class bl {
+          a::b<bl> bm;
+        };
+        struct B {
+            int a;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
 #[ignore] // https://github.com/rust-lang/rust-bindgen/issues/1924
 #[test]
 fn test_associated_type_templated_typedef() {
