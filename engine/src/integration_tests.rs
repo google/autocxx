@@ -4704,7 +4704,9 @@ fn test_stringview_ignored() {
         &[],
         None,
         &["-std=c++17"],
-        None,
+        Some(make_string_finder(
+            ["take_string_view", "return_string_view", "std::string_view"].to_vec(),
+        )),
     );
 }
 
