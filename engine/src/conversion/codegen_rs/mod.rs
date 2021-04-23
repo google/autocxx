@@ -143,8 +143,15 @@ impl<'a> RsCodeGenerator<'a> {
             .into_iter()
             .map(|api| {
                 let more_cpp_needed = api.additional_cpp().is_some();
-                let gen = Self::generate_rs_for_api(&api.ns, &api.id, api.detail);
-                ((api.ns, api.id, gen), more_cpp_needed)
+                let gen = Self::generate_rs_for_api(&api.name, api.detail);
+                (
+                    (
+                        api.name.get_namespace().clone(),
+                        make_ident(api.name.get_final_ident()),
+                        gen,
+                    ),
+                    more_cpp_needed,
+                )
             })
             .unzip();
         // First, the hierarchy of mods containing lots of 'use' statements
@@ -374,10 +381,10 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn generate_rs_for_api(
-        ns: &Namespace,
-        id: &Ident,
+        name: &QualifiedName,
         api_detail: ApiDetail<FnAnalysis>,
     ) -> RsCodegenResult {
+        let id = make_ident(name.get_final_ident());
         match api_detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
@@ -402,7 +409,9 @@ impl<'a> RsCodeGenerator<'a> {
                     materialization: Use::Unused,
                 }
             }
-            ApiDetail::Function { fun, analysis } => gen_function(ns, fun, analysis),
+            ApiDetail::Function { fun, analysis } => {
+                gen_function(name.get_namespace(), fun, analysis)
+            }
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
                 impl_entry: None,
@@ -435,9 +444,7 @@ impl<'a> RsCodeGenerator<'a> {
                 } else {
                     Vec::new()
                 },
-                extern_c_mod_item: Some(ForeignItem::Verbatim(Self::generate_cxxbridge_type(
-                    ns, id,
-                ))),
+                extern_c_mod_item: Some(ForeignItem::Verbatim(Self::generate_cxxbridge_type(name))),
                 bindgen_mod_item,
                 materialization: Use::UsedFromCxxBridge,
             },
@@ -454,7 +461,7 @@ impl<'a> RsCodeGenerator<'a> {
             ApiDetail::OpaqueTypedef => RsCodegenResult {
                 global_items: Vec::new(),
                 impl_entry: None,
-                bridge_items: create_impl_items(id),
+                bridge_items: create_impl_items(&id),
                 extern_c_mod_item: Some(ForeignItem::Type(parse_quote! {
                     type #id;
                 })),
@@ -540,7 +547,9 @@ impl<'a> RsCodeGenerator<'a> {
         })]
     }
 
-    fn generate_cxxbridge_type(ns: &Namespace, id: &Ident) -> TokenStream {
+    fn generate_cxxbridge_type(name: &QualifiedName) -> TokenStream {
+        let id = make_ident(name.get_final_ident());
+        let ns = name.get_namespace();
         let mut for_extern_c_ts = if !ns.is_empty() {
             let ns_string = ns.iter().cloned().collect::<Vec<String>>().join("::");
             quote! {
@@ -577,7 +586,7 @@ impl HasNs for (Namespace, Ident, RsCodegenResult) {
 
 impl<T: ApiAnalysis> HasNs for Api<T> {
     fn get_namespace(&self) -> &Namespace {
-        &self.ns
+        &self.name.get_namespace()
     }
 }
 

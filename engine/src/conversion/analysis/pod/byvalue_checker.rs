@@ -122,7 +122,9 @@ impl ByValueChecker {
                     analysis: _,
                 } => match bindgen_mod_item {
                     None => {}
-                    Some(Item::Struct(s)) => byvalue_checker.ingest_struct(&s, &api.ns),
+                    Some(Item::Struct(s)) => {
+                        byvalue_checker.ingest_struct(&s, &api.name.get_namespace())
+                    }
                     Some(Item::Enum(_)) => {
                         byvalue_checker
                             .results

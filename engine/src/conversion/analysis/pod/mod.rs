@@ -103,7 +103,13 @@ fn analyze_pod_api(
             } else if byvalue_checker.is_pod(&ty_id) {
                 // It's POD so let's mark dependencies on things in its field
                 if let Some(Item::Struct(ref s)) = bindgen_mod_item {
-                    get_struct_field_types(type_converter, &api.ns, &s, &mut new_deps, extra_apis)?;
+                    get_struct_field_types(
+                        type_converter,
+                        &api.name.get_namespace(),
+                        &s,
+                        &mut new_deps,
+                        extra_apis,
+                    )?;
                 } // otherwise might be an enum, etc.
                 TypeKind::Pod
             } else {
@@ -126,8 +132,7 @@ fn analyze_pod_api(
         ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
     };
     Ok(Api {
-        ns: api.ns,
-        id: api.id,
+        name: api.name,
         deps: new_deps,
         detail: api_detail,
     })

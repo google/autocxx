@@ -36,8 +36,7 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
         .collect();
     for (id, tn) in ctypes {
         apis.push(Api {
-            ns: Namespace::new(),
-            id,
+            name: QualifiedName::new(&Namespace::new(), id),
             deps: HashSet::new(),
             detail: ApiDetail::CType { typename: tn },
         });

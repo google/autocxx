@@ -217,8 +217,7 @@ impl<'a> FnAnalyzer<'a> {
             _ => panic!("Function analysis created an extra API which wasn't a concrete type"),
         };
         Api {
-            ns: api.ns,
-            id: api.id,
+            name: api.name,
             deps: api.deps,
             detail: new_detail,
         }
@@ -229,7 +228,7 @@ impl<'a> FnAnalyzer<'a> {
         api: Api<PodAnalysis>,
     ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
         let mut new_deps = api.deps.clone();
-        let mut new_id = api.id;
+        let mut new_id = make_ident(api.name.get_final_ident());
         let api_detail = match api.detail {
             // No changes to any of these...
             ApiDetail::ConcreteType {
@@ -241,7 +240,7 @@ impl<'a> FnAnalyzer<'a> {
             },
             ApiDetail::StringConstructor => ApiDetail::StringConstructor,
             ApiDetail::Function { fun, analysis: _ } => {
-                let analysis = self.analyze_foreign_fn(&api.ns, &fun)?;
+                let analysis = self.analyze_foreign_fn(&api.name.get_namespace(), &fun)?;
                 match analysis {
                     None => return Ok(None),
                     Some(FnAnalysisResult(analysis, id, fn_deps)) => {
@@ -270,8 +269,7 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
         };
         Ok(Some(Api {
-            ns: api.ns,
-            id: new_id,
+            name: QualifiedName::new(api.name.get_namespace(), new_id),
             deps: new_deps,
             detail: api_detail,
         }))
@@ -862,7 +860,9 @@ impl Api<FnAnalysis> {
         match &self.detail {
             ApiDetail::Function { fun: _, analysis } => match analysis.kind {
                 FnKind::Method(ref self_ty, _) => self_ty.clone(),
-                FnKind::Function => QualifiedName::new(&self.ns, make_ident(&analysis.rust_name)),
+                FnKind::Function => {
+                    QualifiedName::new(&self.name.get_namespace(), make_ident(&analysis.rust_name))
+                }
             },
             _ => self.typename(),
         }
