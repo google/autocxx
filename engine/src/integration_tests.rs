@@ -3553,14 +3553,30 @@ fn test_forward_declaration() {
         struct B {
             B() {}
             uint32_t a;
-            void daft(const A&) {}
-            void daft2(std::unique_ptr<A>) {}
+            void daft(const A&) const {}
+            void daft2(std::unique_ptr<A>) const {}
         };
+        A* get_a();
+        void delete_a(A*);
+    "};
+    let cpp = indoc! {"
+        struct A {
+            uint32_t a;
+        };
+        A* get_a() {
+            return new A();
+        }
+        void delete_a(A* a) {
+            delete a;
+        }
     "};
     let rs = quote! {
-        ffi::B::make_unique();
+        let b = ffi::B::make_unique();
+        let a = ffi::get_a();
+        b.daft(unsafe { a.as_ref().unwrap() });
+        unsafe { ffi::delete_a(a) };
     };
-    run_test("", hdr, rs, &["B"], &[]);
+    run_test(cpp, hdr, rs, &["B", "get_a", "delete_a"], &[]);
 }
 
 #[test]
