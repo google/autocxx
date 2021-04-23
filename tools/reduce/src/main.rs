@@ -196,6 +196,11 @@ fn print_minimized_case(concat_path: &Path) -> Result<(), std::io::Error> {
     Ok(())
 }
 
+/// Arguments we always pass to creduce. This pass always seems to cause a crash
+/// as far as I can tell, so always exclude it. It may be environment-dependent,
+/// of course, but as I'm the primary user of this tool I am ruthlessly removing it.
+const CREDUCE_STANDARD_ARGS: &[&str] = &["--remove-pass", "pass_line_markers"];
+
 fn run_creduce<'a>(
     creduce_cmd: &str,
     interestingness_test: &Path,
@@ -206,6 +211,7 @@ fn run_creduce<'a>(
     Command::new(creduce_cmd)
         .arg(interestingness_test.to_str().unwrap())
         .arg(concat_path.to_str().unwrap())
+        .args(CREDUCE_STANDARD_ARGS)
         .args(creduce_args)
         .status()
         .expect("failed to creduce");
