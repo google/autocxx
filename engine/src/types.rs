@@ -157,7 +157,7 @@ impl QualifiedName {
             .iter()
             .map(make_ident)
             .chain(self.ns_segment_iter().map(make_ident))
-            .chain(std::iter::once(make_ident(self.get_final_ident().clone())))
+            .chain(std::iter::once(make_ident(self.get_final_ident())))
             .collect()
     }
 
