@@ -21,7 +21,7 @@ use crate::conversion::{
 };
 use crate::{
     conversion::{
-        api::{ApiDetail, ParseResults, TypeApiDetails, TypedefKind, UnanalyzedApi},
+        api::{ApiDetail, ParseResults, TypedefKind, UnanalyzedApi},
         ConvertError,
     },
     types::make_ident,
@@ -310,27 +310,15 @@ impl<'a> ParseBindgen<'a> {
         deps: HashSet<QualifiedName>,
         bindgen_mod_item: Option<Item>,
     ) {
-        let final_ident = make_ident(tyname.get_final_ident());
         if self.type_config.is_on_blocklist(&tyname.to_cpp_name()) {
             return;
         }
-        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(make_ident).collect();
-        for segment in tyname.ns_segment_iter() {
-            let id = make_ident(segment);
-            fulltypath.push(id);
-        }
-        let tynamestring = tyname.to_cpp_name();
-        fulltypath.push(final_ident.clone());
         let api = UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
-            id: final_ident.clone(),
+            id: make_ident(tyname.get_final_ident()),
             deps,
             detail: ApiDetail::Type {
-                ty_details: TypeApiDetails {
-                    fulltypath,
-                    final_ident,
-                    tynamestring,
-                },
+                tyname: tyname.clone(),
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis: (),

@@ -14,11 +14,7 @@
 
 use crate::{
     conversion::codegen_cpp::AdditionalNeed,
-    conversion::{
-        api::{TypeApiDetails, UnanalyzedApi},
-        codegen_cpp::type_to_cpp::type_to_cpp,
-        ConvertError,
-    },
+    conversion::{api::UnanalyzedApi, codegen_cpp::type_to_cpp::type_to_cpp, ConvertError},
     known_types::known_types,
     types::{make_ident, Namespace, QualifiedName},
 };
@@ -337,20 +333,12 @@ impl TypeConverter {
     }
 
     fn add_concrete_type(&self, tyname: &QualifiedName, rs_definition: &Type) -> UnanalyzedApi {
-        let final_ident = make_ident(tyname.get_final_ident());
-        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(make_ident).collect();
-        fulltypath.push(final_ident.clone());
-        let tynamestring = tyname.to_cpp_name();
         UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
-            id: final_ident.clone(),
+            id: make_ident(tyname.get_final_ident()),
             deps: HashSet::new(),
             detail: crate::conversion::api::ApiDetail::ConcreteType {
-                ty_details: TypeApiDetails {
-                    fulltypath,
-                    final_ident,
-                    tynamestring,
-                },
+                tyname: tyname.clone(),
                 additional_cpp: AdditionalNeed::ConcreteTemplatedTypeTypedef(
                     tyname.clone(),
                     Box::new(rs_definition.clone()),

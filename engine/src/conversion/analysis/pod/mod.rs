@@ -80,10 +80,10 @@ fn analyze_pod_api(
     let api_detail = match api.detail {
         // No changes to any of these...
         ApiDetail::ConcreteType {
-            ty_details,
+            tyname,
             additional_cpp,
         } => ApiDetail::ConcreteType {
-            ty_details,
+            tyname,
             additional_cpp,
         },
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
@@ -93,7 +93,7 @@ fn analyze_pod_api(
         ApiDetail::CType { typename } => ApiDetail::CType { typename },
         // Just changes to this one...
         ApiDetail::Type {
-            ty_details,
+            tyname,
             is_forward_declaration,
             mut bindgen_mod_item,
             analysis: _,
@@ -116,7 +116,7 @@ fn analyze_pod_api(
                 TypeKind::NonPod
             };
             ApiDetail::Type {
-                ty_details,
+                tyname,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis: type_kind,
