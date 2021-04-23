@@ -164,11 +164,7 @@ impl<'a> FnAnalyzer<'a> {
     fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {
-                ApiDetail::Type {
-                    is_forward_declaration: true,
-                    bindgen_mod_item: _,
-                    analysis: _,
-                } => Some(api.typename()),
+                ApiDetail::ForwardDeclaration => Some(api.typename()),
                 _ => None,
             })
             .collect()
@@ -178,7 +174,6 @@ impl<'a> FnAnalyzer<'a> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
-                    is_forward_declaration: _,
                     bindgen_mod_item: _,
                     analysis: TypeKind::Pod,
                 } => Some(api.typename()),
@@ -241,14 +236,13 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
             // Just changes to this one...
             ApiDetail::Type {
-                is_forward_declaration,
                 bindgen_mod_item,
                 analysis,
             } => ApiDetail::Type {
-                is_forward_declaration,
                 bindgen_mod_item,
                 analysis,
             },
+            ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
             ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
             ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
         };
@@ -265,9 +259,12 @@ impl<'a> FnAnalyzer<'a> {
         ns: &Namespace,
         convert_ptrs_to_reference: bool,
     ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool), ConvertError> {
-        let annotated =
-            self.type_converter
-                .convert_boxed_type(ty, ns, convert_ptrs_to_reference)?;
+        let annotated = self.type_converter.convert_boxed_type(
+            ty,
+            ns,
+            convert_ptrs_to_reference,
+            &self.incomplete_types,
+        )?;
         self.extra_apis.extend(annotated.extra_apis);
         Ok((
             annotated.ty,
@@ -296,7 +293,6 @@ impl<'a> FnAnalyzer<'a> {
 
     fn avoid_generating_type(&self, type_name: &QualifiedName) -> bool {
         self.type_config.is_on_blocklist(&type_name.to_cpp_name())
-            || self.incomplete_types.contains(type_name)
     }
 
     fn should_be_unsafe(&self) -> bool {

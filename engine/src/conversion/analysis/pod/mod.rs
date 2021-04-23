@@ -80,6 +80,7 @@ fn analyze_pod_api(
     let api_detail = match api.detail {
         // No changes to any of these...
         ApiDetail::ConcreteType { rs_definition } => ApiDetail::ConcreteType { rs_definition },
+        ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
         ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
@@ -87,13 +88,10 @@ fn analyze_pod_api(
         ApiDetail::CType { typename } => ApiDetail::CType { typename },
         // Just changes to this one...
         ApiDetail::Type {
-            is_forward_declaration,
             mut bindgen_mod_item,
             analysis: _,
         } => {
-            let type_kind = if is_forward_declaration {
-                TypeKind::ForwardDeclaration
-            } else if byvalue_checker.is_pod(&ty_id) {
+            let type_kind = if byvalue_checker.is_pod(&ty_id) {
                 // It's POD so let's mark dependencies on things in its field
                 if let Some(Item::Struct(ref s)) = bindgen_mod_item {
                     get_struct_field_types(
@@ -115,7 +113,6 @@ fn analyze_pod_api(
                 TypeKind::NonPod
             };
             ApiDetail::Type {
-                is_forward_declaration,
                 bindgen_mod_item,
                 analysis: type_kind,
             }
@@ -138,7 +135,7 @@ fn get_struct_field_types(
     extra_apis: &mut Vec<UnanalyzedApi>,
 ) -> Result<(), ConvertError> {
     for f in &s.fields {
-        let annotated = type_converter.convert_type(f.ty.clone(), ns, false)?;
+        let annotated = type_converter.convert_type(f.ty.clone(), ns, false, &HashSet::new())?;
         extra_apis.extend(annotated.extra_apis);
         deps.extend(annotated.types_encountered);
     }
