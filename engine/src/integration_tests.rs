@@ -276,16 +276,16 @@ fn do_run_test(
         b.file(cxx_path);
     }
 
-    for a in extra_clang_args {
-        b.flag(a);
-    }
-
-    b.out_dir(&target_dir)
+    let mut b = b
+        .out_dir(&target_dir)
         .host(&target)
         .target(&target)
         .opt_level(1)
-        .flag("-std=c++14")
-        .include(tdir.path())
+        .flag("-std=c++14");
+    for f in extra_clang_args {
+        b = b.flag(f);
+    }
+    b.include(tdir.path())
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
     // Step 8: use the trybuild crate to build the Rust file.
