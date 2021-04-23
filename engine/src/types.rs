@@ -152,6 +152,15 @@ impl QualifiedName {
         &self.0
     }
 
+    pub(crate) fn get_bindgen_path_idents(&self) -> Vec<Ident> {
+        ["bindgen", "root"]
+            .iter()
+            .map(make_ident)
+            .chain(self.ns_segment_iter().map(make_ident))
+            .chain(std::iter::once(make_ident(self.get_final_ident().clone())))
+            .collect()
+    }
+
     /// Output the fully-qualified C++ name of this type.
     pub(crate) fn to_cpp_name(&self) -> String {
         let special_cpp_name = known_types().special_cpp_name(&self);

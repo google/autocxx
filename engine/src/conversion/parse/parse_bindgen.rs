@@ -314,12 +314,6 @@ impl<'a> ParseBindgen<'a> {
         if self.type_config.is_on_blocklist(&tyname.to_cpp_name()) {
             return;
         }
-        let fulltypath = ["bindgen", "root"]
-            .iter()
-            .map(make_ident)
-            .chain(tyname.ns_segment_iter().map(make_ident))
-            .chain(std::iter::once(final_ident.clone()))
-            .collect();
         let tynamestring = tyname.to_cpp_name();
         let api = UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
@@ -327,7 +321,7 @@ impl<'a> ParseBindgen<'a> {
             deps,
             detail: ApiDetail::Type {
                 ty_details: TypeApiDetails {
-                    fulltypath,
+                    fulltypath: tyname.get_bindgen_path_idents(),
                     final_ident,
                     tynamestring,
                 },
