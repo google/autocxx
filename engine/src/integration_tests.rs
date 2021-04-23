@@ -276,16 +276,16 @@ fn do_run_test(
         b.file(cxx_path);
     }
 
-    for a in extra_clang_args {
-        b.flag(a);
-    }
-
-    b.out_dir(&target_dir)
+    let mut b = b
+        .out_dir(&target_dir)
         .host(&target)
         .target(&target)
         .opt_level(1)
-        .flag("-std=c++14")
-        .include(tdir.path())
+        .flag("-std=c++14");
+    for f in extra_clang_args {
+        b = b.flag(f);
+    }
+    b.include(tdir.path())
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
     // Step 8: use the trybuild crate to build the Rust file.
@@ -4145,6 +4145,30 @@ fn test_take_array() {
 }
 
 #[test]
+fn test_union_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    union A {
+        uint32_t a;
+        float b;
+    };
+    struct B {
+        B() :a(1) {}
+        uint32_t take_union(A) const {
+            return 3;
+        }
+        uint32_t get_a() const { return 2; }
+        uint32_t a;
+    };
+    "};
+    let rs = quote! {
+        let b = ffi::B::make_unique();
+        assert_eq!(b.get_a(), 2);
+    };
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
+#[test]
 fn test_issue_264() {
     let hdr = indoc! {"
     namespace a {
@@ -4656,6 +4680,34 @@ fn test_blocklist_not_overly_broad() {
         ffi::std_func();
     };
     run_test("", hdr, rs, &["rust_func", "std_func"], &[]);
+}
+
+#[test]
+fn test_stringview_ignored() {
+    // Test that APIs using std::string_view are ignored but do not otherwise cause errors.
+    // This is a regression test: We used to blocklist std::string_view but still import APIs that
+    // use it, which caused cxx to complain that it didn't know about the type.
+    // Once we actually support std::string_view, this test can be extended to actually call
+    // take_string_view().
+    let hdr = indoc! {"
+        #include <string_view>
+        #include <string>
+        void take_string_view(std::string_view) {}
+        std::string_view return_string_view(std::string a) { return std::string_view(a); }
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["take_string_view", "return_string_view"],
+        &[],
+        None,
+        &["-std=c++17"],
+        Some(make_string_finder(
+            ["take_string_view", "return_string_view", "std::string_view"].to_vec(),
+        )),
+    );
 }
 
 // Yet to test:
