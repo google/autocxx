@@ -14,12 +14,9 @@
 
 use crate::types::QualifiedName;
 use std::collections::HashSet;
-use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse};
+use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse, Type};
 
-use super::{
-    codegen_cpp::AdditionalNeed, convert_error::ErrorContext, parse::type_converter::TypeConverter,
-    ConvertError,
-};
+use super::{convert_error::ErrorContext, parse::type_converter::TypeConverter, ConvertError};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
@@ -76,7 +73,7 @@ pub(crate) enum TypedefKind {
 pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
-    ConcreteType { additional_cpp: AdditionalNeed },
+    ConcreteType { rs_definition: Box<Type> },
     /// A simple note that we want to make a constructor for
     /// a `std::string` on the heap.
     StringConstructor,
