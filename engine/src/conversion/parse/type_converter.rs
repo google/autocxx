@@ -337,7 +337,6 @@ impl TypeConverter {
             name: name.clone(),
             deps: HashSet::new(),
             detail: crate::conversion::api::ApiDetail::ConcreteType {
-                tyname: name.clone(),
                 additional_cpp: AdditionalNeed::ConcreteTemplatedTypeTypedef(
                     name.clone(),
                     Box::new(rs_definition.clone()),

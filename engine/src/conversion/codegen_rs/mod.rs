@@ -396,8 +396,8 @@ impl<'a> RsCodeGenerator<'a> {
                 impl_entry: None,
                 materialization: Use::Unused,
             },
-            ApiDetail::ConcreteType { tyname, .. } => {
-                let global_items = Self::generate_extern_type_impl(TypeKind::NonPod, &tyname);
+            ApiDetail::ConcreteType { .. } => {
+                let global_items = Self::generate_extern_type_impl(TypeKind::NonPod, &name);
                 RsCodegenResult {
                     global_items,
                     bridge_items: create_impl_items(&id),
@@ -432,12 +432,11 @@ impl<'a> RsCodeGenerator<'a> {
                 materialization: Use::UsedFromBindgen,
             },
             ApiDetail::Type {
-                tyname,
                 is_forward_declaration: _,
                 bindgen_mod_item,
                 analysis,
             } => RsCodegenResult {
-                global_items: Self::generate_extern_type_impl(analysis, &tyname),
+                global_items: Self::generate_extern_type_impl(analysis, &name),
                 impl_entry: None,
                 bridge_items: if analysis.can_be_instantiated() {
                     create_impl_items(&id)

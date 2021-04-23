@@ -116,7 +116,6 @@ impl ByValueChecker {
                     }
                 }
                 ApiDetail::Type {
-                    tyname: _,
                     is_forward_declaration: _,
                     bindgen_mod_item,
                     analysis: _,

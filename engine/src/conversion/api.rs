@@ -76,11 +76,7 @@ pub(crate) enum TypedefKind {
 pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
-    ConcreteType {
-        tyname: QualifiedName, // there's a good chance this field
-        // is redundant
-        additional_cpp: AdditionalNeed,
-    },
+    ConcreteType { additional_cpp: AdditionalNeed },
     /// A simple note that we want to make a constructor for
     /// a `std::string` on the heap.
     StringConstructor,
@@ -97,8 +93,6 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A type (struct or enum) encountered in the
     /// `bindgen` output.
     Type {
-        tyname: QualifiedName, // there's a good chance this field
-        // is redundant
         is_forward_declaration: bool,
         bindgen_mod_item: Option<Item>,
         analysis: T::TypeAnalysis,

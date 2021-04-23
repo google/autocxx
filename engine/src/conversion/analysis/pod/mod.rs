@@ -79,13 +79,7 @@ fn analyze_pod_api(
     let mut new_deps = api.deps;
     let api_detail = match api.detail {
         // No changes to any of these...
-        ApiDetail::ConcreteType {
-            tyname,
-            additional_cpp,
-        } => ApiDetail::ConcreteType {
-            tyname,
-            additional_cpp,
-        },
+        ApiDetail::ConcreteType { additional_cpp } => ApiDetail::ConcreteType { additional_cpp },
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
         ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
@@ -93,7 +87,6 @@ fn analyze_pod_api(
         ApiDetail::CType { typename } => ApiDetail::CType { typename },
         // Just changes to this one...
         ApiDetail::Type {
-            tyname,
             is_forward_declaration,
             mut bindgen_mod_item,
             analysis: _,
@@ -122,7 +115,6 @@ fn analyze_pod_api(
                 TypeKind::NonPod
             };
             ApiDetail::Type {
-                tyname,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis: type_kind,

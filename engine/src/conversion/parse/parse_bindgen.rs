@@ -312,7 +312,6 @@ impl<'a> ParseBindgen<'a> {
             name: name.clone(),
             deps,
             detail: ApiDetail::Type {
-                tyname: name.clone(),
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis: (),

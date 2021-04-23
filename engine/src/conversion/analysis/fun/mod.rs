@@ -165,7 +165,6 @@ impl<'a> FnAnalyzer<'a> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
-                    tyname: _,
                     is_forward_declaration: true,
                     bindgen_mod_item: _,
                     analysis: _,
@@ -179,7 +178,6 @@ impl<'a> FnAnalyzer<'a> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
-                    tyname: _,
                     is_forward_declaration: _,
                     bindgen_mod_item: _,
                     analysis: TypeKind::Pod,
@@ -207,13 +205,9 @@ impl<'a> FnAnalyzer<'a> {
     /// a new analysis phase prior to the POD analysis which materializes these types.
     fn make_extra_api_nonpod(api: UnanalyzedApi) -> Api<FnAnalysis> {
         let new_detail = match api.detail {
-            ApiDetail::ConcreteType {
-                tyname,
-                additional_cpp,
-            } => ApiDetail::ConcreteType {
-                tyname,
-                additional_cpp,
-            },
+            ApiDetail::ConcreteType { additional_cpp } => {
+                ApiDetail::ConcreteType { additional_cpp }
+            }
             _ => panic!("Function analysis created an extra API which wasn't a concrete type"),
         };
         Api {
@@ -231,13 +225,9 @@ impl<'a> FnAnalyzer<'a> {
         let mut new_id = make_ident(api.name.get_final_ident());
         let api_detail = match api.detail {
             // No changes to any of these...
-            ApiDetail::ConcreteType {
-                tyname,
-                additional_cpp,
-            } => ApiDetail::ConcreteType {
-                tyname,
-                additional_cpp,
-            },
+            ApiDetail::ConcreteType { additional_cpp } => {
+                ApiDetail::ConcreteType { additional_cpp }
+            }
             ApiDetail::StringConstructor => ApiDetail::StringConstructor,
             ApiDetail::Function { fun, analysis: _ } => {
                 let analysis = self.analyze_foreign_fn(&api.name.get_namespace(), &fun)?;
@@ -255,12 +245,10 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
             // Just changes to this one...
             ApiDetail::Type {
-                tyname,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis,
             } => ApiDetail::Type {
-                tyname,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis,
@@ -878,10 +866,7 @@ impl Api<FnAnalysis> {
         match &self.detail {
             ApiDetail::Function { fun: _, analysis } => analysis.cpp_wrapper.clone(),
             ApiDetail::StringConstructor => Some(AdditionalNeed::MakeStringConstructor),
-            ApiDetail::ConcreteType {
-                tyname: _,
-                additional_cpp,
-            } => Some(additional_cpp.clone()),
+            ApiDetail::ConcreteType { additional_cpp } => Some(additional_cpp.clone()),
             ApiDetail::CType { typename } => Some(AdditionalNeed::CTypeTypedef(typename.clone())),
             _ => None,
         }
