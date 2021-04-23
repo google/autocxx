@@ -282,6 +282,7 @@ fn do_run_test(
         .target(&target)
         .opt_level(1)
         .flag("-std=c++14");
+    // Pass extra_clang_args last so that we have a chance to override the `-std` flag.
     for f in extra_clang_args {
         b = b.flag(f);
     }
