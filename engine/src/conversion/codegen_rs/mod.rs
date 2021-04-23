@@ -144,14 +144,7 @@ impl<'a> RsCodeGenerator<'a> {
             .map(|api| {
                 let more_cpp_needed = api.additional_cpp().is_some();
                 let gen = Self::generate_rs_for_api(&api.name, api.detail);
-                (
-                    (
-                        api.name.get_namespace().clone(),
-                        api.name.get_final_ident(),
-                        gen,
-                    ),
-                    more_cpp_needed,
-                )
+                ((api.name, gen), more_cpp_needed)
             })
             .unzip();
         // First, the hierarchy of mods containing lots of 'use' statements
@@ -163,8 +156,8 @@ impl<'a> RsCodeGenerator<'a> {
             .generate_final_bindgen_mods(&rs_codegen_results_and_namespaces, generate_utilities);
         // Both of the above ('use' hierarchy and bindgen mod) are organized into
         // sub-mods by namespace. From here on, things are flat.
-        let (_, _, rs_codegen_results) =
-            rs_codegen_results_and_namespaces.into_iter().unzip_n_vec();
+        let (_, rs_codegen_results): (Vec<_>, Vec<_>) =
+            rs_codegen_results_and_namespaces.into_iter().unzip();
         let (extern_c_mod_items, all_items, bridge_items) = rs_codegen_results
             .into_iter()
             .map(|api| (api.extern_c_mod_item, api.global_items, api.bridge_items))
@@ -241,7 +234,7 @@ impl<'a> RsCodeGenerator<'a> {
     /// Generate lots of 'use' statements to pull cxxbridge items into the output
     /// mod hierarchy according to C++ namespaces.
     fn generate_final_use_statements(
-        input_items: &[(Namespace, Ident, RsCodegenResult)],
+        input_items: &[(QualifiedName, RsCodegenResult)],
     ) -> Vec<Item> {
         let mut output_items = Vec::new();
         let ns_entries = NamespaceEntries::new(input_items);
@@ -250,18 +243,18 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn append_child_use_namespace(
-        ns_entries: &NamespaceEntries<(Namespace, Ident, RsCodegenResult)>,
+        ns_entries: &NamespaceEntries<(QualifiedName, RsCodegenResult)>,
         output_items: &mut Vec<Item>,
     ) {
-        for (ns, id, codegen) in ns_entries.entries() {
+        for (name, codegen) in ns_entries.entries() {
             match &codegen.materialization {
                 Use::UsedFromCxxBridgeWithAlias(alias) => {
-                    output_items.push(Self::generate_cxx_use_stmt(ns, id, Some(alias)))
+                    output_items.push(Self::generate_cxx_use_stmt(name, Some(alias)))
                 }
                 Use::UsedFromCxxBridge => {
-                    output_items.push(Self::generate_cxx_use_stmt(ns, id, None))
+                    output_items.push(Self::generate_cxx_use_stmt(name, None))
                 }
-                Use::UsedFromBindgen => output_items.push(Self::generate_bindgen_use_stmt(ns, id)),
+                Use::UsedFromBindgen => output_items.push(Self::generate_bindgen_use_stmt(name)),
                 Use::Unused => {}
                 Use::Custom(item) => output_items.push(*item.clone()),
             };
@@ -317,15 +310,15 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn append_child_bindgen_namespace(
         &mut self,
-        ns_entries: &NamespaceEntries<(Namespace, Ident, RsCodegenResult)>,
+        ns_entries: &NamespaceEntries<(QualifiedName, RsCodegenResult)>,
         output_items: &mut Vec<Item>,
         ns: &Namespace,
         generate_utilities: bool,
     ) {
         let mut impl_entries_by_type: HashMap<_, Vec<_>> = HashMap::new();
         for item in ns_entries.entries() {
-            output_items.extend(item.2.bindgen_mod_item.iter().cloned());
-            if let Some(impl_entry) = &item.2.impl_entry {
+            output_items.extend(item.1.bindgen_mod_item.iter().cloned());
+            if let Some(impl_entry) = &item.1.impl_entry {
                 impl_entries_by_type
                     .entry(impl_entry.ty.clone())
                     .or_default()
@@ -364,7 +357,7 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn generate_final_bindgen_mods(
         &mut self,
-        input_items: &[(Namespace, Ident, RsCodegenResult)],
+        input_items: &[(QualifiedName, RsCodegenResult)],
         generate_utilities: bool,
     ) -> Vec<Item> {
         let mut output_items = Vec::new();
@@ -506,10 +499,10 @@ impl<'a> RsCodeGenerator<'a> {
         }
     }
 
-    fn generate_cxx_use_stmt(ns: &Namespace, id: &Ident, alias: Option<&Ident>) -> Item {
-        let segs = Self::find_output_mod_root(ns)
+    fn generate_cxx_use_stmt(name: &QualifiedName, alias: Option<&Ident>) -> Item {
+        let segs = Self::find_output_mod_root(name.get_namespace())
             .chain(std::iter::once(make_ident("cxxbridge")))
-            .chain(std::iter::once(id.clone()));
+            .chain(std::iter::once(name.get_final_ident()));
         Item::Use(match alias {
             None => parse_quote! {
                 pub use #(#segs)::*;
@@ -520,11 +513,9 @@ impl<'a> RsCodeGenerator<'a> {
         })
     }
 
-    fn generate_bindgen_use_stmt(ns: &Namespace, id: &Ident) -> Item {
-        let segs = Self::find_output_mod_root(ns)
-            .chain(["bindgen", "root"].iter().map(make_ident))
-            .chain(ns.iter().map(make_ident))
-            .chain(std::iter::once(id.clone()));
+    fn generate_bindgen_use_stmt(name: &QualifiedName) -> Item {
+        let segs =
+            Self::find_output_mod_root(name.get_namespace()).chain(name.get_bindgen_path_idents());
         Item::Use(parse_quote! {
             pub use #(#segs)::*;
         })
@@ -577,9 +568,9 @@ impl<'a> RsCodeGenerator<'a> {
     }
 }
 
-impl HasNs for (Namespace, Ident, RsCodegenResult) {
+impl HasNs for (QualifiedName, RsCodegenResult) {
     fn get_namespace(&self) -> &Namespace {
-        &self.0
+        &self.0.get_namespace()
     }
 }
 
