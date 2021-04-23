@@ -129,8 +129,7 @@ impl ParseForeignMod {
             let mut fun = self.funcs_to_convert.remove(0);
             fun.self_ty = self.method_receivers.get(&fun.item.sig.ident).cloned();
             apis.push(UnanalyzedApi {
-                ns: self.ns.clone(),
-                id: fun.item.sig.ident.clone(),
+                name: QualifiedName::new(&self.ns, fun.item.sig.ident.clone()),
                 deps: HashSet::new(), // filled in later - TODO make compile-time safe
                 detail: ApiDetail::Function { fun, analysis: () },
             })

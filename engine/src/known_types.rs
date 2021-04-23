@@ -72,7 +72,7 @@ impl TypeDetails {
             | Behavior::CxxContainerByValueSafe
             | Behavior::CxxContainerNotByValueSafe => {
                 let tn = QualifiedName::new_from_user_input(&self.rs_name);
-                let cxx_name = tn.get_final_ident();
+                let cxx_name = tn.get_final_item();
                 let (templating, payload) = match self.behavior {
                     Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => {
                         ("template<typename T> ", "T* ptr")

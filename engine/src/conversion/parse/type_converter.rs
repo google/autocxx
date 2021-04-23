@@ -332,15 +332,13 @@ impl TypeConverter {
         }))
     }
 
-    fn add_concrete_type(&self, tyname: &QualifiedName, rs_definition: &Type) -> UnanalyzedApi {
+    fn add_concrete_type(&self, name: &QualifiedName, rs_definition: &Type) -> UnanalyzedApi {
         UnanalyzedApi {
-            ns: tyname.get_namespace().clone(),
-            id: make_ident(tyname.get_final_ident()),
+            name: name.clone(),
             deps: HashSet::new(),
             detail: crate::conversion::api::ApiDetail::ConcreteType {
-                tyname: tyname.clone(),
                 additional_cpp: AdditionalNeed::ConcreteTemplatedTypeTypedef(
-                    tyname.clone(),
+                    name.clone(),
                     Box::new(rs_definition.clone()),
                 ),
             },

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::{Namespace, QualifiedName};
+use crate::types::QualifiedName;
 use std::collections::HashSet;
 use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse};
 
@@ -76,11 +76,7 @@ pub(crate) enum TypedefKind {
 pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
-    ConcreteType {
-        tyname: QualifiedName, // there's a good chance this field
-        // is redundant
-        additional_cpp: AdditionalNeed,
-    },
+    ConcreteType { additional_cpp: AdditionalNeed },
     /// A simple note that we want to make a constructor for
     /// a `std::string` on the heap.
     StringConstructor,
@@ -97,8 +93,6 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A type (struct or enum) encountered in the
     /// `bindgen` output.
     Type {
-        tyname: QualifiedName, // there's a good chance this field
-        // is redundant
         is_forward_declaration: bool,
         bindgen_mod_item: Option<Item>,
         analysis: T::TypeAnalysis,
@@ -132,8 +126,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
 /// because sometimes we pass on the `bindgen` output directly in the
 /// Rust codegen output.
 pub(crate) struct Api<T: ApiAnalysis> {
-    pub(crate) ns: Namespace,
-    pub(crate) id: Ident,
+    pub(crate) name: QualifiedName,
     /// Any dependencies of this API, such that during garbage collection
     /// we can ensure to keep them.
     pub(crate) deps: HashSet<QualifiedName>,
@@ -145,7 +138,7 @@ pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 
 impl<T: ApiAnalysis> Api<T> {
     pub(crate) fn typename(&self) -> QualifiedName {
-        QualifiedName::new(&self.ns, self.id.clone())
+        self.name.clone()
     }
 }
 

@@ -24,12 +24,11 @@ use crate::{
         api::{ApiDetail, ParseResults, TypedefKind, UnanalyzedApi},
         ConvertError,
     },
-    types::make_ident,
     types::Namespace,
     types::QualifiedName,
 };
 use autocxx_parser::TypeConfig;
-use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
+use syn::{parse_quote, Fields, Item, Type, TypePath, UseTree};
 
 use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
 
@@ -202,8 +201,7 @@ impl<'a> ParseBindgen<'a> {
                             let mut deps = HashSet::new();
                             deps.insert(old_tyname);
                             self.results.apis.push(UnanalyzedApi {
-                                id: new_id.clone(),
-                                ns: ns.clone(),
+                                name: QualifiedName::new(ns, new_id.clone()),
                                 deps,
                                 detail: ApiDetail::Typedef {
                                     payload: TypedefKind::Use(parse_quote! {
@@ -228,8 +226,7 @@ impl<'a> ParseBindgen<'a> {
                 // the global namespace which is bug
                 // https://github.com/google/autocxx/issues/133
                 self.results.apis.push(UnanalyzedApi {
-                    id: const_item.ident.clone(),
-                    ns: ns.clone(),
+                    name: QualifiedName::new(ns, const_item.ident.clone()),
                     deps: HashSet::new(),
                     detail: ApiDetail::Const { const_item },
                 });
@@ -241,7 +238,7 @@ impl<'a> ParseBindgen<'a> {
                     self.results.type_converter.convert_type(*ity.ty, ns, false);
                 match type_conversion_results {
                     Err(ConvertError::OpaqueTypeFound) => {
-                        self.add_opaque_type(ity.ident, ns.clone());
+                        self.add_opaque_type(tyname);
                         Ok(())
                     }
                     Err(err) => Err(ConvertErrorWithContext(
@@ -264,8 +261,7 @@ impl<'a> ParseBindgen<'a> {
                             .insert_typedef(tyname, final_type.ty);
                         self.results.apis.append(&mut final_type.extra_apis);
                         self.results.apis.push(UnanalyzedApi {
-                            id: ity.ident.clone(),
-                            ns: ns.clone(),
+                            name: QualifiedName::new(ns, ity.ident.clone()),
                             deps: final_type.types_encountered,
                             detail: ApiDetail::Typedef {
                                 payload: TypedefKind::Type(ity),
@@ -288,10 +284,9 @@ impl<'a> ParseBindgen<'a> {
             .any(|id| id == "_unused")
     }
 
-    fn add_opaque_type(&mut self, id: Ident, ns: Namespace) {
+    fn add_opaque_type(&mut self, name: QualifiedName) {
         self.results.apis.push(UnanalyzedApi {
-            id,
-            ns,
+            name,
             deps: HashSet::new(),
             detail: ApiDetail::OpaqueTypedef,
         });
@@ -305,27 +300,25 @@ impl<'a> ParseBindgen<'a> {
     /// this adds.
     fn parse_type(
         &mut self,
-        tyname: QualifiedName,
+        name: QualifiedName,
         is_forward_declaration: bool,
         deps: HashSet<QualifiedName>,
         bindgen_mod_item: Option<Item>,
     ) {
-        if self.type_config.is_on_blocklist(&tyname.to_cpp_name()) {
+        if self.type_config.is_on_blocklist(&name.to_cpp_name()) {
             return;
         }
         let api = UnanalyzedApi {
-            ns: tyname.get_namespace().clone(),
-            id: make_ident(tyname.get_final_ident()),
+            name: name.clone(),
             deps,
             detail: ApiDetail::Type {
-                tyname: tyname.clone(),
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis: (),
             },
         };
         self.results.apis.push(api);
-        self.results.type_converter.push(tyname);
+        self.results.type_converter.push(name);
     }
 
     fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertError> {

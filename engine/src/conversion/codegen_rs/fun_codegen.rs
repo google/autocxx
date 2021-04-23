@@ -190,7 +190,7 @@ fn generate_method_impl(
                 cxxbridge::#cxxbridge_name ( #(#arg_list),* )
             }
         }),
-        ty: make_ident(impl_block_type_name.get_final_ident()),
+        ty: impl_block_type_name.get_final_ident(),
     })
 }
 

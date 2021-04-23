@@ -69,8 +69,7 @@ fn push_ignored_item(
     apis: &mut Vec<Api<impl ApiAnalysis>>,
 ) {
     apis.push(Api {
-        ns: ns.clone(),
-        id: ctx.get_id().clone(),
+        name: QualifiedName::new(ns, ctx.get_id().clone()),
         deps: HashSet::new(),
         detail: ApiDetail::IgnoredItem { err, ctx },
     });

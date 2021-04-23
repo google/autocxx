@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::api::UnanalyzedApi;
-use crate::types::{make_ident, Namespace};
+use crate::types::{make_ident, Namespace, QualifiedName};
 use std::collections::HashSet;
 
 /// Adds items which we always add, cos they're useful.
@@ -27,8 +27,7 @@ pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>) {
     // and we always generate an additional C++ file for our bindings additions,
     // unless the include_cpp macro has specified ExcludeUtilities.
     apis.push(UnanalyzedApi {
-        ns: Namespace::new(),
-        id: make_ident("make_string"),
+        name: QualifiedName::new(&Namespace::new(), make_ident("make_string")),
         deps: HashSet::new(),
         detail: super::api::ApiDetail::StringConstructor,
     });

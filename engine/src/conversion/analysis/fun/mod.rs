@@ -165,7 +165,6 @@ impl<'a> FnAnalyzer<'a> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
-                    tyname: _,
                     is_forward_declaration: true,
                     bindgen_mod_item: _,
                     analysis: _,
@@ -179,7 +178,6 @@ impl<'a> FnAnalyzer<'a> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
-                    tyname: _,
                     is_forward_declaration: _,
                     bindgen_mod_item: _,
                     analysis: TypeKind::Pod,
@@ -207,18 +205,13 @@ impl<'a> FnAnalyzer<'a> {
     /// a new analysis phase prior to the POD analysis which materializes these types.
     fn make_extra_api_nonpod(api: UnanalyzedApi) -> Api<FnAnalysis> {
         let new_detail = match api.detail {
-            ApiDetail::ConcreteType {
-                tyname,
-                additional_cpp,
-            } => ApiDetail::ConcreteType {
-                tyname,
-                additional_cpp,
-            },
+            ApiDetail::ConcreteType { additional_cpp } => {
+                ApiDetail::ConcreteType { additional_cpp }
+            }
             _ => panic!("Function analysis created an extra API which wasn't a concrete type"),
         };
         Api {
-            ns: api.ns,
-            id: api.id,
+            name: api.name,
             deps: api.deps,
             detail: new_detail,
         }
@@ -229,19 +222,15 @@ impl<'a> FnAnalyzer<'a> {
         api: Api<PodAnalysis>,
     ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
         let mut new_deps = api.deps.clone();
-        let mut new_id = api.id;
+        let mut new_id = api.name.get_final_ident();
         let api_detail = match api.detail {
             // No changes to any of these...
-            ApiDetail::ConcreteType {
-                tyname,
-                additional_cpp,
-            } => ApiDetail::ConcreteType {
-                tyname,
-                additional_cpp,
-            },
+            ApiDetail::ConcreteType { additional_cpp } => {
+                ApiDetail::ConcreteType { additional_cpp }
+            }
             ApiDetail::StringConstructor => ApiDetail::StringConstructor,
             ApiDetail::Function { fun, analysis: _ } => {
-                let analysis = self.analyze_foreign_fn(&api.ns, &fun)?;
+                let analysis = self.analyze_foreign_fn(&api.name.get_namespace(), &fun)?;
                 match analysis {
                     None => return Ok(None),
                     Some(FnAnalysisResult(analysis, id, fn_deps)) => {
@@ -256,12 +245,10 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
             // Just changes to this one...
             ApiDetail::Type {
-                tyname,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis,
             } => ApiDetail::Type {
-                tyname,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis,
@@ -270,8 +257,7 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
         };
         Ok(Some(Api {
-            ns: api.ns,
-            id: new_id,
+            name: QualifiedName::new(api.name.get_namespace(), new_id),
             deps: new_deps,
             detail: api_detail,
         }))
@@ -386,7 +372,7 @@ impl<'a> FnAnalyzer<'a> {
             Some(self_ty) => ConvertErrorWithContext(
                 err,
                 Some(ErrorContext::Method {
-                    self_ty: make_ident(self_ty.get_final_ident()),
+                    self_ty: self_ty.get_final_ident(),
                     method: rust_name_for_error,
                 }),
             ),
@@ -436,7 +422,7 @@ impl<'a> FnAnalyzer<'a> {
                 return Ok(None);
             }
             // Method or static method.
-            let type_ident = self_ty.get_final_ident().to_string();
+            let type_ident = self_ty.get_final_item();
             // bindgen generates methods with the name:
             // {class}_{method name}
             // It then generates an impl section for the Rust type
@@ -485,7 +471,7 @@ impl<'a> FnAnalyzer<'a> {
         // namespace so we might need to prepend some stuff to make it unique.
         let cxxbridge_name = self.get_cxx_bridge_name(
             match kind {
-                FnKind::Method(ref self_ty, ..) => Some(self_ty.get_final_ident()),
+                FnKind::Method(ref self_ty, ..) => Some(self_ty.get_final_item()),
                 FnKind::Function => None,
             },
             &rust_name,
@@ -577,7 +563,7 @@ impl<'a> FnAnalyzer<'a> {
                 FnKind::Method(ref self_ty, MethodKind::Static) => (
                     FunctionWrapperPayload::StaticMethodCall(
                         ns.clone(),
-                        make_ident(self_ty.get_final_ident()),
+                        self_ty.get_final_ident(),
                         cpp_construction_ident,
                     ),
                     false,
@@ -862,7 +848,9 @@ impl Api<FnAnalysis> {
         match &self.detail {
             ApiDetail::Function { fun: _, analysis } => match analysis.kind {
                 FnKind::Method(ref self_ty, _) => self_ty.clone(),
-                FnKind::Function => QualifiedName::new(&self.ns, make_ident(&analysis.rust_name)),
+                FnKind::Function => {
+                    QualifiedName::new(&self.name.get_namespace(), make_ident(&analysis.rust_name))
+                }
             },
             _ => self.typename(),
         }
@@ -878,10 +866,7 @@ impl Api<FnAnalysis> {
         match &self.detail {
             ApiDetail::Function { fun: _, analysis } => analysis.cpp_wrapper.clone(),
             ApiDetail::StringConstructor => Some(AdditionalNeed::MakeStringConstructor),
-            ApiDetail::ConcreteType {
-                tyname: _,
-                additional_cpp,
-            } => Some(additional_cpp.clone()),
+            ApiDetail::ConcreteType { additional_cpp } => Some(additional_cpp.clone()),
             ApiDetail::CType { typename } => Some(AdditionalNeed::CTypeTypedef(typename.clone())),
             _ => None,
         }

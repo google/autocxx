@@ -79,13 +79,7 @@ fn analyze_pod_api(
     let mut new_deps = api.deps;
     let api_detail = match api.detail {
         // No changes to any of these...
-        ApiDetail::ConcreteType {
-            tyname,
-            additional_cpp,
-        } => ApiDetail::ConcreteType {
-            tyname,
-            additional_cpp,
-        },
+        ApiDetail::ConcreteType { additional_cpp } => ApiDetail::ConcreteType { additional_cpp },
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
         ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
@@ -93,7 +87,6 @@ fn analyze_pod_api(
         ApiDetail::CType { typename } => ApiDetail::CType { typename },
         // Just changes to this one...
         ApiDetail::Type {
-            tyname,
             is_forward_declaration,
             mut bindgen_mod_item,
             analysis: _,
@@ -103,7 +96,13 @@ fn analyze_pod_api(
             } else if byvalue_checker.is_pod(&ty_id) {
                 // It's POD so let's mark dependencies on things in its field
                 if let Some(Item::Struct(ref s)) = bindgen_mod_item {
-                    get_struct_field_types(type_converter, &api.ns, &s, &mut new_deps, extra_apis)?;
+                    get_struct_field_types(
+                        type_converter,
+                        &api.name.get_namespace(),
+                        &s,
+                        &mut new_deps,
+                        extra_apis,
+                    )?;
                 } // otherwise might be an enum, etc.
                 TypeKind::Pod
             } else {
@@ -116,7 +115,6 @@ fn analyze_pod_api(
                 TypeKind::NonPod
             };
             ApiDetail::Type {
-                tyname,
                 is_forward_declaration,
                 bindgen_mod_item,
                 analysis: type_kind,
@@ -126,8 +124,7 @@ fn analyze_pod_api(
         ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
     };
     Ok(Api {
-        ns: api.ns,
-        id: api.id,
+        name: api.name,
         deps: new_deps,
         detail: api_detail,
     })

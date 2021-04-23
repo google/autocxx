@@ -281,7 +281,7 @@ impl CppCodeGenerator {
     }
 
     fn generate_typedef(&mut self, tn: &QualifiedName, definition: String) {
-        let our_name = tn.get_final_ident();
+        let our_name = tn.get_final_item();
         self.additional_functions.push(AdditionalFunction {
             type_definition: format!("typedef {} {};", definition, our_name),
             declaration: "".into(),
