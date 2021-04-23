@@ -41,7 +41,7 @@ pub enum ConvertError {
     TemplatedTypeContainingNonPathArg(QualifiedName),
     InvalidPointee,
     DidNotGenerateAnything(String),
-    UnacceptableStdType(QualifiedName),
+    UnacceptableSpecialNamespaceType(QualifiedName),
     TypeContainingForwardDeclaration(QualifiedName),
     Blocked(QualifiedName),
 }
@@ -77,7 +77,7 @@ impl Display for ConvertError {
             ConvertError::TemplatedTypeContainingNonPathArg(tn) => write!(f, "Type {} was parameterized over something complex which we don't yet support", tn)?,
             ConvertError::InvalidPointee => write!(f, "Pointer pointed to something unsupported")?,
             ConvertError::DidNotGenerateAnything(directive) => write!(f, "The 'generate' or 'generate_pod' directive for '{}' did not result in any code being generated. Perhaps this was mis-spelled or you didn't qualify the name with any namespaces? Otherwise please report a bug.", directive)?,
-            ConvertError::UnacceptableStdType(tn) => write!(f, "The std type '{}' is not yet supported", tn.to_cpp_name())?,
+            ConvertError::UnacceptableSpecialNamespaceType(tn) => write!(f, "The type '{}' would require special support from cxx/autocxx, but is not yet supported", tn.to_cpp_name())?,
             ConvertError::TypeContainingForwardDeclaration(tn) => write!(f, "Found an attempt at using a forward declaration ({}) inside a templated cxx type such as UniquePtr or CxxVector", tn.to_cpp_name())?,
             ConvertError::Blocked(tn) => write!(f, "Found an attempt at using a type marked as blocked! ({})", tn.to_cpp_name())?,
         }

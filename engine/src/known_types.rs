@@ -189,15 +189,15 @@ impl TypeDatabase {
     ) -> Result<Option<TypePath>, ConvertError> {
         match self.get(&tn) {
             None => {
-                // Only allow types from std:: which we specifically understand,
+                // Only allow types from std:: and rust:: which we specifically understand,
                 // because we've told bindgen to block all the rest.
                 if tn
                     .ns_segment_iter()
                     .next()
-                    .filter(|seg| *seg == "std")
+                    .filter(|seg| BINDGEN_BLOCKLIST_NAMESPACES.iter().any(|ns| ns == seg))
                     .is_some()
                 {
-                    return Err(ConvertError::UnacceptableStdType(tn.clone()));
+                    return Err(ConvertError::UnacceptableSpecialNamespaceType(tn.clone()));
                 }
                 Ok(None)
             }
@@ -380,6 +380,12 @@ fn create_type_database() -> TypeDatabase {
     db
 }
 
+/// Namespaces which we pass to bindgen's blocklist.
+/// This is because we have special knowledge and handling of
+/// types in those namespaces.
+const BINDGEN_BLOCKLIST_NAMESPACES: &[&str] = &["std", "rust"];
+
+/// Extra things to include in the bindgen blocklist.
 /// This is worked out basically using trial and error.
 /// Excluding std* and rust* is obvious, but the other items...
 /// in theory bindgen ought to be smart enough to work out that
@@ -387,12 +393,15 @@ fn create_type_database() -> TypeDatabase {
 /// But it doesm unless we blocklist them. This is obviously
 /// a bit sensitive to the particular STL in use so one day
 /// it would be good to dig into bindgen's behavior here - TODO.
-const BINDGEN_BLOCKLIST: &[&str] = &["std::.*", "__gnu.*", ".*mbstate_t.*", "rust::.*"];
+const BINDGEN_BLOCKLIST: &[&str] = &["__gnu.*", ".*mbstate_t.*"];
 
 /// Get the list of types to give to bindgen to ask it _not_ to
 /// generate code for.
-pub(crate) fn get_initial_blocklist() -> Vec<String> {
-    BINDGEN_BLOCKLIST.iter().map(|s| s.to_string()).collect()
+pub(crate) fn get_initial_blocklist() -> impl Iterator<Item = String> {
+    BINDGEN_BLOCKLIST_NAMESPACES
+        .iter()
+        .map(|ns| format!("{}::.*", ns))
+        .chain(BINDGEN_BLOCKLIST.iter().map(|s| s.to_string()))
 }
 
 /// If a given type lacks a copy constructor, we should always use
