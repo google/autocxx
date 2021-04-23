@@ -402,16 +402,6 @@ impl<'a> RsCodeGenerator<'a> {
                     materialization: Use::Unused,
                 }
             }
-            ApiDetail::ForwardDeclaration => RsCodegenResult {
-                extern_c_mod_item: Some(ForeignItem::Type(parse_quote! {
-                    type #id;
-                })),
-                bridge_items: Vec::new(),
-                global_items: Vec::new(),
-                bindgen_mod_item: None,
-                impl_entry: None,
-                materialization: Use::UsedFromCxxBridge,
-            },
             ApiDetail::Function { fun, analysis } => {
                 gen_function(name.get_namespace(), fun, analysis)
             }
@@ -435,6 +425,7 @@ impl<'a> RsCodeGenerator<'a> {
                 materialization: Use::UsedFromBindgen,
             },
             ApiDetail::Type {
+                is_forward_declaration: _,
                 bindgen_mod_item,
                 analysis,
             } => RsCodegenResult {

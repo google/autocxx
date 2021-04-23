@@ -116,6 +116,7 @@ impl ByValueChecker {
                     }
                 }
                 ApiDetail::Type {
+                    is_forward_declaration: _,
                     bindgen_mod_item,
                     analysis: _,
                 } => match bindgen_mod_item {

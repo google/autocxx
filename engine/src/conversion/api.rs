@@ -20,8 +20,9 @@ use super::{convert_error::ErrorContext, parse::type_converter::TypeConverter, C
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
-    Pod,      // trivial. Can be moved and copied in Rust.
-    NonPod,   // has destructor or non-trivial move constructors. Can only hold by UniquePtr
+    Pod,                // trivial. Can be moved and copied in Rust.
+    NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
+    ForwardDeclaration, // no full C++ declaration available - can't even generate UniquePtr
     Abstract, // has pure virtual members - can't even generate UniquePtr
 }
 
@@ -29,7 +30,7 @@ impl TypeKind {
     pub(crate) fn can_be_instantiated(&self) -> bool {
         match self {
             TypeKind::Pod | TypeKind::NonPod => true,
-            TypeKind::Abstract => false,
+            TypeKind::ForwardDeclaration | TypeKind::Abstract => false,
         }
     }
 }
@@ -70,8 +71,6 @@ pub(crate) enum TypedefKind {
 
 /// Different types of API we might encounter.
 pub(crate) enum ApiDetail<T: ApiAnalysis> {
-    /// A forward declared type for which no definition is available.
-    ForwardDeclaration,
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
     ConcreteType { rs_definition: Box<Type> },
@@ -91,6 +90,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A type (struct or enum) encountered in the
     /// `bindgen` output.
     Type {
+        is_forward_declaration: bool,
         bindgen_mod_item: Option<Item>,
         analysis: T::TypeAnalysis,
     },

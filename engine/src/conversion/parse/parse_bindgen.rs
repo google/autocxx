@@ -235,9 +235,7 @@ impl<'a> ParseBindgen<'a> {
             Item::Type(mut ity) => {
                 let tyname = QualifiedName::new(ns, ity.ident.clone());
                 let type_conversion_results =
-                    self.results
-                        .type_converter
-                        .convert_type(*ity.ty, ns, false, &HashSet::new());
+                    self.results.type_converter.convert_type(*ity.ty, ns, false);
                 match type_conversion_results {
                     Err(ConvertError::OpaqueTypeFound) => {
                         self.add_opaque_type(tyname);
@@ -313,13 +311,10 @@ impl<'a> ParseBindgen<'a> {
         let api = UnanalyzedApi {
             name: name.clone(),
             deps,
-            detail: if is_forward_declaration {
-                ApiDetail::ForwardDeclaration
-            } else {
-                ApiDetail::Type {
-                    bindgen_mod_item,
-                    analysis: (),
-                }
+            detail: ApiDetail::Type {
+                is_forward_declaration,
+                bindgen_mod_item,
+                analysis: (),
             },
         };
         self.results.apis.push(api);
