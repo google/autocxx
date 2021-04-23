@@ -37,7 +37,7 @@ use super::parse_foreign_mod::ParseForeignMod;
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
     type_config: &'a TypeConfig,
-    results: ParseResults,
+    results: ParseResults<'a>,
     /// Here we track the last struct which bindgen told us about.
     /// Any subsequent "extern 'C'" blocks are methods belonging to that type,
     /// even if the 'this' is actually recorded as void in the
@@ -51,7 +51,7 @@ impl<'a> ParseBindgen<'a> {
             type_config,
             results: ParseResults {
                 apis: Vec::new(),
-                type_converter: TypeConverter::new(),
+                type_converter: TypeConverter::new(type_config),
             },
             latest_virtual_this_type: None,
         }
@@ -63,7 +63,7 @@ impl<'a> ParseBindgen<'a> {
         mut self,
         items: Vec<Item>,
         exclude_utilities: bool,
-    ) -> Result<ParseResults, ConvertError> {
+    ) -> Result<ParseResults<'a>, ConvertError> {
         let items = Self::find_items_in_root(items)?;
         if !exclude_utilities {
             generate_utilities(&mut self.results.apis);
@@ -235,7 +235,9 @@ impl<'a> ParseBindgen<'a> {
             Item::Type(mut ity) => {
                 let tyname = QualifiedName::new(ns, ity.ident.clone());
                 let type_conversion_results =
-                    self.results.type_converter.convert_type(*ity.ty, ns, false);
+                    self.results
+                        .type_converter
+                        .convert_type(*ity.ty, ns, false, &HashSet::new());
                 match type_conversion_results {
                     Err(ConvertError::OpaqueTypeFound) => {
                         self.add_opaque_type(tyname);
@@ -311,10 +313,13 @@ impl<'a> ParseBindgen<'a> {
         let api = UnanalyzedApi {
             name: name.clone(),
             deps,
-            detail: ApiDetail::Type {
-                is_forward_declaration,
-                bindgen_mod_item,
-                analysis: (),
+            detail: if is_forward_declaration {
+                ApiDetail::ForwardDeclaration
+            } else {
+                ApiDetail::Type {
+                    bindgen_mod_item,
+                    analysis: (),
+                }
             },
         };
         self.results.apis.push(api);

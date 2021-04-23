@@ -17,6 +17,7 @@ use crate::{
     known_types::known_types,
     types::{make_ident, Namespace, QualifiedName},
 };
+use autocxx_parser::TypeConfig;
 use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
 use syn::{
@@ -72,18 +73,20 @@ impl<T> Annotated<T> {
 /// information stored elsewhere in the list of `Api`s, or can
 /// easily be moved into it, which would enable us to
 /// distribute this logic elsewhere.
-pub(crate) struct TypeConverter {
+pub(crate) struct TypeConverter<'a> {
     types_found: Vec<QualifiedName>,
     typedefs: HashMap<QualifiedName, Type>,
     concrete_templates: HashMap<String, QualifiedName>,
+    config: &'a TypeConfig,
 }
 
-impl TypeConverter {
-    pub(crate) fn new() -> Self {
+impl<'a> TypeConverter<'a> {
+    pub(crate) fn new(config: &'a TypeConfig) -> Self {
         Self {
             types_found: Vec::new(),
             typedefs: HashMap::new(),
             concrete_templates: HashMap::new(),
+            config,
         }
     }
 
@@ -100,9 +103,15 @@ impl TypeConverter {
         ty: Box<Type>,
         ns: &Namespace,
         convert_ptrs_to_reference: bool,
+        types_to_allow_only_in_references_and_ptrs: &HashSet<QualifiedName>,
     ) -> Result<Annotated<Box<Type>>, ConvertError> {
         Ok(self
-            .convert_type(*ty, ns, convert_ptrs_to_reference)?
+            .convert_type(
+                *ty,
+                ns,
+                convert_ptrs_to_reference,
+                types_to_allow_only_in_references_and_ptrs,
+            )?
             .map(Box::new))
     }
 
@@ -111,16 +120,22 @@ impl TypeConverter {
         ty: Type,
         ns: &Namespace,
         convert_ptrs_to_reference: bool,
+        types_to_allow_only_in_references_and_ptrs: &HashSet<QualifiedName>,
     ) -> Result<Annotated<Type>, ConvertError> {
         let result = match ty {
             Type::Path(p) => {
-                let newp = self.convert_type_path(p, ns)?;
+                let newp =
+                    self.convert_type_path(p, ns, types_to_allow_only_in_references_and_ptrs)?;
                 if let Type::Path(newpp) = &newp.ty {
+                    let qn = QualifiedName::from_type_path(newpp);
+                    if types_to_allow_only_in_references_and_ptrs.contains(&qn) {
+                        return Err(ConvertError::TypeContainingForwardDeclaration(qn.clone()));
+                    }
                     // Special handling because rust_Str (as emitted by bindgen)
                     // doesn't simply get renamed to a different type _identifier_.
                     // This plain type-by-value (as far as bindgen is concerned)
                     // is actually a &str.
-                    if known_types().should_dereference_in_cpp(newpp) {
+                    if known_types().should_dereference_in_cpp(&qn) {
                         Annotated::new(
                             Type::Reference(parse_quote! {
                                 &str
@@ -137,7 +152,7 @@ impl TypeConverter {
                 }
             }
             Type::Reference(mut r) => {
-                let innerty = self.convert_boxed_type(r.elem, ns, false)?;
+                let innerty = self.convert_boxed_type(r.elem, ns, false, &HashSet::new())?;
                 r.elem = innerty.ty;
                 Annotated::new(
                     Type::Reference(r),
@@ -151,7 +166,7 @@ impl TypeConverter {
             }
             Type::Ptr(mut ptr) => {
                 crate::known_types::ensure_pointee_is_valid(&ptr)?;
-                let innerty = self.convert_boxed_type(ptr.elem, ns, false)?;
+                let innerty = self.convert_boxed_type(ptr.elem, ns, false, &HashSet::new())?;
                 ptr.elem = innerty.ty;
                 Annotated::new(
                     Type::Ptr(ptr),
@@ -169,6 +184,7 @@ impl TypeConverter {
         &mut self,
         mut typ: TypePath,
         ns: &Namespace,
+        types_to_allow_only_in_references_and_ptrs: &HashSet<QualifiedName>,
     ) -> Result<Annotated<Type>, ConvertError> {
         // First, qualify any unqualified paths.
         if typ.path.segments.iter().next().unwrap().ident != "root" {
@@ -196,6 +212,9 @@ impl TypeConverter {
         }
 
         let original_tn = QualifiedName::from_type_path(&typ);
+        if self.config.is_on_blocklist(&original_tn.to_cpp_name()) {
+            return Err(ConvertError::Blocked(original_tn));
+        }
         let mut deps = HashSet::new();
 
         // Now convert this type itself.
@@ -243,6 +262,7 @@ impl TypeConverter {
                 crate::known_types::confirm_inner_type_is_acceptable_generic_payload(
                     &last_seg.arguments,
                     &tn,
+                    types_to_allow_only_in_references_and_ptrs,
                 )?;
                 if let PathArguments::AngleBracketed(ref mut ab) = last_seg.arguments {
                     let mut innerty = self.convert_punctuated(ab.args.clone(), ns)?;
@@ -284,7 +304,7 @@ impl TypeConverter {
         for arg in pun.into_iter() {
             new_pun.push(match arg {
                 GenericArgument::Type(t) => {
-                    let mut innerty = self.convert_type(t, ns, false)?;
+                    let mut innerty = self.convert_type(t, ns, false, &HashSet::new())?;
                     types_encountered.extend(innerty.types_encountered.drain());
                     extra_apis.extend(innerty.extra_apis.drain(..));
                     GenericArgument::Type(innerty.ty)
@@ -316,7 +336,7 @@ impl TypeConverter {
         ns: &Namespace,
     ) -> Result<Annotated<Type>, ConvertError> {
         let mutability = ptr.mutability;
-        let elem = self.convert_boxed_type(ptr.elem, ns, false)?;
+        let elem = self.convert_boxed_type(ptr.elem, ns, false, &HashSet::new())?;
         // TODO - in the future, we should check if this is a rust::Str and throw
         // a wobbler if not. rust::Str should only be seen _by value_ in C++
         // headers; it manifests as &str in Rust but on the C++ side it must
@@ -331,16 +351,6 @@ impl TypeConverter {
         }))
     }
 
-    fn add_concrete_type(&self, name: &QualifiedName, rs_definition: &Type) -> UnanalyzedApi {
-        UnanalyzedApi {
-            name: name.clone(),
-            deps: HashSet::new(),
-            detail: crate::conversion::api::ApiDetail::ConcreteType {
-                rs_definition: Box::new(rs_definition.clone()),
-            },
-        }
-    }
-
     fn get_templated_typename(
         &mut self,
         rs_definition: &Type,
@@ -352,14 +362,20 @@ impl TypeConverter {
         match e {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
-                let tn = QualifiedName::new(
+                let name = QualifiedName::new(
                     &Namespace::new(),
                     make_ident(&format!("AutocxxConcrete{}", count)),
                 );
                 self.concrete_templates
-                    .insert(cpp_definition.clone(), tn.clone());
-                let api = self.add_concrete_type(&tn, rs_definition);
-                Ok((tn, Some(api)))
+                    .insert(cpp_definition.clone(), name.clone());
+                let api = UnanalyzedApi {
+                    name: name.clone(),
+                    deps: HashSet::new(),
+                    detail: crate::conversion::api::ApiDetail::ConcreteType {
+                        rs_definition: Box::new(rs_definition.clone()),
+                    },
+                };
+                Ok((name, Some(api)))
             }
         }
     }

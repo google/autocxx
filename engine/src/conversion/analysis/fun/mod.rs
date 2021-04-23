@@ -118,7 +118,7 @@ pub(crate) struct FnAnalyzer<'a> {
     unsafe_policy: UnsafePolicy,
     rust_name_tracker: RustNameTracker,
     extra_apis: Vec<UnanalyzedApi>,
-    type_converter: &'a mut TypeConverter,
+    type_converter: &'a mut TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
     type_config: &'a TypeConfig,
@@ -133,7 +133,7 @@ impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: Vec<Api<PodAnalysis>>,
         unsafe_policy: UnsafePolicy,
-        type_converter: &'a mut TypeConverter,
+        type_converter: &'a mut TypeConverter<'a>,
         type_database: &'a TypeConfig,
     ) -> Vec<Api<FnAnalysis>> {
         let mut me = Self {
@@ -164,11 +164,7 @@ impl<'a> FnAnalyzer<'a> {
     fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {
-                ApiDetail::Type {
-                    is_forward_declaration: true,
-                    bindgen_mod_item: _,
-                    analysis: _,
-                } => Some(api.typename()),
+                ApiDetail::ForwardDeclaration => Some(api.typename()),
                 _ => None,
             })
             .collect()
@@ -178,7 +174,6 @@ impl<'a> FnAnalyzer<'a> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
-                    is_forward_declaration: _,
                     bindgen_mod_item: _,
                     analysis: TypeKind::Pod,
                 } => Some(api.typename()),
@@ -241,14 +236,13 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
             // Just changes to this one...
             ApiDetail::Type {
-                is_forward_declaration,
                 bindgen_mod_item,
                 analysis,
             } => ApiDetail::Type {
-                is_forward_declaration,
                 bindgen_mod_item,
                 analysis,
             },
+            ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
             ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
             ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
         };
@@ -265,9 +259,12 @@ impl<'a> FnAnalyzer<'a> {
         ns: &Namespace,
         convert_ptrs_to_reference: bool,
     ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool), ConvertError> {
-        let annotated =
-            self.type_converter
-                .convert_boxed_type(ty, ns, convert_ptrs_to_reference)?;
+        let annotated = self.type_converter.convert_boxed_type(
+            ty,
+            ns,
+            convert_ptrs_to_reference,
+            &self.incomplete_types,
+        )?;
         self.extra_apis.extend(annotated.extra_apis);
         Ok((
             annotated.ty,
@@ -292,11 +289,6 @@ impl<'a> FnAnalyzer<'a> {
 
     fn is_on_allowlist(&self, type_name: &QualifiedName) -> bool {
         self.type_config.is_on_allowlist(&type_name.to_cpp_name())
-    }
-
-    fn avoid_generating_type(&self, type_name: &QualifiedName) -> bool {
-        self.type_config.is_on_blocklist(&type_name.to_cpp_name())
-            || self.incomplete_types.contains(type_name)
     }
 
     fn should_be_unsafe(&self) -> bool {
@@ -504,11 +496,6 @@ impl<'a> FnAnalyzer<'a> {
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
 
-        if deps.iter().any(|tn| self.avoid_generating_type(tn)) {
-            return Err(contextualize_error(ConvertError::UnacceptableParam(
-                rust_name,
-            )));
-        }
         if return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
             // one reference as a parameter. Let's see...
@@ -654,9 +641,6 @@ impl<'a> FnAnalyzer<'a> {
         )))
     }
 
-    /// Returns additionally a Boolean indicating whether an argument was
-    /// 'this' and another one indicating whether we took a type by value
-    /// and that type was non-trivial.
     fn convert_fn_arg(
         &mut self,
         arg: &FnArg,

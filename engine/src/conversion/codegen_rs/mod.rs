@@ -389,19 +389,22 @@ impl<'a> RsCodeGenerator<'a> {
                 impl_entry: None,
                 materialization: Use::Unused,
             },
-            ApiDetail::ConcreteType { .. } => {
-                let global_items = Self::generate_extern_type_impl(TypeKind::NonPod, &name);
-                RsCodegenResult {
-                    global_items,
-                    bridge_items: create_impl_items(&id),
-                    extern_c_mod_item: Some(ForeignItem::Verbatim(quote! {
-                        type #id = super::bindgen::root::#id;
-                    })),
-                    bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id.clone()))),
-                    impl_entry: None,
-                    materialization: Use::Unused,
-                }
-            }
+            ApiDetail::ConcreteType { .. } => RsCodegenResult {
+                global_items: Self::generate_extern_type_impl(TypeKind::NonPod, &name),
+                bridge_items: create_impl_items(&id),
+                extern_c_mod_item: Some(ForeignItem::Verbatim(Self::generate_cxxbridge_type(name))),
+                bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id.clone()))),
+                impl_entry: None,
+                materialization: Use::Unused,
+            },
+            ApiDetail::ForwardDeclaration => RsCodegenResult {
+                extern_c_mod_item: Some(ForeignItem::Verbatim(Self::generate_cxxbridge_type(name))),
+                bridge_items: Vec::new(),
+                global_items: Self::generate_extern_type_impl(TypeKind::NonPod, &name),
+                bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id.clone()))),
+                impl_entry: None,
+                materialization: Use::UsedFromCxxBridge,
+            },
             ApiDetail::Function { fun, analysis } => {
                 gen_function(name.get_namespace(), fun, analysis)
             }
@@ -425,7 +428,6 @@ impl<'a> RsCodeGenerator<'a> {
                 materialization: Use::UsedFromBindgen,
             },
             ApiDetail::Type {
-                is_forward_declaration: _,
                 bindgen_mod_item,
                 analysis,
             } => RsCodegenResult {
