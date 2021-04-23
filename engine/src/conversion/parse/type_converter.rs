@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::{
-    conversion::codegen_cpp::AdditionalNeed,
     conversion::{api::UnanalyzedApi, codegen_cpp::type_to_cpp::type_to_cpp, ConvertError},
     known_types::known_types,
     types::{make_ident, Namespace, QualifiedName},
@@ -337,10 +336,7 @@ impl TypeConverter {
             name: name.clone(),
             deps: HashSet::new(),
             detail: crate::conversion::api::ApiDetail::ConcreteType {
-                additional_cpp: AdditionalNeed::ConcreteTemplatedTypeTypedef(
-                    name.clone(),
-                    Box::new(rs_definition.clone()),
-                ),
+                rs_definition: Box::new(rs_definition.clone()),
             },
         }
     }
