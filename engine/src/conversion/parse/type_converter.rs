@@ -124,11 +124,15 @@ impl TypeConverter {
                 let newp =
                     self.convert_type_path(p, ns, types_to_allow_only_in_references_and_ptrs)?;
                 if let Type::Path(newpp) = &newp.ty {
+                    let qn = QualifiedName::from_type_path(newpp);
+                    if types_to_allow_only_in_references_and_ptrs.contains(&qn) {
+                        return Err(ConvertError::TypeContainingForwardDeclaration(qn.clone()));
+                    }
                     // Special handling because rust_Str (as emitted by bindgen)
                     // doesn't simply get renamed to a different type _identifier_.
                     // This plain type-by-value (as far as bindgen is concerned)
                     // is actually a &str.
-                    if known_types().should_dereference_in_cpp(newpp) {
+                    if known_types().should_dereference_in_cpp(&qn) {
                         Annotated::new(
                             Type::Reference(parse_quote! {
                                 &str

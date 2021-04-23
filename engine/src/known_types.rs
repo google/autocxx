@@ -172,8 +172,7 @@ impl TypeDatabase {
     /// Whether this TypePath should be treated as a value in C++
     /// but a reference in Rust. This only applies to rust::Str
     /// (C++ name) which is &str in Rust.
-    pub(crate) fn should_dereference_in_cpp(&self, typ: &TypePath) -> bool {
-        let tn = QualifiedName::from_type_path(typ);
+    pub(crate) fn should_dereference_in_cpp(&self, tn: &QualifiedName) -> bool {
         self.get(&tn)
             .map(|td| matches!(td.behavior, Behavior::RustStr))
             .unwrap_or(false)
