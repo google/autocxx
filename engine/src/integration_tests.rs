@@ -3556,6 +3556,7 @@ fn test_forward_declaration() {
             uint32_t a;
             void daft(const A&) const {}
             void daft2(std::unique_ptr<A>) const {}
+            static B daft3(const A&) { B b; return b; }
         };
         A* get_a();
         void delete_a(A*);
