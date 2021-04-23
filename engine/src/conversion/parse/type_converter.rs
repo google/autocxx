@@ -17,6 +17,7 @@ use crate::{
     known_types::known_types,
     types::{make_ident, Namespace, QualifiedName},
 };
+use autocxx_parser::TypeConfig;
 use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
 use syn::{
@@ -72,18 +73,20 @@ impl<T> Annotated<T> {
 /// information stored elsewhere in the list of `Api`s, or can
 /// easily be moved into it, which would enable us to
 /// distribute this logic elsewhere.
-pub(crate) struct TypeConverter {
+pub(crate) struct TypeConverter<'a> {
     types_found: Vec<QualifiedName>,
     typedefs: HashMap<QualifiedName, Type>,
     concrete_templates: HashMap<String, QualifiedName>,
+    config: &'a TypeConfig,
 }
 
-impl TypeConverter {
-    pub(crate) fn new() -> Self {
+impl<'a> TypeConverter<'a> {
+    pub(crate) fn new(config: &'a TypeConfig) -> Self {
         Self {
             types_found: Vec::new(),
             typedefs: HashMap::new(),
             concrete_templates: HashMap::new(),
+            config,
         }
     }
 
@@ -209,6 +212,9 @@ impl TypeConverter {
         }
 
         let original_tn = QualifiedName::from_type_path(&typ);
+        if self.config.is_on_blocklist(&original_tn.to_cpp_name()) {
+            return Err(ConvertError::Blocked(original_tn));
+        }
         let mut deps = HashSet::new();
 
         // Now convert this type itself.

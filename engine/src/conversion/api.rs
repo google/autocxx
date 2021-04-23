@@ -141,12 +141,12 @@ impl<T: ApiAnalysis> Api<T> {
 
 /// Results of parsing the bindgen mod. This is what is passed from
 /// the parser to the analysis phases.
-pub(crate) struct ParseResults {
+pub(crate) struct ParseResults<'a> {
     /// All APIs encountered. This is the main thing.
     pub(crate) apis: Vec<UnanalyzedApi>,
     /// A database containing known relationships between types.
     /// In particular, any typedefs detected.
     /// This should probably be replaced by extracting this information
     /// from APIs as necessary later. TODO
-    pub(crate) type_converter: TypeConverter,
+    pub(crate) type_converter: TypeConverter<'a>,
 }

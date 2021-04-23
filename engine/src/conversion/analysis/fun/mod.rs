@@ -118,7 +118,7 @@ pub(crate) struct FnAnalyzer<'a> {
     unsafe_policy: UnsafePolicy,
     rust_name_tracker: RustNameTracker,
     extra_apis: Vec<UnanalyzedApi>,
-    type_converter: &'a mut TypeConverter,
+    type_converter: &'a mut TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
     type_config: &'a TypeConfig,
@@ -133,7 +133,7 @@ impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: Vec<Api<PodAnalysis>>,
         unsafe_policy: UnsafePolicy,
-        type_converter: &'a mut TypeConverter,
+        type_converter: &'a mut TypeConverter<'a>,
         type_database: &'a TypeConfig,
     ) -> Vec<Api<FnAnalysis>> {
         let mut me = Self {
@@ -289,10 +289,6 @@ impl<'a> FnAnalyzer<'a> {
 
     fn is_on_allowlist(&self, type_name: &QualifiedName) -> bool {
         self.type_config.is_on_allowlist(&type_name.to_cpp_name())
-    }
-
-    fn avoid_generating_type(&self, type_name: &QualifiedName) -> bool {
-        self.type_config.is_on_blocklist(&type_name.to_cpp_name())
     }
 
     fn should_be_unsafe(&self) -> bool {
@@ -500,11 +496,6 @@ impl<'a> FnAnalyzer<'a> {
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
 
-        if deps.iter().any(|tn| self.avoid_generating_type(tn)) {
-            return Err(contextualize_error(ConvertError::UnacceptableParam(
-                rust_name,
-            )));
-        }
         if return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
             // one reference as a parameter. Let's see...
