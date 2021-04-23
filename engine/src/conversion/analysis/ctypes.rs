@@ -17,10 +17,7 @@ use std::collections::{HashMap, HashSet};
 use syn::Ident;
 
 use crate::{conversion::api::Api, known_types::known_types, types::QualifiedName};
-use crate::{
-    conversion::api::ApiDetail,
-    types::{make_ident, Namespace},
-};
+use crate::{conversion::api::ApiDetail, types::Namespace};
 
 use super::fun::FnAnalysis;
 
@@ -32,7 +29,7 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
         .map(|api| api.deps.iter())
         .flatten()
         .filter(|ty| known_types().is_ctype(ty))
-        .map(|ty| (make_ident(ty.get_final_item()), ty.clone()))
+        .map(|ty| (ty.get_final_ident(), ty.clone()))
         .collect();
     for (id, tn) in ctypes {
         apis.push(Api {

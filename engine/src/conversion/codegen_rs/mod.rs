@@ -147,7 +147,7 @@ impl<'a> RsCodeGenerator<'a> {
                 (
                     (
                         api.name.get_namespace().clone(),
-                        make_ident(api.name.get_final_item()),
+                        api.name.get_final_ident(),
                         gen,
                     ),
                     more_cpp_needed,
@@ -384,7 +384,7 @@ impl<'a> RsCodeGenerator<'a> {
         name: &QualifiedName,
         api_detail: ApiDetail<FnAnalysis>,
     ) -> RsCodegenResult {
-        let id = make_ident(name.get_final_item());
+        let id = name.get_final_ident();
         match api_detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
@@ -547,7 +547,7 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn generate_cxxbridge_type(name: &QualifiedName) -> TokenStream {
-        let id = make_ident(name.get_final_item());
+        let id = name.get_final_ident();
         let ns = name.get_namespace();
         let mut for_extern_c_ts = if !ns.is_empty() {
             let ns_string = ns.iter().cloned().collect::<Vec<String>>().join("::");

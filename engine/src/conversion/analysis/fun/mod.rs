@@ -222,7 +222,7 @@ impl<'a> FnAnalyzer<'a> {
         api: Api<PodAnalysis>,
     ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
         let mut new_deps = api.deps.clone();
-        let mut new_id = make_ident(api.name.get_final_item());
+        let mut new_id = api.name.get_final_ident();
         let api_detail = match api.detail {
             // No changes to any of these...
             ApiDetail::ConcreteType { additional_cpp } => {
@@ -372,7 +372,7 @@ impl<'a> FnAnalyzer<'a> {
             Some(self_ty) => ConvertErrorWithContext(
                 err,
                 Some(ErrorContext::Method {
-                    self_ty: make_ident(self_ty.get_final_item()),
+                    self_ty: self_ty.get_final_ident(),
                     method: rust_name_for_error,
                 }),
             ),
@@ -422,7 +422,7 @@ impl<'a> FnAnalyzer<'a> {
                 return Ok(None);
             }
             // Method or static method.
-            let type_ident = self_ty.get_final_item().to_string();
+            let type_ident = self_ty.get_final_item();
             // bindgen generates methods with the name:
             // {class}_{method name}
             // It then generates an impl section for the Rust type
@@ -563,7 +563,7 @@ impl<'a> FnAnalyzer<'a> {
                 FnKind::Method(ref self_ty, MethodKind::Static) => (
                     FunctionWrapperPayload::StaticMethodCall(
                         ns.clone(),
-                        make_ident(self_ty.get_final_item()),
+                        self_ty.get_final_ident(),
                         cpp_construction_ident,
                     ),
                     false,
