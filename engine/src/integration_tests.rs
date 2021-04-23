@@ -4131,6 +4131,69 @@ fn test_simple_dependent_qualified_type() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/411
+fn test_specialization() {
+    let hdr = indoc! {"
+    #include <stddef.h>
+    #include <stdint.h>
+    #include <string>
+    #include <type_traits>
+
+    template <typename T, bool = std::is_trivially_destructible<T>::value>
+    struct OptionalStorageBase {
+        T value_;
+    };
+
+    template <typename T,
+    bool = std::is_trivially_copy_constructible<T>::value,
+    bool = std::is_trivially_move_constructible<T>::value>
+    struct OptionalStorage : OptionalStorageBase<T> {};
+
+    template <typename T>
+    struct OptionalStorage<T,
+                       true /* trivially copy constructible */,
+                       false /* trivially move constructible */>
+    : OptionalStorageBase<T> {
+    };
+
+    template <typename T>
+    struct OptionalStorage<T,
+                       false /* trivially copy constructible */,
+                       true /* trivially move constructible */>
+    : OptionalStorageBase<T> {
+    };
+
+    template <typename T>
+    struct OptionalStorage<T,
+                       true /* trivially copy constructible */,
+                       true /* trivially move constructible */>
+    : OptionalStorageBase<T> {
+    };
+
+    template <typename T>
+    class OptionalBase {
+    private:
+        OptionalStorage<T> storage_;
+    };
+
+    template <typename T>
+    class Optional : public OptionalBase<T> {
+
+    };
+
+    struct B {
+        B() {}
+        void take_optional(Optional<std::string>) {}
+        uint32_t a;
+    };
+    "};
+    let rs = quote! {
+        ffi::B::make_unique();
+    };
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
+#[test]
 fn test_private_constructor_make_unique() {
     let hdr = indoc! {"
     #include <stdint.h>
