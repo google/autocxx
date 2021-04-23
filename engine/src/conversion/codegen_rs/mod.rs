@@ -29,7 +29,7 @@ pub(crate) use non_pod_struct::make_non_pod;
 use proc_macro2::TokenStream;
 use syn::{parse_quote, ForeignItem, Ident, Item, ItemForeignMod, ItemMod};
 
-use crate::types::{make_ident, Namespace};
+use crate::types::{make_ident, Namespace, QualifiedName};
 use impl_item_creator::create_impl_items;
 
 use self::{
@@ -40,7 +40,7 @@ use self::{
 
 use super::{
     analysis::fun::FnAnalysis,
-    api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, TypedefKind},
+    api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeKind, TypedefKind},
 };
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::quote;
@@ -389,8 +389,8 @@ impl<'a> RsCodeGenerator<'a> {
                 impl_entry: None,
                 materialization: Use::Unused,
             },
-            ApiDetail::ConcreteType { ty_details, .. } => {
-                let global_items = Self::generate_extern_type_impl(TypeKind::NonPod, &ty_details);
+            ApiDetail::ConcreteType { tyname, .. } => {
+                let global_items = Self::generate_extern_type_impl(TypeKind::NonPod, &tyname);
                 RsCodegenResult {
                     global_items,
                     bridge_items: create_impl_items(&id),
@@ -423,12 +423,12 @@ impl<'a> RsCodeGenerator<'a> {
                 materialization: Use::UsedFromBindgen,
             },
             ApiDetail::Type {
-                ty_details,
+                tyname,
                 is_forward_declaration: _,
                 bindgen_mod_item,
                 analysis,
             } => RsCodegenResult {
-                global_items: Self::generate_extern_type_impl(analysis, &ty_details),
+                global_items: Self::generate_extern_type_impl(analysis, &tyname),
                 impl_entry: None,
                 bridge_items: if analysis.can_be_instantiated() {
                     create_impl_items(&id)
@@ -524,9 +524,9 @@ impl<'a> RsCodeGenerator<'a> {
         })
     }
 
-    fn generate_extern_type_impl(type_kind: TypeKind, ty_details: &TypeApiDetails) -> Vec<Item> {
-        let tynamestring = &ty_details.tynamestring;
-        let fulltypath = &ty_details.fulltypath;
+    fn generate_extern_type_impl(type_kind: TypeKind, tyname: &QualifiedName) -> Vec<Item> {
+        let tynamestring = tyname.to_cpp_name();
+        let fulltypath = tyname.get_bindgen_path_idents();
         let kind_item = match type_kind {
             TypeKind::Pod => "Trivial",
             _ => "Opaque",

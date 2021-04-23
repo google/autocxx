@@ -14,11 +14,7 @@
 
 use crate::{
     conversion::codegen_cpp::AdditionalNeed,
-    conversion::{
-        api::{TypeApiDetails, UnanalyzedApi},
-        codegen_cpp::type_to_cpp::type_to_cpp,
-        ConvertError,
-    },
+    conversion::{api::UnanalyzedApi, codegen_cpp::type_to_cpp::type_to_cpp, ConvertError},
     known_types::known_types,
     types::{make_ident, Namespace, QualifiedName},
 };
@@ -342,10 +338,7 @@ impl TypeConverter {
             id: make_ident(tyname.get_final_ident()),
             deps: HashSet::new(),
             detail: crate::conversion::api::ApiDetail::ConcreteType {
-                ty_details: TypeApiDetails {
-                    fulltypath: tyname.get_bindgen_path_idents(),
-                    tynamestring: tyname.to_cpp_name(),
-                },
+                tyname: tyname.clone(),
                 additional_cpp: AdditionalNeed::ConcreteTemplatedTypeTypedef(
                     tyname.clone(),
                     Box::new(rs_definition.clone()),

@@ -38,13 +38,6 @@ impl TypeKind {
     }
 }
 
-/// Common details for types of API which are a type and will require
-/// us to generate an ExternType.
-pub(crate) struct TypeApiDetails {
-    pub(crate) fulltypath: Vec<Ident>,
-    pub(crate) tynamestring: String,
-}
-
 /// An entry which needs to go into an `impl` block for a given type.
 pub(crate) struct ImplBlockDetails {
     pub(crate) item: ImplItem,
@@ -84,7 +77,8 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
     ConcreteType {
-        ty_details: TypeApiDetails,
+        tyname: QualifiedName, // there's a good chance this field
+        // is redundant
         additional_cpp: AdditionalNeed,
     },
     /// A simple note that we want to make a constructor for
@@ -103,7 +97,8 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A type (struct or enum) encountered in the
     /// `bindgen` output.
     Type {
-        ty_details: TypeApiDetails,
+        tyname: QualifiedName, // there's a good chance this field
+        // is redundant
         is_forward_declaration: bool,
         bindgen_mod_item: Option<Item>,
         analysis: T::TypeAnalysis,
