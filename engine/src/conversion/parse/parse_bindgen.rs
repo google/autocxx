@@ -310,19 +310,17 @@ impl<'a> ParseBindgen<'a> {
         deps: HashSet<QualifiedName>,
         bindgen_mod_item: Option<Item>,
     ) {
-        let final_ident = make_ident(tyname.get_final_ident());
         if self.type_config.is_on_blocklist(&tyname.to_cpp_name()) {
             return;
         }
         let tynamestring = tyname.to_cpp_name();
         let api = UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
-            id: final_ident.clone(),
+            id: make_ident(tyname.get_final_ident()),
             deps,
             detail: ApiDetail::Type {
                 ty_details: TypeApiDetails {
                     fulltypath: tyname.get_bindgen_path_idents(),
-                    final_ident,
                     tynamestring,
                 },
                 is_forward_declaration,

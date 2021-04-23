@@ -391,16 +391,13 @@ impl<'a> RsCodeGenerator<'a> {
             },
             ApiDetail::ConcreteType { ty_details, .. } => {
                 let global_items = Self::generate_extern_type_impl(TypeKind::NonPod, &ty_details);
-                let final_ident = &ty_details.final_ident;
                 RsCodegenResult {
                     global_items,
-                    bridge_items: create_impl_items(&final_ident),
+                    bridge_items: create_impl_items(&id),
                     extern_c_mod_item: Some(ForeignItem::Verbatim(quote! {
-                        type #final_ident = super::bindgen::root::#final_ident;
+                        type #id = super::bindgen::root::#id;
                     })),
-                    bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(
-                        ty_details.final_ident,
-                    ))),
+                    bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id.clone()))),
                     impl_entry: None,
                     materialization: Use::Unused,
                 }
@@ -434,7 +431,7 @@ impl<'a> RsCodeGenerator<'a> {
                 global_items: Self::generate_extern_type_impl(analysis, &ty_details),
                 impl_entry: None,
                 bridge_items: if analysis.can_be_instantiated() {
-                    create_impl_items(&ty_details.final_ident)
+                    create_impl_items(&id)
                 } else {
                     Vec::new()
                 },

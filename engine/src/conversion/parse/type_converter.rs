@@ -344,7 +344,6 @@ impl TypeConverter {
             detail: crate::conversion::api::ApiDetail::ConcreteType {
                 ty_details: TypeApiDetails {
                     fulltypath: tyname.get_bindgen_path_idents(),
-                    final_ident: make_ident(tyname.get_final_ident()),
                     tynamestring: tyname.to_cpp_name(),
                 },
                 additional_cpp: AdditionalNeed::ConcreteTemplatedTypeTypedef(

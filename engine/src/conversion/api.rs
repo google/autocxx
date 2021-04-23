@@ -42,7 +42,6 @@ impl TypeKind {
 /// us to generate an ExternType.
 pub(crate) struct TypeApiDetails {
     pub(crate) fulltypath: Vec<Ident>,
-    pub(crate) final_ident: Ident,
     pub(crate) tynamestring: String,
 }
 
