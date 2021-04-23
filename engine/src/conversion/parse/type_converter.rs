@@ -331,16 +331,6 @@ impl TypeConverter {
         }))
     }
 
-    fn add_concrete_type(&self, name: &QualifiedName, rs_definition: &Type) -> UnanalyzedApi {
-        UnanalyzedApi {
-            name: name.clone(),
-            deps: HashSet::new(),
-            detail: crate::conversion::api::ApiDetail::ConcreteType {
-                rs_definition: Box::new(rs_definition.clone()),
-            },
-        }
-    }
-
     fn get_templated_typename(
         &mut self,
         rs_definition: &Type,
@@ -352,14 +342,20 @@ impl TypeConverter {
         match e {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
-                let tn = QualifiedName::new(
+                let name = QualifiedName::new(
                     &Namespace::new(),
                     make_ident(&format!("AutocxxConcrete{}", count)),
                 );
                 self.concrete_templates
-                    .insert(cpp_definition.clone(), tn.clone());
-                let api = self.add_concrete_type(&tn, rs_definition);
-                Ok((tn, Some(api)))
+                    .insert(cpp_definition.clone(), name.clone());
+                let api = UnanalyzedApi {
+                    name: name.clone(),
+                    deps: HashSet::new(),
+                    detail: crate::conversion::api::ApiDetail::ConcreteType {
+                        rs_definition: Box::new(rs_definition.clone()),
+                    },
+                };
+                Ok((name, Some(api)))
             }
         }
     }
