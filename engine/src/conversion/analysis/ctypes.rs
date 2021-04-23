@@ -32,7 +32,7 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
         .map(|api| api.deps.iter())
         .flatten()
         .filter(|ty| known_types().is_ctype(ty))
-        .map(|ty| (make_ident(ty.get_final_ident()), ty.clone()))
+        .map(|ty| (make_ident(ty.get_final_item()), ty.clone()))
         .collect();
     for (id, tn) in ctypes {
         apis.push(Api {

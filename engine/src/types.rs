@@ -144,7 +144,7 @@ impl QualifiedName {
 
     /// Return the actual type name, without any namespace
     /// qualification. Avoid unless you have a good reason.
-    pub(crate) fn get_final_ident(&self) -> &str {
+    pub(crate) fn get_final_item(&self) -> &str {
         &self.1
     }
 
@@ -157,7 +157,7 @@ impl QualifiedName {
             .iter()
             .map(make_ident)
             .chain(self.ns_segment_iter().map(make_ident))
-            .chain(std::iter::once(make_ident(self.get_final_ident())))
+            .chain(std::iter::once(make_ident(self.get_final_item())))
             .collect()
     }
 

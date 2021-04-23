@@ -222,7 +222,7 @@ impl<'a> FnAnalyzer<'a> {
         api: Api<PodAnalysis>,
     ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
         let mut new_deps = api.deps.clone();
-        let mut new_id = make_ident(api.name.get_final_ident());
+        let mut new_id = make_ident(api.name.get_final_item());
         let api_detail = match api.detail {
             // No changes to any of these...
             ApiDetail::ConcreteType { additional_cpp } => {
@@ -372,7 +372,7 @@ impl<'a> FnAnalyzer<'a> {
             Some(self_ty) => ConvertErrorWithContext(
                 err,
                 Some(ErrorContext::Method {
-                    self_ty: make_ident(self_ty.get_final_ident()),
+                    self_ty: make_ident(self_ty.get_final_item()),
                     method: rust_name_for_error,
                 }),
             ),
@@ -422,7 +422,7 @@ impl<'a> FnAnalyzer<'a> {
                 return Ok(None);
             }
             // Method or static method.
-            let type_ident = self_ty.get_final_ident().to_string();
+            let type_ident = self_ty.get_final_item().to_string();
             // bindgen generates methods with the name:
             // {class}_{method name}
             // It then generates an impl section for the Rust type
@@ -471,7 +471,7 @@ impl<'a> FnAnalyzer<'a> {
         // namespace so we might need to prepend some stuff to make it unique.
         let cxxbridge_name = self.get_cxx_bridge_name(
             match kind {
-                FnKind::Method(ref self_ty, ..) => Some(self_ty.get_final_ident()),
+                FnKind::Method(ref self_ty, ..) => Some(self_ty.get_final_item()),
                 FnKind::Function => None,
             },
             &rust_name,
@@ -563,7 +563,7 @@ impl<'a> FnAnalyzer<'a> {
                 FnKind::Method(ref self_ty, MethodKind::Static) => (
                     FunctionWrapperPayload::StaticMethodCall(
                         ns.clone(),
-                        make_ident(self_ty.get_final_ident()),
+                        make_ident(self_ty.get_final_item()),
                         cpp_construction_ident,
                     ),
                     false,
