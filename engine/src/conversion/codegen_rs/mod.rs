@@ -392,9 +392,7 @@ impl<'a> RsCodeGenerator<'a> {
             ApiDetail::ConcreteType { .. } => RsCodegenResult {
                 global_items: Self::generate_extern_type_impl(TypeKind::NonPod, &name),
                 bridge_items: create_impl_items(&id),
-                extern_c_mod_item: Some(ForeignItem::Verbatim(quote! {
-                    type #id = super::bindgen::root::#id;
-                })),
+                extern_c_mod_item: Some(ForeignItem::Verbatim(Self::generate_cxxbridge_type(name))),
                 bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id.clone()))),
                 impl_entry: None,
                 materialization: Use::Unused,
