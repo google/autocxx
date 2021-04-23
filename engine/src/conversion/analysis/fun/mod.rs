@@ -654,9 +654,6 @@ impl<'a> FnAnalyzer<'a> {
         )))
     }
 
-    /// Returns additionally a Boolean indicating whether an argument was
-    /// 'this' and another one indicating whether we took a type by value
-    /// and that type was non-trivial.
     fn convert_fn_arg(
         &mut self,
         arg: &FnArg,
