@@ -314,13 +314,13 @@ impl<'a> ParseBindgen<'a> {
         if self.type_config.is_on_blocklist(&tyname.to_cpp_name()) {
             return;
         }
-        let mut fulltypath: Vec<_> = ["bindgen", "root"].iter().map(make_ident).collect();
-        for segment in tyname.ns_segment_iter() {
-            let id = make_ident(segment);
-            fulltypath.push(id);
-        }
+        let fulltypath = ["bindgen", "root"]
+            .iter()
+            .map(make_ident)
+            .chain(tyname.ns_segment_iter().map(make_ident))
+            .chain(std::iter::once(final_ident.clone()))
+            .collect();
         let tynamestring = tyname.to_cpp_name();
-        fulltypath.push(final_ident.clone());
         let api = UnanalyzedApi {
             ns: tyname.get_namespace().clone(),
             id: final_ident.clone(),
