@@ -44,6 +44,7 @@ pub enum ConvertError {
     UnacceptableSpecialNamespaceType(QualifiedName),
     TypeContainingForwardDeclaration(QualifiedName),
     Blocked(QualifiedName),
+    UnusedTemplateParam,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -80,6 +81,7 @@ impl Display for ConvertError {
             ConvertError::UnacceptableSpecialNamespaceType(tn) => write!(f, "The type '{}' would require special support from cxx/autocxx, but is not yet supported", tn.to_cpp_name())?,
             ConvertError::TypeContainingForwardDeclaration(tn) => write!(f, "Found an attempt at using a forward declaration ({}) inside a templated cxx type such as UniquePtr or CxxVector", tn.to_cpp_name())?,
             ConvertError::Blocked(tn) => write!(f, "Found an attempt at using a type marked as blocked! ({})", tn.to_cpp_name())?,
+            ConvertError::UnusedTemplateParam => write!(f, "This function or method uses a type where one of the template parameters was incomprehensible to bindgen/autocxx - probably because it uses template specialization.")?,
         }
         Ok(())
     }
