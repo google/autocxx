@@ -311,6 +311,7 @@ impl<'a> FnAnalyzer<'a> {
         //    we need to generate a wrapper function in C++ which wraps and unwraps
         //    it from a unique_ptr.
         //    3a. And alias the original name to the wrapper.
+
         let initial_rust_name = fun.sig.ident.to_string();
         if initial_rust_name.ends_with("_destructor") {
             return Ok(None);
@@ -372,6 +373,11 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
         let requires_unsafe = param_details.iter().any(|pd| pd.requires_unsafe);
+
+        // Now we can add error context, reject any functions handling types which we flake out on.
+        if Self::has_attr(&fun, "bindgen_unused_template_param_in_arg_or_return") {
+            return Err(contextualize_error(ConvertError::UnusedTemplateParam));
+        }
 
         // Work out naming, part one.
         let mut rust_name;

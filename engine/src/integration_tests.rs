@@ -4131,7 +4131,6 @@ fn test_simple_dependent_qualified_type() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/411
 fn test_specialization() {
     let hdr = indoc! {"
     #include <stddef.h>
