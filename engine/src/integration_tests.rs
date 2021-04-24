@@ -4102,8 +4102,7 @@ fn test_dependent_qualified_type() {
 }
 
 #[test]
-#[ignore] // https://github.com/rust-lang/rust-bindgen/pull/1975, https://github.com/google/autocxx/issues/106
-fn test_simple_dependent_qualified_type() {
+fn test_ignore_dependent_qualified_type() {
     let hdr = indoc! {"
     #include <stddef.h>
     #include <stdint.h>
