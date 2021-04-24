@@ -4084,13 +4084,13 @@ fn test_dependent_qualified_type() {
         size_t length;
     };
     const char* HELLO = \"hello\";
-    MyStringView<MyString> make_string_view() {
+    inline MyStringView<MyString> make_string_view() {
         MyStringView<MyString> r;
         r.start = HELLO;
         r.length = 2;
         return r;
     }
-    size_t take_string_view(const MyStringView<MyString>& bit) {
+    inline size_t take_string_view(const MyStringView<MyString>& bit) {
         return bit.length;
     }
     "};
@@ -4103,6 +4103,7 @@ fn test_dependent_qualified_type() {
 
 #[test]
 fn test_simple_dependent_qualified_type() {
+    // bindgen seems to cope with this case just fine
     let hdr = indoc! {"
     #include <stddef.h>
     #include <stdint.h>
@@ -4127,6 +4128,71 @@ fn test_simple_dependent_qualified_type() {
         assert_eq!(ffi::take_char(c), 97);
     };
     run_test("", hdr, rs, &["make_char", "take_char"], &[]);
+}
+
+#[test]
+fn test_ignore_dependent_qualified_type() {
+    let hdr = indoc! {"
+    #include <stddef.h>
+    struct MyString {
+        typedef char value_type;
+    };
+    template<typename T> struct MyStringView {
+        typedef typename T::value_type view_value_type;
+        const view_value_type* start;
+        size_t length;
+    };
+    const char* HELLO = \"hello\";
+    inline MyStringView<MyString> make_string_view() {
+        MyStringView<MyString> r;
+        r.start = HELLO;
+        r.length = 2;
+        return r;
+    }
+    struct B {
+        B() {}
+        inline size_t take_string_view(const MyStringView<MyString> bit) {
+            return bit.length;
+        }
+    };
+    "};
+    let rs = quote! {
+        ffi::B::make_unique();
+    };
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/416
+fn test_ignore_dependent_qualified_type_reference() {
+    let hdr = indoc! {"
+    #include <stddef.h>
+    struct MyString {
+        typedef char value_type;
+    };
+    template<typename T> struct MyStringView {
+        typedef typename T::value_type view_value_type;
+        const view_value_type* start;
+        size_t length;
+    };
+    const char* HELLO = \"hello\";
+    inline MyStringView<MyString> make_string_view() {
+        MyStringView<MyString> r;
+        r.start = HELLO;
+        r.length = 2;
+        return r;
+    }
+    struct B {
+        B() {}
+        inline size_t take_string_view(const MyStringView<MyString>& bit) {
+            return bit.length;
+        }
+    };
+    "};
+    let rs = quote! {
+        ffi::B::make_unique();
+    };
+    run_test("", hdr, rs, &["B"], &[]);
 }
 
 #[test]
