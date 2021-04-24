@@ -295,6 +295,21 @@ impl<'a> FnAnalyzer<'a> {
         self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
     }
 
+    /// Determine how to materialize a function.
+    ///
+    /// The main job here is to determine whether a function can simply be noted
+    /// in the [cxx::bridge] mod and passed directly to cxx, or if it needs a Rust-side
+    /// wrapper function, or if it needs a C++-side wrapper function, or both.
+    /// We aim for the simplest case but, for example:
+    /// * We'll need a C++ wrapper for static methods
+    /// * We'll need a C++ wrapper for parameters which need to be wrapped and unwrapped
+    ///   to [UniquePtr]
+    /// * We'll need a Rust wrapper if we've got a C++ wrapper and it's a method.
+    /// * We may need wrappers if names conflict.
+    /// etc.
+    /// The other major thing we do here is figure out naming for the function.
+    /// This depends on overloads, and what other functions are floating around.
+    /// The output of this analysis phase is used by both Rust and C++ codegen.
     fn analyze_foreign_fn(
         &mut self,
         ns: &Namespace,
@@ -302,26 +317,21 @@ impl<'a> FnAnalyzer<'a> {
     ) -> Result<Option<FnAnalysisResult>, ConvertErrorWithContext> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
-        // This function is one of the most complex parts of our conversion.
-        // It needs to consider:
-        // 1. Rejecting destructors entirely.
-        // 2. For methods, we need to strip off the class name.
-        // 3. For constructors, we change new(this: *Type, ...) into make_unique(...) -> UniquePtr<Type>
-        // 4. For anything taking or returning a non-POD type _by value_,
-        //    we need to generate a wrapper function in C++ which wraps and unwraps
-        //    it from a unique_ptr.
-        //    3a. And alias the original name to the wrapper.
 
+        // Let's gather some pre-wisdom about the name of the function.
+        // We're shortly going to plunge into analyzing the parameters,
+        // and it would be nice to have some idea of the function name
+        // for diagnostics whilst we do that.
         let initial_rust_name = fun.sig.ident.to_string();
         if initial_rust_name.ends_with("_destructor") {
             return Ok(None);
         }
-
         let original_name = Self::get_bindgen_original_name_annotation(&fun);
-        let (reference_params, reference_return) = Self::get_reference_parameters_and_return(&fun);
         let diagnostic_display_name = original_name.as_ref().unwrap_or(&initial_rust_name);
 
         // Now let's analyze all the parameters.
+        // See if any have annotations which our fork of bindgen has craftily inserted...
+        let (reference_params, reference_return) = Self::get_reference_parameters_and_return(&fun);
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .sig
             .inputs
@@ -366,19 +376,22 @@ impl<'a> FnAnalyzer<'a> {
                 }),
             ),
         };
+        // Now we can add context to the error, see if any of the parameters are trouble.
         if let Some(problem) = bads.into_iter().next() {
             match problem {
                 Ok(_) => panic!("No error in the error"),
                 Err(problem) => return Err(contextualize_error(problem)),
             }
         }
-        let requires_unsafe = param_details.iter().any(|pd| pd.requires_unsafe);
-
-        // Now we can add error context, reject any functions handling types which we flake out on.
+        // And now we can add error context, reject any functions handling types which we flake out on.
         if Self::has_attr(&fun, "bindgen_unused_template_param_in_arg_or_return") {
             return Err(contextualize_error(ConvertError::UnusedTemplateParam));
         }
 
+        let requires_unsafe =
+            self.should_be_unsafe() || param_details.iter().any(|pd| pd.requires_unsafe);
+
+        // End of parameter processing.
         // Work out naming, part one.
         let mut rust_name;
         // bindgen may have mangled the name either because it's invalid Rust
@@ -601,7 +614,6 @@ impl<'a> FnAnalyzer<'a> {
             None
         };
 
-        let requires_unsafe = requires_unsafe || self.should_be_unsafe();
         let vis = func_information.item.vis.clone();
 
         // Naming, part two.
