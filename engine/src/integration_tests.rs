@@ -4102,7 +4102,7 @@ fn test_dependent_qualified_type() {
 }
 
 #[test]
-fn test_ignore_dependent_qualified_type() {
+fn test_simple_dependent_qualified_type() {
     let hdr = indoc! {"
     #include <stddef.h>
     #include <stdint.h>
@@ -4115,10 +4115,10 @@ fn test_ignore_dependent_qualified_type() {
         size_t length;
     };
     typedef MyStringView<MyString>::view_value_type MyChar;
-    MyChar make_char() {
+    inline MyChar make_char() {
         return 'a';
     }
-    uint32_t take_char(MyChar c) {
+    inline uint32_t take_char(MyChar c) {
         return static_cast<unsigned char>(c);
     }
     "};
