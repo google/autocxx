@@ -4142,13 +4142,7 @@ fn test_ignore_dependent_qualified_type() {
         const view_value_type* start;
         size_t length;
     };
-    const char* HELLO = \"hello\";
-    inline MyStringView<MyString> make_string_view() {
-        MyStringView<MyString> r;
-        r.start = HELLO;
-        r.length = 2;
-        return r;
-    }
+    MyStringView<MyString> make_string_view();
     struct B {
         B() {}
         inline size_t take_string_view(const MyStringView<MyString> bit) {
@@ -4156,10 +4150,19 @@ fn test_ignore_dependent_qualified_type() {
         }
     };
     "};
+    let cpp = indoc! {"
+    const char* HELLO = \"hello\";
+    MyStringView<MyString> make_string_view() {
+        MyStringView<MyString> r;
+        r.start = HELLO;
+        r.length = 2;
+        return r;
+    }
+    "};
     let rs = quote! {
         ffi::B::make_unique();
     };
-    run_test("", hdr, rs, &["B"], &[]);
+    run_test(cpp, hdr, rs, &["B"], &[]);
 }
 
 #[test]
@@ -4175,13 +4178,7 @@ fn test_ignore_dependent_qualified_type_reference() {
         const view_value_type* start;
         size_t length;
     };
-    const char* HELLO = \"hello\";
-    inline MyStringView<MyString> make_string_view() {
-        MyStringView<MyString> r;
-        r.start = HELLO;
-        r.length = 2;
-        return r;
-    }
+    MyStringView<MyString> make_string_view();
     struct B {
         B() {}
         inline size_t take_string_view(const MyStringView<MyString>& bit) {
@@ -4189,10 +4186,19 @@ fn test_ignore_dependent_qualified_type_reference() {
         }
     };
     "};
+    let cpp = indoc! {"
+    const char* HELLO = \"hello\";
+    MyStringView<MyString> make_string_view() {
+        MyStringView<MyString> r;
+        r.start = HELLO;
+        r.length = 2;
+        return r;
+    }
+    "};
     let rs = quote! {
         ffi::B::make_unique();
     };
-    run_test("", hdr, rs, &["B"], &[]);
+    run_test(cpp, hdr, rs, &["B"], &[]);
 }
 
 #[test]
