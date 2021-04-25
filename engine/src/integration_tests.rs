@@ -4166,7 +4166,6 @@ fn test_ignore_dependent_qualified_type() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/416
 fn test_ignore_dependent_qualified_type_reference() {
     let hdr = indoc! {"
     #include <stddef.h>
