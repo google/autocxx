@@ -18,6 +18,7 @@ use once_cell::sync::OnceCell;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use quote::ToTokens;
+use quote::TokenStreamExt;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
@@ -193,12 +194,7 @@ fn do_run_test(
     extra_clang_args: &[&str],
     rust_code_checker: Option<Box<dyn FnOnce(syn::File) -> Result<(), TestError>>>,
 ) -> Result<(), TestError> {
-    // Step 1: Write the C++ header snippet to a temp file
-    let tdir = tempdir().unwrap();
-    write_to_file(&tdir, "input.h", &format!("#pragma once\n{}", header_code));
-    write_to_file(&tdir, "cxx.h", crate::HEADER);
-
-    // Step 2: Expand the snippet of Rust code into an entire
+    // Step 1: Expand the snippet of Rust code into an entire
     //         program including include_cxx!
     let generate = generate.iter().map(|s| {
         quote! {
@@ -212,25 +208,58 @@ fn do_run_test(
     });
 
     let hexathorpe = Token![#](Span::call_site());
-    let unexpanded_rust = quote! {
-        use autocxx::include_cpp;
+    let unexpanded_rust = |hdr: &str| {
+        quote! {
+            use autocxx::include_cpp;
 
-        include_cpp!(
-            #hexathorpe include "input.h"
-            safety!(unsafe_ffi)
-            #(#generate)*
-            #(#generate_pods)*
-            #extra_directives
-        );
+            include_cpp!(
+                #hexathorpe include #hdr
+                safety!(unsafe_ffi)
+                #(#generate)*
+                #(#generate_pods)*
+                #extra_directives
+            );
 
-        fn main() {
-            #rust_code
+            fn main() {
+                #rust_code
+            }
         }
+    };
+    do_run_test_manual(
+        cxx_code,
+        header_code,
+        unexpanded_rust,
+        extra_clang_args,
+        rust_code_checker,
+    )
+}
 
+fn do_run_test_manual<F>(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code_generator: F,
+    extra_clang_args: &[&str],
+    rust_code_checker: Option<Box<dyn FnOnce(syn::File) -> Result<(), TestError>>>,
+) -> Result<(), TestError>
+where
+    F: FnOnce(&'static str) -> TokenStream,
+{
+    const HEADER_NAME: &str = "input.h";
+    let mut rust_code = rust_code_generator(HEADER_NAME);
+    // Step 2: Write the C++ header snippet to a temp file
+    let tdir = tempdir().unwrap();
+    write_to_file(
+        &tdir,
+        HEADER_NAME,
+        &format!("#pragma once\n{}", header_code),
+    );
+    write_to_file(&tdir, "cxx.h", crate::HEADER);
+
+    rust_code.append_all(quote! {
         #[link(name="autocxx-demo")]
         extern {}
-    };
-    info!("Unexpanded Rust: {}", unexpanded_rust);
+    });
+    info!("Unexpanded Rust: {}", rust_code);
 
     let write_rust_to_file = |ts: &TokenStream| -> PathBuf {
         // Step 3: Write the Rust code to a temp file
@@ -241,7 +270,7 @@ fn do_run_test(
     let target_dir = tdir.path().join("target");
     std::fs::create_dir(&target_dir).unwrap();
 
-    let rs_path = write_rust_to_file(&unexpanded_rust);
+    let rs_path = write_rust_to_file(&rust_code);
 
     info!("Path is {:?}", tdir.path());
     let build_results = crate::builder::build_to_custom_directory(
@@ -4858,6 +4887,55 @@ fn test_stringview_ignored() {
             ["take_string_view", "return_string_view", "std::string_view"].to_vec(),
         )),
     );
+}
+
+#[test]
+fn test_include_cpp_alone() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        inline uint32_t give_int() {
+            return 5;
+        }
+    "};
+    let rs = |hdr| {
+        let hexathorpe = Token![#](Span::call_site());
+        quote! {
+            use autocxx::include_cpp;
+            include_cpp! {
+                #hexathorpe include #hdr
+                safety!(unsafe_ffi)
+                generate!("give_int")
+            }
+            fn main() {
+                assert_eq!(ffi::give_int(), 5);
+            }
+        }
+    };
+    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+}
+
+#[test]
+fn test_include_cpp_in_path() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        inline uint32_t give_int() {
+            return 5;
+        }
+    "};
+    let rs = |hdr| {
+        let hexathorpe = Token![#](Span::call_site());
+        quote! {
+            autocxx::include_cpp! {
+                #hexathorpe include #hdr
+                safety!(unsafe_ffi)
+                generate!("give_int")
+            }
+            fn main() {
+                assert_eq!(ffi::give_int(), 5);
+            }
+        }
+    };
+    do_run_test_manual("", hdr, rs, &[], None).unwrap();
 }
 
 // Yet to test:

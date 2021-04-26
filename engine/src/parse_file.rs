@@ -67,7 +67,14 @@ fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
     let mut results = Vec::new();
     for item in source.items {
         if let Item::Macro(ref mac) = item {
-            if mac.mac.path.is_ident("include_cpp") {
+            if mac
+                .mac
+                .path
+                .segments
+                .last()
+                .map(|s| s.ident.to_string() == "include_cpp")
+                .unwrap_or(false)
+            {
                 let include_cpp = crate::IncludeCppEngine::new_from_syn(mac.mac.clone())
                     .map_err(ParseError::AutocxxCodegenError)?;
                 results.push(Segment::Autocxx(include_cpp));
