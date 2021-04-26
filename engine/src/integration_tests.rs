@@ -4938,6 +4938,39 @@ fn test_include_cpp_in_path() {
     do_run_test_manual("", hdr, rs, &[], None).unwrap();
 }
 
+#[test]
+fn test_cint_vector() {
+    let hdr = indoc! {"
+        #include <vector>
+        #include <cstdint>
+        std::vector<int32_t> give_vec() {
+            return std::vector<int32_t> {1,2};
+        }
+    "};
+
+    let rs = quote! {
+        assert_eq!(ffi::give_vec().as_ref().unwrap().as_slice(), &[1,2]);
+    };
+
+    run_test("", hdr, rs, &["give_vec"], &[]);
+}
+
+#[test]
+fn test_int_vector() {
+    let hdr = indoc! {"
+        #include <vector>
+        std::vector<int> give_vec() {
+            return std::vector<int> {1,2};
+        }
+    "};
+
+    let rs = quote! {
+        assert_eq!(ffi::give_vec().as_ref().unwrap().as_slice(), &[autocxx::c_int(1),autocxx::c_int(2)]);
+    };
+
+    run_test("", hdr, rs, &["give_vec"], &[]);
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Out param pointers
