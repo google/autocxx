@@ -54,6 +54,7 @@ impl Parse for UnsafePolicy {
 
 #[derive(Hash, Debug)]
 pub struct IncludeCppConfig {
+    pub mod_name: Option<Ident>,
     pub inclusions: Vec<String>,
     pub unsafe_policy: UnsafePolicy,
     pub type_config: TypeConfig,
@@ -71,6 +72,7 @@ impl Parse for IncludeCppConfig {
         let mut parse_only = false;
         let mut type_config = TypeConfigInput::default();
         let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
+        let mut mod_name = None;
 
         while !input.is_empty() {
             let has_hexathorpe = input.parse::<Option<syn::Token![#]>>()?.is_some();
@@ -110,6 +112,11 @@ impl Parse for IncludeCppConfig {
                 } else if ident == "generate_all" {
                     type_config.allowlist.set_all(&ident)?;
                     swallow_parentheses(&input, &ident)?;
+                } else if ident == "name" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let ident: syn::Ident = args.parse()?;
+                    mod_name = Some(ident);
                 } else if ident == "exclude_utilities" {
                     type_config.exclude_utilities = true;
                     swallow_parentheses(&input, &ident)?;
@@ -130,6 +137,7 @@ impl Parse for IncludeCppConfig {
         }
 
         Ok(IncludeCppConfig {
+            mod_name,
             inclusions,
             unsafe_policy,
             type_config: type_config.into_type_config()?,

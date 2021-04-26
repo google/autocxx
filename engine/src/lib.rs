@@ -46,13 +46,14 @@ use std::{
     process::{Command, Stdio},
 };
 use tempfile::NamedTempFile;
+use types::make_ident;
 
 use quote::ToTokens;
-use syn::Result as ParseResult;
 use syn::{
     parse::{Parse, ParseStream},
     parse_quote, ItemMod, Macro,
 };
+use syn::{Ident, Result as ParseResult};
 
 use itertools::{join, Itertools};
 use known_types::known_types;
@@ -331,6 +332,15 @@ impl IncludeCppEngine {
         }
     }
 
+    /// The name of the generated output `mod`.
+    pub fn get_mod_name(&self) -> Ident {
+        self.config
+            .mod_name
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| make_ident("ffi"))
+    }
+
     fn parse_bindings(&self, bindings: bindgen::Bindings) -> Result<ItemMod> {
         // This bindings object is actually a TokenStream internally and we're wasting
         // effort converting to and from string. We could enhance the bindgen API
@@ -363,6 +373,7 @@ impl IncludeCppEngine {
             State::Generated(_) => panic!("Only call generate once"),
         }
 
+        let mod_name = self.get_mod_name();
         let mut builder = self.make_bindgen_builder(&inc_dirs, &extra_clang_args);
         if let Some(dep_recorder) = dep_recorder {
             builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
@@ -386,7 +397,7 @@ impl IncludeCppEngine {
             #[allow(dead_code)]
             #[allow(non_upper_case_globals)]
             #[allow(non_camel_case_types)]
-            mod ffi {
+            mod #mod_name {
             }
         };
         new_bindings.content.as_mut().unwrap().1.append(&mut items);

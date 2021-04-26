@@ -323,6 +323,16 @@ macro_rules! block {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// The name of the mod to be generated with the FFI code.
+/// The default is `ffi`.
+///
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+#[macro_export]
+macro_rules! name {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 /// Specifies a global safety policy for functions generated
 /// from these headers. By default (without such a `safety!`
 /// directive) all such functions are marked as `unsafe` and
