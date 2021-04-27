@@ -4969,6 +4969,33 @@ fn test_implicitly_deleted_copy_constructor() {
     let rs = quote! {};
     run_test("", hdr, rs, &["A"], &[]);
 }
+  
+#[ignore] // https://github.com/google/autocxx/issues/428
+fn test_overloaded_ignored_function() {
+    // When overloaded functions are ignored during import, the placeholder
+    // functions generated for them should have unique names, just as they
+    // would have if they had ben imported successfully.
+    // The test is successful if the bindings compile.
+    let hdr = indoc! {"
+        struct Blocked {};
+        class A {
+        public:
+            void take_blocked(Blocked);
+            void take_blocked(Blocked, int);
+        };
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["A"],
+        &[],
+        Some(quote! { block!("Blocked") }),
+        &[],
+        None,
+    );
+}
 
 // Yet to test:
 // 6. Ifdef
