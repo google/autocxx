@@ -55,7 +55,6 @@ impl Parse for UnsafePolicy {
 #[derive(Hash, Debug)]
 pub struct IncludeCppConfig {
     pub inclusions: Vec<String>,
-    pub exclude_utilities: bool,
     pub unsafe_policy: UnsafePolicy,
     pub type_config: TypeConfig,
     pub parse_only: bool,
@@ -70,7 +69,6 @@ impl Parse for IncludeCppConfig {
 
         let mut inclusions = Vec::new();
         let mut parse_only = false;
-        let mut exclude_utilities = false;
         let mut type_config = TypeConfig::new();
         let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
 
@@ -89,19 +87,19 @@ impl Parse for IncludeCppConfig {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
-                    type_config.add_to_allowlist(generate.value());
+                    type_config.allowlist.push(generate.value());
                     if ident == "generate_pod" {
-                        type_config.note_pod_request(generate.value());
+                        type_config.pod_requests.push(generate.value());
                     }
                 } else if ident == "block" {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
-                    type_config.add_to_blocklist(generate.value());
+                    type_config.blocklist.push(generate.value());
                 } else if ident == "parse_only" {
                     parse_only = true;
                 } else if ident == "exclude_utilities" {
-                    exclude_utilities = true;
+                    type_config.exclude_utilities = true;
                 } else if ident == "safety" {
                     let args;
                     syn::parenthesized!(args in input);
@@ -117,13 +115,9 @@ impl Parse for IncludeCppConfig {
                 break;
             }
         }
-        if !exclude_utilities {
-            type_config.add_to_allowlist("make_string".to_string());
-        }
 
         Ok(IncludeCppConfig {
             inclusions,
-            exclude_utilities,
             unsafe_policy,
             type_config,
             parse_only,

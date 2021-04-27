@@ -33,7 +33,7 @@ fn do_test(input: ItemMod) {
     let tc = TypeConfig::new();
     let bc = BridgeConverter::new(&[], &tc);
     let inclusions = "".into();
-    bc.convert(input, true, UnsafePolicy::AllFunctionsSafe, inclusions)
+    bc.convert(input, UnsafePolicy::AllFunctionsSafe, inclusions)
         .unwrap();
 }
 

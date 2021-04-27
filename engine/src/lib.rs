@@ -301,9 +301,9 @@ impl IncludeCppEngine {
         for a in self.config.type_config.allowlist() {
             // TODO - allowlist type/functions/separately
             builder = builder
-                .allowlist_type(a)
-                .allowlist_function(a)
-                .allowlist_var(a);
+                .allowlist_type(&a)
+                .allowlist_function(&a)
+                .allowlist_var(&a);
         }
 
         builder
@@ -376,12 +376,7 @@ impl IncludeCppEngine {
         let converter = BridgeConverter::new(&self.config.inclusions, &self.config.type_config);
 
         let conversion = converter
-            .convert(
-                bindings,
-                self.config.exclude_utilities,
-                self.config.unsafe_policy.clone(),
-                header_contents,
-            )
+            .convert(bindings, self.config.unsafe_policy.clone(), header_contents)
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;
         let mut new_bindings: ItemMod = parse_quote! {

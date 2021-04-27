@@ -17,38 +17,47 @@
 /// known_types.rs into this and possibly other things as well.
 #[derive(Default, Hash, Debug)]
 pub struct TypeConfig {
-    pod_requests: Vec<String>,
-    allowlist: Vec<String>,
-    blocklist: Vec<String>,
+    pub(crate) pod_requests: Vec<String>,
+    pub(crate) allowlist: Vec<String>,
+    pub(crate) blocklist: Vec<String>,
+    pub(crate) exclude_utilities: bool,
 }
+
+const UTILITIES: &[&str] = &["make_string"];
+const NO_UTILITIES: &[&str] = &[];
 
 impl TypeConfig {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub(crate) fn note_pod_request(&mut self, tn: String) {
-        self.pod_requests.push(tn);
-    }
-
-    pub(crate) fn add_to_allowlist(&mut self, item: String) {
-        self.allowlist.push(item);
-    }
-
-    pub(crate) fn add_to_blocklist(&mut self, item: String) {
-        self.blocklist.push(item);
-    }
-
     pub fn get_pod_requests(&self) -> &[String] {
         &self.pod_requests
     }
 
-    pub fn allowlist(&self) -> impl Iterator<Item = &String> {
-        self.allowlist.iter()
+    /// Whether to avoid generating the standard helpful utility
+    /// functions which we normally include in every mod.
+    pub fn exclude_utilities(&self) -> bool {
+        self.exclude_utilities
+    }
+
+    pub fn allowlist(&self) -> impl Iterator<Item = String> + '_ {
+        self.allowlist
+            .iter()
+            .map(|s| s.to_string())
+            .chain(self.active_utilities().iter().map(|s| s.to_string()))
     }
 
     pub fn allowlist_is_empty(&self) -> bool {
         self.allowlist.is_empty()
+    }
+
+    fn active_utilities(&self) -> &'static [&'static str] {
+        if self.exclude_utilities {
+            NO_UTILITIES
+        } else {
+            UTILITIES
+        }
     }
 
     /// Whether this type is on the allowlist specified by the user.
@@ -60,7 +69,8 @@ impl TypeConfig {
     /// This second pass may seem redundant. But sometimes bindgen generates
     /// unnecessary stuff.
     pub fn is_on_allowlist(&self, cpp_name: &str) -> bool {
-        self.allowlist.contains(&cpp_name.to_string())
+        self.allowlist.iter().any(|item| item == cpp_name)
+            || self.active_utilities().iter().any(|item| *item == cpp_name)
     }
 
     pub fn is_on_blocklist(&self, cpp_name: &str) -> bool {
