@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{Error as EngineError, IncludeCppEngine, RebuildDependencyRecorder};
+use crate::{
+    cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
+    RebuildDependencyRecorder,
+};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::{fmt::Display, io::Read, path::PathBuf};
@@ -66,22 +69,31 @@ pub fn parse_file<P1: AsRef<Path>>(rs_file: P1) -> Result<ParsedFile, ParseError
 fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
     let mut results = Vec::new();
     for item in source.items {
-        if let Item::Macro(ref mac) = item {
-            if mac
-                .mac
-                .path
-                .segments
-                .last()
-                .map(|s| s.ident == "include_cpp")
-                .unwrap_or(false)
+        results.push(match item {
+            Item::Macro(mac)
+                if mac
+                    .mac
+                    .path
+                    .segments
+                    .last()
+                    .map(|s| s.ident == "include_cpp")
+                    .unwrap_or(false) =>
             {
-                let include_cpp = crate::IncludeCppEngine::new_from_syn(mac.mac.clone())
-                    .map_err(ParseError::AutocxxCodegenError)?;
-                results.push(Segment::Autocxx(include_cpp));
-                continue;
+                Segment::Autocxx(
+                    crate::IncludeCppEngine::new_from_syn(mac.mac.clone())
+                        .map_err(ParseError::AutocxxCodegenError)?,
+                )
             }
-        }
-        results.push(Segment::Other(item));
+            Item::Mod(itm)
+                if itm
+                    .attrs
+                    .iter()
+                    .any(|attr| attr.path.to_token_stream().to_string() == "cxx :: bridge") =>
+            {
+                Segment::Cxx(CxxBridge::from(itm))
+            }
+            _ => Segment::Other(item),
+        });
     }
     Ok(ParsedFile(results))
 }
@@ -95,23 +107,47 @@ pub struct ParsedFile(Vec<Segment>);
 #[allow(clippy::large_enum_variant)]
 enum Segment {
     Autocxx(IncludeCppEngine),
+    Cxx(CxxBridge),
     Other(Item),
+}
+
+pub trait CppBuildable {
+    fn generate_h_and_cxx(&self) -> Result<GeneratedCpp, cxx_gen::Error>;
 }
 
 impl ParsedFile {
     /// Get all the autocxxes in this parsed file.
-    pub fn get_autocxxes(&self) -> impl Iterator<Item = &IncludeCppEngine> {
+    pub fn get_rs_buildables(&self) -> impl Iterator<Item = &IncludeCppEngine> {
         self.0.iter().filter_map(|s| match s {
             Segment::Autocxx(includecpp) => Some(includecpp),
-            Segment::Other(_) => None,
+            _ => None,
         })
     }
 
-    pub fn get_autocxxes_mut(&mut self) -> impl Iterator<Item = &mut IncludeCppEngine> {
+    /// Get all items which can result in C++ code
+    pub fn get_cpp_buildables(&self) -> impl Iterator<Item = &dyn CppBuildable> {
+        self.0.iter().filter_map(|s| match s {
+            Segment::Autocxx(includecpp) => Some(includecpp as &dyn CppBuildable),
+            Segment::Cxx(cxxbridge) => Some(cxxbridge as &dyn CppBuildable),
+            _ => None,
+        })
+    }
+
+    fn get_autocxxes_mut(&mut self) -> impl Iterator<Item = &mut IncludeCppEngine> {
         self.0.iter_mut().filter_map(|s| match s {
             Segment::Autocxx(includecpp) => Some(includecpp),
-            Segment::Other(_) => None,
+            _ => None,
         })
+    }
+
+    pub fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
+        self.0
+            .iter()
+            .filter_map(|s| match s {
+                Segment::Autocxx(includecpp) => Some(includecpp.include_dirs()),
+                _ => None,
+            })
+            .flatten()
     }
 
     pub fn resolve_all(
@@ -148,6 +184,7 @@ impl ToTokens for ParsedFile {
                     let these_tokens = autocxx.generate_rs();
                     tokens.extend(these_tokens);
                 }
+                Segment::Cxx(itemmod) => itemmod.to_tokens(tokens),
             }
         }
     }

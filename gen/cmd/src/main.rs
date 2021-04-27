@@ -183,7 +183,7 @@ fn main() {
     if matches.is_present("gen-cpp") {
         let cpp = matches.value_of("cpp-extension").unwrap();
         let mut counter = 0usize;
-        for include_cxx in parsed_file.get_autocxxes() {
+        for include_cxx in parsed_file.get_cpp_buildables() {
             let generations = include_cxx
                 .generate_h_and_cxx()
                 .expect("Unable to generate header and C++ code");
@@ -208,7 +208,7 @@ fn main() {
         );
     }
     if matches.is_present("gen-rs-include") {
-        let autocxxes = parsed_file.get_autocxxes();
+        let autocxxes = parsed_file.get_rs_buildables();
         let mut counter = 0usize;
         for include_cxx in autocxxes {
             let ts = include_cxx.generate_rs();
