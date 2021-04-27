@@ -255,7 +255,7 @@ impl CppCodeGenerator {
                 format!("return {}", ret.cpp_conversion(&underlying_function_call)?);
         };
         let declaration = Some(format!(
-            "{} {{ {}; }}",
+            "inline {} {{ {}; }}",
             declaration, underlying_function_call,
         ));
         self.additional_functions.push(AdditionalFunction {
