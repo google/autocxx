@@ -5233,11 +5233,27 @@ fn test_generate_all() {
 fn test_two_mods() {
     let hdr = indoc! {"
         #include <cstdint>
-        inline uint32_t give_int() {
-            return 5;
+        struct A {
+            uint32_t a;
+        };
+        inline A give_a() {
+            A a;
+            a.a = 5;
+            return a;
         }
-        inline uint32_t give_int2() {
-            return 5;
+        inline uint32_t get_a(A a) {
+            return a.a;
+        }
+        struct B {
+            uint32_t a;
+        };
+        inline B give_b() {
+            B a;
+            a.a = 8;
+            return a;
+        }
+        inline uint32_t get_b(B a) {
+            return a.a;
         }
     "};
     let rs = |hdr| {
@@ -5246,16 +5262,20 @@ fn test_two_mods() {
             autocxx::include_cpp! {
                 #hexathorpe include #hdr
                 safety!(unsafe_ffi)
-                generate!("give_int")
+                generate!("give_a")
+                generate!("get_a")
             }
             autocxx::include_cpp! {
                 #hexathorpe include #hdr
                 name!(ffi2)
-                generate!("give_int2")
+                generate!("give_b")
+                generate!("get_b")
             }
             fn main() {
-                assert_eq!(ffi::give_int(), 5);
-                assert_eq!(unsafe { ffi2::give_int2() }, 5);
+                let a = ffi::give_a();
+                assert_eq!(ffi::get_a(a), 5);
+                let b = unsafe { ffi2::give_b() };
+                assert_eq!(unsafe { ffi2::get_b(b) }, 8);
             }
         }
     };
