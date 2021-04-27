@@ -330,7 +330,7 @@ impl<'a> ParseBindgen<'a> {
             .iter()
             .map(|api| api.typename().to_cpp_name())
             .collect();
-        for generate_directive in self.type_config.allowlist() {
+        for generate_directive in self.type_config.must_generate_list() {
             if !api_names.contains(&generate_directive) {
                 return Err(ConvertError::DidNotGenerateAnything(generate_directive));
             }

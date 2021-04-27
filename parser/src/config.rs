@@ -19,7 +19,7 @@ use syn::{
 };
 use syn::{Ident, Result as ParseResult};
 
-use crate::type_config::TypeConfig;
+use crate::type_config::{TypeConfig, TypeConfigInput};
 
 #[derive(PartialEq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
@@ -69,7 +69,7 @@ impl Parse for IncludeCppConfig {
 
         let mut inclusions = Vec::new();
         let mut parse_only = false;
-        let mut type_config = TypeConfig::new();
+        let mut type_config = TypeConfigInput::default();
         let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
 
         while !input.is_empty() {
@@ -83,14 +83,22 @@ impl Parse for IncludeCppConfig {
                 inclusions.push(hdr.value());
             } else {
                 input.parse::<Option<syn::Token![!]>>()?;
-                if ident == "generate" || ident == "generate_pod" {
+                if ident == "generate" {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
-                    type_config.allowlist.push(generate.value());
-                    if ident == "generate_pod" {
-                        type_config.pod_requests.push(generate.value());
-                    }
+                    type_config.allowlist.push(generate)?;
+                } else if ident == "generate_pod" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let generate_pod: syn::LitStr = args.parse()?;
+                    type_config.pod_requests.push(generate_pod.value());
+                    type_config.allowlist.push(generate_pod)?;
+                } else if ident == "pod" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let pod: syn::LitStr = args.parse()?;
+                    type_config.pod_requests.push(pod.value());
                 } else if ident == "block" {
                     let args;
                     syn::parenthesized!(args in input);
@@ -98,6 +106,9 @@ impl Parse for IncludeCppConfig {
                     type_config.blocklist.push(generate.value());
                 } else if ident == "parse_only" {
                     parse_only = true;
+                    swallow_parentheses(&input, &ident)?;
+                } else if ident == "generate_all" {
+                    type_config.allowlist.set_all(&ident)?;
                     swallow_parentheses(&input, &ident)?;
                 } else if ident == "exclude_utilities" {
                     type_config.exclude_utilities = true;
@@ -121,7 +132,7 @@ impl Parse for IncludeCppConfig {
         Ok(IncludeCppConfig {
             inclusions,
             unsafe_policy,
-            type_config,
+            type_config: type_config.into_type_config()?,
             parse_only,
         })
     }

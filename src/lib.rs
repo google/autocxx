@@ -269,7 +269,7 @@ macro_rules! generate {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
-/// Generate as "plain old data".
+/// Generate as "plain old data" and add to allowlist.
 /// Generate Rust bindings for the given C++ type such that
 /// it can be passed and owned by value in Rust. This only works
 /// for C++ types which have trivial move constructors and no
@@ -280,6 +280,23 @@ macro_rules! generate {
 /// [include_cpp] - see [include_cpp] for general information.
 #[macro_export]
 macro_rules! generate_pod {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
+/// Generate Rust bindings for all C++ types and functions
+/// found. Highly experimental and not recommended.
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+/// See also [generate].
+#[macro_export]
+macro_rules! generate_all {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
+/// Generate as "plain old data". For use with [generate_all]
+/// and similarly experimental.
+#[macro_export]
+macro_rules! pod {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 

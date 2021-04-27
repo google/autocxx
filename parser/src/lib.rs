@@ -78,6 +78,8 @@ mod parse_tests {
 
     #[test]
     fn test_basic() {
-        let _i: IncludeCpp = parse_quote! {};
+        let _i: IncludeCpp = parse_quote! {
+            generate_all!()
+        };
     }
 }

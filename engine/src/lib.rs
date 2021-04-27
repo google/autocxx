@@ -99,12 +99,6 @@ pub enum Error {
     /// Some error occcurred in converting the bindgen-style
     /// bindings to safe cxx bindings.
     Conversion(conversion::ConvertError),
-    /// No 'generate' or 'generate_pod' was specified.
-    /// It might be that in future we can simply let things work
-    /// without any allowlist, in which case bindgen should generate
-    /// bindings for everything. That just seems very unlikely to work
-    /// in the common case right now.
-    NoGenerationRequested,
 }
 
 impl Display for Error {
@@ -114,7 +108,6 @@ impl Display for Error {
             Error::Parsing(err) => write!(f, "The Rust file could not be parsede: {}", err)?,
             Error::NoAutoCxxInc => write!(f, "No C++ include directory was provided.")?,
             Error::Conversion(err) => write!(f, "autocxx could not generate the requested bindings. {}", err)?,
-            Error::NoGenerationRequested => write!(f, "No 'generate' or 'generate_pod' directives were found, so we would not generate any Rust bindings despite the inclusion of C++ headers.")?,
         }
         Ok(())
     }
@@ -298,12 +291,14 @@ impl IncludeCppEngine {
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
-        for a in self.config.type_config.allowlist() {
-            // TODO - allowlist type/functions/separately
-            builder = builder
-                .allowlist_type(&a)
-                .allowlist_function(&a)
-                .allowlist_var(&a);
+        if let Some(allowlist) = self.config.type_config.bindgen_allowlist() {
+            for a in allowlist {
+                // TODO - allowlist type/functions/separately
+                builder = builder
+                    .allowlist_type(&a)
+                    .allowlist_function(&a)
+                    .allowlist_var(&a);
+            }
         }
 
         builder
@@ -355,10 +350,6 @@ impl IncludeCppEngine {
             State::ParseOnly => return Ok(()),
             State::NotGenerated => {}
             State::Generated(_) => panic!("Only call generate once"),
-        }
-
-        if self.config.type_config.allowlist_is_empty() {
-            return Err(Error::NoGenerationRequested);
         }
 
         let mut builder = self.make_bindgen_builder(&inc_dirs, &extra_clang_args);

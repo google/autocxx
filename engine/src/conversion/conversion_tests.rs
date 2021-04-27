@@ -30,7 +30,7 @@ use super::BridgeConverter;
 
 #[allow(dead_code)]
 fn do_test(input: ItemMod) {
-    let tc = TypeConfig::new();
+    let tc = TypeConfig::new_for_test();
     let bc = BridgeConverter::new(&[], &tc);
     let inclusions = "".into();
     bc.convert(input, UnsafePolicy::AllFunctionsSafe, inclusions)
