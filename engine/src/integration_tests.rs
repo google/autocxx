@@ -4938,6 +4938,38 @@ fn test_include_cpp_in_path() {
     do_run_test_manual("", hdr, rs, &[], None).unwrap();
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/426
+fn test_deleted_function() {
+    // We shouldn't generate bindings for deleted functions.
+    // The test is successful if the bindings compile, i.e. if autocxx doesn't
+    // attempt to call the deleted function.
+    let hdr = indoc! {"
+        class A {
+        public:
+            void foo() = delete;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/426
+fn test_implicitly_deleted_copy_constructor() {
+    // We shouldn't generate bindings for implicitly deleted functions.
+    // The test is successful if the bindings compile, i.e. if autocxx doesn't
+    // attempt to call the implicitly deleted copy constructor.
+    let hdr = indoc! {"
+        class A {
+        public:
+            A(A&&);
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Out param pointers
