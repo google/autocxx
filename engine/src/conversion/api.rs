@@ -80,7 +80,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     StringConstructor,
     /// A function. May include some analysis.
     Function {
-        fun: FuncToConvert,
+        fun: Box<FuncToConvert>,
         analysis: T::FunAnalysis,
     },
     /// A constant.
