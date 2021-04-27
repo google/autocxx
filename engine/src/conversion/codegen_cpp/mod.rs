@@ -134,7 +134,7 @@ impl CppCodeGenerator {
             let type_definitions = self.concat_additional_items(|x| &x.type_definition);
             let declarations = self.concat_additional_items(|x| &x.declaration);
             let declarations = format!(
-                "#pragma once\n\n{}\n{}\n{}\n{}",
+                "#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
                 headers, self.inclusions, type_definitions, declarations
             );
             let definitions = self.concat_additional_items(|x| &x.definition);
