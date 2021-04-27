@@ -4955,6 +4955,40 @@ fn test_include_cpp_in_path() {
 }
 
 #[test]
+fn test_cint_vector() {
+    let hdr = indoc! {"
+        #include <vector>
+        #include <cstdint>
+        inline std::vector<int32_t> give_vec() {
+            return std::vector<int32_t> {1,2};
+        }
+    "};
+
+    let rs = quote! {
+        assert_eq!(ffi::give_vec().as_ref().unwrap().as_slice(), &[1,2]);
+    };
+
+    run_test("", hdr, rs, &["give_vec"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/422
+fn test_int_vector() {
+    let hdr = indoc! {"
+        #include <vector>
+        std::vector<int> give_vec() {
+            return std::vector<int> {1,2};
+        }
+    "};
+
+    let rs = quote! {
+        assert_eq!(ffi::give_vec().as_ref().unwrap().as_slice(), &[autocxx::c_int(1),autocxx::c_int(2)]);
+    };
+
+    run_test("", hdr, rs, &["give_vec"], &[]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/426
 fn test_deleted_function() {
     // We shouldn't generate bindings for deleted functions.
