@@ -68,8 +68,8 @@ impl Header {
 }
 
 struct AdditionalFunction {
-    type_definition: String, // are output before main declarations
-    declaration: String,
+    type_definition: Option<String>, // are output before main declarations
+    declaration: Option<String>,
     headers: Vec<Header>,
 }
 
@@ -131,8 +131,8 @@ impl CppCodeGenerator {
                 .flatten()
                 .collect();
             let headers = headers.iter().map(|x| x.include_stmt()).join("\n");
-            let type_definitions = self.concat_additional_items(|x| &x.type_definition);
-            let declarations = self.concat_additional_items(|x| &x.declaration);
+            let type_definitions = self.concat_additional_items(|x| x.type_definition.as_ref());
+            let declarations = self.concat_additional_items(|x| x.declaration.as_ref());
             let declarations = format!(
                 "#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
                 headers, self.inclusions, type_definitions, declarations
@@ -148,13 +148,13 @@ impl CppCodeGenerator {
 
     fn concat_additional_items<F>(&self, field_access: F) -> String
     where
-        F: FnMut(&AdditionalFunction) -> &str,
+        F: FnMut(&AdditionalFunction) -> Option<&String>,
     {
         let mut s = self
             .additional_functions
             .iter()
             .map(field_access)
-            .collect::<Vec<&str>>()
+            .flatten()
             .join("\n");
         s.push('\n');
         s
@@ -165,9 +165,9 @@ impl CppCodeGenerator {
         inline std::unique_ptr<std::string> make_string(::rust::Str str)
         { return std::make_unique<std::string>(std::string(str)); }
         "};
-        let declaration = format!("{};", declaration);
+        let declaration = Some(declaration.into());
         self.additional_functions.push(AdditionalFunction {
-            type_definition: "".into(),
+            type_definition: None,
             declaration,
             headers: vec![
                 Header::system("memory"),
@@ -254,9 +254,12 @@ impl CppCodeGenerator {
             underlying_function_call =
                 format!("return {}", ret.cpp_conversion(&underlying_function_call)?);
         };
-        let declaration = format!("{} {{ {}; }}", declaration, underlying_function_call,);
+        let declaration = Some(format!(
+            "inline {} {{ {}; }}",
+            declaration, underlying_function_call,
+        ));
         self.additional_functions.push(AdditionalFunction {
-            type_definition: "".into(),
+            type_definition: None,
             declaration,
             headers: vec![Header::system("memory")],
         });
@@ -271,8 +274,8 @@ impl CppCodeGenerator {
     fn generate_typedef(&mut self, tn: &QualifiedName, definition: String) {
         let our_name = tn.get_final_item();
         self.additional_functions.push(AdditionalFunction {
-            type_definition: format!("typedef {} {};", definition, our_name),
-            declaration: "".into(),
+            type_definition: Some(format!("typedef {} {};", definition, our_name)),
+            declaration: None,
             headers: Vec::new(),
         })
     }
