@@ -4483,6 +4483,23 @@ fn test_get_pure_virtual() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/424
+fn test_abstract_class_no_make_unique() {
+    // We shouldn't generate a make_unique() for abstract classes.
+    // The test is successful if the bindings compile, i.e. if autocxx doesn't
+    // attempt to instantiate the class.
+    let hdr = indoc! {"
+        class A {
+        public:
+            A();
+            virtual void foo() const = 0;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_vector_of_pointers() {
     // Just ensures the troublesome API is ignored
     let hdr = indoc! {"
