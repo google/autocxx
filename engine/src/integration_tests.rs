@@ -5047,6 +5047,27 @@ fn test_overloaded_ignored_function() {
     );
 }
 
+
+#[test]
+#[ignore]  // #133
+fn test_namespaced_constant() {
+    let hdr = indoc! {"
+        namespace A {
+            const int kConstant = 3;
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::A::kConstant, 3);
+    };
+    run_test(
+        "",
+        hdr,
+        rs,
+        &["A::kConstant"],
+        &[],
+    );
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Out param pointers
