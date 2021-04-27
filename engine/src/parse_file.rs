@@ -72,7 +72,7 @@ fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
                 .path
                 .segments
                 .last()
-                .map(|s| s.ident.to_string() == "include_cpp")
+                .map(|s| s.ident == "include_cpp")
                 .unwrap_or(false)
             {
                 let include_cpp = crate::IncludeCppEngine::new_from_syn(mac.mac.clone())
