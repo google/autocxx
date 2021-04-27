@@ -4959,7 +4959,7 @@ fn test_cint_vector() {
     let hdr = indoc! {"
         #include <vector>
         #include <cstdint>
-        std::vector<int32_t> give_vec() {
+        inline std::vector<int32_t> give_vec() {
             return std::vector<int32_t> {1,2};
         }
     "};
