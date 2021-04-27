@@ -212,6 +212,7 @@ impl<'a> TypeConverter<'a> {
         }
 
         let original_tn = QualifiedName::from_type_path(&typ);
+        original_tn.validate_ok_for_cxx()?;
         if self.config.is_on_blocklist(&original_tn.to_cpp_name()) {
             return Err(ConvertError::Blocked(original_tn));
         }

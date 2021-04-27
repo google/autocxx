@@ -4348,6 +4348,30 @@ fn test_union_ignored() {
 }
 
 #[test]
+fn test_double_underscores_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    struct __FOO {
+        uint32_t a;
+    };
+    struct B {
+        B() :a(1) {}
+        uint32_t take_foo(__FOO a) const {
+            return 3;
+        }
+        void do__something() const { }
+        uint32_t get_a() const { return 2; }
+        uint32_t a;
+    };
+    "};
+    let rs = quote! {
+        let b = ffi::B::make_unique();
+        assert_eq!(b.get_a(), 2);
+    };
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
+#[test]
 fn test_issue_264() {
     let hdr = indoc! {"
     namespace a {

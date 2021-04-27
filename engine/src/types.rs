@@ -17,7 +17,7 @@ use std::iter::Peekable;
 use std::{fmt::Display, sync::Arc};
 use syn::{parse_quote, Ident, PathSegment, TypePath};
 
-use crate::known_types::known_types;
+use crate::{conversion::ConvertError, known_types::known_types};
 
 pub(crate) fn make_ident<S: AsRef<str>>(id: S) -> Ident {
     Ident::new(id.as_ref(), Span::call_site())
@@ -148,6 +148,12 @@ impl QualifiedName {
         &self.1
     }
 
+    /// cxx doesn't accept names containing double underscores,
+    /// but these are OK elsewhere in our output mod.
+    pub(crate) fn validate_ok_for_cxx(&self) -> Result<(), ConvertError> {
+        validate_ident_ok_for_cxx(self.get_final_item())
+    }
+
     /// Return the actual type name as an [Ident], without any namespace
     /// qualification. Avoid unless you have a good reason.
     pub(crate) fn get_final_ident(&self) -> Ident {
@@ -216,6 +222,19 @@ impl Display for QualifiedName {
             f.write_str("::")?;
         }
         f.write_str(&self.1)
+    }
+}
+
+/// cxx doesn't allow identifiers containing __. These are OK elsewhere
+/// in our output mod. It would be nice in future to think of a way we
+/// can enforce this using the Rust type system, e.g. a newtype
+/// wrapper for a CxxCompatibleIdent which is used in any context
+/// where code will be output as part of the `#[cxx::bridge]` mod.
+pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), ConvertError> {
+    if id.contains("__") {
+        Err(ConvertError::TooManyUnderscores)
+    } else {
+        Ok(())
     }
 }
 

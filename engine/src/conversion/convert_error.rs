@@ -45,6 +45,7 @@ pub enum ConvertError {
     TypeContainingForwardDeclaration(QualifiedName),
     Blocked(QualifiedName),
     UnusedTemplateParam,
+    TooManyUnderscores,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -82,6 +83,7 @@ impl Display for ConvertError {
             ConvertError::TypeContainingForwardDeclaration(tn) => write!(f, "Found an attempt at using a forward declaration ({}) inside a templated cxx type such as UniquePtr or CxxVector", tn.to_cpp_name())?,
             ConvertError::Blocked(tn) => write!(f, "Found an attempt at using a type marked as blocked! ({})", tn.to_cpp_name())?,
             ConvertError::UnusedTemplateParam => write!(f, "This function or method uses a type where one of the template parameters was incomprehensible to bindgen/autocxx - probably because it uses template specialization.")?,
+            ConvertError::TooManyUnderscores => write!(f, "Names containing __ are reserved by C++ so not acceptable to cxx")?,
         }
         Ok(())
     }

@@ -41,7 +41,7 @@ use crate::{
         parse::type_converter::TypeConverter,
         ConvertError,
     },
-    types::{make_ident, Namespace, QualifiedName},
+    types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},
 };
 
 use self::{
@@ -613,6 +613,7 @@ impl<'a> FnAnalyzer<'a> {
 
         // Naming, part two.
         // Work out our final naming strategy.
+        validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).map_err(contextualize_error)?;
         let rust_name_ident = make_ident(&rust_name);
         let (id, rust_rename_strategy) = match kind {
             FnKind::Method(..) => (rust_name_ident, RustRenameStrategy::None),
@@ -710,6 +711,7 @@ impl<'a> FnAnalyzer<'a> {
                         syn::Pat::Ident(pp)
                     }
                     syn::Pat::Ident(pp) => {
+                        validate_ident_ok_for_cxx(&pp.ident.to_string())?;
                         treat_as_reference = reference_args.contains(&pp.ident);
                         syn::Pat::Ident(pp)
                     }

@@ -14,11 +14,6 @@
 
 use std::collections::HashSet;
 
-use crate::conversion::{
-    convert_error::{ConvertErrorWithContext, ErrorContext},
-    error_reporter::report_any_error,
-    parse::type_converter::Annotated,
-};
 use crate::{
     conversion::{
         api::{ApiDetail, ParseResults, TypedefKind, UnanalyzedApi},
@@ -27,8 +22,16 @@ use crate::{
     types::Namespace,
     types::QualifiedName,
 };
+use crate::{
+    conversion::{
+        convert_error::{ConvertErrorWithContext, ErrorContext},
+        error_reporter::report_any_error,
+        parse::type_converter::Annotated,
+    },
+    types::validate_ident_ok_for_cxx,
+};
 use autocxx_parser::TypeConfig;
-use syn::{parse_quote, Fields, Item, Type, TypePath, UseTree};
+use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
 
 use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
 
@@ -124,7 +127,7 @@ impl<'a> ParseBindgen<'a> {
                 if s.ident.to_string().ends_with("__bindgen_vtable") {
                     return Ok(());
                 }
-                let tyname = QualifiedName::new(ns, s.ident.clone());
+                let tyname = Self::qualify_name(ns, s.ident.clone())?;
                 let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
@@ -138,7 +141,7 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Enum(e) => {
-                let tyname = QualifiedName::new(ns, e.ident.clone());
+                let tyname = Self::qualify_name(ns, e.ident.clone())?;
                 self.parse_type(tyname, false, HashSet::new(), Some(Item::Enum(e)));
                 Ok(())
             }
@@ -274,6 +277,16 @@ impl<'a> ParseBindgen<'a> {
                 ConvertError::UnexpectedItemInMod,
                 None,
             )),
+        }
+    }
+
+    fn qualify_name(ns: &Namespace, id: Ident) -> Result<QualifiedName, ConvertErrorWithContext> {
+        match validate_ident_ok_for_cxx(&id.to_string()) {
+            Err(e) => {
+                let ctx = ErrorContext::Item(id);
+                Err(ConvertErrorWithContext(e, Some(ctx)))
+            }
+            Ok(..) => Ok(QualifiedName::new(ns, id)),
         }
     }
 
