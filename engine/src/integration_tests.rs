@@ -4986,8 +4986,9 @@ fn test_implicitly_deleted_copy_constructor() {
     let rs = quote! {};
     run_test("", hdr, rs, &["A"], &[]);
 }
-  
+
 #[ignore] // https://github.com/google/autocxx/issues/428
+#[test]
 fn test_overloaded_ignored_function() {
     // When overloaded functions are ignored during import, the placeholder
     // functions generated for them should have unique names, just as they

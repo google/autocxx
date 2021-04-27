@@ -18,8 +18,8 @@
 #[derive(Default, Hash, Debug)]
 pub struct TypeConfig {
     pod_requests: Vec<String>,
-    allowlist: Vec<String>, // not TypeName as it may be funcs not types.
-    blocklist: Vec<String>, // not TypeName as it may be funcs not types.
+    allowlist: Vec<String>,
+    blocklist: Vec<String>,
 }
 
 impl TypeConfig {

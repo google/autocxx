@@ -30,7 +30,7 @@ mod builder;
 mod integration_tests;
 
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
-use conversion::{BridgeConverter, CppCodegenResults};
+use conversion::BridgeConverter;
 use parse_callbacks::AutocxxParseCallbacks;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{
@@ -70,6 +70,7 @@ pub use cxx_gen::HEADER;
 /// <https://github.com/google/autocxx/issues/36>
 pub use cxx;
 
+#[derive(Clone)]
 /// Some C++ content which should be written to disk and built.
 pub struct CppFilePair {
     /// Declarations to go into a header file.
@@ -124,7 +125,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 struct GenerationResults {
     item_mod: ItemMod,
-    additional_cpp_generator: Option<CppCodegenResults>,
+    cpp: Option<CppFilePair>,
     inc_dirs: Vec<PathBuf>,
 }
 enum State {
@@ -398,7 +399,7 @@ impl IncludeCppEngine {
         );
         self.state = State::Generated(Box::new(GenerationResults {
             item_mod: new_bindings,
-            additional_cpp_generator: conversion.cpp,
+            cpp: conversion.cpp,
             inc_dirs,
         }));
         Ok(())
@@ -419,20 +420,8 @@ impl IncludeCppEngine {
                     header_name: "cxxgen.h".to_string(),
                     implementation: cxx_generated.implementation,
                 });
-
-                match gen_results.additional_cpp_generator {
-                    None => {}
-                    Some(ref additional_cpp) => {
-                        // TODO should probably replace pragma once below with traditional include guards.
-                        let declarations = format!("#pragma once\n{}", additional_cpp.declarations);
-                        files.push(CppFilePair {
-                            header: declarations.as_bytes().to_vec(),
-                            header_name: "autocxxgen.h".to_string(),
-                            implementation: additional_cpp.definitions.as_bytes().to_vec(),
-                        });
-                        info!("Additional C++ decls:\n{}", declarations);
-                        info!("Additional C++ defs:\n{}", additional_cpp.definitions);
-                    }
+                if let Some(cpp_file_pair) = &gen_results.cpp {
+                    files.push(cpp_file_pair.clone());
                 }
             }
         };
