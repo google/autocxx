@@ -406,7 +406,7 @@ impl<'a> RsCodeGenerator<'a> {
                 materialization: Use::UsedFromCxxBridge,
             },
             ApiDetail::Function { fun, analysis } => {
-                gen_function(name.get_namespace(), fun, analysis)
+                gen_function(name.get_namespace(), *fun, analysis)
             }
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
