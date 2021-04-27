@@ -4483,7 +4483,6 @@ fn test_get_pure_virtual() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/424
 fn test_abstract_class_no_make_unique() {
     // We shouldn't generate a make_unique() for abstract classes.
     // The test is successful if the bindings compile, i.e. if autocxx doesn't

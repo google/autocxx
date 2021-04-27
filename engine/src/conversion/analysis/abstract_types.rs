@@ -37,7 +37,7 @@ pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
         return;
     }
 
-    for api in apis {
+    for api in apis.iter_mut() {
         let tyname = api.typename();
         match &mut api.detail {
             ApiDetail::Type { analysis, .. } if abstract_types.contains(&tyname) => {
@@ -46,4 +46,18 @@ pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
             _ => {}
         }
     }
+
+    // We also need to remove any constructors belonging to these
+    // abstract types.
+    apis.retain(|api| match &api.detail {
+        ApiDetail::Function {
+            fun: _,
+            analysis:
+                FnAnalysisBody {
+                    kind: FnKind::Method(self_ty, MethodKind::Constructor),
+                    ..
+                },
+        } if abstract_types.contains(&self_ty) => false,
+        _ => true,
+    })
 }
