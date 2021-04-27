@@ -222,9 +222,6 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Const(const_item) => {
-                // The following puts this constant into
-                // the global namespace which is bug
-                // https://github.com/google/autocxx/issues/133
                 self.results.apis.push(UnanalyzedApi {
                     name: QualifiedName::new(ns, const_item.ident.clone()),
                     deps: HashSet::new(),
