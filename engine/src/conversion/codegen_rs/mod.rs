@@ -413,8 +413,8 @@ impl<'a> RsCodeGenerator<'a> {
                 impl_entry: None,
                 bridge_items: Vec::new(),
                 extern_c_mod_item: None,
-                bindgen_mod_item: None,
-                materialization: Use::Custom(Box::new(Item::Const(const_item))),
+                bindgen_mod_item: Some(Item::Const(const_item)),
+                materialization: Use::UsedFromBindgen,
             },
             ApiDetail::Typedef { payload } => RsCodegenResult {
                 extern_c_mod_item: None,
