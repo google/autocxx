@@ -4972,6 +4972,7 @@ fn test_cint_vector() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/422
 fn test_int_vector() {
     let hdr = indoc! {"
         #include <vector>
