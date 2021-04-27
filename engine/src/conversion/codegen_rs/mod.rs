@@ -47,7 +47,7 @@ use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
 
-/// Whether and how this type should be exposed in the mods constructed
+/// Whether and how this item should be exposed in the mods constructed
 /// for actual end-user use.
 #[derive(Clone)]
 enum Use {
@@ -409,12 +409,12 @@ impl<'a> RsCodeGenerator<'a> {
                 gen_function(name.get_namespace(), *fun, analysis)
             }
             ApiDetail::Const { const_item } => RsCodegenResult {
-                global_items: vec![Item::Const(const_item)],
+                global_items: Vec::new(),
                 impl_entry: None,
                 bridge_items: Vec::new(),
                 extern_c_mod_item: None,
                 bindgen_mod_item: None,
-                materialization: Use::Unused,
+                materialization: Use::Custom(Box::new(Item::Const(const_item))),
             },
             ApiDetail::Typedef { payload } => RsCodegenResult {
                 extern_c_mod_item: None,

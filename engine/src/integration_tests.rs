@@ -5049,7 +5049,6 @@ fn test_overloaded_ignored_function() {
 
 
 #[test]
-#[ignore]  // #133
 fn test_namespaced_constant() {
     let hdr = indoc! {"
         namespace A {
