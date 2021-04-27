@@ -75,8 +75,8 @@ pub use cxx;
 pub struct CppFilePair {
     /// Declarations to go into a header file.
     pub header: Vec<u8>,
-    /// Implementations to go into a .cpp file.
-    pub implementation: Vec<u8>,
+    /// Implementations to go into a .cpp file, if any.
+    pub implementation: Option<Vec<u8>>,
     /// The name which should be used for the header file
     /// (important as it may be `#include`d elsewhere)
     pub header_name: String,
@@ -418,7 +418,7 @@ impl IncludeCppEngine {
                 files.push(CppFilePair {
                     header: cxx_generated.header,
                     header_name: "cxxgen.h".to_string(),
-                    implementation: cxx_generated.implementation,
+                    implementation: Some(cxx_generated.implementation),
                 });
                 if let Some(cpp_file_pair) = &gen_results.cpp {
                     files.push(cpp_file_pair.clone());

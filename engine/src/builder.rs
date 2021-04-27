@@ -162,10 +162,12 @@ pub(crate) fn build_with_existing_parsed_file(
             .generate_h_and_cxx()
             .map_err(BuilderError::InvalidCxx)?;
         for filepair in generated_code.0 {
-            let fname = format!("gen{}.cxx", counter);
-            counter += 1;
-            let gen_cxx_path = write_to_file(&cxxdir, &fname, &filepair.implementation)?;
-            builder.file(gen_cxx_path);
+            if let Some(implementation) = &filepair.implementation {
+                let fname = format!("gen{}.cxx", counter);
+                counter += 1;
+                let gen_cxx_path = write_to_file(&cxxdir, &fname, implementation)?;
+                builder.file(gen_cxx_path);
+            }
 
             write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
             let fname = include_cpp.get_rs_filename();

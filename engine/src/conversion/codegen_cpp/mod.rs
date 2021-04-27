@@ -140,7 +140,7 @@ impl CppCodeGenerator {
             log::info!("Additional C++ decls:\n{}", declarations);
             Some(CppFilePair {
                 header: declarations.into_bytes(),
-                implementation: vec![],
+                implementation: None,
                 header_name: "autocxxgen.h".into(),
             })
         }
