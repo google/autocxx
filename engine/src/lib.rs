@@ -413,29 +413,6 @@ impl IncludeCppEngine {
         Ok(())
     }
 
-    /// Generate C++-side bindings for these APIs. Call `generate` first.
-    pub fn generate_h_and_cxx(&self) -> Result<GeneratedCpp, cxx_gen::Error> {
-        let mut files = Vec::new();
-        match &self.state {
-            State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
-            State::NotGenerated => panic!("Call generate() first"),
-            State::Generated(gen_results) => {
-                let rs = gen_results.item_mod.to_token_stream();
-                let opt = cxx_gen::Opt::default();
-                let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
-                files.push(CppFilePair {
-                    header: cxx_generated.header,
-                    header_name: "cxxgen.h".to_string(),
-                    implementation: Some(cxx_generated.implementation),
-                });
-                if let Some(cpp_file_pair) = &gen_results.cpp {
-                    files.push(cpp_file_pair.clone());
-                }
-            }
-        };
-        Ok(GeneratedCpp(files))
-    }
-
     /// Return the include directories used for this include_cpp invocation.
     pub fn include_dirs(&self) -> &Vec<PathBuf> {
         match &self.state {
@@ -457,6 +434,29 @@ impl IncludeCppEngine {
             let tp = tf.into_temp_path();
             preprocess(&tp, &PathBuf::from(output_path), inc_dirs, extra_clang_args).unwrap();
         }
+    }
+
+    /// Generate C++-side bindings for these APIs. Call `generate` first.
+    pub fn generate_h_and_cxx(&self) -> Result<GeneratedCpp, cxx_gen::Error> {
+        let mut files = Vec::new();
+        match &self.state {
+            State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
+            State::NotGenerated => panic!("Call generate() first"),
+            State::Generated(gen_results) => {
+                let rs = gen_results.item_mod.to_token_stream();
+                let opt = cxx_gen::Opt::default();
+                let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
+                files.push(CppFilePair {
+                    header: cxx_generated.header,
+                    header_name: "cxxgen.h".to_string(),
+                    implementation: Some(cxx_generated.implementation),
+                });
+                if let Some(cpp_file_pair) = &gen_results.cpp {
+                    files.push(cpp_file_pair.clone());
+                }
+            }
+        };
+        Ok(GeneratedCpp(files))
     }
 }
 
