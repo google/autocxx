@@ -15,11 +15,9 @@
 use proc_macro2::Span;
 use syn::{
     parse::{Parse, ParseStream},
-    Token,
+    LitStr, Token,
 };
 use syn::{Ident, Result as ParseResult};
-
-use crate::type_config::{TypeConfig, TypeConfigInput};
 
 #[derive(PartialEq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
@@ -52,13 +50,59 @@ impl Parse for UnsafePolicy {
     }
 }
 
+/// Allowlist configuration.
+#[derive(Hash, Debug)]
+pub enum Allowlist {
+    Unspecified,
+    All,
+    Specific(Vec<String>),
+}
+
+impl Allowlist {
+    pub(crate) fn push(&mut self, item: LitStr) -> ParseResult<()> {
+        match self {
+            Allowlist::Unspecified => {
+                *self = Allowlist::Specific(vec![item.value()]);
+            }
+            Allowlist::All => {
+                return Err(syn::Error::new(
+                    item.span(),
+                    "use either generate!/generate_pod! or generate_all!, not both.",
+                ))
+            }
+            Allowlist::Specific(list) => list.push(item.value()),
+        };
+        Ok(())
+    }
+
+    pub(crate) fn set_all(&mut self, ident: &Ident) -> ParseResult<()> {
+        if matches!(self, Allowlist::Specific(..)) {
+            return Err(syn::Error::new(
+                ident.span(),
+                "use either generate!/generate_pod! or generate_all!, not both.",
+            ));
+        }
+        *self = Allowlist::All;
+        Ok(())
+    }
+}
+
+impl Default for Allowlist {
+    fn default() -> Self {
+        Allowlist::Unspecified
+    }
+}
+
 #[derive(Hash, Debug)]
 pub struct IncludeCppConfig {
-    pub mod_name: Option<Ident>,
     pub inclusions: Vec<String>,
     pub unsafe_policy: UnsafePolicy,
-    pub type_config: TypeConfig,
     pub parse_only: bool,
+    pod_requests: Vec<String>,
+    allowlist: Allowlist,
+    blocklist: Vec<String>,
+    exclude_utilities: bool,
+    mod_name: Option<Ident>,
 }
 
 impl Parse for IncludeCppConfig {
@@ -70,8 +114,11 @@ impl Parse for IncludeCppConfig {
 
         let mut inclusions = Vec::new();
         let mut parse_only = false;
-        let mut type_config = TypeConfigInput::default();
         let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
+        let mut allowlist = Allowlist::Unspecified;
+        let mut blocklist = Vec::new();
+        let mut pod_requests = Vec::new();
+        let mut exclude_utilities = false;
         let mut mod_name = None;
 
         while !input.is_empty() {
@@ -89,28 +136,28 @@ impl Parse for IncludeCppConfig {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
-                    type_config.allowlist.push(generate)?;
+                    allowlist.push(generate)?;
                 } else if ident == "generate_pod" {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate_pod: syn::LitStr = args.parse()?;
-                    type_config.pod_requests.push(generate_pod.value());
-                    type_config.allowlist.push(generate_pod)?;
+                    pod_requests.push(generate_pod.value());
+                    allowlist.push(generate_pod)?;
                 } else if ident == "pod" {
                     let args;
                     syn::parenthesized!(args in input);
                     let pod: syn::LitStr = args.parse()?;
-                    type_config.pod_requests.push(pod.value());
+                    pod_requests.push(pod.value());
                 } else if ident == "block" {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
-                    type_config.blocklist.push(generate.value());
+                    blocklist.push(generate.value());
                 } else if ident == "parse_only" {
                     parse_only = true;
                     swallow_parentheses(&input, &ident)?;
                 } else if ident == "generate_all" {
-                    type_config.allowlist.set_all(&ident)?;
+                    allowlist.set_all(&ident)?;
                     swallow_parentheses(&input, &ident)?;
                 } else if ident == "name" {
                     let args;
@@ -118,7 +165,7 @@ impl Parse for IncludeCppConfig {
                     let ident: syn::Ident = args.parse()?;
                     mod_name = Some(ident);
                 } else if ident == "exclude_utilities" {
-                    type_config.exclude_utilities = true;
+                    exclude_utilities = true;
                     swallow_parentheses(&input, &ident)?;
                 } else if ident == "safety" {
                     let args;
@@ -137,11 +184,14 @@ impl Parse for IncludeCppConfig {
         }
 
         Ok(IncludeCppConfig {
-            mod_name,
             inclusions,
             unsafe_policy,
-            type_config: type_config.into_type_config()?,
             parse_only,
+            pod_requests,
+            allowlist,
+            blocklist,
+            exclude_utilities,
+            mod_name,
         })
     }
 }
@@ -156,6 +206,94 @@ fn swallow_parentheses(input: &ParseStream, latest_ident: &Ident) -> ParseResult
             latest_ident.span(),
             "expected no arguments to directive",
         ))
+    }
+}
+
+impl IncludeCppConfig {
+    pub fn get_pod_requests(&self) -> &[String] {
+        &self.pod_requests
+    }
+
+    pub fn get_mod_name(&self) -> Ident {
+        self.mod_name
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| Ident::new("ffi", Span::call_site()))
+    }
+
+    /// Whether to avoid generating the standard helpful utility
+    /// functions which we normally include in every mod.
+    pub fn exclude_utilities(&self) -> bool {
+        self.exclude_utilities
+    }
+
+    /// Items which the user has explicitly asked us to generate;
+    /// we should raise an error if we weren't able to do so.
+    pub fn must_generate_list(&self) -> Box<dyn Iterator<Item = String> + '_> {
+        if let Allowlist::Specific(items) = &self.allowlist {
+            Box::new(items.iter().chain(self.pod_requests.iter()).cloned())
+        } else {
+            Box::new(self.pod_requests.iter().cloned())
+        }
+    }
+
+    /// The allowlist of items to be passed into bindgen, if any.
+    pub fn bindgen_allowlist(&self) -> Option<Box<dyn Iterator<Item = String> + '_>> {
+        match &self.allowlist {
+            Allowlist::All => None,
+            Allowlist::Specific(items) => Some(Box::new(
+                items
+                    .iter()
+                    .chain(self.pod_requests.iter())
+                    .cloned()
+                    .chain(self.active_utilities()),
+            )),
+            Allowlist::Unspecified => unreachable!(),
+        }
+    }
+
+    fn active_utilities(&self) -> Vec<String> {
+        if self.exclude_utilities {
+            Vec::new()
+        } else {
+            vec![self.get_makestring_name()]
+        }
+    }
+
+    /// Whether this type is on the allowlist specified by the user.
+    ///
+    /// A note on the allowlist handling in general. It's used in two places:
+    /// 1) As directives to bindgen
+    /// 2) After bindgen has generated code, to filter the APIs which
+    ///    we pass to cxx.
+    /// This second pass may seem redundant. But sometimes bindgen generates
+    /// unnecessary stuff.
+    pub fn is_on_allowlist(&self, cpp_name: &str) -> bool {
+        match self.bindgen_allowlist() {
+            None => true,
+            Some(mut items) => {
+                items.any(|item| item == cpp_name)
+                    || self.active_utilities().iter().any(|item| *item == cpp_name)
+            }
+        }
+    }
+
+    pub fn is_on_blocklist(&self, cpp_name: &str) -> bool {
+        self.blocklist.contains(&cpp_name.to_string())
+    }
+
+    pub fn get_blocklist(&self) -> impl Iterator<Item = &String> {
+        self.blocklist.iter()
+    }
+
+    pub fn get_makestring_name(&self) -> String {
+        format!(
+            "autocxx_make_string_{}",
+            self.mod_name
+                .as_ref()
+                .map(|i| i.to_string())
+                .unwrap_or_else(|| "default".into())
+        )
     }
 }
 

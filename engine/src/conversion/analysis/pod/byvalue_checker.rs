@@ -23,7 +23,7 @@ use crate::{
     conversion::{api::ApiDetail, ConvertError},
     known_types::known_types,
 };
-use autocxx_parser::TypeConfig;
+use autocxx_parser::IncludeCppConfig;
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
 
@@ -79,10 +79,10 @@ impl ByValueChecker {
     /// that others can use to query the results.
     pub(crate) fn new_from_apis(
         apis: &[Api<TypedefAnalysis>],
-        type_config: &TypeConfig,
+        config: &IncludeCppConfig,
     ) -> Result<ByValueChecker, ConvertError> {
         let mut byvalue_checker = ByValueChecker::new();
-        for blocklisted in type_config.get_blocklist() {
+        for blocklisted in config.get_blocklist() {
             let tn = QualifiedName::new_from_cpp_name(blocklisted);
             let safety = PodState::UnsafeToBePod(format!("type {} is on the blocklist", &tn));
             byvalue_checker
@@ -129,7 +129,7 @@ impl ByValueChecker {
                 _ => {}
             }
         }
-        let pod_requests = type_config
+        let pod_requests = config
             .get_pod_requests()
             .iter()
             .map(|ty| QualifiedName::new_from_cpp_name(ty))

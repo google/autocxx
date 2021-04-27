@@ -14,7 +14,6 @@
 
 mod config;
 pub mod file_locations;
-mod type_config;
 
 use std::{
     collections::hash_map::DefaultHasher,
@@ -29,8 +28,6 @@ use syn::{
     parse::{Parse, ParseStream},
     Macro,
 };
-
-pub use type_config::TypeConfig;
 
 /// Core of the autocxx engine. See `generate` for most details
 /// on how this works.

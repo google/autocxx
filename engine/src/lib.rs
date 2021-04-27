@@ -48,14 +48,13 @@ use std::{
     process::{Command, Stdio},
 };
 use tempfile::NamedTempFile;
-use types::make_ident;
 
 use quote::ToTokens;
+use syn::Result as ParseResult;
 use syn::{
     parse::{Parse, ParseStream},
     parse_quote, ItemMod, Macro,
 };
-use syn::{Ident, Result as ParseResult};
 
 use itertools::{join, Itertools};
 use known_types::known_types;
@@ -297,7 +296,7 @@ impl IncludeCppEngine {
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
-        if let Some(allowlist) = self.config.type_config.bindgen_allowlist() {
+        if let Some(allowlist) = self.config.bindgen_allowlist() {
             for a in allowlist {
                 // TODO - allowlist type/functions/separately
                 builder = builder
@@ -334,13 +333,10 @@ impl IncludeCppEngine {
         }
     }
 
-    /// The name of the generated output `mod`.
-    pub fn get_mod_name(&self) -> Ident {
-        self.config
-            .mod_name
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| make_ident("ffi"))
+    /// Returns the name of the mod which this `include_cpp!` will generate.
+    /// Can and should be used to ensure multiple mods in a file don't conflict.
+    pub fn get_mod_name(&self) -> String {
+        self.config.get_mod_name().to_string()
     }
 
     fn parse_bindings(&self, bindings: bindgen::Bindings) -> Result<ItemMod> {
@@ -375,7 +371,7 @@ impl IncludeCppEngine {
             State::Generated(_) => panic!("Only call generate once"),
         }
 
-        let mod_name = self.get_mod_name();
+        let mod_name = self.config.get_mod_name();
         let mut builder = self.make_bindgen_builder(&inc_dirs, &extra_clang_args);
         if let Some(dep_recorder) = dep_recorder {
             builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
@@ -388,7 +384,7 @@ impl IncludeCppEngine {
         let bindings = builder.generate().map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
 
-        let converter = BridgeConverter::new(&self.config.inclusions, &self.config.type_config);
+        let converter = BridgeConverter::new(&self.config.inclusions, &self.config);
 
         let conversion = converter
             .convert(bindings, self.config.unsafe_policy.clone(), header_contents)

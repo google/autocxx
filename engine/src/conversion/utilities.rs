@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use autocxx_parser::IncludeCppConfig;
+
 use super::api::UnanalyzedApi;
 use crate::types::{make_ident, Namespace, QualifiedName};
 use std::collections::HashSet;
@@ -20,14 +22,14 @@ use std::collections::HashSet;
 /// Any APIs or techniques which do not involve actual C++ interop
 /// shouldn't go here, but instead should go into the main autocxx
 /// src/lib.rs.
-pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>) {
+pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>, config: &IncludeCppConfig) {
     // Unless we've been specifically asked not to do so, we always
     // generate a 'make_string' function. That pretty much *always* means
     // we run two passes through bindgen. i.e. the next 'if' is always true,
     // and we always generate an additional C++ file for our bindings additions,
     // unless the include_cpp macro has specified ExcludeUtilities.
     apis.push(UnanalyzedApi {
-        name: QualifiedName::new(&Namespace::new(), make_ident("make_string")),
+        name: QualifiedName::new(&Namespace::new(), make_ident(config.get_makestring_name())),
         original_name: None,
         deps: HashSet::new(),
         detail: super::api::ApiDetail::StringConstructor,

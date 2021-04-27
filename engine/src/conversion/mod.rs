@@ -24,7 +24,7 @@ mod parse;
 mod utilities;
 
 use analysis::fun::FnAnalyzer;
-use autocxx_parser::TypeConfig;
+use autocxx_parser::IncludeCppConfig;
 pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use convert_error::ConvertError;
 use itertools::Itertools;
@@ -59,7 +59,7 @@ const LOG_APIS: bool = true;
 /// we need to be a bit more graceful, but for now, that's OK.
 pub(crate) struct BridgeConverter<'a> {
     include_list: &'a [String],
-    type_config: &'a TypeConfig,
+    config: &'a IncludeCppConfig,
 }
 
 /// C++ and Rust code generation output.
@@ -69,10 +69,10 @@ pub(crate) struct CodegenResults {
 }
 
 impl<'a> BridgeConverter<'a> {
-    pub fn new(include_list: &'a [String], type_config: &'a TypeConfig) -> Self {
+    pub fn new(include_list: &'a [String], config: &'a IncludeCppConfig) -> Self {
         Self {
             include_list,
-            type_config,
+            config,
         }
     }
 
@@ -103,14 +103,14 @@ impl<'a> BridgeConverter<'a> {
             Some((_, items)) => {
                 // Parse the bindgen mod.
                 let items_to_process = items.drain(..).collect();
-                let parser = ParseBindgen::new(&self.type_config);
+                let parser = ParseBindgen::new(&self.config);
                 let apis = parser.parse_items(items_to_process)?;
                 Self::dump_apis("parsing", &apis);
                 // Inside parse_results, we now have a list of APIs.
                 // We now enter various analysis phases. First, convert any typedefs.
                 // "Convert" means replacing bindgen-style type targets
                 // (e.g. root::std::unique_ptr) with cxx-style targets (e.g. UniquePtr).
-                let apis = convert_typedef_targets(&self.type_config, apis);
+                let apis = convert_typedef_targets(&self.config, apis);
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
                 // Specifically, let's confirm that the items requested by the user to be
@@ -118,14 +118,14 @@ impl<'a> BridgeConverter<'a> {
                 // This returns a new list of `Api`s, which will be parameterized with
                 // the analysis results. It also returns an object which can be used
                 // by subsequent phases to work out which objects are POD.
-                let analyzed_apis = analyze_pod_apis(apis, &self.type_config)?;
+                let analyzed_apis = analyze_pod_apis(apis, &self.config)?;
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions. This is probably the most complex
                 // part of `autocxx`. Again, this returns a new set of `Api`s, but
                 // parameterized by a richer set of metadata.
                 let mut analyzed_apis =
-                    FnAnalyzer::analyze_functions(analyzed_apis, unsafe_policy, self.type_config);
+                    FnAnalyzer::analyze_functions(analyzed_apis, unsafe_policy, self.config);
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
@@ -139,17 +139,19 @@ impl<'a> BridgeConverter<'a> {
                 Self::dump_apis("removing ignored dependents", &analyzed_apis);
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis =
-                    filter_apis_by_following_edges_from_allowlist(analyzed_apis, &self.type_config);
+                    filter_apis_by_following_edges_from_allowlist(analyzed_apis, &self.config);
                 // Determine what variably-sized C types (e.g. int) we need to include
                 analysis::ctypes::append_ctype_information(&mut analyzed_apis);
                 Self::dump_apis("GC", &analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
-                let cpp = CppCodeGenerator::generate_cpp_code(inclusions, &analyzed_apis)?;
+                let cpp =
+                    CppCodeGenerator::generate_cpp_code(inclusions, &analyzed_apis, self.config)?;
                 let rs = RsCodeGenerator::generate_rs_code(
                     analyzed_apis,
                     self.include_list,
                     bindgen_mod,
+                    &self.config,
                 );
                 Ok(CodegenResults { rs, cpp })
             }

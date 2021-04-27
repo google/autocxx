@@ -16,7 +16,7 @@ mod byvalue_checker;
 
 use std::collections::HashSet;
 
-use autocxx_parser::TypeConfig;
+use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
 use syn::ItemStruct;
 
@@ -47,15 +47,15 @@ impl AnalysisPhase for PodAnalysis {
 /// type whether or not it's one of the [Api]s.
 pub(crate) fn analyze_pod_apis(
     apis: Vec<Api<TypedefAnalysis>>,
-    type_config: &TypeConfig,
+    config: &IncludeCppConfig,
 ) -> Result<Vec<Api<PodAnalysis>>, ConvertError> {
     // This next line will return an error if any of the 'generate_pod'
     // directives from the user can't be met because, for instance,
     // a type contains a std::string or some other type which can't be
     // held safely by value in Rust.
-    let byvalue_checker = ByValueChecker::new_from_apis(&apis, type_config)?;
+    let byvalue_checker = ByValueChecker::new_from_apis(&apis, config)?;
     let mut extra_apis = Vec::new();
-    let mut type_converter = TypeConverter::new(type_config, &apis);
+    let mut type_converter = TypeConverter::new(config, &apis);
     let mut results: Vec<_> = apis
         .into_iter()
         .map(|api| analyze_pod_api(api, &byvalue_checker, &mut type_converter, &mut extra_apis))

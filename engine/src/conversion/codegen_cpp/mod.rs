@@ -16,7 +16,7 @@ mod function_wrapper_cpp;
 pub(crate) mod type_to_cpp;
 
 use crate::{types::QualifiedName, CppFilePair};
-use indoc::indoc;
+use autocxx_parser::IncludeCppConfig;
 use itertools::Itertools;
 use std::collections::HashSet;
 use syn::Type;
@@ -79,27 +79,34 @@ struct AdditionalFunction {
 /// generates, and perhaps we'll explore that in future. But for now,
 /// autocxx generates its own _additional_ C++ files which therefore
 /// need to be built and included in linking procedures.
-pub(crate) struct CppCodeGenerator {
+pub(crate) struct CppCodeGenerator<'a> {
     additional_functions: Vec<AdditionalFunction>,
     inclusions: String,
     original_name_map: OriginalNameMap,
+    config: &'a IncludeCppConfig,
 }
 
-impl CppCodeGenerator {
+impl<'a> CppCodeGenerator<'a> {
     pub(crate) fn generate_cpp_code(
         inclusions: String,
         apis: &[Api<FnAnalysis>],
+        config: &'a IncludeCppConfig,
     ) -> Result<Option<CppFilePair>, ConvertError> {
-        let mut gen = CppCodeGenerator::new(inclusions, original_name_map_from_apis(apis));
+        let mut gen = CppCodeGenerator::new(inclusions, original_name_map_from_apis(apis), config);
         gen.add_needs(apis.iter().filter_map(|api| api.additional_cpp()))?;
         Ok(gen.generate())
     }
 
-    fn new(inclusions: String, original_name_map: OriginalNameMap) -> Self {
+    fn new(
+        inclusions: String,
+        original_name_map: OriginalNameMap,
+        config: &'a IncludeCppConfig,
+    ) -> Self {
         CppCodeGenerator {
             additional_functions: Vec::new(),
             inclusions,
             original_name_map,
+            config,
         }
     }
 
@@ -140,10 +147,11 @@ impl CppCodeGenerator {
                 headers, self.inclusions, type_definitions, declarations
             );
             log::info!("Additional C++ decls:\n{}", declarations);
+            let header_name = format!("autocxxgen_{}.h", self.config.get_mod_name());
             Some(CppFilePair {
                 header: declarations.into_bytes(),
                 implementation: None,
-                header_name: "autocxxgen.h".into(),
+                header_name,
             })
         }
     }
@@ -163,11 +171,8 @@ impl CppCodeGenerator {
     }
 
     fn generate_string_constructor(&mut self) {
-        let declaration = indoc! {"
-        inline std::unique_ptr<std::string> make_string(::rust::Str str)
-        { return std::make_unique<std::string>(std::string(str)); }
-        "};
-        let declaration = Some(declaration.into());
+        let makestring_name = self.config.get_makestring_name();
+        let declaration = Some(format!("inline std::unique_ptr<std::string> {}(::rust::Str str) {{ return std::make_unique<std::string>(std::string(str)); }}", makestring_name));
         self.additional_functions.push(AdditionalFunction {
             type_definition: None,
             declaration,

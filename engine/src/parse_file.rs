@@ -18,7 +18,7 @@ use crate::{
 };
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use std::{fmt::Display, io::Read, path::PathBuf};
+use std::{collections::HashSet, fmt::Display, io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
 use syn::Item;
 
@@ -39,6 +39,9 @@ pub enum ParseError {
     /// over. It could also cover errors in your syntax of the `include_cpp`
     /// macro or the directives inside.
     AutocxxCodegenError(EngineError),
+    /// There are two or more [autocxx::include_cpp] macros with the same
+    /// mod name.
+    ConflictingModNames,
 }
 
 impl Display for ParseError {
@@ -47,9 +50,10 @@ impl Display for ParseError {
             ParseError::FileOpen(err) => write!(f, "Unable to open file: {}", err)?,
             ParseError::FileRead(err) => write!(f, "Unable to read file: {}", err)?,
             ParseError::Syntax(err) => write!(f, "Syntax error parsing Rust file: {}", err)?,
-            ParseError::AutocxxCodegenError(err) => {
-                write!(f, "Unable to parse include_cpp! macro: {}", err)?
-            }
+            ParseError::AutocxxCodegenError(err) =>
+                write!(f, "Unable to parse include_cpp! macro: {}", err)?,
+            ParseError::ConflictingModNames =>
+                write!(f, "There are two or more include_cpp! macros with the same output mod name. Use name!")?,
         }
         Ok(())
     }
@@ -156,6 +160,7 @@ impl ParsedFile {
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     ) -> Result<(), ParseError> {
+        let mut mods_found = HashSet::new();
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
             dep_recorder.map(Rc::from);
         for include_cpp in self.get_autocxxes_mut() {
@@ -167,6 +172,9 @@ impl ParsedFile {
                     inner_dep_recorder.clone(),
                 ))),
             };
+            if !mods_found.insert(include_cpp.get_mod_name()) {
+                return Err(ParseError::ConflictingModNames);
+            }
             include_cpp
                 .generate(autocxx_inc.clone(), extra_clang_args, dep_recorder)
                 .map_err(ParseError::AutocxxCodegenError)?

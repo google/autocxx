@@ -22,6 +22,7 @@ mod unqualify;
 
 use std::collections::HashMap;
 
+use autocxx_parser::IncludeCppConfig;
 // The following should not need to be exposed outside
 // codegen_rs but currently Rust codegen happens everywhere... TODO
 pub(crate) use non_pod_struct::make_non_pod;
@@ -66,7 +67,8 @@ enum Use {
     Custom(Box<Item>),
 }
 
-fn get_string_items() -> Vec<Item> {
+fn get_string_items(config: &IncludeCppConfig) -> Vec<Item> {
+    let makestring_name = make_ident(config.get_makestring_name());
     [
         Item::Trait(parse_quote! {
             pub trait ToCppString {
@@ -79,21 +81,21 @@ fn get_string_items() -> Vec<Item> {
         Item::Impl(parse_quote! {
             impl ToCppString for &str {
                 fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
-                    cxxbridge::make_string(self)
+                    cxxbridge::#makestring_name(self)
                 }
             }
         }),
         Item::Impl(parse_quote! {
             impl ToCppString for String {
                 fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
-                    cxxbridge::make_string(&self)
+                    cxxbridge::#makestring_name(&self)
                 }
             }
         }),
         Item::Impl(parse_quote! {
             impl ToCppString for &String {
                 fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
-                    cxxbridge::make_string(self)
+                    cxxbridge::#makestring_name(self)
                 }
             }
         }),
@@ -119,6 +121,7 @@ pub(crate) struct RsCodeGenerator<'a> {
     include_list: &'a [String],
     bindgen_mod: ItemMod,
     original_name_map: OriginalNameMap,
+    config: &'a IncludeCppConfig,
 }
 
 impl<'a> RsCodeGenerator<'a> {
@@ -127,11 +130,13 @@ impl<'a> RsCodeGenerator<'a> {
         all_apis: Vec<Api<FnAnalysis>>,
         include_list: &'a [String],
         bindgen_mod: ItemMod,
+        config: &'a IncludeCppConfig,
     ) -> Vec<Item> {
         let c = Self {
             include_list,
             bindgen_mod,
             original_name_map: original_name_map_from_apis(&all_apis),
+            config,
         };
         c.rs_codegen(all_apis)
     }
@@ -222,7 +227,10 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn build_include_foreign_items(&self, has_additional_cpp_needs: bool) -> Vec<ForeignItem> {
         let extra_inclusion = if has_additional_cpp_needs {
-            Some("autocxxgen.h".to_string())
+            Some(format!(
+                "autocxxgen_{}.h",
+                self.config.get_mod_name().to_string()
+            ))
         } else {
             None
         };
@@ -384,13 +392,14 @@ impl<'a> RsCodeGenerator<'a> {
         api_detail: ApiDetail<FnAnalysis>,
     ) -> RsCodegenResult {
         let id = name.get_final_ident();
+        let make_string_name = make_ident(self.config.get_makestring_name());
         match api_detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
-                    fn make_string(str_: &str) -> UniquePtr<CxxString>;
+                    fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;
                 ))),
                 bridge_items: Vec::new(),
-                global_items: get_string_items(),
+                global_items: get_string_items(self.config),
                 bindgen_mod_item: None,
                 impl_entry: None,
                 materialization: Use::Unused,

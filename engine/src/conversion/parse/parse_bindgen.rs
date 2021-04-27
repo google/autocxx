@@ -29,7 +29,7 @@ use crate::{
     },
     types::validate_ident_ok_for_cxx,
 };
-use autocxx_parser::TypeConfig;
+use autocxx_parser::IncludeCppConfig;
 use syn::{parse_quote, Attribute, Fields, Ident, Item, LitStr, TypePath, UseTree};
 
 use super::super::utilities::generate_utilities;
@@ -38,7 +38,7 @@ use super::parse_foreign_mod::ParseForeignMod;
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
-    type_config: &'a TypeConfig,
+    config: &'a IncludeCppConfig,
     apis: Vec<UnanalyzedApi>,
     /// Here we track the last struct which bindgen told us about.
     /// Any subsequent "extern 'C'" blocks are methods belonging to that type,
@@ -65,9 +65,9 @@ pub(crate) fn get_bindgen_original_name_annotation(attrs: &[Attribute]) -> Optio
 }
 
 impl<'a> ParseBindgen<'a> {
-    pub(crate) fn new(type_config: &'a TypeConfig) -> Self {
+    pub(crate) fn new(config: &'a IncludeCppConfig) -> Self {
         ParseBindgen {
-            type_config,
+            config,
             apis: Vec::new(),
             latest_virtual_this_type: None,
         }
@@ -80,8 +80,8 @@ impl<'a> ParseBindgen<'a> {
         items: Vec<Item>,
     ) -> Result<Vec<UnanalyzedApi>, ConvertError> {
         let items = Self::find_items_in_root(items)?;
-        if !self.type_config.exclude_utilities() {
-            generate_utilities(&mut self.apis);
+        if !self.config.exclude_utilities() {
+            generate_utilities(&mut self.apis, &self.config);
         }
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
@@ -306,7 +306,7 @@ impl<'a> ParseBindgen<'a> {
     ) where
         F: FnOnce(T) -> ApiDetail<NullAnalysis>,
     {
-        if self.type_config.is_on_blocklist(&name.to_cpp_name()) {
+        if self.config.is_on_blocklist(&name.to_cpp_name()) {
             return;
         }
         let api = UnanalyzedApi {
@@ -328,7 +328,7 @@ impl<'a> ParseBindgen<'a> {
             .iter()
             .map(|api| api.name().to_cpp_name())
             .collect();
-        for generate_directive in self.type_config.must_generate_list() {
+        for generate_directive in self.config.must_generate_list() {
             if !api_names.contains(&generate_directive) {
                 return Err(ConvertError::DidNotGenerateAnything(generate_directive));
             }
