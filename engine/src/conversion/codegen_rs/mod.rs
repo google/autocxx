@@ -401,12 +401,12 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_c_mod_item: Some(ForeignItem::Verbatim(Self::generate_cxxbridge_type(name))),
                 bridge_items: Vec::new(),
                 global_items: Self::generate_extern_type_impl(TypeKind::NonPod, &name),
-                bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id.clone()))),
+                bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id))),
                 impl_entry: None,
                 materialization: Use::UsedFromCxxBridge,
             },
             ApiDetail::Function { fun, analysis } => {
-                gen_function(name.get_namespace(), fun, analysis)
+                gen_function(name.get_namespace(), *fun, analysis)
             }
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],

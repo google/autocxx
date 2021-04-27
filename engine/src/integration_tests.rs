@@ -4483,6 +4483,22 @@ fn test_get_pure_virtual() {
 }
 
 #[test]
+fn test_abstract_class_no_make_unique() {
+    // We shouldn't generate a make_unique() for abstract classes.
+    // The test is successful if the bindings compile, i.e. if autocxx doesn't
+    // attempt to instantiate the class.
+    let hdr = indoc! {"
+        class A {
+        public:
+            A();
+            virtual void foo() const = 0;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_vector_of_pointers() {
     // Just ensures the troublesome API is ignored
     let hdr = indoc! {"
@@ -4969,6 +4985,66 @@ fn test_int_vector() {
     };
 
     run_test("", hdr, rs, &["give_vec"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/426
+fn test_deleted_function() {
+    // We shouldn't generate bindings for deleted functions.
+    // The test is successful if the bindings compile, i.e. if autocxx doesn't
+    // attempt to call the deleted function.
+    let hdr = indoc! {"
+        class A {
+        public:
+            void foo() = delete;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/426
+fn test_implicitly_deleted_copy_constructor() {
+    // We shouldn't generate bindings for implicitly deleted functions.
+    // The test is successful if the bindings compile, i.e. if autocxx doesn't
+    // attempt to call the implicitly deleted copy constructor.
+    let hdr = indoc! {"
+        class A {
+        public:
+            A(A&&);
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[ignore] // https://github.com/google/autocxx/issues/428
+#[test]
+fn test_overloaded_ignored_function() {
+    // When overloaded functions are ignored during import, the placeholder
+    // functions generated for them should have unique names, just as they
+    // would have if they had ben imported successfully.
+    // The test is successful if the bindings compile.
+    let hdr = indoc! {"
+        struct Blocked {};
+        class A {
+        public:
+            void take_blocked(Blocked);
+            void take_blocked(Blocked, int);
+        };
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["A"],
+        &[],
+        Some(quote! { block!("Blocked") }),
+        &[],
+        None,
+    );
 }
 
 // Yet to test:

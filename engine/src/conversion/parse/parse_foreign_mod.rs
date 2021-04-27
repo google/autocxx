@@ -131,7 +131,10 @@ impl ParseForeignMod {
             apis.push(UnanalyzedApi {
                 name: QualifiedName::new(&self.ns, fun.item.sig.ident.clone()),
                 deps: HashSet::new(), // filled in later - TODO make compile-time safe
-                detail: ApiDetail::Function { fun, analysis: () },
+                detail: ApiDetail::Function {
+                    fun: Box::new(fun),
+                    analysis: (),
+                },
             })
         }
     }

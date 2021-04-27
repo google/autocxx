@@ -26,11 +26,10 @@ mod utilities;
 use analysis::fun::FnAnalyzer;
 use autocxx_parser::TypeConfig;
 pub(crate) use codegen_cpp::CppCodeGenerator;
-pub(crate) use codegen_cpp::CppCodegenResults;
 pub(crate) use convert_error::ConvertError;
 use syn::{Item, ItemMod};
 
-use crate::UnsafePolicy;
+use crate::{CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
@@ -61,7 +60,7 @@ pub(crate) struct BridgeConverter<'a> {
 /// C++ and Rust code generation output.
 pub(crate) struct CodegenResults {
     pub(crate) rs: Vec<Item>,
-    pub(crate) cpp: Option<CppCodegenResults>,
+    pub(crate) cpp: Option<CppFilePair>,
 }
 
 impl<'a> BridgeConverter<'a> {
