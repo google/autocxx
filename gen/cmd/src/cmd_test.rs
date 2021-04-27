@@ -71,7 +71,7 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
         .assert()
         .success();
     assert_contentful(&tmp_dir, "gen0.cc");
-    assert_contentful(&tmp_dir, "gen1.cc");
+    assert_exists(&tmp_dir, "gen1.cc");
     assert_exists(&tmp_dir, "gen2.cc");
     assert_contentful(&tmp_dir, "gen0.include.rs");
     assert_exists(&tmp_dir, "gen1.include.rs");
