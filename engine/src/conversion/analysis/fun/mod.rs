@@ -360,34 +360,6 @@ impl<'a> FnAnalyzer<'a> {
             .next()
             .cloned();
 
-        // If we encounter errors from here on, we can give some context around
-        // where the error occurred such that we can put a marker in the output
-        // Rust code to indicate that a problem occurred (benefiting people using
-        // rust-analyzer or similar). Make a closure to make this easy.
-        let rust_name_for_error = make_ident(&diagnostic_display_name);
-        let self_ty_for_error = self_ty.clone();
-        let contextualize_error = |err| match self_ty_for_error {
-            None => ConvertErrorWithContext(err, Some(ErrorContext::Item(rust_name_for_error))),
-            Some(self_ty) => ConvertErrorWithContext(
-                err,
-                Some(ErrorContext::Method {
-                    self_ty: self_ty.get_final_ident(),
-                    method: rust_name_for_error,
-                }),
-            ),
-        };
-        // Now we can add context to the error, see if any of the parameters are trouble.
-        if let Some(problem) = bads.into_iter().next() {
-            match problem {
-                Ok(_) => panic!("No error in the error"),
-                Err(problem) => return Err(contextualize_error(problem)),
-            }
-        }
-        // And now we can add error context, reject any functions handling types which we flake out on.
-        if Self::has_attr(&fun, "bindgen_unused_template_param_in_arg_or_return") {
-            return Err(contextualize_error(ConvertError::UnusedTemplateParam));
-        }
-
         let requires_unsafe =
             self.should_be_unsafe() || param_details.iter().any(|pd| pd.requires_unsafe);
 
@@ -419,7 +391,7 @@ impl<'a> FnAnalyzer<'a> {
             (false, self_ty)
         };
 
-        let kind = if let Some(self_ty) = self_ty {
+        let (kind, error_context) = if let Some(self_ty) = self_ty {
             // Some kind of method.
             if !self.is_on_allowlist(&self_ty) {
                 // Bindgen will output methods for types which have been encountered
@@ -464,13 +436,17 @@ impl<'a> FnAnalyzer<'a> {
             } else {
                 MethodKind::Normal
             };
-            FnKind::Method(self_ty, method_kind)
+            let error_context = ErrorContext::Method {
+                self_ty: self_ty.get_final_ident(),
+                method: make_ident(&rust_name),
+            };
+            (FnKind::Method(self_ty, method_kind), error_context)
         } else {
             // Not a method.
             // What shall we call this function? It may be overloaded.
             let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
             rust_name = overload_tracker.get_function_real_name(ideal_rust_name);
-            FnKind::Function
+            (FnKind::Function, ErrorContext::Item(make_ident(&rust_name)))
         };
 
         // The name we use within the cxx::bridge mod may be different
@@ -485,6 +461,25 @@ impl<'a> FnAnalyzer<'a> {
             &ns,
         );
         let mut cxxbridge_name = make_ident(&cxxbridge_name);
+
+        // If we encounter errors from here on, we can give some context around
+        // where the error occurred such that we can put a marker in the output
+        // Rust code to indicate that a problem occurred (benefiting people using
+        // rust-analyzer or similar). Make a closure to make this easy.
+        let contextualize_error = |err| ConvertErrorWithContext(err, Some(error_context));
+
+        // Now we can add context to the error, check for a couple of error
+        // cases. First, see if any of the parameters are trouble.
+        if let Some(problem) = bads.into_iter().next() {
+            match problem {
+                Ok(_) => panic!("No error in the error"),
+                Err(problem) => return Err(contextualize_error(problem)),
+            }
+        }
+        // Second, reject any functions handling types which we flake out on.
+        if Self::has_attr(&fun, "bindgen_unused_template_param_in_arg_or_return") {
+            return Err(contextualize_error(ConvertError::UnusedTemplateParam));
+        }
 
         // Analyze the return type, just as we previously did for the
         // parameters.
