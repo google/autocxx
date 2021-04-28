@@ -4396,6 +4396,23 @@ fn test_double_underscore_typedef_ignored() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/443
+fn test_extern_c_type_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    struct _xlocale; /* forward reference */
+    typedef struct _xlocale * locale_t;
+    extern \"C\" {
+        locale_t duplocale(locale_t);
+    }
+    "};
+    let rs = quote! {
+    };
+    run_test("", hdr, rs, &["duplocale"], &[]);
+}
+
+
+#[test]
 fn test_issue_264() {
     let hdr = indoc! {"
     namespace a {
