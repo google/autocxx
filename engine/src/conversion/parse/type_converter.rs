@@ -261,7 +261,7 @@ impl<'a> TypeConverter<'a> {
             if known_types().is_cxx_acceptable_generic(&tn) {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
-                crate::known_types::confirm_inner_type_is_acceptable_generic_payload(
+                Self::confirm_inner_type_is_acceptable_generic_payload(
                     &last_seg.arguments,
                     &tn,
                     types_to_allow_only_in_references_and_ptrs,
@@ -381,4 +381,45 @@ impl<'a> TypeConverter<'a> {
             }
         }
     }
+
+    fn confirm_inner_type_is_acceptable_generic_payload(
+        path_args: &PathArguments,
+        desc: &QualifiedName,
+        unacceptable_types: &HashSet<QualifiedName>,
+    ) -> Result<(), ConvertError> {
+        // For now, all supported generics accept the same payloads. This
+        // may change in future in which case we'll need to accept more arguments here.
+        match path_args {
+            PathArguments::None => Ok(()),
+            PathArguments::Parenthesized(_) => Err(ConvertError::TemplatedTypeContainingNonPathArg(
+                desc.clone(),
+            )),
+            PathArguments::AngleBracketed(ab) => {
+                for inner in &ab.args {
+                    match inner {
+                        GenericArgument::Type(Type::Path(typ)) => {
+                            let inner_qn = QualifiedName::from_type_path(&typ);
+                            if unacceptable_types.contains(&inner_qn) {
+                                return Err(ConvertError::TypeContainingForwardDeclaration(inner_qn));
+                            }
+                            if let Some(more_generics) = typ.path.segments.last() {
+                                Self::confirm_inner_type_is_acceptable_generic_payload(
+                                    &more_generics.arguments,
+                                    desc,
+                                    &HashSet::new(),
+                                )?;
+                            }
+                        }
+                        _ => {
+                            return Err(ConvertError::TemplatedTypeContainingNonPathArg(
+                                desc.clone(),
+                            ))
+                        }
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+
 }
