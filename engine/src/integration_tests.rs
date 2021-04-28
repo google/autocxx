@@ -4372,7 +4372,6 @@ fn test_double_underscores_ignored() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/442
 fn test_double_underscore_typedef_ignored() {
     let hdr = indoc! {"
     #include <cstdint>
