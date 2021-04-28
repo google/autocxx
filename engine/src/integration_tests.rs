@@ -4398,14 +4398,14 @@ fn test_double_underscore_typedef_ignored() {
 #[test]
 fn test_typedef_to_ptr_is_marked_unsafe() {
     let hdr = indoc! {"
-    struct _xlocale; /* forward reference */
-    typedef struct _xlocale * locale_t;
+    struct _xlocalefoo; /* forward reference */
+    typedef struct _xlocalefoo * locale_tfoo;
     extern \"C\" {
-        locale_t duplocale(locale_t);
+        locale_tfoo duplocalefoo(locale_tfoo);
     }
     "};
     let rs = quote! {};
-    run_test("", hdr, rs, &["duplocale"], &[]);
+    run_test("", hdr, rs, &["duplocalefoo"], &[]);
 }
 
 #[test]
