@@ -4372,6 +4372,30 @@ fn test_double_underscores_ignored() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/442
+fn test_double_underscore_typedef_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    typedef int __int32_t;
+    typedef __int32_t __darwin_pid_t;
+    typedef __darwin_pid_t pid_t;
+    struct B {
+        B() :a(1) {}
+        uint32_t take_foo(pid_t a) const {
+            return 3;
+        }
+        uint32_t get_a() const { return 2; }
+        uint32_t a;
+    };
+    "};
+    let rs = quote! {
+        let b = ffi::B::make_unique();
+        assert_eq!(b.get_a(), 2);
+    };
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
+#[test]
 fn test_issue_264() {
     let hdr = indoc! {"
     namespace a {
