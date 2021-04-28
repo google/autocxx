@@ -4398,7 +4398,6 @@ fn test_double_underscore_typedef_ignored() {
 #[test]
 fn test_typedef_to_ptr_is_marked_unsafe() {
     let hdr = indoc! {"
-    #include <cstdint>
     struct _xlocale; /* forward reference */
     typedef struct _xlocale * locale_t;
     extern \"C\" {
