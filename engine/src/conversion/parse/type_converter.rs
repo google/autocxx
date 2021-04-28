@@ -59,6 +59,49 @@ impl<T> Annotated<T> {
     }
 }
 
+/// Options when converting a type.
+pub(crate) enum TypeConversionContext<'a> {
+    Cxx,
+    NonCxx,
+    CxxOuterType {
+        forward_declarations: &'a HashSet<QualifiedName>,
+        convert_ptrs_to_references: bool,
+    },
+}
+
+impl<'a> TypeConversionContext<'a> {
+    fn validate_cxx_spelling(&self) -> bool {
+        match self {
+            TypeConversionContext::Cxx | TypeConversionContext::CxxOuterType { .. } => true,
+            TypeConversionContext::NonCxx => false,
+        }
+    }
+    fn convert_ptrs_to_references(&self) -> bool {
+        matches!(
+            self,
+            TypeConversionContext::CxxOuterType {
+                convert_ptrs_to_references: true,
+                ..
+            }
+        )
+    }
+    fn allow_instantiation(&self, qn: &QualifiedName) -> bool {
+        match self {
+            TypeConversionContext::CxxOuterType {
+                forward_declarations,
+                ..
+            } if forward_declarations.contains(qn) => false,
+            _ => true,
+        }
+    }
+    fn for_inner_type(&self) -> Self {
+        match self {
+            TypeConversionContext::NonCxx => TypeConversionContext::NonCxx,
+            _ => TypeConversionContext::Cxx,
+        }
+    }
+}
+
 /// A type which can convert from a type encountered in `bindgen`
 /// output to the sort of type we should represeent to `cxx`.
 /// As a simple example, `std::string` should be replaced
@@ -102,33 +145,23 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         ty: Box<Type>,
         ns: &Namespace,
-        convert_ptrs_to_reference: bool,
-        types_to_allow_only_in_references_and_ptrs: &HashSet<QualifiedName>,
+        ctx: &TypeConversionContext,
     ) -> Result<Annotated<Box<Type>>, ConvertError> {
-        Ok(self
-            .convert_type(
-                *ty,
-                ns,
-                convert_ptrs_to_reference,
-                types_to_allow_only_in_references_and_ptrs,
-            )?
-            .map(Box::new))
+        Ok(self.convert_type(*ty, ns, ctx)?.map(Box::new))
     }
 
     pub(crate) fn convert_type(
         &mut self,
         ty: Type,
         ns: &Namespace,
-        convert_ptrs_to_reference: bool,
-        types_to_allow_only_in_references_and_ptrs: &HashSet<QualifiedName>,
+        ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertError> {
         let result = match ty {
             Type::Path(p) => {
-                let newp =
-                    self.convert_type_path(p, ns, types_to_allow_only_in_references_and_ptrs)?;
+                let newp = self.convert_type_path(p, ns, ctx)?;
                 if let Type::Path(newpp) = &newp.ty {
                     let qn = QualifiedName::from_type_path(newpp);
-                    if types_to_allow_only_in_references_and_ptrs.contains(&qn) {
+                    if !ctx.allow_instantiation(&qn) {
                         return Err(ConvertError::TypeContainingForwardDeclaration(qn));
                     }
                     // Special handling because rust_Str (as emitted by bindgen)
@@ -152,7 +185,7 @@ impl<'a> TypeConverter<'a> {
                 }
             }
             Type::Reference(mut r) => {
-                let innerty = self.convert_boxed_type(r.elem, ns, false, &HashSet::new())?;
+                let innerty = self.convert_boxed_type(r.elem, ns, &ctx.for_inner_type())?;
                 r.elem = innerty.ty;
                 Annotated::new(
                     Type::Reference(r),
@@ -161,12 +194,12 @@ impl<'a> TypeConverter<'a> {
                     false,
                 )
             }
-            Type::Ptr(ptr) if convert_ptrs_to_reference => {
-                self.convert_ptr_to_reference(ptr, ns)?
+            Type::Ptr(ptr) if ctx.convert_ptrs_to_references() => {
+                self.convert_ptr_to_reference(ptr, ns, ctx)?
             }
             Type::Ptr(mut ptr) => {
                 crate::known_types::ensure_pointee_is_valid(&ptr)?;
-                let innerty = self.convert_boxed_type(ptr.elem, ns, false, &HashSet::new())?;
+                let innerty = self.convert_boxed_type(ptr.elem, ns, &ctx.for_inner_type())?;
                 ptr.elem = innerty.ty;
                 Annotated::new(
                     Type::Ptr(ptr),
@@ -184,7 +217,7 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         mut typ: TypePath,
         ns: &Namespace,
-        types_to_allow_only_in_references_and_ptrs: &HashSet<QualifiedName>,
+        ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertError> {
         // First, qualify any unqualified paths.
         if typ.path.segments.iter().next().unwrap().ident != "root" {
@@ -212,7 +245,9 @@ impl<'a> TypeConverter<'a> {
         }
 
         let original_tn = QualifiedName::from_type_path(&typ);
-        original_tn.validate_ok_for_cxx()?;
+        if ctx.validate_cxx_spelling() {
+            original_tn.validate_ok_for_cxx()?;
+        }
         if self.config.is_on_blocklist(&original_tn.to_cpp_name()) {
             return Err(ConvertError::Blocked(original_tn));
         }
@@ -264,10 +299,11 @@ impl<'a> TypeConverter<'a> {
                 Self::confirm_inner_type_is_acceptable_generic_payload(
                     &last_seg.arguments,
                     &tn,
-                    types_to_allow_only_in_references_and_ptrs,
+                    ctx,
                 )?;
                 if let PathArguments::AngleBracketed(ref mut ab) = last_seg.arguments {
-                    let mut innerty = self.convert_punctuated(ab.args.clone(), ns)?;
+                    let mut innerty =
+                        self.convert_punctuated(ab.args.clone(), ns, &ctx.for_inner_type())?;
                     ab.args = innerty.ty;
                     deps.extend(innerty.types_encountered.drain());
                 }
@@ -296,6 +332,7 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         pun: Punctuated<GenericArgument, P>,
         ns: &Namespace,
+        ctx: &TypeConversionContext,
     ) -> Result<Annotated<Punctuated<GenericArgument, P>>, ConvertError>
     where
         P: Default,
@@ -306,7 +343,7 @@ impl<'a> TypeConverter<'a> {
         for arg in pun.into_iter() {
             new_pun.push(match arg {
                 GenericArgument::Type(t) => {
-                    let mut innerty = self.convert_type(t, ns, false, &HashSet::new())?;
+                    let mut innerty = self.convert_type(t, ns, &ctx.for_inner_type())?;
                     types_encountered.extend(innerty.types_encountered.drain());
                     extra_apis.extend(innerty.extra_apis.drain(..));
                     GenericArgument::Type(innerty.ty)
@@ -336,9 +373,10 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         ptr: TypePtr,
         ns: &Namespace,
+        ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertError> {
         let mutability = ptr.mutability;
-        let elem = self.convert_boxed_type(ptr.elem, ns, false, &HashSet::new())?;
+        let elem = self.convert_boxed_type(ptr.elem, ns, &ctx.for_inner_type())?;
         // TODO - in the future, we should check if this is a rust::Str and throw
         // a wobbler if not. rust::Str should only be seen _by value_ in C++
         // headers; it manifests as &str in Rust but on the C++ side it must
@@ -385,28 +423,30 @@ impl<'a> TypeConverter<'a> {
     fn confirm_inner_type_is_acceptable_generic_payload(
         path_args: &PathArguments,
         desc: &QualifiedName,
-        unacceptable_types: &HashSet<QualifiedName>,
+        ctx: &TypeConversionContext,
     ) -> Result<(), ConvertError> {
         // For now, all supported generics accept the same payloads. This
         // may change in future in which case we'll need to accept more arguments here.
         match path_args {
             PathArguments::None => Ok(()),
-            PathArguments::Parenthesized(_) => Err(ConvertError::TemplatedTypeContainingNonPathArg(
-                desc.clone(),
-            )),
+            PathArguments::Parenthesized(_) => Err(
+                ConvertError::TemplatedTypeContainingNonPathArg(desc.clone()),
+            ),
             PathArguments::AngleBracketed(ab) => {
                 for inner in &ab.args {
                     match inner {
                         GenericArgument::Type(Type::Path(typ)) => {
                             let inner_qn = QualifiedName::from_type_path(&typ);
-                            if unacceptable_types.contains(&inner_qn) {
-                                return Err(ConvertError::TypeContainingForwardDeclaration(inner_qn));
+                            if !ctx.allow_instantiation(&inner_qn) {
+                                return Err(ConvertError::TypeContainingForwardDeclaration(
+                                    inner_qn,
+                                ));
                             }
                             if let Some(more_generics) = typ.path.segments.last() {
                                 Self::confirm_inner_type_is_acceptable_generic_payload(
                                     &more_generics.arguments,
                                     desc,
-                                    &HashSet::new(),
+                                    ctx,
                                 )?;
                             }
                         }
@@ -421,5 +461,4 @@ impl<'a> TypeConverter<'a> {
             }
         }
     }
-
 }

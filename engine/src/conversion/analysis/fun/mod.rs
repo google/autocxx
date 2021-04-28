@@ -20,7 +20,7 @@ mod rust_name_tracker;
 use crate::{
     conversion::{
         convert_error::ConvertErrorWithContext, convert_error::ErrorContext,
-        error_reporter::add_api_or_report_error,
+        error_reporter::add_api_or_report_error, parse::type_converter::TypeConversionContext,
     },
     known_types::known_types,
 };
@@ -257,13 +257,15 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         ty: Box<Type>,
         ns: &Namespace,
-        convert_ptrs_to_reference: bool,
+        convert_ptrs_to_references: bool,
     ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool), ConvertError> {
         let annotated = self.type_converter.convert_boxed_type(
             ty,
             ns,
-            convert_ptrs_to_reference,
-            &self.incomplete_types,
+            &TypeConversionContext::CxxOuterType {
+                convert_ptrs_to_references,
+                forward_declarations: &self.incomplete_types,
+            },
         )?;
         self.extra_apis.extend(annotated.extra_apis);
         Ok((

@@ -33,6 +33,7 @@ use crate::{
 use autocxx_parser::TypeConfig;
 use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
 
+use super::type_converter::TypeConversionContext;
 use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
 
 use super::parse_foreign_mod::ParseForeignMod;
@@ -234,10 +235,11 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Type(mut ity) => {
                 let tyname = QualifiedName::new(ns, ity.ident.clone());
-                let type_conversion_results =
-                    self.results
-                        .type_converter
-                        .convert_type(*ity.ty, ns, false, &HashSet::new());
+                let type_conversion_results = self.results.type_converter.convert_type(
+                    *ity.ty,
+                    ns,
+                    &TypeConversionContext::NonCxx,
+                );
                 match type_conversion_results {
                     Err(ConvertError::OpaqueTypeFound) => {
                         self.add_opaque_type(tyname);

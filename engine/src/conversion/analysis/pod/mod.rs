@@ -24,7 +24,7 @@ use crate::{
     conversion::{
         api::{Api, ApiAnalysis, ApiDetail, TypeKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
-        parse::type_converter::TypeConverter,
+        parse::type_converter::{TypeConversionContext, TypeConverter},
         ConvertError,
     },
     types::{Namespace, QualifiedName},
@@ -135,7 +135,8 @@ fn get_struct_field_types(
     extra_apis: &mut Vec<UnanalyzedApi>,
 ) -> Result<(), ConvertError> {
     for f in &s.fields {
-        let annotated = type_converter.convert_type(f.ty.clone(), ns, false, &HashSet::new())?;
+        let annotated =
+            type_converter.convert_type(f.ty.clone(), ns, &TypeConversionContext::Cxx)?;
         extra_apis.extend(annotated.extra_apis);
         deps.extend(annotated.types_encountered);
     }
