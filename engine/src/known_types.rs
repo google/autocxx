@@ -18,8 +18,8 @@ use crate::{
 };
 use indoc::indoc;
 use once_cell::sync::OnceCell;
-use std::collections::{HashMap, HashSet};
-use syn::{parse_quote, GenericArgument, PathArguments, Type, TypePath, TypePtr};
+use std::collections::HashMap;
+use syn::{parse_quote, Type, TypePath, TypePtr};
 
 //// The behavior of the type.
 #[derive(Debug)]
@@ -414,46 +414,6 @@ pub(crate) fn type_lacks_copy_constructor(ty: &Type) -> bool {
             tn.to_cpp_name().starts_with("std::unique_ptr")
         }
         _ => false,
-    }
-}
-
-pub(crate) fn confirm_inner_type_is_acceptable_generic_payload(
-    path_args: &PathArguments,
-    desc: &QualifiedName,
-    unacceptable_types: &HashSet<QualifiedName>,
-) -> Result<(), ConvertError> {
-    // For now, all supported generics accept the same payloads. This
-    // may change in future in which case we'll need to accept more arguments here.
-    match path_args {
-        PathArguments::None => Ok(()),
-        PathArguments::Parenthesized(_) => Err(ConvertError::TemplatedTypeContainingNonPathArg(
-            desc.clone(),
-        )),
-        PathArguments::AngleBracketed(ab) => {
-            for inner in &ab.args {
-                match inner {
-                    GenericArgument::Type(Type::Path(typ)) => {
-                        let inner_qn = QualifiedName::from_type_path(&typ);
-                        if unacceptable_types.contains(&inner_qn) {
-                            return Err(ConvertError::TypeContainingForwardDeclaration(inner_qn));
-                        }
-                        if let Some(more_generics) = typ.path.segments.last() {
-                            confirm_inner_type_is_acceptable_generic_payload(
-                                &more_generics.arguments,
-                                desc,
-                                &HashSet::new(),
-                            )?;
-                        }
-                    }
-                    _ => {
-                        return Err(ConvertError::TemplatedTypeContainingNonPathArg(
-                            desc.clone(),
-                        ))
-                    }
-                }
-            }
-            Ok(())
-        }
     }
 }
 

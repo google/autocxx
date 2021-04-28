@@ -4372,7 +4372,6 @@ fn test_double_underscores_ignored() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/442
 fn test_double_underscore_typedef_ignored() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -4381,7 +4380,7 @@ fn test_double_underscore_typedef_ignored() {
     typedef __darwin_pid_t pid_t;
     struct B {
         B() :a(1) {}
-        uint32_t take_foo(pid_t a) const {
+        uint32_t take_foo(pid_t) const {
             return 3;
         }
         uint32_t get_a() const { return 2; }
