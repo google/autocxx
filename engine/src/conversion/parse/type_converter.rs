@@ -228,14 +228,15 @@ impl<'a> TypeConverter<'a> {
                 deps.insert(resolved_tn.clone());
                 (resolved_tp.clone(), resolved_tn)
             }
-            Some(other) => {
+            Some(Type::Ptr(resolved_tp)) => {
                 return Ok(Annotated::new(
-                    other.clone(),
+                    Type::Ptr(resolved_tp.clone()),
                     deps,
                     Vec::new(),
-                    false,
+                    true,
                 ))
             }
+            Some(other) => return Ok(Annotated::new(other.clone(), deps, Vec::new(), false)),
         };
 
         // Now let's see if it's a known type.

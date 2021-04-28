@@ -4396,21 +4396,17 @@ fn test_double_underscore_typedef_ignored() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/443
-fn test_extern_c_type_ignored() {
+fn test_typedef_to_ptr_is_marked_unsafe() {
     let hdr = indoc! {"
-    #include <cstdint>
-    struct _xlocale; /* forward reference */
-    typedef struct _xlocale * locale_t;
+    struct _xlocalefoo; /* forward reference */
+    typedef struct _xlocalefoo * locale_tfoo;
     extern \"C\" {
-        locale_t duplocale(locale_t);
+        locale_tfoo duplocalefoo(locale_tfoo);
     }
     "};
-    let rs = quote! {
-    };
-    run_test("", hdr, rs, &["duplocale"], &[]);
+    let rs = quote! {};
+    run_test("", hdr, rs, &["duplocalefoo"], &[]);
 }
-
 
 #[test]
 fn test_issue_264() {
@@ -5112,7 +5108,6 @@ fn test_overloaded_ignored_function() {
     );
 }
 
-
 #[test]
 fn test_namespaced_constant() {
     let hdr = indoc! {"
@@ -5123,13 +5118,7 @@ fn test_namespaced_constant() {
     let rs = quote! {
         assert_eq!(ffi::A::kConstant, 3);
     };
-    run_test(
-        "",
-        hdr,
-        rs,
-        &["A::kConstant"],
-        &[],
-    );
+    run_test("", hdr, rs, &["A::kConstant"], &[]);
 }
 
 // Yet to test:
