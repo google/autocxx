@@ -231,7 +231,7 @@ impl<'a> TypeConverter<'a> {
             Some(other) => {
                 return Ok(Annotated::new(
                     other.clone(),
-                    HashSet::new(),
+                    deps,
                     Vec::new(),
                     false,
                 ))
