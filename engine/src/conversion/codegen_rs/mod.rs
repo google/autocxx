@@ -452,16 +452,6 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: None,
                 materialization: Use::Unused,
             },
-            ApiDetail::OpaqueTypedef => RsCodegenResult {
-                global_items: Vec::new(),
-                impl_entry: None,
-                bridge_items: create_impl_items(&id),
-                extern_c_mod_item: Some(ForeignItem::Type(parse_quote! {
-                    type #id;
-                })),
-                bindgen_mod_item: None,
-                materialization: Use::Unused,
-            },
             ApiDetail::IgnoredItem { err, ctx } => Self::generate_error_entry(err, ctx),
         }
     }

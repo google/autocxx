@@ -243,7 +243,6 @@ impl<'a> FnAnalyzer<'a> {
                 analysis,
             },
             ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
-            ApiDetail::OpaqueTypedef => ApiDetail::OpaqueTypedef,
             ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
         };
         Ok(Some(Api {
