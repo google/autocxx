@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::types::QualifiedName;
+use itertools::Itertools;
 use std::collections::HashSet;
 use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse, Type};
 
@@ -68,7 +69,13 @@ pub(crate) enum TypedefKind {
     Use(ItemUse),
 }
 
+#[derive(strum_macros::Display)]
 /// Different types of API we might encounter.
+/// This derives from [strum_macros::Display] because we want to be
+/// able to debug-print the enum discriminant without worrying about
+/// the fact that their payloads may not be `Debug` or `Display`.
+/// (Specifically, allowing `syn` Types to be `Debug` requires
+/// enabling syn's `extra-traits` feature which increases compile time.)
 pub(crate) enum ApiDetail<T: ApiAnalysis> {
     /// A forward declared type for which no definition is available.
     ForwardDeclaration,
@@ -129,6 +136,18 @@ pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) deps: HashSet<QualifiedName>,
     /// Details of this specific API kind.
     pub(crate) detail: ApiDetail<T>,
+}
+
+impl<T: ApiAnalysis> std::fmt::Debug for Api<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} (kind={}, deps={})",
+            self.name.to_cpp_name(),
+            self.detail,
+            self.deps.iter().map(|d| d.to_cpp_name()).join(", ")
+        )
+    }
 }
 
 pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
