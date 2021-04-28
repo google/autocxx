@@ -5119,13 +5119,7 @@ fn test_namespaced_constant() {
     let rs = quote! {
         assert_eq!(ffi::A::kConstant, 3);
     };
-    run_test(
-        "",
-        hdr,
-        rs,
-        &["A::kConstant"],
-        &[],
-    );
+    run_test("", hdr, rs, &["A::kConstant"], &[]);
 }
 
 // Yet to test:
