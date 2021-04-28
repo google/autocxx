@@ -236,14 +236,7 @@ impl<'a> TypeConverter<'a> {
                     true,
                 ))
             }
-            Some(other) => {
-                return Ok(Annotated::new(
-                    other.clone(),
-                    deps,
-                    Vec::new(),
-                    false,
-                ))
-            }
+            Some(other) => return Ok(Annotated::new(other.clone(), deps, Vec::new(), false)),
         };
 
         // Now let's see if it's a known type.
