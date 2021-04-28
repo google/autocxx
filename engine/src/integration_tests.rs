@@ -4396,8 +4396,7 @@ fn test_double_underscore_typedef_ignored() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/443
-fn test_extern_c_type_ignored() {
+fn test_typedef_to_ptr_is_marked_unsafe() {
     let hdr = indoc! {"
     #include <cstdint>
     struct _xlocale; /* forward reference */
@@ -4406,11 +4405,9 @@ fn test_extern_c_type_ignored() {
         locale_t duplocale(locale_t);
     }
     "};
-    let rs = quote! {
-    };
+    let rs = quote! {};
     run_test("", hdr, rs, &["duplocale"], &[]);
 }
-
 
 #[test]
 fn test_issue_264() {
@@ -5111,7 +5108,6 @@ fn test_overloaded_ignored_function() {
         None,
     );
 }
-
 
 #[test]
 fn test_namespaced_constant() {
