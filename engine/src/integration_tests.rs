@@ -5120,6 +5120,20 @@ fn test_namespaced_constant() {
     run_test("", hdr, rs, &["A::kConstant"], &[]);
 }
 
+#[test]
+fn test_mbstate() {
+    // mbstate_t is currently on the bindgen blocklist, so this won't generate anything
+    // good, but shouldn't explode.
+    let hdr = indoc! {"
+        struct foo_mbstate_t {
+            int a;
+        };
+        inline void bar(foo_mbstate_t) {}
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["bar"], &[]);
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Out param pointers
