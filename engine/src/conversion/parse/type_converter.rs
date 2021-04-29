@@ -401,6 +401,9 @@ impl<'a> TypeConverter<'a> {
                     .insert(cpp_definition.clone(), name.clone());
                 let api = UnanalyzedApi {
                     name: name.clone(),
+                    // This is a synthesized type that isn't nested within anything else,
+                    // so it doesn't have an orignal_name.
+                    original_name: None,
                     deps: HashSet::new(),
                     detail: crate::conversion::api::ApiDetail::ConcreteType {
                         rs_definition: Box::new(rs_definition.clone()),

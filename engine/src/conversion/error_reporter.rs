@@ -70,6 +70,7 @@ fn push_ignored_item(
 ) {
     apis.push(Api {
         name: QualifiedName::new(ns, ctx.get_id().clone()),
+        original_name: None,
         deps: HashSet::new(),
         detail: ApiDetail::IgnoredItem { err, ctx },
     });

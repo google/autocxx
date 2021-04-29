@@ -30,8 +30,8 @@ use autocxx_parser::{TypeConfig, UnsafePolicy};
 use function_wrapper::{FunctionWrapper, FunctionWrapperPayload, TypeConversionPolicy};
 use proc_macro2::Span;
 use syn::{
-    parse_quote, punctuated::Punctuated, FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType,
-    Type, TypePtr, Visibility,
+    parse_quote, punctuated::Punctuated, FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType, Type,
+    TypePtr, Visibility,
 };
 
 use crate::{
@@ -205,6 +205,10 @@ impl<'a> FnAnalyzer<'a> {
         };
         Api {
             name: api.name,
+            // An "extra API" is unlikely to have an `original_name, but we
+            // don't need to knoww that here -- we can simply pass on
+            // `api.original_name`.
+            original_name: api.original_name,
             deps: api.deps,
             detail: new_detail,
         }
@@ -221,7 +225,11 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::ConcreteType { rs_definition } => ApiDetail::ConcreteType { rs_definition },
             ApiDetail::StringConstructor => ApiDetail::StringConstructor,
             ApiDetail::Function { fun, analysis: _ } => {
-                let analysis = self.analyze_foreign_fn(&api.name.get_namespace(), &fun)?;
+                let analysis = self.analyze_foreign_fn(
+                    &api.name.get_namespace(),
+                    &fun,
+                    api.original_name.clone(),
+                )?;
                 match analysis {
                     None => return Ok(None),
                     Some(FnAnalysisResult(analysis, id, fn_deps)) => {
@@ -247,6 +255,7 @@ impl<'a> FnAnalyzer<'a> {
         };
         Ok(Some(Api {
             name: QualifiedName::new(api.name.get_namespace(), new_id),
+            original_name: api.original_name,
             deps: new_deps,
             detail: api_detail,
         }))
@@ -315,6 +324,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         ns: &Namespace,
         func_information: &FuncToConvert,
+        original_name: Option<String>,
     ) -> Result<Option<FnAnalysisResult>, ConvertErrorWithContext> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
@@ -327,7 +337,6 @@ impl<'a> FnAnalyzer<'a> {
         if initial_rust_name.ends_with("_destructor") {
             return Ok(None);
         }
-        let original_name = Self::get_bindgen_original_name_annotation(&fun);
         let diagnostic_display_name = original_name.as_ref().unwrap_or(&initial_rust_name);
 
         // Now let's analyze all the parameters.
@@ -806,23 +815,6 @@ impl<'a> FnAnalyzer<'a> {
             }
         };
         Ok(result)
-    }
-
-    fn get_bindgen_original_name_annotation(fun: &ForeignItemFn) -> Option<String> {
-        fun.attrs
-            .iter()
-            .filter_map(|a| {
-                if a.path.is_ident("bindgen_original_name") {
-                    let r: Result<LitStr, syn::Error> = a.parse_args();
-                    match r {
-                        Ok(ls) => Some(ls.value()),
-                        Err(_) => None,
-                    }
-                } else {
-                    None
-                }
-            })
-            .next()
     }
 
     fn get_bindgen_special_member_annotation(fun: &ForeignItemFn) -> Option<String> {

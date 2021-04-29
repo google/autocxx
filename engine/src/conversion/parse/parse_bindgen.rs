@@ -31,7 +31,7 @@ use crate::{
     types::validate_ident_ok_for_cxx,
 };
 use autocxx_parser::TypeConfig;
-use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
+use syn::{parse_quote, Attribute, Fields, Ident, Item, LitStr, Type, TypePath, UseTree};
 
 use super::type_converter::TypeConversionContext;
 use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
@@ -47,6 +47,23 @@ pub(crate) struct ParseBindgen<'a> {
     /// even if the 'this' is actually recorded as void in the
     /// function signature.
     latest_virtual_this_type: Option<QualifiedName>,
+}
+
+pub(crate) fn get_bindgen_original_name_annotation(attrs: &[Attribute]) -> Option<String> {
+    attrs
+        .iter()
+        .filter_map(|a| {
+            if a.path.is_ident("bindgen_original_name") {
+                let r: Result<LitStr, syn::Error> = a.parse_args();
+                match r {
+                    Ok(ls) => Some(ls.value()),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            }
+        })
+        .next()
 }
 
 impl<'a> ParseBindgen<'a> {
@@ -129,19 +146,22 @@ impl<'a> ParseBindgen<'a> {
                 }
                 let tyname = Self::qualify_name(ns, s.ident.clone())?;
                 let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
+                let original_name = get_bindgen_original_name_annotation(&s.attrs);
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
                 self.parse_type(
                     tyname.clone(),
                     is_forward_declaration,
                     Some(Item::Struct(s)),
+                    original_name,
                 );
                 self.latest_virtual_this_type = Some(tyname);
                 Ok(())
             }
             Item::Enum(e) => {
                 let tyname = Self::qualify_name(ns, e.ident.clone())?;
-                self.parse_type(tyname, false, Some(Item::Enum(e)));
+                let original_name = get_bindgen_original_name_annotation(&e.attrs);
+                self.parse_type(tyname, false, Some(Item::Enum(e)), original_name);
                 Ok(())
             }
             Item::Impl(imp) => {
@@ -204,6 +224,9 @@ impl<'a> ParseBindgen<'a> {
                             deps.insert(old_tyname);
                             self.results.apis.push(UnanalyzedApi {
                                 name: QualifiedName::new(ns, new_id.clone()),
+                                original_name: get_bindgen_original_name_annotation(
+                                    &use_item.attrs,
+                                ),
                                 deps,
                                 detail: ApiDetail::Typedef {
                                     payload: TypedefKind::Use(parse_quote! {
@@ -226,6 +249,7 @@ impl<'a> ParseBindgen<'a> {
             Item::Const(const_item) => {
                 self.results.apis.push(UnanalyzedApi {
                     name: QualifiedName::new(ns, const_item.ident.clone()),
+                    original_name: get_bindgen_original_name_annotation(&const_item.attrs),
                     deps: HashSet::new(),
                     detail: ApiDetail::Const { const_item },
                 });
@@ -260,6 +284,7 @@ impl<'a> ParseBindgen<'a> {
                         self.results.apis.append(&mut final_type.extra_apis);
                         self.results.apis.push(UnanalyzedApi {
                             name: QualifiedName::new(ns, ity.ident.clone()),
+                            original_name: get_bindgen_original_name_annotation(&ity.attrs),
                             deps: final_type.types_encountered,
                             detail: ApiDetail::Typedef {
                                 payload: TypedefKind::Type(ity),
@@ -303,12 +328,14 @@ impl<'a> ParseBindgen<'a> {
         name: QualifiedName,
         is_forward_declaration: bool,
         bindgen_mod_item: Option<Item>,
+        original_name: Option<String>,
     ) {
         if self.type_config.is_on_blocklist(&name.to_cpp_name()) {
             return;
         }
         let api = UnanalyzedApi {
             name: name.clone(),
+            original_name,
             deps: HashSet::new(),
             detail: if is_forward_declaration {
                 ApiDetail::ForwardDeclaration
