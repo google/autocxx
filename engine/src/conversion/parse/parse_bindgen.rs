@@ -135,7 +135,6 @@ impl<'a> ParseBindgen<'a> {
                 self.parse_type(
                     tyname.clone(),
                     is_forward_declaration,
-                    HashSet::new(),
                     Some(Item::Struct(s)),
                 );
                 self.latest_virtual_this_type = Some(tyname);
@@ -143,7 +142,7 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Enum(e) => {
                 let tyname = Self::qualify_name(ns, e.ident.clone())?;
-                self.parse_type(tyname, false, HashSet::new(), Some(Item::Enum(e)));
+                self.parse_type(tyname, false, Some(Item::Enum(e)));
                 Ok(())
             }
             Item::Impl(imp) => {
@@ -304,7 +303,6 @@ impl<'a> ParseBindgen<'a> {
         &mut self,
         name: QualifiedName,
         is_forward_declaration: bool,
-        deps: HashSet<QualifiedName>,
         bindgen_mod_item: Option<Item>,
     ) {
         if self.type_config.is_on_blocklist(&name.to_cpp_name()) {
@@ -312,7 +310,7 @@ impl<'a> ParseBindgen<'a> {
         }
         let api = UnanalyzedApi {
             name: name.clone(),
-            deps,
+            deps: HashSet::new(),
             detail: if is_forward_declaration {
                 ApiDetail::ForwardDeclaration
             } else {
