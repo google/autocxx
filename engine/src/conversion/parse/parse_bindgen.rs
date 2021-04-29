@@ -241,10 +241,6 @@ impl<'a> ParseBindgen<'a> {
                     &TypeConversionContext::NonCxx,
                 );
                 match type_conversion_results {
-                    Err(ConvertError::OpaqueTypeFound) => {
-                        self.add_opaque_type(tyname);
-                        Ok(())
-                    }
                     Err(err) => Err(ConvertErrorWithContext(
                         err,
                         Some(ErrorContext::Item(ity.ident.clone())),
@@ -296,14 +292,6 @@ impl<'a> ParseBindgen<'a> {
         s.iter()
             .filter_map(|f| f.ident.as_ref())
             .any(|id| id == "_unused")
-    }
-
-    fn add_opaque_type(&mut self, name: QualifiedName) {
-        self.results.apis.push(UnanalyzedApi {
-            name,
-            deps: HashSet::new(),
-            detail: ApiDetail::OpaqueTypedef,
-        });
     }
 
     /// Record the Api for a type, e.g. enum or struct.

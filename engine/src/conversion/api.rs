@@ -103,10 +103,6 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     },
     /// A variable-length C integer type (e.g. int, unsigned long).
     CType { typename: QualifiedName },
-    /// A typedef which doesn't point to any actual useful kind of
-    /// type, but instead to something which `bindgen` couldn't figure out
-    /// and has therefore itself made opaque and mysterious.
-    OpaqueTypedef,
     /// Some item which couldn't be processed by autocxx for some reason.
     /// We will have emitted a warning message about this, but we want
     /// to mark that it's ignored so that we don't attempt to process

@@ -130,7 +130,6 @@ impl ByValueChecker {
                     }
                     _ => {}
                 },
-                ApiDetail::OpaqueTypedef => byvalue_checker.ingest_nonpod_type(api.typename()),
                 _ => {}
             }
         }
