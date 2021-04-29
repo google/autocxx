@@ -35,7 +35,7 @@ use crate::{CppFilePair, UnsafePolicy};
 use self::{
     analysis::{
         abstract_types::mark_types_abstract, gc::filter_apis_by_following_edges_from_allowlist,
-        pod::analyze_pod_apis,
+        pod::analyze_pod_apis, remove_ignored::filter_apis_by_ignored_dependents,
     },
     api::{Api, ApiAnalysis},
     codegen_rs::RsCodeGenerator,
@@ -135,6 +135,12 @@ impl<'a> BridgeConverter<'a> {
                 // be instantiated.
                 mark_types_abstract(&mut analyzed_apis);
                 Self::dump_apis("main analyses", &analyzed_apis);
+                // During parsing or subsequent processing we might have encountered
+                // items which we couldn't process due to as-yet-unsupported features.
+                // There might be other items depending on such things. Let's remove them
+                // too.
+                let analyzed_apis = filter_apis_by_ignored_dependents(analyzed_apis);
+                Self::dump_apis("removing ignored dependents", &analyzed_apis);
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis =
                     filter_apis_by_following_edges_from_allowlist(analyzed_apis, &self.type_config);

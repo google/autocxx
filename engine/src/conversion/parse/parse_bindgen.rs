@@ -238,7 +238,7 @@ impl<'a> ParseBindgen<'a> {
                 let type_conversion_results = self.results.type_converter.convert_type(
                     *ity.ty,
                     ns,
-                    &TypeConversionContext::NonCxx,
+                    &TypeConversionContext::CxxInnerType,
                 );
                 match type_conversion_results {
                     Err(err) => Err(ConvertErrorWithContext(
