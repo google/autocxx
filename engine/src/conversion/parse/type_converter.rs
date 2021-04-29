@@ -60,9 +60,14 @@ impl<T> Annotated<T> {
 }
 
 /// Options when converting a type.
+/// It's possible we could add more policies here in future.
+/// For example, Rust in general allows type names containing
+/// __, whereas cxx doesn't. If we could identify cases where
+/// a type will only ever be used in a bindgen context,
+/// we could be more liberal. At the moment though, all outputs
+/// from [TypeConverter] _might_ be used in the [cxx::bridge].
 pub(crate) enum TypeConversionContext<'a> {
-    Cxx,
-    NonCxx,
+    CxxInnerType,
     CxxOuterType {
         forward_declarations: &'a HashSet<QualifiedName>,
         convert_ptrs_to_references: bool,
@@ -70,12 +75,6 @@ pub(crate) enum TypeConversionContext<'a> {
 }
 
 impl<'a> TypeConversionContext<'a> {
-    fn validate_cxx_spelling(&self) -> bool {
-        match self {
-            TypeConversionContext::Cxx | TypeConversionContext::CxxOuterType { .. } => true,
-            TypeConversionContext::NonCxx => false,
-        }
-    }
     fn convert_ptrs_to_references(&self) -> bool {
         matches!(
             self,
@@ -92,12 +91,6 @@ impl<'a> TypeConversionContext<'a> {
                 ..
             } if forward_declarations.contains(qn) => false,
             _ => true,
-        }
-    }
-    fn for_inner_type(&self) -> Self {
-        match self {
-            TypeConversionContext::NonCxx => TypeConversionContext::NonCxx,
-            _ => TypeConversionContext::Cxx,
         }
     }
 }
@@ -185,7 +178,8 @@ impl<'a> TypeConverter<'a> {
                 }
             }
             Type::Reference(mut r) => {
-                let innerty = self.convert_boxed_type(r.elem, ns, &ctx.for_inner_type())?;
+                let innerty =
+                    self.convert_boxed_type(r.elem, ns, &TypeConversionContext::CxxInnerType)?;
                 r.elem = innerty.ty;
                 Annotated::new(
                     Type::Reference(r),
@@ -195,11 +189,12 @@ impl<'a> TypeConverter<'a> {
                 )
             }
             Type::Ptr(ptr) if ctx.convert_ptrs_to_references() => {
-                self.convert_ptr_to_reference(ptr, ns, ctx)?
+                self.convert_ptr_to_reference(ptr, ns)?
             }
             Type::Ptr(mut ptr) => {
                 crate::known_types::ensure_pointee_is_valid(&ptr)?;
-                let innerty = self.convert_boxed_type(ptr.elem, ns, &ctx.for_inner_type())?;
+                let innerty =
+                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
                 ptr.elem = innerty.ty;
                 Annotated::new(
                     Type::Ptr(ptr),
@@ -245,9 +240,7 @@ impl<'a> TypeConverter<'a> {
         }
 
         let original_tn = QualifiedName::from_type_path(&typ);
-        if ctx.validate_cxx_spelling() {
-            original_tn.validate_ok_for_cxx()?;
-        }
+        original_tn.validate_ok_for_cxx()?;
         if self.config.is_on_blocklist(&original_tn.to_cpp_name()) {
             return Err(ConvertError::Blocked(original_tn));
         }
@@ -302,8 +295,7 @@ impl<'a> TypeConverter<'a> {
                     ctx,
                 )?;
                 if let PathArguments::AngleBracketed(ref mut ab) = last_seg.arguments {
-                    let mut innerty =
-                        self.convert_punctuated(ab.args.clone(), ns, &ctx.for_inner_type())?;
+                    let mut innerty = self.convert_punctuated(ab.args.clone(), ns)?;
                     ab.args = innerty.ty;
                     deps.extend(innerty.types_encountered.drain());
                 }
@@ -332,7 +324,6 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         pun: Punctuated<GenericArgument, P>,
         ns: &Namespace,
-        ctx: &TypeConversionContext,
     ) -> Result<Annotated<Punctuated<GenericArgument, P>>, ConvertError>
     where
         P: Default,
@@ -343,7 +334,8 @@ impl<'a> TypeConverter<'a> {
         for arg in pun.into_iter() {
             new_pun.push(match arg {
                 GenericArgument::Type(t) => {
-                    let mut innerty = self.convert_type(t, ns, &ctx.for_inner_type())?;
+                    let mut innerty =
+                        self.convert_type(t, ns, &TypeConversionContext::CxxInnerType)?;
                     types_encountered.extend(innerty.types_encountered.drain());
                     extra_apis.extend(innerty.extra_apis.drain(..));
                     GenericArgument::Type(innerty.ty)
@@ -373,10 +365,9 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         ptr: TypePtr,
         ns: &Namespace,
-        ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertError> {
         let mutability = ptr.mutability;
-        let elem = self.convert_boxed_type(ptr.elem, ns, &ctx.for_inner_type())?;
+        let elem = self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
         // TODO - in the future, we should check if this is a rust::Str and throw
         // a wobbler if not. rust::Str should only be seen _by value_ in C++
         // headers; it manifests as &str in Rust but on the C++ side it must

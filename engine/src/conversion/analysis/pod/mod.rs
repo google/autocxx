@@ -136,7 +136,7 @@ fn get_struct_field_types(
 ) -> Result<(), ConvertError> {
     for f in &s.fields {
         let annotated =
-            type_converter.convert_type(f.ty.clone(), ns, &TypeConversionContext::Cxx)?;
+            type_converter.convert_type(f.ty.clone(), ns, &TypeConversionContext::CxxInnerType)?;
         extra_apis.extend(annotated.extra_apis);
         deps.extend(annotated.types_encountered);
     }
