@@ -30,8 +30,8 @@ use autocxx_parser::{TypeConfig, UnsafePolicy};
 use function_wrapper::{FunctionWrapper, FunctionWrapperPayload, TypeConversionPolicy};
 use proc_macro2::Span;
 use syn::{
-    parse_quote, punctuated::Punctuated, FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType, Type,
-    TypePtr, Visibility,
+    parse_quote, punctuated::Punctuated, FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType,
+    Type, TypePtr, Visibility,
 };
 
 use crate::{

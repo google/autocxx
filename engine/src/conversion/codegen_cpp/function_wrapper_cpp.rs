@@ -18,35 +18,48 @@ use crate::conversion::{
 };
 use crate::known_types::type_lacks_copy_constructor;
 
-use super::type_to_cpp;
+use super::type_to_cpp::{type_to_cpp, OriginalNameMap};
 
 impl TypeConversionPolicy {
-    pub(super) fn unconverted_type(&self) -> Result<String, ConvertError> {
+    pub(super) fn unconverted_type(
+        &self,
+        original_name_map: &OriginalNameMap,
+    ) -> Result<String, ConvertError> {
         match self.cpp_conversion {
-            CppConversionType::FromUniquePtrToValue => self.wrapped_type(),
-            _ => self.unwrapped_type_as_string(),
+            CppConversionType::FromUniquePtrToValue => self.wrapped_type(original_name_map),
+            _ => self.unwrapped_type_as_string(original_name_map),
         }
     }
 
-    pub(super) fn converted_type(&self) -> Result<String, ConvertError> {
+    pub(super) fn converted_type(
+        &self,
+        original_name_map: &OriginalNameMap,
+    ) -> Result<String, ConvertError> {
         match self.cpp_conversion {
-            CppConversionType::FromValueToUniquePtr => self.wrapped_type(),
-            _ => self.unwrapped_type_as_string(),
+            CppConversionType::FromValueToUniquePtr => self.wrapped_type(original_name_map),
+            _ => self.unwrapped_type_as_string(original_name_map),
         }
     }
 
-    fn unwrapped_type_as_string(&self) -> Result<String, ConvertError> {
-        type_to_cpp(&self.unwrapped_type)
+    fn unwrapped_type_as_string(
+        &self,
+        original_name_map: &OriginalNameMap,
+    ) -> Result<String, ConvertError> {
+        type_to_cpp(&self.unwrapped_type, original_name_map)
     }
 
-    fn wrapped_type(&self) -> Result<String, ConvertError> {
+    fn wrapped_type(&self, original_name_map: &OriginalNameMap) -> Result<String, ConvertError> {
         Ok(format!(
             "std::unique_ptr<{}>",
-            self.unwrapped_type_as_string()?
+            self.unwrapped_type_as_string(original_name_map)?
         ))
     }
 
-    pub(super) fn cpp_conversion(&self, var_name: &str) -> Result<String, ConvertError> {
+    pub(super) fn cpp_conversion(
+        &self,
+        var_name: &str,
+        original_name_map: &OriginalNameMap,
+    ) -> Result<String, ConvertError> {
         Ok(match self.cpp_conversion {
             CppConversionType::None => {
                 if type_lacks_copy_constructor(&self.unwrapped_type) {
@@ -58,7 +71,7 @@ impl TypeConversionPolicy {
             CppConversionType::FromUniquePtrToValue => format!("std::move(*{})", var_name),
             CppConversionType::FromValueToUniquePtr => format!(
                 "std::make_unique<{}>({})",
-                self.unconverted_type()?,
+                self.unconverted_type(original_name_map)?,
                 var_name
             ),
         })

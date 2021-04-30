@@ -388,7 +388,9 @@ impl<'a> TypeConverter<'a> {
     ) -> Result<(QualifiedName, Option<UnanalyzedApi>), ConvertError> {
         let count = self.concrete_templates.len();
         // We just use this as a hash key, essentially.
-        let cpp_definition = type_to_cpp(rs_definition)?;
+        // TODO: Once we've completed the TypeConverter refactoring (see #220),
+        // pass in an actual original_name_map here.
+        let cpp_definition = type_to_cpp(rs_definition, &HashMap::new())?;
         let e = self.concrete_templates.get(&cpp_definition);
         match e {
             Some(tn) => Ok((tn.clone(), None)),

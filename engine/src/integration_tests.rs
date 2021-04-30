@@ -3697,28 +3697,53 @@ fn test_reserved_name() {
 
 #[test]
 fn test_nested_type() {
-    // For the time being, we merely test that a nested type doesn't conflict with a top-level type
-    // of the same name. We can't create an instance of `A::B` yet because autocxx gets confused
-    // when we try to generate it. Bindgen imports the type as `A_B`, autocxx inserts this
-    // type name into generated C++ code, and the C++ compiler then fails to recognize the type.
+    // Test that we can import APIs that use nested types.
+    // As a regression test, we also test that the nested type `A::B` doesn't conflict with the
+    // top-level type `B`. This used to cause compile errors.
     let hdr = indoc! {"
         struct A {
             A() {}
             struct B {
                 B() {}
             };
+            enum C {};
+            using D = int;
         };
         struct B {
             B() {}
             void method_on_top_level_type() const {}
         };
+        void take_A_B(A::B);
+        void take_A_C(A::C);
+        void take_A_D(A::D);
     "};
     let rs = quote! {
         let _ = ffi::A::make_unique();
         let b = ffi::B::make_unique();
         b.as_ref().unwrap().method_on_top_level_type();
     };
-    run_test("", hdr, rs, &["A", "B"], &[]);
+    run_test("", hdr, rs, &["A", "B", "take_A_B", "take_A_C"], &[]);
+}
+
+#[test]
+fn test_nested_type_in_namespace() {
+    // Test that we can import APIs that use nested types in a namespace.
+    // We can't make this part of the previous test as autocxx drops the
+    // namespace, so `A::B` and `N::A::B` would be imported as the same
+    // type.
+    let hdr = indoc! {"
+        namespace N {
+            struct A {
+                A() {}
+                struct B {
+                    B() {}
+                };
+            };
+        };
+        void take_A_B(N::A::B);
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["take_A_B"], &[]);
 }
 
 #[test]
