@@ -47,6 +47,7 @@ pub enum ConvertError {
     TooManyUnderscores,
     UnknownDependentType,
     IgnoredDependent,
+    MoveConstructorUnsupported,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -86,6 +87,7 @@ impl Display for ConvertError {
             ConvertError::TooManyUnderscores => write!(f, "Names containing __ are reserved by C++ so not acceptable to cxx")?,
             ConvertError::UnknownDependentType => write!(f, "This item relies on a type not known to autocxx.")?,
             ConvertError::IgnoredDependent => write!(f, "This item depends on some other type which autocxx could not generate.")?,
+            ConvertError::MoveConstructorUnsupported => write!(f, "This is a move constructor, for which we currently cannot generate bindings.")?,
         }
         Ok(())
     }

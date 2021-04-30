@@ -482,6 +482,13 @@ impl<'a> FnAnalyzer<'a> {
             return Err(contextualize_error(ConvertError::UnusedTemplateParam));
         }
 
+        // Reject move constructors.
+        if Self::is_move_constructor(&fun) {
+            return Err(contextualize_error(
+                ConvertError::MoveConstructorUnsupported,
+            ));
+        }
+
         // Analyze the return type, just as we previously did for the
         // parameters.
         let mut return_analysis = if let FnKind::Method(ref self_ty, MethodKind::Constructor) = kind
@@ -816,6 +823,27 @@ impl<'a> FnAnalyzer<'a> {
                 }
             })
             .next()
+    }
+
+    fn get_bindgen_special_member_annotation(fun: &ForeignItemFn) -> Option<String> {
+        fun.attrs
+            .iter()
+            .filter_map(|a| {
+                if a.path.is_ident("bindgen_special_member") {
+                    let r: Result<LitStr, syn::Error> = a.parse_args();
+                    match r {
+                        Ok(ls) => Some(ls.value()),
+                        Err(_) => None,
+                    }
+                } else {
+                    None
+                }
+            })
+            .next()
+    }
+
+    fn is_move_constructor(fun: &ForeignItemFn) -> bool {
+        Self::get_bindgen_special_member_annotation(fun).map_or(false, |val| val == "move_ctor")
     }
 
     fn get_reference_parameters_and_return(fun: &ForeignItemFn) -> (HashSet<Ident>, bool) {
