@@ -5141,6 +5141,31 @@ fn test_mbstate() {
     run_test("", hdr, rs, &["bar"], &[]);
 }
 
+#[test]
+fn test_generate_all() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        inline uint32_t give_int() {
+            return 5;
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_int(), 5);
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &[],
+        &[],
+        Some(quote! {
+            generate_all!()
+        }),
+        &[],
+        None,
+    );
+}
+
 // Yet to test:
 // 6. Ifdef
 // 7. Out param pointers
