@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use proc_macro2::Span;
-use syn::Result as ParseResult;
 use syn::{
     parse::{Parse, ParseStream},
     Token,
 };
+use syn::{Ident, Result as ParseResult};
 
 use crate::type_config::TypeConfig;
 
@@ -98,8 +98,10 @@ impl Parse for IncludeCppConfig {
                     type_config.blocklist.push(generate.value());
                 } else if ident == "parse_only" {
                     parse_only = true;
+                    swallow_parentheses(&input, &ident)?;
                 } else if ident == "exclude_utilities" {
                     type_config.exclude_utilities = true;
+                    swallow_parentheses(&input, &ident)?;
                 } else if ident == "safety" {
                     let args;
                     syn::parenthesized!(args in input);
@@ -122,6 +124,19 @@ impl Parse for IncludeCppConfig {
             type_config,
             parse_only,
         })
+    }
+}
+
+fn swallow_parentheses(input: &ParseStream, latest_ident: &Ident) -> ParseResult<()> {
+    let args;
+    syn::parenthesized!(args in input);
+    if args.is_empty() {
+        Ok(())
+    } else {
+        Err(syn::Error::new(
+            latest_ident.span(),
+            "expected no arguments to directive",
+        ))
     }
 }
 
