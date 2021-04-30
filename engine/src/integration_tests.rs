@@ -5065,11 +5065,18 @@ fn test_deleted_function() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/426
-fn test_implicitly_deleted_copy_constructor() {
-    // We shouldn't generate bindings for implicitly deleted functions.
-    // The test is successful if the bindings compile, i.e. if autocxx doesn't
-    // attempt to call the implicitly deleted copy constructor.
+fn test_ignore_move_constructor() {
+    // Test that we don't generate bindings for move constructors and,
+    // specifically, don't erroneously import them as copy constructors.
+    // We used to do this because bindgen creates the same Rust signature for
+    // move constructors and for copy constructors.
+    // The way this tests works is a bit subtle.  Declaring a move constructor
+    // causes the copy constructor to be implicitly deleted (unless it is]
+    // explicitly declared). If we erroneously tried to create a binding for the
+    // move constructor (because the signature led us to believe it is a copy
+    // constructor), the generated C++ code would therefore try to call the
+    // deleted copy constructor, which would result in a compile error.
+    // The test is therefore successful if the bindings compile.
     let hdr = indoc! {"
         class A {
         public:
