@@ -81,7 +81,10 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     ForwardDeclaration,
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
-    ConcreteType { rs_definition: Box<Type> },
+    ConcreteType {
+        rs_definition: Box<Type>,
+        cpp_definition: String,
+    },
     /// A simple note that we want to make a constructor for
     /// a `std::string` on the heap.
     StringConstructor,

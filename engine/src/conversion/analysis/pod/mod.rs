@@ -79,7 +79,13 @@ fn analyze_pod_api(
     let mut new_deps = api.deps;
     let api_detail = match api.detail {
         // No changes to any of these...
-        ApiDetail::ConcreteType { rs_definition } => ApiDetail::ConcreteType { rs_definition },
+        ApiDetail::ConcreteType {
+            rs_definition,
+            cpp_definition,
+        } => ApiDetail::ConcreteType {
+            rs_definition,
+            cpp_definition,
+        },
         ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
         ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },

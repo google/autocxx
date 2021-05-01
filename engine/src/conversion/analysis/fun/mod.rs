@@ -200,7 +200,13 @@ impl<'a> FnAnalyzer<'a> {
     /// a new analysis phase prior to the POD analysis which materializes these types.
     fn make_extra_api_nonpod(api: UnanalyzedApi) -> Api<FnAnalysis> {
         let new_detail = match api.detail {
-            ApiDetail::ConcreteType { rs_definition } => ApiDetail::ConcreteType { rs_definition },
+            ApiDetail::ConcreteType {
+                rs_definition,
+                cpp_definition,
+            } => ApiDetail::ConcreteType {
+                rs_definition,
+                cpp_definition,
+            },
             _ => panic!("Function analysis created an extra API which wasn't a concrete type"),
         };
         Api {
@@ -222,7 +228,13 @@ impl<'a> FnAnalyzer<'a> {
         let mut new_id = api.name.get_final_ident();
         let api_detail = match api.detail {
             // No changes to any of these...
-            ApiDetail::ConcreteType { rs_definition } => ApiDetail::ConcreteType { rs_definition },
+            ApiDetail::ConcreteType {
+                rs_definition,
+                cpp_definition,
+            } => ApiDetail::ConcreteType {
+                rs_definition,
+                cpp_definition,
+            },
             ApiDetail::StringConstructor => ApiDetail::StringConstructor,
             ApiDetail::Function { fun, analysis: _ } => {
                 let analysis = self.analyze_foreign_fn(
@@ -882,7 +894,7 @@ impl Api<FnAnalysis> {
         match &self.detail {
             ApiDetail::Function { fun: _, analysis } => analysis.cpp_wrapper.clone(),
             ApiDetail::StringConstructor => Some(AdditionalNeed::MakeStringConstructor),
-            ApiDetail::ConcreteType { rs_definition } => {
+            ApiDetail::ConcreteType { rs_definition, .. } => {
                 Some(AdditionalNeed::ConcreteTemplatedTypeTypedef(
                     self.name.clone(),
                     rs_definition.clone(),

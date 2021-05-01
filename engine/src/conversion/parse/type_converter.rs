@@ -406,6 +406,7 @@ impl<'a> TypeConverter<'a> {
                     deps: HashSet::new(),
                     detail: crate::conversion::api::ApiDetail::ConcreteType {
                         rs_definition: Box::new(rs_definition.clone()),
+                        cpp_definition,
                     },
                 };
                 Ok((name, Some(api)))
