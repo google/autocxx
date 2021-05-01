@@ -17,7 +17,7 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse, Type};
 
-use super::{convert_error::ErrorContext, parse::type_converter::TypeConverter, ConvertError};
+use super::{convert_error::ErrorContext, ConvertError};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
@@ -156,16 +156,4 @@ impl<T: ApiAnalysis> Api<T> {
     pub(crate) fn typename(&self) -> QualifiedName {
         self.name.clone()
     }
-}
-
-/// Results of parsing the bindgen mod. This is what is passed from
-/// the parser to the analysis phases.
-pub(crate) struct ParseResults<'a> {
-    /// All APIs encountered. This is the main thing.
-    pub(crate) apis: Vec<UnanalyzedApi>,
-    /// A database containing known relationships between types.
-    /// In particular, any typedefs detected.
-    /// This should probably be replaced by extracting this information
-    /// from APIs as necessary later. TODO
-    pub(crate) type_converter: TypeConverter<'a>,
 }

@@ -13,7 +13,11 @@
 // limitations under the License.
 
 use crate::{
-    conversion::{api::UnanalyzedApi, codegen_cpp::type_to_cpp::type_to_cpp, ConvertError},
+    conversion::{
+        api::{Api, ApiAnalysis, ApiDetail, TypedefKind, UnanalyzedApi},
+        codegen_cpp::type_to_cpp::type_to_cpp,
+        ConvertError,
+    },
     known_types::known_types,
     types::{make_ident, Namespace, QualifiedName},
 };
@@ -107,28 +111,20 @@ impl<'a> TypeConversionContext<'a> {
 /// easily be moved into it, which would enable us to
 /// distribute this logic elsewhere.
 pub(crate) struct TypeConverter<'a> {
-    types_found: Vec<QualifiedName>,
+    types_found: HashSet<QualifiedName>,
     typedefs: HashMap<QualifiedName, Type>,
     concrete_templates: HashMap<String, QualifiedName>,
     config: &'a TypeConfig,
 }
 
 impl<'a> TypeConverter<'a> {
-    pub(crate) fn new(config: &'a TypeConfig) -> Self {
+    pub(crate) fn new<A: ApiAnalysis>(config: &'a TypeConfig, apis: &[Api<A>]) -> Self {
         Self {
-            types_found: Vec::new(),
-            typedefs: HashMap::new(),
-            concrete_templates: HashMap::new(),
+            types_found: Self::find_types(apis),
+            typedefs: Self::find_typedefs(apis),
+            concrete_templates: Self::find_concrete_templates(apis),
             config,
         }
-    }
-
-    pub(crate) fn push(&mut self, ty: QualifiedName) {
-        self.types_found.push(ty);
-    }
-
-    pub(crate) fn insert_typedef(&mut self, id: QualifiedName, target: Type) {
-        self.typedefs.insert(id, target);
     }
 
     pub(crate) fn convert_boxed_type(
@@ -454,5 +450,43 @@ impl<'a> TypeConverter<'a> {
                 Ok(())
             }
         }
+    }
+
+    fn find_types<A: ApiAnalysis>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+        apis.iter()
+            .filter_map(|api| match api.detail {
+                ApiDetail::ForwardDeclaration
+                | ApiDetail::ConcreteType { .. }
+                | ApiDetail::Typedef { .. }
+                | ApiDetail::Type { .. } => Some(api.typename()),
+                ApiDetail::StringConstructor
+                | ApiDetail::Function { .. }
+                | ApiDetail::Const { .. }
+                | ApiDetail::CType { .. }
+                | ApiDetail::IgnoredItem { .. } => None,
+            })
+            .collect()
+    }
+
+    fn find_typedefs<A: ApiAnalysis>(apis: &[Api<A>]) -> HashMap<QualifiedName, Type> {
+        apis.iter()
+            .filter_map(|api| match &api.detail {
+                ApiDetail::Typedef {
+                    payload: TypedefKind::Type(ty),
+                } => Some((api.typename(), (*ty.ty).clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn find_concrete_templates<A: ApiAnalysis>(apis: &[Api<A>]) -> HashMap<String, QualifiedName> {
+        apis.iter()
+            .filter_map(|api| match &api.detail {
+                ApiDetail::ConcreteType { cpp_definition, .. } => {
+                    Some((cpp_definition.clone(), api.typename()))
+                }
+                _ => None,
+            })
+            .collect()
     }
 }

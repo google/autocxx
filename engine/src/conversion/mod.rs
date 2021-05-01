@@ -39,7 +39,7 @@ use self::{
     },
     api::{Api, ApiAnalysis},
     codegen_rs::RsCodeGenerator,
-    parse::ParseBindgen,
+    parse::{type_converter::TypeConverter, ParseBindgen},
 };
 
 const LOG_APIS: bool = true;
@@ -103,11 +103,11 @@ impl<'a> BridgeConverter<'a> {
                 // Parse the bindgen mod.
                 let items_to_process = items.drain(..).collect();
                 let parser = ParseBindgen::new(&self.type_config);
-                let parse_results = parser.parse_items(items_to_process)?;
-                Self::dump_apis("parsing", &parse_results.apis);
+                let apis = parser.parse_items(items_to_process)?;
+                Self::dump_apis("parsing", &apis);
                 // Inside parse_results, we now have a list of APIs and a few other things
                 // e.g. type relationships. The latter are stored in here...
-                let mut type_converter = parse_results.type_converter;
+                let mut type_converter = TypeConverter::new(self.type_config, &apis);
                 // The code above will have contributed lots of `Api`s to self.apis.
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
@@ -116,8 +116,7 @@ impl<'a> BridgeConverter<'a> {
                 // This returns a new list of `Api`s, which will be parameterized with
                 // the analysis results. It also returns an object which can be used
                 // by subsequent phases to work out which objects are POD.
-                let analyzed_apis =
-                    analyze_pod_apis(parse_results.apis, &self.type_config, &mut type_converter)?;
+                let analyzed_apis = analyze_pod_apis(apis, &self.type_config, &mut type_converter)?;
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions. This is probably the most complex
