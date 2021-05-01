@@ -92,7 +92,7 @@ impl ByValueChecker {
         for api in apis {
             match &api.detail {
                 ApiDetail::Typedef { payload } => {
-                    let name = api.typename();
+                    let name = api.name();
                     let typedef_type = match payload {
                         TypedefKind::Type(type_item) => match type_item.ty.as_ref() {
                             Type::Path(typ) => {
@@ -126,7 +126,7 @@ impl ByValueChecker {
                     Some(Item::Enum(_)) => {
                         byvalue_checker
                             .results
-                            .insert(api.typename(), StructDetails::new(PodState::IsPod));
+                            .insert(api.name(), StructDetails::new(PodState::IsPod));
                     }
                     _ => {}
                 },

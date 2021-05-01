@@ -149,7 +149,7 @@ impl<'a> FnAnalyzer<'a> {
         };
         let mut results = Vec::new();
         for api in apis {
-            add_api_or_report_error(api.typename(), &mut results, || me.analyze_fn_api(api));
+            add_api_or_report_error(api.name(), &mut results, || me.analyze_fn_api(api));
         }
         results.extend(me.extra_apis.into_iter().map(Self::make_extra_api_nonpod));
         results
@@ -163,7 +163,7 @@ impl<'a> FnAnalyzer<'a> {
     fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {
-                ApiDetail::ForwardDeclaration => Some(api.typename()),
+                ApiDetail::ForwardDeclaration => Some(api.name()),
                 _ => None,
             })
             .collect()
@@ -175,7 +175,7 @@ impl<'a> FnAnalyzer<'a> {
                 ApiDetail::Type {
                     bindgen_mod_item: _,
                     analysis: TypeKind::Pod,
-                } => Some(api.typename()),
+                } => Some(api.name()),
                 _ => None,
             })
             .chain(
@@ -879,7 +879,7 @@ impl Api<FnAnalysis> {
                     QualifiedName::new(&self.name.get_namespace(), make_ident(&analysis.rust_name))
                 }
             },
-            _ => self.typename(),
+            _ => self.name(),
         }
     }
 

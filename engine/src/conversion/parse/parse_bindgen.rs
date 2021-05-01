@@ -345,7 +345,7 @@ impl<'a> ParseBindgen<'a> {
         let api_names: HashSet<_> = self
             .apis
             .iter()
-            .map(|api| api.typename().to_cpp_name())
+            .map(|api| api.name().to_cpp_name())
             .collect();
         for generate_directive in self.type_config.must_generate_list() {
             if !api_names.contains(&generate_directive) {

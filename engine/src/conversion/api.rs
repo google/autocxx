@@ -153,7 +153,7 @@ impl<T: ApiAnalysis> std::fmt::Debug for Api<T> {
 pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 
 impl<T: ApiAnalysis> Api<T> {
-    pub(crate) fn typename(&self) -> QualifiedName {
+    pub(crate) fn name(&self) -> QualifiedName {
         self.name.clone()
     }
 }

@@ -452,7 +452,7 @@ impl<'a> TypeConverter<'a> {
                 ApiDetail::ForwardDeclaration
                 | ApiDetail::ConcreteType { .. }
                 | ApiDetail::Typedef { .. }
-                | ApiDetail::Type { .. } => Some(api.typename()),
+                | ApiDetail::Type { .. } => Some(api.name()),
                 ApiDetail::StringConstructor
                 | ApiDetail::Function { .. }
                 | ApiDetail::Const { .. }
@@ -467,7 +467,7 @@ impl<'a> TypeConverter<'a> {
             .filter_map(|api| match &api.detail {
                 ApiDetail::Typedef {
                     payload: TypedefKind::Type(ty),
-                } => Some((api.typename(), (*ty.ty).clone())),
+                } => Some((api.name(), (*ty.ty).clone())),
                 _ => None,
             })
             .collect()
@@ -477,7 +477,7 @@ impl<'a> TypeConverter<'a> {
         apis.iter()
             .filter_map(|api| match &api.detail {
                 ApiDetail::ConcreteType { cpp_definition, .. } => {
-                    Some((cpp_definition.clone(), api.typename()))
+                    Some((cpp_definition.clone(), api.name()))
                 }
                 _ => None,
             })

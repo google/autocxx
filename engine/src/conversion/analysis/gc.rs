@@ -47,11 +47,11 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
             let tnforal = api.typename_for_allowlist();
             type_config.is_on_allowlist(&tnforal.to_cpp_name())
         })
-        .map(Api::typename)
+        .map(Api::name)
         .collect();
     let mut by_typename: HashMap<QualifiedName, Vec<Api<FnAnalysis>>> = HashMap::new();
     for api in apis.drain(..) {
-        let tn = api.typename();
+        let tn = api.name();
         by_typename.entry(tn).or_default().push(api);
     }
     let mut done = HashSet::new();
