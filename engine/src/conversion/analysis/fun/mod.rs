@@ -160,15 +160,6 @@ impl<'a> FnAnalyzer<'a> {
             .any(|api| matches!(api.detail, ApiDetail::StringConstructor))
     }
 
-    fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
-        apis.iter()
-            .filter_map(|api| match api.detail {
-                ApiDetail::ForwardDeclaration => Some(api.name()),
-                _ => None,
-            })
-            .collect()
-    }
-
     fn build_pod_safe_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {

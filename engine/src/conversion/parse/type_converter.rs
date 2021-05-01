@@ -483,4 +483,13 @@ impl<'a> TypeConverter<'a> {
             })
             .collect()
     }
+
+    fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
+        apis.iter()
+            .filter_map(|api| match api.detail {
+                ApiDetail::ForwardDeclaration => Some(api.name()),
+                _ => None,
+            })
+            .collect()
+    }
 }
