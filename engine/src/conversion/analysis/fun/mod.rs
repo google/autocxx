@@ -122,7 +122,6 @@ pub(crate) struct FnAnalyzer<'a> {
     bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
     type_config: &'a TypeConfig,
-    incomplete_types: HashSet<QualifiedName>,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     generate_utilities: bool,
 }
@@ -142,7 +141,6 @@ impl<'a> FnAnalyzer<'a> {
             type_converter: TypeConverter::new(type_database, &apis),
             bridge_name_tracker: BridgeNameTracker::new(),
             type_config: type_database,
-            incomplete_types: Self::build_incomplete_type_set(&apis),
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             generate_utilities: Self::should_generate_utilities(&apis),
@@ -274,7 +272,6 @@ impl<'a> FnAnalyzer<'a> {
             ns,
             &TypeConversionContext::CxxOuterType {
                 convert_ptrs_to_references,
-                forward_declarations: &self.incomplete_types,
             },
         )?;
         self.extra_apis.extend(annotated.extra_apis);

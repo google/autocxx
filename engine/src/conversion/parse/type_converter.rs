@@ -70,15 +70,12 @@ impl<T> Annotated<T> {
 /// a type will only ever be used in a bindgen context,
 /// we could be more liberal. At the moment though, all outputs
 /// from [TypeConverter] _might_ be used in the [cxx::bridge].
-pub(crate) enum TypeConversionContext<'a> {
+pub(crate) enum TypeConversionContext {
     CxxInnerType,
-    CxxOuterType {
-        forward_declarations: &'a HashSet<QualifiedName>,
-        convert_ptrs_to_references: bool,
-    },
+    CxxOuterType { convert_ptrs_to_references: bool },
 }
 
-impl<'a> TypeConversionContext<'a> {
+impl TypeConversionContext {
     fn convert_ptrs_to_references(&self) -> bool {
         matches!(
             self,
@@ -88,11 +85,8 @@ impl<'a> TypeConversionContext<'a> {
             }
         )
     }
-    fn allow_instantiation(&self, qn: &QualifiedName) -> bool {
-        !matches!(self, TypeConversionContext::CxxOuterType {
-            forward_declarations,
-            ..
-        } if forward_declarations.contains(qn))
+    fn allow_instantiation_of_forward_declaration(&self) -> bool {
+        matches!(self, TypeConversionContext::CxxInnerType)
     }
 }
 
@@ -108,6 +102,7 @@ pub(crate) struct TypeConverter<'a> {
     types_found: HashSet<QualifiedName>,
     typedefs: HashMap<QualifiedName, Type>,
     concrete_templates: HashMap<String, QualifiedName>,
+    forward_declarations: HashSet<QualifiedName>,
     config: &'a TypeConfig,
 }
 
@@ -117,6 +112,7 @@ impl<'a> TypeConverter<'a> {
             types_found: Self::find_types(apis),
             typedefs: Self::find_typedefs(apis),
             concrete_templates: Self::find_concrete_templates(apis),
+            forward_declarations: Self::find_incomplete_types(apis),
             config,
         }
     }
@@ -141,7 +137,9 @@ impl<'a> TypeConverter<'a> {
                 let newp = self.convert_type_path(p, ns, ctx)?;
                 if let Type::Path(newpp) = &newp.ty {
                     let qn = QualifiedName::from_type_path(newpp);
-                    if !ctx.allow_instantiation(&qn) {
+                    if !ctx.allow_instantiation_of_forward_declaration()
+                        && self.forward_declarations.contains(&qn)
+                    {
                         return Err(ConvertError::TypeContainingForwardDeclaration(qn));
                     }
                     // Special handling because rust_Str (as emitted by bindgen)
@@ -276,7 +274,7 @@ impl<'a> TypeConverter<'a> {
             if known_types().is_cxx_acceptable_generic(&tn) {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
-                Self::confirm_inner_type_is_acceptable_generic_payload(
+                self.confirm_inner_type_is_acceptable_generic_payload(
                     &last_seg.arguments,
                     &tn,
                     ctx,
@@ -405,6 +403,7 @@ impl<'a> TypeConverter<'a> {
     }
 
     fn confirm_inner_type_is_acceptable_generic_payload(
+        &self,
         path_args: &PathArguments,
         desc: &QualifiedName,
         ctx: &TypeConversionContext,
@@ -421,13 +420,15 @@ impl<'a> TypeConverter<'a> {
                     match inner {
                         GenericArgument::Type(Type::Path(typ)) => {
                             let inner_qn = QualifiedName::from_type_path(&typ);
-                            if !ctx.allow_instantiation(&inner_qn) {
+                            if !ctx.allow_instantiation_of_forward_declaration()
+                                && self.forward_declarations.contains(&inner_qn)
+                            {
                                 return Err(ConvertError::TypeContainingForwardDeclaration(
                                     inner_qn,
                                 ));
                             }
                             if let Some(more_generics) = typ.path.segments.last() {
-                                Self::confirm_inner_type_is_acceptable_generic_payload(
+                                self.confirm_inner_type_is_acceptable_generic_payload(
                                     &more_generics.arguments,
                                     desc,
                                     ctx,
@@ -484,7 +485,7 @@ impl<'a> TypeConverter<'a> {
             .collect()
     }
 
-    fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
+    fn find_incomplete_types<A: ApiAnalysis>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::ForwardDeclaration => Some(api.name()),
