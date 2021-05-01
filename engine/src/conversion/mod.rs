@@ -94,7 +94,6 @@ impl<'a> BridgeConverter<'a> {
     pub(crate) fn convert(
         &self,
         mut bindgen_mod: ItemMod,
-        exclude_utilities: bool,
         unsafe_policy: UnsafePolicy,
         inclusions: String,
     ) -> Result<CodegenResults, ConvertError> {
@@ -104,7 +103,7 @@ impl<'a> BridgeConverter<'a> {
                 // Parse the bindgen mod.
                 let items_to_process = items.drain(..).collect();
                 let parser = ParseBindgen::new(&self.type_config);
-                let parse_results = parser.parse_items(items_to_process, exclude_utilities)?;
+                let parse_results = parser.parse_items(items_to_process)?;
                 Self::dump_apis("parsing", &parse_results.apis);
                 // Inside parse_results, we now have a list of APIs and a few other things
                 // e.g. type relationships. The latter are stored in here...

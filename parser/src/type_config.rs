@@ -12,43 +12,126 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use proc_macro2::Span;
+use syn::{Ident, LitStr, Result as ParseResult};
+
+/// Allowlist configuration.
+#[derive(Hash, Debug)]
+pub enum Allowlist {
+    Unspecified,
+    All,
+    Specific(Vec<String>),
+}
+
+impl Allowlist {
+    pub(crate) fn push(&mut self, item: LitStr) -> ParseResult<()> {
+        match self {
+            Allowlist::Unspecified => {
+                *self = Allowlist::Specific(vec![item.value()]);
+            }
+            Allowlist::All => {
+                return Err(syn::Error::new(
+                    item.span(),
+                    "use either generate!/generate_pod! or generate_all!, not both.",
+                ))
+            }
+            Allowlist::Specific(list) => list.push(item.value()),
+        };
+        Ok(())
+    }
+
+    pub(crate) fn set_all(&mut self, ident: &Ident) -> ParseResult<()> {
+        if matches!(self, Allowlist::Specific(..)) {
+            return Err(syn::Error::new(
+                ident.span(),
+                "use either generate!/generate_pod! or generate_all!, not both.",
+            ));
+        }
+        *self = Allowlist::All;
+        Ok(())
+    }
+}
+
+impl Default for Allowlist {
+    fn default() -> Self {
+        Allowlist::Unspecified
+    }
+}
+
+#[derive(Default, Hash, Debug)]
+pub(crate) struct TypeConfigInput {
+    pub(crate) pod_requests: Vec<String>,
+    pub(crate) allowlist: Allowlist,
+    pub(crate) blocklist: Vec<String>,
+    pub(crate) exclude_utilities: bool,
+}
+
 /// Configuration about types.
 /// At present this is very minimal; in future we should roll
 /// known_types.rs into this and possibly other things as well.
-#[derive(Default, Hash, Debug)]
-pub struct TypeConfig {
-    pod_requests: Vec<String>,
-    allowlist: Vec<String>,
-    blocklist: Vec<String>,
+/// This type can only be created once we know that the allowlist
+/// is specified.
+#[derive(Hash, Debug)]
+pub struct TypeConfig(TypeConfigInput);
+
+const UTILITIES: &[&str] = &["make_string"];
+const NO_UTILITIES: &[&str] = &[];
+
+impl TypeConfigInput {
+    pub(crate) fn into_type_config(self) -> ParseResult<TypeConfig> {
+        if matches!(self.allowlist, Allowlist::Unspecified) {
+            Err(syn::Error::new(
+                Span::call_site(),
+                "expected generate! or generate_all!",
+            ))
+        } else {
+            Ok(TypeConfig(self))
+        }
+    }
 }
 
 impl TypeConfig {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub(crate) fn note_pod_request(&mut self, tn: String) {
-        self.pod_requests.push(tn);
-    }
-
-    pub(crate) fn add_to_allowlist(&mut self, item: String) {
-        self.allowlist.push(item);
-    }
-
-    pub(crate) fn add_to_blocklist(&mut self, item: String) {
-        self.blocklist.push(item);
-    }
-
     pub fn get_pod_requests(&self) -> &[String] {
-        &self.pod_requests
+        &self.0.pod_requests
     }
 
-    pub fn allowlist(&self) -> impl Iterator<Item = &String> {
-        self.allowlist.iter()
+    /// Whether to avoid generating the standard helpful utility
+    /// functions which we normally include in every mod.
+    pub fn exclude_utilities(&self) -> bool {
+        self.0.exclude_utilities
     }
 
-    pub fn allowlist_is_empty(&self) -> bool {
-        self.allowlist.is_empty()
+    /// Items which the user has explicitly asked us to generate;
+    /// we should raise an error if we weren't able to do so.
+    pub fn must_generate_list(&self) -> Box<dyn Iterator<Item = String> + '_> {
+        if let Allowlist::Specific(items) = &self.0.allowlist {
+            Box::new(items.iter().chain(self.0.pod_requests.iter()).cloned())
+        } else {
+            Box::new(self.0.pod_requests.iter().cloned())
+        }
+    }
+
+    /// The allowlist of items to be passed into bindgen, if any.
+    pub fn bindgen_allowlist(&self) -> Option<Box<dyn Iterator<Item = String> + '_>> {
+        match &self.0.allowlist {
+            Allowlist::All => None,
+            Allowlist::Specific(items) => Some(Box::new(
+                items
+                    .iter()
+                    .chain(self.0.pod_requests.iter())
+                    .cloned()
+                    .chain(self.active_utilities().iter().map(|s| s.to_string())),
+            )),
+            Allowlist::Unspecified => unreachable!(),
+        }
+    }
+
+    fn active_utilities(&self) -> &'static [&'static str] {
+        if self.0.exclude_utilities {
+            NO_UTILITIES
+        } else {
+            UTILITIES
+        }
     }
 
     /// Whether this type is on the allowlist specified by the user.
@@ -60,14 +143,26 @@ impl TypeConfig {
     /// This second pass may seem redundant. But sometimes bindgen generates
     /// unnecessary stuff.
     pub fn is_on_allowlist(&self, cpp_name: &str) -> bool {
-        self.allowlist.contains(&cpp_name.to_string())
+        match self.bindgen_allowlist() {
+            None => true,
+            Some(mut items) => {
+                items.any(|item| item == cpp_name)
+                    || self.active_utilities().iter().any(|item| *item == cpp_name)
+            }
+        }
     }
 
     pub fn is_on_blocklist(&self, cpp_name: &str) -> bool {
-        self.blocklist.contains(&cpp_name.to_string())
+        self.0.blocklist.contains(&cpp_name.to_string())
     }
 
     pub fn get_blocklist(&self) -> impl Iterator<Item = &String> {
-        self.blocklist.iter()
+        self.0.blocklist.iter()
+    }
+
+    pub fn new_for_test() -> Self {
+        let mut input = TypeConfigInput::default();
+        input.allowlist = Allowlist::All;
+        input.into_type_config().unwrap()
     }
 }

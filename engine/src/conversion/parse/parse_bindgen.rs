@@ -66,10 +66,9 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn parse_items(
         mut self,
         items: Vec<Item>,
-        exclude_utilities: bool,
     ) -> Result<ParseResults<'a>, ConvertError> {
         let items = Self::find_items_in_root(items)?;
-        if !exclude_utilities {
+        if !self.type_config.exclude_utilities() {
             generate_utilities(&mut self.results.apis);
         }
         let root_ns = Namespace::new();
@@ -331,11 +330,9 @@ impl<'a> ParseBindgen<'a> {
             .iter()
             .map(|api| api.typename().to_cpp_name())
             .collect();
-        for generate_directive in self.type_config.allowlist() {
-            if !api_names.contains(generate_directive) {
-                return Err(ConvertError::DidNotGenerateAnything(
-                    generate_directive.into(),
-                ));
+        for generate_directive in self.type_config.must_generate_list() {
+            if !api_names.contains(&generate_directive) {
+                return Err(ConvertError::DidNotGenerateAnything(generate_directive));
             }
         }
         Ok(())
