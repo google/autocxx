@@ -107,7 +107,10 @@ pub(crate) struct TypeConverter<'a> {
 }
 
 impl<'a> TypeConverter<'a> {
-    pub(crate) fn new<A: ApiAnalysis>(config: &'a TypeConfig, apis: &[Api<A>]) -> Self {
+    pub(crate) fn new<A: ApiAnalysis>(config: &'a TypeConfig, apis: &[Api<A>]) -> Self
+    where
+        A::TypedefAnalysis: TypedefTarget,
+    {
         Self {
             types_found: Self::find_types(apis),
             typedefs: Self::find_typedefs(apis),
@@ -463,12 +466,15 @@ impl<'a> TypeConverter<'a> {
             .collect()
     }
 
-    fn find_typedefs<A: ApiAnalysis>(apis: &[Api<A>]) -> HashMap<QualifiedName, Type> {
+    fn find_typedefs<A: ApiAnalysis>(apis: &[Api<A>]) -> HashMap<QualifiedName, Type>
+    where
+        A::TypedefAnalysis: TypedefTarget,
+    {
         apis.iter()
             .filter_map(|api| match &api.detail {
-                ApiDetail::Typedef {
-                    payload: TypedefKind::Type(ty),
-                } => Some((api.name(), (*ty.ty).clone())),
+                ApiDetail::Typedef { analysis, .. } => {
+                    analysis.get_target().cloned().map(|ty| (api.name(), ty))
+                }
                 _ => None,
             })
             .collect()
@@ -492,5 +498,48 @@ impl<'a> TypeConverter<'a> {
                 _ => None,
             })
             .collect()
+    }
+}
+
+/// Processing functions sometimes results in new types being materialized.
+/// These types haven't been through the analysis phases (chicken and egg
+/// problem) but fortunately, don't need to. We need to keep the type
+/// system happy by adding an [ApiAnalysis] but in practice, for the sorts
+/// of things that get created, it's always blank.
+pub(crate) fn add_analysis<A: ApiAnalysis>(api: UnanalyzedApi) -> Api<A> {
+    let new_detail = match api.detail {
+        ApiDetail::ConcreteType {
+            rs_definition,
+            cpp_definition,
+        } => ApiDetail::ConcreteType {
+            rs_definition,
+            cpp_definition,
+        },
+        ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
+        _ => panic!("Function analysis created an unexpected type of extra API"),
+    };
+    Api {
+        name: api.name,
+        original_name: api.original_name,
+        deps: api.deps,
+        detail: new_detail,
+    }
+}
+pub(crate) trait TypedefTarget {
+    fn get_target(&self) -> Option<&Type>;
+}
+
+impl TypedefTarget for () {
+    fn get_target(&self) -> Option<&Type> {
+        None
+    }
+}
+
+impl TypedefTarget for TypedefKind {
+    fn get_target(&self) -> Option<&Type> {
+        match self {
+            TypedefKind::Type(ty) => Some(&ty.ty),
+            TypedefKind::Use(_) => None,
+        }
     }
 }

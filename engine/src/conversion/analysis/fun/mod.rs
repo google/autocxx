@@ -19,8 +19,11 @@ mod rust_name_tracker;
 
 use crate::{
     conversion::{
-        convert_error::ConvertErrorWithContext, convert_error::ErrorContext,
-        error_reporter::add_api_or_report_error, parse::type_converter::TypeConversionContext,
+        api::TypedefKind,
+        convert_error::ConvertErrorWithContext,
+        convert_error::ErrorContext,
+        error_reporter::add_api_or_report_error,
+        parse::type_converter::{add_analysis, TypeConversionContext},
     },
     known_types::known_types,
 };
@@ -110,6 +113,7 @@ struct ReturnTypeAnalysis {
 pub(crate) struct FnAnalysis;
 
 impl ApiAnalysis for FnAnalysis {
+    type TypedefAnalysis = TypedefKind;
     type TypeAnalysis = TypeKind;
     type FunAnalysis = FnAnalysisBody;
 }
@@ -149,7 +153,7 @@ impl<'a> FnAnalyzer<'a> {
         for api in apis {
             add_api_or_report_error(api.name(), &mut results, || me.analyze_fn_api(api));
         }
-        results.extend(me.extra_apis.into_iter().map(Self::make_extra_api_nonpod));
+        results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }
 
@@ -181,31 +185,6 @@ impl<'a> FnAnalyzer<'a> {
                     ),
             )
             .collect()
-    }
-
-    /// Processing functions sometimes results in new types being materialized.
-    /// In future, if we wanted to make these POD, we'd probably want to create
-    /// a new analysis phase prior to the POD analysis which materializes these types.
-    fn make_extra_api_nonpod(api: UnanalyzedApi) -> Api<FnAnalysis> {
-        let new_detail = match api.detail {
-            ApiDetail::ConcreteType {
-                rs_definition,
-                cpp_definition,
-            } => ApiDetail::ConcreteType {
-                rs_definition,
-                cpp_definition,
-            },
-            _ => panic!("Function analysis created an extra API which wasn't a concrete type"),
-        };
-        Api {
-            name: api.name,
-            // An "extra API" is unlikely to have an `original_name, but we
-            // don't need to knoww that here -- we can simply pass on
-            // `api.original_name`.
-            original_name: api.original_name,
-            deps: api.deps,
-            detail: new_detail,
-        }
     }
 
     fn analyze_fn_api(
@@ -240,7 +219,7 @@ impl<'a> FnAnalyzer<'a> {
                 }
             }
             ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
-            ApiDetail::Typedef { payload } => ApiDetail::Typedef { payload },
+            ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
             // Just changes to this one...
             ApiDetail::Type {

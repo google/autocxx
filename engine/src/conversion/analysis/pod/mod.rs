@@ -22,17 +22,20 @@ use syn::{Item, ItemStruct};
 
 use crate::{
     conversion::{
-        api::{Api, ApiAnalysis, ApiDetail, TypeKind, UnanalyzedApi},
+        api::{Api, ApiAnalysis, ApiDetail, TypeKind, TypedefKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
-        parse::type_converter::{TypeConversionContext, TypeConverter},
+        parse::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         ConvertError,
     },
     types::{Namespace, QualifiedName},
 };
 
+use super::tdef::TypedefAnalysis;
+
 pub(crate) struct PodAnalysis;
 
 impl ApiAnalysis for PodAnalysis {
+    type TypedefAnalysis = TypedefKind;
     type TypeAnalysis = TypeKind;
     type FunAnalysis = ();
 }
@@ -43,7 +46,7 @@ impl ApiAnalysis for PodAnalysis {
 /// and an object which can be used to query the POD status of any
 /// type whether or not it's one of the [Api]s.
 pub(crate) fn analyze_pod_apis(
-    apis: Vec<UnanalyzedApi>,
+    apis: Vec<Api<TypedefAnalysis>>,
     type_config: &TypeConfig,
 ) -> Result<Vec<Api<PodAnalysis>>, ConvertError> {
     // This next line will return an error if any of the 'generate_pod'
@@ -62,6 +65,7 @@ pub(crate) fn analyze_pod_apis(
     let mut more_extra_apis = Vec::new();
     let mut more_results = extra_apis
         .into_iter()
+        .map(add_analysis)
         .map(|api| {
             analyze_pod_api(
                 api,
@@ -77,7 +81,7 @@ pub(crate) fn analyze_pod_apis(
 }
 
 fn analyze_pod_api(
-    api: UnanalyzedApi,
+    api: Api<TypedefAnalysis>,
     byvalue_checker: &ByValueChecker,
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
@@ -97,7 +101,7 @@ fn analyze_pod_api(
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
         ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
-        ApiDetail::Typedef { payload } => ApiDetail::Typedef { payload },
+        ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
         ApiDetail::CType { typename } => ApiDetail::CType { typename },
         // Just changes to this one...
         ApiDetail::Type {

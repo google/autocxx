@@ -478,11 +478,11 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: Some(Item::Const(const_item)),
                 materialization: Use::UsedFromBindgen,
             },
-            ApiDetail::Typedef { payload } => RsCodegenResult {
+            ApiDetail::Typedef { item: _, analysis } => RsCodegenResult {
                 extern_c_mod_item: None,
                 bridge_items: Vec::new(),
                 global_items: Vec::new(),
-                bindgen_mod_item: Some(match payload {
+                bindgen_mod_item: Some(match analysis {
                     TypedefKind::Type(type_item) => Item::Type(type_item),
                     TypedefKind::Use(use_item) => Item::Use(use_item),
                 }),

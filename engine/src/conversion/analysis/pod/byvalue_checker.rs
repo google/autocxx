@@ -13,14 +13,14 @@
 // limitations under the License.
 
 use crate::{
-    conversion::api::TypedefKind,
+    conversion::{
+        analysis::tdef::TypedefAnalysis,
+        api::{Api, TypedefKind},
+    },
     types::{Namespace, QualifiedName},
 };
 use crate::{
-    conversion::{
-        api::{ApiDetail, UnanalyzedApi},
-        ConvertError,
-    },
+    conversion::{api::ApiDetail, ConvertError},
     known_types::known_types,
 };
 use autocxx_parser::TypeConfig;
@@ -78,7 +78,7 @@ impl ByValueChecker {
     /// Scan APIs to work out which are by-value safe. Constructs a [ByValueChecker]
     /// that others can use to query the results.
     pub(crate) fn new_from_apis(
-        apis: &[UnanalyzedApi],
+        apis: &[Api<TypedefAnalysis>],
         type_config: &TypeConfig,
     ) -> Result<ByValueChecker, ConvertError> {
         let mut byvalue_checker = ByValueChecker::new();
@@ -91,9 +91,9 @@ impl ByValueChecker {
         }
         for api in apis {
             match &api.detail {
-                ApiDetail::Typedef { payload } => {
+                ApiDetail::Typedef { analysis, .. } => {
                     let name = api.name();
-                    let typedef_type = match payload {
+                    let typedef_type = match analysis {
                         TypedefKind::Type(type_item) => match type_item.ty.as_ref() {
                             Type::Path(typ) => {
                                 let target_tn = QualifiedName::from_type_path(&typ);

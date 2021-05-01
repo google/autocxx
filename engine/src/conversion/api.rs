@@ -52,6 +52,7 @@ pub(crate) struct FuncToConvert {
 /// Layers of analysis which may be applied to decorate each API.
 /// See description of the purpose of this trait within `Api`.
 pub(crate) trait ApiAnalysis {
+    type TypedefAnalysis;
     type TypeAnalysis;
     type FunAnalysis;
 }
@@ -60,13 +61,15 @@ pub(crate) trait ApiAnalysis {
 pub(crate) struct NullAnalysis;
 
 impl ApiAnalysis for NullAnalysis {
+    type TypedefAnalysis = ();
     type TypeAnalysis = ();
     type FunAnalysis = ();
 }
 
+#[derive(Clone)]
 pub(crate) enum TypedefKind {
-    Type(ItemType),
     Use(ItemUse),
+    Type(ItemType),
 }
 
 #[derive(strum_macros::Display)]
@@ -97,7 +100,10 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     Const { const_item: ItemConst },
     /// A typedef found in the bindgen output which we wish
     /// to pass on in our output
-    Typedef { payload: TypedefKind },
+    Typedef {
+        item: TypedefKind,
+        analysis: T::TypedefAnalysis,
+    },
     /// A type (struct or enum) encountered in the
     /// `bindgen` output.
     Type {

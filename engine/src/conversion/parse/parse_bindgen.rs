@@ -26,7 +26,6 @@ use crate::{
     conversion::{
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::report_any_error,
-        parse::type_converter::Annotated,
     },
     types::validate_ident_ok_for_cxx,
 };
@@ -34,7 +33,6 @@ use autocxx_parser::TypeConfig;
 use syn::{parse_quote, Attribute, Fields, Ident, Item, LitStr, TypePath, UseTree};
 
 use super::super::utilities::generate_utilities;
-use super::type_converter::{TypeConversionContext, TypeConverter};
 
 use super::parse_foreign_mod::ParseForeignMod;
 
@@ -223,9 +221,10 @@ impl<'a> ParseBindgen<'a> {
                                 ),
                                 deps,
                                 detail: ApiDetail::Typedef {
-                                    payload: TypedefKind::Use(parse_quote! {
+                                    item: TypedefKind::Use(parse_quote! {
                                         pub use #old_path as #new_id;
                                     }),
+                                    analysis: (),
                                 },
                             });
                             break;
@@ -249,42 +248,17 @@ impl<'a> ParseBindgen<'a> {
                 });
                 Ok(())
             }
-            Item::Type(mut ity) => {
-                let tyname = QualifiedName::new(ns, ity.ident.clone());
-                let mut type_converter = TypeConverter::new(self.type_config, &self.apis);
-                let type_conversion_results =
-                    type_converter.convert_type(*ity.ty, ns, &TypeConversionContext::CxxInnerType);
-                match type_conversion_results {
-                    Err(err) => Err(ConvertErrorWithContext(
-                        err,
-                        Some(ErrorContext::Item(ity.ident.clone())),
-                    )),
-                    Ok(Annotated {
-                        ty: syn::Type::Path(ref typ),
-                        ..
-                    }) if QualifiedName::from_type_path(typ) == tyname => {
-                        Err(ConvertErrorWithContext(
-                            ConvertError::InfinitelyRecursiveTypedef(tyname),
-                            Some(ErrorContext::Item(ity.ident)),
-                        ))
-                    }
-                    Ok(mut final_type) => {
-                        ity.ty = Box::new(final_type.ty.clone());
-                        // self.results
-                        //     .type_converter
-                        //     .insert_typedef(tyname, final_type.ty);
-                        self.apis.append(&mut final_type.extra_apis);
-                        self.apis.push(UnanalyzedApi {
-                            name: QualifiedName::new(ns, ity.ident.clone()),
-                            original_name: get_bindgen_original_name_annotation(&ity.attrs),
-                            deps: final_type.types_encountered,
-                            detail: ApiDetail::Typedef {
-                                payload: TypedefKind::Type(ity),
-                            },
-                        });
-                        Ok(())
-                    }
-                }
+            Item::Type(ity) => {
+                self.apis.push(UnanalyzedApi {
+                    name: QualifiedName::new(ns, ity.ident.clone()),
+                    original_name: get_bindgen_original_name_annotation(&ity.attrs),
+                    deps: HashSet::new(),
+                    detail: ApiDetail::Typedef {
+                        item: TypedefKind::Type(ity),
+                        analysis: (),
+                    },
+                });
+                Ok(())
             }
             _ => Err(ConvertErrorWithContext(
                 ConvertError::UnexpectedItemInMod,

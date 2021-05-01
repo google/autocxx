@@ -23,18 +23,24 @@ use std::collections::HashSet;
 /// Run some code which may generate a ConvertError.
 /// If it does, try to note the problem in our output APIs
 /// such that users will see documentation of the error.
-pub(crate) fn report_any_error<F, T>(ns: &Namespace, apis: &mut Vec<Api<impl ApiAnalysis>>, fun: F)
+pub(crate) fn report_any_error<F, T>(
+    ns: &Namespace,
+    apis: &mut Vec<Api<impl ApiAnalysis>>,
+    fun: F,
+) -> Option<T>
 where
     F: FnOnce() -> Result<T, ConvertErrorWithContext>,
 {
     match fun() {
-        Ok(_) => {}
+        Ok(result) => Some(result),
         Err(ConvertErrorWithContext(err, None)) => {
-            eprintln!("Ignored item: {}", err)
+            eprintln!("Ignored item: {}", err);
+            None
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
             eprintln!("Ignored item {}: {}", ctx.to_string(), err);
-            push_ignored_item(ns, ctx, err, apis)
+            push_ignored_item(ns, ctx, err, apis);
+            None
         }
     }
 }

@@ -36,6 +36,7 @@ use self::{
     analysis::{
         abstract_types::mark_types_abstract, gc::filter_apis_by_following_edges_from_allowlist,
         pod::analyze_pod_apis, remove_ignored::filter_apis_by_ignored_dependents,
+        tdef::convert_typedef_targets,
     },
     api::{Api, ApiAnalysis},
     codegen_rs::RsCodeGenerator,
@@ -106,6 +107,10 @@ impl<'a> BridgeConverter<'a> {
                 let apis = parser.parse_items(items_to_process)?;
                 Self::dump_apis("parsing", &apis);
                 // Inside parse_results, we now have a list of APIs.
+                // We now enter various analysis phases. First, convert any typedefs.
+                // "Convert" means replacing bindgen-style type targets
+                // (e.g. root::std::unique_ptr) with cxx-style targets (e.g. UniquePtr).
+                let apis = convert_typedef_targets(&self.type_config, apis);
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
                 // Specifically, let's confirm that the items requested by the user to be
