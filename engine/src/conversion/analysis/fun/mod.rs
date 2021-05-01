@@ -118,7 +118,7 @@ pub(crate) struct FnAnalyzer<'a> {
     unsafe_policy: UnsafePolicy,
     rust_name_tracker: RustNameTracker,
     extra_apis: Vec<UnanalyzedApi>,
-    type_converter: &'a mut TypeConverter<'a>,
+    type_converter: TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
     type_config: &'a TypeConfig,
@@ -133,14 +133,13 @@ impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: Vec<Api<PodAnalysis>>,
         unsafe_policy: UnsafePolicy,
-        type_converter: &'a mut TypeConverter<'a>,
         type_database: &'a TypeConfig,
     ) -> Vec<Api<FnAnalysis>> {
         let mut me = Self {
             unsafe_policy,
             rust_name_tracker: RustNameTracker::new(),
             extra_apis: Vec::new(),
-            type_converter,
+            type_converter: TypeConverter::new(type_database, &apis),
             bridge_name_tracker: BridgeNameTracker::new(),
             type_config: type_database,
             incomplete_types: Self::build_incomplete_type_set(&apis),

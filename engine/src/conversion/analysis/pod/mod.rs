@@ -45,7 +45,6 @@ impl ApiAnalysis for PodAnalysis {
 pub(crate) fn analyze_pod_apis(
     apis: Vec<UnanalyzedApi>,
     type_config: &TypeConfig,
-    type_converter: &mut TypeConverter,
 ) -> Result<Vec<Api<PodAnalysis>>, ConvertError> {
     // This next line will return an error if any of the 'generate_pod'
     // directives from the user can't be met because, for instance,
@@ -53,16 +52,24 @@ pub(crate) fn analyze_pod_apis(
     // held safely by value in Rust.
     let byvalue_checker = ByValueChecker::new_from_apis(&apis, type_config)?;
     let mut extra_apis = Vec::new();
+    let mut type_converter = TypeConverter::new(type_config, &apis);
     let mut results: Vec<_> = apis
         .into_iter()
-        .map(|api| analyze_pod_api(api, &byvalue_checker, type_converter, &mut extra_apis))
+        .map(|api| analyze_pod_api(api, &byvalue_checker, &mut type_converter, &mut extra_apis))
         .collect::<Result<Vec<_>, ConvertError>>()?;
     // Conceivably, the process of POD-analysing the first set of APIs could result
     // in us creating new APIs to concretize generic types.
     let mut more_extra_apis = Vec::new();
     let mut more_results = extra_apis
         .into_iter()
-        .map(|api| analyze_pod_api(api, &byvalue_checker, type_converter, &mut more_extra_apis))
+        .map(|api| {
+            analyze_pod_api(
+                api,
+                &byvalue_checker,
+                &mut type_converter,
+                &mut more_extra_apis,
+            )
+        })
         .collect::<Result<Vec<_>, ConvertError>>()?;
     assert!(more_extra_apis.is_empty());
     results.append(&mut more_results);

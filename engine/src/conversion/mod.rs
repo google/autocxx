@@ -39,7 +39,7 @@ use self::{
     },
     api::{Api, ApiAnalysis},
     codegen_rs::RsCodeGenerator,
-    parse::{type_converter::TypeConverter, ParseBindgen},
+    parse::ParseBindgen,
 };
 
 const LOG_APIS: bool = true;
@@ -105,10 +105,7 @@ impl<'a> BridgeConverter<'a> {
                 let parser = ParseBindgen::new(&self.type_config);
                 let apis = parser.parse_items(items_to_process)?;
                 Self::dump_apis("parsing", &apis);
-                // Inside parse_results, we now have a list of APIs and a few other things
-                // e.g. type relationships. The latter are stored in here...
-                let mut type_converter = TypeConverter::new(self.type_config, &apis);
-                // The code above will have contributed lots of `Api`s to self.apis.
+                // Inside parse_results, we now have a list of APIs.
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
                 // Specifically, let's confirm that the items requested by the user to be
@@ -116,19 +113,14 @@ impl<'a> BridgeConverter<'a> {
                 // This returns a new list of `Api`s, which will be parameterized with
                 // the analysis results. It also returns an object which can be used
                 // by subsequent phases to work out which objects are POD.
-                let analyzed_apis = analyze_pod_apis(apis, &self.type_config, &mut type_converter)?;
+                let analyzed_apis = analyze_pod_apis(apis, &self.type_config)?;
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions. This is probably the most complex
                 // part of `autocxx`. Again, this returns a new set of `Api`s, but
                 // parameterized by a richer set of metadata.
-                let mut type_converter = TypeConverter::new(self.type_config, &analyzed_apis);
-                let mut analyzed_apis = FnAnalyzer::analyze_functions(
-                    analyzed_apis,
-                    unsafe_policy,
-                    &mut type_converter,
-                    self.type_config,
-                );
+                let mut analyzed_apis =
+                    FnAnalyzer::analyze_functions(analyzed_apis, unsafe_policy, self.type_config);
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
