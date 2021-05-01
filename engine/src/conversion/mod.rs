@@ -122,6 +122,7 @@ impl<'a> BridgeConverter<'a> {
                 // require C++ wrapper functions. This is probably the most complex
                 // part of `autocxx`. Again, this returns a new set of `Api`s, but
                 // parameterized by a richer set of metadata.
+                let mut type_converter = TypeConverter::new(self.type_config, &analyzed_apis);
                 let mut analyzed_apis = FnAnalyzer::analyze_functions(
                     analyzed_apis,
                     unsafe_policy,
