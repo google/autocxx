@@ -5192,11 +5192,12 @@ fn test_generate_all() {
 }
 
 // Yet to test:
-// 6. Ifdef
-// 7. Out param pointers
-// 10. ExcludeUtilities
+// - Ifdef
+// - Out param pointers
+// - ExcludeUtilities
+// - Struct fields which are typedefs
 // Stuff which requires much more thought:
-// 1. Shared pointers
+// - Shared pointers
 // Negative tests:
-// 1. Private methods
-// 2. Private fields
+// - Private methods
+// - Private fields
