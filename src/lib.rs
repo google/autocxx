@@ -43,7 +43,7 @@ use autocxx_engine::IncludeCppEngine;
 /// ```
 /// # use autocxx_macro::include_cpp_impl as include_cpp;
 /// include_cpp!(
-/// #   parse_only
+/// #   parse_only!()
 ///     #include "input.h"
 ///     generate!("do_math")
 ///     safety!(unsafe)
