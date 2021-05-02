@@ -19,3 +19,4 @@ pub(crate) mod gc;
 pub(crate) mod pod; // hey, that rhymes
 pub(crate) mod remove_ignored;
 pub(crate) mod tdef;
+mod type_converter;

@@ -22,9 +22,9 @@ use syn::{Item, ItemStruct};
 
 use crate::{
     conversion::{
+        analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         api::{Api, ApiAnalysis, ApiDetail, TypeKind, TypedefKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
-        parse::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         ConvertError,
     },
     types::{Namespace, QualifiedName},

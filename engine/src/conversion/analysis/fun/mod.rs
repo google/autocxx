@@ -19,11 +19,11 @@ mod rust_name_tracker;
 
 use crate::{
     conversion::{
+        analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         api::TypedefKind,
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::add_api_or_report_error,
-        parse::type_converter::{add_analysis, TypeConversionContext},
     },
     known_types::known_types,
 };
@@ -41,7 +41,6 @@ use crate::{
     conversion::{
         api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
         codegen_cpp::AdditionalNeed,
-        parse::type_converter::TypeConverter,
         ConvertError,
     },
     types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},

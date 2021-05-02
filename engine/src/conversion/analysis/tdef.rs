@@ -19,10 +19,10 @@ use syn::ItemType;
 
 use crate::{
     conversion::{
+        analysis::type_converter::{add_analysis, Annotated, TypeConversionContext, TypeConverter},
         api::{Api, ApiAnalysis, ApiDetail, TypedefKind, UnanalyzedApi},
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::report_any_error,
-        parse::type_converter::{add_analysis, Annotated, TypeConversionContext, TypeConverter},
         ConvertError,
     },
     types::QualifiedName,
