@@ -14,7 +14,7 @@
 
 use crate::{
     conversion::{
-        api::{Api, ApiAnalysis, ApiDetail, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiDetail, TypedefKind, UnanalyzedApi},
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -107,7 +107,7 @@ pub(crate) struct TypeConverter<'a> {
 }
 
 impl<'a> TypeConverter<'a> {
-    pub(crate) fn new<A: ApiAnalysis>(config: &'a TypeConfig, apis: &[Api<A>]) -> Self
+    pub(crate) fn new<A: AnalysisPhase>(config: &'a TypeConfig, apis: &[Api<A>]) -> Self
     where
         A::TypedefAnalysis: TypedefTarget,
     {
@@ -450,7 +450,7 @@ impl<'a> TypeConverter<'a> {
         }
     }
 
-    fn find_types<A: ApiAnalysis>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+    fn find_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::ForwardDeclaration
@@ -466,7 +466,7 @@ impl<'a> TypeConverter<'a> {
             .collect()
     }
 
-    fn find_typedefs<A: ApiAnalysis>(apis: &[Api<A>]) -> HashMap<QualifiedName, Type>
+    fn find_typedefs<A: AnalysisPhase>(apis: &[Api<A>]) -> HashMap<QualifiedName, Type>
     where
         A::TypedefAnalysis: TypedefTarget,
     {
@@ -480,7 +480,9 @@ impl<'a> TypeConverter<'a> {
             .collect()
     }
 
-    fn find_concrete_templates<A: ApiAnalysis>(apis: &[Api<A>]) -> HashMap<String, QualifiedName> {
+    fn find_concrete_templates<A: AnalysisPhase>(
+        apis: &[Api<A>],
+    ) -> HashMap<String, QualifiedName> {
         apis.iter()
             .filter_map(|api| match &api.detail {
                 ApiDetail::ConcreteType { cpp_definition, .. } => {
@@ -491,7 +493,7 @@ impl<'a> TypeConverter<'a> {
             .collect()
     }
 
-    fn find_incomplete_types<A: ApiAnalysis>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+    fn find_incomplete_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::ForwardDeclaration => Some(api.name()),
@@ -506,7 +508,7 @@ impl<'a> TypeConverter<'a> {
 /// problem) but fortunately, don't need to. We need to keep the type
 /// system happy by adding an [ApiAnalysis] but in practice, for the sorts
 /// of things that get created, it's always blank.
-pub(crate) fn add_analysis<A: ApiAnalysis>(api: UnanalyzedApi) -> Api<A> {
+pub(crate) fn add_analysis<A: AnalysisPhase>(api: UnanalyzedApi) -> Api<A> {
     let new_detail = match api.detail {
         ApiDetail::ConcreteType {
             rs_definition,

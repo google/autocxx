@@ -38,7 +38,7 @@ use self::{
         pod::analyze_pod_apis, remove_ignored::filter_apis_by_ignored_dependents,
         tdef::convert_typedef_targets,
     },
-    api::{Api, ApiAnalysis},
+    api::{AnalysisPhase, Api},
     codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
 };
@@ -76,7 +76,7 @@ impl<'a> BridgeConverter<'a> {
         }
     }
 
-    fn dump_apis<T: ApiAnalysis>(label: &str, apis: &[Api<T>]) {
+    fn dump_apis<T: AnalysisPhase>(label: &str, apis: &[Api<T>]) {
         if LOG_APIS {
             log::info!(
                 "APIs after {}:\n{}",

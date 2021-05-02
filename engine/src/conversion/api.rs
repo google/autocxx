@@ -51,7 +51,7 @@ pub(crate) struct FuncToConvert {
 
 /// Layers of analysis which may be applied to decorate each API.
 /// See description of the purpose of this trait within `Api`.
-pub(crate) trait ApiAnalysis {
+pub(crate) trait AnalysisPhase {
     type TypedefAnalysis;
     type TypeAnalysis;
     type FunAnalysis;
@@ -60,7 +60,7 @@ pub(crate) trait ApiAnalysis {
 /// No analysis has been applied to this API.
 pub(crate) struct NullAnalysis;
 
-impl ApiAnalysis for NullAnalysis {
+impl AnalysisPhase for NullAnalysis {
     type TypedefAnalysis = ();
     type TypeAnalysis = ();
     type FunAnalysis = ();
@@ -79,7 +79,7 @@ pub(crate) enum TypedefKind {
 /// the fact that their payloads may not be `Debug` or `Display`.
 /// (Specifically, allowing `syn` Types to be `Debug` requires
 /// enabling syn's `extra-traits` feature which increases compile time.)
-pub(crate) enum ApiDetail<T: ApiAnalysis> {
+pub(crate) enum ApiDetail<T: AnalysisPhase> {
     /// A forward declared type for which no definition is available.
     ForwardDeclaration,
     /// A synthetic type we've manufactured in order to
@@ -134,7 +134,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
 /// This is not as high-level as the equivalent types in `cxx` or `bindgen`,
 /// because sometimes we pass on the `bindgen` output directly in the
 /// Rust codegen output.
-pub(crate) struct Api<T: ApiAnalysis> {
+pub(crate) struct Api<T: AnalysisPhase> {
     pub(crate) name: QualifiedName,
     pub(crate) original_name: Option<String>,
     /// Any dependencies of this API, such that during garbage collection
@@ -144,7 +144,7 @@ pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) detail: ApiDetail<T>,
 }
 
-impl<T: ApiAnalysis> std::fmt::Debug for Api<T> {
+impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -158,7 +158,7 @@ impl<T: ApiAnalysis> std::fmt::Debug for Api<T> {
 
 pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 
-impl<T: ApiAnalysis> Api<T> {
+impl<T: AnalysisPhase> Api<T> {
     pub(crate) fn name(&self) -> QualifiedName {
         self.name.clone()
     }

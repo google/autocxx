@@ -43,7 +43,7 @@ use super::codegen_cpp::type_to_cpp::{
 };
 use super::{
     analysis::fun::FnAnalysis,
-    api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeKind, TypedefKind},
+    api::{AnalysisPhase, Api, ApiDetail, ImplBlockDetails, TypeKind, TypedefKind},
 };
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::quote;
@@ -642,7 +642,7 @@ impl HasNs for (QualifiedName, RsCodegenResult) {
     }
 }
 
-impl<T: ApiAnalysis> HasNs for Api<T> {
+impl<T: AnalysisPhase> HasNs for Api<T> {
     fn get_namespace(&self) -> &Namespace {
         &self.name.get_namespace()
     }

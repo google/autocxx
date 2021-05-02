@@ -20,7 +20,7 @@ use syn::ItemType;
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, Annotated, TypeConversionContext, TypeConverter},
-        api::{Api, ApiAnalysis, ApiDetail, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiDetail, TypedefKind, UnanalyzedApi},
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::report_any_error,
         ConvertError,
@@ -32,7 +32,7 @@ use crate::{
 /// analyses just yet.
 pub(crate) struct TypedefAnalysis;
 
-impl ApiAnalysis for TypedefAnalysis {
+impl AnalysisPhase for TypedefAnalysis {
     type TypedefAnalysis = TypedefKind;
     type TypeAnalysis = ();
     type FunAnalysis = ();

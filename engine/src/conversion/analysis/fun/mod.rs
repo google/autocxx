@@ -39,7 +39,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
         codegen_cpp::AdditionalNeed,
         ConvertError,
     },
@@ -111,7 +111,7 @@ struct ReturnTypeAnalysis {
 
 pub(crate) struct FnAnalysis;
 
-impl ApiAnalysis for FnAnalysis {
+impl AnalysisPhase for FnAnalysis {
     type TypedefAnalysis = TypedefKind;
     type TypeAnalysis = TypeKind;
     type FunAnalysis = FnAnalysisBody;

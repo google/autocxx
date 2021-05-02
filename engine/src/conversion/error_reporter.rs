@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{
-    api::{Api, ApiAnalysis, ApiDetail},
+    api::{AnalysisPhase, Api, ApiDetail},
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
@@ -25,7 +25,7 @@ use std::collections::HashSet;
 /// such that users will see documentation of the error.
 pub(crate) fn report_any_error<F, T>(
     ns: &Namespace,
-    apis: &mut Vec<Api<impl ApiAnalysis>>,
+    apis: &mut Vec<Api<impl AnalysisPhase>>,
     fun: F,
 ) -> Option<T>
 where
@@ -51,7 +51,7 @@ where
 pub(crate) fn add_api_or_report_error<F, A>(tn: QualifiedName, apis: &mut Vec<Api<A>>, fun: F)
 where
     F: FnOnce() -> Result<Option<Api<A>>, ConvertErrorWithContext>,
-    A: ApiAnalysis,
+    A: AnalysisPhase,
 {
     match fun() {
         Ok(Some(api)) => {
@@ -72,7 +72,7 @@ fn push_ignored_item(
     ns: &Namespace,
     ctx: ErrorContext,
     err: ConvertError,
-    apis: &mut Vec<Api<impl ApiAnalysis>>,
+    apis: &mut Vec<Api<impl AnalysisPhase>>,
 ) {
     apis.push(Api {
         name: QualifiedName::new(ns, ctx.get_id().clone()),

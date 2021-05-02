@@ -23,7 +23,7 @@ use syn::{Item, ItemStruct};
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
-        api::{Api, ApiAnalysis, ApiDetail, TypeKind, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiDetail, TypeKind, TypedefKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
         ConvertError,
     },
@@ -34,7 +34,7 @@ use super::tdef::TypedefAnalysis;
 
 pub(crate) struct PodAnalysis;
 
-impl ApiAnalysis for PodAnalysis {
+impl AnalysisPhase for PodAnalysis {
     type TypedefAnalysis = TypedefKind;
     type TypeAnalysis = TypeKind;
     type FunAnalysis = ();
