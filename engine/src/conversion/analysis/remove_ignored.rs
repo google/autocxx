@@ -22,6 +22,9 @@ use crate::{
 };
 
 /// Remove any APIs which depend on other items which have been ignored.
+/// We also eliminate any APIs that depend on some type that we just don't
+/// know about at all. In either case, we don't simply remove the type, but instead
+/// replace it with an error marker.
 pub(crate) fn filter_apis_by_ignored_dependents(
     mut apis: Vec<Api<FnAnalysis>>,
 ) -> Vec<Api<FnAnalysis>> {
