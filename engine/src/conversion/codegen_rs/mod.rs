@@ -27,7 +27,7 @@ use std::collections::HashMap;
 pub(crate) use non_pod_struct::make_non_pod;
 
 use proc_macro2::TokenStream;
-use syn::{parse_quote, ForeignItem, Ident, Item, ItemForeignMod, ItemMod};
+use syn::{parse_quote, Attribute, ForeignItem, Ident, Item, ItemForeignMod, ItemMod};
 
 use crate::types::{make_ident, Namespace, QualifiedName};
 use impl_item_creator::create_impl_items;
@@ -308,6 +308,54 @@ impl<'a> RsCodeGenerator<'a> {
         }));
     }
 
+    fn remove_bindgen_attrs_from_item(mut item: Item) -> Item {
+        fn is_bindgen_attr(attr: &Attribute) -> bool {
+            let segments = &attr.path.segments;
+            segments.len() == 1
+                && segments
+                    .first()
+                    .unwrap()
+                    .ident
+                    .to_string()
+                    .starts_with("bindgen_")
+        }
+
+        fn remove_bindgen_attrs(attrs: &mut Vec<Attribute>) {
+            *attrs = attrs
+                .drain(..)
+                .filter(|attr| !is_bindgen_attr(&attr))
+                .collect();
+        }
+
+        match &mut item {
+            Item::Const(item_const) => remove_bindgen_attrs(&mut item_const.attrs),
+            Item::Enum(item_enum) => remove_bindgen_attrs(&mut item_enum.attrs),
+            Item::ExternCrate(item_extern_crate) => {
+                remove_bindgen_attrs(&mut item_extern_crate.attrs)
+            }
+            Item::Fn(item_fn) => remove_bindgen_attrs(&mut item_fn.attrs),
+            Item::ForeignMod(item_foreign_mod) => remove_bindgen_attrs(&mut item_foreign_mod.attrs),
+            Item::Impl(item_impl) => remove_bindgen_attrs(&mut item_impl.attrs),
+            Item::Macro(item_macro) => remove_bindgen_attrs(&mut item_macro.attrs),
+            Item::Macro2(item_macro2) => remove_bindgen_attrs(&mut item_macro2.attrs),
+            Item::Mod(item_mod) => remove_bindgen_attrs(&mut item_mod.attrs),
+            Item::Static(item_static) => remove_bindgen_attrs(&mut item_static.attrs),
+            Item::Struct(item_struct) => remove_bindgen_attrs(&mut item_struct.attrs),
+            Item::Trait(item_trait) => remove_bindgen_attrs(&mut item_trait.attrs),
+            Item::TraitAlias(item_trait_alias) => remove_bindgen_attrs(&mut item_trait_alias.attrs),
+            Item::Type(item_type) => remove_bindgen_attrs(&mut item_type.attrs),
+            Item::Union(item_union) => remove_bindgen_attrs(&mut item_union.attrs),
+            Item::Use(item_use) => remove_bindgen_attrs(&mut item_use.attrs),
+            Item::Verbatim(_) => {}
+            #[cfg(test)]
+            Item::__TestExhaustive(_) => unimplemented!(),
+            #[cfg(not(test))]
+            // Do nothing -- assumne there are no Attributes in the item.
+            _ => (),
+        }
+        item
+    }
+
     fn append_child_bindgen_namespace(
         &mut self,
         ns_entries: &NamespaceEntries<(QualifiedName, RsCodegenResult)>,
@@ -317,7 +365,15 @@ impl<'a> RsCodeGenerator<'a> {
     ) {
         let mut impl_entries_by_type: HashMap<_, Vec<_>> = HashMap::new();
         for item in ns_entries.entries() {
-            output_items.extend(item.1.bindgen_mod_item.iter().cloned());
+            // Remove `bindgen_` attributes. They don't have a corresponding macro defined anywhere,
+            // so they will cause compilation errors if we leave them in.
+            output_items.extend(
+                item.1
+                    .bindgen_mod_item
+                    .iter()
+                    .cloned()
+                    .map(|item| Self::remove_bindgen_attrs_from_item(item)),
+            );
             if let Some(impl_entry) = &item.1.impl_entry {
                 impl_entries_by_type
                     .entry(impl_entry.ty.clone())
