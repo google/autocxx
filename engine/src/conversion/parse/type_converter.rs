@@ -388,7 +388,9 @@ impl<'a> TypeConverter<'a> {
     ) -> Result<(QualifiedName, Option<UnanalyzedApi>), ConvertError> {
         let count = self.concrete_templates.len();
         // We just use this as a hash key, essentially.
-        let cpp_definition = type_to_cpp(rs_definition)?;
+        // TODO: Once we've completed the TypeConverter refactoring (see #220),
+        // pass in an actual original_name_map here.
+        let cpp_definition = type_to_cpp(rs_definition, &HashMap::new())?;
         let e = self.concrete_templates.get(&cpp_definition);
         match e {
             Some(tn) => Ok((tn.clone(), None)),
@@ -401,6 +403,9 @@ impl<'a> TypeConverter<'a> {
                     .insert(cpp_definition.clone(), name.clone());
                 let api = UnanalyzedApi {
                     name: name.clone(),
+                    // This is a synthesized type that isn't nested within anything else,
+                    // so it doesn't have an orignal_name.
+                    original_name: None,
                     deps: HashSet::new(),
                     detail: crate::conversion::api::ApiDetail::ConcreteType {
                         rs_definition: Box::new(rs_definition.clone()),

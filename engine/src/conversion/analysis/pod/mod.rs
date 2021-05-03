@@ -121,6 +121,7 @@ fn analyze_pod_api(
     };
     Ok(Api {
         name: api.name,
+        original_name: api.original_name,
         deps: new_deps,
         detail: api_detail,
     })

@@ -20,7 +20,7 @@ use indoc::indoc;
 use itertools::Itertools;
 use std::collections::HashSet;
 use syn::Type;
-use type_to_cpp::type_to_cpp;
+use type_to_cpp::{original_name_map_from_apis, type_to_cpp, OriginalNameMap};
 
 use super::{
     analysis::fun::{
@@ -82,6 +82,7 @@ struct AdditionalFunction {
 pub(crate) struct CppCodeGenerator {
     additional_functions: Vec<AdditionalFunction>,
     inclusions: String,
+    original_name_map: OriginalNameMap,
 }
 
 impl CppCodeGenerator {
@@ -89,15 +90,16 @@ impl CppCodeGenerator {
         inclusions: String,
         apis: &[Api<FnAnalysis>],
     ) -> Result<Option<CppFilePair>, ConvertError> {
-        let mut gen = CppCodeGenerator::new(inclusions);
+        let mut gen = CppCodeGenerator::new(inclusions, original_name_map_from_apis(apis));
         gen.add_needs(apis.iter().filter_map(|api| api.additional_cpp()))?;
         Ok(gen.generate())
     }
 
-    fn new(inclusions: String) -> Self {
+    fn new(inclusions: String, original_name_map: OriginalNameMap) -> Self {
         CppCodeGenerator {
             additional_functions: Vec::new(),
             inclusions,
+            original_name_map,
         }
     }
 
@@ -113,7 +115,7 @@ impl CppCodeGenerator {
                 }
                 AdditionalNeed::CTypeTypedef(tn) => self.generate_ctype_typedef(&tn),
                 AdditionalNeed::ConcreteTemplatedTypeTypedef(tn, def) => {
-                    self.generate_typedef(&tn, type_to_cpp(&def)?)
+                    self.generate_typedef(&tn, type_to_cpp(&def, &self.original_name_map)?)
                 }
             }
         }
@@ -208,7 +210,7 @@ impl CppCodeGenerator {
             .map(|(counter, ty)| {
                 Ok(format!(
                     "{} {}",
-                    ty.unconverted_type()?,
+                    ty.unconverted_type(&self.original_name_map)?,
                     get_arg_name(counter)
                 ))
             })
@@ -217,13 +219,17 @@ impl CppCodeGenerator {
         let ret_type = details
             .return_conversion
             .as_ref()
-            .map_or(Ok("void".to_string()), |x| x.converted_type())?;
+            .map_or(Ok("void".to_string()), |x| {
+                x.converted_type(&self.original_name_map)
+            })?;
         let declaration = format!("{} {}({})", ret_type, name, args);
         let arg_list: Result<Vec<_>, _> = details
             .argument_conversion
             .iter()
             .enumerate()
-            .map(|(counter, conv)| conv.cpp_conversion(&get_arg_name(counter)))
+            .map(|(counter, conv)| {
+                conv.cpp_conversion(&get_arg_name(counter), &self.original_name_map)
+            })
             .collect();
         let mut arg_list = arg_list?.into_iter();
         let receiver = if is_a_method { arg_list.next() } else { None };
@@ -251,8 +257,10 @@ impl CppCodeGenerator {
             }
         };
         if let Some(ret) = &details.return_conversion {
-            underlying_function_call =
-                format!("return {}", ret.cpp_conversion(&underlying_function_call)?);
+            underlying_function_call = format!(
+                "return {}",
+                ret.cpp_conversion(&underlying_function_call, &self.original_name_map)?
+            );
         };
         let declaration = Some(format!(
             "inline {} {{ {}; }}",

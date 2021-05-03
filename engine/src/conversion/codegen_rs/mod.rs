@@ -38,6 +38,9 @@ use self::{
     non_pod_struct::new_non_pod_struct,
 };
 
+use super::codegen_cpp::type_to_cpp::{
+    namespaced_name_using_original_name_map, original_name_map_from_apis, OriginalNameMap,
+};
 use super::{
     analysis::fun::FnAnalysis,
     api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeKind, TypedefKind},
@@ -115,6 +118,7 @@ fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
 pub(crate) struct RsCodeGenerator<'a> {
     include_list: &'a [String],
     bindgen_mod: ItemMod,
+    original_name_map: OriginalNameMap,
 }
 
 impl<'a> RsCodeGenerator<'a> {
@@ -127,6 +131,7 @@ impl<'a> RsCodeGenerator<'a> {
         let c = Self {
             include_list,
             bindgen_mod,
+            original_name_map: original_name_map_from_apis(&all_apis),
         };
         c.rs_codegen(all_apis)
     }
@@ -143,7 +148,7 @@ impl<'a> RsCodeGenerator<'a> {
             .into_iter()
             .map(|api| {
                 let more_cpp_needed = api.additional_cpp().is_some();
-                let gen = Self::generate_rs_for_api(&api.name, api.detail);
+                let gen = self.generate_rs_for_api(&api.name, api.detail);
                 ((api.name, gen), more_cpp_needed)
             })
             .unzip();
@@ -430,6 +435,7 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn generate_rs_for_api(
+        &self,
         name: &QualifiedName,
         api_detail: ApiDetail<FnAnalysis>,
     ) -> RsCodegenResult {
@@ -446,17 +452,17 @@ impl<'a> RsCodeGenerator<'a> {
                 materialization: Use::Unused,
             },
             ApiDetail::ConcreteType { .. } => RsCodegenResult {
-                global_items: Self::generate_extern_type_impl(TypeKind::NonPod, &name),
+                global_items: self.generate_extern_type_impl(TypeKind::NonPod, &name),
                 bridge_items: create_impl_items(&id),
-                extern_c_mod_item: Some(ForeignItem::Verbatim(Self::generate_cxxbridge_type(name))),
+                extern_c_mod_item: Some(ForeignItem::Verbatim(self.generate_cxxbridge_type(name))),
                 bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id.clone()))),
                 impl_entry: None,
                 materialization: Use::Unused,
             },
             ApiDetail::ForwardDeclaration => RsCodegenResult {
-                extern_c_mod_item: Some(ForeignItem::Verbatim(Self::generate_cxxbridge_type(name))),
+                extern_c_mod_item: Some(ForeignItem::Verbatim(self.generate_cxxbridge_type(name))),
                 bridge_items: Vec::new(),
-                global_items: Self::generate_extern_type_impl(TypeKind::NonPod, &name),
+                global_items: self.generate_extern_type_impl(TypeKind::NonPod, &name),
                 bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id))),
                 impl_entry: None,
                 materialization: Use::UsedFromCxxBridge,
@@ -487,14 +493,14 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item,
                 analysis,
             } => RsCodegenResult {
-                global_items: Self::generate_extern_type_impl(analysis, &name),
+                global_items: self.generate_extern_type_impl(analysis, &name),
                 impl_entry: None,
                 bridge_items: if analysis.can_be_instantiated() {
                     create_impl_items(&id)
                 } else {
                     Vec::new()
                 },
-                extern_c_mod_item: Some(ForeignItem::Verbatim(Self::generate_cxxbridge_type(name))),
+                extern_c_mod_item: Some(ForeignItem::Verbatim(self.generate_cxxbridge_type(name))),
                 bindgen_mod_item,
                 materialization: Use::UsedFromCxxBridge,
             },
@@ -569,8 +575,8 @@ impl<'a> RsCodeGenerator<'a> {
         })
     }
 
-    fn generate_extern_type_impl(type_kind: TypeKind, tyname: &QualifiedName) -> Vec<Item> {
-        let tynamestring = tyname.to_cpp_name();
+    fn generate_extern_type_impl(&self, type_kind: TypeKind, tyname: &QualifiedName) -> Vec<Item> {
+        let tynamestring = namespaced_name_using_original_name_map(tyname, &self.original_name_map);
         let fulltypath = tyname.get_bindgen_path_idents();
         let kind_item = match type_kind {
             TypeKind::Pod => "Trivial",
@@ -585,17 +591,31 @@ impl<'a> RsCodeGenerator<'a> {
         })]
     }
 
-    fn generate_cxxbridge_type(name: &QualifiedName) -> TokenStream {
-        let id = name.get_final_ident();
+    fn generate_cxxbridge_type(&self, name: &QualifiedName) -> TokenStream {
         let ns = name.get_namespace();
-        let mut for_extern_c_ts = if !ns.is_empty() {
-            let ns_string = ns.iter().cloned().collect::<Vec<String>>().join("::");
+        let id = name.get_final_ident();
+        let mut ns_components: Vec<String> = ns.iter().cloned().collect();
+        let mut cxx_name = None;
+        if let Some(original_name) = self.original_name_map.get(name) {
+            let mut name_components: Vec<_> = original_name.split("::").collect();
+            cxx_name = Some(name_components.pop().unwrap());
+            ns_components.extend(name_components.iter().map(|s| s.to_string()));
+        };
+
+        let mut for_extern_c_ts = if !ns_components.is_empty() {
+            let ns_string = ns_components.join("::");
             quote! {
                 #[namespace = #ns_string]
             }
         } else {
             TokenStream::new()
         };
+
+        if let Some(n) = cxx_name {
+            for_extern_c_ts.extend(quote! {
+                #[cxx_name = #n]
+            });
+        }
 
         for_extern_c_ts.extend(quote! {
             type #id = super::bindgen::root::

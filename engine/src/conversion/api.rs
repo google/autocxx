@@ -127,6 +127,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
 /// Rust codegen output.
 pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) name: QualifiedName,
+    pub(crate) original_name: Option<String>,
     /// Any dependencies of this API, such that during garbage collection
     /// we can ensure to keep them.
     pub(crate) deps: HashSet<QualifiedName>,
