@@ -161,8 +161,10 @@ impl TypeConfig {
     }
 
     pub fn new_for_test() -> Self {
-        let mut input = TypeConfigInput::default();
-        input.allowlist = Allowlist::All;
+        let input = TypeConfigInput {
+            allowlist: Allowlist::All,
+            ..Default::default()
+        };
         input.into_type_config().unwrap()
     }
 }
