@@ -22,6 +22,9 @@ use crate::{
 };
 
 /// Remove any APIs which depend on other items which have been ignored.
+/// We also eliminate any APIs that depend on some type that we just don't
+/// know about at all. In either case, we don't simply remove the type, but instead
+/// replace it with an error marker.
 pub(crate) fn filter_apis_by_ignored_dependents(
     mut apis: Vec<Api<FnAnalysis>>,
 ) -> Vec<Api<FnAnalysis>> {
@@ -34,11 +37,8 @@ pub(crate) fn filter_apis_by_ignored_dependents(
             }
         )
     });
-    let mut ignored_items: HashSet<_> = ignored_items
-        .into_iter()
-        .map(|api| api.typename())
-        .collect();
-    let valid_types: HashSet<_> = valid_items.into_iter().map(|api| api.typename()).collect();
+    let mut ignored_items: HashSet<_> = ignored_items.into_iter().map(|api| api.name()).collect();
+    let valid_types: HashSet<_> = valid_items.into_iter().map(|api| api.name()).collect();
     let mut iterate_again = true;
     while iterate_again {
         iterate_again = false;
@@ -47,7 +47,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(
             .map(|api| {
                 if api.deps.iter().any(|dep| ignored_items.contains(dep)) {
                     iterate_again = true;
-                    ignored_items.insert(api.typename());
+                    ignored_items.insert(api.name());
                     create_ignore_item(api, ConvertError::IgnoredDependent)
                 } else if !api
                     .deps
@@ -55,7 +55,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(
                     .all(|dep| valid_types.contains(dep) || known_types().is_known_type(dep))
                 {
                     iterate_again = true;
-                    ignored_items.insert(api.typename());
+                    ignored_items.insert(api.name());
                     create_ignore_item(api, ConvertError::UnknownDependentType)
                 } else {
                     api
@@ -67,9 +67,9 @@ pub(crate) fn filter_apis_by_ignored_dependents(
 }
 
 fn create_ignore_item(api: Api<FnAnalysis>, err: ConvertError) -> Api<FnAnalysis> {
-    let id = api.typename().get_final_ident();
+    let id = api.name().get_final_ident();
     Api {
-        name: api.typename(),
+        name: api.name(),
         original_name: api.original_name,
         deps: HashSet::new(),
         detail: ApiDetail::IgnoredItem {

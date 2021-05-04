@@ -22,17 +22,20 @@ use syn::{Item, ItemStruct};
 
 use crate::{
     conversion::{
-        api::{Api, ApiAnalysis, ApiDetail, TypeKind, UnanalyzedApi},
+        analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
+        api::{AnalysisPhase, Api, ApiDetail, TypeKind, TypedefKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
-        parse::type_converter::{TypeConversionContext, TypeConverter},
         ConvertError,
     },
     types::{Namespace, QualifiedName},
 };
 
+use super::tdef::TypedefAnalysis;
+
 pub(crate) struct PodAnalysis;
 
-impl ApiAnalysis for PodAnalysis {
+impl AnalysisPhase for PodAnalysis {
+    type TypedefAnalysis = TypedefKind;
     type TypeAnalysis = TypeKind;
     type FunAnalysis = ();
 }
@@ -43,9 +46,8 @@ impl ApiAnalysis for PodAnalysis {
 /// and an object which can be used to query the POD status of any
 /// type whether or not it's one of the [Api]s.
 pub(crate) fn analyze_pod_apis(
-    apis: Vec<UnanalyzedApi>,
+    apis: Vec<Api<TypedefAnalysis>>,
     type_config: &TypeConfig,
-    type_converter: &mut TypeConverter,
 ) -> Result<Vec<Api<PodAnalysis>>, ConvertError> {
     // This next line will return an error if any of the 'generate_pod'
     // directives from the user can't be met because, for instance,
@@ -53,16 +55,25 @@ pub(crate) fn analyze_pod_apis(
     // held safely by value in Rust.
     let byvalue_checker = ByValueChecker::new_from_apis(&apis, type_config)?;
     let mut extra_apis = Vec::new();
+    let mut type_converter = TypeConverter::new(type_config, &apis);
     let mut results: Vec<_> = apis
         .into_iter()
-        .map(|api| analyze_pod_api(api, &byvalue_checker, type_converter, &mut extra_apis))
+        .map(|api| analyze_pod_api(api, &byvalue_checker, &mut type_converter, &mut extra_apis))
         .collect::<Result<Vec<_>, ConvertError>>()?;
     // Conceivably, the process of POD-analysing the first set of APIs could result
     // in us creating new APIs to concretize generic types.
     let mut more_extra_apis = Vec::new();
     let mut more_results = extra_apis
         .into_iter()
-        .map(|api| analyze_pod_api(api, &byvalue_checker, type_converter, &mut more_extra_apis))
+        .map(add_analysis)
+        .map(|api| {
+            analyze_pod_api(
+                api,
+                &byvalue_checker,
+                &mut type_converter,
+                &mut more_extra_apis,
+            )
+        })
         .collect::<Result<Vec<_>, ConvertError>>()?;
     assert!(more_extra_apis.is_empty());
     results.append(&mut more_results);
@@ -70,21 +81,27 @@ pub(crate) fn analyze_pod_apis(
 }
 
 fn analyze_pod_api(
-    api: UnanalyzedApi,
+    api: Api<TypedefAnalysis>,
     byvalue_checker: &ByValueChecker,
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
 ) -> Result<Api<PodAnalysis>, ConvertError> {
-    let ty_id = api.typename();
+    let ty_id = api.name();
     let mut new_deps = api.deps;
     let api_detail = match api.detail {
         // No changes to any of these...
-        ApiDetail::ConcreteType { rs_definition } => ApiDetail::ConcreteType { rs_definition },
+        ApiDetail::ConcreteType {
+            rs_definition,
+            cpp_definition,
+        } => ApiDetail::ConcreteType {
+            rs_definition,
+            cpp_definition,
+        },
         ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
         ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
-        ApiDetail::Typedef { payload } => ApiDetail::Typedef { payload },
+        ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
         ApiDetail::CType { typename } => ApiDetail::CType { typename },
         // Just changes to this one...
         ApiDetail::Type {

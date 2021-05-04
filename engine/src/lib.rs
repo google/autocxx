@@ -210,19 +210,17 @@ pub trait RebuildDependencyRecorder: std::fmt::Debug {
 ///     syn[(syn parse)]
 ///     apis(Unanalyzed APIs)
 ///     subgraph parse
-///     tc(TypeConverter)
 ///     syn ==> parse_bindgen
 ///     end
 ///     parse_bindgen ==> apis
-///     parse_bindgen -.-> tc
 ///     subgraph analysis
+///     typedef[typedef analysis]
 ///     pod[POD analysis]
-///     tc -.-> pod
-///     apis ==> pod
+///     apis ==> typedef
+///     typedef ==> pod
 ///     podapis(APIs with POD analysis)
 ///     pod ==> podapis
 ///     fun[Function materialization analysis]
-///     tc -.-> fun
 ///     podapis ==> fun
 ///     funapis(APIs with function analysis)
 ///     fun ==> funapis

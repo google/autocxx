@@ -14,6 +14,5 @@
 
 mod parse_bindgen;
 mod parse_foreign_mod;
-pub(crate) mod type_converter;
 
 pub(crate) use parse_bindgen::ParseBindgen;

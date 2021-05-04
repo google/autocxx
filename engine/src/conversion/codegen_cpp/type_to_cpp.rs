@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{
-    conversion::{api::Api, ApiAnalysis, ConvertError},
+    conversion::{api::Api, AnalysisPhase, ConvertError},
     types::QualifiedName,
 };
 use quote::ToTokens;
@@ -26,7 +26,7 @@ use syn::{Token, Type};
 /// in the QualifiedName.
 pub(crate) type OriginalNameMap = HashMap<QualifiedName, String>;
 
-pub(crate) fn original_name_map_from_apis<T: ApiAnalysis>(apis: &[Api<T>]) -> OriginalNameMap {
+pub(crate) fn original_name_map_from_apis<T: AnalysisPhase>(apis: &[Api<T>]) -> OriginalNameMap {
     let mut map: OriginalNameMap = HashMap::new();
     for api in apis {
         if let Some(original_name) = &api.original_name {

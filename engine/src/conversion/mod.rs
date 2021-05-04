@@ -36,8 +36,9 @@ use self::{
     analysis::{
         abstract_types::mark_types_abstract, gc::filter_apis_by_following_edges_from_allowlist,
         pod::analyze_pod_apis, remove_ignored::filter_apis_by_ignored_dependents,
+        tdef::convert_typedef_targets,
     },
-    api::{Api, ApiAnalysis},
+    api::{AnalysisPhase, Api},
     codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
 };
@@ -75,7 +76,7 @@ impl<'a> BridgeConverter<'a> {
         }
     }
 
-    fn dump_apis<T: ApiAnalysis>(label: &str, apis: &[Api<T>]) {
+    fn dump_apis<T: AnalysisPhase>(label: &str, apis: &[Api<T>]) {
         if LOG_APIS {
             log::info!(
                 "APIs after {}:\n{}",
@@ -103,12 +104,13 @@ impl<'a> BridgeConverter<'a> {
                 // Parse the bindgen mod.
                 let items_to_process = items.drain(..).collect();
                 let parser = ParseBindgen::new(&self.type_config);
-                let parse_results = parser.parse_items(items_to_process)?;
-                Self::dump_apis("parsing", &parse_results.apis);
-                // Inside parse_results, we now have a list of APIs and a few other things
-                // e.g. type relationships. The latter are stored in here...
-                let mut type_converter = parse_results.type_converter;
-                // The code above will have contributed lots of `Api`s to self.apis.
+                let apis = parser.parse_items(items_to_process)?;
+                Self::dump_apis("parsing", &apis);
+                // Inside parse_results, we now have a list of APIs.
+                // We now enter various analysis phases. First, convert any typedefs.
+                // "Convert" means replacing bindgen-style type targets
+                // (e.g. root::std::unique_ptr) with cxx-style targets (e.g. UniquePtr).
+                let apis = convert_typedef_targets(&self.type_config, apis);
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
                 // Specifically, let's confirm that the items requested by the user to be
@@ -116,19 +118,14 @@ impl<'a> BridgeConverter<'a> {
                 // This returns a new list of `Api`s, which will be parameterized with
                 // the analysis results. It also returns an object which can be used
                 // by subsequent phases to work out which objects are POD.
-                let analyzed_apis =
-                    analyze_pod_apis(parse_results.apis, &self.type_config, &mut type_converter)?;
+                let analyzed_apis = analyze_pod_apis(apis, &self.type_config)?;
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions. This is probably the most complex
                 // part of `autocxx`. Again, this returns a new set of `Api`s, but
                 // parameterized by a richer set of metadata.
-                let mut analyzed_apis = FnAnalyzer::analyze_functions(
-                    analyzed_apis,
-                    unsafe_policy,
-                    &mut type_converter,
-                    self.type_config,
-                );
+                let mut analyzed_apis =
+                    FnAnalyzer::analyze_functions(analyzed_apis, unsafe_policy, self.type_config);
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.

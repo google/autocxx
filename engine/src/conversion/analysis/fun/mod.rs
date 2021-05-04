@@ -19,8 +19,11 @@ mod rust_name_tracker;
 
 use crate::{
     conversion::{
-        convert_error::ConvertErrorWithContext, convert_error::ErrorContext,
-        error_reporter::add_api_or_report_error, parse::type_converter::TypeConversionContext,
+        analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
+        api::TypedefKind,
+        convert_error::ConvertErrorWithContext,
+        convert_error::ErrorContext,
+        error_reporter::add_api_or_report_error,
     },
     known_types::known_types,
 };
@@ -36,9 +39,8 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
         codegen_cpp::AdditionalNeed,
-        parse::type_converter::TypeConverter,
         ConvertError,
     },
     types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},
@@ -109,7 +111,8 @@ struct ReturnTypeAnalysis {
 
 pub(crate) struct FnAnalysis;
 
-impl ApiAnalysis for FnAnalysis {
+impl AnalysisPhase for FnAnalysis {
+    type TypedefAnalysis = TypedefKind;
     type TypeAnalysis = TypeKind;
     type FunAnalysis = FnAnalysisBody;
 }
@@ -118,11 +121,10 @@ pub(crate) struct FnAnalyzer<'a> {
     unsafe_policy: UnsafePolicy,
     rust_name_tracker: RustNameTracker,
     extra_apis: Vec<UnanalyzedApi>,
-    type_converter: &'a mut TypeConverter<'a>,
+    type_converter: TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
     type_config: &'a TypeConfig,
-    incomplete_types: HashSet<QualifiedName>,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     generate_utilities: bool,
 }
@@ -133,26 +135,24 @@ impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: Vec<Api<PodAnalysis>>,
         unsafe_policy: UnsafePolicy,
-        type_converter: &'a mut TypeConverter<'a>,
         type_database: &'a TypeConfig,
     ) -> Vec<Api<FnAnalysis>> {
         let mut me = Self {
             unsafe_policy,
             rust_name_tracker: RustNameTracker::new(),
             extra_apis: Vec::new(),
-            type_converter,
+            type_converter: TypeConverter::new(type_database, &apis),
             bridge_name_tracker: BridgeNameTracker::new(),
             type_config: type_database,
-            incomplete_types: Self::build_incomplete_type_set(&apis),
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             generate_utilities: Self::should_generate_utilities(&apis),
         };
         let mut results = Vec::new();
         for api in apis {
-            add_api_or_report_error(api.typename(), &mut results, || me.analyze_fn_api(api));
+            add_api_or_report_error(api.name(), &mut results, || me.analyze_fn_api(api));
         }
-        results.extend(me.extra_apis.into_iter().map(Self::make_extra_api_nonpod));
+        results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }
 
@@ -161,22 +161,13 @@ impl<'a> FnAnalyzer<'a> {
             .any(|api| matches!(api.detail, ApiDetail::StringConstructor))
     }
 
-    fn build_incomplete_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
-        apis.iter()
-            .filter_map(|api| match api.detail {
-                ApiDetail::ForwardDeclaration => Some(api.typename()),
-                _ => None,
-            })
-            .collect()
-    }
-
     fn build_pod_safe_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {
                 ApiDetail::Type {
                     bindgen_mod_item: _,
                     analysis: TypeKind::Pod,
-                } => Some(api.typename()),
+                } => Some(api.name()),
                 _ => None,
             })
             .chain(
@@ -195,25 +186,6 @@ impl<'a> FnAnalyzer<'a> {
             .collect()
     }
 
-    /// Processing functions sometimes results in new types being materialized.
-    /// In future, if we wanted to make these POD, we'd probably want to create
-    /// a new analysis phase prior to the POD analysis which materializes these types.
-    fn make_extra_api_nonpod(api: UnanalyzedApi) -> Api<FnAnalysis> {
-        let new_detail = match api.detail {
-            ApiDetail::ConcreteType { rs_definition } => ApiDetail::ConcreteType { rs_definition },
-            _ => panic!("Function analysis created an extra API which wasn't a concrete type"),
-        };
-        Api {
-            name: api.name,
-            // An "extra API" is unlikely to have an `original_name, but we
-            // don't need to knoww that here -- we can simply pass on
-            // `api.original_name`.
-            original_name: api.original_name,
-            deps: api.deps,
-            detail: new_detail,
-        }
-    }
-
     fn analyze_fn_api(
         &mut self,
         api: Api<PodAnalysis>,
@@ -222,7 +194,13 @@ impl<'a> FnAnalyzer<'a> {
         let mut new_id = api.name.get_final_ident();
         let api_detail = match api.detail {
             // No changes to any of these...
-            ApiDetail::ConcreteType { rs_definition } => ApiDetail::ConcreteType { rs_definition },
+            ApiDetail::ConcreteType {
+                rs_definition,
+                cpp_definition,
+            } => ApiDetail::ConcreteType {
+                rs_definition,
+                cpp_definition,
+            },
             ApiDetail::StringConstructor => ApiDetail::StringConstructor,
             ApiDetail::Function { fun, analysis: _ } => {
                 let analysis = self.analyze_foreign_fn(
@@ -240,7 +218,7 @@ impl<'a> FnAnalyzer<'a> {
                 }
             }
             ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
-            ApiDetail::Typedef { payload } => ApiDetail::Typedef { payload },
+            ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
             // Just changes to this one...
             ApiDetail::Type {
@@ -272,7 +250,6 @@ impl<'a> FnAnalyzer<'a> {
             ns,
             &TypeConversionContext::CxxOuterType {
                 convert_ptrs_to_references,
-                forward_declarations: &self.incomplete_types,
             },
         )?;
         self.extra_apis.extend(annotated.extra_apis);
@@ -868,7 +845,7 @@ impl Api<FnAnalysis> {
                     QualifiedName::new(&self.name.get_namespace(), make_ident(&analysis.rust_name))
                 }
             },
-            _ => self.typename(),
+            _ => self.name(),
         }
     }
 
@@ -882,7 +859,7 @@ impl Api<FnAnalysis> {
         match &self.detail {
             ApiDetail::Function { fun: _, analysis } => analysis.cpp_wrapper.clone(),
             ApiDetail::StringConstructor => Some(AdditionalNeed::MakeStringConstructor),
-            ApiDetail::ConcreteType { rs_definition } => {
+            ApiDetail::ConcreteType { rs_definition, .. } => {
                 Some(AdditionalNeed::ConcreteTemplatedTypeTypedef(
                     self.name.clone(),
                     rs_definition.clone(),

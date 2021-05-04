@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{ApiDetail, ParseResults, TypedefKind, UnanalyzedApi},
+        api::{ApiDetail, TypedefKind, UnanalyzedApi},
         ConvertError,
     },
     types::Namespace,
@@ -26,22 +26,20 @@ use crate::{
     conversion::{
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::report_any_error,
-        parse::type_converter::Annotated,
     },
     types::validate_ident_ok_for_cxx,
 };
 use autocxx_parser::TypeConfig;
-use syn::{parse_quote, Attribute, Fields, Ident, Item, LitStr, Type, TypePath, UseTree};
+use syn::{parse_quote, Attribute, Fields, Ident, Item, LitStr, TypePath, UseTree};
 
-use super::type_converter::TypeConversionContext;
-use super::{super::utilities::generate_utilities, type_converter::TypeConverter};
+use super::super::utilities::generate_utilities;
 
 use super::parse_foreign_mod::ParseForeignMod;
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
     type_config: &'a TypeConfig,
-    results: ParseResults<'a>,
+    apis: Vec<UnanalyzedApi>,
     /// Here we track the last struct which bindgen told us about.
     /// Any subsequent "extern 'C'" blocks are methods belonging to that type,
     /// even if the 'this' is actually recorded as void in the
@@ -70,10 +68,7 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn new(type_config: &'a TypeConfig) -> Self {
         ParseBindgen {
             type_config,
-            results: ParseResults {
-                apis: Vec::new(),
-                type_converter: TypeConverter::new(type_config),
-            },
+            apis: Vec::new(),
             latest_virtual_this_type: None,
         }
     }
@@ -83,15 +78,15 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn parse_items(
         mut self,
         items: Vec<Item>,
-    ) -> Result<ParseResults<'a>, ConvertError> {
+    ) -> Result<Vec<UnanalyzedApi>, ConvertError> {
         let items = Self::find_items_in_root(items)?;
         if !self.type_config.exclude_utilities() {
-            generate_utilities(&mut self.results.apis);
+            generate_utilities(&mut self.apis);
         }
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
         self.confirm_all_generate_directives_obeyed()?;
-        Ok(self.results)
+        Ok(self.apis)
     }
 
     fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
@@ -124,8 +119,8 @@ impl<'a> ParseBindgen<'a> {
                 self.parse_item(item, &mut mod_converter, &ns)
             });
         }
-        self.results.apis.append(&mut more_apis);
-        mod_converter.finished(&mut self.results.apis);
+        self.apis.append(&mut more_apis);
+        mod_converter.finished(&mut self.apis);
     }
 
     fn parse_item(
@@ -217,21 +212,19 @@ impl<'a> ParseBindgen<'a> {
                                     Some(ErrorContext::Item(new_id.clone())),
                                 ));
                             }
-                            self.results
-                                .type_converter
-                                .insert_typedef(new_tyname, Type::Path(old_path.clone()));
                             let mut deps = HashSet::new();
                             deps.insert(old_tyname);
-                            self.results.apis.push(UnanalyzedApi {
+                            self.apis.push(UnanalyzedApi {
                                 name: QualifiedName::new(ns, new_id.clone()),
                                 original_name: get_bindgen_original_name_annotation(
                                     &use_item.attrs,
                                 ),
                                 deps,
                                 detail: ApiDetail::Typedef {
-                                    payload: TypedefKind::Use(parse_quote! {
+                                    item: TypedefKind::Use(parse_quote! {
                                         pub use #old_path as #new_id;
                                     }),
+                                    analysis: (),
                                 },
                             });
                             break;
@@ -247,7 +240,7 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Const(const_item) => {
-                self.results.apis.push(UnanalyzedApi {
+                self.apis.push(UnanalyzedApi {
                     name: QualifiedName::new(ns, const_item.ident.clone()),
                     original_name: get_bindgen_original_name_annotation(&const_item.attrs),
                     deps: HashSet::new(),
@@ -255,44 +248,17 @@ impl<'a> ParseBindgen<'a> {
                 });
                 Ok(())
             }
-            Item::Type(mut ity) => {
-                let tyname = QualifiedName::new(ns, ity.ident.clone());
-                let type_conversion_results = self.results.type_converter.convert_type(
-                    *ity.ty,
-                    ns,
-                    &TypeConversionContext::CxxInnerType,
-                );
-                match type_conversion_results {
-                    Err(err) => Err(ConvertErrorWithContext(
-                        err,
-                        Some(ErrorContext::Item(ity.ident.clone())),
-                    )),
-                    Ok(Annotated {
-                        ty: syn::Type::Path(ref typ),
-                        ..
-                    }) if QualifiedName::from_type_path(typ) == tyname => {
-                        Err(ConvertErrorWithContext(
-                            ConvertError::InfinitelyRecursiveTypedef(tyname),
-                            Some(ErrorContext::Item(ity.ident)),
-                        ))
-                    }
-                    Ok(mut final_type) => {
-                        ity.ty = Box::new(final_type.ty.clone());
-                        self.results
-                            .type_converter
-                            .insert_typedef(tyname, final_type.ty);
-                        self.results.apis.append(&mut final_type.extra_apis);
-                        self.results.apis.push(UnanalyzedApi {
-                            name: QualifiedName::new(ns, ity.ident.clone()),
-                            original_name: get_bindgen_original_name_annotation(&ity.attrs),
-                            deps: final_type.types_encountered,
-                            detail: ApiDetail::Typedef {
-                                payload: TypedefKind::Type(ity),
-                            },
-                        });
-                        Ok(())
-                    }
-                }
+            Item::Type(ity) => {
+                self.apis.push(UnanalyzedApi {
+                    name: QualifiedName::new(ns, ity.ident.clone()),
+                    original_name: get_bindgen_original_name_annotation(&ity.attrs),
+                    deps: HashSet::new(),
+                    detail: ApiDetail::Typedef {
+                        item: TypedefKind::Type(ity),
+                        analysis: (),
+                    },
+                });
+                Ok(())
             }
             _ => Err(ConvertErrorWithContext(
                 ConvertError::UnexpectedItemInMod,
@@ -334,7 +300,7 @@ impl<'a> ParseBindgen<'a> {
             return;
         }
         let api = UnanalyzedApi {
-            name: name.clone(),
+            name,
             original_name,
             deps: HashSet::new(),
             detail: if is_forward_declaration {
@@ -346,16 +312,14 @@ impl<'a> ParseBindgen<'a> {
                 }
             },
         };
-        self.results.apis.push(api);
-        self.results.type_converter.push(name);
+        self.apis.push(api);
     }
 
     fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertError> {
         let api_names: HashSet<_> = self
-            .results
             .apis
             .iter()
-            .map(|api| api.typename().to_cpp_name())
+            .map(|api| api.name().to_cpp_name())
             .collect();
         for generate_directive in self.type_config.must_generate_list() {
             if !api_names.contains(&generate_directive) {

@@ -17,7 +17,7 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse, Type};
 
-use super::{convert_error::ErrorContext, parse::type_converter::TypeConverter, ConvertError};
+use super::{convert_error::ErrorContext, ConvertError};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
@@ -51,7 +51,8 @@ pub(crate) struct FuncToConvert {
 
 /// Layers of analysis which may be applied to decorate each API.
 /// See description of the purpose of this trait within `Api`.
-pub(crate) trait ApiAnalysis {
+pub(crate) trait AnalysisPhase {
+    type TypedefAnalysis;
     type TypeAnalysis;
     type FunAnalysis;
 }
@@ -59,14 +60,16 @@ pub(crate) trait ApiAnalysis {
 /// No analysis has been applied to this API.
 pub(crate) struct NullAnalysis;
 
-impl ApiAnalysis for NullAnalysis {
+impl AnalysisPhase for NullAnalysis {
+    type TypedefAnalysis = ();
     type TypeAnalysis = ();
     type FunAnalysis = ();
 }
 
+#[derive(Clone)]
 pub(crate) enum TypedefKind {
-    Type(ItemType),
     Use(ItemUse),
+    Type(ItemType),
 }
 
 #[derive(strum_macros::Display)]
@@ -76,12 +79,15 @@ pub(crate) enum TypedefKind {
 /// the fact that their payloads may not be `Debug` or `Display`.
 /// (Specifically, allowing `syn` Types to be `Debug` requires
 /// enabling syn's `extra-traits` feature which increases compile time.)
-pub(crate) enum ApiDetail<T: ApiAnalysis> {
+pub(crate) enum ApiDetail<T: AnalysisPhase> {
     /// A forward declared type for which no definition is available.
     ForwardDeclaration,
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
-    ConcreteType { rs_definition: Box<Type> },
+    ConcreteType {
+        rs_definition: Box<Type>,
+        cpp_definition: String,
+    },
     /// A simple note that we want to make a constructor for
     /// a `std::string` on the heap.
     StringConstructor,
@@ -94,7 +100,10 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
     Const { const_item: ItemConst },
     /// A typedef found in the bindgen output which we wish
     /// to pass on in our output
-    Typedef { payload: TypedefKind },
+    Typedef {
+        item: TypedefKind,
+        analysis: T::TypedefAnalysis,
+    },
     /// A type (struct or enum) encountered in the
     /// `bindgen` output.
     Type {
@@ -125,7 +134,7 @@ pub(crate) enum ApiDetail<T: ApiAnalysis> {
 /// This is not as high-level as the equivalent types in `cxx` or `bindgen`,
 /// because sometimes we pass on the `bindgen` output directly in the
 /// Rust codegen output.
-pub(crate) struct Api<T: ApiAnalysis> {
+pub(crate) struct Api<T: AnalysisPhase> {
     pub(crate) name: QualifiedName,
     pub(crate) original_name: Option<String>,
     /// Any dependencies of this API, such that during garbage collection
@@ -135,7 +144,7 @@ pub(crate) struct Api<T: ApiAnalysis> {
     pub(crate) detail: ApiDetail<T>,
 }
 
-impl<T: ApiAnalysis> std::fmt::Debug for Api<T> {
+impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -149,20 +158,8 @@ impl<T: ApiAnalysis> std::fmt::Debug for Api<T> {
 
 pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 
-impl<T: ApiAnalysis> Api<T> {
-    pub(crate) fn typename(&self) -> QualifiedName {
+impl<T: AnalysisPhase> Api<T> {
+    pub(crate) fn name(&self) -> QualifiedName {
         self.name.clone()
     }
-}
-
-/// Results of parsing the bindgen mod. This is what is passed from
-/// the parser to the analysis phases.
-pub(crate) struct ParseResults<'a> {
-    /// All APIs encountered. This is the main thing.
-    pub(crate) apis: Vec<UnanalyzedApi>,
-    /// A database containing known relationships between types.
-    /// In particular, any typedefs detected.
-    /// This should probably be replaced by extracting this information
-    /// from APIs as necessary later. TODO
-    pub(crate) type_converter: TypeConverter<'a>,
 }
