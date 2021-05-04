@@ -85,13 +85,10 @@ impl<'a> TypeConversionContext<'a> {
         )
     }
     fn allow_instantiation(&self, qn: &QualifiedName) -> bool {
-        match self {
-            TypeConversionContext::CxxOuterType {
-                forward_declarations,
-                ..
-            } if forward_declarations.contains(qn) => false,
-            _ => true,
-        }
+        !matches!(self, TypeConversionContext::CxxOuterType {
+            forward_declarations,
+            ..
+        } if forward_declarations.contains(qn))
     }
 }
 

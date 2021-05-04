@@ -377,7 +377,7 @@ impl<'a> RsCodeGenerator<'a> {
                     .bindgen_mod_item
                     .iter()
                     .cloned()
-                    .map(|item| Self::remove_bindgen_attrs_from_item(item)),
+                    .map(Self::remove_bindgen_attrs_from_item),
             );
             if let Some(impl_entry) = &item.1.impl_entry {
                 impl_entries_by_type
