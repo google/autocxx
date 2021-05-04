@@ -5074,7 +5074,6 @@ fn test_int_vector() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/426
 fn test_deleted_function() {
     // We shouldn't generate bindings for deleted functions.
     // The test is successful if the bindings compile, i.e. if autocxx doesn't
