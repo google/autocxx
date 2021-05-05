@@ -16,6 +16,7 @@ use crate::{
     conversion::{api::Api, AnalysisPhase, ConvertError},
     types::QualifiedName,
 };
+use itertools::Itertools;
 use quote::ToTokens;
 use std::collections::HashMap;
 use std::iter::once;
@@ -45,8 +46,6 @@ pub(crate) fn namespaced_name_using_original_name_map(
             .get_namespace()
             .iter()
             .chain(once(original_name))
-            .cloned()
-            .collect::<Vec<_>>()
             .join("::")
     } else {
         qual_name.to_cpp_name()
