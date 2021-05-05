@@ -28,6 +28,8 @@ use crate::{
     types::QualifiedName,
 };
 
+use super::remove_bindgen_attrs;
+
 /// Analysis phase where typedef analysis has been performed but no other
 /// analyses just yet.
 pub(crate) struct TypedefAnalysis;
@@ -83,13 +85,8 @@ pub(crate) fn convert_typedef_targets(
                     item: item.clone(),
                     analysis: item,
                 }),
-                ApiDetail::Type {
-                    bindgen_mod_item,
-                    analysis,
-                } => Some(ApiDetail::Type {
-                    bindgen_mod_item,
-                    analysis,
-                }),
+                ApiDetail::Struct { item, analysis } => Some(ApiDetail::Struct { item, analysis }),
+                ApiDetail::Enum { item, analysis } => Some(ApiDetail::Enum { item, analysis }),
                 ApiDetail::CType { typename } => Some(ApiDetail::CType { typename }),
                 ApiDetail::IgnoredItem { err, ctx } => Some(ApiDetail::IgnoredItem { err, ctx }),
             };
@@ -115,6 +112,7 @@ fn get_replacement_typedef(
     deps: &mut HashSet<QualifiedName>,
 ) -> Result<ApiDetail<TypedefAnalysis>, ConvertErrorWithContext> {
     let mut converted_type = ity.clone();
+    remove_bindgen_attrs(&mut converted_type.attrs);
     let type_conversion_results = type_converter.convert_type(
         (*ity.ty).clone(),
         name.get_namespace(),

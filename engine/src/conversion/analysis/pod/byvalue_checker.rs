@@ -25,7 +25,7 @@ use crate::{
 };
 use autocxx_parser::TypeConfig;
 use std::collections::HashMap;
-use syn::{Item, ItemStruct, Type};
+use syn::{ItemStruct, Type};
 
 #[derive(Clone)]
 enum PodState {
@@ -115,21 +115,17 @@ impl ByValueChecker {
                         None => byvalue_checker.ingest_nonpod_type(name),
                     }
                 }
-                ApiDetail::Type {
-                    bindgen_mod_item,
+                ApiDetail::Struct { item, analysis: _ } => {
+                    byvalue_checker.ingest_struct(&item, &api.name.get_namespace())
+                }
+                ApiDetail::Enum {
+                    item: _,
                     analysis: _,
-                } => match bindgen_mod_item {
-                    None => {}
-                    Some(Item::Struct(s)) => {
-                        byvalue_checker.ingest_struct(&s, &api.name.get_namespace())
-                    }
-                    Some(Item::Enum(_)) => {
-                        byvalue_checker
-                            .results
-                            .insert(api.name(), StructDetails::new(PodState::IsPod));
-                    }
-                    _ => {}
-                },
+                } => {
+                    byvalue_checker
+                        .results
+                        .insert(api.name(), StructDetails::new(PodState::IsPod));
+                }
                 _ => {}
             }
         }
