@@ -5166,6 +5166,45 @@ fn test_mbstate() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/470
+fn test_issue_470() {
+    let hdr = indoc! {"
+        namespace std {
+        template <bool, typename _Iftrue, typename _Iffalse> struct a;
+        }
+        namespace {
+        namespace {
+        template <typename> struct b { template <typename> struct c; };
+        struct d : b<d> {};
+        struct e : b<e> {};
+        struct f : b<f> {};
+        struct g : b<g> {};
+        struct h;
+        template <typename... i> struct j {
+          typedef std::a<d::c<i...>::k, d,
+                         std::a<e::c<i...>::k, e,
+                                std::a<f::c<i...>::k, f, std::a<g::c<i...>::k, g, h>>>>
+              l;
+        };
+        } // namespace
+        } // namespace
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &[],
+        &[],
+        Some(quote! {
+            generate_all!()
+        }),
+        &[],
+        None,
+    );
+}
+
+#[test]
 fn test_generate_all() {
     let hdr = indoc! {"
         #include <cstdint>
