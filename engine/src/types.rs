@@ -129,7 +129,7 @@ impl QualifiedName {
     }
 
     /// Create from user input, e.g. a name in an AllowPOD directive.
-    pub(crate) fn new_from_user_input(id: &str) -> Self {
+    pub(crate) fn new_from_cpp_name(id: &str) -> Self {
         let mut seg_iter = id.split("::").peekable();
         let mut ns = Namespace::new();
         while let Some(seg) = seg_iter.next() {
@@ -245,11 +245,11 @@ mod tests {
     #[test]
     fn test_ints() {
         assert_eq!(
-            QualifiedName::new_from_user_input("i8").to_cpp_name(),
+            QualifiedName::new_from_cpp_name("i8").to_cpp_name(),
             "int8_t"
         );
         assert_eq!(
-            QualifiedName::new_from_user_input("u64").to_cpp_name(),
+            QualifiedName::new_from_cpp_name("u64").to_cpp_name(),
             "uint64_t"
         );
     }

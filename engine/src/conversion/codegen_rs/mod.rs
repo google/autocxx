@@ -554,12 +554,12 @@ impl<'a> RsCodeGenerator<'a> {
     fn generate_cxxbridge_type(&self, name: &QualifiedName) -> TokenStream {
         let ns = name.get_namespace();
         let id = name.get_final_ident();
-        let mut ns_components: Vec<String> = ns.iter().cloned().collect();
+        let mut ns_components: Vec<_> = ns.iter().cloned().collect();
         let mut cxx_name = None;
         if let Some(original_name) = self.original_name_map.get(name) {
-            let mut name_components: Vec<_> = original_name.split("::").collect();
-            cxx_name = Some(name_components.pop().unwrap());
-            ns_components.extend(name_components.iter().map(|s| s.to_string()));
+            let original_name = QualifiedName::new_from_cpp_name(original_name);
+            cxx_name = Some(original_name.get_final_item().to_string());
+            ns_components.extend(original_name.ns_segment_iter().cloned());
         };
 
         let mut for_extern_c_ts = if !ns_components.is_empty() {
