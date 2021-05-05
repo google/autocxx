@@ -71,7 +71,7 @@ impl TypeDetails {
             | Behavior::CxxString
             | Behavior::CxxContainerByValueSafe
             | Behavior::CxxContainerNotByValueSafe => {
-                let tn = QualifiedName::new_from_user_input(&self.rs_name);
+                let tn = QualifiedName::new_from_cpp_name(&self.rs_name);
                 let cxx_name = tn.get_final_item();
                 let (templating, payload) = match self.behavior {
                     Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => {
@@ -104,7 +104,7 @@ impl TypeDetails {
     }
 
     fn to_typename(&self) -> QualifiedName {
-        QualifiedName::new_from_user_input(&self.rs_name)
+        QualifiedName::new_from_cpp_name(&self.rs_name)
     }
 }
 
@@ -254,12 +254,12 @@ impl TypeDatabase {
         let rs_name = td.to_typename();
         if let Some(extra_non_canonical_name) = &td.extra_non_canonical_name {
             self.canonical_names.insert(
-                QualifiedName::new_from_user_input(extra_non_canonical_name),
+                QualifiedName::new_from_cpp_name(extra_non_canonical_name),
                 rs_name.clone(),
             );
         }
         self.canonical_names.insert(
-            QualifiedName::new_from_user_input(&td.cpp_name),
+            QualifiedName::new_from_cpp_name(&td.cpp_name),
             rs_name.clone(),
         );
         self.by_rs_name.insert(rs_name, td);

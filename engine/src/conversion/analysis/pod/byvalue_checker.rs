@@ -83,7 +83,7 @@ impl ByValueChecker {
     ) -> Result<ByValueChecker, ConvertError> {
         let mut byvalue_checker = ByValueChecker::new();
         for blocklisted in type_config.get_blocklist() {
-            let tn = QualifiedName::new_from_user_input(blocklisted);
+            let tn = QualifiedName::new_from_cpp_name(blocklisted);
             let safety = PodState::UnsafeToBePod(format!("type {} is on the blocklist", &tn));
             byvalue_checker
                 .results
@@ -132,7 +132,7 @@ impl ByValueChecker {
         let pod_requests = type_config
             .get_pod_requests()
             .iter()
-            .map(|ty| QualifiedName::new_from_user_input(ty))
+            .map(|ty| QualifiedName::new_from_cpp_name(ty))
             .collect();
         byvalue_checker
             .satisfy_requests(pod_requests)
@@ -265,13 +265,13 @@ mod tests {
     use syn::{parse_quote, Ident, ItemStruct};
 
     fn ty_from_ident(id: &Ident) -> QualifiedName {
-        QualifiedName::new_from_user_input(&id.to_string())
+        QualifiedName::new_from_cpp_name(&id.to_string())
     }
 
     #[test]
     fn test_primitive_by_itself() {
         let bvc = ByValueChecker::new();
-        let t_id = QualifiedName::new_from_user_input("u32");
+        let t_id = QualifiedName::new_from_cpp_name("u32");
         assert!(bvc.is_pod(&t_id));
     }
 
