@@ -18,7 +18,7 @@ use std::collections::HashSet;
 
 use autocxx_parser::TypeConfig;
 use byvalue_checker::ByValueChecker;
-use syn::{Item, ItemStruct};
+use syn::ItemStruct;
 
 use crate::{
     conversion::{
@@ -103,34 +103,43 @@ fn analyze_pod_api(
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
         ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
         ApiDetail::CType { typename } => ApiDetail::CType { typename },
-        // Just changes to this one...
-        ApiDetail::Type {
-            mut bindgen_mod_item,
+        // Just changes to these two...
+        ApiDetail::Enum {
+            mut item,
             analysis: _,
         } => {
+            super::remove_bindgen_attrs(&mut item.attrs);
+            let analysis = if byvalue_checker.is_pod(&ty_id) {
+                TypeKind::Pod
+            } else {
+                TypeKind::NonPod
+            };
+            ApiDetail::Enum { item, analysis }
+        }
+        ApiDetail::Struct {
+            mut item,
+            analysis: _,
+        } => {
+            super::remove_bindgen_attrs(&mut item.attrs);
             let type_kind = if byvalue_checker.is_pod(&ty_id) {
                 // It's POD so let's mark dependencies on things in its field
-                if let Some(Item::Struct(ref s)) = bindgen_mod_item {
-                    get_struct_field_types(
-                        type_converter,
-                        &api.name.get_namespace(),
-                        &s,
-                        &mut new_deps,
-                        extra_apis,
-                    )?;
-                } // otherwise might be an enum, etc.
+                get_struct_field_types(
+                    type_converter,
+                    &api.name.get_namespace(),
+                    &item,
+                    &mut new_deps,
+                    extra_apis,
+                )?;
                 TypeKind::Pod
             } else {
                 // It's non-POD. So also, make the fields opaque...
-                if let Some(Item::Struct(ref mut s)) = bindgen_mod_item {
-                    make_non_pod(s);
-                } // otherwise might be an enum, etc.
-                  // ... and say we don't depend on other types.
+                make_non_pod(&mut item);
+                // ... and say we don't depend on other types.
                 new_deps.clear();
                 TypeKind::NonPod
             };
-            ApiDetail::Type {
-                bindgen_mod_item,
+            ApiDetail::Struct {
+                item,
                 analysis: type_kind,
             }
         }

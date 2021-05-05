@@ -15,7 +15,9 @@
 use crate::types::QualifiedName;
 use itertools::Itertools;
 use std::collections::HashSet;
-use syn::{ForeignItemFn, Ident, ImplItem, Item, ItemConst, ItemType, ItemUse, Type};
+use syn::{
+    ForeignItemFn, Ident, ImplItem, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, Type,
+};
 
 use super::{convert_error::ErrorContext, ConvertError};
 
@@ -104,10 +106,16 @@ pub(crate) enum ApiDetail<T: AnalysisPhase> {
         item: TypedefKind,
         analysis: T::TypedefAnalysis,
     },
-    /// A type (struct or enum) encountered in the
+    /// An enum encountered in the
     /// `bindgen` output.
-    Type {
-        bindgen_mod_item: Option<Item>,
+    Enum {
+        item: ItemEnum,
+        analysis: T::TypeAnalysis,
+    },
+    /// A struct encountered in the
+    /// `bindgen` output.
+    Struct {
+        item: ItemStruct,
         analysis: T::TypeAnalysis,
     },
     /// A variable-length C integer type (e.g. int, unsigned long).

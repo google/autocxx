@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{ApiDetail, TypedefKind, UnanalyzedApi},
+        api::{ApiDetail, NullAnalysis, TypedefKind, UnanalyzedApi},
         ConvertError,
     },
     types::Namespace,
@@ -147,8 +147,12 @@ impl<'a> ParseBindgen<'a> {
                 self.parse_type(
                     tyname.clone(),
                     is_forward_declaration,
-                    Some(Item::Struct(s)),
+                    s,
                     original_name,
+                    |s| ApiDetail::Struct {
+                        item: s,
+                        analysis: (),
+                    },
                 );
                 self.latest_virtual_this_type = Some(tyname);
                 Ok(())
@@ -156,7 +160,10 @@ impl<'a> ParseBindgen<'a> {
             Item::Enum(e) => {
                 let tyname = Self::qualify_name(ns, e.ident.clone())?;
                 let original_name = get_bindgen_original_name_annotation(&e.attrs);
-                self.parse_type(tyname, false, Some(Item::Enum(e)), original_name);
+                self.parse_type(tyname, false, e, original_name, |e| ApiDetail::Enum {
+                    item: e,
+                    analysis: (),
+                });
                 Ok(())
             }
             Item::Impl(imp) => {
@@ -289,13 +296,16 @@ impl<'a> ParseBindgen<'a> {
     /// is aware of the type, and 'use' statements for the final
     /// output mod hierarchy. All are stored in the Api which
     /// this adds.
-    fn parse_type(
+    fn parse_type<T, F>(
         &mut self,
         name: QualifiedName,
         is_forward_declaration: bool,
-        bindgen_mod_item: Option<Item>,
+        bindgen_mod_item: T,
         original_name: Option<String>,
-    ) {
+        api_make: F,
+    ) where
+        F: FnOnce(T) -> ApiDetail<NullAnalysis>,
+    {
         if self.type_config.is_on_blocklist(&name.to_cpp_name()) {
             return;
         }
@@ -306,10 +316,7 @@ impl<'a> ParseBindgen<'a> {
             detail: if is_forward_declaration {
                 ApiDetail::ForwardDeclaration
             } else {
-                ApiDetail::Type {
-                    bindgen_mod_item,
-                    analysis: (),
-                }
+                api_make(bindgen_mod_item)
             },
         };
         self.apis.push(api);

@@ -164,8 +164,12 @@ impl<'a> FnAnalyzer<'a> {
     fn build_pod_safe_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api.detail {
-                ApiDetail::Type {
-                    bindgen_mod_item: _,
+                ApiDetail::Struct {
+                    item: _,
+                    analysis: TypeKind::Pod,
+                } => Some(api.name()),
+                ApiDetail::Enum {
+                    item: _,
                     analysis: TypeKind::Pod,
                 } => Some(api.name()),
                 _ => None,
@@ -220,14 +224,8 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
             ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
-            // Just changes to this one...
-            ApiDetail::Type {
-                bindgen_mod_item,
-                analysis,
-            } => ApiDetail::Type {
-                bindgen_mod_item,
-                analysis,
-            },
+            ApiDetail::Enum { item, analysis } => ApiDetail::Enum { item, analysis },
+            ApiDetail::Struct { item, analysis } => ApiDetail::Struct { item, analysis },
             ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
             ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
         };

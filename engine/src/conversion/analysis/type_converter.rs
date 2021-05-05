@@ -456,7 +456,8 @@ impl<'a> TypeConverter<'a> {
                 ApiDetail::ForwardDeclaration
                 | ApiDetail::ConcreteType { .. }
                 | ApiDetail::Typedef { .. }
-                | ApiDetail::Type { .. } => Some(api.name()),
+                | ApiDetail::Enum { .. }
+                | ApiDetail::Struct { .. } => Some(api.name()),
                 ApiDetail::StringConstructor
                 | ApiDetail::Function { .. }
                 | ApiDetail::Const { .. }
