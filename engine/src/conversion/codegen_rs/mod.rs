@@ -326,10 +326,7 @@ impl<'a> RsCodeGenerator<'a> {
         }
 
         fn remove_bindgen_attrs(attrs: &mut Vec<Attribute>) {
-            *attrs = attrs
-                .drain(..)
-                .filter(|attr| !is_bindgen_attr(&attr))
-                .collect();
+            attrs.retain(|a| !is_bindgen_attr(a))
         }
 
         match &mut item {
