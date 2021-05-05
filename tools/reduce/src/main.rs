@@ -91,7 +91,7 @@ fn main() {
                 .long("problem")
                 .required(true)
                 .value_name("PROBLEM")
-                .help("problem string we're looking for")
+                .help("problem string we're looking for... may be in logs, or in generated C++, or generated .rs")
                 .takes_value(true),
         )
         .arg(
@@ -243,6 +243,7 @@ fn format_gen_cmd(
         dir.to_string(),
         rs_file.to_str().unwrap().to_string(),
         "--gen-rs-complete".to_string(),
+        "--gen-cpp".to_string(),
     ]
     .to_vec();
     Ok((gen, args.into_iter()))
@@ -262,7 +263,7 @@ fn create_interestingness_test(
     let content = format!(
         indoc! {"
         #!/bin/sh
-        {} {} 2>&1 | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h) | grep \"{}\"  >/dev/null 2>&1
     "},
         gen_cmd.to_str().unwrap(),
         args,
