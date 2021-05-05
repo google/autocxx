@@ -28,13 +28,19 @@ use syn::{Token, Type};
 pub(crate) type OriginalNameMap = HashMap<QualifiedName, String>;
 
 pub(crate) fn original_name_map_from_apis<T: AnalysisPhase>(apis: &[Api<T>]) -> OriginalNameMap {
-    let mut map: OriginalNameMap = HashMap::new();
-    for api in apis {
-        if let Some(original_name) = &api.original_name {
-            map.insert(api.name.clone(), original_name.clone());
-        }
-    }
-    map
+    apis.iter()
+        .filter_map(|api| {
+            if let Api {
+                original_name: Some(original_name),
+                ..
+            } = api
+            {
+                Some((api.name(), original_name.clone()))
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 pub(crate) fn namespaced_name_using_original_name_map(
