@@ -49,7 +49,7 @@ use syn::{
     parse_quote, ItemMod, Macro,
 };
 
-use itertools::join;
+use itertools::{join, Itertools};
 use known_types::known_types;
 use log::info;
 
@@ -299,6 +299,14 @@ impl IncludeCppEngine {
             }
         }
 
+        log::info!(
+            "Bindgen flags would be: {}",
+            builder
+                .command_line_flags()
+                .into_iter()
+                .map(|f| format!("\"{}\"", f))
+                .join(" ")
+        );
         builder
     }
 
