@@ -202,7 +202,8 @@ order of preference here's how we would like to hear about your problem:
 * Use the C++ preprocessor to give a single complete C++ file which demonstrates
   the problem, along with the `include_cpp!` directive you use.
   Alternatively, run your build using `AUTOCXX_PREPROCESS=output.h` which should
-  put everything we need into `output.h`.
+  put everything we need into `output.h`. If necessary, you can use the `CLANG_PATH`
+  or `CXX` environment variables to specify the path to the Clang compiler to use.
 * Failing all else, build using
   `cargo clean -p <your package name> && RUST_LOG=autocxx_engine=info cargo build -vvv`
   and send the _entire_ log to us. This will include two key bits of logging:
