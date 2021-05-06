@@ -39,7 +39,12 @@ use std::{
     hash::{Hash, Hasher},
     path::PathBuf,
 };
-use std::{fs::File, io::prelude::*, path::Path, process::Command};
+use std::{
+    fs::File,
+    io::prelude::*,
+    path::Path,
+    process::{Command, Stdio},
+};
 use tempfile::NamedTempFile;
 
 use quote::ToTokens;
@@ -465,13 +470,24 @@ pub fn preprocess(
     incs: &[PathBuf],
     extra_clang_args: &[&str],
 ) -> Result<(), std::io::Error> {
-    let mut cmd = Command::new("clang++");
+    // `CLANG_PATH` is the environment variable that clang-sys uses to specify
+    // the path to Clang, so in most cases where someone is using a compiler
+    // that's not on the path, things should just work. We also check `CXX`,
+    // since some users may have set that.
+    let clang = std::env::var("CLANG_PATH")
+        .or(std::env::var("CXX"))
+        .unwrap_or("clang++".to_string());
+    let mut cmd = Command::new(clang);
     cmd.arg("-E");
     cmd.arg("-C");
     cmd.args(make_clang_args(incs, extra_clang_args));
     cmd.arg(listing_path.to_str().unwrap());
-    let output = cmd.output().expect("failed to preprocess").stdout;
+    cmd.stderr(Stdio::inherit());
+    let result = cmd.output().expect("failed to execute clang++");
+    if !result.status.success() {
+        panic!("failed to preprocess");
+    }
     let mut file = File::create(preprocess_path)?;
-    file.write_all(&output)?;
+    file.write_all(&result.stdout)?;
     Ok(())
 }
