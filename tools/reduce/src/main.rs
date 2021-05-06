@@ -117,6 +117,14 @@ fn main() {
                 .long("keep-dir")
                 .help("keep the temporary directory for debugging purposes"),
         )
+        .arg(
+            Arg::with_name("clang-args")
+                .short("c")
+                .long("clang-arg")
+                .multiple(true)
+                .value_name("CLANG_ARG")
+                .help("Extra arguments to pass to Clang"),
+        )
         .arg(Arg::with_name("creduce-args").last(true).multiple(true))
         .get_matches();
     run(matches).unwrap();
@@ -161,12 +169,17 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         )
         .collect();
     create_rs_file(&rs_path, &directives)?;
-    run_sample_gen_cmd(&rs_path, &tmp_dir.path())?;
+    let extra_clang_args: Vec<_> = matches
+        .values_of("clang-args")
+        .unwrap_or_default()
+        .collect();
+    run_sample_gen_cmd(&rs_path, &tmp_dir.path(), &extra_clang_args)?;
     let interestingness_test = tmp_dir.path().join("test.sh");
     create_interestingness_test(
         &interestingness_test,
         matches.value_of("problem").unwrap(),
         &rs_path,
+        &extra_clang_args,
     )?;
     run_interestingness_test(&interestingness_test);
     run_creduce(
@@ -217,8 +230,12 @@ fn run_creduce<'a>(
         .expect("failed to creduce");
 }
 
-fn run_sample_gen_cmd(rs_file: &Path, tmp_dir: &Path) -> Result<(), std::io::Error> {
-    let (gen_cmd, args) = format_gen_cmd(rs_file, tmp_dir.to_str().unwrap())?;
+fn run_sample_gen_cmd(
+    rs_file: &Path,
+    tmp_dir: &Path,
+    extra_clang_args: &[&str],
+) -> Result<(), std::io::Error> {
+    let (gen_cmd, args) = format_gen_cmd(rs_file, tmp_dir.to_str().unwrap(), extra_clang_args)?;
     let args = args.collect::<Vec<_>>();
     let args_str = args.join(" ");
     announce_progress(&format!(
@@ -230,10 +247,11 @@ fn run_sample_gen_cmd(rs_file: &Path, tmp_dir: &Path) -> Result<(), std::io::Err
     Ok(())
 }
 
-fn format_gen_cmd(
+fn format_gen_cmd<'a>(
     rs_file: &Path,
     dir: &str,
-) -> Result<(PathBuf, impl Iterator<Item = String>), std::io::Error> {
+    extra_clang_args: &'a [&str],
+) -> Result<(PathBuf, impl Iterator<Item = String> + 'a), std::io::Error> {
     let me = std::env::current_exe()?;
     let gen = me.parent().unwrap().join("autocxx-gen");
     let args = [
@@ -244,21 +262,27 @@ fn format_gen_cmd(
         rs_file.to_str().unwrap().to_string(),
         "--gen-rs-complete".to_string(),
         "--gen-cpp".to_string(),
+        "--".to_string(),
     ]
     .to_vec();
-    Ok((gen, args.into_iter()))
+    Ok((
+        gen,
+        args.into_iter()
+            .chain(extra_clang_args.iter().map(|s| s.to_string())),
+    ))
 }
 
 fn create_interestingness_test(
     test_path: &Path,
     problem: &str,
     rs_file: &Path,
+    extra_clang_args: &[&str],
 ) -> Result<(), std::io::Error> {
     announce_progress("Creating interestingness test");
     // Ensure we refer to the input header by relative path
     // because creduce will invoke us in some other directory with
     // a copy thereof.
-    let (gen_cmd, mut args) = format_gen_cmd(rs_file, "$(pwd)")?;
+    let (gen_cmd, mut args) = format_gen_cmd(rs_file, "$(pwd)", extra_clang_args)?;
     let args = args.join(" ");
     let content = format!(
         indoc! {"
