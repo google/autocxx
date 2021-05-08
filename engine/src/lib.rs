@@ -475,8 +475,8 @@ pub fn preprocess(
     // that's not on the path, things should just work. We also check `CXX`,
     // since some users may have set that.
     let clang = std::env::var("CLANG_PATH")
-        .or(std::env::var("CXX"))
-        .unwrap_or("clang++".to_string());
+        .or_else(|_| std::env::var("CXX"))
+        .unwrap_or_else(|_| "clang++".to_string());
     let mut cmd = Command::new(clang);
     cmd.arg("-E");
     cmd.arg("-C");
