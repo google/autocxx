@@ -29,7 +29,7 @@ use crate::{
 };
 use std::collections::{HashMap, HashSet};
 
-use autocxx_parser::{TypeConfig, UnsafePolicy};
+use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use function_wrapper::{FunctionWrapper, FunctionWrapperPayload, TypeConversionPolicy};
 use proc_macro2::Span;
 use syn::{
@@ -124,7 +124,7 @@ pub(crate) struct FnAnalyzer<'a> {
     type_converter: TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
-    type_config: &'a TypeConfig,
+    config: &'a IncludeCppConfig,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     generate_utilities: bool,
 }
@@ -135,15 +135,15 @@ impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: Vec<Api<PodAnalysis>>,
         unsafe_policy: UnsafePolicy,
-        type_database: &'a TypeConfig,
+        config: &'a IncludeCppConfig,
     ) -> Vec<Api<FnAnalysis>> {
         let mut me = Self {
             unsafe_policy,
             rust_name_tracker: RustNameTracker::new(),
             extra_apis: Vec::new(),
-            type_converter: TypeConverter::new(type_database, &apis),
+            type_converter: TypeConverter::new(config, &apis),
             bridge_name_tracker: BridgeNameTracker::new(),
-            type_config: type_database,
+            config,
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             generate_utilities: Self::should_generate_utilities(&apis),
@@ -273,7 +273,7 @@ impl<'a> FnAnalyzer<'a> {
     }
 
     fn is_on_allowlist(&self, type_name: &QualifiedName) -> bool {
-        self.type_config.is_on_allowlist(&type_name.to_cpp_name())
+        self.config.is_on_allowlist(&type_name.to_cpp_name())
     }
 
     fn should_be_unsafe(&self) -> bool {

@@ -154,10 +154,8 @@ pub(crate) fn build_with_existing_parsed_file(
     let mut builder = cc::Build::new();
     builder.cpp(true);
     let mut generated_rs = Vec::new();
-    for include_cpp in parsed_file.get_autocxxes() {
-        for inc_dir in include_cpp.include_dirs() {
-            builder.include(inc_dir);
-        }
+    builder.includes(parsed_file.include_dirs());
+    for include_cpp in parsed_file.get_cpp_buildables() {
         let generated_code = include_cpp
             .generate_h_and_cxx()
             .map_err(BuilderError::InvalidCxx)?;
@@ -170,10 +168,13 @@ pub(crate) fn build_with_existing_parsed_file(
             }
 
             write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
-            let fname = include_cpp.get_rs_filename();
-            let rs = include_cpp.generate_rs();
-            generated_rs.push(write_rs_to_file(&rsdir, &fname, rs)?);
         }
+    }
+
+    for include_cpp in parsed_file.get_rs_buildables() {
+        let fname = include_cpp.get_rs_filename();
+        let rs = include_cpp.generate_rs();
+        generated_rs.push(write_rs_to_file(&rsdir, &fname, rs)?);
     }
     if counter == 0 {
         Err(BuilderError::NoIncludeCxxMacrosFound)

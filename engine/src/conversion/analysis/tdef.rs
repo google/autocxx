@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-use autocxx_parser::TypeConfig;
+use autocxx_parser::IncludeCppConfig;
 use syn::ItemType;
 
 use crate::{
@@ -42,10 +42,10 @@ impl AnalysisPhase for TypedefAnalysis {
 
 #[allow(clippy::needless_collect)] // we need the extra collect because the closure borrows extra_apis
 pub(crate) fn convert_typedef_targets(
-    type_config: &TypeConfig,
+    config: &IncludeCppConfig,
     apis: Vec<UnanalyzedApi>,
 ) -> Vec<Api<TypedefAnalysis>> {
-    let mut type_converter = TypeConverter::new(type_config, &apis);
+    let mut type_converter = TypeConverter::new(config, &apis);
     let mut extra_apis = Vec::new();
     let mut problem_apis = Vec::new();
     let new_apis = apis

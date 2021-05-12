@@ -17,6 +17,7 @@
 // limitations under the License.
 
 mod conversion;
+mod cxxbridge;
 mod known_types;
 mod parse_callbacks;
 mod parse_file;
@@ -32,6 +33,7 @@ mod integration_tests;
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use parse_callbacks::AutocxxParseCallbacks;
+use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
 use std::{
     collections::hash_map::DefaultHasher,
@@ -294,7 +296,7 @@ impl IncludeCppEngine {
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
-        if let Some(allowlist) = self.config.type_config.bindgen_allowlist() {
+        if let Some(allowlist) = self.config.bindgen_allowlist() {
             for a in allowlist {
                 // TODO - allowlist type/functions/separately
                 builder = builder
@@ -331,6 +333,12 @@ impl IncludeCppEngine {
         }
     }
 
+    /// Returns the name of the mod which this `include_cpp!` will generate.
+    /// Can and should be used to ensure multiple mods in a file don't conflict.
+    pub fn get_mod_name(&self) -> String {
+        self.config.get_mod_name().to_string()
+    }
+
     fn parse_bindings(&self, bindings: bindgen::Bindings) -> Result<ItemMod> {
         // This bindings object is actually a TokenStream internally and we're wasting
         // effort converting to and from string. We could enhance the bindgen API
@@ -363,6 +371,7 @@ impl IncludeCppEngine {
             State::Generated(_) => panic!("Only call generate once"),
         }
 
+        let mod_name = self.config.get_mod_name();
         let mut builder = self.make_bindgen_builder(&inc_dirs, &extra_clang_args);
         if let Some(dep_recorder) = dep_recorder {
             builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
@@ -375,7 +384,7 @@ impl IncludeCppEngine {
         let bindings = builder.generate().map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
 
-        let converter = BridgeConverter::new(&self.config.inclusions, &self.config.type_config);
+        let converter = BridgeConverter::new(&self.config.inclusions, &self.config);
 
         let conversion = converter
             .convert(bindings, self.config.unsafe_policy.clone(), header_contents)
@@ -386,7 +395,7 @@ impl IncludeCppEngine {
             #[allow(dead_code)]
             #[allow(non_upper_case_globals)]
             #[allow(non_camel_case_types)]
-            mod ffi {
+            mod #mod_name {
             }
         };
         new_bindings.content.as_mut().unwrap().1.append(&mut items);
@@ -402,33 +411,10 @@ impl IncludeCppEngine {
         Ok(())
     }
 
-    /// Generate C++-side bindings for these APIs. Call `generate` first.
-    pub fn generate_h_and_cxx(&self) -> Result<GeneratedCpp, cxx_gen::Error> {
-        let mut files = Vec::new();
-        match &self.state {
-            State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
-            State::NotGenerated => panic!("Call generate() first"),
-            State::Generated(gen_results) => {
-                let rs = gen_results.item_mod.to_token_stream();
-                let opt = cxx_gen::Opt::default();
-                let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
-                files.push(CppFilePair {
-                    header: cxx_generated.header,
-                    header_name: "cxxgen.h".to_string(),
-                    implementation: Some(cxx_generated.implementation),
-                });
-                if let Some(cpp_file_pair) = &gen_results.cpp {
-                    files.push(cpp_file_pair.clone());
-                }
-            }
-        };
-        Ok(GeneratedCpp(files))
-    }
-
     /// Return the include directories used for this include_cpp invocation.
-    pub fn include_dirs(&self) -> &Vec<PathBuf> {
+    fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
         match &self.state {
-            State::Generated(gen_results) => &gen_results.inc_dirs,
+            State::Generated(gen_results) => gen_results.inc_dirs.iter(),
             _ => panic!("Must call generate() before include_dirs()"),
         }
     }
@@ -446,6 +432,35 @@ impl IncludeCppEngine {
             let tp = tf.into_temp_path();
             preprocess(&tp, &PathBuf::from(output_path), inc_dirs, extra_clang_args).unwrap();
         }
+    }
+}
+
+pub fn do_cxx_cpp_generation(rs: TokenStream2) -> Result<CppFilePair, cxx_gen::Error> {
+    let opt = cxx_gen::Opt::default();
+    let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
+    Ok(CppFilePair {
+        header: cxx_generated.header,
+        header_name: "cxxgen.h".into(),
+        implementation: Some(cxx_generated.implementation),
+    })
+}
+
+impl CppBuildable for IncludeCppEngine {
+    /// Generate C++-side bindings for these APIs. Call `generate` first.
+    fn generate_h_and_cxx(&self) -> Result<GeneratedCpp, cxx_gen::Error> {
+        let mut files = Vec::new();
+        match &self.state {
+            State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
+            State::NotGenerated => panic!("Call generate() first"),
+            State::Generated(gen_results) => {
+                let rs = gen_results.item_mod.to_token_stream();
+                files.push(do_cxx_cpp_generation(rs)?);
+                if let Some(cpp_file_pair) = &gen_results.cpp {
+                    files.push(cpp_file_pair.clone());
+                }
+            }
+        };
+        Ok(GeneratedCpp(files))
     }
 }
 

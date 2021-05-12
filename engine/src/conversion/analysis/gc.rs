@@ -14,7 +14,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use autocxx_parser::TypeConfig;
+use autocxx_parser::IncludeCppConfig;
 
 use crate::{conversion::api::Api, types::QualifiedName};
 
@@ -39,13 +39,13 @@ use super::fun::FnAnalysis;
 ///    APIs either.
 pub(crate) fn filter_apis_by_following_edges_from_allowlist(
     mut apis: Vec<Api<FnAnalysis>>,
-    type_config: &TypeConfig,
+    config: &IncludeCppConfig,
 ) -> Vec<Api<FnAnalysis>> {
     let mut todos: Vec<_> = apis
         .iter()
         .filter(|api| {
             let tnforal = api.typename_for_allowlist();
-            type_config.is_on_allowlist(&tnforal.to_cpp_name())
+            config.is_on_allowlist(&tnforal.to_cpp_name())
         })
         .map(Api::name)
         .collect();

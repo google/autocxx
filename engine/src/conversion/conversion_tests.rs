@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx_parser::{TypeConfig, UnsafePolicy};
+use autocxx_parser::UnsafePolicy;
 #[allow(unused_imports)]
 use syn::parse_quote;
 use syn::ItemMod;
@@ -30,7 +30,7 @@ use super::BridgeConverter;
 
 #[allow(dead_code)]
 fn do_test(input: ItemMod) {
-    let tc = TypeConfig::new_for_test();
+    let tc = parse_quote! {};
     let bc = BridgeConverter::new(&[], &tc);
     let inclusions = "".into();
     bc.convert(input, UnsafePolicy::AllFunctionsSafe, inclusions)

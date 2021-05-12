@@ -21,7 +21,7 @@ use crate::{
     known_types::known_types,
     types::{make_ident, Namespace, QualifiedName},
 };
-use autocxx_parser::TypeConfig;
+use autocxx_parser::IncludeCppConfig;
 use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
 use syn::{
@@ -103,11 +103,11 @@ pub(crate) struct TypeConverter<'a> {
     typedefs: HashMap<QualifiedName, Type>,
     concrete_templates: HashMap<String, QualifiedName>,
     forward_declarations: HashSet<QualifiedName>,
-    config: &'a TypeConfig,
+    config: &'a IncludeCppConfig,
 }
 
 impl<'a> TypeConverter<'a> {
-    pub(crate) fn new<A: AnalysisPhase>(config: &'a TypeConfig, apis: &[Api<A>]) -> Self
+    pub(crate) fn new<A: AnalysisPhase>(config: &'a IncludeCppConfig, apis: &[Api<A>]) -> Self
     where
         A::TypedefAnalysis: TypedefTarget,
     {

@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{Error as EngineError, IncludeCppEngine, RebuildDependencyRecorder};
+use crate::{
+    cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
+    RebuildDependencyRecorder,
+};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use std::{fmt::Display, io::Read, path::PathBuf};
+use std::{collections::HashSet, fmt::Display, io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
 use syn::Item;
 
@@ -36,6 +39,9 @@ pub enum ParseError {
     /// over. It could also cover errors in your syntax of the `include_cpp`
     /// macro or the directives inside.
     AutocxxCodegenError(EngineError),
+    /// There are two or more [autocxx::include_cpp] macros with the same
+    /// mod name.
+    ConflictingModNames,
 }
 
 impl Display for ParseError {
@@ -44,9 +50,10 @@ impl Display for ParseError {
             ParseError::FileOpen(err) => write!(f, "Unable to open file: {}", err)?,
             ParseError::FileRead(err) => write!(f, "Unable to read file: {}", err)?,
             ParseError::Syntax(err) => write!(f, "Syntax error parsing Rust file: {}", err)?,
-            ParseError::AutocxxCodegenError(err) => {
-                write!(f, "Unable to parse include_cpp! macro: {}", err)?
-            }
+            ParseError::AutocxxCodegenError(err) =>
+                write!(f, "Unable to parse include_cpp! macro: {}", err)?,
+            ParseError::ConflictingModNames =>
+                write!(f, "There are two or more include_cpp! macros with the same output mod name. Use name!")?,
         }
         Ok(())
     }
@@ -66,22 +73,31 @@ pub fn parse_file<P1: AsRef<Path>>(rs_file: P1) -> Result<ParsedFile, ParseError
 fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
     let mut results = Vec::new();
     for item in source.items {
-        if let Item::Macro(ref mac) = item {
-            if mac
-                .mac
-                .path
-                .segments
-                .last()
-                .map(|s| s.ident == "include_cpp")
-                .unwrap_or(false)
+        results.push(match item {
+            Item::Macro(mac)
+                if mac
+                    .mac
+                    .path
+                    .segments
+                    .last()
+                    .map(|s| s.ident == "include_cpp")
+                    .unwrap_or(false) =>
             {
-                let include_cpp = crate::IncludeCppEngine::new_from_syn(mac.mac.clone())
-                    .map_err(ParseError::AutocxxCodegenError)?;
-                results.push(Segment::Autocxx(include_cpp));
-                continue;
+                Segment::Autocxx(
+                    crate::IncludeCppEngine::new_from_syn(mac.mac.clone())
+                        .map_err(ParseError::AutocxxCodegenError)?,
+                )
             }
-        }
-        results.push(Segment::Other(item));
+            Item::Mod(itm)
+                if itm
+                    .attrs
+                    .iter()
+                    .any(|attr| attr.path.to_token_stream().to_string() == "cxx :: bridge") =>
+            {
+                Segment::Cxx(CxxBridge::from(itm))
+            }
+            _ => Segment::Other(item),
+        });
     }
     Ok(ParsedFile(results))
 }
@@ -95,23 +111,47 @@ pub struct ParsedFile(Vec<Segment>);
 #[allow(clippy::large_enum_variant)]
 enum Segment {
     Autocxx(IncludeCppEngine),
+    Cxx(CxxBridge),
     Other(Item),
+}
+
+pub trait CppBuildable {
+    fn generate_h_and_cxx(&self) -> Result<GeneratedCpp, cxx_gen::Error>;
 }
 
 impl ParsedFile {
     /// Get all the autocxxes in this parsed file.
-    pub fn get_autocxxes(&self) -> impl Iterator<Item = &IncludeCppEngine> {
+    pub fn get_rs_buildables(&self) -> impl Iterator<Item = &IncludeCppEngine> {
         self.0.iter().filter_map(|s| match s {
             Segment::Autocxx(includecpp) => Some(includecpp),
-            Segment::Other(_) => None,
+            _ => None,
         })
     }
 
-    pub fn get_autocxxes_mut(&mut self) -> impl Iterator<Item = &mut IncludeCppEngine> {
+    /// Get all items which can result in C++ code
+    pub fn get_cpp_buildables(&self) -> impl Iterator<Item = &dyn CppBuildable> {
+        self.0.iter().filter_map(|s| match s {
+            Segment::Autocxx(includecpp) => Some(includecpp as &dyn CppBuildable),
+            Segment::Cxx(cxxbridge) => Some(cxxbridge as &dyn CppBuildable),
+            _ => None,
+        })
+    }
+
+    fn get_autocxxes_mut(&mut self) -> impl Iterator<Item = &mut IncludeCppEngine> {
         self.0.iter_mut().filter_map(|s| match s {
             Segment::Autocxx(includecpp) => Some(includecpp),
-            Segment::Other(_) => None,
+            _ => None,
         })
+    }
+
+    pub fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
+        self.0
+            .iter()
+            .filter_map(|s| match s {
+                Segment::Autocxx(includecpp) => Some(includecpp.include_dirs()),
+                _ => None,
+            })
+            .flatten()
     }
 
     pub fn resolve_all(
@@ -120,6 +160,7 @@ impl ParsedFile {
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     ) -> Result<(), ParseError> {
+        let mut mods_found = HashSet::new();
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
             dep_recorder.map(Rc::from);
         for include_cpp in self.get_autocxxes_mut() {
@@ -131,6 +172,9 @@ impl ParsedFile {
                     inner_dep_recorder.clone(),
                 ))),
             };
+            if !mods_found.insert(include_cpp.get_mod_name()) {
+                return Err(ParseError::ConflictingModNames);
+            }
             include_cpp
                 .generate(autocxx_inc.clone(), extra_clang_args, dep_recorder)
                 .map_err(ParseError::AutocxxCodegenError)?
@@ -148,6 +192,7 @@ impl ToTokens for ParsedFile {
                     let these_tokens = autocxx.generate_rs();
                     tokens.extend(these_tokens);
                 }
+                Segment::Cxx(itemmod) => itemmod.to_tokens(tokens),
             }
         }
     }
