@@ -4964,12 +4964,8 @@ fn test_blocklist_not_overly_broad() {
 }
 
 #[test]
-fn test_stringview_ignored() {
-    // Test that APIs using std::string_view are ignored but do not otherwise cause errors.
-    // This is a regression test: We used to blocklist std::string_view but still import APIs that
-    // use it, which caused cxx to complain that it didn't know about the type.
-    // Once we actually support std::string_view, this test can be extended to actually call
-    // take_string_view().
+fn test_stringview() {
+    // Test that APIs using std::string_view do not otherwise cause errors.
     let hdr = indoc! {"
         #include <string_view>
         #include <string>
@@ -4985,9 +4981,7 @@ fn test_stringview_ignored() {
         &[],
         None,
         &["-std=c++17"],
-        Some(make_string_finder(
-            ["take_string_view", "return_string_view", "std::string_view"].to_vec(),
-        )),
+        None,
     );
 }
 
