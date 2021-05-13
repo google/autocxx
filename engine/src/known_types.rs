@@ -97,9 +97,18 @@ impl TypeDetails {
     }
 
     fn to_type_path(&self) -> TypePath {
-        let segs = self.rs_name.split("::").map(make_ident);
-        parse_quote! {
-            #(#segs)::*
+        let mut segs = self.rs_name.split("::").peekable();
+        if segs.peek().map(|seg| seg.is_empty()).unwrap_or_default() {
+            segs.next();
+            let segs = segs.into_iter().map(make_ident);
+            parse_quote! {
+                ::#(#segs)::*
+            }
+        } else {
+            let segs = segs.into_iter().map(make_ident);
+            parse_quote! {
+                #(#segs)::*
+            }
         }
     }
 
@@ -356,7 +365,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new("f32", "float", Behavior::CByValue, None));
     db.insert(TypeDetails::new("f64", "double", Behavior::CByValue, None));
     db.insert(TypeDetails::new(
-        "std::os::raw::c_char",
+        "::std::os::raw::c_char",
         "char",
         Behavior::CByValue,
         None,

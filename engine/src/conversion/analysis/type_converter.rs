@@ -362,7 +362,7 @@ impl<'a> TypeConverter<'a> {
         // be a plain value. We should detect and abort.
         Ok(elem.map(|elem| match mutability {
             Some(_) => Type::Path(parse_quote! {
-                std::pin::Pin < & #mutability #elem >
+                ::std::pin::Pin < & #mutability #elem >
             }),
             None => Type::Reference(parse_quote! {
                 & #elem
