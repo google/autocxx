@@ -125,7 +125,12 @@ fn run_test(
     .unwrap()
 }
 
+// A function applied to the resultant generated Rust code
+// which can be used to inspect that code.
+type RustCodeChecker = Box<dyn FnOnce(syn::File) -> Result<(), TestError>>;
+
 /// A positive test, we expect to pass.
+#[allow(clippy::too_many_arguments)] // least typing for each test
 fn run_test_ex(
     cxx_code: &str,
     header_code: &str,
@@ -134,9 +139,7 @@ fn run_test_ex(
     generate_pods: &[&str],
     extra_directives: Option<TokenStream>,
     extra_clang_args: &[&str],
-    // A function applied to the resultant generated Rust code
-    // which can be used to inspect that code.
-    rust_code_checker: Option<Box<dyn FnOnce(syn::File) -> Result<(), TestError>>>,
+    rust_code_checker: Option<RustCodeChecker>,
 ) {
     do_run_test(
         cxx_code,
@@ -184,6 +187,7 @@ enum TestError {
     RsCodeExaminationFail,
 }
 
+#[allow(clippy::too_many_arguments)] // least typing for each test
 fn do_run_test(
     cxx_code: &str,
     header_code: &str,
@@ -192,7 +196,7 @@ fn do_run_test(
     generate_pods: &[&str],
     extra_directives: Option<TokenStream>,
     extra_clang_args: &[&str],
-    rust_code_checker: Option<Box<dyn FnOnce(syn::File) -> Result<(), TestError>>>,
+    rust_code_checker: Option<RustCodeChecker>,
 ) -> Result<(), TestError> {
     // Step 1: Expand the snippet of Rust code into an entire
     //         program including include_cxx!
@@ -239,7 +243,7 @@ fn do_run_test_manual<F>(
     header_code: &str,
     rust_code_generator: F,
     extra_clang_args: &[&str],
-    rust_code_checker: Option<Box<dyn FnOnce(syn::File) -> Result<(), TestError>>>,
+    rust_code_checker: Option<RustCodeChecker>,
 ) -> Result<(), TestError>
 where
     F: FnOnce(&'static str) -> TokenStream,
@@ -4787,25 +4791,20 @@ fn make_error_finder(error_symbol: &str) -> Box<dyn FnOnce(syn::File) -> Result<
     let error_symbol = error_symbol.to_string();
     Box::new(move |f| {
         let ffi_items = find_ffi_items(f)?;
-        // Ensure there's some kind of struct entry for this symboll
-        let foo = ffi_items
+        // Ensure there's some kind of struct entry for this symbol
+        let error_item = ffi_items
             .into_iter()
             .filter_map(|i| match i {
-                Item::Struct(its) if its.ident.to_string() == error_symbol => Some(its),
+                Item::Struct(its) if its.ident == error_symbol => Some(its),
                 _ => None,
             })
             .next()
             .ok_or(TestError::RsCodeExaminationFail)?;
         // Ensure doc attribute
-        foo.attrs
+        error_item
+            .attrs
             .into_iter()
-            .filter(|a| {
-                a.path
-                    .get_ident()
-                    .filter(|p| p.to_string() == "doc")
-                    .is_some()
-            })
-            .next()
+            .find(|a| a.path.get_ident().filter(|p| *p == "doc").is_some())
             .ok_or(TestError::RsCodeExaminationFail)?;
         Ok(())
     })
@@ -4881,7 +4880,7 @@ fn test_error_generated_for_array_dependent_method() {
 }
 
 /// Returns a closure which simply hunts for a given string in the results
-fn make_string_finder<'a>(
+fn make_string_finder(
     error_texts: Vec<&str>,
 ) -> Box<dyn FnOnce(syn::File) -> Result<(), TestError> + '_> {
     Box::new(|f| {
