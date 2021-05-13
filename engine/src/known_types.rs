@@ -21,6 +21,16 @@ use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use syn::{parse_quote, Type, TypePath, TypePtr};
 
+/// Extra things to include in the bindgen blocklist.
+/// This is worked out basically using trial and error.
+/// Excluding std* and rust* is obvious, but the other items...
+/// in theory bindgen ought to be smart enough to work out that
+/// they're not used and therefore not generate code for them.
+/// But it doesm unless we blocklist them. This is obviously
+/// a bit sensitive to the particular STL in use so one day
+/// it would be good to dig into bindgen's behavior here - TODO.
+const BINDGEN_BLOCKLIST: &[&str] = &["__gnu.*", ".*mbstate_t.*"];
+
 //// The behavior of the type.
 #[derive(Debug)]
 enum Behavior {
@@ -183,26 +193,8 @@ impl TypeDatabase {
     /// We strip off and ignore
     /// any PathArguments within this TypePath - callers should
     /// put them back again if needs be.
-    pub(crate) fn consider_substitution(
-        &self,
-        tn: &QualifiedName,
-    ) -> Result<Option<TypePath>, ConvertError> {
-        match self.get(&tn) {
-            None => {
-                // Only allow types from std:: and rust:: which we specifically understand,
-                // because we've told bindgen to block all the rest.
-                if tn
-                    .ns_segment_iter()
-                    .next()
-                    .filter(|seg| BINDGEN_BLOCKLIST_NAMESPACES.iter().any(|ns| ns == seg))
-                    .is_some()
-                {
-                    return Err(ConvertError::UnacceptableSpecialNamespaceType(tn.clone()));
-                }
-                Ok(None)
-            }
-            Some(td) => Ok(Some(td.to_type_path())),
-        }
+    pub(crate) fn consider_substitution(&self, tn: &QualifiedName) -> Option<TypePath> {
+        self.get(&tn).map(|td| td.to_type_path())
     }
 
     pub(crate) fn special_cpp_name(&self, rs: &QualifiedName) -> Option<String> {
@@ -215,6 +207,23 @@ impl TypeDatabase {
 
     pub(crate) fn known_type_type_path(&self, ty: &QualifiedName) -> Option<TypePath> {
         self.get(ty).map(|td| td.to_type_path())
+    }
+
+    /// Get the list of types to give to bindgen to ask it _not_ to
+    /// generate code for.
+    pub(crate) fn get_initial_blocklist(&self) -> impl Iterator<Item = &str> + '_ {
+        self.by_rs_name
+            .iter()
+            .filter_map(|(_, td)| match td.behavior {
+                Behavior::CByValue | Behavior::CVariableLengthByValue | Behavior::CVoid => None,
+                Behavior::CxxContainerByValueSafe
+                | Behavior::RustStr
+                | Behavior::RustString
+                | Behavior::RustByValue
+                | Behavior::CxxString
+                | Behavior::CxxContainerNotByValueSafe => Some(td.cpp_name.as_str()),
+            })
+            .chain(BINDGEN_BLOCKLIST.iter().copied())
     }
 
     /// Whether this is one of the ctypes (mostly variable length integers)
@@ -378,30 +387,6 @@ fn create_type_database() -> TypeDatabase {
         Some("std::os::raw::c_void".into()),
     ));
     db
-}
-
-/// Namespaces which we pass to bindgen's blocklist.
-/// This is because we have special knowledge and handling of
-/// types in those namespaces.
-const BINDGEN_BLOCKLIST_NAMESPACES: &[&str] = &["std", "rust"];
-
-/// Extra things to include in the bindgen blocklist.
-/// This is worked out basically using trial and error.
-/// Excluding std* and rust* is obvious, but the other items...
-/// in theory bindgen ought to be smart enough to work out that
-/// they're not used and therefore not generate code for them.
-/// But it doesm unless we blocklist them. This is obviously
-/// a bit sensitive to the particular STL in use so one day
-/// it would be good to dig into bindgen's behavior here - TODO.
-const BINDGEN_BLOCKLIST: &[&str] = &["__gnu.*", ".*mbstate_t.*"];
-
-/// Get the list of types to give to bindgen to ask it _not_ to
-/// generate code for.
-pub(crate) fn get_initial_blocklist() -> impl Iterator<Item = String> {
-    BINDGEN_BLOCKLIST_NAMESPACES
-        .iter()
-        .map(|ns| format!("{}::.*", ns))
-        .chain(BINDGEN_BLOCKLIST.iter().map(|s| s.to_string()))
 }
 
 /// If a given type lacks a copy constructor, we should always use

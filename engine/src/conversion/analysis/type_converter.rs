@@ -257,7 +257,7 @@ impl<'a> TypeConverter<'a> {
 
         // Now let's see if it's a known type.
         // (We may entirely reject some types at this point too.)
-        let mut typ = match known_types().consider_substitution(&tn)? {
+        let mut typ = match known_types().consider_substitution(&tn) {
             Some(mut substitute_type) => {
                 if let Some(last_seg_args) =
                     typ.path.segments.into_iter().last().map(|ps| ps.arguments)

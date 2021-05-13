@@ -97,7 +97,7 @@ impl ByValueChecker {
                         TypedefKind::Type(type_item) => match type_item.ty.as_ref() {
                             Type::Path(typ) => {
                                 let target_tn = QualifiedName::from_type_path(&typ);
-                                known_types().consider_substitution(&target_tn)?
+                                known_types().consider_substitution(&target_tn)
                             }
                             _ => None,
                         },
