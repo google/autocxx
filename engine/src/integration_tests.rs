@@ -5221,6 +5221,32 @@ fn test_generate_all() {
 }
 
 #[test]
+fn test_std_thing() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace std {
+            struct A {
+                uint8_t a;
+            };
+        }
+        typedef char daft;
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &[],
+        &[],
+        Some(quote! {
+            generate_all!()
+        }),
+        &[],
+        None,
+    );
+}
+
+#[test]
 fn test_two_mods() {
     let hdr = indoc! {"
         #include <cstdint>
