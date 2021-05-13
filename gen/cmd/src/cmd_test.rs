@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{convert::TryInto, fs::File, io::Write, path::PathBuf};
+use std::{convert::TryInto, fs::File, io::Write, path::Path};
 
 use assert_cmd::Command;
 use tempdir::TempDir;
@@ -79,7 +79,7 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn write_to_file(dir: &PathBuf, filename: &str, content: &[u8]) {
+fn write_to_file(dir: &Path, filename: &str, content: &[u8]) {
     let path = dir.join(filename);
     let mut f = File::create(&path).expect("Unable to create file");
     f.write_all(content).expect("Unable to write file");
