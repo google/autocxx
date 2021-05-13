@@ -21,16 +21,6 @@ use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use syn::{parse_quote, Type, TypePath, TypePtr};
 
-/// Extra things to include in the bindgen blocklist.
-/// This is worked out basically using trial and error.
-/// Excluding std* and rust* is obvious, but the other items...
-/// in theory bindgen ought to be smart enough to work out that
-/// they're not used and therefore not generate code for them.
-/// But it doesm unless we blocklist them. This is obviously
-/// a bit sensitive to the particular STL in use so one day
-/// it would be good to dig into bindgen's behavior here - TODO.
-const BINDGEN_BLOCKLIST: &[&str] = &["__gnu.*", ".*mbstate_t.*"];
-
 //// The behavior of the type.
 #[derive(Debug)]
 enum Behavior {
@@ -214,16 +204,7 @@ impl TypeDatabase {
     pub(crate) fn get_initial_blocklist(&self) -> impl Iterator<Item = &str> + '_ {
         self.by_rs_name
             .iter()
-            .filter_map(|(_, td)| match td.behavior {
-                Behavior::CByValue | Behavior::CVariableLengthByValue | Behavior::CVoid => None,
-                Behavior::CxxContainerByValueSafe
-                | Behavior::RustStr
-                | Behavior::RustString
-                | Behavior::RustByValue
-                | Behavior::CxxString
-                | Behavior::CxxContainerNotByValueSafe => Some(td.cpp_name.as_str()),
-            })
-            .chain(BINDGEN_BLOCKLIST.iter().copied())
+            .filter_map(|(_, td)| td.get_prelude_entry().map(|_| td.cpp_name.as_str()))
     }
 
     /// Whether this is one of the ctypes (mostly variable length integers)
