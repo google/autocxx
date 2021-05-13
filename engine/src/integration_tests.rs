@@ -5167,8 +5167,6 @@ fn test_issue_470() {
         namespace std {
         template <bool, typename _Iftrue, typename _Iffalse> struct a;
         }
-        namespace {
-        namespace {
         template <typename> struct b { template <typename> struct c; };
         struct d : b<d> {};
         struct e : b<e> {};
@@ -5181,8 +5179,6 @@ fn test_issue_470() {
                                 std::a<f::c<i...>::k, f, std::a<g::c<i...>::k, g, h>>>>
               l;
         };
-        } // namespace
-        } // namespace
     "};
     let rs = quote! {};
     run_test_ex(
