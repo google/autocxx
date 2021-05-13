@@ -4055,6 +4055,7 @@ fn test_issues_217_222() {
     let hdr = indoc! {"
     #include <string>
     #include <cstdint>
+    #include <cstddef>
 
     template <typename STRING_TYPE> class BasicStringPiece {
         public:
