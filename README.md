@@ -10,28 +10,19 @@ The intention is that it has all the fluent safety from [cxx](https://github.com
 
 # Overview
 
-```cpp
-namespace base {
-  class Bob {
-  public:
-      Bob(std::string name);
-      ...
-      void do_a_thing() const;
-  };
-}
-```
-
 ```rust
-use autocxx::include_cpp;
-
-include_cpp!{
-    #include "base/bob.h"
+autocxx::include_cpp! {
+    #include "url/origin.h"
+    generate!("url::Origin")
     safety!(unsafe_ffi)
-    generate!("base::Bob")
 }
 
-let a = ffi::base::Bob::make_unique("hello");
-a.do_a_thing();
+fn main() {
+    let o = ffi::url::Origin::CreateFromNormalizedTuple("https",
+        "google.com", 443);
+    let uri = o.Serialize();
+    println!("URI is {}", uri.to_str().unwrap());
+}
 ```
 
 See [demo/src/main.rs](demo/src/main.rs) for a basic example, and the [examples](examples/) directory for more.
