@@ -233,16 +233,19 @@ const CREDUCE_STANDARD_ARGS: &[&str] = &["--remove-pass", "pass_line_markers"];
 
 fn run_creduce<'a>(
     creduce_cmd: &str,
-    interestingness_test: &Path,
-    concat_path: &Path,
+    interestingness_test: &'a Path,
+    concat_path: &'a Path,
     creduce_args: impl Iterator<Item = &'a str>,
 ) {
     announce_progress("creduce");
+    let args = std::iter::once(interestingness_test.to_str().unwrap())
+        .chain(std::iter::once(concat_path.to_str().unwrap()))
+        .chain(CREDUCE_STANDARD_ARGS.iter().copied())
+        .chain(creduce_args)
+        .collect::<Vec<_>>();
+    println!("Command: {} {}", creduce_cmd, args.join(" "));
     Command::new(creduce_cmd)
-        .arg(interestingness_test.to_str().unwrap())
-        .arg(concat_path.to_str().unwrap())
-        .args(CREDUCE_STANDARD_ARGS)
-        .args(creduce_args)
+        .args(args)
         .status()
         .expect("failed to creduce");
 }
