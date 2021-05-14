@@ -4963,12 +4963,8 @@ fn test_blocklist_not_overly_broad() {
 }
 
 #[test]
-fn test_stringview_ignored() {
-    // Test that APIs using std::string_view are ignored but do not otherwise cause errors.
-    // This is a regression test: We used to blocklist std::string_view but still import APIs that
-    // use it, which caused cxx to complain that it didn't know about the type.
-    // Once we actually support std::string_view, this test can be extended to actually call
-    // take_string_view().
+fn test_stringview() {
+    // Test that APIs using std::string_view do not otherwise cause errors.
     let hdr = indoc! {"
         #include <string_view>
         #include <string>
@@ -4984,9 +4980,7 @@ fn test_stringview_ignored() {
         &[],
         None,
         &["-std=c++17"],
-        Some(make_string_finder(
-            ["take_string_view", "return_string_view", "std::string_view"].to_vec(),
-        )),
+        None,
     );
 }
 
@@ -5172,8 +5166,6 @@ fn test_issue_470() {
         namespace std {
         template <bool, typename _Iftrue, typename _Iffalse> struct a;
         }
-        namespace {
-        namespace {
         template <typename> struct b { template <typename> struct c; };
         struct d : b<d> {};
         struct e : b<e> {};
@@ -5186,8 +5178,6 @@ fn test_issue_470() {
                                 std::a<f::c<i...>::k, f, std::a<g::c<i...>::k, g, h>>>>
               l;
         };
-        } // namespace
-        } // namespace
     "};
     let rs = quote! {};
     run_test_ex(
@@ -5215,6 +5205,32 @@ fn test_generate_all() {
     let rs = quote! {
         assert_eq!(ffi::give_int(), 5);
     };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &[],
+        &[],
+        Some(quote! {
+            generate_all!()
+        }),
+        &[],
+        None,
+    );
+}
+
+#[test]
+fn test_std_thing() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace std {
+            struct A {
+                uint8_t a;
+            };
+        }
+        typedef char daft;
+    "};
+    let rs = quote! {};
     run_test_ex(
         "",
         hdr,

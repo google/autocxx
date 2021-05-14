@@ -134,7 +134,9 @@ impl QualifiedName {
         let mut ns = Namespace::new();
         while let Some(seg) = seg_iter.next() {
             if seg_iter.peek().is_some() {
-                ns = ns.push(seg.to_string());
+                if !seg.to_string().is_empty() {
+                    ns = ns.push(seg.to_string());
+                }
             } else {
                 return Self(ns, seg.to_string());
             }
