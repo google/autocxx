@@ -133,6 +133,12 @@ fn main() {
                 .value_name("CLANG_ARG")
                 .help("Extra arguments to pass to Clang"),
         )
+        .arg(
+            Arg::with_name("clang")
+                .long("clang")
+                .value_name("CLANG_PATH")
+                .help("Path to clang"),
+        )
         .arg(Arg::with_name("creduce-args").last(true).multiple(true))
         .get_matches();
     run(matches).unwrap();
@@ -190,12 +196,14 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         .to_string();
     let gen_cmd = matches.value_of("gen-cmd").unwrap_or(&default_gen_cmd);
     run_sample_gen_cmd(gen_cmd, &rs_path, &tmp_dir.path(), &extra_clang_args)?;
+    let clang = PathBuf::from(matches.value_of("clang-path").unwrap_or("clang++"));
     let interestingness_test = tmp_dir.path().join("test.sh");
     create_interestingness_test(
         gen_cmd,
         &interestingness_test,
         matches.value_of("problem").unwrap(),
         &rs_path,
+        &clang,
         &extra_clang_args,
     )?;
     run_interestingness_test(&interestingness_test);
@@ -277,6 +285,8 @@ fn format_gen_cmd<'a>(
         rs_file.to_str().unwrap().to_string(),
         "--gen-rs-complete".to_string(),
         "--gen-cpp".to_string(),
+        "--generate-exact".to_string(),
+        "2".to_string(),
         "--".to_string(),
     ]
     .to_vec();
@@ -289,20 +299,28 @@ fn create_interestingness_test(
     test_path: &Path,
     problem: &str,
     rs_file: &Path,
+    clang_path: &Path,
     extra_clang_args: &[&str],
 ) -> Result<(), std::io::Error> {
     announce_progress("Creating interestingness test");
     // Ensure we refer to the input header by relative path
     // because creduce will invoke us in some other directory with
     // a copy thereof.
-    let mut args = format_gen_cmd(rs_file, "$(pwd)", extra_clang_args);
-    let args = args.join(" ");
+    let mut gen_args = format_gen_cmd(rs_file, "$(pwd)", extra_clang_args);
+    let gen_args = gen_args.join(" ");
+    let clang_args = extra_clang_args.join(" ");
     let content = format!(
         indoc! {"
         #!/bin/sh
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. {} gen0.cxx && {} -I. {} gen1.cxx && rustc --crate-type rlib --crate-name test gen.complete.rs) | grep \"{}\"  >/dev/null 2>&1
     "},
-        gen_cmd, args, problem
+        gen_cmd,
+        gen_args,
+        clang_path.to_str().unwrap(),
+        clang_args,
+        clang_path.to_str().unwrap(),
+        clang_args,
+        problem
     );
     println!("Interestingness test:\n{}", content);
     {
