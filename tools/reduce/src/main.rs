@@ -112,6 +112,14 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("gen-cmd")
+                .short("g")
+                .long("gen-cmd")
+                .value_name("GEN-CMD")
+                .help("where to find autocxx-gen")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("keep")
                 .short("k")
                 .long("keep-dir")
@@ -173,9 +181,18 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         .values_of("clang-args")
         .unwrap_or_default()
         .collect();
-    run_sample_gen_cmd(&rs_path, &tmp_dir.path(), &extra_clang_args)?;
+    let default_gen_cmd = std::env::current_exe()?
+        .parent()
+        .unwrap()
+        .join("autocxx-gen")
+        .to_str()
+        .unwrap()
+        .to_string();
+    let gen_cmd = matches.value_of("gen-cmd").unwrap_or(&default_gen_cmd);
+    run_sample_gen_cmd(gen_cmd, &rs_path, &tmp_dir.path(), &extra_clang_args)?;
     let interestingness_test = tmp_dir.path().join("test.sh");
     create_interestingness_test(
+        gen_cmd,
         &interestingness_test,
         matches.value_of("problem").unwrap(),
         &rs_path,
@@ -231,18 +248,15 @@ fn run_creduce<'a>(
 }
 
 fn run_sample_gen_cmd(
+    gen_cmd: &str,
     rs_file: &Path,
     tmp_dir: &Path,
     extra_clang_args: &[&str],
 ) -> Result<(), std::io::Error> {
-    let (gen_cmd, args) = format_gen_cmd(rs_file, tmp_dir.to_str().unwrap(), extra_clang_args)?;
+    let args = format_gen_cmd(rs_file, tmp_dir.to_str().unwrap(), extra_clang_args);
     let args = args.collect::<Vec<_>>();
     let args_str = args.join(" ");
-    announce_progress(&format!(
-        "Running sample gen cmd: {} {}",
-        gen_cmd.to_str().unwrap(),
-        args_str
-    ));
+    announce_progress(&format!("Running sample gen cmd: {} {}", gen_cmd, args_str));
     Command::new(gen_cmd).args(args).status()?;
     Ok(())
 }
@@ -251,9 +265,7 @@ fn format_gen_cmd<'a>(
     rs_file: &Path,
     dir: &str,
     extra_clang_args: &'a [&str],
-) -> Result<(PathBuf, impl Iterator<Item = String> + 'a), std::io::Error> {
-    let me = std::env::current_exe()?;
-    let gen = me.parent().unwrap().join("autocxx-gen");
+) -> impl Iterator<Item = String> + 'a {
     let args = [
         "-o".to_string(),
         dir.to_string(),
@@ -265,14 +277,12 @@ fn format_gen_cmd<'a>(
         "--".to_string(),
     ]
     .to_vec();
-    Ok((
-        gen,
-        args.into_iter()
-            .chain(extra_clang_args.iter().map(|s| s.to_string())),
-    ))
+    args.into_iter()
+        .chain(extra_clang_args.iter().map(|s| s.to_string()))
 }
 
 fn create_interestingness_test(
+    gen_cmd: &str,
     test_path: &Path,
     problem: &str,
     rs_file: &Path,
@@ -282,16 +292,14 @@ fn create_interestingness_test(
     // Ensure we refer to the input header by relative path
     // because creduce will invoke us in some other directory with
     // a copy thereof.
-    let (gen_cmd, mut args) = format_gen_cmd(rs_file, "$(pwd)", extra_clang_args)?;
+    let mut args = format_gen_cmd(rs_file, "$(pwd)", extra_clang_args);
     let args = args.join(" ");
     let content = format!(
         indoc! {"
         #!/bin/sh
         ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h) | grep \"{}\"  >/dev/null 2>&1
     "},
-        gen_cmd.to_str().unwrap(),
-        args,
-        problem
+        gen_cmd, args, problem
     );
     println!("Interestingness test:\n{}", content);
     {
