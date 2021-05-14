@@ -35,7 +35,7 @@ Command line utility to minimize autocxx bug cases.
 This is a wrapper for creduce.
 
 Example command-line:
-autocxx-reduce -I my-inc-dir -h my-header -d 'generate!(\"MyClass\")' -k -- --n 64 --remove-pass pass_line_markers
+autocxx-reduce -I my-inc-dir -h my-header -d 'generate!(\"MyClass\")' -k -- --n 64
 "};
 
 fn main() {
@@ -229,7 +229,7 @@ fn print_minimized_case(concat_path: &Path) -> Result<(), std::io::Error> {
 /// Arguments we always pass to creduce. This pass always seems to cause a crash
 /// as far as I can tell, so always exclude it. It may be environment-dependent,
 /// of course, but as I'm the primary user of this tool I am ruthlessly removing it.
-const CREDUCE_STANDARD_ARGS: &[&str] = &["--remove-pass", "pass_line_markers"];
+const CREDUCE_STANDARD_ARGS: &[&str] = &["--remove-pass", "pass_line_markers", "*"];
 
 fn run_creduce<'a>(
     creduce_cmd: &str,
