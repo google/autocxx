@@ -22,10 +22,10 @@ include_cpp! {
     // which means the functions themselves do not need to be marked
     // as unsafe. Other policies are possible.
     safety!(unsafe)
-    // What types and functions we want to generate
-    generate!("R1Interval")
-    generate!("R2Rect")
-    generate!("describe_point")
+    // Attempt to generate bindings for all the C++ APIs we find.
+    // Things are much quicker and more reliable if you provide an allowlist
+    // via lots of directives like: generate!("R2Rect") etc.
+    generate_all!()
 }
 
 // Everything that we care about is inlined, so we don't have to do
