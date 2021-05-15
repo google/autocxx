@@ -19,7 +19,10 @@ mod rust_name_tracker;
 
 use crate::{
     conversion::{
-        analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
+        analysis::{
+            has_attr,
+            type_converter::{add_analysis, TypeConversionContext, TypeConverter},
+        },
         api::TypedefKind,
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
@@ -413,7 +416,7 @@ impl<'a> FnAnalyzer<'a> {
             } else if is_static_method {
                 MethodKind::Static
             } else if param_details.iter().any(|pd| pd.is_virtual) {
-                if Self::has_attr(&fun, "bindgen_pure_virtual") {
+                if has_attr(&fun.attrs, "bindgen_pure_virtual") {
                     MethodKind::PureVirtual
                 } else {
                     MethodKind::Virtual
@@ -462,7 +465,7 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
         // Second, reject any functions handling types which we flake out on.
-        if Self::has_attr(&fun, "bindgen_unused_template_param_in_arg_or_return") {
+        if has_attr(&fun.attrs, "bindgen_unused_template_param_in_arg_or_return") {
             return Err(contextualize_error(ConvertError::UnusedTemplateParam));
         }
 
@@ -827,10 +830,6 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
         (ref_params, ref_return)
-    }
-
-    fn has_attr(fun: &ForeignItemFn, attr_name: &str) -> bool {
-        fun.attrs.iter().any(|at| at.path.is_ident(attr_name))
     }
 }
 
