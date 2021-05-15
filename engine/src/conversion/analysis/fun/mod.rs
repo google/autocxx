@@ -26,7 +26,7 @@ use crate::{
         api::TypedefKind,
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
-        error_reporter::add_api_or_report_error,
+        error_reporter::convert_apis,
     },
     known_types::known_types,
 };
@@ -152,9 +152,7 @@ impl<'a> FnAnalyzer<'a> {
             generate_utilities: Self::should_generate_utilities(&apis),
         };
         let mut results = Vec::new();
-        for api in apis {
-            add_api_or_report_error(api.name(), &mut results, || me.analyze_fn_api(api));
-        }
+        convert_apis(apis, &mut results, |api| me.analyze_fn_api(api));
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }

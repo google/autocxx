@@ -25,8 +25,7 @@ use crate::{
         analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         api::{AnalysisPhase, Api, ApiDetail, TypeKind, TypedefKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
-        convert_error::{ConvertErrorWithContext, ErrorContext},
-        error_reporter::add_api_or_report_error,
+        error_reporter::convert_item_apis,
         ConvertError,
     },
     types::{Namespace, QualifiedName},
@@ -59,31 +58,21 @@ pub(crate) fn analyze_pod_apis(
     let mut extra_apis = Vec::new();
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut results = Vec::new();
-    for api in apis.into_iter() {
-        let id = api.name().get_final_ident();
-        add_api_or_report_error(api.name(), &mut results, || {
-            analyze_pod_api(api, &byvalue_checker, &mut type_converter, &mut extra_apis)
-                .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))
-                .map(Some)
-        })
-    }
+    convert_item_apis(apis, &mut results, |api| {
+        analyze_pod_api(api, &byvalue_checker, &mut type_converter, &mut extra_apis).map(Some)
+    });
     // Conceivably, the process of POD-analysing the first set of APIs could result
     // in us creating new APIs to concretize generic types.
     let mut more_extra_apis = Vec::new();
-
-    for api in extra_apis.into_iter().map(add_analysis) {
-        let id = api.name().get_final_ident();
-        add_api_or_report_error(api.name(), &mut results, || {
-            analyze_pod_api(
-                api,
-                &byvalue_checker,
-                &mut type_converter,
-                &mut more_extra_apis,
-            )
-            .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))
-            .map(Some)
-        })
-    }
+    convert_item_apis(extra_apis, &mut results, |api| {
+        analyze_pod_api(
+            add_analysis(api),
+            &byvalue_checker,
+            &mut type_converter,
+            &mut more_extra_apis,
+        )
+        .map(Some)
+    });
     assert!(more_extra_apis.is_empty());
     Ok(results)
 }

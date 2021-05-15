@@ -48,23 +48,53 @@ where
 /// Run some code which generates an API. Add that API, or if
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
-pub(crate) fn add_api_or_report_error<F, A>(tn: QualifiedName, apis: &mut Vec<Api<A>>, fun: F)
+pub(crate) fn convert_apis<F, A, B>(in_apis: Vec<Api<A>>, out_apis: &mut Vec<Api<B>>, mut fun: F)
 where
-    F: FnOnce() -> Result<Option<Api<A>>, ConvertErrorWithContext>,
+    F: FnMut(Api<A>) -> Result<Option<Api<B>>, ConvertErrorWithContext>,
     A: AnalysisPhase,
+    B: AnalysisPhase,
 {
-    match fun() {
-        Ok(Some(api)) => {
-            apis.push(api);
+    out_apis.extend(in_apis.into_iter().filter_map(|api| {
+        let tn = api.name();
+        match fun(api) {
+            Ok(opt) => opt,
+            Err(ConvertErrorWithContext(err, None)) => {
+                eprintln!("Ignored {}: {}", tn.to_string(), err);
+                None
+            }
+            Err(ConvertErrorWithContext(err, Some(ctx))) => {
+                eprintln!("Ignored {}: {}", tn.to_string(), err);
+                Some(ignored_item(tn.get_namespace(), ctx, err))
+            }
         }
-        Ok(None) => {}
-        Err(ConvertErrorWithContext(err, None)) => {
-            eprintln!("Ignored {}: {}", tn.to_string(), err);
-        }
-        Err(ConvertErrorWithContext(err, Some(ctx))) => {
-            eprintln!("Ignored {}: {}", tn.to_string(), err);
-            push_ignored_item(tn.get_namespace(), ctx, err, apis);
-        }
+    }))
+}
+
+/// Run some code which generates an API for an item (as opposed to
+/// a method). Add that API, or if
+/// anything goes wrong, instead add a note of the problem in our
+/// output API such that users will see documentation for the problem.
+pub(crate) fn convert_item_apis<F, A, B>(
+    in_apis: Vec<Api<A>>,
+    out_apis: &mut Vec<Api<B>>,
+    mut fun: F,
+) where
+    F: FnMut(Api<A>) -> Result<Option<Api<B>>, ConvertError>,
+    A: AnalysisPhase,
+    B: AnalysisPhase,
+{
+    convert_apis(in_apis, out_apis, |api| {
+        let id = api.name().get_final_ident();
+        fun(api).map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))
+    })
+}
+
+fn ignored_item<A: AnalysisPhase>(ns: &Namespace, ctx: ErrorContext, err: ConvertError) -> Api<A> {
+    Api {
+        name: QualifiedName::new(ns, ctx.get_id().clone()),
+        original_name: None,
+        deps: HashSet::new(),
+        detail: ApiDetail::IgnoredItem { err, ctx },
     }
 }
 
@@ -74,10 +104,5 @@ fn push_ignored_item(
     err: ConvertError,
     apis: &mut Vec<Api<impl AnalysisPhase>>,
 ) {
-    apis.push(Api {
-        name: QualifiedName::new(ns, ctx.get_id().clone()),
-        original_name: None,
-        deps: HashSet::new(),
-        detail: ApiDetail::IgnoredItem { err, ctx },
-    });
+    apis.push(ignored_item(ns, ctx, err));
 }
