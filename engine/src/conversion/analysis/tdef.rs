@@ -112,7 +112,9 @@ fn get_replacement_typedef(
     deps: &mut HashSet<QualifiedName>,
 ) -> Result<ApiDetail<TypedefAnalysis>, ConvertErrorWithContext> {
     let mut converted_type = ity.clone();
-    remove_bindgen_attrs(&mut converted_type.attrs);
+    let id = ity.ident.clone();
+    remove_bindgen_attrs(&mut converted_type.attrs)
+        .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))?;
     let type_conversion_results = type_converter.convert_type(
         (*ity.ty).clone(),
         name.get_namespace(),

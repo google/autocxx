@@ -14,6 +14,8 @@
 
 use syn::Attribute;
 
+use super::ConvertError;
+
 pub(crate) mod abstract_types;
 pub(crate) mod ctypes;
 pub(crate) mod fun;
@@ -25,7 +27,13 @@ mod type_converter;
 
 // Remove `bindgen_` attributes. They don't have a corresponding macro defined anywhere,
 // so they will cause compilation errors if we leave them in.
-fn remove_bindgen_attrs(attrs: &mut Vec<Attribute>) {
+// We may return an error if one of the bindgen attributes shows that the
+// item can't be processed.
+fn remove_bindgen_attrs(attrs: &mut Vec<Attribute>) -> Result<(), ConvertError> {
+    if has_attr(&attrs, "bindgen_unused_template_param") {
+        return Err(ConvertError::UnusedTemplateParam);
+    }
+
     fn is_bindgen_attr(attr: &Attribute) -> bool {
         let segments = &attr.path.segments;
         segments.len() == 1
@@ -37,5 +45,10 @@ fn remove_bindgen_attrs(attrs: &mut Vec<Attribute>) {
                 .starts_with("bindgen_")
     }
 
-    attrs.retain(|a| !is_bindgen_attr(a))
+    attrs.retain(|a| !is_bindgen_attr(a));
+    Ok(())
+}
+
+fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
+    attrs.iter().any(|at| at.path.is_ident(attr_name))
 }

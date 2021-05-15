@@ -25,6 +25,7 @@ use crate::{
         analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         api::{AnalysisPhase, Api, ApiDetail, TypeKind, TypedefKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
+        error_reporter::convert_item_apis,
         ConvertError,
     },
     types::{Namespace, QualifiedName},
@@ -56,27 +57,23 @@ pub(crate) fn analyze_pod_apis(
     let byvalue_checker = ByValueChecker::new_from_apis(&apis, config)?;
     let mut extra_apis = Vec::new();
     let mut type_converter = TypeConverter::new(config, &apis);
-    let mut results: Vec<_> = apis
-        .into_iter()
-        .map(|api| analyze_pod_api(api, &byvalue_checker, &mut type_converter, &mut extra_apis))
-        .collect::<Result<Vec<_>, ConvertError>>()?;
+    let mut results = Vec::new();
+    convert_item_apis(apis, &mut results, |api| {
+        analyze_pod_api(api, &byvalue_checker, &mut type_converter, &mut extra_apis).map(Some)
+    });
     // Conceivably, the process of POD-analysing the first set of APIs could result
     // in us creating new APIs to concretize generic types.
     let mut more_extra_apis = Vec::new();
-    let mut more_results = extra_apis
-        .into_iter()
-        .map(add_analysis)
-        .map(|api| {
-            analyze_pod_api(
-                api,
-                &byvalue_checker,
-                &mut type_converter,
-                &mut more_extra_apis,
-            )
-        })
-        .collect::<Result<Vec<_>, ConvertError>>()?;
+    convert_item_apis(extra_apis, &mut results, |api| {
+        analyze_pod_api(
+            add_analysis(api),
+            &byvalue_checker,
+            &mut type_converter,
+            &mut more_extra_apis,
+        )
+        .map(Some)
+    });
     assert!(more_extra_apis.is_empty());
-    results.append(&mut more_results);
     Ok(results)
 }
 
@@ -108,7 +105,7 @@ fn analyze_pod_api(
             mut item,
             analysis: _,
         } => {
-            super::remove_bindgen_attrs(&mut item.attrs);
+            super::remove_bindgen_attrs(&mut item.attrs)?;
             let analysis = if byvalue_checker.is_pod(&ty_id) {
                 TypeKind::Pod
             } else {
@@ -120,7 +117,7 @@ fn analyze_pod_api(
             mut item,
             analysis: _,
         } => {
-            super::remove_bindgen_attrs(&mut item.attrs);
+            super::remove_bindgen_attrs(&mut item.attrs)?;
             let type_kind = if byvalue_checker.is_pod(&ty_id) {
                 // It's POD so let's mark dependencies on things in its field
                 get_struct_field_types(
