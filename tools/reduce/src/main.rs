@@ -178,6 +178,8 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         listing_path, concat_path
     ));
     preprocess(&listing_path, &concat_path, &incs, &defs)?;
+    announce_progress("Writing cxx.h");
+    write_to_file(&tmp_dir.path(), "cxx.h", cxx_gen::HEADER.as_bytes())?;
     let rs_path = tmp_dir.path().join("input.rs");
     let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
         .chain(
@@ -215,6 +217,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         &rs_path,
         &clang,
         &extra_clang_args,
+        &tmp_dir.path().to_str().unwrap(),
         precompile_step,
     )?;
     run_interestingness_test(&interestingness_test);
@@ -312,6 +315,7 @@ fn create_interestingness_test(
     rs_file: &Path,
     clang_path: &Path,
     extra_clang_args: &[&str],
+    cpp_inc_dir: &str,
     precompile_step: Option<&str>,
 ) -> Result<(), std::io::Error> {
     announce_progress("Creating interestingness test");
@@ -323,16 +327,28 @@ fn create_interestingness_test(
     let clang = clang_path.to_str().unwrap();
     let clang_args = autocxx_engine::make_clang_args(&[], &extra_clang_args).join(" ");
     let precompile_step = match precompile_step {
-        Some(hdr) => format!("{} {} -c {} >/dev/null 2>&1", clang, clang_args, hdr,),
+        Some(hdr) => format!(
+            "{} {} -I {} -c {} >/dev/null 2>&1",
+            clang, clang_args, cpp_inc_dir, hdr,
+        ),
         None => "".into(),
     };
     let content = format!(
         indoc! {"
         #!/bin/sh
         {}
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. -c {} gen0.cc && {} -c -I. {} gen1.cc && rustc --crate-type rlib --crate-name test gen.complete.rs) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. -c {} {} gen0.cc && {} -c -I. {} {} gen1.cc && rustc --crate-type rlib --crate-name test gen.complete.rs) | grep \"{}\"  >/dev/null 2>&1
     "},
-        precompile_step, gen_cmd, gen_args, clang, clang_args, clang, clang_args, problem
+        precompile_step,
+        gen_cmd,
+        gen_args,
+        clang,
+        clang_args,
+        cpp_inc_dir,
+        clang,
+        clang_args,
+        cpp_inc_dir,
+        problem
     );
     println!("Interestingness test:\n{}", content);
     {
@@ -373,4 +389,10 @@ fn create_concatenated_header(headers: &[&str], listing_path: &Path) -> Result<(
         file.write_all(format!("#include \"{}\"\n", header).as_bytes())?;
     }
     Ok(())
+}
+
+fn write_to_file(dir: &Path, filename: &str, content: &[u8]) -> Result<(), std::io::Error> {
+    let path = dir.join(filename);
+    let mut f = File::create(path)?;
+    f.write_all(content)
 }
