@@ -204,14 +204,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     let clang = PathBuf::from(matches.value_of("clang-path").unwrap_or("clang++"));
     let interestingness_test = tmp_dir.path().join("test.sh");
     let precompile_step = if matches.is_present("compile") {
-        let clang = clang.to_str().unwrap();
-        let clang_args = autocxx_engine::make_clang_args(&[], &extra_clang_args).join(" ");
-        Some(format!(
-            "{} {} -c {} >/dev/null 2>&1",
-            clang,
-            clang_args,
-            concat_path.to_str().unwrap()
-        ))
+        Some(concat_path.to_str().unwrap())
     } else {
         None
     };
@@ -319,7 +312,7 @@ fn create_interestingness_test(
     rs_file: &Path,
     clang_path: &Path,
     extra_clang_args: &[&str],
-    precompile_step: Option<String>,
+    precompile_step: Option<&str>,
 ) -> Result<(), std::io::Error> {
     announce_progress("Creating interestingness test");
     // Ensure we refer to the input header by relative path
@@ -328,13 +321,16 @@ fn create_interestingness_test(
     let mut gen_args = format_gen_cmd(rs_file, "$(pwd)", extra_clang_args);
     let gen_args = gen_args.join(" ");
     let clang = clang_path.to_str().unwrap();
-    let clang_args = extra_clang_args.join(" ");
-    let precompile_step = precompile_step.unwrap_or_default();
+    let clang_args = autocxx_engine::make_clang_args(&[], &extra_clang_args).join(" ");
+    let precompile_step = match precompile_step {
+        Some(hdr) => format!("{} {} -c {} >/dev/null 2>&1", clang, clang_args, hdr,),
+        None => "".into(),
+    };
     let content = format!(
         indoc! {"
         #!/bin/sh
         {}
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. {} gen0.cxx && {} -I. {} gen1.cxx && rustc --crate-type rlib --crate-name test gen.complete.rs) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. -c {} gen0.cc && {} -c -I. {} gen1.cc && rustc --crate-type rlib --crate-name test gen.complete.rs) | grep \"{}\"  >/dev/null 2>&1
     "},
         precompile_step, gen_cmd, gen_args, clang, clang_args, clang, clang_args, problem
     );
