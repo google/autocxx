@@ -203,6 +203,11 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     run_sample_gen_cmd(gen_cmd, &rs_path, &tmp_dir.path(), &extra_clang_args)?;
     let clang = PathBuf::from(matches.value_of("clang-path").unwrap_or("clang++"));
     let interestingness_test = tmp_dir.path().join("test.sh");
+    let build_cpp_file_first = if matches.is_present("compile") {
+        Some("concat.h")
+    } else {
+        None
+    };
     create_interestingness_test(
         gen_cmd,
         &interestingness_test,
@@ -210,7 +215,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         &rs_path,
         &clang,
         &extra_clang_args,
-        matches.is_present("compile")
+        build_cpp_file_first,
     )?;
     run_interestingness_test(&interestingness_test);
     run_creduce(
@@ -307,7 +312,7 @@ fn create_interestingness_test(
     rs_file: &Path,
     clang_path: &Path,
     extra_clang_args: &[&str],
-    build_cpp_first: bool,
+    build_cpp_file_first: Option<&str>,
 ) -> Result<(), std::io::Error> {
     announce_progress("Creating interestingness test");
     // Ensure we refer to the input header by relative path
@@ -315,19 +320,19 @@ fn create_interestingness_test(
     // a copy thereof.
     let mut gen_args = format_gen_cmd(rs_file, "$(pwd)", extra_clang_args);
     let gen_args = gen_args.join(" ");
+    let clang = clang_path.to_str().unwrap();
     let clang_args = extra_clang_args.join(" ");
+    let precompile_step = match build_cpp_file_first {
+        Some(header) => format!("{} -I {}", clang, header),
+        None => "".into(),
+    };
     let content = format!(
         indoc! {"
         #!/bin/sh
+        {}
         ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. {} gen0.cxx && {} -I. {} gen1.cxx && rustc --crate-type rlib --crate-name test gen.complete.rs) | grep \"{}\"  >/dev/null 2>&1
     "},
-        gen_cmd,
-        gen_args,
-        clang_path.to_str().unwrap(),
-        clang_args,
-        clang_path.to_str().unwrap(),
-        clang_args,
-        problem
+        precompile_step, gen_cmd, gen_args, clang, clang_args, clang, clang_args, problem
     );
     println!("Interestingness test:\n{}", content);
     {
