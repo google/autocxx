@@ -5561,6 +5561,25 @@ fn test_manual_bridge() {
     do_run_test_manual("", hdr, rs, &[], None).unwrap();
 }
 
+#[test]
+fn test_issue486() {
+    let hdr = indoc! {"
+        namespace a {
+            namespace spanner {
+                class Key;
+            }
+        } // namespace a
+        namespace spanner {
+            class Key {
+                public:
+                    bool b(a::spanner::Key &);
+            };
+        } // namespace spanner
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["spanner::Key"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
