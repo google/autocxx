@@ -203,8 +203,15 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     run_sample_gen_cmd(gen_cmd, &rs_path, &tmp_dir.path(), &extra_clang_args)?;
     let clang = PathBuf::from(matches.value_of("clang-path").unwrap_or("clang++"));
     let interestingness_test = tmp_dir.path().join("test.sh");
-    let build_cpp_file_first = if matches.is_present("compile") {
-        Some("concat.h")
+    let precompile_step = if matches.is_present("compile") {
+        let clang = clang.to_str().unwrap();
+        let clang_args = autocxx_engine::make_clang_args(&[], &extra_clang_args).join(" ");
+        Some(format!(
+            "{} {} -c {} >/dev/null 2>&1",
+            clang,
+            clang_args,
+            concat_path.to_str().unwrap()
+        ))
     } else {
         None
     };
@@ -215,7 +222,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         &rs_path,
         &clang,
         &extra_clang_args,
-        build_cpp_file_first,
+        precompile_step,
     )?;
     run_interestingness_test(&interestingness_test);
     run_creduce(
@@ -312,7 +319,7 @@ fn create_interestingness_test(
     rs_file: &Path,
     clang_path: &Path,
     extra_clang_args: &[&str],
-    build_cpp_file_first: Option<&str>,
+    precompile_step: Option<String>,
 ) -> Result<(), std::io::Error> {
     announce_progress("Creating interestingness test");
     // Ensure we refer to the input header by relative path
@@ -322,10 +329,7 @@ fn create_interestingness_test(
     let gen_args = gen_args.join(" ");
     let clang = clang_path.to_str().unwrap();
     let clang_args = extra_clang_args.join(" ");
-    let precompile_step = match build_cpp_file_first {
-        Some(header) => format!("{} -I {}", clang, header),
-        None => "".into(),
-    };
+    let precompile_step = precompile_step.unwrap_or_default();
     let content = format!(
         indoc! {"
         #!/bin/sh
