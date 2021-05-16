@@ -126,6 +126,11 @@ fn main() {
                 .help("keep the temporary directory for debugging purposes"),
         )
         .arg(
+            Arg::with_name("compile")
+                .long("compile")
+                .help("compile the C++ header first to ensure it's valid C++"),
+        )
+        .arg(
             Arg::with_name("clang-args")
                 .short("c")
                 .long("clang-arg")
@@ -205,6 +210,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         &rs_path,
         &clang,
         &extra_clang_args,
+        matches.is_present("compile")
     )?;
     run_interestingness_test(&interestingness_test);
     run_creduce(
@@ -301,6 +307,7 @@ fn create_interestingness_test(
     rs_file: &Path,
     clang_path: &Path,
     extra_clang_args: &[&str],
+    build_cpp_first: bool,
 ) -> Result<(), std::io::Error> {
     announce_progress("Creating interestingness test");
     // Ensure we refer to the input header by relative path
