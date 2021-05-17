@@ -159,6 +159,8 @@ fn main() {
                 .help("Extra arguments to pass to Clang"),
         )
         .get_matches();
+
+    env_logger::builder().init();
     let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap())
         .expect("Unable to parse Rust file and interpret autocxx macro");
     let incs = matches
