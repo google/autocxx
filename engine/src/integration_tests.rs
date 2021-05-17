@@ -4589,6 +4589,25 @@ fn test_abstract_class_no_make_unique() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/491
+fn test_derived_abstract_class_no_make_unique() {
+    let hdr = indoc! {"
+        class A {
+        public:
+            A();
+            virtual void foo() const = 0;
+        };
+
+        class B : public A {
+        public:
+            B();
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
+#[test]
 fn test_vector_of_pointers() {
     // Just ensures the troublesome API is ignored
     let hdr = indoc! {"
