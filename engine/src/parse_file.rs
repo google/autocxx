@@ -177,7 +177,12 @@ impl ParsedFile {
                 return Err(ParseError::ConflictingModNames);
             }
             include_cpp
-                .generate(autocxx_inc.clone(), extra_clang_args, dep_recorder, omit_includes)
+                .generate(
+                    autocxx_inc.clone(),
+                    extra_clang_args,
+                    dep_recorder,
+                    omit_includes,
+                )
                 .map_err(ParseError::AutocxxCodegenError)?
         }
         Ok(())

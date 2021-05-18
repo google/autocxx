@@ -388,7 +388,12 @@ impl IncludeCppEngine {
         let converter = BridgeConverter::new(&self.config.inclusions, &self.config);
 
         let conversion = converter
-            .convert(bindings, self.config.unsafe_policy.clone(), header_contents, omit_includes)
+            .convert(
+                bindings,
+                self.config.unsafe_policy.clone(),
+                header_contents,
+                omit_includes,
+            )
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;
         let mut new_bindings: ItemMod = parse_quote! {

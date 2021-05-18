@@ -181,7 +181,12 @@ fn main() {
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56
     parsed_file
-        .resolve_all(incs, &extra_clang_args, None, matches.value_of("omit-includes").is_some())
+        .resolve_all(
+            incs,
+            &extra_clang_args,
+            None,
+            matches.value_of("omit-includes").is_some(),
+        )
         .expect("Unable to resolve macro");
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
     let desired_number = matches

@@ -147,12 +147,13 @@ impl<'a> BridgeConverter<'a> {
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
                 let cpp =
-                    CppCodeGenerator::generate_cpp_code(inclusions, &analyzed_apis, self.config, omit_includes)?;
+                    CppCodeGenerator::generate_cpp_code(inclusions, &analyzed_apis, self.config)?;
                 let rs = RsCodeGenerator::generate_rs_code(
                     analyzed_apis,
                     self.include_list,
                     bindgen_mod,
                     &self.config,
+                    omit_includes,
                 );
                 Ok(CodegenResults { rs, cpp })
             }

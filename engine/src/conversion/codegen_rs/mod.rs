@@ -131,6 +131,7 @@ impl<'a> RsCodeGenerator<'a> {
         include_list: &'a [String],
         bindgen_mod: ItemMod,
         config: &'a IncludeCppConfig,
+        omit_includes: bool,
     ) -> Vec<Item> {
         let c = Self {
             include_list,
@@ -138,10 +139,10 @@ impl<'a> RsCodeGenerator<'a> {
             original_name_map: original_name_map_from_apis(&all_apis),
             config,
         };
-        c.rs_codegen(all_apis)
+        c.rs_codegen(all_apis, omit_includes)
     }
 
-    fn rs_codegen(mut self, all_apis: Vec<Api<FnAnalysis>>) -> Vec<Item> {
+    fn rs_codegen(mut self, all_apis: Vec<Api<FnAnalysis>>, omit_includes: bool) -> Vec<Item> {
         // ... and now let's start to generate the output code.
         // First let's see if we plan to generate the string construction utilities, as this will affect
         // what 'use' statements we need here and there.
@@ -180,7 +181,8 @@ impl<'a> RsCodeGenerator<'a> {
         let mut all_items: Vec<Item> = all_items.into_iter().flatten().collect();
         // And finally any C++ we need to generate. And by "we" I mean autocxx not cxx.
         let has_additional_cpp_needs = additional_cpp_needs.into_iter().any(std::convert::identity);
-        extern_c_mod_items.extend(self.build_include_foreign_items(has_additional_cpp_needs));
+        extern_c_mod_items
+            .extend(self.build_include_foreign_items(has_additional_cpp_needs, omit_includes));
         // We will always create an extern "C" mod even if bindgen
         // didn't generate one, e.g. because it only generated types.
         // We still want cxx to know about those types.
@@ -225,7 +227,11 @@ impl<'a> RsCodeGenerator<'a> {
         })
     }
 
-    fn build_include_foreign_items(&self, has_additional_cpp_needs: bool) -> Vec<ForeignItem> {
+    fn build_include_foreign_items(
+        &self,
+        has_additional_cpp_needs: bool,
+        omit_includes: bool,
+    ) -> Vec<ForeignItem> {
         let extra_inclusion = if has_additional_cpp_needs {
             Some(format!(
                 "autocxxgen_{}.h",
@@ -234,8 +240,16 @@ impl<'a> RsCodeGenerator<'a> {
         } else {
             None
         };
-        let chained = self.include_list.iter().chain(extra_inclusion.iter());
-        chained
+        let all_includes: Vec<_> = if omit_includes {
+            extra_inclusion.iter().collect()
+        } else {
+            self.include_list
+                .iter()
+                .chain(extra_inclusion.iter())
+                .collect()
+        };
+        all_includes
+            .into_iter()
             .map(|inc| {
                 ForeignItem::Macro(parse_quote! {
                     include!(#inc);
