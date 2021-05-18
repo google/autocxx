@@ -134,12 +134,16 @@ impl<'a> CppCodeGenerator<'a> {
         if self.additional_functions.is_empty() {
             None
         } else {
-            let headers: HashSet<Header> = self
-                .additional_functions
-                .iter()
-                .map(|x| x.headers.iter().cloned())
-                .flatten()
-                .collect();
+            let headers: HashSet<Header> = if omit_includes {
+                HashSet::new()
+            } else {
+                self
+                    .additional_functions
+                    .iter()
+                    .map(|x| x.headers.iter().cloned())
+                    .flatten()
+                    .collect()
+            };
             let headers = headers.iter().map(|x| x.include_stmt()).join("\n");
             let type_definitions = self.concat_additional_items(|x| x.type_definition.as_ref());
             let declarations = self.concat_additional_items(|x| x.declaration.as_ref());
