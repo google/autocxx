@@ -130,26 +130,23 @@ impl<'a> CppCodeGenerator<'a> {
         Ok(())
     }
 
-    fn generate(&self, omit_includes: bool) -> Option<CppFilePair> {
+    fn generate(&self) -> Option<CppFilePair> {
         if self.additional_functions.is_empty() {
             None
         } else {
-            let headers: HashSet<Header> = if omit_includes {
-                HashSet::new()
-            } else {
-                self
-                    .additional_functions
-                    .iter()
-                    .map(|x| x.headers.iter().cloned())
-                    .flatten()
-                    .collect()
-            };
+            let headers: HashSet<Header> = self
+                .additional_functions
+                .iter()
+                .map(|x| x.headers.iter().cloned())
+                .flatten()
+                .collect();
+
             let headers = headers.iter().map(|x| x.include_stmt()).join("\n");
             let type_definitions = self.concat_additional_items(|x| x.type_definition.as_ref());
             let declarations = self.concat_additional_items(|x| x.declaration.as_ref());
             let declarations = format!(
                 "#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
-                headers, self.inclusions, type_definitions, declarations
+                self.inclusions, headers, type_definitions, declarations
             );
             log::info!("Additional C++ decls:\n{}", declarations);
             let header_name = format!("autocxxgen_{}.h", self.config.get_mod_name());
