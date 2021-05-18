@@ -426,7 +426,19 @@ impl IncludeCppEngine {
         extra_clang_args: &[&str],
     ) {
         if let Ok(output_path) = std::env::var("AUTOCXX_PREPROCESS") {
-            let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}", self.config, header);
+            // Include a load of system headers at the end of the preprocessed output,
+            // because we would like to be able to generate bindings from the
+            // preprocessed header, and then build those bindings. The C++ parts
+            // of those bindings might need things inside these various headers;
+            // we make sure all these definitions and declarations are inside
+            // this one header file so that the reduction process does not have
+            // to refer to local headers on the reduction machine too.
+            let suffix = ALL_KNOWN_SYSTEM_HEADERS
+                .iter()
+                .map(|hdr| format!("#include <{}>\n", hdr))
+                .join("\n");
+            let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n",
+                self.config, header, suffix);
             let mut tf = NamedTempFile::new().unwrap();
             write!(tf, "{}", input).unwrap();
             let tp = tf.into_temp_path();
@@ -434,6 +446,34 @@ impl IncludeCppEngine {
         }
     }
 }
+
+/// This is a list of all the headers known to be included in generated
+/// C++ by cxx. We only use this when `AUTOCXX_PERPROCESS` is set to true,
+/// in an attempt to make the resulting preprocessed header more hermetic.
+/// We clearly should _not_ use this in any other circumstance; obviously
+/// we'd then want to add an API to cxx_gen such that we could retrieve
+/// that information from source.
+pub(crate) static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
+    "memory",
+    "string",
+    "algorithm",
+    "array",
+    "cassert",
+    "cstddef",
+    "cstdint",
+    "cstring",
+    "exception",
+    "functional",
+    "initializer_list",
+    "iterator",
+    "memory",
+    "new",
+    "stdexcept",
+    "type_traits",
+    "utility",
+    "vector",
+    "sys/types.h",
+];
 
 pub fn do_cxx_cpp_generation(rs: TokenStream2) -> Result<CppFilePair, cxx_gen::Error> {
     let opt = cxx_gen::Opt::default();
