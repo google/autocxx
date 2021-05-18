@@ -342,11 +342,12 @@ fn create_interestingness_test(
         ),
         None => "".into(),
     };
+    let defs = "-DCXXBRIDGE1_RUST_STRING -DCXXBRIDGE1_RUST_STR -DCXXBRIDGE1_RUST_SLICE -DCXXBRIDGE1_RUST_BOX -DCXXBRIDGE1_RUST_VEC -DCXXBRIDGE1_RUST_FN -DCXXBRIDGE1_RUST_ISIZE -DCXXBRIDGE1_PANIC -DCXXBRIDGE1_RUST_BITCOPY_T -DCXXBRIDGE1_RUST_BITCOPY -DCXXBRIDGE1_RUST_SLICE -DCXXBRIDGE1_RUST_BOX -DCXXBRIDGE1_RUST_VEC -DCXXBRIDGE1_IS_COMPLETE -DCXXBRIDGE1_LAYOUT -DCXXBRIDGE1_RELOCATABLE -DCXXBRIDGE1_RUST_OPAQUE -DCXXBRIDGE1_RUST_ERROR";
     let content = format!(
         indoc! {"
         #!/bin/sh
         {}
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. -c {} -I {} gen0.cc) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. -c {} -I {} gen0.cc {}) | grep \"{}\"  >/dev/null 2>&1
     "},
         precompile_step,
         gen_cmd,
@@ -354,6 +355,7 @@ fn create_interestingness_test(
         clang,
         clang_args,
         cpp_inc_dir,
+        defs,
         problem
     );
     println!("Interestingness test:\n{}", content);
