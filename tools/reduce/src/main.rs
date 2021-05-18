@@ -162,7 +162,28 @@ fn run(matches: ArgMatches) -> Result<(), std::io::Error> {
     r
 }
 
-static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &["memory", "string", "algorithm", "array", "cassert", "cstddef", "cstdint", "cstring", "exception", "functional", "initializer_list", "iterator", "memory", "new", "stdexcept", "type_traits", "utility", "vector", "iosfwd", "sys/types.h"];
+static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
+    "memory",
+    "string",
+    "algorithm",
+    "array",
+    "cassert",
+    "cstddef",
+    "cstdint",
+    "cstring",
+    "exception",
+    "functional",
+    "initializer_list",
+    "iterator",
+    "memory",
+    "new",
+    "stdexcept",
+    "type_traits",
+    "utility",
+    "vector",
+    "iosfwd",
+    "sys/types.h",
+];
 
 fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> {
     let incs: Vec<_> = matches

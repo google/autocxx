@@ -433,10 +433,10 @@ impl IncludeCppEngine {
     ) {
         if let Ok(output_path) = std::env::var("AUTOCXX_PREPROCESS") {
             let suffix = ALL_KNOWN_SYSTEM_HEADERS
-                         .iter()
-                         .map(|hdr| format!("#include <{}>\n", hdr))
-                         //.chain(std::iter::once("#include \"cxx.h\"\n".to_string()))
-                         .join("\n");
+                .iter()
+                .map(|hdr| format!("#include <{}>\n", hdr))
+                //.chain(std::iter::once("#include \"cxx.h\"\n".to_string()))
+                .join("\n");
             let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* Autocxx: extra headers added below for completeness. */\n\n{}\n", self.config, header, suffix);
             {
                 let mut cxx_file = File::create("/tmp/cxx.h").unwrap();
@@ -451,7 +451,26 @@ impl IncludeCppEngine {
 }
 
 /// Used during preprocessing dumping.
-pub(crate) static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &["memory", "string", "algorithm", "array", "cassert", "cstddef", "cstdint", "cstring", "exception", "functional", "initializer_list", "iterator", "memory", "new", "stdexcept", "type_traits", "utility", "vector"];
+pub(crate) static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
+    "memory",
+    "string",
+    "algorithm",
+    "array",
+    "cassert",
+    "cstddef",
+    "cstdint",
+    "cstring",
+    "exception",
+    "functional",
+    "initializer_list",
+    "iterator",
+    "memory",
+    "new",
+    "stdexcept",
+    "type_traits",
+    "utility",
+    "vector",
+];
 
 pub fn do_cxx_cpp_generation(rs: TokenStream2) -> Result<CppFilePair, cxx_gen::Error> {
     let opt = cxx_gen::Opt::default();
