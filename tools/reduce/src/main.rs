@@ -162,6 +162,8 @@ fn run(matches: ArgMatches) -> Result<(), std::io::Error> {
     r
 }
 
+static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &["memory", "string", "algorithm", "array", "cassert", "cstddef", "cstdint", "cstring", "exception", "functional", "initializer_list", "iterator", "memory", "new", "stdexcept", "type_traits", "utility", "vector", "iosfwd"];
+
 fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> {
     let incs: Vec<_> = matches
         .values_of("inc")
@@ -180,6 +182,9 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     preprocess(&listing_path, &concat_path, &incs, &defs)?;
     announce_progress("Writing cxx.h");
     write_to_file(&tmp_dir.path(), "cxx.h", cxx_gen::HEADER.as_bytes())?;
+    for fake_hdr in ALL_KNOWN_SYSTEM_HEADERS.iter() {
+        write_to_file(&tmp_dir.path(), fake_hdr, "".as_bytes())?;
+    }
     let rs_path = tmp_dir.path().join("input.rs");
     let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
         .chain(
@@ -337,14 +342,11 @@ fn create_interestingness_test(
         indoc! {"
         #!/bin/sh
         {}
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. -c {} {} gen0.cc && {} -c -I. {} {} gen1.cc && rustc --crate-type rlib --crate-name test gen.complete.rs) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. -c {} -I {} gen0.cc) | grep \"{}\"  >/dev/null 2>&1
     "},
         precompile_step,
         gen_cmd,
         gen_args,
-        clang,
-        clang_args,
-        cpp_inc_dir,
         clang,
         clang_args,
         cpp_inc_dir,
