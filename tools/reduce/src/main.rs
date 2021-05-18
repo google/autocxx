@@ -349,13 +349,7 @@ fn create_interestingness_test(
         {}
         ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. -c {} -I {} gen0.cc) | grep \"{}\"  >/dev/null 2>&1
     "},
-        precompile_step,
-        gen_cmd,
-        gen_args,
-        clang,
-        clang_args,
-        cpp_inc_dir,
-        problem
+        precompile_step, gen_cmd, gen_args, clang, clang_args, cpp_inc_dir, problem
     );
     println!("Interestingness test:\n{}", content);
     {
