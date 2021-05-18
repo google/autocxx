@@ -139,7 +139,7 @@ where
 
     let mut parsed_file = crate::parse_file(rs_file).map_err(BuilderError::ParseError)?;
     parsed_file
-        .resolve_all(autocxx_inc, extra_clang_args, dependency_recorder)
+        .resolve_all(autocxx_inc, extra_clang_args, dependency_recorder, false)
         .map_err(BuilderError::ParseError)?;
     build_with_existing_parsed_file(parsed_file, cxxdir, incdir, rsdir)
 }

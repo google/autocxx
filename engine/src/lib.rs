@@ -361,6 +361,7 @@ impl IncludeCppEngine {
         inc_dirs: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
+        omit_includes: bool,
     ) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -387,7 +388,7 @@ impl IncludeCppEngine {
         let converter = BridgeConverter::new(&self.config.inclusions, &self.config);
 
         let conversion = converter
-            .convert(bindings, self.config.unsafe_policy.clone(), header_contents)
+            .convert(bindings, self.config.unsafe_policy.clone(), header_contents, omit_includes)
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;
         let mut new_bindings: ItemMod = parse_quote! {

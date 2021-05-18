@@ -91,10 +91,11 @@ impl<'a> CppCodeGenerator<'a> {
         inclusions: String,
         apis: &[Api<FnAnalysis>],
         config: &'a IncludeCppConfig,
+        omit_includes: bool,
     ) -> Result<Option<CppFilePair>, ConvertError> {
         let mut gen = CppCodeGenerator::new(inclusions, original_name_map_from_apis(apis), config);
         gen.add_needs(apis.iter().filter_map(|api| api.additional_cpp()))?;
-        Ok(gen.generate())
+        Ok(gen.generate(omit_includes))
     }
 
     fn new(
@@ -129,7 +130,7 @@ impl<'a> CppCodeGenerator<'a> {
         Ok(())
     }
 
-    fn generate(&self) -> Option<CppFilePair> {
+    fn generate(&self, omit_includes: bool) -> Option<CppFilePair> {
         if self.additional_functions.is_empty() {
             None
         } else {

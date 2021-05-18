@@ -158,6 +158,13 @@ fn main() {
                 .multiple(true)
                 .help("Extra arguments to pass to Clang"),
         )
+        .arg(
+            Arg::with_name("omit-includes")
+                .long("omit-includes")
+                .last(true)
+                .multiple(true)
+                .help("Omit system #includes from generated C++ files. Only useful in certain niche situations related to testcase reduction."),
+        )
         .get_matches();
     let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap())
         .expect("Unable to parse Rust file and interpret autocxx macro");
@@ -174,7 +181,7 @@ fn main() {
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56
     parsed_file
-        .resolve_all(incs, &extra_clang_args, None)
+        .resolve_all(incs, &extra_clang_args, None, matches.value_of("omit-includes").is_some())
         .expect("Unable to resolve macro");
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
     let desired_number = matches
