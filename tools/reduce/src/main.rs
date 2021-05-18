@@ -162,7 +162,27 @@ fn run(matches: ArgMatches) -> Result<(), std::io::Error> {
     r
 }
 
-static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &["memory", "string", "algorithm", "array", "cassert", "cstddef", "cstdint", "cstring", "exception", "functional", "initializer_list", "iterator", "memory", "new", "stdexcept", "type_traits", "utility", "vector", "iosfwd"];
+static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
+    "memory",
+    "string",
+    "algorithm",
+    "array",
+    "cassert",
+    "cstddef",
+    "cstdint",
+    "cstring",
+    "exception",
+    "functional",
+    "initializer_list",
+    "iterator",
+    "memory",
+    "new",
+    "stdexcept",
+    "type_traits",
+    "utility",
+    "vector",
+    "iosfwd",
+];
 
 fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> {
     let incs: Vec<_> = matches
@@ -344,13 +364,7 @@ fn create_interestingness_test(
         {}
         ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h && {} -I. -c {} -I {} gen0.cc) | grep \"{}\"  >/dev/null 2>&1
     "},
-        precompile_step,
-        gen_cmd,
-        gen_args,
-        clang,
-        clang_args,
-        cpp_inc_dir,
-        problem
+        precompile_step, gen_cmd, gen_args, clang, clang_args, cpp_inc_dir, problem
     );
     println!("Interestingness test:\n{}", content);
     {
