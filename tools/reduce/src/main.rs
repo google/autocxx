@@ -162,7 +162,7 @@ fn run(matches: ArgMatches) -> Result<(), std::io::Error> {
     r
 }
 
-static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &["memory", "string", "algorithm", "array", "cassert", "cstddef", "cstdint", "cstring", "exception", "functional", "initializer_list", "iterator", "memory", "new", "stdexcept", "type_traits", "utility", "vector", "iosfwd"];
+static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &["memory", "string", "algorithm", "array", "cassert", "cstddef", "cstdint", "cstring", "exception", "functional", "initializer_list", "iterator", "memory", "new", "stdexcept", "type_traits", "utility", "vector", "iosfwd", "sys/types.h"];
 
 fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> {
     let incs: Vec<_> = matches
@@ -183,7 +183,11 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     announce_progress("Writing cxx.h");
     write_to_file(&tmp_dir.path(), "cxx.h", cxx_gen::HEADER.as_bytes())?;
     for fake_hdr in ALL_KNOWN_SYSTEM_HEADERS.iter() {
-        write_to_file(&tmp_dir.path(), fake_hdr, "".as_bytes())?;
+        let full_path = tmp_dir.path().join(fake_hdr);
+        let hdr_dir = full_path.parent().unwrap();
+        std::fs::create_dir_all(&hdr_dir)?;
+        let fname = full_path.file_name().unwrap();
+        write_to_file(&hdr_dir, fname.to_str().unwrap(), "".as_bytes())?;
     }
     let rs_path = tmp_dir.path().join("input.rs");
     let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
