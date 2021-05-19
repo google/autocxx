@@ -300,7 +300,7 @@ fn create_interestingness_test(
     let content = format!(
         indoc! {"
         #!/bin/sh
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h) | grep \"{}\"  >/dev/null 2>&1
     "},
         gen_cmd, args, problem
     );
