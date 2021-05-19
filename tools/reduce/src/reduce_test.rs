@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{fs::File, io::{Write}, path::Path};
 use assert_cmd::Command;
+use std::{fs::File, io::Write, path::Path};
 use tempdir::TempDir;
 
 static INPUT_H: &str = indoc::indoc! {"
@@ -27,7 +27,7 @@ static INPUT_H: &str = indoc::indoc! {"
 "};
 
 #[test]
-fn test_reduce() -> Result<(), Box<dyn std::error::Error>>  {
+fn test_reduce() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
     let demo_code_dir = tmp_dir.path().join("demo");
     std::fs::create_dir(&demo_code_dir).unwrap();
