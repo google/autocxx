@@ -161,8 +161,6 @@ fn main() {
         .arg(
             Arg::with_name("omit-includes")
                 .long("omit-includes")
-                .last(true)
-                .multiple(true)
                 .help("Omit system #includes from generated C++ files. Only useful in certain niche situations related to testcase reduction."),
         )
         .get_matches();
