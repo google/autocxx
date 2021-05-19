@@ -14,3 +14,8 @@ tempfile = "3.1"
 indoc = "1.0"
 itertools = "0.10"
 cxx-gen = "0.7.44"
+
+[dev-dependencies]
+assert_cmd = "1.0.3"
+tempdir = "0.3.7"
+indoc = "1.0"

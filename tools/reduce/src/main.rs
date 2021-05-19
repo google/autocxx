@@ -15,6 +15,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(test)]
+mod reduce_test;
+
 use std::{
     fs::File,
     io::Write,
@@ -100,7 +103,7 @@ fn main() {
                 .required(true)
                 .value_name("PATH")
                 .help("creduce binary location")
-                .default_value("/usr/bin/creduce")
+                .default_value("creduce")
                 .takes_value(true),
         )
         .arg(
@@ -257,6 +260,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         &concat_path,
         matches.values_of("creduce-args").unwrap_or_default(),
     );
+    announce_progress("creduce completed");
     let output_path = matches.value_of("output");
     match output_path {
         None => print_minimized_case(&concat_path)?,
