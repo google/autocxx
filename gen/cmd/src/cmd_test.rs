@@ -74,6 +74,20 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[test]
+fn test_gen_preprocess() -> Result<(), Box<dyn std::error::Error>> {
+    let tmp_dir = TempDir::new("example")?;
+    let prepro_path = tmp_dir.path().join("preprocessed.h");
+    base_test(&tmp_dir, |cmd| {
+        cmd.env("AUTOCXX_PREPROCESS", prepro_path.to_str().unwrap());
+    })?;
+    assert_contentful(&tmp_dir, "preprocessed.h");
+    // Check that a random thing from one of the headers in
+    // `ALL_KNOWN_SYSTEM_HEADERS` is included.
+    assert!(std::fs::read_to_string(prepro_path)?.contains("integer_sequence"));
+    Ok(())
+}
+
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) {
     let path = dir.join(filename);
     let mut f = File::create(&path).expect("Unable to create file");
