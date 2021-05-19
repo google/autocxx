@@ -74,6 +74,17 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[test]
+fn test_gen_preprocess() -> Result<(), Box<dyn std::error::Error>> {
+    let tmp_dir = TempDir::new("example")?;
+    let prepro_path = tmp_dir.path().join("preprocessed.h");
+    base_test(&tmp_dir, |cmd| {
+        cmd.env("AUTOCXX_PREPROCESS", prepro_path.to_str().unwrap());
+    })?;
+    assert_contentful(&tmp_dir, "preprocessed.h");
+    Ok(())
+}
+
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) {
     let path = dir.join(filename);
     let mut f = File::create(&path).expect("Unable to create file");
