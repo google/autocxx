@@ -37,7 +37,7 @@ pub(crate) struct PodAnalysis;
 
 impl AnalysisPhase for PodAnalysis {
     type TypedefAnalysis = TypedefKind;
-    type TypeAnalysis = TypeKind;
+    type EnumAnalysis = TypeKind;
     type FunAnalysis = ();
 }
 
