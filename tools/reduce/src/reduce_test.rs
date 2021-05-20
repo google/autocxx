@@ -13,7 +13,10 @@
 // limitations under the License.
 
 use assert_cmd::Command;
+use proc_macro2::Span;
+use quote::quote;
 use std::{fs::File, io::Write, path::Path};
+use syn::Token;
 use tempdir::TempDir;
 
 static INPUT_H: &str = indoc::indoc! {"
@@ -33,7 +36,46 @@ static INPUT_H: &str = indoc::indoc! {"
 "};
 
 #[test]
-fn test_reduce() -> Result<(), Box<dyn std::error::Error>> {
+fn test_reduce_direct() -> Result<(), Box<dyn std::error::Error>> {
+    do_reduce(|header, _| Ok(header.into()))
+}
+
+#[test]
+fn test_reduce_preprocessed() -> Result<(), Box<dyn std::error::Error>> {
+    do_reduce(|header, demo_code_dir| {
+        let hexathorpe = Token![#](Span::call_site());
+        write_to_file(
+            &demo_code_dir,
+            "main.rs",
+            quote! {
+                autocxx::include_cpp! {
+                    #hexathorpe include #header
+                    generate_all!()
+                    safety(unsafe_ffi)
+                }
+            }
+            .to_string()
+            .as_bytes(),
+        );
+        let prepro = demo_code_dir.join("autocxx-preprocessed.h");
+        let mut cmd = Command::cargo_bin("autocxx-gen")?;
+        cmd.arg("--inc")
+            .arg(demo_code_dir.to_str().unwrap())
+            .arg(demo_code_dir.join("main.rs"))
+            .env("AUTOCXX_PREPROCESS", prepro.to_str().unwrap())
+            .arg("--outdir")
+            .arg(demo_code_dir.to_str().unwrap())
+            .arg("--gen-cpp")
+            .assert()
+            .success();
+        Ok("autocxx-preprocessed.h".into())
+    })
+}
+
+fn do_reduce<F>(get_header_name: F) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: FnOnce(&str, &Path) -> Result<String, Box<dyn std::error::Error>>,
+{
     if creduce_is_broken() {
         return Ok(());
     }
@@ -42,11 +84,12 @@ fn test_reduce() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir(&demo_code_dir).unwrap();
     write_to_file(&demo_code_dir, "input.h", INPUT_H.as_bytes());
     let output_path = tmp_dir.path().join("min.h");
+    let header_name = get_header_name("input.h", &demo_code_dir)?;
     let mut cmd = Command::cargo_bin("autocxx-reduce")?;
     cmd.arg("--inc")
         .arg(demo_code_dir.to_str().unwrap())
         .arg("-h")
-        .arg("input.h")
+        .arg(header_name)
         .arg("-o")
         .arg(output_path.to_str().unwrap())
         .arg("-d")
