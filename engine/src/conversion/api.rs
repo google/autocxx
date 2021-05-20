@@ -55,6 +55,7 @@ pub(crate) struct FuncToConvert {
 /// See description of the purpose of this trait within `Api`.
 pub(crate) trait AnalysisPhase {
     type TypedefAnalysis;
+    type StructAnalysis;
     type EnumAnalysis;
     type FunAnalysis;
 }
@@ -64,6 +65,7 @@ pub(crate) struct NullAnalysis;
 
 impl AnalysisPhase for NullAnalysis {
     type TypedefAnalysis = ();
+    type StructAnalysis = ();
     type EnumAnalysis = ();
     type FunAnalysis = ();
 }
@@ -116,7 +118,7 @@ pub(crate) enum ApiDetail<T: AnalysisPhase> {
     /// `bindgen` output.
     Struct {
         item: ItemStruct,
-        analysis: T::EnumAnalysis,
+        analysis: T::StructAnalysis,
     },
     /// A variable-length C integer type (e.g. int, unsigned long).
     CType { typename: QualifiedName },

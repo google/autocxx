@@ -36,6 +36,7 @@ pub(crate) struct TypedefAnalysis;
 
 impl AnalysisPhase for TypedefAnalysis {
     type TypedefAnalysis = TypedefKind;
+    type StructAnalysis = ();
     type EnumAnalysis = ();
     type FunAnalysis = ();
 }

@@ -116,6 +116,7 @@ pub(crate) struct FnAnalysis;
 
 impl AnalysisPhase for FnAnalysis {
     type TypedefAnalysis = TypedefKind;
+    type StructAnalysis = TypeKind;
     type EnumAnalysis = TypeKind;
     type FunAnalysis = FnAnalysisBody;
 }
