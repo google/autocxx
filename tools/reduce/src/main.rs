@@ -230,10 +230,21 @@ fn print_minimized_case(concat_path: &Path) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-/// Arguments we always pass to creduce. This pass always seems to cause a crash
+/// Arguments we pass to creduce if supported. This pass always seems to cause a crash
 /// as far as I can tell, so always exclude it. It may be environment-dependent,
 /// of course, but as I'm the primary user of this tool I am ruthlessly removing it.
-const CREDUCE_STANDARD_ARGS: &[&str] = &["--remove-pass", "pass_line_markers", "*"];
+const REMOVE_PASS_LINE_MARKERS: &[&str] = &["--remove-pass", "pass_line_markers", "*"];
+const SKIP_INITIAL_PASSES: &[&str] = &["--skip-initial-passes"];
+
+fn creduce_supports_remove_pass(creduce_cmd: &str) -> bool {
+    let msg = Command::new(creduce_cmd)
+        .arg("--help")
+        .output()
+        .unwrap()
+        .stdout;
+    let msg = std::str::from_utf8(&msg).unwrap();
+    msg.contains("--remove-pass")
+}
 
 fn run_creduce<'a>(
     creduce_cmd: &str,
@@ -244,8 +255,16 @@ fn run_creduce<'a>(
     announce_progress("creduce");
     let args = std::iter::once(interestingness_test.to_str().unwrap())
         .chain(std::iter::once(concat_path.to_str().unwrap()))
-        .chain(CREDUCE_STANDARD_ARGS.iter().copied())
         .chain(creduce_args)
+        .chain(
+            if creduce_supports_remove_pass(creduce_cmd) {
+                REMOVE_PASS_LINE_MARKERS
+            } else {
+                SKIP_INITIAL_PASSES
+            }
+            .iter()
+            .copied(),
+        )
         .collect::<Vec<_>>();
     println!("Command: {} {}", creduce_cmd, args.join(" "));
     Command::new(creduce_cmd)
