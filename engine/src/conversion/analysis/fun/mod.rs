@@ -54,7 +54,7 @@ use self::{
     rust_name_tracker::RustNameTracker,
 };
 
-use super::pod::PodAnalysis;
+use super::pod::{PodAnalysis, PodStructAnalysisBody};
 
 pub(crate) enum MethodKind {
     Normal,
@@ -116,7 +116,8 @@ pub(crate) struct FnAnalysis;
 
 impl AnalysisPhase for FnAnalysis {
     type TypedefAnalysis = TypedefKind;
-    type TypeAnalysis = TypeKind;
+    type StructAnalysis = PodStructAnalysisBody;
+    type EnumAnalysis = TypeKind;
     type FunAnalysis = FnAnalysisBody;
 }
 
@@ -167,7 +168,11 @@ impl<'a> FnAnalyzer<'a> {
             .filter_map(|api| match api.detail {
                 ApiDetail::Struct {
                     item: _,
-                    analysis: TypeKind::Pod,
+                    analysis:
+                        PodStructAnalysisBody {
+                            kind: TypeKind::Pod,
+                            ..
+                        },
                 } => Some(api.name()),
                 ApiDetail::Enum {
                     item: _,

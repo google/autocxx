@@ -12,14 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::fun::{FnAnalysis, FnAnalysisBody, FnKind, MethodKind};
+use super::{
+    fun::{FnAnalysis, FnAnalysisBody, FnKind, MethodKind},
+    pod::PodStructAnalysisBody,
+};
 use crate::conversion::api::ApiDetail;
 use crate::conversion::api::{Api, TypeKind};
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
 pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
-    let abstract_types: HashSet<_> = apis
+    let mut abstract_types: HashSet<_> = apis
         .iter()
         .filter_map(|api| match &api.detail {
             ApiDetail::Function {
@@ -41,9 +44,29 @@ pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
         let tyname = api.name();
         match &mut api.detail {
             ApiDetail::Struct { analysis, .. } if abstract_types.contains(&tyname) => {
-                *analysis = TypeKind::Abstract;
+                analysis.kind = TypeKind::Abstract;
             }
             _ => {}
+        }
+    }
+
+    // Spot any derived classes (recursively)
+    let mut iterate = true;
+    while iterate {
+        iterate = false;
+        for api in apis.iter_mut() {
+            match &mut api.detail {
+                ApiDetail::Struct {
+                    analysis: PodStructAnalysisBody { bases, kind },
+                    ..
+                } if *kind != TypeKind::Abstract && !abstract_types.is_disjoint(bases) => {
+                    *kind = TypeKind::Abstract;
+                    abstract_types.insert(api.name());
+                    // Recurse in case there are further dependent types
+                    iterate = true;
+                }
+                _ => {}
+            }
         }
     }
 

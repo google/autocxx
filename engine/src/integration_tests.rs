@@ -4589,8 +4589,49 @@ fn test_abstract_class_no_make_unique() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/491
 fn test_derived_abstract_class_no_make_unique() {
+    let hdr = indoc! {"
+        class A {
+        public:
+            A();
+            virtual void foo() const = 0;
+        };
+
+        class B : public A {
+        public:
+            B();
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
+fn test_recursive_derived_abstract_class_no_make_unique() {
+    let hdr = indoc! {"
+        class A {
+        public:
+            A() {};
+            virtual void foo() const = 0;
+        };
+
+        class B : public A {
+        public:
+            B() {};
+        };
+
+        class C : public B {
+        public:
+            C() {};
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A", "B", "C"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/491
+fn test_derived_abstract_class_with_no_allowlisting_no_make_unique() {
     let hdr = indoc! {"
         class A {
         public:
