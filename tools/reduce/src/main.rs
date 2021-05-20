@@ -15,6 +15,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(test)]
+mod reduce_test;
+
 use std::{
     fs::File,
     io::Write,
@@ -100,7 +103,7 @@ fn main() {
                 .required(true)
                 .value_name("PATH")
                 .help("creduce binary location")
-                .default_value("/usr/bin/creduce")
+                .default_value("creduce")
                 .takes_value(true),
         )
         .arg(
@@ -205,6 +208,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         &concat_path,
         matches.values_of("creduce-args").unwrap_or_default(),
     );
+    announce_progress("creduce completed");
     let output_path = matches.value_of("output");
     match output_path {
         None => print_minimized_case(&concat_path)?,
@@ -226,10 +230,21 @@ fn print_minimized_case(concat_path: &Path) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-/// Arguments we always pass to creduce. This pass always seems to cause a crash
+/// Arguments we pass to creduce if supported. This pass always seems to cause a crash
 /// as far as I can tell, so always exclude it. It may be environment-dependent,
 /// of course, but as I'm the primary user of this tool I am ruthlessly removing it.
-const CREDUCE_STANDARD_ARGS: &[&str] = &["--remove-pass", "pass_line_markers", "*"];
+const REMOVE_PASS_LINE_MARKERS: &[&str] = &["--remove-pass", "pass_line_markers", "*"];
+const SKIP_INITIAL_PASSES: &[&str] = &["--skip-initial-passes"];
+
+fn creduce_supports_remove_pass(creduce_cmd: &str) -> bool {
+    let msg = Command::new(creduce_cmd)
+        .arg("--help")
+        .output()
+        .unwrap()
+        .stdout;
+    let msg = std::str::from_utf8(&msg).unwrap();
+    msg.contains("--remove-pass")
+}
 
 fn run_creduce<'a>(
     creduce_cmd: &str,
@@ -240,8 +255,16 @@ fn run_creduce<'a>(
     announce_progress("creduce");
     let args = std::iter::once(interestingness_test.to_str().unwrap())
         .chain(std::iter::once(concat_path.to_str().unwrap()))
-        .chain(CREDUCE_STANDARD_ARGS.iter().copied())
         .chain(creduce_args)
+        .chain(
+            if creduce_supports_remove_pass(creduce_cmd) {
+                REMOVE_PASS_LINE_MARKERS
+            } else {
+                SKIP_INITIAL_PASSES
+            }
+            .iter()
+            .copied(),
+        )
         .collect::<Vec<_>>();
     println!("Command: {} {}", creduce_cmd, args.join(" "));
     Command::new(creduce_cmd)
@@ -300,7 +323,7 @@ fn create_interestingness_test(
     let content = format!(
         indoc! {"
         #!/bin/sh
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen.h) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h) | grep \"{}\"  >/dev/null 2>&1
     "},
         gen_cmd, args, problem
     );
