@@ -35,7 +35,7 @@ use super::tdef::TypedefAnalysis;
 
 pub(crate) struct PodStructAnalysisBody {
     pub(crate) kind: TypeKind,
-    pub(crate) bases: Vec<QualifiedName>,
+    pub(crate) bases: HashSet<QualifiedName>,
 }
 
 pub(crate) struct PodAnalysis;
@@ -124,7 +124,7 @@ fn analyze_pod_api(
             analysis: _,
         } => {
             super::remove_bindgen_attrs(&mut item.attrs)?;
-            let bases = get_bases(&item); // TODO
+            let bases = get_bases(&item);
             let type_kind = if byvalue_checker.is_pod(&ty_id) {
                 // It's POD so let's mark dependencies on things in its field
                 get_struct_field_types(
@@ -176,7 +176,7 @@ fn get_struct_field_types(
     Ok(())
 }
 
-fn get_bases(item: &ItemStruct) -> Vec<QualifiedName> {
+fn get_bases(item: &ItemStruct) -> HashSet<QualifiedName> {
     item.fields
         .iter()
         .filter_map(|f| match &f.ty {
