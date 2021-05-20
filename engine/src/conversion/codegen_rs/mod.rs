@@ -443,7 +443,7 @@ impl<'a> RsCodeGenerator<'a> {
                 materialization: Use::UsedFromBindgen,
             },
             ApiDetail::Struct { item, analysis } => {
-                self.generate_type(name, id, item, analysis, Item::Struct)
+                self.generate_type(name, id, item, analysis.kind, Item::Struct)
             }
             ApiDetail::Enum { item, analysis } => {
                 self.generate_type(name, id, item, analysis, Item::Enum)

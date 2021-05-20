@@ -18,7 +18,7 @@ use std::collections::HashSet;
 
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
-use syn::ItemStruct;
+use syn::{ItemStruct, Type};
 
 use crate::{
     conversion::{
@@ -33,11 +33,16 @@ use crate::{
 
 use super::tdef::TypedefAnalysis;
 
+pub(crate) struct PodStructAnalysisBody {
+    pub(crate) kind: TypeKind,
+    pub(crate) bases: Vec<QualifiedName>,
+}
+
 pub(crate) struct PodAnalysis;
 
 impl AnalysisPhase for PodAnalysis {
     type TypedefAnalysis = TypedefKind;
-    type StructAnalysis = TypeKind;
+    type StructAnalysis = PodStructAnalysisBody;
     type EnumAnalysis = TypeKind;
     type FunAnalysis = ();
 }
@@ -119,6 +124,7 @@ fn analyze_pod_api(
             analysis: _,
         } => {
             super::remove_bindgen_attrs(&mut item.attrs)?;
+            let bases = get_bases(&item); // TODO
             let type_kind = if byvalue_checker.is_pod(&ty_id) {
                 // It's POD so let's mark dependencies on things in its field
                 get_struct_field_types(
@@ -138,7 +144,10 @@ fn analyze_pod_api(
             };
             ApiDetail::Struct {
                 item,
-                analysis: type_kind,
+                analysis: PodStructAnalysisBody {
+                    kind: type_kind,
+                    bases,
+                },
             }
         }
         ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
@@ -165,4 +174,18 @@ fn get_struct_field_types(
         deps.extend(annotated.types_encountered);
     }
     Ok(())
+}
+
+fn get_bases(item: &ItemStruct) -> Vec<QualifiedName> {
+    item.fields
+        .iter()
+        .filter_map(|f| match &f.ty {
+            Type::Path(typ) => f
+                .ident
+                .as_ref()
+                .filter(|id| id.to_string().starts_with("_base"))
+                .map(|_| QualifiedName::from_type_path(&typ)),
+            _ => None,
+        })
+        .collect()
 }

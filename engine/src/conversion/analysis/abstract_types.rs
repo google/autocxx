@@ -41,7 +41,7 @@ pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
         let tyname = api.name();
         match &mut api.detail {
             ApiDetail::Struct { analysis, .. } if abstract_types.contains(&tyname) => {
-                *analysis = TypeKind::Abstract;
+                analysis.kind = TypeKind::Abstract;
             }
             _ => {}
         }
