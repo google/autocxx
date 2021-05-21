@@ -171,7 +171,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     ));
     preprocess(&listing_path, &concat_path, &incs, &defs)?;
     let rs_path = tmp_dir.path().join("input.rs");
-    let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
+    let directives: Vec<_> = std::iter::once("#include \"concat-included-once.h\"\n".to_string())
         .chain(
             matches
                 .values_of("directive")
@@ -180,6 +180,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         )
         .collect();
     create_rs_file(&rs_path, &directives)?;
+    create_included_once_file(&tmp_dir.path().join("concat-included-once.h"))?;
     let extra_clang_args: Vec<_> = matches
         .values_of("clang-args")
         .unwrap_or_default()
@@ -365,5 +366,15 @@ fn create_concatenated_header(headers: &[&str], listing_path: &Path) -> Result<(
     for header in headers {
         file.write_all(format!("#include \"{}\"\n", header).as_bytes())?;
     }
+    Ok(())
+}
+
+fn create_included_once_file(path: &Path) -> Result<(), std::io::Error> {
+    announce_progress("Creating include-guard header");
+    let mut file = File::create(path)?;
+    write!(file, "#ifndef __CONCAT_H__\n")?;
+    write!(file, "#define __CONCAT_H__\n")?;
+    write!(file, "#include \"concat.h\"\n")?;
+    write!(file, "#endif // __CONCAT_H__\n")?;
     Ok(())
 }
