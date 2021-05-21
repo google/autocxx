@@ -129,7 +129,7 @@ impl<'a> BridgeConverter<'a> {
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
-                mark_types_abstract(&mut analyzed_apis);
+                mark_types_abstract(&self.config, &mut analyzed_apis);
                 Self::dump_apis("main analyses", &analyzed_apis);
                 // During parsing or subsequent processing we might have encountered
                 // items which we couldn't process due to as-yet-unsupported features.
