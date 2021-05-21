@@ -324,7 +324,11 @@ fn create_interestingness_test(
         indoc! {"
         #!/bin/sh
         set -e
+        mv concat.h concat-body.h
+        (echo \"#ifndef __CONCAT_H__\"; echo \"#define __CONCAT_H__\"; echo '#include \"concat-body.h\"'; echo \"#endif\") > concat.h
         ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h) | grep \"{}\"  >/dev/null 2>&1
+        rm concat.h
+        mv concat-body.h concat.h
     "},
         gen_cmd, args, problem
     );
