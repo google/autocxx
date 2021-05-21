@@ -4630,7 +4630,6 @@ fn test_recursive_derived_abstract_class_no_make_unique() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/491
 fn test_derived_abstract_class_with_no_allowlisting_no_make_unique() {
     let hdr = indoc! {"
         class A {

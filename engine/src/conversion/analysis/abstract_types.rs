@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use autocxx_parser::IncludeCppConfig;
+
 use super::{
     fun::{FnAnalysis, FnAnalysisBody, FnKind, MethodKind},
     pod::PodStructAnalysisBody,
 };
-use crate::conversion::api::ApiDetail;
 use crate::conversion::api::{Api, TypeKind};
+use crate::{conversion::api::ApiDetail, types::QualifiedName};
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
-pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
+pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<FnAnalysis>>) {
     let mut abstract_types: HashSet<_> = apis
         .iter()
         .filter_map(|api| match &api.detail {
@@ -36,9 +38,6 @@ pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
             _ => None,
         })
         .collect();
-    if abstract_types.is_empty() {
-        return;
-    }
 
     for api in apis.iter_mut() {
         let tyname = api.name();
@@ -50,7 +49,10 @@ pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
         }
     }
 
-    // Spot any derived classes (recursively)
+    // Spot any derived classes (recursively). Also, any types which have a base
+    // class that's not on the allowlist are presumed to be abstract, because we
+    // have no way of knowing (as they're not on the allowlist, there will be
+    // no methods associated so we won't be able to spot pure virtual methods).
     let mut iterate = true;
     while iterate {
         iterate = false;
@@ -59,7 +61,10 @@ pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
                 ApiDetail::Struct {
                     analysis: PodStructAnalysisBody { bases, kind },
                     ..
-                } if *kind != TypeKind::Abstract && !abstract_types.is_disjoint(bases) => {
+                } if *kind != TypeKind::Abstract
+                    && (!abstract_types.is_disjoint(bases)
+                        || any_missing_from_allowlist(config, &bases)) =>
+                {
                     *kind = TypeKind::Abstract;
                     abstract_types.insert(api.name());
                     // Recurse in case there are further dependent types
@@ -83,4 +88,10 @@ pub(crate) fn mark_types_abstract(apis: &mut Vec<Api<FnAnalysis>>) {
                 },
         } if abstract_types.contains(&self_ty))
     })
+}
+
+fn any_missing_from_allowlist(config: &IncludeCppConfig, bases: &HashSet<QualifiedName>) -> bool {
+    bases
+        .iter()
+        .any(|qn| !config.is_on_allowlist(&qn.to_cpp_name()))
 }

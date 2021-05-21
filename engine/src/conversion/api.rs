@@ -23,9 +23,13 @@ use super::{convert_error::ErrorContext, ConvertError};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
-    Pod,      // trivial. Can be moved and copied in Rust.
-    NonPod,   // has destructor or non-trivial move constructors. Can only hold by UniquePtr
-    Abstract, // has pure virtual members - can't even generate UniquePtr
+    Pod,    // trivial. Can be moved and copied in Rust.
+    NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
+    Abstract, // has pure virtual members - can't even generate UniquePtr.
+            // It's possible that the type itself isn't pure virtual, but it inherits from
+            // some other type which is pure virtual. Alternatively, maybe we just don't
+            // know if the base class is pure virtual because it wasn't on the allowlist,
+            // in which case we'll err on the side of caution.
 }
 
 impl TypeKind {
