@@ -5050,6 +5050,28 @@ fn test_error_generated_for_array_dependent_method() {
     );
 }
 
+#[test]
+fn test_keyword_function() {
+    let hdr = indoc! {"
+        inline void move(int a) {};
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["move_"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/494
+fn test_keyword_method() {
+    let hdr = indoc! {"
+        struct A {
+            int a;
+            inline void move() {};
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
 /// Returns a closure which simply hunts for a given string in the results
 fn make_string_finder(
     error_texts: Vec<&str>,
