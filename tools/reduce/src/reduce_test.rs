@@ -41,6 +41,7 @@ fn test_reduce_direct() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+#[ignore] // takes absolutely ages but you can run using cargo test -- --ignored
 fn test_reduce_preprocessed() -> Result<(), Box<dyn std::error::Error>> {
     do_reduce(|header, demo_code_dir| {
         let hexathorpe = Token![#](Span::call_site());
