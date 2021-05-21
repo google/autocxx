@@ -4830,6 +4830,26 @@ fn test_string_transparent_static_method() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/489
+fn test_immovable_object() {
+    let hdr = indoc! {"
+        class A {
+        public:
+            A();
+            A(A&&) = delete;
+        };
+
+        class B{
+        public:
+            B();
+            B(const B&) = delete;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
 fn find_ffi_items(f: syn::File) -> Result<Vec<Item>, TestError> {
     Ok(f.items
         .into_iter()
