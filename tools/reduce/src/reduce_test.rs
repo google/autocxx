@@ -87,7 +87,8 @@ where
     let output_path = tmp_dir.path().join("min.h");
     let header_name = get_header_name("input.h", &demo_code_dir)?;
     let mut cmd = Command::cargo_bin("autocxx-reduce")?;
-    cmd.arg("--inc")
+    let o = cmd
+        .arg("--inc")
         .arg(demo_code_dir.to_str().unwrap())
         .arg("-h")
         .arg(header_name)
@@ -100,8 +101,12 @@ where
         .arg("-p")
         .arg("type marked as blocked")
         .arg("-k")
-        .assert()
-        .success();
+        .output()?;
+    println!("Reduce output: {}", std::str::from_utf8(&o.stdout).unwrap());
+    println!("Reduce error: {}", std::str::from_utf8(&o.stderr).unwrap());
+    if !o.status.success() {
+        panic!("autocxx-reduce returned non-zero result code");
+    }
     let minimized = std::fs::read_to_string(output_path)?;
     assert!(minimized.contains("First"));
     assert!(!minimized.contains("DoMath"));
