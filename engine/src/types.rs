@@ -14,6 +14,7 @@
 
 use itertools::Itertools;
 use proc_macro2::Span;
+use quote::ToTokens;
 use std::iter::Peekable;
 use std::{fmt::Display, sync::Arc};
 use syn::{parse_quote, Ident, PathSegment, TypePath};
@@ -226,11 +227,19 @@ impl Display for QualifiedName {
 /// wrapper for a CxxCompatibleIdent which is used in any context
 /// where code will be output as part of the `#[cxx::bridge]` mod.
 pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), ConvertError> {
+    validate_ident_ok_for_rust(id)?;
     if id.contains("__") {
         Err(ConvertError::TooManyUnderscores)
     } else {
         Ok(())
     }
+}
+
+pub fn validate_ident_ok_for_rust(id: &str) -> Result<(), ConvertError> {
+    let id = make_ident(id);
+    syn::parse2::<syn::Ident>(id.into_token_stream())
+        .map_err(|_| ConvertError::ReservedName)
+        .map(|_| ())
 }
 
 #[cfg(test)]
