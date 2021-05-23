@@ -357,7 +357,6 @@ impl<'a> FnAnalyzer<'a> {
 
         // End of parameter processing.
         // Work out naming, part one.
-        let mut rust_name;
         // bindgen may have mangled the name either because it's invalid Rust
         // syntax (e.g. a keyword like 'async') or it's an overload.
         // If the former, we respect that mangling. If the latter, we don't,
@@ -383,7 +382,7 @@ impl<'a> FnAnalyzer<'a> {
             (false, self_ty)
         };
 
-        let (kind, error_context) = if let Some(self_ty) = self_ty {
+        let (kind, error_context, rust_name) = if let Some(self_ty) = self_ty {
             // Some kind of method.
             if !self.is_on_allowlist(&self_ty) {
                 // Bindgen will output methods for types which have been encountered
@@ -401,7 +400,7 @@ impl<'a> FnAnalyzer<'a> {
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
             let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
-            rust_name = overload_tracker.get_method_real_name(&type_ident, ideal_rust_name);
+            let mut rust_name = overload_tracker.get_method_real_name(&type_ident, ideal_rust_name);
             let method_kind = if rust_name.starts_with(&type_ident) {
                 // It's a constructor. bindgen generates
                 // fn new(this: *Type, ...args)
@@ -432,13 +431,21 @@ impl<'a> FnAnalyzer<'a> {
                 self_ty: self_ty.get_final_ident(),
                 method: make_ident(&rust_name),
             };
-            (FnKind::Method(self_ty, method_kind), error_context)
+            (
+                FnKind::Method(self_ty, method_kind),
+                error_context,
+                rust_name,
+            )
         } else {
             // Not a method.
             // What shall we call this function? It may be overloaded.
             let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
-            rust_name = overload_tracker.get_function_real_name(ideal_rust_name);
-            (FnKind::Function, ErrorContext::Item(make_ident(&rust_name)))
+            let rust_name = overload_tracker.get_function_real_name(ideal_rust_name);
+            (
+                FnKind::Function,
+                ErrorContext::Item(make_ident(&rust_name)),
+                rust_name,
+            )
         };
 
         // The name we use within the cxx::bridge mod may be different
