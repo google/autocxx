@@ -4830,6 +4830,98 @@ fn test_string_transparent_static_method() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/490
+fn test_issue_490() {
+    let hdr = indoc! {"
+        typedef int a;
+        typedef long unsigned size_t;
+        namespace std {
+        namespace {
+        using ::size_t;
+        template <class b, b c> struct g { static const b value = c; };
+        template <bool d> using e = g<bool, d>;
+        typedef e<true> true_type;
+        template <size_t, size_t> struct ag {};
+        template <class b> typename b ::h move();
+        template <class> class allocator;
+        template <class> class vector;
+        } // namespace
+        } // namespace std
+        void *operator new(size_t, void *);
+        namespace std {
+        namespace {
+        template <class> struct iterator;
+        template <class b, class> struct ay { using h = b *; };
+        template <class b> struct bj { b bk; };
+        template <class bm, class> class bn : bj<bm> {};
+        template <class b, class i = b> class unique_ptr {
+        typedef i bp;
+        typedef typename ay<b, bp>::h bh;
+        bn<bh, bp> bq;
+        
+        public:
+        unique_ptr();
+        unique_ptr(bh);
+        bh get() const;
+        bh release();
+        };
+        template <class = void> struct bt;
+        } // namespace
+        } // namespace std
+        typedef a bv;
+        namespace absl {
+        template <typename ce> class cj {
+        public:
+        using bh = ce *;
+        using iterator = bh;
+        };
+        namespace j {
+        template <class ce> struct cp {
+        using k = ce;
+        using cq = std::bt<>;
+        };
+        template <class ce> using cr = typename cp<ce>::k;
+        template <class ce> using cs = typename cp<ce>::cq;
+        template <class, class, class, class> class ct {
+        public:
+        class iterator {};
+        class cu {
+            cu(iterator);
+            iterator cv;
+        };
+        };
+        template <typename> struct cw;
+        } // namespace j
+        template <class ce, class k = j::cr<ce>, class cq = j::cs<ce>,
+                class cx = std::allocator<ce>>
+        class cy : public j::ct<j::cw<ce>, k, cq, cx> {};
+        } // namespace absl
+        namespace cz {
+        template <typename da> class db { std::ag<sizeof(a), alignof(da)> c; };
+        } // namespace cz
+        namespace spanner {
+        class l;
+        class ColumnList {
+        public:
+        typedef absl::cj<l>::iterator iterator;
+        iterator begin();
+        };
+        class dd {
+        union {
+            cz::db<absl::cy<bv>::cu> e;
+        };
+        };
+        class Row {
+        public:
+        bool f(dd);
+        };
+        } // namespace spanner
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["spanner::Row", "spanner::ColumnList"], &[]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/489
 fn test_immovable_object() {
     let hdr = indoc! {"
