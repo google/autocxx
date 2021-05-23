@@ -369,6 +369,17 @@ macro_rules! safety {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// Whether to avoid generating [`cxx::UniquePtr`] and [`cxx::Vector`]
+/// implementations. This is primarily useful for reducing test cases and
+/// shouldn't be used in normal operation.
+///
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+#[macro_export]
+macro_rules! exclude_impls {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! usage {

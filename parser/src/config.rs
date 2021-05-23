@@ -98,6 +98,7 @@ pub struct IncludeCppConfig {
     pub inclusions: Vec<String>,
     pub unsafe_policy: UnsafePolicy,
     pub parse_only: bool,
+    pub exclude_impls: bool,
     pod_requests: Vec<String>,
     allowlist: Allowlist,
     blocklist: Vec<String>,
@@ -114,6 +115,7 @@ impl Parse for IncludeCppConfig {
 
         let mut inclusions = Vec::new();
         let mut parse_only = false;
+        let mut exclude_impls = false;
         let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
         let mut allowlist = Allowlist::Unspecified;
         let mut blocklist = Vec::new();
@@ -156,6 +158,9 @@ impl Parse for IncludeCppConfig {
                 } else if ident == "parse_only" {
                     parse_only = true;
                     swallow_parentheses(&input, &ident)?;
+                } else if ident == "exclude_impls" {
+                    exclude_impls = true;
+                    swallow_parentheses(&input, &ident)?;
                 } else if ident == "generate_all" {
                     allowlist.set_all(&ident)?;
                     swallow_parentheses(&input, &ident)?;
@@ -192,6 +197,7 @@ impl Parse for IncludeCppConfig {
             blocklist,
             exclude_utilities,
             mod_name,
+            exclude_impls,
         })
     }
 }

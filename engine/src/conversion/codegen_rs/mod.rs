@@ -406,7 +406,7 @@ impl<'a> RsCodeGenerator<'a> {
             },
             ApiDetail::ConcreteType { .. } => RsCodegenResult {
                 global_items: self.generate_extern_type_impl(TypeKind::NonPod, &name),
-                bridge_items: create_impl_items(&id),
+                bridge_items: create_impl_items(&id, self.config),
                 extern_c_mod_item: Some(ForeignItem::Verbatim(self.generate_cxxbridge_type(name))),
                 bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id.clone()))),
                 impl_entry: None,
@@ -477,7 +477,7 @@ impl<'a> RsCodeGenerator<'a> {
             global_items: self.generate_extern_type_impl(analysis, &name),
             impl_entry: None,
             bridge_items: if analysis.can_be_instantiated() {
-                create_impl_items(&id)
+                create_impl_items(&id, self.config)
             } else {
                 Vec::new()
             },
