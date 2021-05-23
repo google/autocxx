@@ -47,6 +47,7 @@ pub enum ConvertError {
     UnknownDependentType,
     IgnoredDependent,
     MoveConstructorUnsupported,
+    ReservedName,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -86,6 +87,7 @@ impl Display for ConvertError {
             ConvertError::UnknownDependentType => write!(f, "This item relies on a type not known to autocxx.")?,
             ConvertError::IgnoredDependent => write!(f, "This item depends on some other type which autocxx could not generate.")?,
             ConvertError::MoveConstructorUnsupported => write!(f, "This is a move constructor, for which we currently cannot generate bindings.")?,
+            ConvertError::ReservedName => write!(f, "The item name is a reserved word in Rust.")?,
         }
         Ok(())
     }

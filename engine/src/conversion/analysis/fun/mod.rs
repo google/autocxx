@@ -29,6 +29,7 @@ use crate::{
         error_reporter::convert_apis,
     },
     known_types::known_types,
+    types::validate_ident_ok_for_rust,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -526,6 +527,8 @@ impl<'a> FnAnalyzer<'a> {
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
             .map_or(false, |x| x.cpp_work_needed());
+        // See https://github.com/dtolnay/cxx/issues/878 for the reason for this next line.
+        let cpp_name_incompatible_with_cxx = validate_ident_ok_for_rust(&cpp_call_name).is_err();
         // If possible, we'll put knowledge of the C++ API directly into the cxx::bridge
         // mod. However, there are various circumstances where cxx can't work with the existing
         // C++ API and we need to create a C++ wrapper function which is more cxx-compliant.
@@ -538,6 +541,7 @@ impl<'a> FnAnalyzer<'a> {
             FnKind::Method(..) if cxxbridge_name != rust_name => true,
             _ if param_conversion_needed => true,
             _ if ret_type_conversion_needed => true,
+            _ if cpp_name_incompatible_with_cxx => true,
             _ => false,
         };
 
