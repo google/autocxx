@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use itertools::Itertools;
 use proc_macro2::Span;
 use std::iter::Peekable;
 use std::{fmt::Display, sync::Arc};
@@ -180,15 +181,7 @@ impl QualifiedName {
         let special_cpp_name = known_types().special_cpp_name(&self);
         match special_cpp_name {
             Some(name) => name,
-            None => {
-                let mut s = String::new();
-                for seg in &self.0 {
-                    s.push_str(&seg);
-                    s.push_str("::");
-                }
-                s.push_str(&self.1);
-                s
-            }
+            None => self.0.iter().chain(std::iter::once(&self.1)).join("::"),
         }
     }
 
