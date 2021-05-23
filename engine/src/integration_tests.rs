@@ -5060,7 +5060,6 @@ fn test_keyword_function() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/494
 fn test_keyword_method() {
     let hdr = indoc! {"
         struct A {

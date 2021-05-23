@@ -357,18 +357,33 @@ impl<'a> FnAnalyzer<'a> {
 
         // End of parameter processing.
         // Work out naming, part one.
+        // The C++ call name will always be whatever bindgen tells us.
+        let cpp_call_name = original_name
+            .clone()
+            .unwrap_or_else(|| initial_rust_name.clone());
+        // The Rust name... it's more complicated.
         // bindgen may have mangled the name either because it's invalid Rust
         // syntax (e.g. a keyword like 'async') or it's an overload.
         // If the former, we respect that mangling. If the latter, we don't,
         // because we'll add our own overload counting mangling later.
-        let name_probably_invalid_in_rust =
-            original_name.is_some() && initial_rust_name.ends_with('_');
-        // The C++ call name will always be whatever bindgen tells us.
-        let cpp_call_name = original_name.unwrap_or_else(|| initial_rust_name.clone());
-        let ideal_rust_name = if name_probably_invalid_in_rust {
-            initial_rust_name
-        } else {
-            cpp_call_name.clone()
+        // Cases:
+        //   function, IRN=foo,    ON=<none>                    output: foo    case 1
+        //   function, IRN=move_,  ON=move   (keyword problem)  output: move_  case 2
+        //   function, IRN=foo1,   ON=foo    (overload)         output: foo    case 3
+        //   method,   IRN=A_foo,  ON=foo                       output: foo    case 4
+        //   method,   IRN=A_move, ON=move   (keyword problem)  output: move_  case 5
+        //   method,   IRN=A_foo1, ON=foo    (overload)         output: foo    case 6
+        let ideal_rust_name = match original_name {
+            None => initial_rust_name, // case 1
+            Some(original_name) => {
+                if initial_rust_name.ends_with("_") {
+                    initial_rust_name // case 2
+                } else if validate_ident_ok_for_rust(&original_name).is_err() {
+                    format!("{}_", original_name) // case 5
+                } else {
+                    original_name // cases 3, 4, 6
+                }
+            }
         };
 
         // Let's spend some time figuring out the kind of this function (i.e. method,
