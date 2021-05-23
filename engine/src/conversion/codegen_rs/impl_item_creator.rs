@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use autocxx_parser::IncludeCppConfig;
 use syn::{parse_quote, Ident, Item};
 
-pub(crate) fn create_impl_items(id: &Ident) -> Vec<Item> {
+pub(crate) fn create_impl_items(id: &Ident, config: &IncludeCppConfig) -> Vec<Item> {
+    if config.exclude_impls {
+        return vec![];
+    }
     vec![
         Item::Impl(parse_quote! {
             impl UniquePtr<#id> {}

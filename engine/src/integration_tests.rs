@@ -5357,6 +5357,29 @@ fn test_issue_470_492() {
 }
 
 #[test]
+fn test_no_impl() {
+    let hdr = indoc! {"
+        struct A {
+            int a;
+        };
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &["A"],
+        &[],
+        Some(quote! {
+            exclude_impls!()
+            exclude_utilities!()
+        }),
+        &[],
+        None,
+    );
+}
+
+#[test]
 fn test_generate_all() {
     let hdr = indoc! {"
         #include <cstdint>
