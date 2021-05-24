@@ -525,14 +525,7 @@ pub fn preprocess(
     incs: &[PathBuf],
     extra_clang_args: &[&str],
 ) -> Result<(), std::io::Error> {
-    // `CLANG_PATH` is the environment variable that clang-sys uses to specify
-    // the path to Clang, so in most cases where someone is using a compiler
-    // that's not on the path, things should just work. We also check `CXX`,
-    // since some users may have set that.
-    let clang = std::env::var("CLANG_PATH")
-        .or_else(|_| std::env::var("CXX"))
-        .unwrap_or_else(|_| "clang++".to_string());
-    let mut cmd = Command::new(clang);
+    let mut cmd = Command::new(get_clang_path());
     cmd.arg("-E");
     cmd.arg("-C");
     cmd.args(make_clang_args(incs, extra_clang_args));
@@ -545,4 +538,16 @@ pub fn preprocess(
     let mut file = File::create(preprocess_path)?;
     file.write_all(&result.stdout)?;
     Ok(())
+}
+
+/// Get the path to clang which is effective for any preprocessing
+/// operations done by autocxx.
+pub fn get_clang_path() -> String {
+    // `CLANG_PATH` is the environment variable that clang-sys uses to specify
+    // the path to Clang, so in most cases where someone is using a compiler
+    // that's not on the path, things should just work. We also check `CXX`,
+    // since some users may have set that.
+    std::env::var("CLANG_PATH")
+        .or_else(|_| std::env::var("CXX"))
+        .unwrap_or_else(|_| "clang++".to_string())
 }
