@@ -376,7 +376,7 @@ impl<'a> FnAnalyzer<'a> {
         let ideal_rust_name = match original_name {
             None => initial_rust_name, // case 1
             Some(original_name) => {
-                if initial_rust_name.ends_with("_") {
+                if initial_rust_name.ends_with('_') {
                     initial_rust_name // case 2
                 } else if validate_ident_ok_for_rust(&original_name).is_err() {
                     format!("{}_", original_name) // case 5
