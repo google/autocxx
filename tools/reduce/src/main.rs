@@ -343,12 +343,18 @@ fn create_interestingness_test(
         indoc! {"
         #!/bin/sh
         set -e
+        echo Precompile
         {}
+        echo Move
         mv concat.h concat-body.h
+        echo Codegen
         (echo \"#ifndef __CONCAT_H__\"; echo \"#define __CONCAT_H__\"; echo '#include \"concat-body.h\"'; echo \"#endif\") > concat.h
         ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h {}) | grep \"{}\"  >/dev/null 2>&1
+        echo Remove
         rm concat.h
+        echo Swap back
         mv concat-body.h concat.h
+        echo Done
     "},
         precompile_step, gen_cmd, args, postcompile_step, problem
     );
