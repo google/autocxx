@@ -476,7 +476,7 @@ impl<'a> FnAnalyzer<'a> {
         // where the error occurred such that we can put a marker in the output
         // Rust code to indicate that a problem occurred (benefiting people using
         // rust-analyzer or similar). Make a closure to make this easy.
-        let contextualize_error = |err| ConvertErrorWithContext(err, Some(error_context));
+        let contextualize_error = |err| ConvertErrorWithContext(err, Some(error_context.clone()));
 
         // Now we can add context to the error, check for a couple of error
         // cases. First, see if any of the parameters are trouble.
@@ -516,13 +516,8 @@ impl<'a> FnAnalyzer<'a> {
                 deps: these_deps,
             }
         } else {
-            // We can't easily use map_err below because the borrow checker can't
-            // prove we don't use contextualize_error more than once.
-            let r = self.convert_return_type(&fun.sig.output, &ns, reference_return);
-            match r {
-                Err(err) => return Err(contextualize_error(err)),
-                Ok(r) => r,
-            }
+            self.convert_return_type(&fun.sig.output, &ns, reference_return)
+                .map_err(contextualize_error)?
         };
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
