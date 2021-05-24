@@ -480,7 +480,7 @@ impl<'a> FnAnalyzer<'a> {
         // where the error occurred such that we can put a marker in the output
         // Rust code to indicate that a problem occurred (benefiting people using
         // rust-analyzer or similar). Make a closure to make this easy.
-        let contextualize_error = |err| ConvertErrorWithContext(err, Some(error_context));
+        let contextualize_error = |err| ConvertErrorWithContext(err, Some(error_context.clone()));
 
         // Now we can add context to the error, check for a couple of error
         // cases. First, see if any of the parameters are trouble.
@@ -513,9 +513,15 @@ impl<'a> FnAnalyzer<'a> {
                 rt: parse_quote! {
                     -> #constructed_type
                 },
-                conversion: Some(TypeConversionPolicy::new_to_unique_ptr(parse_quote! {
-                    #constructed_type
-                })),
+                conversion: Some(
+                    TypeConversionPolicy::new_to_unique_ptr(
+                        parse_quote! {
+                            #constructed_type
+                        },
+                        self.config,
+                    )
+                    .map_err(contextualize_error)?,
+                ),
                 was_reference: false,
                 deps: these_deps,
             }
@@ -744,7 +750,7 @@ impl<'a> FnAnalyzer<'a> {
                 let (new_ty, deps, requires_unsafe) =
                     self.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
                 let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
-                let conversion = self.argument_conversion_details(&new_ty);
+                let conversion = self.argument_conversion_details(&new_ty)?;
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
                 (
@@ -764,33 +770,36 @@ impl<'a> FnAnalyzer<'a> {
         })
     }
 
-    fn argument_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
+    fn argument_conversion_details(&self, ty: &Type) -> Result<TypeConversionPolicy, ConvertError> {
         match ty {
             Type::Path(p) => {
                 let tn = QualifiedName::from_type_path(p);
                 if self.pod_safe_types.contains(&tn) {
-                    TypeConversionPolicy::new_unconverted(ty.clone())
+                    Ok(TypeConversionPolicy::new_unconverted(ty.clone()))
                 } else if known_types().convertible_from_strs(&tn) && self.generate_utilities {
-                    TypeConversionPolicy::new_from_str(ty.clone())
+                    Ok(TypeConversionPolicy::new_from_str(ty.clone()))
                 } else {
-                    TypeConversionPolicy::new_from_unique_ptr(ty.clone())
+                    TypeConversionPolicy::new_from_unique_ptr(ty.clone(), self.config)
                 }
             }
-            _ => TypeConversionPolicy::new_unconverted(ty.clone()),
+            _ => Ok(TypeConversionPolicy::new_unconverted(ty.clone())),
         }
     }
 
-    fn return_type_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
+    fn return_type_conversion_details(
+        &self,
+        ty: &Type,
+    ) -> Result<TypeConversionPolicy, ConvertError> {
         match ty {
             Type::Path(p) => {
                 let tn = QualifiedName::from_type_path(p);
                 if self.pod_safe_types.contains(&tn) {
-                    TypeConversionPolicy::new_unconverted(ty.clone())
+                    Ok(TypeConversionPolicy::new_unconverted(ty.clone()))
                 } else {
-                    TypeConversionPolicy::new_to_unique_ptr(ty.clone())
+                    TypeConversionPolicy::new_to_unique_ptr(ty.clone(), self.config)
                 }
             }
-            _ => TypeConversionPolicy::new_unconverted(ty.clone()),
+            _ => Ok(TypeConversionPolicy::new_unconverted(ty.clone())),
         }
     }
 
@@ -812,7 +821,7 @@ impl<'a> FnAnalyzer<'a> {
                 let (boxed_type, deps, _) =
                     self.convert_boxed_type(boxed_type.clone(), ns, convert_ptr_to_reference)?;
                 let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
-                let conversion = self.return_type_conversion_details(boxed_type.as_ref());
+                let conversion = self.return_type_conversion_details(boxed_type.as_ref())?;
                 ReturnTypeAnalysis {
                     rt: ReturnType::Type(*rarrow, boxed_type),
                     conversion: Some(conversion),

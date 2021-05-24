@@ -48,6 +48,7 @@ pub enum ConvertError {
     IgnoredDependent,
     MoveConstructorUnsupported,
     ReservedName,
+    ImplsExcludedButNeeded,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -88,11 +89,13 @@ impl Display for ConvertError {
             ConvertError::IgnoredDependent => write!(f, "This item depends on some other type which autocxx could not generate.")?,
             ConvertError::MoveConstructorUnsupported => write!(f, "This is a move constructor, for which we currently cannot generate bindings.")?,
             ConvertError::ReservedName => write!(f, "The item name is a reserved word in Rust.")?,
+            ConvertError::ImplsExcludedButNeeded => write!(f, "exclude_impls! was used and prevents us wrapping this type in a UniquePtr")?,
         }
         Ok(())
     }
 }
 
+#[derive(Clone)]
 pub(crate) enum ErrorContext {
     Item(Ident),
     Method { self_ty: Ident, method: Ident },

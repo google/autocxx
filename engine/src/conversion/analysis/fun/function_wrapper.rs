@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::Namespace;
+use crate::{conversion::ConvertError, types::Namespace};
+use autocxx_parser::IncludeCppConfig;
 use syn::{parse_quote, Ident, Type};
 
 #[derive(Clone)]
@@ -55,20 +56,32 @@ impl TypeConversionPolicy {
         }
     }
 
-    pub(crate) fn new_to_unique_ptr(ty: Type) -> Self {
-        TypeConversionPolicy {
+    pub(crate) fn new_to_unique_ptr(
+        ty: Type,
+        config: &IncludeCppConfig,
+    ) -> Result<Self, ConvertError> {
+        if config.exclude_impls {
+            return Err(ConvertError::ImplsExcludedButNeeded);
+        }
+        Ok(TypeConversionPolicy {
             unwrapped_type: ty,
             cpp_conversion: CppConversionType::FromValueToUniquePtr,
             rust_conversion: RustConversionType::None,
-        }
+        })
     }
 
-    pub(crate) fn new_from_unique_ptr(ty: Type) -> Self {
-        TypeConversionPolicy {
+    pub(crate) fn new_from_unique_ptr(
+        ty: Type,
+        config: &IncludeCppConfig,
+    ) -> Result<Self, ConvertError> {
+        if config.exclude_impls {
+            return Err(ConvertError::ImplsExcludedButNeeded);
+        }
+        Ok(TypeConversionPolicy {
             unwrapped_type: ty,
             cpp_conversion: CppConversionType::FromUniquePtrToValue,
             rust_conversion: RustConversionType::None,
-        }
+        })
     }
 
     pub(crate) fn new_from_str(ty: Type) -> Self {
