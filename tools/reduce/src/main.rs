@@ -213,7 +213,6 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         matches.value_of("no-precompile").is_none(),
         matches.value_of("no-postcompile").is_none(),
     )?;
-    run_interestingness_test(&interestingness_test);
     run_creduce(
         matches.value_of("creduce").unwrap(),
         &interestingness_test,
@@ -381,15 +380,6 @@ fn make_compile_step(enabled: bool, file: &str, extra_clang_args: &[&str]) -> St
     } else {
         "".into()
     }
-}
-
-fn run_interestingness_test(test_path: &Path) {
-    announce_progress("Running interestingness test");
-    let status = Command::new(test_path).status().unwrap();
-    announce_progress(&format!(
-        "Have run interestingness test - result is {:?}",
-        status.code()
-    ));
 }
 
 fn create_rs_file(rs_path: &Path, directives: &[String]) -> Result<(), std::io::Error> {
