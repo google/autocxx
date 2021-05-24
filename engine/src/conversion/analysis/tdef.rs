@@ -37,7 +37,6 @@ pub(crate) struct TypedefAnalysis;
 impl AnalysisPhase for TypedefAnalysis {
     type TypedefAnalysis = TypedefKind;
     type StructAnalysis = ();
-    type EnumAnalysis = ();
     type FunAnalysis = ();
 }
 
@@ -87,7 +86,7 @@ pub(crate) fn convert_typedef_targets(
                     analysis: item,
                 }),
                 ApiDetail::Struct { item, analysis } => Some(ApiDetail::Struct { item, analysis }),
-                ApiDetail::Enum { item, analysis } => Some(ApiDetail::Enum { item, analysis }),
+                ApiDetail::Enum { item } => Some(ApiDetail::Enum { item }),
                 ApiDetail::CType { typename } => Some(ApiDetail::CType { typename }),
                 ApiDetail::IgnoredItem { err, ctx } => Some(ApiDetail::IgnoredItem { err, ctx }),
             };

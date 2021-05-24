@@ -93,6 +93,7 @@ impl Display for ConvertError {
     }
 }
 
+#[derive(Clone)]
 pub(crate) enum ErrorContext {
     Item(Ident),
     Method { self_ty: Ident, method: Ident },

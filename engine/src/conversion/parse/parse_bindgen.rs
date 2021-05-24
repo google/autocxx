@@ -162,7 +162,6 @@ impl<'a> ParseBindgen<'a> {
                 let original_name = get_bindgen_original_name_annotation(&e.attrs);
                 self.parse_type(tyname, false, e, original_name, |e| ApiDetail::Enum {
                     item: e,
-                    analysis: (),
                 });
                 Ok(())
             }

@@ -118,7 +118,6 @@ pub(crate) struct FnAnalysis;
 impl AnalysisPhase for FnAnalysis {
     type TypedefAnalysis = TypedefKind;
     type StructAnalysis = PodStructAnalysisBody;
-    type EnumAnalysis = TypeKind;
     type FunAnalysis = FnAnalysisBody;
 }
 
@@ -175,10 +174,7 @@ impl<'a> FnAnalyzer<'a> {
                             ..
                         },
                 } => Some(api.name()),
-                ApiDetail::Enum {
-                    item: _,
-                    analysis: TypeKind::Pod,
-                } => Some(api.name()),
+                ApiDetail::Enum { item: _ } => Some(api.name()),
                 _ => None,
             })
             .chain(
@@ -231,7 +227,7 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
             ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
-            ApiDetail::Enum { item, analysis } => ApiDetail::Enum { item, analysis },
+            ApiDetail::Enum { item } => ApiDetail::Enum { item },
             ApiDetail::Struct { item, analysis } => ApiDetail::Struct { item, analysis },
             ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
             ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
@@ -480,7 +476,7 @@ impl<'a> FnAnalyzer<'a> {
         // where the error occurred such that we can put a marker in the output
         // Rust code to indicate that a problem occurred (benefiting people using
         // rust-analyzer or similar). Make a closure to make this easy.
-        let contextualize_error = |err| ConvertErrorWithContext(err, Some(error_context));
+        let contextualize_error = |err| ConvertErrorWithContext(err, Some(error_context.clone()));
 
         // Now we can add context to the error, check for a couple of error
         // cases. First, see if any of the parameters are trouble.
@@ -520,13 +516,8 @@ impl<'a> FnAnalyzer<'a> {
                 deps: these_deps,
             }
         } else {
-            // We can't easily use map_err below because the borrow checker can't
-            // prove we don't use contextualize_error more than once.
-            let r = self.convert_return_type(&fun.sig.output, &ns, reference_return);
-            match r {
-                Err(err) => return Err(contextualize_error(err)),
-                Ok(r) => r,
-            }
+            self.convert_return_type(&fun.sig.output, &ns, reference_return)
+                .map_err(contextualize_error)?
         };
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
