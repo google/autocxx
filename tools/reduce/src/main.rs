@@ -334,8 +334,10 @@ fn create_interestingness_test(
     let mut args = format_gen_cmd(rs_file, "$(pwd)", extra_clang_args);
     let args = args.join(" ");
     let precompile_step = make_compile_step(precompile, "concat.h", extra_clang_args);
+    // For the compile afterwards, we have to avoid including any system headers.
+    // We rely on equivalent content being hermetically inside concat.h.
     let postcompile_step = format!(
-        "; {} 2>&1",
+        "; mv gen0.cc gen0-orig.cc && sed -e 's/#include <.*>//g' < gen0-orig.cc > gen0.cc && {} 2>&1",
         make_compile_step(postcompile, "gen0.cc", extra_clang_args)
     );
     let content = format!(
