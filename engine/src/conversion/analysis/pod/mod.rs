@@ -43,7 +43,6 @@ pub(crate) struct PodAnalysis;
 impl AnalysisPhase for PodAnalysis {
     type TypedefAnalysis = TypedefKind;
     type StructAnalysis = PodStructAnalysisBody;
-    type EnumAnalysis = TypeKind;
     type FunAnalysis = ();
 }
 
@@ -107,17 +106,9 @@ fn analyze_pod_api(
         ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
         ApiDetail::CType { typename } => ApiDetail::CType { typename },
         // Just changes to these two...
-        ApiDetail::Enum {
-            mut item,
-            analysis: _,
-        } => {
+        ApiDetail::Enum { mut item } => {
             super::remove_bindgen_attrs(&mut item.attrs)?;
-            let analysis = if byvalue_checker.is_pod(&ty_id) {
-                TypeKind::Pod
-            } else {
-                TypeKind::NonPod
-            };
-            ApiDetail::Enum { item, analysis }
+            ApiDetail::Enum { item }
         }
         ApiDetail::Struct {
             mut item,

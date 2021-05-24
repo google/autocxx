@@ -118,7 +118,6 @@ pub(crate) struct FnAnalysis;
 impl AnalysisPhase for FnAnalysis {
     type TypedefAnalysis = TypedefKind;
     type StructAnalysis = PodStructAnalysisBody;
-    type EnumAnalysis = TypeKind;
     type FunAnalysis = FnAnalysisBody;
 }
 
@@ -175,10 +174,7 @@ impl<'a> FnAnalyzer<'a> {
                             ..
                         },
                 } => Some(api.name()),
-                ApiDetail::Enum {
-                    item: _,
-                    analysis: TypeKind::Pod,
-                } => Some(api.name()),
+                ApiDetail::Enum { item: _ } => Some(api.name()),
                 _ => None,
             })
             .chain(
@@ -231,7 +227,7 @@ impl<'a> FnAnalyzer<'a> {
             ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
             ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
             ApiDetail::CType { typename } => ApiDetail::CType { typename },
-            ApiDetail::Enum { item, analysis } => ApiDetail::Enum { item, analysis },
+            ApiDetail::Enum { item } => ApiDetail::Enum { item },
             ApiDetail::Struct { item, analysis } => ApiDetail::Struct { item, analysis },
             ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
             ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },

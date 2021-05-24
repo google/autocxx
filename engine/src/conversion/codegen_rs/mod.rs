@@ -445,8 +445,8 @@ impl<'a> RsCodeGenerator<'a> {
             ApiDetail::Struct { item, analysis } => {
                 self.generate_type(name, id, item, analysis.kind, Item::Struct)
             }
-            ApiDetail::Enum { item, analysis } => {
-                self.generate_type(name, id, item, analysis, Item::Enum)
+            ApiDetail::Enum { item } => {
+                self.generate_type(name, id, item, TypeKind::Pod, Item::Enum)
             }
             ApiDetail::CType { .. } => RsCodegenResult {
                 global_items: Vec::new(),

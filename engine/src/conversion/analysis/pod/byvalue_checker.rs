@@ -118,10 +118,7 @@ impl ByValueChecker {
                 ApiDetail::Struct { item, analysis: _ } => {
                     byvalue_checker.ingest_struct(&item, &api.name.get_namespace())
                 }
-                ApiDetail::Enum {
-                    item: _,
-                    analysis: _,
-                } => {
+                ApiDetail::Enum { item: _ } => {
                     byvalue_checker
                         .results
                         .insert(api.name(), StructDetails::new(PodState::IsPod));

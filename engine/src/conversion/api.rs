@@ -60,7 +60,6 @@ pub(crate) struct FuncToConvert {
 pub(crate) trait AnalysisPhase {
     type TypedefAnalysis;
     type StructAnalysis;
-    type EnumAnalysis;
     type FunAnalysis;
 }
 
@@ -70,7 +69,6 @@ pub(crate) struct NullAnalysis;
 impl AnalysisPhase for NullAnalysis {
     type TypedefAnalysis = ();
     type StructAnalysis = ();
-    type EnumAnalysis = ();
     type FunAnalysis = ();
 }
 
@@ -114,10 +112,7 @@ pub(crate) enum ApiDetail<T: AnalysisPhase> {
     },
     /// An enum encountered in the
     /// `bindgen` output.
-    Enum {
-        item: ItemEnum,
-        analysis: T::EnumAnalysis,
-    },
+    Enum { item: ItemEnum },
     /// A struct encountered in the
     /// `bindgen` output.
     Struct {
