@@ -173,7 +173,7 @@ RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test  integration_tests::tes
 ```
 
 This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
-in `engine/src/conversion`. See [here](https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCpp.html) for documentation and diagrams on how the engine works.
+in `engine/src/conversion`. See [here](https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCppEngine.html) for documentation and diagrams on how the engine works.
 
 # Reporting bugs
 
