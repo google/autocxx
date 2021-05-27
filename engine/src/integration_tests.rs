@@ -4941,6 +4941,29 @@ fn test_immovable_object() {
     run_test("", hdr, rs, &["A", "B"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/528
+fn test_type_called_type() {
+    let hdr = indoc! {"
+        namespace std {
+            template<int _Len>
+            struct aligned_storage
+            {
+                union type
+                {
+                    unsigned char __data[_Len];
+                    struct foo {
+                        int a;
+                    };
+                };
+            };
+        }
+        inline void take_type(std::aligned_storage<4>::type) {}
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["take_type"], &[]);
+}
+
 fn find_ffi_items(f: syn::File) -> Result<Vec<Item>, TestError> {
     Ok(f.items
         .into_iter()
