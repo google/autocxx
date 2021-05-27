@@ -26,7 +26,7 @@ use std::{
     process::Command,
 };
 
-use autocxx_engine::{get_clang_path, preprocess};
+use autocxx_engine::{get_clang_path, make_clang_args, preprocess};
 use clap::{crate_authors, crate_version, App, Arg, ArgMatches};
 use indoc::indoc;
 use itertools::Itertools;
@@ -374,10 +374,10 @@ fn create_interestingness_test(
 fn make_compile_step(enabled: bool, file: &str, extra_clang_args: &[&str]) -> String {
     if enabled {
         format!(
-            "{} -I. {} {}",
+            "{} {} -c {}",
             get_clang_path(),
+            make_clang_args(&[PathBuf::from(".")], extra_clang_args).join(" "),
             file,
-            extra_clang_args.join(" ")
         )
     } else {
         "".into()

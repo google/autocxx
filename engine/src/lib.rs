@@ -504,7 +504,9 @@ impl CppBuildable for IncludeCppEngine {
     }
 }
 
-fn make_clang_args<'a>(
+/// Get clang args as if we were operating clang the same way as we operate
+/// bindgen.
+pub fn make_clang_args<'a>(
     incs: &'a [PathBuf],
     extra_args: &'a [&str],
 ) -> impl Iterator<Item = String> + 'a {
