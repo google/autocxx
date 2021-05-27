@@ -90,7 +90,6 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) kind: FnKind,
     pub(crate) ret_type: ReturnType,
     pub(crate) param_details: Vec<ArgumentAnalysis>,
-    pub(crate) cpp_call_name: String,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
     pub(crate) cpp_wrapper: Option<AdditionalNeed>,
@@ -199,6 +198,7 @@ impl<'a> FnAnalyzer<'a> {
     ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
         let mut new_deps = api.deps.clone();
         let mut new_id = api.name.get_final_ident();
+        let cpp_name = api.cxx_name().to_string();
         let api_detail = match api.detail {
             // No changes to any of these...
             ApiDetail::ConcreteType {
@@ -214,6 +214,7 @@ impl<'a> FnAnalyzer<'a> {
                     &api.name.get_namespace(),
                     &fun,
                     api.original_name.clone(),
+                    cpp_name,
                 )?;
                 match analysis {
                     None => return Ok(None),
@@ -303,6 +304,7 @@ impl<'a> FnAnalyzer<'a> {
         ns: &Namespace,
         func_information: &FuncToConvert,
         original_name: Option<String>,
+        cpp_call_name: String,
     ) -> Result<Option<FnAnalysisResult>, ConvertErrorWithContext> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
@@ -353,10 +355,6 @@ impl<'a> FnAnalyzer<'a> {
 
         // End of parameter processing.
         // Work out naming, part one.
-        // The C++ call name will always be whatever bindgen tells us.
-        let cpp_call_name = original_name
-            .clone()
-            .unwrap_or_else(|| initial_rust_name.clone());
         // The Rust name... it's more complicated.
         // bindgen may have mangled the name either because it's invalid Rust
         // syntax (e.g. a keyword like 'async') or it's an overload.
@@ -660,7 +658,6 @@ impl<'a> FnAnalyzer<'a> {
                 kind,
                 ret_type,
                 param_details,
-                cpp_call_name,
                 requires_unsafe,
                 vis,
                 cpp_wrapper,

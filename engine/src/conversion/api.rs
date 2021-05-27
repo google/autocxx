@@ -171,4 +171,10 @@ impl<T: AnalysisPhase> Api<T> {
     pub(crate) fn name(&self) -> QualifiedName {
         self.name.clone()
     }
+
+    pub(crate) fn cxx_name(&self) -> &str {
+        self.original_name
+            .as_deref()
+            .unwrap_or_else(|| self.name.get_final_item())
+    }
 }

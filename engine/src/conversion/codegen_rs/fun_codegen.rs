@@ -37,12 +37,12 @@ pub(super) fn gen_function(
     ns: &Namespace,
     fun: FuncToConvert,
     analysis: FnAnalysisBody,
+    cpp_call_name: String,
 ) -> RsCodegenResult {
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = analysis.rust_name;
     let ret_type = analysis.ret_type;
     let param_details = analysis.param_details;
-    let cpp_call_name = analysis.cpp_call_name;
     let wrapper_function_needed = analysis.cpp_wrapper.is_some();
     let params = analysis.params;
     let vis = analysis.vis;
