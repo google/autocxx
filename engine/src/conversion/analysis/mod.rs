@@ -17,6 +17,7 @@ use syn::Attribute;
 use super::ConvertError;
 
 pub(crate) mod abstract_types;
+mod bridge_name_tracker;
 pub(crate) mod ctypes;
 pub(crate) mod fun;
 pub(crate) mod gc;

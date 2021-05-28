@@ -18,7 +18,7 @@ use std::collections::HashSet;
 
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
-use syn::{ItemStruct, Type};
+use syn::{Ident, ItemStruct, Type};
 
 use crate::{
     conversion::{
@@ -28,10 +28,10 @@ use crate::{
         error_reporter::convert_item_apis,
         ConvertError,
     },
-    types::{Namespace, QualifiedName},
+    types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::tdef::TypedefAnalysis;
+use super::{bridge_name_tracker::BridgeNameTracker, tdef::TypedefAnalysis};
 
 pub(crate) struct PodStructAnalysisBody {
     pub(crate) kind: TypeKind,
@@ -63,8 +63,16 @@ pub(crate) fn analyze_pod_apis(
     let mut extra_apis = Vec::new();
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut results = Vec::new();
+    let mut bridge_tracker = BridgeNameTracker::new();
     convert_item_apis(apis, &mut results, |api| {
-        analyze_pod_api(api, &byvalue_checker, &mut type_converter, &mut extra_apis).map(Some)
+        analyze_pod_api(
+            api,
+            &byvalue_checker,
+            &mut type_converter,
+            &mut extra_apis,
+            &mut bridge_tracker,
+        )
+        .map(Some)
     });
     // Conceivably, the process of POD-analysing the first set of APIs could result
     // in us creating new APIs to concretize generic types.
@@ -75,6 +83,7 @@ pub(crate) fn analyze_pod_apis(
             &byvalue_checker,
             &mut type_converter,
             &mut more_extra_apis,
+            &mut bridge_tracker,
         )
         .map(Some)
     });
@@ -87,9 +96,12 @@ fn analyze_pod_api(
     byvalue_checker: &ByValueChecker,
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
+    bridge_name_tracker: &mut BridgeNameTracker,
 ) -> Result<Api<PodAnalysis>, ConvertError> {
     let ty_id = api.name();
     let mut new_deps = api.deps;
+    let mut new_name = api.name;
+    let mut rename_to: Option<Ident> = None;
     let api_detail = match api.detail {
         // No changes to any of these...
         ApiDetail::ConcreteType {
@@ -99,7 +111,24 @@ fn analyze_pod_api(
             rs_definition,
             cpp_definition,
         },
-        ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
+        ApiDetail::ForwardDeclaration => {
+            let replacement_cxx_bridge_name = bridge_name_tracker.get_unique_cxx_bridge_name(
+                None,
+                &ty_id.get_final_item(),
+                ty_id.get_namespace(),
+            );
+            new_name = QualifiedName::new(
+                ty_id.get_namespace(),
+                make_ident(&replacement_cxx_bridge_name),
+            );
+            rename_to = if replacement_cxx_bridge_name == ty_id.get_final_item() {
+                None
+            } else {
+                Some(ty_id.get_final_ident().clone())
+            };
+
+            ApiDetail::ForwardDeclaration
+        }
         ApiDetail::StringConstructor => ApiDetail::StringConstructor,
         ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
         ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
@@ -120,7 +149,7 @@ fn analyze_pod_api(
                 // It's POD so let's mark dependencies on things in its field
                 get_struct_field_types(
                     type_converter,
-                    &api.name.get_namespace(),
+                    &new_name.get_namespace(),
                     &item,
                     &mut new_deps,
                     extra_apis,
@@ -133,6 +162,21 @@ fn analyze_pod_api(
                 new_deps.clear();
                 TypeKind::NonPod
             };
+            let replacement_cxx_bridge_name = bridge_name_tracker.get_unique_cxx_bridge_name(
+                None,
+                &item.ident.to_string(),
+                ty_id.get_namespace(),
+            );
+            new_name = QualifiedName::new(
+                ty_id.get_namespace(),
+                make_ident(&replacement_cxx_bridge_name),
+            );
+
+            rename_to = if replacement_cxx_bridge_name == item.ident.to_string() {
+                None
+            } else {
+                Some(item.ident.clone())
+            };
             ApiDetail::Struct {
                 item,
                 analysis: PodStructAnalysisBody {
@@ -143,11 +187,13 @@ fn analyze_pod_api(
         }
         ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
     };
+    println!("Rename to {:?}", rename_to);
     Ok(Api {
-        name: api.name,
+        name: new_name,
         original_name: api.original_name,
         deps: new_deps,
         detail: api_detail,
+        rename_to,
     })
 }
 

@@ -89,5 +89,6 @@ fn create_ignore_item(api: Api<FnAnalysis>, err: ConvertError) -> Api<FnAnalysis
                 _ => ErrorContext::Item(id),
             },
         },
+        rename_to: api.rename_to,
     }
 }

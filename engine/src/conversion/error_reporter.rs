@@ -95,6 +95,7 @@ fn ignored_item<A: AnalysisPhase>(ns: &Namespace, ctx: ErrorContext, err: Conver
         original_name: None,
         deps: HashSet::new(),
         detail: ApiDetail::IgnoredItem { err, ctx },
+        rename_to: None,
     }
 }
 

@@ -399,6 +399,7 @@ impl<'a> TypeConverter<'a> {
                         rs_definition: Box::new(rs_definition.clone()),
                         cpp_definition,
                     },
+                    rename_to: None,
                 };
                 Ok((name, Some(api)))
             }
@@ -526,6 +527,7 @@ pub(crate) fn add_analysis<A: AnalysisPhase>(api: UnanalyzedApi) -> Api<A> {
         original_name: api.original_name,
         deps: api.deps,
         detail: new_detail,
+        rename_to: api.rename_to,
     }
 }
 pub(crate) trait TypedefTarget {

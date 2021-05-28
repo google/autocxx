@@ -33,5 +33,6 @@ pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>, config: &Include
         original_name: None,
         deps: HashSet::new(),
         detail: super::api::ApiDetail::StringConstructor,
+        rename_to: None,
     });
 }

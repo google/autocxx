@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-mod bridge_name_tracker;
 pub(crate) mod function_wrapper;
 mod overload_tracker;
 mod rust_name_tracker;
@@ -50,12 +48,9 @@ use crate::{
     types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},
 };
 
-use self::{
-    bridge_name_tracker::BridgeNameTracker, overload_tracker::OverloadTracker,
-    rust_name_tracker::RustNameTracker,
-};
+use self::{overload_tracker::OverloadTracker, rust_name_tracker::RustNameTracker};
 
-use super::pod::{PodAnalysis, PodStructAnalysisBody};
+use super::{bridge_name_tracker::BridgeNameTracker, pod::{PodAnalysis, PodStructAnalysisBody}};
 
 pub(crate) enum MethodKind {
     Normal,
@@ -237,6 +232,7 @@ impl<'a> FnAnalyzer<'a> {
             original_name: api.original_name,
             deps: new_deps,
             detail: api_detail,
+            rename_to: api.rename_to,
         }))
     }
 
@@ -862,7 +858,11 @@ impl Api<FnAnalysis> {
                     QualifiedName::new(&self.name.get_namespace(), make_ident(&analysis.rust_name))
                 }
             },
-            _ => self.name(),
+            _ => self
+                .rename_to
+                .as_ref()
+                .map(|id| QualifiedName::new(self.name().get_namespace(), id.clone()))
+                .unwrap_or(self.name()),
         }
     }
 

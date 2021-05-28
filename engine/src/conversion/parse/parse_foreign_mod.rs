@@ -137,6 +137,7 @@ impl ParseForeignMod {
                     fun: Box::new(fun),
                     analysis: (),
                 },
+                rename_to: None,
             })
         }
     }
