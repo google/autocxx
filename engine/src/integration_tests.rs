@@ -4944,9 +4944,9 @@ fn test_immovable_object() {
 #[test]
 fn test_type_called_type() {
     let hdr = indoc! {"
-        namespace std {
+        namespace a {
             template<int _Len>
-            struct aligned_storage
+            struct b
             {
                 union type
                 {
@@ -4957,7 +4957,7 @@ fn test_type_called_type() {
                 };
             };
         }
-        inline void take_type(std::aligned_storage<4>::type) {}
+        inline void take_type(a::b<4>::type) {}
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["take_type"], &[]);
