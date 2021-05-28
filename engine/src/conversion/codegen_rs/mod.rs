@@ -392,18 +392,20 @@ impl<'a> RsCodeGenerator<'a> {
         api_detail: ApiDetail<FnAnalysis>,
     ) -> RsCodegenResult {
         let id = name.get_final_ident();
-        let make_string_name = make_ident(self.config.get_makestring_name());
         match api_detail {
-            ApiDetail::StringConstructor => RsCodegenResult {
-                extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
-                    fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;
-                ))),
-                bridge_items: Vec::new(),
-                global_items: get_string_items(self.config),
-                bindgen_mod_item: None,
-                impl_entry: None,
-                materialization: Use::Unused,
-            },
+            ApiDetail::StringConstructor => {
+                let make_string_name = make_ident(self.config.get_makestring_name());
+                RsCodegenResult {
+                    extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
+                        fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;
+                    ))),
+                    bridge_items: Vec::new(),
+                    global_items: get_string_items(self.config),
+                    bindgen_mod_item: None,
+                    impl_entry: None,
+                    materialization: Use::Unused,
+                }
+            }
             ApiDetail::ConcreteType { .. } => RsCodegenResult {
                 global_items: self.generate_extern_type_impl(TypeKind::NonPod, &name),
                 bridge_items: create_impl_items(&id, self.config),
