@@ -4963,6 +4963,31 @@ fn test_type_called_type() {
     run_test("", hdr, rs, &["take_type"], &[]);
 }
 
+#[test]
+fn test_issue_506() {
+    let hdr = indoc! {"
+        namespace std {
+            template <class, class> class am;
+            typedef am<char, char> an;
+        } // namespace std
+        namespace be {
+            class bf {
+            virtual std::an bg() = 0;
+            };
+            class bh : bf {};
+        } // namespace be
+        namespace spanner {
+            class Database;
+            class Row {
+            public:
+            Row(be::bh *);
+            };
+        } // namespace spanner
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["spanner::Database", "spanner::Row"], &[]);
+}
+
 fn find_ffi_items(f: syn::File) -> Result<Vec<Item>, TestError> {
     Ok(f.items
         .into_iter()
