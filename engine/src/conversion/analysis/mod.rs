@@ -14,7 +14,7 @@
 
 use syn::Attribute;
 
-use crate::types::validate_ident_ok_for_rust;
+use crate::types::{validate_ident_ok_for_rust, QualifiedName};
 
 use self::fun::FnAnalysis;
 
@@ -70,8 +70,27 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
         | ApiDetail::ForwardDeclaration
         | ApiDetail::Const { .. }
         | ApiDetail::Enum { .. }
-        | ApiDetail::Struct { .. } => validate_ident_ok_for_rust(api.cxx_name()).map(|_| Some(api)),
-        _ => Ok(Some(api)),
+        | ApiDetail::Struct { .. } => {
+            let cxx_name = api
+                .original_name
+                .as_ref()
+                .map(|s| {
+                    // Occasionally we might have outer_type::inner_type.
+                    // We'll just check that inner_type is acceptable cxx spelling.
+                    let parsed = QualifiedName::new_from_cpp_name(&s);
+                    parsed.get_final_item().to_string()
+                })
+                .unwrap_or(api.name.get_final_item().to_string());
+            validate_ident_ok_for_rust(&cxx_name).map(|_| Some(api))
+        }
+        ApiDetail::Function { .. } // we don't handle functions here because
+            // the function analysis does an equivalent check. Instead of just rejecting
+            // the function, it creates a wrapper function instead with a more
+            // palatable name. That's preferable to rejecting the API entirely.
+        | ApiDetail::ConcreteType  { .. }
+        | ApiDetail::CType { .. }
+        | ApiDetail::StringConstructor
+        | ApiDetail::IgnoredItem { .. } => Ok(Some(api)),
     });
     results
 }
