@@ -201,9 +201,16 @@ impl QualifiedName {
         }
     }
 
-    /// Iterator over segments in the namespace of this type.
+    /// Iterator over segments in the namespace of this name.
     pub(crate) fn ns_segment_iter(&self) -> impl Iterator<Item = &String> {
         self.0.iter()
+    }
+
+    /// Iterate over all segments of this name.
+    pub(crate) fn segment_iter(&self) -> impl Iterator<Item = String> + '_ {
+        self.ns_segment_iter()
+            .cloned()
+            .chain(std::iter::once(self.get_final_item().to_string()))
     }
 
     pub(crate) fn is_cvoid(&self) -> bool {

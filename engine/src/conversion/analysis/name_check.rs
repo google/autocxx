@@ -35,14 +35,14 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
             let cxx_name = api
                 .original_name
                 .as_ref()
-                .map(|s| {
-                    // Occasionally we might have outer_type::inner_type.
-                    // We'll just check that inner_type is acceptable cxx spelling.
-                    let parsed = QualifiedName::new_from_cpp_name(&s);
-                    parsed.get_final_item().to_string()
-                })
-                .unwrap_or(api.name.get_final_item().to_string());
-            validate_ident_ok_for_rust(&cxx_name).map(|_| Some(api))
+                .map(|s|
+                    QualifiedName::new_from_cpp_name(&s)
+                )
+                .unwrap_or(api.name.clone());
+            for seg in cxx_name.segment_iter() {
+                validate_ident_ok_for_rust(&seg)?;
+            }
+            Ok(Some(api))
         }
         ApiDetail::Function { .. } // we don't handle functions here because
             // the function analysis does an equivalent check. Instead of just rejecting
