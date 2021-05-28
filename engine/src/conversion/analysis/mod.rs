@@ -14,24 +14,19 @@
 
 use syn::Attribute;
 
-use crate::types::{validate_ident_ok_for_rust, QualifiedName};
-
-use self::fun::FnAnalysis;
-
-use super::{
-    api::{Api, ApiDetail},
-    error_reporter::convert_item_apis,
-    ConvertError,
-};
+use super::ConvertError;
 
 pub(crate) mod abstract_types;
 pub(crate) mod ctypes;
 pub(crate) mod fun;
 pub(crate) mod gc;
+mod name_check;
 pub(crate) mod pod; // hey, that rhymes
 pub(crate) mod remove_ignored;
 pub(crate) mod tdef;
 mod type_converter;
+
+pub(crate) use name_check::check_names;
 
 // Remove `bindgen_` attributes. They don't have a corresponding macro defined anywhere,
 // so they will cause compilation errors if we leave them in.
@@ -59,38 +54,4 @@ fn remove_bindgen_attrs(attrs: &mut Vec<Attribute>) -> Result<(), ConvertError> 
 
 fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
     attrs.iter().any(|at| at.path.is_ident(attr_name))
-}
-
-/// If any items have names which can't be represented by cxx,
-/// abort.
-pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
-    let mut results = Vec::new();
-    convert_item_apis(apis, &mut results, |api| match api.detail {
-        ApiDetail::Typedef { .. }
-        | ApiDetail::ForwardDeclaration
-        | ApiDetail::Const { .. }
-        | ApiDetail::Enum { .. }
-        | ApiDetail::Struct { .. } => {
-            let cxx_name = api
-                .original_name
-                .as_ref()
-                .map(|s| {
-                    // Occasionally we might have outer_type::inner_type.
-                    // We'll just check that inner_type is acceptable cxx spelling.
-                    let parsed = QualifiedName::new_from_cpp_name(&s);
-                    parsed.get_final_item().to_string()
-                })
-                .unwrap_or(api.name.get_final_item().to_string());
-            validate_ident_ok_for_rust(&cxx_name).map(|_| Some(api))
-        }
-        ApiDetail::Function { .. } // we don't handle functions here because
-            // the function analysis does an equivalent check. Instead of just rejecting
-            // the function, it creates a wrapper function instead with a more
-            // palatable name. That's preferable to rejecting the API entirely.
-        | ApiDetail::ConcreteType  { .. }
-        | ApiDetail::CType { .. }
-        | ApiDetail::StringConstructor
-        | ApiDetail::IgnoredItem { .. } => Ok(Some(api)),
-    });
-    results
 }
