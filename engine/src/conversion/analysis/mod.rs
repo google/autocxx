@@ -20,10 +20,13 @@ pub(crate) mod abstract_types;
 pub(crate) mod ctypes;
 pub(crate) mod fun;
 pub(crate) mod gc;
+mod name_check;
 pub(crate) mod pod; // hey, that rhymes
 pub(crate) mod remove_ignored;
 pub(crate) mod tdef;
 mod type_converter;
+
+pub(crate) use name_check::check_names;
 
 // Remove `bindgen_` attributes. They don't have a corresponding macro defined anywhere,
 // so they will cause compilation errors if we leave them in.
