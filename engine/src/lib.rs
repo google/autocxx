@@ -453,7 +453,7 @@ impl IncludeCppEngine {
 /// We clearly should _not_ use this in any other circumstance; obviously
 /// we'd then want to add an API to cxx_gen such that we could retrieve
 /// that information from source.
-pub(crate) static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
+static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
     "memory",
     "string",
     "algorithm",
