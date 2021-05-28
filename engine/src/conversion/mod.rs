@@ -34,9 +34,9 @@ use crate::{CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
-        abstract_types::mark_types_abstract, gc::filter_apis_by_following_edges_from_allowlist,
-        pod::analyze_pod_apis, remove_ignored::filter_apis_by_ignored_dependents,
-        tdef::convert_typedef_targets,
+        abstract_types::mark_types_abstract, check_names,
+        gc::filter_apis_by_following_edges_from_allowlist, pod::analyze_pod_apis,
+        remove_ignored::filter_apis_by_ignored_dependents, tdef::convert_typedef_targets,
     },
     api::{AnalysisPhase, Api},
     codegen_rs::RsCodeGenerator,
@@ -131,6 +131,8 @@ impl<'a> BridgeConverter<'a> {
                 // be instantiated.
                 mark_types_abstract(&self.config, &mut analyzed_apis);
                 Self::dump_apis("main analyses", &analyzed_apis);
+                // Remove any APIs whose names are not compatible with cxx.
+                let analyzed_apis = check_names(analyzed_apis);
                 // During parsing or subsequent processing we might have encountered
                 // items which we couldn't process due to as-yet-unsupported features.
                 // There might be other items depending on such things. Let's remove them

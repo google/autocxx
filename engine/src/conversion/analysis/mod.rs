@@ -14,7 +14,15 @@
 
 use syn::Attribute;
 
-use super::ConvertError;
+use crate::types::validate_ident_ok_for_rust;
+
+use self::fun::FnAnalysis;
+
+use super::{
+    api::{Api, ApiDetail},
+    error_reporter::convert_item_apis,
+    ConvertError,
+};
 
 pub(crate) mod abstract_types;
 pub(crate) mod ctypes;
@@ -51,4 +59,19 @@ fn remove_bindgen_attrs(attrs: &mut Vec<Attribute>) -> Result<(), ConvertError> 
 
 fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
     attrs.iter().any(|at| at.path.is_ident(attr_name))
+}
+
+/// If any items have names which can't be represented by cxx,
+/// abort.
+pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
+    let mut results = Vec::new();
+    convert_item_apis(apis, &mut results, |api| match api.detail {
+        ApiDetail::Typedef { .. }
+        | ApiDetail::ForwardDeclaration
+        | ApiDetail::Const { .. }
+        | ApiDetail::Enum { .. }
+        | ApiDetail::Struct { .. } => validate_ident_ok_for_rust(api.cxx_name()).map(|_| Some(api)),
+        _ => Ok(Some(api)),
+    });
+    results
 }

@@ -4942,7 +4942,6 @@ fn test_immovable_object() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/528
 fn test_type_called_type() {
     let hdr = indoc! {"
         namespace std {
