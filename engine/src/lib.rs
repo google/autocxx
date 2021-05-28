@@ -437,8 +437,8 @@ impl IncludeCppEngine {
                 .iter()
                 .map(|hdr| format!("#include <{}>\n", hdr))
                 .join("\n");
-            let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n",
-                self.config, header, suffix);
+            let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n{}\n",
+                self.config, header, suffix, cxx_gen::HEADER);
             let mut tf = NamedTempFile::new().unwrap();
             write!(tf, "{}", input).unwrap();
             let tp = tf.into_temp_path();
