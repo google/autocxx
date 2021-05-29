@@ -62,7 +62,7 @@ impl BridgeNameTracker {
         Self::default()
     }
 
-    /// Figure out the least confusing unique name for this function in the
+    /// Figure out the least confusing unique name for this thing in the
     /// cxx::bridge section, which has a flat namespace.
     /// We mostly just qualify the name with the namespace_with_underscores.
     /// It doesn't really matter; we'll rebind these things to
@@ -82,6 +82,7 @@ impl BridgeNameTracker {
         found_name: &str,
         ns: &Namespace,
     ) -> String {
+        println!("===Found name getting unique: {}", found_name);
         let count = self
             .next_cxx_bridge_name_for_prefix
             .entry(found_name.to_string())

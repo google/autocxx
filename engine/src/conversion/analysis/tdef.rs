@@ -15,7 +15,7 @@
 use std::collections::HashSet;
 
 use autocxx_parser::IncludeCppConfig;
-use syn::ItemType;
+use syn::{Ident, ItemType};
 
 use crate::{
     conversion::{
@@ -25,11 +25,10 @@ use crate::{
         error_reporter::report_any_error,
         ConvertError,
     },
-    types::QualifiedName,
+    types::{make_ident, QualifiedName},
 };
 
-use super::remove_bindgen_attrs;
-
+use super::{bridge_name_tracker::BridgeNameTracker, remove_bindgen_attrs};
 /// Analysis phase where typedef analysis has been performed but no other
 /// analyses just yet.
 pub(crate) struct TypedefAnalysis;
@@ -48,6 +47,7 @@ pub(crate) fn convert_typedef_targets(
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut extra_apis = Vec::new();
     let mut problem_apis = Vec::new();
+    let mut bridge_tracker = BridgeNameTracker::new();
     let new_apis = apis
         .into_iter()
         .filter_map(|api| {
@@ -55,6 +55,8 @@ pub(crate) fn convert_typedef_targets(
             let original_name = api.original_name;
             let ns = name.get_namespace();
             let mut newdeps = api.deps;
+            let mut new_name = api.name;
+            let mut rename_to: Option<Ident> = None;
             let detail = match api.detail {
                 ApiDetail::ForwardDeclaration => Some(ApiDetail::ForwardDeclaration),
                 ApiDetail::ConcreteType {
@@ -72,15 +74,31 @@ pub(crate) fn convert_typedef_targets(
                 ApiDetail::Typedef {
                     item: TypedefKind::Type(ity),
                     analysis: _,
-                } => report_any_error(ns, &mut problem_apis, || {
-                    get_replacement_typedef(
-                        &name,
-                        ity,
-                        &mut type_converter,
-                        &mut extra_apis,
-                        &mut newdeps,
-                    )
-                }),
+                } => {
+                    let replacement_cxx_bridge_name = bridge_tracker.get_unique_cxx_bridge_name(
+                        None,
+                        &ity.ident.to_string(),
+                        name.get_namespace(),
+                    );
+                    new_name = QualifiedName::new(
+                        name.get_namespace(),
+                        make_ident(&replacement_cxx_bridge_name),
+                    );
+                    rename_to = if replacement_cxx_bridge_name == ity.ident.to_string() {
+                        None
+                    } else {
+                        Some(ity.ident.clone())
+                    };
+                    report_any_error(ns, &mut problem_apis, || {
+                        get_replacement_typedef(
+                            &name,
+                            ity,
+                            &mut type_converter,
+                            &mut extra_apis,
+                            &mut newdeps,
+                        )
+                    })
+                }
                 ApiDetail::Typedef { item, analysis: _ } => Some(ApiDetail::Typedef {
                     item: item.clone(),
                     analysis: item,
@@ -92,9 +110,10 @@ pub(crate) fn convert_typedef_targets(
             };
             detail.map(|detail| Api {
                 detail,
-                name,
+                name: new_name,
                 original_name,
                 deps: newdeps,
+                rename_to,
             })
         })
         .collect::<Vec<_>>();

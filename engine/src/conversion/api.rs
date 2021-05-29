@@ -151,16 +151,18 @@ pub(crate) struct Api<T: AnalysisPhase> {
     pub(crate) deps: HashSet<QualifiedName>,
     /// Details of this specific API kind.
     pub(crate) detail: ApiDetail<T>,
+    pub(crate) rename_to: Option<Ident>,
 }
 
 impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} (kind={}, deps={})",
+            "{} (kind={}, deps={}, rename_to={:?})",
             self.name.to_cpp_name(),
             self.detail,
-            self.deps.iter().map(|d| d.to_cpp_name()).join(", ")
+            self.deps.iter().map(|d| d.to_cpp_name()).join(", "),
+            self.rename_to
         )
     }
 }

@@ -232,6 +232,7 @@ impl<'a> ParseBindgen<'a> {
                                     }),
                                     analysis: (),
                                 },
+                                rename_to: None,
                             });
                             break;
                         }
@@ -251,6 +252,7 @@ impl<'a> ParseBindgen<'a> {
                     original_name: get_bindgen_original_name_annotation(&const_item.attrs),
                     deps: HashSet::new(),
                     detail: ApiDetail::Const { const_item },
+                    rename_to: None,
                 });
                 Ok(())
             }
@@ -263,6 +265,7 @@ impl<'a> ParseBindgen<'a> {
                         item: TypedefKind::Type(ity),
                         analysis: (),
                     },
+                    rename_to: None,
                 });
                 Ok(())
             }
@@ -317,6 +320,7 @@ impl<'a> ParseBindgen<'a> {
             } else {
                 api_make(bindgen_mod_item)
             },
+            rename_to: None,
         };
         self.apis.push(api);
     }
