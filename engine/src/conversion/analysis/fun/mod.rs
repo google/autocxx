@@ -50,7 +50,10 @@ use crate::{
 
 use self::{overload_tracker::OverloadTracker, rust_name_tracker::RustNameTracker};
 
-use super::{bridge_name_tracker::BridgeNameTracker, pod::{PodAnalysis, PodStructAnalysisBody}};
+use super::{
+    bridge_name_tracker::BridgeNameTracker,
+    pod::{PodAnalysis, PodStructAnalysisBody},
+};
 
 pub(crate) enum MethodKind {
     Normal,
