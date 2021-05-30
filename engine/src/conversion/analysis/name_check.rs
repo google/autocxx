@@ -33,7 +33,7 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
         | ApiDetail::Enum { .. }
         | ApiDetail::Struct { .. } => {
             let cxx_name = api
-                .original_name
+                .cpp_name
                 .as_ref()
                 .map(|s|
                     QualifiedName::new_from_cpp_name(&s)

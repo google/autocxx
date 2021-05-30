@@ -210,11 +210,8 @@ impl<'a> FnAnalyzer<'a> {
             },
             ApiDetail::StringConstructor => ApiDetail::StringConstructor,
             ApiDetail::Function { fun, analysis: _ } => {
-                let analysis = self.analyze_foreign_fn(
-                    &api.name.get_namespace(),
-                    &fun,
-                    api.original_name.clone(),
-                )?;
+                let analysis =
+                    self.analyze_foreign_fn(&api.name.get_namespace(), &fun, api.cpp_name.clone())?;
                 match analysis {
                     None => return Ok(None),
                     Some(FnAnalysisResult(analysis, id, fn_deps)) => {
@@ -234,7 +231,7 @@ impl<'a> FnAnalyzer<'a> {
         };
         Ok(Some(Api {
             name: QualifiedName::new(api.name.get_namespace(), new_id),
-            original_name: api.original_name,
+            cpp_name: api.cpp_name,
             deps: new_deps,
             detail: api_detail,
         }))
@@ -302,7 +299,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         ns: &Namespace,
         func_information: &FuncToConvert,
-        original_name: Option<String>,
+        cpp_name: Option<String>,
     ) -> Result<Option<FnAnalysisResult>, ConvertErrorWithContext> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
@@ -315,7 +312,7 @@ impl<'a> FnAnalyzer<'a> {
         if initial_rust_name.ends_with("_destructor") {
             return Ok(None);
         }
-        let diagnostic_display_name = original_name.as_ref().unwrap_or(&initial_rust_name);
+        let diagnostic_display_name = cpp_name.as_ref().unwrap_or(&initial_rust_name);
 
         // Now let's analyze all the parameters.
         // See if any have annotations which our fork of bindgen has craftily inserted...
@@ -354,7 +351,7 @@ impl<'a> FnAnalyzer<'a> {
         // End of parameter processing.
         // Work out naming, part one.
         // The C++ call name will always be whatever bindgen tells us.
-        let cpp_call_name = original_name
+        let cpp_call_name = cpp_name
             .clone()
             .unwrap_or_else(|| initial_rust_name.clone());
         // The Rust name... it's more complicated.
@@ -363,21 +360,21 @@ impl<'a> FnAnalyzer<'a> {
         // If the former, we respect that mangling. If the latter, we don't,
         // because we'll add our own overload counting mangling later.
         // Cases:
-        //   function, IRN=foo,    ON=<none>                    output: foo    case 1
-        //   function, IRN=move_,  ON=move   (keyword problem)  output: move_  case 2
-        //   function, IRN=foo1,   ON=foo    (overload)         output: foo    case 3
-        //   method,   IRN=A_foo,  ON=foo                       output: foo    case 4
-        //   method,   IRN=A_move, ON=move   (keyword problem)  output: move_  case 5
-        //   method,   IRN=A_foo1, ON=foo    (overload)         output: foo    case 6
-        let ideal_rust_name = match original_name {
+        //   function, IRN=foo,    CN=<none>                    output: foo    case 1
+        //   function, IRN=move_,  CN=move   (keyword problem)  output: move_  case 2
+        //   function, IRN=foo1,   CN=foo    (overload)         output: foo    case 3
+        //   method,   IRN=A_foo,  CN=foo                       output: foo    case 4
+        //   method,   IRN=A_move, CN=move   (keyword problem)  output: move_  case 5
+        //   method,   IRN=A_foo1, CN=foo    (overload)         output: foo    case 6
+        let ideal_rust_name = match cpp_name {
             None => initial_rust_name, // case 1
-            Some(original_name) => {
+            Some(cpp_name) => {
                 if initial_rust_name.ends_with('_') {
                     initial_rust_name // case 2
-                } else if validate_ident_ok_for_rust(&original_name).is_err() {
-                    format!("{}_", original_name) // case 5
+                } else if validate_ident_ok_for_rust(&cpp_name).is_err() {
+                    format!("{}_", cpp_name) // case 5
                 } else {
-                    original_name // cases 3, 4, 6
+                    cpp_name // cases 3, 4, 6
                 }
             }
         };

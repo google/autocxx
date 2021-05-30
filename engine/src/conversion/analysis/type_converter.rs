@@ -393,7 +393,7 @@ impl<'a> TypeConverter<'a> {
                     name: name.clone(),
                     // This is a synthesized type that isn't nested within anything else,
                     // so it doesn't have an orignal_name.
-                    original_name: None,
+                    cpp_name: None,
                     deps: HashSet::new(),
                     detail: crate::conversion::api::ApiDetail::ConcreteType {
                         rs_definition: Box::new(rs_definition.clone()),
@@ -523,7 +523,7 @@ pub(crate) fn add_analysis<A: AnalysisPhase>(api: UnanalyzedApi) -> Api<A> {
     };
     Api {
         name: api.name,
-        original_name: api.original_name,
+        cpp_name: api.cpp_name,
         deps: api.deps,
         detail: new_detail,
     }

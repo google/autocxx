@@ -30,7 +30,7 @@ pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>, config: &Include
     // unless the include_cpp macro has specified ExcludeUtilities.
     apis.push(UnanalyzedApi {
         name: QualifiedName::new(&Namespace::new(), make_ident(config.get_makestring_name())),
-        original_name: None,
+        cpp_name: None,
         deps: HashSet::new(),
         detail: super::api::ApiDetail::StringConstructor,
     });

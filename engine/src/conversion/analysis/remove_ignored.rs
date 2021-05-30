@@ -70,7 +70,7 @@ fn create_ignore_item(api: Api<FnAnalysis>, err: ConvertError) -> Api<FnAnalysis
     let id = api.name().get_final_ident();
     Api {
         name: api.name(),
-        original_name: api.original_name,
+        cpp_name: api.cpp_name,
         deps: HashSet::new(),
         detail: ApiDetail::IgnoredItem {
             err,

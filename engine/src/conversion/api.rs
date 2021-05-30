@@ -144,8 +144,10 @@ pub(crate) enum ApiDetail<T: AnalysisPhase> {
 /// because sometimes we pass on the `bindgen` output directly in the
 /// Rust codegen output.
 pub(crate) struct Api<T: AnalysisPhase> {
+    /// The name by which we refer to this within Rust.
     pub(crate) name: QualifiedName,
-    pub(crate) original_name: Option<String>,
+    /// The C++ name, if it's different.
+    pub(crate) cpp_name: Option<String>,
     /// Any dependencies of this API, such that during garbage collection
     /// we can ensure to keep them.
     pub(crate) deps: HashSet<QualifiedName>,
