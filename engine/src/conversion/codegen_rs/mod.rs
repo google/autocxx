@@ -153,7 +153,8 @@ impl<'a> RsCodeGenerator<'a> {
             .into_iter()
             .map(|api| {
                 let more_cpp_needed = api.additional_cpp().is_some();
-                let gen = self.generate_rs_for_api(&api.name, api.detail);
+                let cpp_name = api.cxx_name().to_string();
+                let gen = self.generate_rs_for_api(&api.name, api.detail, cpp_name);
                 ((api.name, gen), more_cpp_needed)
             })
             .unzip();
@@ -390,6 +391,7 @@ impl<'a> RsCodeGenerator<'a> {
         &self,
         name: &QualifiedName,
         api_detail: ApiDetail<FnAnalysis>,
+        cpp_name: String,
     ) -> RsCodegenResult {
         let id = name.get_final_ident();
         match api_detail {
@@ -423,7 +425,7 @@ impl<'a> RsCodeGenerator<'a> {
                 materialization: Use::UsedFromCxxBridge,
             },
             ApiDetail::Function { fun, analysis } => {
-                gen_function(name.get_namespace(), *fun, analysis)
+                gen_function(name.get_namespace(), *fun, analysis, cpp_name)
             }
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: Vec::new(),
