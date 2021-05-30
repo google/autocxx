@@ -19,7 +19,10 @@ use syn::{
     ForeignItemFn, Ident, ImplItem, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, Type,
 };
 
-use super::{convert_error::ErrorContext, ConvertError};
+use super::{
+    convert_error::{ConvertErrorWithContext, ErrorContext},
+    ConvertError,
+};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
@@ -215,3 +218,58 @@ impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
 }
 
 pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
+
+macro_rules! make_unchanged {
+    ($func_name:ident, $analysis:ident, $detail:ident, $fields:tt) => {
+        pub(crate) fn $func_name<U>(self) -> Result<Option<Api<U>>, ConvertErrorWithContext>
+        where
+            U: AnalysisPhase<$analysis = T::$analysis>
+        {
+            Ok(Some(match self {
+                Api::$detail $fields => Api::$detail $fields,
+                _ => panic!("Applying identity mapping to the wrong type")
+            }))
+        }
+    };
+}
+
+impl<T: AnalysisPhase> Api<T> {
+    pub(crate) fn map<U, FF, SF, TF>(
+        self,
+        func_conversion: FF,
+        struct_conversion: SF,
+        typedef_conversion: TF,
+    ) -> Result<Option<Api<U>>, ConvertErrorWithContext>
+    where
+        U: AnalysisPhase,
+        FF: FnOnce(Api<T>) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
+        SF: FnOnce(Api<T>) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
+        TF: FnOnce(Api<T>) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
+    {
+        Ok(Some(match self {
+            // No changes to any of these...
+            Api::ConcreteType {
+                common,
+                rs_definition,
+                cpp_definition,
+            } => Api::ConcreteType {
+                common,
+                rs_definition,
+                cpp_definition,
+            },
+            Api::ForwardDeclaration { common } => Api::ForwardDeclaration { common },
+            Api::StringConstructor { common } => Api::StringConstructor { common },
+            Api::Const { common, const_item } => Api::Const { common, const_item },
+            Api::CType { common, typename } => Api::CType { common, typename },
+            Api::IgnoredItem { common, err, ctx } => Api::IgnoredItem { common, err, ctx },
+            Api::Enum { common, item } => Api::Enum { common, item },
+            // Apply a mapping to the following
+            Api::Typedef { .. } => return typedef_conversion(self),
+            Api::Function { .. } => return func_conversion(self),
+            Api::Struct { .. } => return struct_conversion(self),
+        }))
+    }
+
+    make_unchanged!(typedef_unchanged, TypedefAnalysis, Typedef, { common, item, analysis });
+    make_unchanged!(struct_unchanged, StructAnalysis, Struct, { common, item, analysis });
+}

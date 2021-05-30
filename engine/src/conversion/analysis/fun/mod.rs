@@ -43,7 +43,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, FuncToConvert, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, TypeKind, UnanalyzedApi},
         codegen_cpp::AdditionalNeed,
         ConvertError,
     },
@@ -132,13 +132,6 @@ pub(crate) struct FnAnalyzer<'a> {
     generate_utilities: bool,
 }
 
-struct FnAnalysisResult(
-    FnAnalysisBody,
-    Ident,
-    HashSet<QualifiedName>,
-    Option<String>,
-);
-
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: Vec<Api<PodAnalysis>>,
@@ -157,7 +150,13 @@ impl<'a> FnAnalyzer<'a> {
             generate_utilities: Self::should_generate_utilities(&apis),
         };
         let mut results = Vec::new();
-        convert_apis(apis, &mut results, |api| me.analyze_fn_api(api));
+        convert_apis(apis, &mut results, |api| {
+            api.map(
+                |api| me.analyze_foreign_fn(api),
+                Api::struct_unchanged,
+                Api::typedef_unchanged,
+            )
+        });
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }
@@ -195,70 +194,6 @@ impl<'a> FnAnalyzer<'a> {
                     ),
             )
             .collect()
-    }
-
-    fn analyze_fn_api(
-        &mut self,
-        api: Api<PodAnalysis>,
-    ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
-        Ok(Some(match api {
-            // No changes to any of these...
-            Api::ConcreteType {
-                common,
-                rs_definition,
-                cpp_definition,
-            } => Api::ConcreteType {
-                common,
-                rs_definition,
-                cpp_definition,
-            },
-            Api::StringConstructor { common } => Api::StringConstructor { common },
-            Api::Function { common, fun, .. } => {
-                let analysis = self.analyze_foreign_fn(
-                    &common.name.get_namespace(),
-                    &fun,
-                    common.cpp_name.clone(),
-                )?;
-                match analysis {
-                    None => return Ok(None),
-                    Some(FnAnalysisResult(analysis, id, fn_deps, fn_cpp_name)) => {
-                        let common = ApiCommon {
-                            deps: fn_deps,
-                            name: QualifiedName::new(common.name.get_namespace(), id),
-                            cpp_name: fn_cpp_name,
-                        };
-                        Api::Function {
-                            common,
-                            fun,
-                            analysis,
-                        }
-                    }
-                }
-            }
-            Api::Const { common, const_item } => Api::Const { common, const_item },
-            Api::Typedef {
-                common,
-                item,
-                analysis,
-            } => Api::Typedef {
-                common,
-                item,
-                analysis,
-            },
-            Api::CType { common, typename } => Api::CType { common, typename },
-            Api::Enum { common, item } => Api::Enum { common, item },
-            Api::Struct {
-                common,
-                item,
-                analysis,
-            } => Api::Struct {
-                common,
-                item,
-                analysis,
-            },
-            Api::ForwardDeclaration { common } => Api::ForwardDeclaration { common },
-            Api::IgnoredItem { common, err, ctx } => Api::IgnoredItem { common, err, ctx },
-        }))
     }
 
     fn convert_boxed_type(
@@ -312,7 +247,7 @@ impl<'a> FnAnalyzer<'a> {
     /// We aim for the simplest case but, for example:
     /// * We'll need a C++ wrapper for static methods
     /// * We'll need a C++ wrapper for parameters which need to be wrapped and unwrapped
-    ///   to [UniquePtr]
+    ///   to [cxx::UniquePtr]
     /// * We'll need a Rust wrapper if we've got a C++ wrapper and it's a method.
     /// * We may need wrappers if names conflict.
     /// etc.
@@ -321,12 +256,16 @@ impl<'a> FnAnalyzer<'a> {
     /// The output of this analysis phase is used by both Rust and C++ codegen.
     fn analyze_foreign_fn(
         &mut self,
-        ns: &Namespace,
-        func_information: &FuncToConvert,
-        mut cpp_name: Option<String>,
-    ) -> Result<Option<FnAnalysisResult>, ConvertErrorWithContext> {
+        api: Api<PodAnalysis>,
+    ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
+        let (common, func_information) = match api {
+            Api::Function { common, fun, .. } => (common, fun),
+            _ => unreachable!(),
+        };
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
+        let mut cpp_name = common.cpp_name.clone();
+        let ns = common.name.get_namespace();
 
         // Let's gather some pre-wisdom about the name of the function.
         // We're shortly going to plunge into analyzing the parameters,
@@ -673,8 +612,9 @@ impl<'a> FnAnalyzer<'a> {
             }
         };
 
-        Ok(Some(FnAnalysisResult(
-            FnAnalysisBody {
+        Ok(Some(Api::Function {
+            fun: func_information,
+            analysis: FnAnalysisBody {
                 cxxbridge_name,
                 rust_name,
                 rust_rename_strategy,
@@ -686,10 +626,12 @@ impl<'a> FnAnalyzer<'a> {
                 vis,
                 cpp_wrapper,
             },
-            id,
-            deps,
-            cpp_name,
-        )))
+            common: ApiCommon {
+                cpp_name,
+                name: QualifiedName::new(ns, id),
+                deps,
+            },
+        }))
     }
 
     fn convert_fn_arg(
