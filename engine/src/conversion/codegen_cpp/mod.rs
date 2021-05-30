@@ -20,7 +20,7 @@ use autocxx_parser::IncludeCppConfig;
 use itertools::Itertools;
 use std::collections::HashSet;
 use syn::Type;
-use type_to_cpp::{original_name_map_from_apis, type_to_cpp, OriginalNameMap};
+use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
 use super::{
     analysis::fun::{
@@ -82,7 +82,7 @@ struct AdditionalFunction {
 pub(crate) struct CppCodeGenerator<'a> {
     additional_functions: Vec<AdditionalFunction>,
     inclusions: String,
-    original_name_map: OriginalNameMap,
+    original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
 }
 
@@ -99,7 +99,7 @@ impl<'a> CppCodeGenerator<'a> {
 
     fn new(
         inclusions: String,
-        original_name_map: OriginalNameMap,
+        original_name_map: CppNameMap,
         config: &'a IncludeCppConfig,
     ) -> Self {
         CppCodeGenerator {

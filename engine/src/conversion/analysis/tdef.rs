@@ -52,7 +52,7 @@ pub(crate) fn convert_typedef_targets(
         .into_iter()
         .filter_map(|api| {
             let name = api.name();
-            let original_name = api.original_name;
+            let cpp_name = api.cpp_name;
             let ns = name.get_namespace();
             let mut newdeps = api.deps;
             let detail = match api.detail {
@@ -93,7 +93,7 @@ pub(crate) fn convert_typedef_targets(
             detail.map(|detail| Api {
                 detail,
                 name,
-                original_name,
+                cpp_name,
                 deps: newdeps,
             })
         })

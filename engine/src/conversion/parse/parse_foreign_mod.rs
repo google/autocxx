@@ -131,7 +131,7 @@ impl ParseForeignMod {
             fun.self_ty = self.method_receivers.get(&fun.item.sig.ident).cloned();
             apis.push(UnanalyzedApi {
                 name: QualifiedName::new(&self.ns, fun.item.sig.ident.clone()),
-                original_name: get_bindgen_original_name_annotation(&fun.item.attrs),
+                cpp_name: get_bindgen_original_name_annotation(&fun.item.attrs),
                 deps: HashSet::new(), // filled in later - TODO make compile-time safe
                 detail: ApiDetail::Function {
                     fun: Box::new(fun),
