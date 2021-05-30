@@ -43,7 +43,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiDetail, TypeKind, UnanalyzedApi},
         codegen_cpp::AdditionalNeed,
         ConvertError,
     },
@@ -132,13 +132,6 @@ pub(crate) struct FnAnalyzer<'a> {
     generate_utilities: bool,
 }
 
-struct FnAnalysisResult(
-    FnAnalysisBody,
-    Ident,
-    HashSet<QualifiedName>,
-    Option<String>,
-);
-
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: Vec<Api<PodAnalysis>>,
@@ -157,7 +150,13 @@ impl<'a> FnAnalyzer<'a> {
             generate_utilities: Self::should_generate_utilities(&apis),
         };
         let mut results = Vec::new();
-        convert_apis(apis, &mut results, |api| me.analyze_fn_api(api));
+        convert_apis(apis, &mut results, |api| {
+            api.map(
+                |api| me.analyze_foreign_fn(api),
+                Api::struct_unchanged,
+                Api::typedef_unchanged,
+            )
+        });
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }
@@ -195,52 +194,6 @@ impl<'a> FnAnalyzer<'a> {
                     ),
             )
             .collect()
-    }
-
-    fn analyze_fn_api(
-        &mut self,
-        api: Api<PodAnalysis>,
-    ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
-        let mut new_deps = api.deps.clone();
-        let mut new_id = api.name.get_final_ident();
-        let mut cpp_name = api.cpp_name;
-        let api_detail = match api.detail {
-            // No changes to any of these...
-            ApiDetail::ConcreteType {
-                rs_definition,
-                cpp_definition,
-            } => ApiDetail::ConcreteType {
-                rs_definition,
-                cpp_definition,
-            },
-            ApiDetail::StringConstructor => ApiDetail::StringConstructor,
-            ApiDetail::Function { fun, analysis: _ } => {
-                let analysis =
-                    self.analyze_foreign_fn(&api.name.get_namespace(), &fun, cpp_name)?;
-                match analysis {
-                    None => return Ok(None),
-                    Some(FnAnalysisResult(analysis, id, fn_deps, fn_cpp_name)) => {
-                        new_deps = fn_deps;
-                        new_id = id;
-                        cpp_name = fn_cpp_name;
-                        ApiDetail::Function { fun, analysis }
-                    }
-                }
-            }
-            ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
-            ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
-            ApiDetail::CType { typename } => ApiDetail::CType { typename },
-            ApiDetail::Enum { item } => ApiDetail::Enum { item },
-            ApiDetail::Struct { item, analysis } => ApiDetail::Struct { item, analysis },
-            ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
-            ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
-        };
-        Ok(Some(Api {
-            name: QualifiedName::new(api.name.get_namespace(), new_id),
-            cpp_name,
-            deps: new_deps,
-            detail: api_detail,
-        }))
     }
 
     fn convert_boxed_type(
@@ -294,7 +247,7 @@ impl<'a> FnAnalyzer<'a> {
     /// We aim for the simplest case but, for example:
     /// * We'll need a C++ wrapper for static methods
     /// * We'll need a C++ wrapper for parameters which need to be wrapped and unwrapped
-    ///   to [UniquePtr]
+    ///   to [cxx::UniquePtr]
     /// * We'll need a Rust wrapper if we've got a C++ wrapper and it's a method.
     /// * We may need wrappers if names conflict.
     /// etc.
@@ -303,12 +256,16 @@ impl<'a> FnAnalyzer<'a> {
     /// The output of this analysis phase is used by both Rust and C++ codegen.
     fn analyze_foreign_fn(
         &mut self,
-        ns: &Namespace,
-        func_information: &FuncToConvert,
-        mut cpp_name: Option<String>,
-    ) -> Result<Option<FnAnalysisResult>, ConvertErrorWithContext> {
+        api: Api<PodAnalysis>,
+    ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
+        let func_information = match api.detail {
+            ApiDetail::Function { fun, .. } => fun,
+            _ => unreachable!(),
+        };
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
+        let mut cpp_name = api.cpp_name;
+        let ns = api.name.get_namespace();
 
         // Let's gather some pre-wisdom about the name of the function.
         // We're shortly going to plunge into analyzing the parameters,
@@ -655,23 +612,26 @@ impl<'a> FnAnalyzer<'a> {
             }
         };
 
-        Ok(Some(FnAnalysisResult(
-            FnAnalysisBody {
-                cxxbridge_name,
-                rust_name,
-                rust_rename_strategy,
-                params,
-                kind,
-                ret_type,
-                param_details,
-                requires_unsafe,
-                vis,
-                cpp_wrapper,
+        Ok(Some(Api {
+            detail: ApiDetail::Function {
+                fun: func_information,
+                analysis: FnAnalysisBody {
+                    cxxbridge_name,
+                    rust_name,
+                    rust_rename_strategy,
+                    params,
+                    kind,
+                    ret_type,
+                    param_details,
+                    requires_unsafe,
+                    vis,
+                    cpp_wrapper,
+                },
             },
-            id,
-            deps,
             cpp_name,
-        )))
+            name: QualifiedName::new(ns, id),
+            deps,
+        }))
     }
 
     fn convert_fn_arg(

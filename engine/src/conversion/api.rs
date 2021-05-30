@@ -19,7 +19,10 @@ use syn::{
     ForeignItemFn, Ident, ImplItem, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, Type,
 };
 
-use super::{convert_error::ErrorContext, ConvertError};
+use super::{
+    convert_error::{ConvertErrorWithContext, ErrorContext},
+    ConvertError,
+};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
@@ -169,6 +172,26 @@ impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
 
 pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 
+macro_rules! make_unchanged {
+    ($func_name:ident, $analysis:ident, $detail:ident, $fields:tt) => {
+        pub(crate) fn $func_name<U>(self) -> Result<Option<Api<U>>, ConvertErrorWithContext>
+        where
+            U: AnalysisPhase<$analysis = T::$analysis>
+        {
+            let detail = match self.detail {
+                ApiDetail::$detail $fields => ApiDetail::$detail $fields,
+                _ => panic!("Applying identity mapping to the wrong type")
+            };
+            Ok(Some(Api {
+                detail,
+                name: self.name,
+                cpp_name: self.cpp_name,
+                deps: self.deps,
+            }))
+        }
+    };
+}
+
 impl<T: AnalysisPhase> Api<T> {
     pub(crate) fn name(&self) -> QualifiedName {
         self.name.clone()
@@ -179,4 +202,47 @@ impl<T: AnalysisPhase> Api<T> {
             .as_deref()
             .unwrap_or_else(|| self.name.get_final_item())
     }
+
+    pub(crate) fn map<U, FF, SF, TF>(
+        self,
+        func_conversion: FF,
+        struct_conversion: SF,
+        typedef_conversion: TF,
+    ) -> Result<Option<Api<U>>, ConvertErrorWithContext>
+    where
+        U: AnalysisPhase,
+        FF: FnOnce(Api<T>) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
+        SF: FnOnce(Api<T>) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
+        TF: FnOnce(Api<T>) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
+    {
+        let detail = match self.detail {
+            // No changes to any of these...
+            ApiDetail::ConcreteType {
+                rs_definition,
+                cpp_definition,
+            } => ApiDetail::ConcreteType {
+                rs_definition,
+                cpp_definition,
+            },
+            ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
+            ApiDetail::StringConstructor => ApiDetail::StringConstructor,
+            ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
+            ApiDetail::CType { typename } => ApiDetail::CType { typename },
+            ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
+            ApiDetail::Enum { item } => ApiDetail::Enum { item },
+            // Apply a mapping to the following
+            ApiDetail::Typedef { .. } => return typedef_conversion(self),
+            ApiDetail::Function { .. } => return func_conversion(self),
+            ApiDetail::Struct { .. } => return struct_conversion(self),
+        };
+        Ok(Some(Api {
+            detail,
+            name: self.name,
+            cpp_name: self.cpp_name,
+            deps: self.deps,
+        }))
+    }
+
+    make_unchanged!(typedef_unchanged, TypedefAnalysis, Typedef, { item, analysis });
+    make_unchanged!(struct_unchanged, StructAnalysis, Struct, { item, analysis });
 }
