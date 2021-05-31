@@ -23,7 +23,7 @@ use crate::{
             has_attr,
             type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::TypedefKind,
+        api::{ApiCommon, TypedefKind},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::convert_apis,
@@ -43,7 +43,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, FuncToConvert, TypeKind, UnanalyzedApi},
         codegen_cpp::AdditionalNeed,
         ConvertError,
     },
@@ -164,21 +164,21 @@ impl<'a> FnAnalyzer<'a> {
 
     fn should_generate_utilities(apis: &[Api<PodAnalysis>]) -> bool {
         apis.iter()
-            .any(|api| matches!(api.detail, ApiDetail::StringConstructor))
+            .any(|api| matches!(api, Api::StringConstructor { .. }))
     }
 
     fn build_pod_safe_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
         apis.iter()
-            .filter_map(|api| match api.detail {
-                ApiDetail::Struct {
-                    item: _,
+            .filter_map(|api| match api {
+                Api::Struct {
                     analysis:
                         PodStructAnalysisBody {
                             kind: TypeKind::Pod,
                             ..
                         },
-                } => Some(api.name()),
-                ApiDetail::Enum { item: _ } => Some(api.name()),
+                    ..
+                } => Some(api.name().clone()),
+                Api::Enum { .. } => Some(api.name().clone()),
                 _ => None,
             })
             .chain(
@@ -201,45 +201,63 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         api: Api<PodAnalysis>,
     ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
-        let mut new_deps = api.deps.clone();
-        let mut new_id = api.name.get_final_ident();
-        let mut cpp_name = api.cpp_name;
-        let api_detail = match api.detail {
+        Ok(Some(match api {
             // No changes to any of these...
-            ApiDetail::ConcreteType {
+            Api::ConcreteType {
+                common,
                 rs_definition,
                 cpp_definition,
-            } => ApiDetail::ConcreteType {
+            } => Api::ConcreteType {
+                common,
                 rs_definition,
                 cpp_definition,
             },
-            ApiDetail::StringConstructor => ApiDetail::StringConstructor,
-            ApiDetail::Function { fun, analysis: _ } => {
-                let analysis =
-                    self.analyze_foreign_fn(&api.name.get_namespace(), &fun, cpp_name)?;
+            Api::StringConstructor { common } => Api::StringConstructor { common },
+            Api::Function { common, fun, .. } => {
+                let analysis = self.analyze_foreign_fn(
+                    &common.name.get_namespace(),
+                    &fun,
+                    common.cpp_name.clone(),
+                )?;
                 match analysis {
                     None => return Ok(None),
                     Some(FnAnalysisResult(analysis, id, fn_deps, fn_cpp_name)) => {
-                        new_deps = fn_deps;
-                        new_id = id;
-                        cpp_name = fn_cpp_name;
-                        ApiDetail::Function { fun, analysis }
+                        let common = ApiCommon {
+                            deps: fn_deps,
+                            name: QualifiedName::new(common.name.get_namespace(), id),
+                            cpp_name: fn_cpp_name,
+                        };
+                        Api::Function {
+                            common,
+                            fun,
+                            analysis,
+                        }
                     }
                 }
             }
-            ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
-            ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
-            ApiDetail::CType { typename } => ApiDetail::CType { typename },
-            ApiDetail::Enum { item } => ApiDetail::Enum { item },
-            ApiDetail::Struct { item, analysis } => ApiDetail::Struct { item, analysis },
-            ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
-            ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
-        };
-        Ok(Some(Api {
-            name: QualifiedName::new(api.name.get_namespace(), new_id),
-            cpp_name,
-            deps: new_deps,
-            detail: api_detail,
+            Api::Const { common, const_item } => Api::Const { common, const_item },
+            Api::Typedef {
+                common,
+                item,
+                analysis,
+            } => Api::Typedef {
+                common,
+                item,
+                analysis,
+            },
+            Api::CType { common, typename } => Api::CType { common, typename },
+            Api::Enum { common, item } => Api::Enum { common, item },
+            Api::Struct {
+                common,
+                item,
+                analysis,
+            } => Api::Struct {
+                common,
+                item,
+                analysis,
+            },
+            Api::ForwardDeclaration { common } => Api::ForwardDeclaration { common },
+            Api::IgnoredItem { common, err, ctx } => Api::IgnoredItem { common, err, ctx },
         }))
     }
 
@@ -859,14 +877,15 @@ impl<'a> FnAnalyzer<'a> {
 
 impl Api<FnAnalysis> {
     pub(crate) fn typename_for_allowlist(&self) -> QualifiedName {
-        match &self.detail {
-            ApiDetail::Function { fun: _, analysis } => match analysis.kind {
+        match &self {
+            Api::Function { analysis, .. } => match analysis.kind {
                 FnKind::Method(ref self_ty, _) => self_ty.clone(),
-                FnKind::Function => {
-                    QualifiedName::new(&self.name.get_namespace(), make_ident(&analysis.rust_name))
-                }
+                FnKind::Function => QualifiedName::new(
+                    &self.name().get_namespace(),
+                    make_ident(&analysis.rust_name),
+                ),
             },
-            _ => self.name(),
+            _ => self.name().clone(),
         }
     }
 
@@ -877,16 +896,16 @@ impl Api<FnAnalysis> {
     /// more C++ is needed (so it can add #includes in the cxx mod).
     /// And we can't answer the question _prior_ to this function analysis phase.
     pub(crate) fn additional_cpp(&self) -> Option<AdditionalNeed> {
-        match &self.detail {
-            ApiDetail::Function { fun: _, analysis } => analysis.cpp_wrapper.clone(),
-            ApiDetail::StringConstructor => Some(AdditionalNeed::MakeStringConstructor),
-            ApiDetail::ConcreteType { rs_definition, .. } => {
+        match &self {
+            Api::Function { analysis, .. } => analysis.cpp_wrapper.clone(),
+            Api::StringConstructor { .. } => Some(AdditionalNeed::MakeStringConstructor),
+            Api::ConcreteType { rs_definition, .. } => {
                 Some(AdditionalNeed::ConcreteTemplatedTypeTypedef(
-                    self.name.clone(),
+                    self.name().clone(),
                     rs_definition.clone(),
                 ))
             }
-            ApiDetail::CType { typename } => Some(AdditionalNeed::CTypeTypedef(typename.clone())),
+            Api::CType { typename, .. } => Some(AdditionalNeed::CTypeTypedef(typename.clone())),
             _ => None,
         }
     }

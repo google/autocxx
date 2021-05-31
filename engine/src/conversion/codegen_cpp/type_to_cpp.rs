@@ -30,15 +30,9 @@ pub(crate) type CppNameMap = HashMap<QualifiedName, String>;
 pub(crate) fn original_name_map_from_apis<T: AnalysisPhase>(apis: &[Api<T>]) -> CppNameMap {
     apis.iter()
         .filter_map(|api| {
-            if let Api {
-                cpp_name: Some(cpp_name),
-                ..
-            } = api
-            {
-                Some((api.name(), cpp_name.clone()))
-            } else {
-                None
-            }
+            api.cpp_name()
+                .as_ref()
+                .map(|cpp_name| (api.name().clone(), cpp_name.clone()))
         })
         .collect()
 }

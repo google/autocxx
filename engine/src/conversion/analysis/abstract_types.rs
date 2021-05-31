@@ -18,31 +18,32 @@ use super::{
     fun::{FnAnalysis, FnAnalysisBody, FnKind, MethodKind},
     pod::PodStructAnalysisBody,
 };
-use crate::conversion::api::{Api, TypeKind};
-use crate::{conversion::api::ApiDetail, types::QualifiedName};
+use crate::conversion::api::TypeKind;
+use crate::{conversion::api::Api, types::QualifiedName};
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
 pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<FnAnalysis>>) {
     let mut abstract_types: HashSet<_> = apis
         .iter()
-        .filter_map(|api| match &api.detail {
-            ApiDetail::Function {
-                fun: _,
+        .filter_map(|api| match &api {
+            Api::Function {
                 analysis:
                     FnAnalysisBody {
                         kind: FnKind::Method(self_ty_name, MethodKind::PureVirtual),
                         ..
                     },
+                ..
             } => Some(self_ty_name.clone()),
             _ => None,
         })
         .collect();
 
-    for api in apis.iter_mut() {
-        let tyname = api.name();
-        match &mut api.detail {
-            ApiDetail::Struct { analysis, .. } if abstract_types.contains(&tyname) => {
+    for mut api in apis.iter_mut() {
+        match &mut api {
+            Api::Struct {
+                analysis, common, ..
+            } if abstract_types.contains(&common.name) => {
                 analysis.kind = TypeKind::Abstract;
             }
             _ => {}
@@ -56,9 +57,9 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
     let mut iterate = true;
     while iterate {
         iterate = false;
-        for api in apis.iter_mut() {
-            match &mut api.detail {
-                ApiDetail::Struct {
+        for mut api in apis.iter_mut() {
+            match &mut api {
+                Api::Struct {
                     analysis: PodStructAnalysisBody { bases, kind },
                     ..
                 } if *kind != TypeKind::Abstract
@@ -66,7 +67,7 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
                         || any_missing_from_allowlist(config, &bases)) =>
                 {
                     *kind = TypeKind::Abstract;
-                    abstract_types.insert(api.name());
+                    abstract_types.insert(api.name().clone());
                     // Recurse in case there are further dependent types
                     iterate = true;
                 }
@@ -78,14 +79,14 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
     // We also need to remove any constructors belonging to these
     // abstract types.
     apis.retain(|api| {
-        !matches!(&api.detail,
-        ApiDetail::Function {
-            fun: _,
+        !matches!(&api,
+        Api::Function {
             analysis:
                 FnAnalysisBody {
                     kind: FnKind::Method(self_ty, MethodKind::Constructor),
                     ..
                 },
+                ..
         } if abstract_types.contains(&self_ty))
     })
 }

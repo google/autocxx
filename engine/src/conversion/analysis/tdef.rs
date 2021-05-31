@@ -12,15 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
-
 use autocxx_parser::IncludeCppConfig;
 use syn::ItemType;
 
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, Annotated, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, ApiDetail, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiCommon, TypedefKind, UnanalyzedApi},
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::report_any_error,
         ConvertError,
@@ -50,52 +48,58 @@ pub(crate) fn convert_typedef_targets(
     let mut problem_apis = Vec::new();
     let new_apis = apis
         .into_iter()
-        .filter_map(|api| {
-            let name = api.name();
-            let cpp_name = api.cpp_name;
-            let ns = name.get_namespace();
-            let mut newdeps = api.deps;
-            let detail = match api.detail {
-                ApiDetail::ForwardDeclaration => Some(ApiDetail::ForwardDeclaration),
-                ApiDetail::ConcreteType {
-                    rs_definition,
-                    cpp_definition,
-                } => Some(ApiDetail::ConcreteType {
-                    rs_definition,
-                    cpp_definition,
-                }),
-                ApiDetail::StringConstructor => Some(ApiDetail::StringConstructor),
-                ApiDetail::Function { fun, analysis } => {
-                    Some(ApiDetail::Function { fun, analysis })
-                }
-                ApiDetail::Const { const_item } => Some(ApiDetail::Const { const_item }),
-                ApiDetail::Typedef {
-                    item: TypedefKind::Type(ity),
-                    analysis: _,
-                } => report_any_error(ns, &mut problem_apis, || {
-                    get_replacement_typedef(
-                        &name,
-                        ity,
-                        &mut type_converter,
-                        &mut extra_apis,
-                        &mut newdeps,
-                    )
-                }),
-                ApiDetail::Typedef { item, analysis: _ } => Some(ApiDetail::Typedef {
-                    item: item.clone(),
-                    analysis: item,
-                }),
-                ApiDetail::Struct { item, analysis } => Some(ApiDetail::Struct { item, analysis }),
-                ApiDetail::Enum { item } => Some(ApiDetail::Enum { item }),
-                ApiDetail::CType { typename } => Some(ApiDetail::CType { typename }),
-                ApiDetail::IgnoredItem { err, ctx } => Some(ApiDetail::IgnoredItem { err, ctx }),
-            };
-            detail.map(|detail| Api {
-                detail,
-                name,
-                cpp_name,
-                deps: newdeps,
-            })
+        .filter_map(|api| match api {
+            Api::ForwardDeclaration { common } => Some(Api::ForwardDeclaration { common }),
+            Api::ConcreteType {
+                common,
+                rs_definition,
+                cpp_definition,
+            } => Some(Api::ConcreteType {
+                common,
+                rs_definition,
+                cpp_definition,
+            }),
+            Api::StringConstructor { common } => Some(Api::StringConstructor { common }),
+            Api::Function {
+                common,
+                fun,
+                analysis,
+            } => Some(Api::Function {
+                common,
+                fun,
+                analysis,
+            }),
+            Api::Const { common, const_item } => Some(Api::Const { common, const_item }),
+            Api::Typedef {
+                common,
+                item: TypedefKind::Type(ity),
+                analysis: _,
+            } => report_any_error(
+                &common.name.get_namespace().clone(),
+                &mut problem_apis,
+                || get_replacement_typedef(common, ity, &mut type_converter, &mut extra_apis),
+            ),
+            Api::Typedef {
+                common,
+                item,
+                analysis: _,
+            } => Some(Api::Typedef {
+                common,
+                item: item.clone(),
+                analysis: item,
+            }),
+            Api::Struct {
+                common,
+                item,
+                analysis,
+            } => Some(Api::Struct {
+                common,
+                item,
+                analysis,
+            }),
+            Api::Enum { common, item } => Some(Api::Enum { common, item }),
+            Api::CType { common, typename } => Some(Api::CType { common, typename }),
+            Api::IgnoredItem { common, err, ctx } => Some(Api::IgnoredItem { common, err, ctx }),
         })
         .collect::<Vec<_>>();
     new_apis
@@ -105,38 +109,38 @@ pub(crate) fn convert_typedef_targets(
 }
 
 fn get_replacement_typedef(
-    name: &QualifiedName,
+    mut common: ApiCommon,
     ity: ItemType,
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
-    deps: &mut HashSet<QualifiedName>,
-) -> Result<ApiDetail<TypedefAnalysis>, ConvertErrorWithContext> {
+) -> Result<Api<TypedefAnalysis>, ConvertErrorWithContext> {
     let mut converted_type = ity.clone();
     let id = ity.ident.clone();
     remove_bindgen_attrs(&mut converted_type.attrs)
         .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))?;
     let type_conversion_results = type_converter.convert_type(
         (*ity.ty).clone(),
-        name.get_namespace(),
+        common.name.get_namespace(),
         &TypeConversionContext::CxxInnerType,
     );
     match type_conversion_results {
         Err(err) => Err(ConvertErrorWithContext(
             err,
-            Some(ErrorContext::Item(name.get_final_ident())),
+            Some(ErrorContext::Item(common.name.get_final_ident())),
         )),
         Ok(Annotated {
             ty: syn::Type::Path(ref typ),
             ..
-        }) if QualifiedName::from_type_path(typ) == *name => Err(ConvertErrorWithContext(
-            ConvertError::InfinitelyRecursiveTypedef(name.clone()),
-            Some(ErrorContext::Item(name.get_final_ident())),
+        }) if QualifiedName::from_type_path(typ) == common.name => Err(ConvertErrorWithContext(
+            ConvertError::InfinitelyRecursiveTypedef(common.name.clone()),
+            Some(ErrorContext::Item(common.name.get_final_ident())),
         )),
         Ok(mut final_type) => {
             converted_type.ty = Box::new(final_type.ty.clone());
             extra_apis.append(&mut final_type.extra_apis);
-            deps.extend(final_type.types_encountered);
-            Ok(ApiDetail::Typedef {
+            common.deps.extend(final_type.types_encountered);
+            Ok(Api::Typedef {
+                common,
                 item: TypedefKind::Type(ity),
                 analysis: TypedefKind::Type(converted_type),
             })

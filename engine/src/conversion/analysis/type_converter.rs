@@ -14,7 +14,7 @@
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiDetail, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiCommon, TypedefKind, UnanalyzedApi},
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -383,24 +383,17 @@ impl<'a> TypeConverter<'a> {
         match e {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
-                let name = QualifiedName::new(
-                    &Namespace::new(),
-                    make_ident(&format!("AutocxxConcrete{}", count)),
-                );
-                self.concrete_templates
-                    .insert(cpp_definition.clone(), name.clone());
-                let api = UnanalyzedApi {
-                    name: name.clone(),
-                    // This is a synthesized type that isn't nested within anything else,
-                    // so it doesn't have an orignal_name.
-                    cpp_name: None,
-                    deps: HashSet::new(),
-                    detail: crate::conversion::api::ApiDetail::ConcreteType {
-                        rs_definition: Box::new(rs_definition.clone()),
-                        cpp_definition,
-                    },
+                let api = UnanalyzedApi::ConcreteType {
+                    common: ApiCommon::new(
+                        &Namespace::new(),
+                        make_ident(&format!("AutocxxConcrete{}", count)),
+                    ),
+                    rs_definition: Box::new(rs_definition.clone()),
+                    cpp_definition: cpp_definition.clone(),
                 };
-                Ok((name, Some(api)))
+                self.concrete_templates
+                    .insert(cpp_definition, api.name().clone());
+                Ok((api.name().clone(), Some(api)))
             }
         }
     }
@@ -452,18 +445,19 @@ impl<'a> TypeConverter<'a> {
 
     fn find_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
         apis.iter()
-            .filter_map(|api| match api.detail {
-                ApiDetail::ForwardDeclaration
-                | ApiDetail::ConcreteType { .. }
-                | ApiDetail::Typedef { .. }
-                | ApiDetail::Enum { .. }
-                | ApiDetail::Struct { .. } => Some(api.name()),
-                ApiDetail::StringConstructor
-                | ApiDetail::Function { .. }
-                | ApiDetail::Const { .. }
-                | ApiDetail::CType { .. }
-                | ApiDetail::IgnoredItem { .. } => None,
+            .filter_map(|api| match api {
+                Api::ForwardDeclaration { .. }
+                | Api::ConcreteType { .. }
+                | Api::Typedef { .. }
+                | Api::Enum { .. }
+                | Api::Struct { .. } => Some(api.name()),
+                Api::StringConstructor { .. }
+                | Api::Function { .. }
+                | Api::Const { .. }
+                | Api::CType { .. }
+                | Api::IgnoredItem { .. } => None,
             })
+            .cloned()
             .collect()
     }
 
@@ -472,10 +466,11 @@ impl<'a> TypeConverter<'a> {
         A::TypedefAnalysis: TypedefTarget,
     {
         apis.iter()
-            .filter_map(|api| match &api.detail {
-                ApiDetail::Typedef { analysis, .. } => {
-                    analysis.get_target().cloned().map(|ty| (api.name(), ty))
-                }
+            .filter_map(|api| match &api {
+                Api::Typedef { analysis, .. } => analysis
+                    .get_target()
+                    .cloned()
+                    .map(|ty| (api.name().clone(), ty)),
                 _ => None,
             })
             .collect()
@@ -485,9 +480,9 @@ impl<'a> TypeConverter<'a> {
         apis: &[Api<A>],
     ) -> HashMap<String, QualifiedName> {
         apis.iter()
-            .filter_map(|api| match &api.detail {
-                ApiDetail::ConcreteType { cpp_definition, .. } => {
-                    Some((cpp_definition.clone(), api.name()))
+            .filter_map(|api| match &api {
+                Api::ConcreteType { cpp_definition, .. } => {
+                    Some((cpp_definition.clone(), api.name().clone()))
                 }
                 _ => None,
             })
@@ -496,10 +491,11 @@ impl<'a> TypeConverter<'a> {
 
     fn find_incomplete_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
         apis.iter()
-            .filter_map(|api| match api.detail {
-                ApiDetail::ForwardDeclaration => Some(api.name()),
+            .filter_map(|api| match api {
+                Api::ForwardDeclaration { .. } => Some(api.name()),
                 _ => None,
             })
+            .cloned()
             .collect()
     }
 }
@@ -510,22 +506,18 @@ impl<'a> TypeConverter<'a> {
 /// system happy by adding an [ApiAnalysis] but in practice, for the sorts
 /// of things that get created, it's always blank.
 pub(crate) fn add_analysis<A: AnalysisPhase>(api: UnanalyzedApi) -> Api<A> {
-    let new_detail = match api.detail {
-        ApiDetail::ConcreteType {
+    match api {
+        Api::ConcreteType {
+            common,
             rs_definition,
             cpp_definition,
-        } => ApiDetail::ConcreteType {
+        } => Api::ConcreteType {
+            common,
             rs_definition,
             cpp_definition,
         },
-        ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
+        Api::IgnoredItem { common, err, ctx } => Api::IgnoredItem { common, err, ctx },
         _ => panic!("Function analysis created an unexpected type of extra API"),
-    };
-    Api {
-        name: api.name,
-        cpp_name: api.cpp_name,
-        deps: api.deps,
-        detail: new_detail,
     }
 }
 pub(crate) trait TypedefTarget {

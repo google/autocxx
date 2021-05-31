@@ -23,7 +23,7 @@ use syn::{ItemStruct, Type};
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, ApiDetail, TypeKind, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, TypeKind, TypedefKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
         error_reporter::convert_item_apis,
         ConvertError,
@@ -88,41 +88,58 @@ fn analyze_pod_api(
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
 ) -> Result<Api<PodAnalysis>, ConvertError> {
-    let ty_id = api.name();
-    let mut new_deps = api.deps;
-    let api_detail = match api.detail {
+    Ok(match api {
         // No changes to any of these...
-        ApiDetail::ConcreteType {
+        Api::ConcreteType {
+            common,
             rs_definition,
             cpp_definition,
-        } => ApiDetail::ConcreteType {
+        } => Api::ConcreteType {
+            common,
             rs_definition,
             cpp_definition,
         },
-        ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
-        ApiDetail::StringConstructor => ApiDetail::StringConstructor,
-        ApiDetail::Function { fun, analysis } => ApiDetail::Function { fun, analysis },
-        ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
-        ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
-        ApiDetail::CType { typename } => ApiDetail::CType { typename },
+        Api::ForwardDeclaration { common } => Api::ForwardDeclaration { common },
+        Api::StringConstructor { common } => Api::StringConstructor { common },
+        Api::Function {
+            common,
+            fun,
+            analysis,
+        } => Api::Function {
+            common,
+            fun,
+            analysis,
+        },
+        Api::Const { common, const_item } => Api::Const { common, const_item },
+        Api::Typedef {
+            common,
+            item,
+            analysis,
+        } => Api::Typedef {
+            common,
+            item,
+            analysis,
+        },
+        Api::CType { common, typename } => Api::CType { common, typename },
         // Just changes to these two...
-        ApiDetail::Enum { mut item } => {
+        Api::Enum { common, mut item } => {
             super::remove_bindgen_attrs(&mut item.attrs)?;
-            ApiDetail::Enum { item }
+            Api::Enum { common, item }
         }
-        ApiDetail::Struct {
+        Api::Struct {
+            mut common,
             mut item,
             analysis: _,
         } => {
             super::remove_bindgen_attrs(&mut item.attrs)?;
             let bases = get_bases(&item);
-            let type_kind = if byvalue_checker.is_pod(&ty_id) {
+            let type_kind = if byvalue_checker.is_pod(&common.name) {
                 // It's POD so let's mark dependencies on things in its field
                 get_struct_field_types(
                     type_converter,
-                    &api.name.get_namespace(),
+                    &common.name.get_namespace(),
                     &item,
-                    &mut new_deps,
+                    &mut common.deps,
                     extra_apis,
                 )?;
                 TypeKind::Pod
@@ -130,10 +147,11 @@ fn analyze_pod_api(
                 // It's non-POD. So also, make the fields opaque...
                 make_non_pod(&mut item);
                 // ... and say we don't depend on other types.
-                new_deps.clear();
+                common.deps.clear();
                 TypeKind::NonPod
             };
-            ApiDetail::Struct {
+            Api::Struct {
+                common,
                 item,
                 analysis: PodStructAnalysisBody {
                     kind: type_kind,
@@ -141,13 +159,7 @@ fn analyze_pod_api(
                 },
             }
         }
-        ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
-    };
-    Ok(Api {
-        name: api.name,
-        cpp_name: api.cpp_name,
-        deps: new_deps,
-        detail: api_detail,
+        Api::IgnoredItem { common, err, ctx } => Api::IgnoredItem { common, err, ctx },
     })
 }
 
