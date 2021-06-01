@@ -7657,6 +7657,37 @@ fn test_pass_superclass() {
     run_test("", hdr, rs, &["A", "B", "get_b", "take_a"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/486
+fn test_issue486_multi_types() {
+    let hdr = indoc! {"
+        namespace a {
+            namespace spanner {
+                inline void Key() {}
+            }
+        } // namespace a
+        namespace b {
+            namespace spanner {
+                typedef int Key;
+            }
+        } // namespace a
+        namespace spanner {
+            class Key {
+                public:
+                    bool b(a::spanner::Key &);
+            };
+        } // namespace spanner
+    "};
+    let rs = quote! {};
+    run_test(
+        "",
+        hdr,
+        rs,
+        &["spanner::Key", "a::spanner::Key", "b::spanner::Key"],
+        &[],
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
