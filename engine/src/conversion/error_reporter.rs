@@ -92,7 +92,7 @@ pub(crate) fn convert_item_apis<F, A, B>(
 fn ignored_item<A: AnalysisPhase>(ns: &Namespace, ctx: ErrorContext, err: ConvertError) -> Api<A> {
     Api {
         name: QualifiedName::new(ns, ctx.get_id().clone()),
-        original_name: None,
+        cpp_name: None,
         deps: HashSet::new(),
         detail: ApiDetail::IgnoredItem { err, ctx },
         rename_to: None,

@@ -190,7 +190,7 @@ fn analyze_pod_api(
     println!("Rename to {:?}", rename_to);
     Ok(Api {
         name: new_name,
-        original_name: api.original_name,
+        cpp_name: api.cpp_name,
         deps: new_deps,
         detail: api_detail,
         rename_to,

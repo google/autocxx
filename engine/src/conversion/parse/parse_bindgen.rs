@@ -141,28 +141,22 @@ impl<'a> ParseBindgen<'a> {
                 }
                 let tyname = Self::qualify_name(ns, s.ident.clone())?;
                 let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
-                let original_name = get_bindgen_original_name_annotation(&s.attrs);
+                let cpp_name = get_bindgen_original_name_annotation(&s.attrs);
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
-                self.parse_type(
-                    tyname.clone(),
-                    is_forward_declaration,
-                    s,
-                    original_name,
-                    |s| ApiDetail::Struct {
+                self.parse_type(tyname.clone(), is_forward_declaration, s, cpp_name, |s| {
+                    ApiDetail::Struct {
                         item: s,
                         analysis: (),
-                    },
-                );
+                    }
+                });
                 self.latest_virtual_this_type = Some(tyname);
                 Ok(())
             }
             Item::Enum(e) => {
                 let tyname = Self::qualify_name(ns, e.ident.clone())?;
-                let original_name = get_bindgen_original_name_annotation(&e.attrs);
-                self.parse_type(tyname, false, e, original_name, |e| ApiDetail::Enum {
-                    item: e,
-                });
+                let cpp_name = get_bindgen_original_name_annotation(&e.attrs);
+                self.parse_type(tyname, false, e, cpp_name, |e| ApiDetail::Enum { item: e });
                 Ok(())
             }
             Item::Impl(imp) => {
@@ -222,9 +216,7 @@ impl<'a> ParseBindgen<'a> {
                             deps.insert(old_tyname);
                             self.apis.push(UnanalyzedApi {
                                 name: QualifiedName::new(ns, new_id.clone()),
-                                original_name: get_bindgen_original_name_annotation(
-                                    &use_item.attrs,
-                                ),
+                                cpp_name: get_bindgen_original_name_annotation(&use_item.attrs),
                                 deps,
                                 detail: ApiDetail::Typedef {
                                     item: TypedefKind::Use(parse_quote! {
@@ -249,7 +241,7 @@ impl<'a> ParseBindgen<'a> {
             Item::Const(const_item) => {
                 self.apis.push(UnanalyzedApi {
                     name: QualifiedName::new(ns, const_item.ident.clone()),
-                    original_name: get_bindgen_original_name_annotation(&const_item.attrs),
+                    cpp_name: get_bindgen_original_name_annotation(&const_item.attrs),
                     deps: HashSet::new(),
                     detail: ApiDetail::Const { const_item },
                     rename_to: None,
@@ -259,7 +251,7 @@ impl<'a> ParseBindgen<'a> {
             Item::Type(ity) => {
                 self.apis.push(UnanalyzedApi {
                     name: QualifiedName::new(ns, ity.ident.clone()),
-                    original_name: get_bindgen_original_name_annotation(&ity.attrs),
+                    cpp_name: get_bindgen_original_name_annotation(&ity.attrs),
                     deps: HashSet::new(),
                     detail: ApiDetail::Typedef {
                         item: TypedefKind::Type(ity),
@@ -303,7 +295,7 @@ impl<'a> ParseBindgen<'a> {
         name: QualifiedName,
         is_forward_declaration: bool,
         bindgen_mod_item: T,
-        original_name: Option<String>,
+        cpp_name: Option<String>,
         api_make: F,
     ) where
         F: FnOnce(T) -> ApiDetail<NullAnalysis>,
@@ -313,7 +305,7 @@ impl<'a> ParseBindgen<'a> {
         }
         let api = UnanalyzedApi {
             name,
-            original_name,
+            cpp_name,
             deps: HashSet::new(),
             detail: if is_forward_declaration {
                 ApiDetail::ForwardDeclaration

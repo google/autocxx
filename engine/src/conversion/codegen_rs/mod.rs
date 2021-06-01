@@ -40,7 +40,7 @@ use self::{
 };
 
 use super::codegen_cpp::type_to_cpp::{
-    namespaced_name_using_original_name_map, original_name_map_from_apis, OriginalNameMap,
+    namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
 };
 use super::{
     analysis::fun::FnAnalysis,
@@ -120,7 +120,7 @@ fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
 pub(crate) struct RsCodeGenerator<'a> {
     include_list: &'a [String],
     bindgen_mod: ItemMod,
-    original_name_map: OriginalNameMap,
+    original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
 }
 
@@ -153,7 +153,8 @@ impl<'a> RsCodeGenerator<'a> {
             .into_iter()
             .map(|api| {
                 let more_cpp_needed = api.additional_cpp().is_some();
-                let gen = self.generate_rs_for_api(&api.name, api.detail);
+                let cpp_name = api.cxx_name().to_string();
+                let gen = self.generate_rs_for_api(&api.name, api.detail, cpp_name);
                 ((api.name, gen), more_cpp_needed)
             })
             .unzip();
@@ -390,6 +391,7 @@ impl<'a> RsCodeGenerator<'a> {
         &self,
         name: &QualifiedName,
         api_detail: ApiDetail<FnAnalysis>,
+        cpp_name: String,
     ) -> RsCodegenResult {
         let id = name.get_final_ident();
         match api_detail {
@@ -423,7 +425,7 @@ impl<'a> RsCodeGenerator<'a> {
                 materialization: Use::UsedFromCxxBridge,
             },
             ApiDetail::Function { fun, analysis } => {
-                gen_function(name.get_namespace(), *fun, analysis)
+                gen_function(name.get_namespace(), *fun, analysis, cpp_name)
             }
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: Vec::new(),
@@ -567,10 +569,10 @@ impl<'a> RsCodeGenerator<'a> {
         let id = name.get_final_ident();
         let mut ns_components: Vec<_> = ns.iter().cloned().collect();
         let mut cxx_name = None;
-        if let Some(original_name) = self.original_name_map.get(name) {
-            let original_name = QualifiedName::new_from_cpp_name(original_name);
-            cxx_name = Some(original_name.get_final_item().to_string());
-            ns_components.extend(original_name.ns_segment_iter().cloned());
+        if let Some(cpp_name) = self.original_name_map.get(name) {
+            let cpp_name = QualifiedName::new_from_cpp_name(cpp_name);
+            cxx_name = Some(cpp_name.get_final_item().to_string());
+            ns_components.extend(cpp_name.ns_segment_iter().cloned());
         };
 
         let mut for_extern_c_ts = if !ns_components.is_empty() {
