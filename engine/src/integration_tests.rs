@@ -5301,6 +5301,28 @@ fn test_include_cpp_in_path() {
 }
 
 #[test]
+fn test_bitset() {
+    let hdr = indoc! {"
+        #include <cstddef>
+        template <size_t _N_words>
+        class bitset
+        {
+        public:
+            typedef size_t              __storage_type;
+            __storage_type __first_[_N_words];
+            inline bool all() {}
+        };
+
+        typedef bitset<1> mybitset;
+    "};
+
+    let rs = quote! {
+    };
+
+    run_test("", hdr, rs, &["mybitset", "bitset"], &[]);
+}
+
+#[test]
 fn test_cint_vector() {
     let hdr = indoc! {"
         #include <vector>
