@@ -5214,6 +5214,23 @@ fn test_closure() {
 }
 
 #[test]
+fn test_underscored_namespace_for_inner_type() {
+    let hdr = indoc! {"
+        namespace __foo {
+            struct daft {
+                struct bob {
+                    int a;
+                };
+                int a;
+            };
+        }
+        inline void bar(__foo::daft::bob) {}
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["bar"], &[]);
+}
+
+#[test]
 fn test_blocklist_not_overly_broad() {
     // This is a regression test. We used to block anything that starts with "rust" or "std",
     // not just items in the "rust" and "std" namespaces. We therefore test that functions starting
