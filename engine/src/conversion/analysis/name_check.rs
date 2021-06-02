@@ -43,7 +43,7 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
                 .map(|s|
                     QualifiedName::new_from_cpp_name(&s)
                 )
-                .unwrap_or(api.name.clone());
+                .unwrap_or_else(|| api.name.clone());
             for seg in cxx_name.segment_iter() {
                 validate_ident_ok_for_rust(&seg)?;
             }

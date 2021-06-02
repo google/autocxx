@@ -192,12 +192,12 @@ impl Parse for IncludeCppConfig {
             inclusions,
             unsafe_policy,
             parse_only,
+            exclude_impls,
             pod_requests,
             allowlist,
             blocklist,
             exclude_utilities,
             mod_name,
-            exclude_impls,
         })
     }
 }
