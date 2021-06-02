@@ -48,6 +48,7 @@ pub enum ConvertError {
     IgnoredDependent,
     MoveConstructorUnsupported,
     ReservedName,
+    DuplicateCxxBridgeName,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -88,6 +89,7 @@ impl Display for ConvertError {
             ConvertError::IgnoredDependent => write!(f, "This item depends on some other type which autocxx could not generate.")?,
             ConvertError::MoveConstructorUnsupported => write!(f, "This is a move constructor, for which we currently cannot generate bindings.")?,
             ConvertError::ReservedName => write!(f, "The item name is a reserved word in Rust.")?,
+            ConvertError::DuplicateCxxBridgeName => write!(f, "This item name is used in multiple namespaces. At present, autocxx and cxx allow only one type of a given name. This limitation will be fixed in future.")?,
         }
         Ok(())
     }
