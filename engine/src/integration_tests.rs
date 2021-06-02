@@ -5318,6 +5318,49 @@ fn test_include_cpp_in_path() {
 }
 
 #[test]
+fn test_bitset() {
+    let hdr = indoc! {"
+        #include <cstddef>
+        template <size_t _N_words, size_t _Size>
+        class __bitset
+        {
+        public:
+            typedef size_t              __storage_type;
+            __storage_type __first_[_N_words];
+            inline bool all() {}
+        };
+
+        template <size_t _Size>
+        class __attribute__ ((__type_visibility__(\"default\"))) bitset
+            : private __bitset<_Size == 0 ? 0 : (_Size - 1) / (sizeof(size_t) * 8) + 1, _Size>
+        {
+        public:
+            static const unsigned __n_words = _Size == 0 ? 0 : (_Size - 1) / (sizeof(size_t) * 8) + 1;
+            typedef __bitset<__n_words, _Size> base;
+            bool all() const noexcept;
+        };
+
+
+        typedef bitset<1> mybitset;
+    "};
+
+    let rs = quote! {};
+
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        &[],
+        &[],
+        Some(quote! {
+            generate_all!()
+        }),
+        &[],
+        None,
+    );
+}
+
+#[test]
 fn test_cint_vector() {
     let hdr = indoc! {"
         #include <vector>
