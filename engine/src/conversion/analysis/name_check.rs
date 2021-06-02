@@ -22,7 +22,7 @@ use crate::{
         error_reporter::convert_item_apis,
         ConvertError,
     },
-    types::{validate_ident_ok_for_rust, QualifiedName},
+    types::{validate_ident_ok_for_cxx, QualifiedName},
 };
 
 use super::fun::FnAnalysis;
@@ -37,15 +37,11 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
         | ApiDetail::Const { .. }
         | ApiDetail::Enum { .. }
         | ApiDetail::Struct { .. } => {
-            let cxx_name = api
-                .cpp_name
-                .as_ref()
-                .map(|s|
-                    QualifiedName::new_from_cpp_name(&s)
-                )
-                .unwrap_or_else(|| api.name.clone());
-            for seg in cxx_name.segment_iter() {
-                validate_ident_ok_for_rust(&seg)?;
+            validate_all_segments_ok_for_cxx(api.name.segment_iter())?;
+            if let Some(ref cpp_name) = api.cpp_name {
+                // The C++ name might itself be outer_type::inner_type and thus may
+                // have multiple segments.
+                validate_all_segments_ok_for_cxx(QualifiedName::new_from_cpp_name(cpp_name).segment_iter())?;
             }
             Ok(Some(api))
         }
@@ -83,6 +79,15 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
         }
     });
     results
+}
+
+fn validate_all_segments_ok_for_cxx(
+    items: impl Iterator<Item = String>,
+) -> Result<(), ConvertError> {
+    for seg in items {
+        validate_ident_ok_for_cxx(&seg)?;
+    }
+    Ok(())
 }
 
 fn cxxbridge_name(api: &Api<FnAnalysis>) -> Option<Ident> {
