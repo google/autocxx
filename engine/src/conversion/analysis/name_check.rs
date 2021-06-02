@@ -12,10 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+
+use syn::Ident;
+
 use crate::{
     conversion::{
         api::{Api, ApiDetail},
         error_reporter::convert_item_apis,
+        ConvertError,
     },
     types::{validate_ident_ok_for_rust, QualifiedName},
 };
@@ -25,8 +30,8 @@ use super::fun::FnAnalysis;
 /// If any items have names which can't be represented by cxx,
 /// abort.
 pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
-    let mut results = Vec::new();
-    convert_item_apis(apis, &mut results, |api| match api.detail {
+    let mut intermediate = Vec::new();
+    convert_item_apis(apis, &mut intermediate, |api| match api.detail {
         ApiDetail::Typedef { .. }
         | ApiDetail::ForwardDeclaration
         | ApiDetail::Const { .. }
@@ -53,5 +58,44 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
         | ApiDetail::StringConstructor
         | ApiDetail::IgnoredItem { .. } => Ok(Some(api)),
     });
+
+    // Reject any names which are duplicates within the cxx bridge mod,
+    // that has a flat namespace.
+    let mut names_found: HashMap<Ident, usize> = HashMap::new();
+    for api in &intermediate {
+        let my_name = cxxbridge_name(api);
+        if let Some(name) = my_name {
+            let e = names_found.entry(name).or_default();
+            *e += 1usize;
+        }
+    }
+    let mut results = Vec::new();
+    convert_item_apis(intermediate, &mut results, |api| {
+        let my_name = cxxbridge_name(&api);
+        if let Some(name) = my_name {
+            if *names_found.entry(name).or_default() > 1usize {
+                Err(ConvertError::DuplicateCxxBridgeName)
+            } else {
+                Ok(Some(api))
+            }
+        } else {
+            Ok(Some(api))
+        }
+    });
     results
+}
+
+fn cxxbridge_name(api: &Api<FnAnalysis>) -> Option<Ident> {
+    match api.detail {
+        ApiDetail::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
+        ApiDetail::Enum { .. }
+        | ApiDetail::ForwardDeclaration
+        | ApiDetail::ConcreteType { .. }
+        | ApiDetail::Typedef { .. }
+        | ApiDetail::Struct { .. }
+        | ApiDetail::CType { .. } => Some(api.name().get_final_ident()),
+        ApiDetail::StringConstructor | ApiDetail::Const { .. } | ApiDetail::IgnoredItem { .. } => {
+            None
+        }
+    }
 }

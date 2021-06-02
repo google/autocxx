@@ -4964,6 +4964,34 @@ fn test_type_called_type() {
 }
 
 #[test]
+fn test_bridge_conflict_ty() {
+    let hdr = indoc! {"
+        namespace a {
+            struct Key { int a; };
+        }
+        namespace b {
+            struct Key { int a; };
+        }
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["a::Key", "b::Key"], &[]);
+}
+
+#[test]
+fn test_bridge_conflict_ty_fn() {
+    let hdr = indoc! {"
+        namespace a {
+            struct Key { int a; };
+        }
+        namespace b {
+            inline void Key() {}
+        }
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["a::Key", "b::Key"], &[]);
+}
+
+#[test]
 fn test_issue_506() {
     let hdr = indoc! {"
         namespace std {
@@ -5584,6 +5612,25 @@ fn test_manual_bridge() {
         }
     };
     do_run_test_manual("", hdr, rs, &[], None).unwrap();
+}
+
+#[test]
+fn test_issue486() {
+    let hdr = indoc! {"
+        namespace a {
+            namespace spanner {
+                class Key;
+            }
+        } // namespace a
+        namespace spanner {
+            class Key {
+                public:
+                    bool b(a::spanner::Key &);
+            };
+        } // namespace spanner
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["spanner::Key"], &[]);
 }
 
 // Yet to test:
