@@ -4964,6 +4964,34 @@ fn test_type_called_type() {
 }
 
 #[test]
+fn test_bridge_conflict_ty() {
+    let hdr = indoc! {"
+        namespace a {
+            struct Key { int a; };
+        }
+        namespace b {
+            struct Key { int a; };
+        }
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["a::Key", "b::Key"], &[]);
+}
+
+#[test]
+fn test_bridge_conflict_ty_fn() {
+    let hdr = indoc! {"
+        namespace a {
+            struct Key { int a; };
+        }
+        namespace b {
+            inline void Key() {}
+        }
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["a::Key", "b::Key"], &[]);
+}
+
+#[test]
 fn test_issue_506() {
     let hdr = indoc! {"
         namespace std {
