@@ -41,17 +41,18 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
     mut apis: Vec<Api<FnAnalysis>>,
     config: &IncludeCppConfig,
 ) -> Vec<Api<FnAnalysis>> {
-    let mut todos: Vec<_> = apis
+    let mut todos: Vec<QualifiedName> = apis
         .iter()
         .filter(|api| {
             let tnforal = api.typename_for_allowlist();
             config.is_on_allowlist(&tnforal.to_cpp_name())
         })
         .map(Api::name)
+        .cloned()
         .collect();
     let mut by_typename: HashMap<QualifiedName, Vec<Api<FnAnalysis>>> = HashMap::new();
     for api in apis.drain(..) {
-        let tn = api.name();
+        let tn = api.name().clone();
         by_typename.entry(tn).or_default().push(api);
     }
     let mut done = HashSet::new();
@@ -62,7 +63,7 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
             continue;
         }
         if let Some(mut these_apis) = by_typename.remove(&todo) {
-            todos.extend(these_apis.iter().flat_map(|api| api.deps.iter().cloned()));
+            todos.extend(these_apis.iter().flat_map(|api| api.deps().iter().cloned()));
             output.append(&mut these_apis);
         } // otherwise, probably an intrinsic e.g. uint32_t.
         done.insert(todo);

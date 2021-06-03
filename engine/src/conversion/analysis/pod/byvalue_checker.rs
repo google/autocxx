@@ -12,16 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::{conversion::ConvertError, known_types::known_types};
 use crate::{
     conversion::{
         analysis::tdef::TypedefAnalysis,
         api::{Api, TypedefKind},
     },
     types::{Namespace, QualifiedName},
-};
-use crate::{
-    conversion::{api::ApiDetail, ConvertError},
-    known_types::known_types,
 };
 use autocxx_parser::IncludeCppConfig;
 use std::collections::HashMap;
@@ -90,8 +87,8 @@ impl ByValueChecker {
                 .insert(tn, StructDetails::new(safety));
         }
         for api in apis {
-            match &api.detail {
-                ApiDetail::Typedef { analysis, .. } => {
+            match &api {
+                Api::Typedef { analysis, .. } => {
                     let name = api.name();
                     let typedef_type = match analysis {
                         TypedefKind::Type(type_item) => match type_item.ty.as_ref() {
@@ -106,22 +103,22 @@ impl ByValueChecker {
                     match &typedef_type {
                         Some(typ) => {
                             byvalue_checker.results.insert(
-                                name,
+                                name.clone(),
                                 StructDetails::new(PodState::IsAlias(
                                     QualifiedName::from_type_path(typ),
                                 )),
                             );
                         }
-                        None => byvalue_checker.ingest_nonpod_type(name),
+                        None => byvalue_checker.ingest_nonpod_type(name.clone()),
                     }
                 }
-                ApiDetail::Struct { item, analysis: _ } => {
-                    byvalue_checker.ingest_struct(&item, &api.name.get_namespace())
+                Api::Struct { item, .. } => {
+                    byvalue_checker.ingest_struct(&item, &api.name().get_namespace())
                 }
-                ApiDetail::Enum { item: _ } => {
+                Api::Enum { .. } => {
                     byvalue_checker
                         .results
-                        .insert(api.name(), StructDetails::new(PodState::IsPod));
+                        .insert(api.name().clone(), StructDetails::new(PodState::IsPod));
                 }
                 _ => {}
             }

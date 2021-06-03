@@ -47,7 +47,7 @@ use super::codegen_cpp::type_to_cpp::{
 };
 use super::{
     analysis::fun::FnAnalysis,
-    api::{AnalysisPhase, Api, ApiDetail, ImplBlockDetails, TypeKind, TypedefKind},
+    api::{AnalysisPhase, Api, ImplBlockDetails, TypeKind, TypedefKind},
 };
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::quote;
@@ -150,15 +150,15 @@ impl<'a> RsCodeGenerator<'a> {
         // what 'use' statements we need here and there.
         let generate_utilities = all_apis
             .iter()
-            .any(|api| matches!(&api.detail, ApiDetail::StringConstructor));
+            .any(|api| matches!(&api, Api::StringConstructor { .. }));
         // Now let's generate the Rust code.
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
                 let more_cpp_needed = api.additional_cpp().is_some();
-                let cpp_name = api.cxx_name().to_string();
-                let gen = self.generate_rs_for_api(&api.name, api.detail, cpp_name);
-                ((api.name, gen), more_cpp_needed)
+                let name = api.name().clone();
+                let gen = self.generate_rs_for_api(api);
+                ((name, gen), more_cpp_needed)
             })
             .unzip();
         // First, the hierarchy of mods containing lots of 'use' statements
@@ -390,15 +390,12 @@ impl<'a> RsCodeGenerator<'a> {
         output_items
     }
 
-    fn generate_rs_for_api(
-        &self,
-        name: &QualifiedName,
-        api_detail: ApiDetail<FnAnalysis>,
-        cpp_name: String,
-    ) -> RsCodegenResult {
+    fn generate_rs_for_api(&self, api: Api<FnAnalysis>) -> RsCodegenResult {
+        let name = api.name().clone();
         let id = name.get_final_ident();
-        match api_detail {
-            ApiDetail::StringConstructor => {
+        let cpp_call_name = api.effective_cpp_name().to_string();
+        match api {
+            Api::StringConstructor { .. } => {
                 let make_string_name = make_ident(self.config.get_makestring_name());
                 RsCodegenResult {
                     extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
@@ -411,26 +408,26 @@ impl<'a> RsCodeGenerator<'a> {
                     materialization: Use::Unused,
                 }
             }
-            ApiDetail::ConcreteType { .. } => RsCodegenResult {
+            Api::ConcreteType { .. } => RsCodegenResult {
                 global_items: self.generate_extern_type_impl(TypeKind::NonPod, &name),
                 bridge_items: create_impl_items(&id, self.config),
-                extern_c_mod_item: Some(ForeignItem::Verbatim(self.generate_cxxbridge_type(name))),
+                extern_c_mod_item: Some(ForeignItem::Verbatim(self.generate_cxxbridge_type(&name))),
                 bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id.clone()))),
                 impl_entry: None,
                 materialization: Use::Unused,
             },
-            ApiDetail::ForwardDeclaration => RsCodegenResult {
-                extern_c_mod_item: Some(ForeignItem::Verbatim(self.generate_cxxbridge_type(name))),
+            Api::ForwardDeclaration { .. } => RsCodegenResult {
+                extern_c_mod_item: Some(ForeignItem::Verbatim(self.generate_cxxbridge_type(&name))),
                 bridge_items: Vec::new(),
                 global_items: self.generate_extern_type_impl(TypeKind::NonPod, &name),
                 bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id))),
                 impl_entry: None,
                 materialization: Use::UsedFromCxxBridge,
             },
-            ApiDetail::Function { fun, analysis } => {
-                gen_function(name.get_namespace(), *fun, analysis, cpp_name)
+            Api::Function { fun, analysis, .. } => {
+                gen_function(name.get_namespace(), *fun, analysis, cpp_call_name)
             }
-            ApiDetail::Const { const_item } => RsCodegenResult {
+            Api::Const { const_item, .. } => RsCodegenResult {
                 global_items: Vec::new(),
                 impl_entry: None,
                 bridge_items: Vec::new(),
@@ -438,7 +435,7 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: Some(Item::Const(const_item)),
                 materialization: Use::UsedFromBindgen,
             },
-            ApiDetail::Typedef { item: _, analysis } => RsCodegenResult {
+            Api::Typedef { analysis, .. } => RsCodegenResult {
                 extern_c_mod_item: None,
                 bridge_items: Vec::new(),
                 global_items: Vec::new(),
@@ -449,13 +446,13 @@ impl<'a> RsCodeGenerator<'a> {
                 impl_entry: None,
                 materialization: Use::UsedFromBindgen,
             },
-            ApiDetail::Struct { item, analysis } => {
-                self.generate_type(name, id, item, analysis.kind, Item::Struct)
+            Api::Struct { item, analysis, .. } => {
+                self.generate_type(&name, id, item, analysis.kind, Item::Struct)
             }
-            ApiDetail::Enum { item } => {
-                self.generate_type(name, id, item, TypeKind::Pod, Item::Enum)
+            Api::Enum { item, .. } => {
+                self.generate_type(&name, id, item, TypeKind::Pod, Item::Enum)
             }
-            ApiDetail::CType { .. } => RsCodegenResult {
+            Api::CType { .. } => RsCodegenResult {
                 global_items: Vec::new(),
                 impl_entry: None,
                 bridge_items: Vec::new(),
@@ -465,7 +462,7 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: None,
                 materialization: Use::Unused,
             },
-            ApiDetail::IgnoredItem { err, ctx } => Self::generate_error_entry(err, ctx),
+            Api::IgnoredItem { err, ctx, .. } => Self::generate_error_entry(err, ctx),
         }
     }
 
@@ -657,7 +654,7 @@ impl HasNs for (QualifiedName, RsCodegenResult) {
 
 impl<T: AnalysisPhase> HasNs for Api<T> {
     fn get_namespace(&self) -> &Namespace {
-        &self.name.get_namespace()
+        &self.name().get_namespace()
     }
 }
 

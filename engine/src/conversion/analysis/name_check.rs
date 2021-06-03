@@ -17,11 +17,7 @@ use std::collections::HashMap;
 use syn::Ident;
 
 use crate::{
-    conversion::{
-        api::{Api, ApiDetail},
-        error_reporter::convert_item_apis,
-        ConvertError,
-    },
+    conversion::{api::Api, error_reporter::convert_item_apis, ConvertError},
     types::{validate_ident_ok_for_cxx, QualifiedName},
 };
 
@@ -31,35 +27,35 @@ use super::fun::FnAnalysis;
 /// abort.
 pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
     let mut intermediate = Vec::new();
-    convert_item_apis(apis, &mut intermediate, |api| match api.detail {
-        ApiDetail::Typedef { .. }
-        | ApiDetail::ForwardDeclaration
-        | ApiDetail::Const { .. }
-        | ApiDetail::Enum { .. }
-        | ApiDetail::Struct { .. } => {
-            validate_all_segments_ok_for_cxx(api.name.segment_iter())?;
-            if let Some(ref cpp_name) = api.cpp_name {
+    convert_item_apis(apis, &mut intermediate, |api| match api {
+        Api::Typedef { ref common, .. }
+        | Api::ForwardDeclaration { ref common, .. }
+        | Api::Const { ref common, .. }
+        | Api::Enum { ref common, .. }
+        | Api::Struct { ref common, .. } => {
+            validate_all_segments_ok_for_cxx(common.name.segment_iter())?;
+            if let Some(ref cpp_name) = common.cpp_name {
                 // The C++ name might itself be outer_type::inner_type and thus may
                 // have multiple segments.
                 validate_all_segments_ok_for_cxx(QualifiedName::new_from_cpp_name(cpp_name).segment_iter())?;
             }
             Ok(Some(api))
         }
-        ApiDetail::Function { .. } // we don't handle functions here because
+        Api::Function { .. } // we don't handle functions here because
             // the function analysis does an equivalent check. Instead of just rejecting
             // the function, it creates a wrapper function instead with a more
             // palatable name. That's preferable to rejecting the API entirely.
-        | ApiDetail::ConcreteType  { .. }
-        | ApiDetail::CType { .. }
-        | ApiDetail::StringConstructor
-        | ApiDetail::IgnoredItem { .. } => Ok(Some(api)),
+        | Api::ConcreteType  { .. }
+        | Api::CType { .. }
+        | Api::StringConstructor { .. }
+        | Api::IgnoredItem { .. } => Ok(Some(api)),
     });
 
     // Reject any names which are duplicates within the cxx bridge mod,
     // that has a flat namespace.
     let mut names_found: HashMap<Ident, usize> = HashMap::new();
     for api in &intermediate {
-        let my_name = cxxbridge_name(api);
+        let my_name = api.cxxbridge_name();
         if let Some(name) = my_name {
             let e = names_found.entry(name).or_default();
             *e += 1usize;
@@ -67,7 +63,7 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
     }
     let mut results = Vec::new();
     convert_item_apis(intermediate, &mut results, |api| {
-        let my_name = cxxbridge_name(&api);
+        let my_name = api.cxxbridge_name();
         if let Some(name) = my_name {
             if *names_found.entry(name).or_default() > 1usize {
                 Err(ConvertError::DuplicateCxxBridgeName)
@@ -88,19 +84,4 @@ fn validate_all_segments_ok_for_cxx(
         validate_ident_ok_for_cxx(&seg)?;
     }
     Ok(())
-}
-
-fn cxxbridge_name(api: &Api<FnAnalysis>) -> Option<Ident> {
-    match api.detail {
-        ApiDetail::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
-        ApiDetail::Enum { .. }
-        | ApiDetail::ForwardDeclaration
-        | ApiDetail::ConcreteType { .. }
-        | ApiDetail::Typedef { .. }
-        | ApiDetail::Struct { .. }
-        | ApiDetail::CType { .. } => Some(api.name().get_final_ident()),
-        ApiDetail::StringConstructor | ApiDetail::Const { .. } | ApiDetail::IgnoredItem { .. } => {
-            None
-        }
-    }
 }

@@ -15,11 +15,9 @@
 use std::collections::HashSet;
 
 use super::fun::{FnAnalysis, FnAnalysisBody, FnKind};
+use crate::conversion::api::ApiCommon;
 use crate::conversion::{convert_error::ErrorContext, ConvertError};
-use crate::{
-    conversion::api::{Api, ApiDetail},
-    known_types,
-};
+use crate::{conversion::api::Api, known_types};
 
 /// Remove any APIs which depend on other items which have been ignored.
 /// We also eliminate any APIs that depend on some type that we just don't
@@ -30,32 +28,39 @@ pub(crate) fn filter_apis_by_ignored_dependents(
 ) -> Vec<Api<FnAnalysis>> {
     let (ignored_items, valid_items): (Vec<&Api<_>>, Vec<&Api<_>>) = apis.iter().partition(|api| {
         matches!(
-            api.detail,
-            ApiDetail::IgnoredItem {
+            api,
+            Api::IgnoredItem {
                 ctx: ErrorContext::Item(..),
                 ..
             }
         )
     });
-    let mut ignored_items: HashSet<_> = ignored_items.into_iter().map(|api| api.name()).collect();
-    let valid_types: HashSet<_> = valid_items.into_iter().map(|api| api.name()).collect();
+    let mut ignored_items: HashSet<_> = ignored_items
+        .into_iter()
+        .map(|api| api.name().clone())
+        .collect();
+    let valid_types: HashSet<_> = valid_items
+        .into_iter()
+        .map(|api| api.name())
+        .cloned()
+        .collect();
     let mut iterate_again = true;
     while iterate_again {
         iterate_again = false;
         apis = apis
             .into_iter()
             .map(|api| {
-                if api.deps.iter().any(|dep| ignored_items.contains(dep)) {
+                if api.deps().iter().any(|dep| ignored_items.contains(dep)) {
                     iterate_again = true;
-                    ignored_items.insert(api.name());
+                    ignored_items.insert(api.name().clone());
                     create_ignore_item(api, ConvertError::IgnoredDependent)
                 } else if !api
-                    .deps
+                    .deps()
                     .iter()
                     .all(|dep| valid_types.contains(dep) || known_types().is_known_type(dep))
                 {
                     iterate_again = true;
-                    ignored_items.insert(api.name());
+                    ignored_items.insert(api.name().clone());
                     create_ignore_item(api, ConvertError::UnknownDependentType)
                 } else {
                     api
@@ -68,26 +73,26 @@ pub(crate) fn filter_apis_by_ignored_dependents(
 
 fn create_ignore_item(api: Api<FnAnalysis>, err: ConvertError) -> Api<FnAnalysis> {
     let id = api.name().get_final_ident();
-    Api {
-        name: api.name(),
-        cpp_name: api.cpp_name,
-        deps: HashSet::new(),
-        detail: ApiDetail::IgnoredItem {
-            err,
-            ctx: match api.detail {
-                ApiDetail::Function {
-                    analysis:
-                        FnAnalysisBody {
-                            kind: FnKind::Method(self_ty, _),
-                            ..
-                        },
-                    ..
-                } => ErrorContext::Method {
-                    self_ty: self_ty.get_final_ident(),
-                    method: id,
-                },
-                _ => ErrorContext::Item(id),
+    Api::IgnoredItem {
+        common: ApiCommon {
+            name: api.name().clone(),
+            cpp_name: api.cpp_name().clone(),
+            deps: HashSet::new(),
+        },
+        err,
+        ctx: match api {
+            Api::Function {
+                analysis:
+                    FnAnalysisBody {
+                        kind: FnKind::Method(self_ty, _),
+                        ..
+                    },
+                ..
+            } => ErrorContext::Method {
+                self_ty: self_ty.get_final_ident(),
+                method: id,
             },
+            _ => ErrorContext::Item(id),
         },
     }
 }

@@ -13,12 +13,11 @@
 // limitations under the License.
 
 use super::{
-    api::{AnalysisPhase, Api, ApiDetail},
+    api::{AnalysisPhase, Api, ApiCommon},
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
-use crate::types::{Namespace, QualifiedName};
-use std::collections::HashSet;
+use crate::types::Namespace;
 
 /// Run some code which may generate a ConvertError.
 /// If it does, try to note the problem in our output APIs
@@ -55,7 +54,7 @@ where
     B: AnalysisPhase,
 {
     out_apis.extend(in_apis.into_iter().filter_map(|api| {
-        let tn = api.name();
+        let tn = api.name().clone();
         match fun(api) {
             Ok(opt) => opt,
             Err(ConvertErrorWithContext(err, None)) => {
@@ -90,11 +89,10 @@ pub(crate) fn convert_item_apis<F, A, B>(
 }
 
 fn ignored_item<A: AnalysisPhase>(ns: &Namespace, ctx: ErrorContext, err: ConvertError) -> Api<A> {
-    Api {
-        name: QualifiedName::new(ns, ctx.get_id().clone()),
-        cpp_name: None,
-        deps: HashSet::new(),
-        detail: ApiDetail::IgnoredItem { err, ctx },
+    Api::IgnoredItem {
+        common: ApiCommon::new(ns, ctx.get_id().clone()),
+        err,
+        ctx,
     }
 }
 

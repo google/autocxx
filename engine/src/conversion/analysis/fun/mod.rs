@@ -23,7 +23,7 @@ use crate::{
             has_attr,
             type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::TypedefKind,
+        api::{ApiCommon, TypedefKind},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::convert_apis,
@@ -43,7 +43,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, TypeKind, UnanalyzedApi},
         codegen_cpp::AdditionalNeed,
         ConvertError,
     },
@@ -132,13 +132,6 @@ pub(crate) struct FnAnalyzer<'a> {
     generate_utilities: bool,
 }
 
-struct FnAnalysisResult(
-    FnAnalysisBody,
-    Ident,
-    HashSet<QualifiedName>,
-    Option<String>,
-);
-
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: Vec<Api<PodAnalysis>>,
@@ -157,28 +150,34 @@ impl<'a> FnAnalyzer<'a> {
             generate_utilities: Self::should_generate_utilities(&apis),
         };
         let mut results = Vec::new();
-        convert_apis(apis, &mut results, |api| me.analyze_fn_api(api));
+        convert_apis(apis, &mut results, |api| {
+            api.map(
+                |api| me.analyze_foreign_fn(api),
+                Api::struct_unchanged,
+                Api::typedef_unchanged,
+            )
+        });
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }
 
     fn should_generate_utilities(apis: &[Api<PodAnalysis>]) -> bool {
         apis.iter()
-            .any(|api| matches!(api.detail, ApiDetail::StringConstructor))
+            .any(|api| matches!(api, Api::StringConstructor { .. }))
     }
 
     fn build_pod_safe_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
         apis.iter()
-            .filter_map(|api| match api.detail {
-                ApiDetail::Struct {
-                    item: _,
+            .filter_map(|api| match api {
+                Api::Struct {
                     analysis:
                         PodStructAnalysisBody {
                             kind: TypeKind::Pod,
                             ..
                         },
-                } => Some(api.name()),
-                ApiDetail::Enum { item: _ } => Some(api.name()),
+                    ..
+                } => Some(api.name().clone()),
+                Api::Enum { .. } => Some(api.name().clone()),
                 _ => None,
             })
             .chain(
@@ -195,52 +194,6 @@ impl<'a> FnAnalyzer<'a> {
                     ),
             )
             .collect()
-    }
-
-    fn analyze_fn_api(
-        &mut self,
-        api: Api<PodAnalysis>,
-    ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
-        let mut new_deps = api.deps.clone();
-        let mut new_id = api.name.get_final_ident();
-        let mut cpp_name = api.cpp_name;
-        let api_detail = match api.detail {
-            // No changes to any of these...
-            ApiDetail::ConcreteType {
-                rs_definition,
-                cpp_definition,
-            } => ApiDetail::ConcreteType {
-                rs_definition,
-                cpp_definition,
-            },
-            ApiDetail::StringConstructor => ApiDetail::StringConstructor,
-            ApiDetail::Function { fun, analysis: _ } => {
-                let analysis =
-                    self.analyze_foreign_fn(&api.name.get_namespace(), &fun, cpp_name)?;
-                match analysis {
-                    None => return Ok(None),
-                    Some(FnAnalysisResult(analysis, id, fn_deps, fn_cpp_name)) => {
-                        new_deps = fn_deps;
-                        new_id = id;
-                        cpp_name = fn_cpp_name;
-                        ApiDetail::Function { fun, analysis }
-                    }
-                }
-            }
-            ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
-            ApiDetail::Typedef { item, analysis } => ApiDetail::Typedef { item, analysis },
-            ApiDetail::CType { typename } => ApiDetail::CType { typename },
-            ApiDetail::Enum { item } => ApiDetail::Enum { item },
-            ApiDetail::Struct { item, analysis } => ApiDetail::Struct { item, analysis },
-            ApiDetail::ForwardDeclaration => ApiDetail::ForwardDeclaration,
-            ApiDetail::IgnoredItem { err, ctx } => ApiDetail::IgnoredItem { err, ctx },
-        };
-        Ok(Some(Api {
-            name: QualifiedName::new(api.name.get_namespace(), new_id),
-            cpp_name,
-            deps: new_deps,
-            detail: api_detail,
-        }))
     }
 
     fn convert_boxed_type(
@@ -294,7 +247,7 @@ impl<'a> FnAnalyzer<'a> {
     /// We aim for the simplest case but, for example:
     /// * We'll need a C++ wrapper for static methods
     /// * We'll need a C++ wrapper for parameters which need to be wrapped and unwrapped
-    ///   to [UniquePtr]
+    ///   to [cxx::UniquePtr]
     /// * We'll need a Rust wrapper if we've got a C++ wrapper and it's a method.
     /// * We may need wrappers if names conflict.
     /// etc.
@@ -303,12 +256,16 @@ impl<'a> FnAnalyzer<'a> {
     /// The output of this analysis phase is used by both Rust and C++ codegen.
     fn analyze_foreign_fn(
         &mut self,
-        ns: &Namespace,
-        func_information: &FuncToConvert,
-        mut cpp_name: Option<String>,
-    ) -> Result<Option<FnAnalysisResult>, ConvertErrorWithContext> {
+        api: Api<PodAnalysis>,
+    ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
+        let (common, func_information) = match api {
+            Api::Function { common, fun, .. } => (common, fun),
+            _ => unreachable!(),
+        };
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
+        let mut cpp_name = common.cpp_name.clone();
+        let ns = common.name.get_namespace();
 
         // Let's gather some pre-wisdom about the name of the function.
         // We're shortly going to plunge into analyzing the parameters,
@@ -666,8 +623,9 @@ impl<'a> FnAnalyzer<'a> {
             }
         };
 
-        Ok(Some(FnAnalysisResult(
-            FnAnalysisBody {
+        Ok(Some(Api::Function {
+            fun: func_information,
+            analysis: FnAnalysisBody {
                 cxxbridge_name,
                 rust_name,
                 rust_rename_strategy,
@@ -679,10 +637,12 @@ impl<'a> FnAnalyzer<'a> {
                 vis,
                 cpp_wrapper,
             },
-            id,
-            deps,
-            cpp_name,
-        )))
+            common: ApiCommon {
+                cpp_name,
+                name: QualifiedName::new(ns, id),
+                deps,
+            },
+        }))
     }
 
     fn convert_fn_arg(
@@ -870,14 +830,15 @@ impl<'a> FnAnalyzer<'a> {
 
 impl Api<FnAnalysis> {
     pub(crate) fn typename_for_allowlist(&self) -> QualifiedName {
-        match &self.detail {
-            ApiDetail::Function { fun: _, analysis } => match analysis.kind {
+        match &self {
+            Api::Function { analysis, .. } => match analysis.kind {
                 FnKind::Method(ref self_ty, _) => self_ty.clone(),
-                FnKind::Function => {
-                    QualifiedName::new(&self.name.get_namespace(), make_ident(&analysis.rust_name))
-                }
+                FnKind::Function => QualifiedName::new(
+                    &self.name().get_namespace(),
+                    make_ident(&analysis.rust_name),
+                ),
             },
-            _ => self.name(),
+            _ => self.name().clone(),
         }
     }
 
@@ -888,17 +849,25 @@ impl Api<FnAnalysis> {
     /// more C++ is needed (so it can add #includes in the cxx mod).
     /// And we can't answer the question _prior_ to this function analysis phase.
     pub(crate) fn additional_cpp(&self) -> Option<AdditionalNeed> {
-        match &self.detail {
-            ApiDetail::Function { fun: _, analysis } => analysis.cpp_wrapper.clone(),
-            ApiDetail::StringConstructor => Some(AdditionalNeed::MakeStringConstructor),
-            ApiDetail::ConcreteType { rs_definition, .. } => {
+        match &self {
+            Api::Function { analysis, .. } => analysis.cpp_wrapper.clone(),
+            Api::StringConstructor { .. } => Some(AdditionalNeed::MakeStringConstructor),
+            Api::ConcreteType { rs_definition, .. } => {
                 Some(AdditionalNeed::ConcreteTemplatedTypeTypedef(
-                    self.name.clone(),
+                    self.name().clone(),
                     rs_definition.clone(),
                 ))
             }
-            ApiDetail::CType { typename } => Some(AdditionalNeed::CTypeTypedef(typename.clone())),
+            Api::CType { typename, .. } => Some(AdditionalNeed::CTypeTypedef(typename.clone())),
             _ => None,
+        }
+    }
+
+    pub(crate) fn cxxbridge_name(&self) -> Option<Ident> {
+        match self {
+            Api::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
+            Api::StringConstructor { .. } | Api::Const { .. } | Api::IgnoredItem { .. } => None,
+            _ => Some(self.common().name.get_final_ident()),
         }
     }
 }
