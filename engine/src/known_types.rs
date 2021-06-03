@@ -295,6 +295,12 @@ fn create_type_database() -> TypeDatabase {
         None,
     ));
     db.insert(TypeDetails::new(
+        "cxx::WeakPtr",
+        "std::weak_ptr",
+        Behavior::CxxContainerByValueSafe,
+        None,
+    ));
+    db.insert(TypeDetails::new(
         "cxx::CxxString",
         "std::string",
         Behavior::CxxString,
