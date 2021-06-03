@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
+
 use autocxx_parser::IncludeCppConfig;
 use syn::ItemType;
 
@@ -28,12 +30,17 @@ use crate::{
 
 use super::remove_bindgen_attrs;
 
+pub(crate) struct TypedefAnalysisBody {
+    pub(crate) kind: TypedefKind,
+    pub(crate) deps: HashSet<QualifiedName>,
+}
+
 /// Analysis phase where typedef analysis has been performed but no other
 /// analyses just yet.
 pub(crate) struct TypedefAnalysis;
 
 impl AnalysisPhase for TypedefAnalysis {
-    type TypedefAnalysis = TypedefKind;
+    type TypedefAnalysis = TypedefAnalysisBody;
     type StructAnalysis = ();
     type FunAnalysis = ();
 }
@@ -73,20 +80,34 @@ pub(crate) fn convert_typedef_targets(
             Api::Typedef {
                 common,
                 item: TypedefKind::Type(ity),
+                old_tyname,
                 analysis: _,
             } => report_any_error(
                 &common.name.get_namespace().clone(),
                 &mut problem_apis,
-                || get_replacement_typedef(common, ity, &mut type_converter, &mut extra_apis),
+                || {
+                    get_replacement_typedef(
+                        common,
+                        ity,
+                        old_tyname,
+                        &mut type_converter,
+                        &mut extra_apis,
+                    )
+                },
             ),
             Api::Typedef {
                 common,
                 item,
+                old_tyname,
                 analysis: _,
             } => Some(Api::Typedef {
                 common,
                 item: item.clone(),
-                analysis: item,
+                old_tyname,
+                analysis: TypedefAnalysisBody {
+                    kind: item,
+                    deps: HashSet::new(),
+                },
             }),
             Api::Struct {
                 common,
@@ -109,8 +130,9 @@ pub(crate) fn convert_typedef_targets(
 }
 
 fn get_replacement_typedef(
-    mut common: ApiCommon,
+    common: ApiCommon,
     ity: ItemType,
+    old_tyname: Option<QualifiedName>,
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
 ) -> Result<Api<TypedefAnalysis>, ConvertErrorWithContext> {
@@ -138,11 +160,14 @@ fn get_replacement_typedef(
         Ok(mut final_type) => {
             converted_type.ty = Box::new(final_type.ty.clone());
             extra_apis.append(&mut final_type.extra_apis);
-            common.deps.extend(final_type.types_encountered);
             Ok(Api::Typedef {
                 common,
                 item: TypedefKind::Type(ity),
-                analysis: TypedefKind::Type(converted_type),
+                old_tyname,
+                analysis: TypedefAnalysisBody {
+                    kind: TypedefKind::Type(converted_type),
+                    deps: final_type.types_encountered,
+                },
             })
         }
     }

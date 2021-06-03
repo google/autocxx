@@ -13,8 +13,6 @@
 // limitations under the License.
 
 use crate::types::{Namespace, QualifiedName};
-use itertools::Itertools;
-use std::collections::HashSet;
 use syn::{
     ForeignItemFn, Ident, ImplItem, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, Type,
 };
@@ -90,7 +88,6 @@ pub(crate) enum TypedefKind {
 pub(crate) struct ApiCommon {
     pub(crate) name: QualifiedName,
     pub(crate) cpp_name: Option<String>,
-    pub(crate) deps: HashSet<QualifiedName>,
 }
 
 impl ApiCommon {
@@ -98,7 +95,6 @@ impl ApiCommon {
         Self {
             name: QualifiedName::new(ns, id),
             cpp_name: None,
-            deps: HashSet::new(),
         }
     }
 
@@ -152,6 +148,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     Typedef {
         common: ApiCommon,
         item: TypedefKind,
+        old_tyname: Option<QualifiedName>,
         analysis: T::TypedefAnalysis,
     },
     /// An enum encountered in the
@@ -219,22 +216,11 @@ impl<T: AnalysisPhase> Api<T> {
             .as_deref()
             .unwrap_or_else(|| self.name().get_final_item())
     }
-
-    /// Any dependencies on other APIs which this API has.
-    pub(crate) fn deps(&self) -> &HashSet<QualifiedName> {
-        &self.common().deps
-    }
 }
 
 impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} (kind={}, deps={})",
-            self.name().to_cpp_name(),
-            self,
-            self.deps().iter().map(|d| d.to_cpp_name()).join(", ")
-        )
+        write!(f, "{} (kind={})", self.name().to_cpp_name(), self,)
     }
 }
 
@@ -291,6 +277,6 @@ impl<T: AnalysisPhase> Api<T> {
         }))
     }
 
-    make_unchanged!(typedef_unchanged, TypedefAnalysis, Typedef, { common, item, analysis });
+    make_unchanged!(typedef_unchanged, TypedefAnalysis, Typedef, { common, item, old_tyname, analysis });
     make_unchanged!(struct_unchanged, StructAnalysis, Struct, { common, item, analysis });
 }

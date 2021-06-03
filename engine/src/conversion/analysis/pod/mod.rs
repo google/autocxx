@@ -23,7 +23,7 @@ use syn::{ItemStruct, Type};
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, TypeKind, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, TypeKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
         error_reporter::convert_item_apis,
         ConvertError,
@@ -31,17 +31,18 @@ use crate::{
     types::{Namespace, QualifiedName},
 };
 
-use super::tdef::TypedefAnalysis;
+use super::tdef::{TypedefAnalysis, TypedefAnalysisBody};
 
 pub(crate) struct PodStructAnalysisBody {
     pub(crate) kind: TypeKind,
     pub(crate) bases: HashSet<QualifiedName>,
+    pub(crate) field_deps: HashSet<QualifiedName>,
 }
 
 pub(crate) struct PodAnalysis;
 
 impl AnalysisPhase for PodAnalysis {
-    type TypedefAnalysis = TypedefKind;
+    type TypedefAnalysis = TypedefAnalysisBody;
     type StructAnalysis = PodStructAnalysisBody;
     type FunAnalysis = ();
 }
@@ -114,10 +115,12 @@ fn analyze_pod_api(
         Api::Typedef {
             common,
             item,
+            old_tyname,
             analysis,
         } => Api::Typedef {
             common,
             item,
+            old_tyname,
             analysis,
         },
         Api::CType { common, typename } => Api::CType { common, typename },
@@ -127,19 +130,20 @@ fn analyze_pod_api(
             Api::Enum { common, item }
         }
         Api::Struct {
-            mut common,
+            common,
             mut item,
             analysis: _,
         } => {
             super::remove_bindgen_attrs(&mut item.attrs)?;
             let bases = get_bases(&item);
+            let mut field_deps = HashSet::new();
             let type_kind = if byvalue_checker.is_pod(&common.name) {
                 // It's POD so let's mark dependencies on things in its field
                 get_struct_field_types(
                     type_converter,
                     &common.name.get_namespace(),
                     &item,
-                    &mut common.deps,
+                    &mut field_deps,
                     extra_apis,
                 )?;
                 TypeKind::Pod
@@ -147,7 +151,6 @@ fn analyze_pod_api(
                 // It's non-POD. So also, make the fields opaque...
                 make_non_pod(&mut item);
                 // ... and say we don't depend on other types.
-                common.deps.clear();
                 TypeKind::NonPod
             };
             Api::Struct {
@@ -156,6 +159,7 @@ fn analyze_pod_api(
                 analysis: PodStructAnalysisBody {
                     kind: type_kind,
                     bases,
+                    field_deps,
                 },
             }
         }

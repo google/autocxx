@@ -29,6 +29,8 @@ use syn::{
     TypePath, TypePtr,
 };
 
+use super::tdef::TypedefAnalysisBody;
+
 /// Results of some type conversion, annotated with a list of every type encountered,
 /// and optionally any extra APIs we need in order to use this type.
 pub(crate) struct Annotated<T> {
@@ -530,10 +532,10 @@ impl TypedefTarget for () {
     }
 }
 
-impl TypedefTarget for TypedefKind {
+impl TypedefTarget for TypedefAnalysisBody {
     fn get_target(&self) -> Option<&Type> {
-        match self {
-            TypedefKind::Type(ty) => Some(&ty.ty),
+        match self.kind {
+            TypedefKind::Type(ref ty) => Some(&ty.ty),
             TypedefKind::Use(_) => None,
         }
     }

@@ -48,19 +48,9 @@ pub(crate) struct ParseBindgen<'a> {
 }
 
 pub(crate) fn api_common(ns: &Namespace, id: Ident, attrs: &[Attribute]) -> ApiCommon {
-    api_common_with_deps(ns, id, attrs, &[])
-}
-
-pub(crate) fn api_common_with_deps(
-    ns: &Namespace,
-    id: Ident,
-    attrs: &[Attribute],
-    deps: &[QualifiedName],
-) -> ApiCommon {
     ApiCommon {
         name: QualifiedName::new(ns, id),
         cpp_name: get_bindgen_original_name_annotation(attrs),
-        deps: deps.iter().cloned().collect(),
     }
 }
 
@@ -74,7 +64,7 @@ pub(crate) fn api_common_qualified(
             let ctx = ErrorContext::Item(id);
             Err(ConvertErrorWithContext(e, Some(ctx)))
         }
-        Ok(..) => Ok(api_common_with_deps(ns, id, attrs, &[])),
+        Ok(..) => Ok(api_common(ns, id, attrs)),
     }
 }
 
@@ -253,15 +243,11 @@ impl<'a> ParseBindgen<'a> {
                                 ));
                             }
                             self.apis.push(UnanalyzedApi::Typedef {
-                                common: api_common_with_deps(
-                                    ns,
-                                    new_id.clone(),
-                                    &use_item.attrs,
-                                    &[old_tyname],
-                                ),
+                                common: api_common(ns, new_id.clone(), &use_item.attrs),
                                 item: TypedefKind::Use(parse_quote! {
                                     pub use #old_path as #new_id;
                                 }),
+                                old_tyname: Some(old_tyname),
                                 analysis: (),
                             });
                             break;
@@ -287,6 +273,7 @@ impl<'a> ParseBindgen<'a> {
                 self.apis.push(UnanalyzedApi::Typedef {
                     common: api_common(ns, ity.ident.clone(), &ity.attrs),
                     item: TypedefKind::Type(ity),
+                    old_tyname: None,
                     analysis: (),
                 });
                 Ok(())

@@ -90,8 +90,8 @@ impl ByValueChecker {
             match &api {
                 Api::Typedef { analysis, .. } => {
                     let name = api.name();
-                    let typedef_type = match analysis {
-                        TypedefKind::Type(type_item) => match type_item.ty.as_ref() {
+                    let typedef_type = match analysis.kind {
+                        TypedefKind::Type(ref type_item) => match type_item.ty.as_ref() {
                             Type::Path(typ) => {
                                 let target_tn = QualifiedName::from_type_path(&typ);
                                 known_types().consider_substitution(&target_tn)

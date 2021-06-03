@@ -23,7 +23,7 @@ use crate::{
             has_attr,
             type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::{ApiCommon, TypedefKind},
+        api::ApiCommon,
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::convert_apis,
@@ -55,7 +55,10 @@ use self::{
     rust_name_tracker::RustNameTracker,
 };
 
-use super::pod::{PodAnalysis, PodStructAnalysisBody};
+use super::{
+    pod::{PodAnalysis, PodStructAnalysisBody},
+    tdef::TypedefAnalysisBody,
+};
 
 pub(crate) enum MethodKind {
     Normal,
@@ -93,6 +96,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
     pub(crate) cpp_wrapper: Option<AdditionalNeed>,
+    pub(crate) deps: HashSet<QualifiedName>,
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -115,7 +119,7 @@ struct ReturnTypeAnalysis {
 pub(crate) struct FnAnalysis;
 
 impl AnalysisPhase for FnAnalysis {
-    type TypedefAnalysis = TypedefKind;
+    type TypedefAnalysis = TypedefAnalysisBody;
     type StructAnalysis = PodStructAnalysisBody;
     type FunAnalysis = FnAnalysisBody;
 }
@@ -636,11 +640,11 @@ impl<'a> FnAnalyzer<'a> {
                 requires_unsafe,
                 vis,
                 cpp_wrapper,
+                deps,
             },
             common: ApiCommon {
                 cpp_name,
                 name: QualifiedName::new(ns, id),
-                deps,
             },
         }))
     }
@@ -868,6 +872,20 @@ impl Api<FnAnalysis> {
             Api::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
             Api::StringConstructor { .. } | Api::Const { .. } | Api::IgnoredItem { .. } => None,
             _ => Some(self.common().name.get_final_ident()),
+        }
+    }
+
+    /// Any dependencies on other APIs which this API has.
+    pub(crate) fn deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
+        match self {
+            Api::Typedef {
+                old_tyname,
+                analysis: TypedefAnalysisBody { deps, .. },
+                ..
+            } => Box::new(old_tyname.iter().chain(deps.iter())),
+            Api::Struct { analysis, .. } => Box::new(analysis.field_deps.iter()),
+            Api::Function { analysis, .. } => Box::new(analysis.deps.iter()),
+            _ => Box::new(std::iter::empty()),
         }
     }
 }

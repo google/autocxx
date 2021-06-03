@@ -50,13 +50,12 @@ pub(crate) fn filter_apis_by_ignored_dependents(
         apis = apis
             .into_iter()
             .map(|api| {
-                if api.deps().iter().any(|dep| ignored_items.contains(dep)) {
+                if api.deps().any(|dep| ignored_items.contains(dep)) {
                     iterate_again = true;
                     ignored_items.insert(api.name().clone());
                     create_ignore_item(api, ConvertError::IgnoredDependent)
                 } else if !api
                     .deps()
-                    .iter()
                     .all(|dep| valid_types.contains(dep) || known_types().is_known_type(dep))
                 {
                     iterate_again = true;
@@ -77,7 +76,6 @@ fn create_ignore_item(api: Api<FnAnalysis>, err: ConvertError) -> Api<FnAnalysis
         common: ApiCommon {
             name: api.name().clone(),
             cpp_name: api.cpp_name().clone(),
-            deps: HashSet::new(),
         },
         err,
         ctx: match api {
