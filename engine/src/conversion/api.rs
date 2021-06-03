@@ -171,7 +171,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
 }
 
 impl<T: AnalysisPhase> Api<T> {
-    fn common(&self) -> &ApiCommon {
+    pub(crate) fn common(&self) -> &ApiCommon {
         match self {
             Api::ForwardDeclaration { common } => common,
             Api::ConcreteType { common, .. } => common,

@@ -851,4 +851,12 @@ impl Api<FnAnalysis> {
             _ => None,
         }
     }
+
+    pub(crate) fn cxxbridge_name(&self) -> Option<Ident> {
+        match self {
+            Api::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
+            Api::StringConstructor { .. } | Api::Const { .. } | Api::IgnoredItem { .. } => None,
+            _ => Some(self.common().name.get_final_ident()),
+        }
+    }
 }

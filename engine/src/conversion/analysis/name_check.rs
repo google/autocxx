@@ -55,7 +55,7 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
     // that has a flat namespace.
     let mut names_found: HashMap<Ident, usize> = HashMap::new();
     for api in &intermediate {
-        let my_name = cxxbridge_name(api);
+        let my_name = api.cxxbridge_name();
         if let Some(name) = my_name {
             let e = names_found.entry(name).or_default();
             *e += 1usize;
@@ -63,7 +63,7 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
     }
     let mut results = Vec::new();
     convert_item_apis(intermediate, &mut results, |api| {
-        let my_name = cxxbridge_name(&api);
+        let my_name = api.cxxbridge_name();
         if let Some(name) = my_name {
             if *names_found.entry(name).or_default() > 1usize {
                 Err(ConvertError::DuplicateCxxBridgeName)
@@ -84,17 +84,4 @@ fn validate_all_segments_ok_for_cxx(
         validate_ident_ok_for_cxx(&seg)?;
     }
     Ok(())
-}
-
-fn cxxbridge_name(api: &Api<FnAnalysis>) -> Option<Ident> {
-    match api {
-        Api::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
-        Api::Enum { common, .. }
-        | Api::ForwardDeclaration { common, .. }
-        | Api::ConcreteType { common, .. }
-        | Api::Typedef { common, .. }
-        | Api::Struct { common, .. }
-        | Api::CType { common, .. } => Some(common.name.get_final_ident()),
-        Api::StringConstructor { .. } | Api::Const { .. } | Api::IgnoredItem { .. } => None,
-    }
 }
