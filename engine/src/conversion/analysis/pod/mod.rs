@@ -92,56 +92,56 @@ fn analyze_pod_api(
     Ok(match api {
         // No changes to any of these...
         Api::ConcreteType {
-            common,
+            name,
             rs_definition,
             cpp_definition,
         } => Api::ConcreteType {
-            common,
+            name,
             rs_definition,
             cpp_definition,
         },
-        Api::ForwardDeclaration { common } => Api::ForwardDeclaration { common },
-        Api::StringConstructor { common } => Api::StringConstructor { common },
+        Api::ForwardDeclaration { name } => Api::ForwardDeclaration { name },
+        Api::StringConstructor { name } => Api::StringConstructor { name },
         Api::Function {
-            common,
+            name,
             fun,
             analysis,
         } => Api::Function {
-            common,
+            name,
             fun,
             analysis,
         },
-        Api::Const { common, const_item } => Api::Const { common, const_item },
+        Api::Const { name, const_item } => Api::Const { name, const_item },
         Api::Typedef {
-            common,
+            name,
             item,
             old_tyname,
             analysis,
         } => Api::Typedef {
-            common,
+            name,
             item,
             old_tyname,
             analysis,
         },
-        Api::CType { common, typename } => Api::CType { common, typename },
+        Api::CType { name, typename } => Api::CType { name, typename },
         // Just changes to these two...
-        Api::Enum { common, mut item } => {
+        Api::Enum { name, mut item } => {
             super::remove_bindgen_attrs(&mut item.attrs)?;
-            Api::Enum { common, item }
+            Api::Enum { name, item }
         }
         Api::Struct {
-            common,
+            name,
             mut item,
             analysis: _,
         } => {
             super::remove_bindgen_attrs(&mut item.attrs)?;
             let bases = get_bases(&item);
             let mut field_deps = HashSet::new();
-            let type_kind = if byvalue_checker.is_pod(&common.name) {
+            let type_kind = if byvalue_checker.is_pod(&name.name) {
                 // It's POD so let's mark dependencies on things in its field
                 get_struct_field_types(
                     type_converter,
-                    &common.name.get_namespace(),
+                    &name.name.get_namespace(),
                     &item,
                     &mut field_deps,
                     extra_apis,
@@ -154,7 +154,7 @@ fn analyze_pod_api(
                 TypeKind::NonPod
             };
             Api::Struct {
-                common,
+                name,
                 item,
                 analysis: PodStructAnalysisBody {
                     kind: type_kind,
@@ -163,7 +163,7 @@ fn analyze_pod_api(
                 },
             }
         }
-        Api::IgnoredItem { common, err, ctx } => Api::IgnoredItem { common, err, ctx },
+        Api::IgnoredItem { name, err, ctx } => Api::IgnoredItem { name, err, ctx },
     })
 }
 

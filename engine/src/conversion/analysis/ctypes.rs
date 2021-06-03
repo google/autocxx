@@ -34,7 +34,7 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
         .collect();
     for (id, typename) in ctypes {
         apis.push(Api::CType {
-            common: ApiName::new(&Namespace::new(), id),
+            name: ApiName::new(&Namespace::new(), id),
             typename,
         });
     }

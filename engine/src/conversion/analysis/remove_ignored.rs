@@ -73,7 +73,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(
 fn create_ignore_item(api: Api<FnAnalysis>, err: ConvertError) -> Api<FnAnalysis> {
     let id = api.name().get_final_ident();
     Api::IgnoredItem {
-        common: ApiName {
+        name: ApiName {
             name: api.name().clone(),
             cpp_name: api.cpp_name().clone(),
         },

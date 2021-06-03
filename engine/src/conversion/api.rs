@@ -117,49 +117,49 @@ impl ApiName {
 /// enabling syn's `extra-traits` feature which increases compile time.)
 pub(crate) enum Api<T: AnalysisPhase> {
     /// A forward declared type for which no definition is available.
-    ForwardDeclaration { common: ApiName },
+    ForwardDeclaration { name: ApiName },
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
     ConcreteType {
-        common: ApiName,
+        name: ApiName,
         rs_definition: Box<Type>,
         cpp_definition: String,
     },
     /// A simple note that we want to make a constructor for
     /// a `std::string` on the heap.
-    StringConstructor { common: ApiName },
+    StringConstructor { name: ApiName },
     /// A function. May include some analysis.
     Function {
-        common: ApiName,
+        name: ApiName,
         fun: Box<FuncToConvert>,
         analysis: T::FunAnalysis,
     },
     /// A constant.
     Const {
-        common: ApiName,
+        name: ApiName,
         const_item: ItemConst,
     },
     /// A typedef found in the bindgen output which we wish
     /// to pass on in our output
     Typedef {
-        common: ApiName,
+        name: ApiName,
         item: TypedefKind,
         old_tyname: Option<QualifiedName>,
         analysis: T::TypedefAnalysis,
     },
     /// An enum encountered in the
     /// `bindgen` output.
-    Enum { common: ApiName, item: ItemEnum },
+    Enum { name: ApiName, item: ItemEnum },
     /// A struct encountered in the
     /// `bindgen` output.
     Struct {
-        common: ApiName,
+        name: ApiName,
         item: ItemStruct,
         analysis: T::StructAnalysis,
     },
     /// A variable-length C integer type (e.g. int, unsigned long).
     CType {
-        common: ApiName,
+        name: ApiName,
         typename: QualifiedName,
     },
     /// Some item which couldn't be processed by autocxx for some reason.
@@ -167,25 +167,25 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// to mark that it's ignored so that we don't attempt to process
     /// dependent items.
     IgnoredItem {
-        common: ApiName,
+        name: ApiName,
         err: ConvertError,
         ctx: ErrorContext,
     },
 }
 
 impl<T: AnalysisPhase> Api<T> {
-    pub(crate) fn common(&self) -> &ApiName {
+    fn name_info(&self) -> &ApiName {
         match self {
-            Api::ForwardDeclaration { common } => common,
-            Api::ConcreteType { common, .. } => common,
-            Api::StringConstructor { common } => common,
-            Api::Function { common, .. } => common,
-            Api::Const { common, .. } => common,
-            Api::Typedef { common, .. } => common,
-            Api::Enum { common, .. } => common,
-            Api::Struct { common, .. } => common,
-            Api::CType { common, .. } => common,
-            Api::IgnoredItem { common, .. } => common,
+            Api::ForwardDeclaration { name } => name,
+            Api::ConcreteType { name, .. } => name,
+            Api::StringConstructor { name } => name,
+            Api::Function { name, .. } => name,
+            Api::Const { name, .. } => name,
+            Api::Typedef { name, .. } => name,
+            Api::Enum { name, .. } => name,
+            Api::Struct { name, .. } => name,
+            Api::CType { name, .. } => name,
+            Api::IgnoredItem { name, .. } => name,
         }
     }
 
@@ -196,13 +196,13 @@ impl<T: AnalysisPhase> Api<T> {
     /// used in the [cxx::bridge] mod -  see
     /// [Api<FnAnalysis>::cxxbridge_name]
     pub(crate) fn name(&self) -> &QualifiedName {
-        &self.common().name
+        &self.name_info().name
     }
 
     /// The name recorded for use in C++, if and only if
     /// it differs from Rust.
     pub(crate) fn cpp_name(&self) -> &Option<String> {
-        &self.common().cpp_name
+        &self.name_info().cpp_name
     }
 
     /// The name for use in C++, whether or not it differs
@@ -252,20 +252,20 @@ impl<T: AnalysisPhase> Api<T> {
         Ok(Some(match self {
             // No changes to any of these...
             Api::ConcreteType {
-                common,
+                name,
                 rs_definition,
                 cpp_definition,
             } => Api::ConcreteType {
-                common,
+                name,
                 rs_definition,
                 cpp_definition,
             },
-            Api::ForwardDeclaration { common } => Api::ForwardDeclaration { common },
-            Api::StringConstructor { common } => Api::StringConstructor { common },
-            Api::Const { common, const_item } => Api::Const { common, const_item },
-            Api::CType { common, typename } => Api::CType { common, typename },
-            Api::IgnoredItem { common, err, ctx } => Api::IgnoredItem { common, err, ctx },
-            Api::Enum { common, item } => Api::Enum { common, item },
+            Api::ForwardDeclaration { name } => Api::ForwardDeclaration { name },
+            Api::StringConstructor { name } => Api::StringConstructor { name },
+            Api::Const { name, const_item } => Api::Const { name, const_item },
+            Api::CType { name, typename } => Api::CType { name, typename },
+            Api::IgnoredItem { name, err, ctx } => Api::IgnoredItem { name, err, ctx },
+            Api::Enum { name, item } => Api::Enum { name, item },
             // Apply a mapping to the following
             Api::Typedef { .. } => return typedef_conversion(self),
             Api::Function { .. } => return func_conversion(self),
@@ -273,6 +273,6 @@ impl<T: AnalysisPhase> Api<T> {
         }))
     }
 
-    make_unchanged!(typedef_unchanged, TypedefAnalysis, Typedef, { common, item, old_tyname, analysis });
-    make_unchanged!(struct_unchanged, StructAnalysis, Struct, { common, item, analysis });
+    make_unchanged!(typedef_unchanged, TypedefAnalysis, Typedef, { name, item, old_tyname, analysis });
+    make_unchanged!(struct_unchanged, StructAnalysis, Struct, { name, item, analysis });
 }

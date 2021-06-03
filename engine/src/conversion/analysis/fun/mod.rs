@@ -262,14 +262,14 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         api: Api<PodAnalysis>,
     ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
-        let (common, func_information) = match api {
-            Api::Function { common, fun, .. } => (common, fun),
+        let (name, func_information) = match api {
+            Api::Function { name, fun, .. } => (name, fun),
             _ => unreachable!(),
         };
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
-        let mut cpp_name = common.cpp_name.clone();
-        let ns = common.name.get_namespace();
+        let mut cpp_name = name.cpp_name.clone();
+        let ns = name.name.get_namespace();
 
         // Let's gather some pre-wisdom about the name of the function.
         // We're shortly going to plunge into analyzing the parameters,
@@ -642,7 +642,7 @@ impl<'a> FnAnalyzer<'a> {
                 cpp_wrapper,
                 deps,
             },
-            common: ApiName {
+            name: ApiName {
                 cpp_name,
                 name: QualifiedName::new(ns, id),
             },
@@ -871,7 +871,7 @@ impl Api<FnAnalysis> {
         match self {
             Api::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
             Api::StringConstructor { .. } | Api::Const { .. } | Api::IgnoredItem { .. } => None,
-            _ => Some(self.common().name.get_final_ident()),
+            _ => Some(self.name().get_final_ident()),
         }
     }
 

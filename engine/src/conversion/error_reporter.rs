@@ -90,7 +90,7 @@ pub(crate) fn convert_item_apis<F, A, B>(
 
 fn ignored_item<A: AnalysisPhase>(ns: &Namespace, ctx: ErrorContext, err: ConvertError) -> Api<A> {
     Api::IgnoredItem {
-        common: ApiName::new(ns, ctx.get_id().clone()),
+        name: ApiName::new(ns, ctx.get_id().clone()),
         err,
         ctx,
     }

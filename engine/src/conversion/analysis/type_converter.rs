@@ -386,7 +386,7 @@ impl<'a> TypeConverter<'a> {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
                 let api = UnanalyzedApi::ConcreteType {
-                    common: ApiName::new_in_root_namespace(make_ident(&format!(
+                    name: ApiName::new_in_root_namespace(make_ident(&format!(
                         "AutocxxConcrete{}",
                         count
                     ))),
@@ -510,15 +510,15 @@ impl<'a> TypeConverter<'a> {
 pub(crate) fn add_analysis<A: AnalysisPhase>(api: UnanalyzedApi) -> Api<A> {
     match api {
         Api::ConcreteType {
-            common,
+            name,
             rs_definition,
             cpp_definition,
         } => Api::ConcreteType {
-            common,
+            name,
             rs_definition,
             cpp_definition,
         },
-        Api::IgnoredItem { common, err, ctx } => Api::IgnoredItem { common, err, ctx },
+        Api::IgnoredItem { name, err, ctx } => Api::IgnoredItem { name, err, ctx },
         _ => panic!("Function analysis created an unexpected type of extra API"),
     }
 }

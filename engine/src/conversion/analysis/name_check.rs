@@ -28,13 +28,13 @@ use super::fun::FnAnalysis;
 pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
     let mut intermediate = Vec::new();
     convert_item_apis(apis, &mut intermediate, |api| match api {
-        Api::Typedef { ref common, .. }
-        | Api::ForwardDeclaration { ref common, .. }
-        | Api::Const { ref common, .. }
-        | Api::Enum { ref common, .. }
-        | Api::Struct { ref common, .. } => {
-            validate_all_segments_ok_for_cxx(common.name.segment_iter())?;
-            if let Some(ref cpp_name) = common.cpp_name {
+        Api::Typedef { ref name, .. }
+        | Api::ForwardDeclaration { ref name, .. }
+        | Api::Const { ref name, .. }
+        | Api::Enum { ref name, .. }
+        | Api::Struct { ref name, .. } => {
+            validate_all_segments_ok_for_cxx(name.name.segment_iter())?;
+            if let Some(ref cpp_name) = name.cpp_name {
                 // The C++ name might itself be outer_type::inner_type and thus may
                 // have multiple segments.
                 validate_all_segments_ok_for_cxx(QualifiedName::new_from_cpp_name(cpp_name).segment_iter())?;

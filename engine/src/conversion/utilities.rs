@@ -28,6 +28,6 @@ pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>, config: &Include
     // and we always generate an additional C++ file for our bindings additions,
     // unless the include_cpp macro has specified ExcludeUtilities.
     apis.push(UnanalyzedApi::StringConstructor {
-        common: ApiName::new(&Namespace::new(), make_ident(config.get_makestring_name())),
+        name: ApiName::new(&Namespace::new(), make_ident(config.get_makestring_name())),
     });
 }
