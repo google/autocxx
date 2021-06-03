@@ -384,8 +384,7 @@ impl<'a> TypeConverter<'a> {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
                 let api = UnanalyzedApi::ConcreteType {
-                    common: ApiCommon::new(
-                        &Namespace::new(),
+                    common: ApiCommon::new_in_root_namespace(
                         make_ident(&format!("AutocxxConcrete{}", count)),
                     ),
                     rs_definition: Box::new(rs_definition.clone()),

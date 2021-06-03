@@ -81,6 +81,12 @@ pub(crate) enum TypedefKind {
     Type(ItemType),
 }
 
+/// Information common to all types of API.
+/// At the moment this includes its name information
+/// and its dependency information. It's intended that the deps
+/// information be stored on each individual API type, as it's not
+/// truly common to all APIs. Then this type will become renamed
+/// ApiName.
 pub(crate) struct ApiCommon {
     pub(crate) name: QualifiedName,
     pub(crate) cpp_name: Option<String>,
@@ -94,6 +100,10 @@ impl ApiCommon {
             cpp_name: None,
             deps: HashSet::new(),
         }
+    }
+
+    pub(crate) fn new_in_root_namespace(id: Ident) -> Self {
+        Self::new(&Namespace::new(), id)
     }
 }
 
@@ -186,22 +196,33 @@ impl<T: AnalysisPhase> Api<T> {
         }
     }
 
+    /// The name of this API as used in Rust code.
+    /// For types, it's important that this never changes, since
+    /// functions or other types may refer to this.
+    /// Yet for functions, this may not actually be the name
+    /// used in the [cxx::bridge] mod -  see
+    /// [Api<FnAnalysis>::cxxbridge_name]
     pub(crate) fn name(&self) -> &QualifiedName {
         &self.common().name
     }
 
+    /// The name recorded for use in C++, if and only if
+    /// it differs from Rust.
     pub(crate) fn cpp_name(&self) -> &Option<String> {
         &self.common().cpp_name
     }
 
-    pub(crate) fn deps(&self) -> &HashSet<QualifiedName> {
-        &self.common().deps
-    }
-
+    /// The name for use in C++, whether or not it differs
+    /// from Rust.
     pub(crate) fn effective_cpp_name(&self) -> &str {
         self.cpp_name()
             .as_deref()
             .unwrap_or_else(|| self.name().get_final_item())
+    }
+
+    /// Any dependencies on other APIs which this API has.
+    pub(crate) fn deps(&self) -> &HashSet<QualifiedName> {
+        &self.common().deps
     }
 }
 
