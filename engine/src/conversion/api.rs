@@ -79,18 +79,14 @@ pub(crate) enum TypedefKind {
     Type(ItemType),
 }
 
-/// Information common to all types of API.
-/// At the moment this includes its name information
-/// and its dependency information. It's intended that the deps
-/// information be stored on each individual API type, as it's not
-/// truly common to all APIs. Then this type will become renamed
-/// ApiName.
-pub(crate) struct ApiCommon {
+/// Name information for an API. This includes the name by
+/// which we know it in Rust, and its C++ name, which may differ.
+pub(crate) struct ApiName {
     pub(crate) name: QualifiedName,
     pub(crate) cpp_name: Option<String>,
 }
 
-impl ApiCommon {
+impl ApiName {
     pub(crate) fn new(ns: &Namespace, id: Ident) -> Self {
         Self {
             name: QualifiedName::new(ns, id),
@@ -121,49 +117,49 @@ impl ApiCommon {
 /// enabling syn's `extra-traits` feature which increases compile time.)
 pub(crate) enum Api<T: AnalysisPhase> {
     /// A forward declared type for which no definition is available.
-    ForwardDeclaration { common: ApiCommon },
+    ForwardDeclaration { common: ApiName },
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
     ConcreteType {
-        common: ApiCommon,
+        common: ApiName,
         rs_definition: Box<Type>,
         cpp_definition: String,
     },
     /// A simple note that we want to make a constructor for
     /// a `std::string` on the heap.
-    StringConstructor { common: ApiCommon },
+    StringConstructor { common: ApiName },
     /// A function. May include some analysis.
     Function {
-        common: ApiCommon,
+        common: ApiName,
         fun: Box<FuncToConvert>,
         analysis: T::FunAnalysis,
     },
     /// A constant.
     Const {
-        common: ApiCommon,
+        common: ApiName,
         const_item: ItemConst,
     },
     /// A typedef found in the bindgen output which we wish
     /// to pass on in our output
     Typedef {
-        common: ApiCommon,
+        common: ApiName,
         item: TypedefKind,
         old_tyname: Option<QualifiedName>,
         analysis: T::TypedefAnalysis,
     },
     /// An enum encountered in the
     /// `bindgen` output.
-    Enum { common: ApiCommon, item: ItemEnum },
+    Enum { common: ApiName, item: ItemEnum },
     /// A struct encountered in the
     /// `bindgen` output.
     Struct {
-        common: ApiCommon,
+        common: ApiName,
         item: ItemStruct,
         analysis: T::StructAnalysis,
     },
     /// A variable-length C integer type (e.g. int, unsigned long).
     CType {
-        common: ApiCommon,
+        common: ApiName,
         typename: QualifiedName,
     },
     /// Some item which couldn't be processed by autocxx for some reason.
@@ -171,14 +167,14 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// to mark that it's ignored so that we don't attempt to process
     /// dependent items.
     IgnoredItem {
-        common: ApiCommon,
+        common: ApiName,
         err: ConvertError,
         ctx: ErrorContext,
     },
 }
 
 impl<T: AnalysisPhase> Api<T> {
-    pub(crate) fn common(&self) -> &ApiCommon {
+    pub(crate) fn common(&self) -> &ApiName {
         match self {
             Api::ForwardDeclaration { common } => common,
             Api::ConcreteType { common, .. } => common,

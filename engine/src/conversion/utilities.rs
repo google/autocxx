@@ -14,7 +14,7 @@
 
 use autocxx_parser::IncludeCppConfig;
 
-use super::api::{ApiCommon, UnanalyzedApi};
+use super::api::{ApiName, UnanalyzedApi};
 use crate::types::{make_ident, Namespace};
 
 /// Adds items which we always add, cos they're useful.
@@ -28,6 +28,6 @@ pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>, config: &Include
     // and we always generate an additional C++ file for our bindings additions,
     // unless the include_cpp macro has specified ExcludeUtilities.
     apis.push(UnanalyzedApi::StringConstructor {
-        common: ApiCommon::new(&Namespace::new(), make_ident(config.get_makestring_name())),
+        common: ApiName::new(&Namespace::new(), make_ident(config.get_makestring_name())),
     });
 }

@@ -15,7 +15,7 @@
 use std::collections::HashSet;
 
 use super::fun::{FnAnalysis, FnAnalysisBody, FnKind};
-use crate::conversion::api::ApiCommon;
+use crate::conversion::api::ApiName;
 use crate::conversion::{convert_error::ErrorContext, ConvertError};
 use crate::{conversion::api::Api, known_types};
 
@@ -73,7 +73,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(
 fn create_ignore_item(api: Api<FnAnalysis>, err: ConvertError) -> Api<FnAnalysis> {
     let id = api.name().get_final_ident();
     Api::IgnoredItem {
-        common: ApiCommon {
+        common: ApiName {
             name: api.name().clone(),
             cpp_name: api.cpp_name().clone(),
         },

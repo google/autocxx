@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{ApiCommon, TypedefKind, UnanalyzedApi},
+        api::{ApiName, TypedefKind, UnanalyzedApi},
         ConvertError,
     },
     types::Namespace,
@@ -47,8 +47,8 @@ pub(crate) struct ParseBindgen<'a> {
     latest_virtual_this_type: Option<QualifiedName>,
 }
 
-pub(crate) fn api_common(ns: &Namespace, id: Ident, attrs: &[Attribute]) -> ApiCommon {
-    ApiCommon {
+pub(crate) fn api_common(ns: &Namespace, id: Ident, attrs: &[Attribute]) -> ApiName {
+    ApiName {
         name: QualifiedName::new(ns, id),
         cpp_name: get_bindgen_original_name_annotation(attrs),
     }
@@ -58,7 +58,7 @@ pub(crate) fn api_common_qualified(
     ns: &Namespace,
     id: Ident,
     attrs: &[Attribute],
-) -> Result<ApiCommon, ConvertErrorWithContext> {
+) -> Result<ApiName, ConvertErrorWithContext> {
     match validate_ident_ok_for_cxx(&id.to_string()) {
         Err(e) => {
             let ctx = ErrorContext::Item(id);

@@ -23,7 +23,7 @@ use crate::{
             has_attr,
             type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::ApiCommon,
+        api::ApiName,
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::convert_apis,
@@ -642,7 +642,7 @@ impl<'a> FnAnalyzer<'a> {
                 cpp_wrapper,
                 deps,
             },
-            common: ApiCommon {
+            common: ApiName {
                 cpp_name,
                 name: QualifiedName::new(ns, id),
             },

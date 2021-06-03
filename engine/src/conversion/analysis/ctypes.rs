@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 use syn::Ident;
 
-use crate::conversion::api::ApiCommon;
+use crate::conversion::api::ApiName;
 use crate::types::Namespace;
 use crate::{conversion::api::Api, known_types::known_types, types::QualifiedName};
 
@@ -34,7 +34,7 @@ pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
         .collect();
     for (id, typename) in ctypes {
         apis.push(Api::CType {
-            common: ApiCommon::new(&Namespace::new(), id),
+            common: ApiName::new(&Namespace::new(), id),
             typename,
         });
     }

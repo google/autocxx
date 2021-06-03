@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{
-    api::{AnalysisPhase, Api, ApiCommon},
+    api::{AnalysisPhase, Api, ApiName},
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
@@ -90,7 +90,7 @@ pub(crate) fn convert_item_apis<F, A, B>(
 
 fn ignored_item<A: AnalysisPhase>(ns: &Namespace, ctx: ErrorContext, err: ConvertError) -> Api<A> {
     Api::IgnoredItem {
-        common: ApiCommon::new(ns, ctx.get_id().clone()),
+        common: ApiName::new(ns, ctx.get_id().clone()),
         err,
         ctx,
     }

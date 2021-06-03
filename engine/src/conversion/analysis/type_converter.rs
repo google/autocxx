@@ -14,7 +14,7 @@
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiCommon, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, TypedefKind, UnanalyzedApi},
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -386,7 +386,7 @@ impl<'a> TypeConverter<'a> {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
                 let api = UnanalyzedApi::ConcreteType {
-                    common: ApiCommon::new_in_root_namespace(make_ident(&format!(
+                    common: ApiName::new_in_root_namespace(make_ident(&format!(
                         "AutocxxConcrete{}",
                         count
                     ))),

@@ -20,7 +20,7 @@ use syn::ItemType;
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, Annotated, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, ApiCommon, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, TypedefKind, UnanalyzedApi},
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::report_any_error,
         ConvertError,
@@ -130,7 +130,7 @@ pub(crate) fn convert_typedef_targets(
 }
 
 fn get_replacement_typedef(
-    common: ApiCommon,
+    common: ApiName,
     ity: ItemType,
     old_tyname: Option<QualifiedName>,
     type_converter: &mut TypeConverter,
