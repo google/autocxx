@@ -243,6 +243,15 @@ impl TypeDatabase {
             .unwrap_or(false)
     }
 
+    pub(crate) fn is_cxx_acceptable_receiver(&self, ty: &QualifiedName) -> bool {
+        self.get(ty).is_none() // at present, none of our known types can have
+                               // methods attached.
+    }
+
+    pub(crate) fn conflicts_with_built_in_type(&self, ty: &QualifiedName) -> bool {
+        self.get(ty).is_some()
+    }
+
     pub(crate) fn convertible_from_strs(&self, ty: &QualifiedName) -> bool {
         self.get(ty)
             .map(|x| matches!(x.behavior, Behavior::CxxString))

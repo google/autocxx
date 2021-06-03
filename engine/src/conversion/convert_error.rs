@@ -49,6 +49,7 @@ pub enum ConvertError {
     MoveConstructorUnsupported,
     ReservedName,
     DuplicateCxxBridgeName,
+    UnsupportedReceiver,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -90,6 +91,7 @@ impl Display for ConvertError {
             ConvertError::MoveConstructorUnsupported => write!(f, "This is a move constructor, for which we currently cannot generate bindings.")?,
             ConvertError::ReservedName => write!(f, "The item name is a reserved word in Rust.")?,
             ConvertError::DuplicateCxxBridgeName => write!(f, "This item name is used in multiple namespaces. At present, autocxx and cxx allow only one type of a given name. This limitation will be fixed in future.")?,
+            ConvertError::UnsupportedReceiver => write!(f, "This is a method on a type which can't be used as the receiver in Rust (i.e. self/this). This is probably because some type involves template specialization.")?,
         }
         Ok(())
     }

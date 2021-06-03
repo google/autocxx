@@ -401,6 +401,7 @@ impl<'a> FnAnalyzer<'a> {
                 // It may, for instance, be a private type.
                 return Ok(None);
             }
+
             // Method or static method.
             let type_ident = self_ty.get_final_item();
             // bindgen generates methods with the name:
@@ -499,6 +500,16 @@ impl<'a> FnAnalyzer<'a> {
                 ConvertError::MoveConstructorUnsupported,
             ));
         }
+
+        match kind {
+            FnKind::Method(_, MethodKind::Static) => {}
+            FnKind::Method(ref self_ty, _) => {
+                if !known_types().is_cxx_acceptable_receiver(&self_ty) {
+                    return Err(contextualize_error(ConvertError::UnsupportedReceiver));
+                }
+            }
+            _ => {}
+        };
 
         // Analyze the return type, just as we previously did for the
         // parameters.
