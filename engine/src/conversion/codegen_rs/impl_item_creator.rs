@@ -24,6 +24,12 @@ pub(crate) fn create_impl_items(id: &Ident, config: &IncludeCppConfig) -> Vec<It
             impl UniquePtr<#id> {}
         }),
         Item::Impl(parse_quote! {
+            impl SharedPtr<#id> {}
+        }),
+        Item::Impl(parse_quote! {
+            impl WeakPtr<#id> {}
+        }),
+        Item::Impl(parse_quote! {
             impl CxxVector<#id> {}
         }),
     ]
