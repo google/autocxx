@@ -222,20 +222,6 @@ impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
 
 pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 
-macro_rules! make_unchanged {
-    ($func_name:ident, $analysis:ident, $detail:ident, $fields:tt) => {
-        pub(crate) fn $func_name<U>(self) -> Result<Option<Api<U>>, ConvertErrorWithContext>
-        where
-            U: AnalysisPhase<$analysis = T::$analysis>
-        {
-            Ok(Some(match self {
-                Api::$detail $fields => Api::$detail $fields,
-                _ => panic!("Applying identity mapping to the wrong type")
-            }))
-        }
-    };
-}
-
 impl<T: AnalysisPhase> Api<T> {
     pub(crate) fn map<U, FF, SF, TF>(
         self,
@@ -246,8 +232,17 @@ impl<T: AnalysisPhase> Api<T> {
     where
         U: AnalysisPhase,
         FF: FnOnce(Api<T>) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
-        SF: FnOnce(Api<T>) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
-        TF: FnOnce(Api<T>) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
+        SF: FnOnce(
+            ApiName,
+            ItemStruct,
+            T::StructAnalysis,
+        ) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
+        TF: FnOnce(
+            ApiName,
+            TypedefKind,
+            Option<QualifiedName>,
+            T::TypedefAnalysis,
+        ) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
     {
         Ok(Some(match self {
             // No changes to any of these...
@@ -267,12 +262,44 @@ impl<T: AnalysisPhase> Api<T> {
             Api::IgnoredItem { name, err, ctx } => Api::IgnoredItem { name, err, ctx },
             Api::Enum { name, item } => Api::Enum { name, item },
             // Apply a mapping to the following
-            Api::Typedef { .. } => return typedef_conversion(self),
+            Api::Typedef {
+                name,
+                item,
+                old_tyname,
+                analysis,
+            } => return typedef_conversion(name, item, old_tyname, analysis),
             Api::Function { .. } => return func_conversion(self),
-            Api::Struct { .. } => return struct_conversion(self),
+            Api::Struct {
+                name,
+                item,
+                analysis,
+            } => return struct_conversion(name, item, analysis),
         }))
     }
 
-    make_unchanged!(typedef_unchanged, TypedefAnalysis, Typedef, { name, item, old_tyname, analysis });
-    make_unchanged!(struct_unchanged, StructAnalysis, Struct, { name, item, analysis });
+    pub(crate) fn typedef_unchanged(
+        name: ApiName,
+        item: TypedefKind,
+        old_tyname: Option<QualifiedName>,
+        analysis: T::TypedefAnalysis,
+    ) -> Result<Option<Api<T>>, ConvertErrorWithContext> {
+        Ok(Some(Api::Typedef {
+            name,
+            item,
+            old_tyname,
+            analysis,
+        }))
+    }
+
+    pub(crate) fn struct_unchanged(
+        name: ApiName,
+        item: ItemStruct,
+        analysis: T::StructAnalysis,
+    ) -> Result<Option<Api<T>>, ConvertErrorWithContext> {
+        Ok(Some(Api::Struct {
+            name,
+            item,
+            analysis,
+        }))
+    }
 }
