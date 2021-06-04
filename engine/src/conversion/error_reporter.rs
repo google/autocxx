@@ -135,21 +135,6 @@ fn api_or_error<T: AnalysisPhase>(
     }
 }
 
-/// Run some code which generates an API. Add that API, or if
-/// anything goes wrong, instead add a note of the problem in our
-/// output API such that users will see documentation for the problem.
-pub(crate) fn transform_apis<F, A, B>(in_apis: Vec<Api<A>>, out_apis: &mut Vec<Api<B>>, mut fun: F)
-where
-    F: FnMut(Api<A>) -> Result<Option<Api<B>>, ConvertErrorWithContext>,
-    A: AnalysisPhase,
-    B: AnalysisPhase,
-{
-    out_apis.extend(in_apis.into_iter().filter_map(|api| {
-        let tn = api.name().clone();
-        api_or_error(tn, fun(api))
-    }))
-}
-
 /// Run some code which generates an API for an item (as opposed to
 /// a method). Add that API, or if
 /// anything goes wrong, instead add a note of the problem in our
@@ -163,10 +148,13 @@ pub(crate) fn convert_item_apis<F, A, B>(
     A: AnalysisPhase,
     B: AnalysisPhase,
 {
-    transform_apis(in_apis, out_apis, |api| {
-        let id = api.name().get_final_ident();
-        fun(api).map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))
-    })
+    out_apis.extend(in_apis.into_iter().filter_map(|api| {
+        let tn = api.name().clone();
+        let result = fun(api).map_err(|e| {
+            ConvertErrorWithContext(e, Some(ErrorContext::Item(tn.get_final_ident())))
+        });
+        api_or_error(tn, result)
+    }))
 }
 
 fn ignored_item<A: AnalysisPhase>(ns: &Namespace, ctx: ErrorContext, err: ConvertError) -> Api<A> {
