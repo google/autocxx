@@ -18,14 +18,15 @@ use std::collections::HashSet;
 
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
-use syn::{ItemStruct, Type};
+use syn::{ItemEnum, ItemStruct, Type};
 
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, TypeKind, UnanalyzedApi},
         codegen_rs::make_non_pod,
-        error_reporter::convert_item_apis,
+        convert_error::{ConvertErrorWithContext, ErrorContext},
+        error_reporter::convert_apis,
         ConvertError,
     },
     types::{Namespace, QualifiedName},
@@ -64,107 +65,91 @@ pub(crate) fn analyze_pod_apis(
     let mut extra_apis = Vec::new();
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut results = Vec::new();
-    convert_item_apis(apis, &mut results, |api| {
-        analyze_pod_api(api, &byvalue_checker, &mut type_converter, &mut extra_apis).map(Some)
+    convert_apis(apis, &mut results, |api| {
+        api.map(
+            Api::fun_unchanged,
+            |name, item, _| {
+                analyze_struct(
+                    &byvalue_checker,
+                    &mut type_converter,
+                    &mut extra_apis,
+                    name,
+                    item,
+                )
+            },
+            analyze_enum,
+            Api::typedef_unchanged,
+        )
     });
     // Conceivably, the process of POD-analysing the first set of APIs could result
     // in us creating new APIs to concretize generic types.
+    let extra_apis: Vec<Api<PodAnalysis>> = extra_apis.into_iter().map(add_analysis).collect();
     let mut more_extra_apis = Vec::new();
-    convert_item_apis(extra_apis, &mut results, |api| {
-        analyze_pod_api(
-            add_analysis(api),
-            &byvalue_checker,
-            &mut type_converter,
-            &mut more_extra_apis,
+    convert_apis(extra_apis, &mut results, |api| {
+        api.map(
+            Api::fun_unchanged,
+            |name, item, _| {
+                analyze_struct(
+                    &byvalue_checker,
+                    &mut type_converter,
+                    &mut more_extra_apis,
+                    name,
+                    item,
+                )
+            },
+            analyze_enum,
+            Api::typedef_unchanged,
         )
-        .map(Some)
     });
     assert!(more_extra_apis.is_empty());
     Ok(results)
 }
 
-fn analyze_pod_api(
-    api: Api<TypedefAnalysis>,
+fn analyze_enum(
+    name: ApiName,
+    mut item: ItemEnum,
+) -> Result<Option<Api<PodAnalysis>>, ConvertErrorWithContext> {
+    super::remove_bindgen_attrs(&mut item.attrs, name.name.get_final_ident())?;
+    Ok(Some(Api::Enum { name, item }))
+}
+
+fn analyze_struct(
     byvalue_checker: &ByValueChecker,
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
-) -> Result<Api<PodAnalysis>, ConvertError> {
-    Ok(match api {
-        // No changes to any of these...
-        Api::ConcreteType {
-            name,
-            rs_definition,
-            cpp_definition,
-        } => Api::ConcreteType {
-            name,
-            rs_definition,
-            cpp_definition,
+    name: ApiName,
+    mut item: ItemStruct,
+) -> Result<Option<Api<PodAnalysis>>, ConvertErrorWithContext> {
+    let id = name.name.get_final_ident();
+    super::remove_bindgen_attrs(&mut item.attrs, id.clone())?;
+    let bases = get_bases(&item);
+    let mut field_deps = HashSet::new();
+    let type_kind = if byvalue_checker.is_pod(&name.name) {
+        // It's POD so let's mark dependencies on things in its field
+        get_struct_field_types(
+            type_converter,
+            &name.name.get_namespace(),
+            &item,
+            &mut field_deps,
+            extra_apis,
+        )
+        .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))?;
+        TypeKind::Pod
+    } else {
+        // It's non-POD. So also, make the fields opaque...
+        make_non_pod(&mut item);
+        // ... and say we don't depend on other types.
+        TypeKind::NonPod
+    };
+    Ok(Some(Api::Struct {
+        name,
+        item,
+        analysis: PodStructAnalysisBody {
+            kind: type_kind,
+            bases,
+            field_deps,
         },
-        Api::ForwardDeclaration { name } => Api::ForwardDeclaration { name },
-        Api::StringConstructor { name } => Api::StringConstructor { name },
-        Api::Function {
-            name,
-            fun,
-            analysis,
-        } => Api::Function {
-            name,
-            fun,
-            analysis,
-        },
-        Api::Const { name, const_item } => Api::Const { name, const_item },
-        Api::Typedef {
-            name,
-            item,
-            old_tyname,
-            analysis,
-        } => Api::Typedef {
-            name,
-            item,
-            old_tyname,
-            analysis,
-        },
-        Api::CType { name, typename } => Api::CType { name, typename },
-        // Just changes to these two...
-        Api::Enum { name, mut item } => {
-            super::remove_bindgen_attrs(&mut item.attrs)?;
-            Api::Enum { name, item }
-        }
-        Api::Struct {
-            name,
-            mut item,
-            analysis: _,
-        } => {
-            super::remove_bindgen_attrs(&mut item.attrs)?;
-            let bases = get_bases(&item);
-            let mut field_deps = HashSet::new();
-            let type_kind = if byvalue_checker.is_pod(&name.name) {
-                // It's POD so let's mark dependencies on things in its field
-                get_struct_field_types(
-                    type_converter,
-                    &name.name.get_namespace(),
-                    &item,
-                    &mut field_deps,
-                    extra_apis,
-                )?;
-                TypeKind::Pod
-            } else {
-                // It's non-POD. So also, make the fields opaque...
-                make_non_pod(&mut item);
-                // ... and say we don't depend on other types.
-                TypeKind::NonPod
-            };
-            Api::Struct {
-                name,
-                item,
-                analysis: PodStructAnalysisBody {
-                    kind: type_kind,
-                    bases,
-                    field_deps,
-                },
-            }
-        }
-        Api::IgnoredItem { name, err, ctx } => Api::IgnoredItem { name, err, ctx },
-    })
+    }))
 }
 
 fn get_struct_field_types(

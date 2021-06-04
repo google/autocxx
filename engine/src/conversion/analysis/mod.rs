@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use syn::Attribute;
+use syn::{Attribute, Ident};
 
-use super::ConvertError;
+use crate::conversion::convert_error::ErrorContext;
+
+use super::{convert_error::ConvertErrorWithContext, ConvertError};
 
 pub(crate) mod abstract_types;
 pub(crate) mod ctypes;
@@ -32,9 +34,15 @@ pub(crate) use name_check::check_names;
 // so they will cause compilation errors if we leave them in.
 // We may return an error if one of the bindgen attributes shows that the
 // item can't be processed.
-fn remove_bindgen_attrs(attrs: &mut Vec<Attribute>) -> Result<(), ConvertError> {
+fn remove_bindgen_attrs(
+    attrs: &mut Vec<Attribute>,
+    id: Ident,
+) -> Result<(), ConvertErrorWithContext> {
     if has_attr(&attrs, "bindgen_unused_template_param") {
-        return Err(ConvertError::UnusedTemplateParam);
+        return Err(ConvertErrorWithContext(
+            ConvertError::UnusedTemplateParam,
+            Some(ErrorContext::Item(id)),
+        ));
     }
 
     fn is_bindgen_attr(attr: &Attribute) -> bool {
