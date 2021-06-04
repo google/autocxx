@@ -5693,6 +5693,37 @@ fn test_issue486() {
     run_test("", hdr, rs, &["spanner::Key"], &[]);
 }
 
+#[test]
+fn test_shared_ptr() {
+    let hdr = indoc! {"
+        #include <memory>
+        struct A {
+            int a;
+        };
+        inline std::shared_ptr<A> make_shared_int() {
+            return std::make_shared<A>(A { 3 });
+        }
+        inline int take_shared_int(std::shared_ptr<A> a) {
+            return a->a;
+        }
+        inline std::weak_ptr<A> shared_to_weak(std::shared_ptr<A> a) {
+            return std::weak_ptr<A>(a);
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::make_shared_int();
+        assert_eq!(ffi::take_shared_int(a.clone()), autocxx::c_int(3));
+        ffi::shared_to_weak(a).upgrade();
+    };
+    run_test(
+        "",
+        hdr,
+        rs,
+        &["make_shared_int", "take_shared_int", "shared_to_weak"],
+        &[],
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
