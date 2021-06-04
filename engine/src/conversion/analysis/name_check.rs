@@ -23,9 +23,13 @@ use crate::{
 
 use super::fun::FnAnalysis;
 
-/// If any items have names which can't be represented by cxx,
-/// abort.
+/// Do some final checks that the names we've come up with can be represented
+/// within cxx.
 pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
+    // If any items have names which can't be represented by cxx,
+    // abort. This check should ideally be done at the times we fill in the
+    // `name` field of each `api` in the first place, at parse time. TODO - move
+    // to parsing phase.
     let mut intermediate = Vec::new();
     convert_item_apis(apis, &mut intermediate, |api| match api {
         Api::Typedef { ref name, .. }
