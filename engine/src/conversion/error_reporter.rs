@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use syn::{ItemEnum, ItemStruct};
+
 use super::{
-    api::{AnalysisPhase, Api, ApiName},
+    api::{AnalysisPhase, Api, ApiName, FuncToConvert, TypedefKind},
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
-use crate::types::Namespace;
+use crate::types::{Namespace, QualifiedName};
 
 /// Run some code which may generate a ConvertError.
 /// If it does, try to note the problem in our output APIs
@@ -47,7 +49,96 @@ where
 /// Run some code which generates an API. Add that API, or if
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
-pub(crate) fn convert_apis<F, A, B>(in_apis: Vec<Api<A>>, out_apis: &mut Vec<Api<B>>, mut fun: F)
+pub(crate) fn convert_apis<FF, SF, EF, TF, A, B>(
+    in_apis: Vec<Api<A>>,
+    out_apis: &mut Vec<Api<B>>,
+    mut func_conversion: FF,
+    mut struct_conversion: SF,
+    mut enum_conversion: EF,
+    mut typedef_conversion: TF,
+) where
+    A: AnalysisPhase,
+    B: AnalysisPhase,
+    FF: FnMut(
+        ApiName,
+        Box<FuncToConvert>,
+        A::FunAnalysis,
+    ) -> Result<Option<Api<B>>, ConvertErrorWithContext>,
+    SF: FnMut(
+        ApiName,
+        ItemStruct,
+        A::StructAnalysis,
+    ) -> Result<Option<Api<B>>, ConvertErrorWithContext>,
+    EF: FnMut(ApiName, ItemEnum) -> Result<Option<Api<B>>, ConvertErrorWithContext>,
+    TF: FnMut(
+        ApiName,
+        TypedefKind,
+        Option<QualifiedName>,
+        A::TypedefAnalysis,
+    ) -> Result<Option<Api<B>>, ConvertErrorWithContext>,
+{
+    out_apis.extend(in_apis.into_iter().filter_map(|api| {
+        let tn = api.name().clone();
+        let result = match api {
+            // No changes to any of these...
+            Api::ConcreteType {
+                name,
+                rs_definition,
+                cpp_definition,
+            } => Ok(Some(Api::ConcreteType {
+                name,
+                rs_definition,
+                cpp_definition,
+            })),
+            Api::ForwardDeclaration { name } => Ok(Some(Api::ForwardDeclaration { name })),
+            Api::StringConstructor { name } => Ok(Some(Api::StringConstructor { name })),
+            Api::Const { name, const_item } => Ok(Some(Api::Const { name, const_item })),
+            Api::CType { name, typename } => Ok(Some(Api::CType { name, typename })),
+            Api::IgnoredItem { name, err, ctx } => Ok(Some(Api::IgnoredItem { name, err, ctx })),
+            // Apply a mapping to the following
+            Api::Enum { name, item } => enum_conversion(name, item),
+            Api::Typedef {
+                name,
+                item,
+                old_tyname,
+                analysis,
+            } => typedef_conversion(name, item, old_tyname, analysis),
+            Api::Function {
+                name,
+                fun,
+                analysis,
+            } => func_conversion(name, fun, analysis),
+            Api::Struct {
+                name,
+                item,
+                analysis,
+            } => struct_conversion(name, item, analysis),
+        };
+        api_or_error(tn, result)
+    }))
+}
+
+fn api_or_error<T: AnalysisPhase>(
+    name: QualifiedName,
+    api_or_error: Result<Option<Api<T>>, ConvertErrorWithContext>,
+) -> Option<Api<T>> {
+    match api_or_error {
+        Ok(opt) => opt,
+        Err(ConvertErrorWithContext(err, None)) => {
+            eprintln!("Ignored {}: {}", name.to_string(), err);
+            None
+        }
+        Err(ConvertErrorWithContext(err, Some(ctx))) => {
+            eprintln!("Ignored {}: {}", name.to_string(), err);
+            Some(ignored_item(name.get_namespace(), ctx, err))
+        }
+    }
+}
+
+/// Run some code which generates an API. Add that API, or if
+/// anything goes wrong, instead add a note of the problem in our
+/// output API such that users will see documentation for the problem.
+pub(crate) fn transform_apis<F, A, B>(in_apis: Vec<Api<A>>, out_apis: &mut Vec<Api<B>>, mut fun: F)
 where
     F: FnMut(Api<A>) -> Result<Option<Api<B>>, ConvertErrorWithContext>,
     A: AnalysisPhase,
@@ -55,17 +146,7 @@ where
 {
     out_apis.extend(in_apis.into_iter().filter_map(|api| {
         let tn = api.name().clone();
-        match fun(api) {
-            Ok(opt) => opt,
-            Err(ConvertErrorWithContext(err, None)) => {
-                eprintln!("Ignored {}: {}", tn.to_string(), err);
-                None
-            }
-            Err(ConvertErrorWithContext(err, Some(ctx))) => {
-                eprintln!("Ignored {}: {}", tn.to_string(), err);
-                Some(ignored_item(tn.get_namespace(), ctx, err))
-            }
-        }
+        api_or_error(tn, fun(api))
     }))
 }
 
@@ -82,7 +163,7 @@ pub(crate) fn convert_item_apis<F, A, B>(
     A: AnalysisPhase,
     B: AnalysisPhase,
 {
-    convert_apis(in_apis, out_apis, |api| {
+    transform_apis(in_apis, out_apis, |api| {
         let id = api.name().get_final_ident();
         fun(api).map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))
     })
