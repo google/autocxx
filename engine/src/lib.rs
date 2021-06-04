@@ -437,8 +437,8 @@ impl IncludeCppEngine {
                 .iter()
                 .map(|hdr| format!("#include <{}>\n", hdr))
                 .join("\n");
-            let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n",
-                self.config, header, suffix);
+            let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n{}\n",
+                self.config, header, suffix, cxx_gen::HEADER);
             let mut tf = NamedTempFile::new().unwrap();
             write!(tf, "{}", input).unwrap();
             let tp = tf.into_temp_path();
@@ -453,7 +453,7 @@ impl IncludeCppEngine {
 /// We clearly should _not_ use this in any other circumstance; obviously
 /// we'd then want to add an API to cxx_gen such that we could retrieve
 /// that information from source.
-pub(crate) static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
+static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
     "memory",
     "string",
     "algorithm",

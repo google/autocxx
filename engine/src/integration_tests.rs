@@ -4963,6 +4963,31 @@ fn test_type_called_type() {
     run_test("", hdr, rs, &["take_type"], &[]);
 }
 
+#[test]
+fn test_issue_506() {
+    let hdr = indoc! {"
+        namespace std {
+            template <class, class> class am;
+            typedef am<char, char> an;
+        } // namespace std
+        namespace be {
+            class bf {
+            virtual std::an bg() = 0;
+            };
+            class bh : bf {};
+        } // namespace be
+        namespace spanner {
+            class Database;
+            class Row {
+            public:
+            Row(be::bh *);
+            };
+        } // namespace spanner
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["spanner::Database", "spanner::Row"], &[]);
+}
+
 fn find_ffi_items(f: syn::File) -> Result<Vec<Item>, TestError> {
     Ok(f.items
         .into_iter()
@@ -5578,6 +5603,36 @@ fn test_issue486() {
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["spanner::Key"], &[]);
+}
+
+#[test]
+fn test_issue486_multi_types() {
+    let hdr = indoc! {"
+        namespace a {
+            namespace spanner {
+                inline void Key() {}
+            }
+        } // namespace a
+        namespace b {
+            namespace spanner {
+                typedef int Key;
+            }
+        } // namespace a
+        namespace spanner {
+            class Key {
+                public:
+                    bool b(a::spanner::Key &);
+            };
+        } // namespace spanner
+    "};
+    let rs = quote! {};
+    run_test(
+        "",
+        hdr,
+        rs,
+        &["spanner::Key", "a::spanner::Key", "b::spanner::Key"],
+        &[],
+    );
 }
 
 // Yet to test:

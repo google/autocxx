@@ -337,7 +337,7 @@ fn create_interestingness_test(
     // For the compile afterwards, we have to avoid including any system headers.
     // We rely on equivalent content being hermetically inside concat.h.
     let postcompile_step = format!(
-        "; mv gen0.cc gen0-orig.cc && sed -e 's/#include <.*>//g' < gen0-orig.cc > gen0.cc && mv autocxxgen.h autocxxgen-orig.h && sed -e 's/#include <.*>//g' < autocxxgen-orig.h > autocxxgen.h && {} 2>&1",
+        "; mv gen0.cc gen0-orig.cc && sed -e 's/#include <.*>//g' < gen0-orig.cc | sed -e 's/#include \"cxx.h\"//g' > gen0.cc && mv autocxxgen.h autocxxgen-orig.h && sed -e 's/#include <.*>//g' < autocxxgen-orig.h | sed -e 's/#include \"cxx.h\"//g' > autocxxgen.h && {} 2>&1",
         make_compile_step(postcompile, "gen0.cc", extra_clang_args)
     );
     let content = format!(

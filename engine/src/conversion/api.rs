@@ -144,8 +144,10 @@ pub(crate) enum ApiDetail<T: AnalysisPhase> {
 /// because sometimes we pass on the `bindgen` output directly in the
 /// Rust codegen output.
 pub(crate) struct Api<T: AnalysisPhase> {
+    /// The name by which we refer to this within Rust.
     pub(crate) name: QualifiedName,
-    pub(crate) original_name: Option<String>,
+    /// The C++ name, if it's different.
+    pub(crate) cpp_name: Option<String>,
     /// Any dependencies of this API, such that during garbage collection
     /// we can ensure to keep them.
     pub(crate) deps: HashSet<QualifiedName>,
@@ -158,12 +160,12 @@ impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} (kind={}, deps={}, rename_to={:?}, original_name={:?})",
+            "{} (kind={}, deps={}, rename_to={:?}, cpp_name={:?})",
             self.name.to_cpp_name(),
             self.detail,
             self.deps.iter().map(|d| d.to_cpp_name()).join(", "),
             self.rename_to,
-            self.original_name,
+            self.cpp_name,
         )
     }
 }
@@ -173,5 +175,11 @@ pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 impl<T: AnalysisPhase> Api<T> {
     pub(crate) fn name(&self) -> QualifiedName {
         self.name.clone()
+    }
+
+    pub(crate) fn cxx_name(&self) -> &str {
+        self.cpp_name
+            .as_deref()
+            .unwrap_or_else(|| self.name.get_final_item())
     }
 }
