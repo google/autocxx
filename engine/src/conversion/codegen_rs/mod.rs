@@ -547,6 +547,7 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn generate_extern_type_impl(&self, type_kind: TypeKind, tyname: &QualifiedName) -> Vec<Item> {
+        println! ("Generate extern type {:?} {:?}", type_kind, tyname);
         let tynamestring = namespaced_name_using_original_name_map(tyname, &self.original_name_map);
         let fulltypath = tyname.get_bindgen_path_idents();
         let kind_item = match type_kind {
@@ -565,6 +566,7 @@ impl<'a> RsCodeGenerator<'a> {
     fn generate_cxxbridge_type(&self, name: &QualifiedName) -> TokenStream {
         let ns = name.get_namespace();
         let id = name.get_final_ident();
+        let mut final_id = id.clone();
         let mut ns_components: Vec<_> = ns.iter().cloned().collect();
         let mut cxx_name = None;
         if let Some(original_name) = self.original_name_map.get(name) {
@@ -586,19 +588,21 @@ impl<'a> RsCodeGenerator<'a> {
             for_extern_c_ts.extend(quote! {
                 #[cxx_name = #n]
             });
+            final_id = make_ident(&n);
         }
 
         for_extern_c_ts.extend(quote! {
             type #id = super::bindgen::root::
         });
+
         for_extern_c_ts.extend(ns.iter().map(make_ident).map(|id| {
             quote! {
                 #id::
             }
         }));
         for_extern_c_ts.extend(quote! {
-            #id;
-        });
+        #final_id; });
+
         for_extern_c_ts
     }
 

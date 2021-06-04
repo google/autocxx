@@ -102,6 +102,7 @@ fn analyze_pod_api(
     let mut new_deps = api.deps;
     let mut new_name = api.name;
     let mut rename_to: Option<Ident> = None;
+    let mut original_name = api.original_name;
     let api_detail = match api.detail {
         // No changes to any of these...
         ApiDetail::ConcreteType {
@@ -121,9 +122,13 @@ fn analyze_pod_api(
                 ty_id.get_namespace(),
                 make_ident(&replacement_cxx_bridge_name),
             );
+
             rename_to = if replacement_cxx_bridge_name == ty_id.get_final_item() {
                 None
             } else {
+                if original_name == None {
+                    original_name = Some(ty_id.get_final_item().to_string());
+                }
                 Some(ty_id.get_final_ident().clone())
             };
 
@@ -175,6 +180,9 @@ fn analyze_pod_api(
             rename_to = if replacement_cxx_bridge_name == item.ident.to_string() {
                 None
             } else {
+                if original_name == None {
+                    original_name = Some(item.ident.to_string());
+                }
                 Some(item.ident.clone())
             };
             ApiDetail::Struct {
@@ -190,7 +198,7 @@ fn analyze_pod_api(
     println!("Rename to {:?}", rename_to);
     Ok(Api {
         name: new_name,
-        original_name: api.original_name,
+        original_name,
         deps: new_deps,
         detail: api_detail,
         rename_to,

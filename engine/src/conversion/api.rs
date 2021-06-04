@@ -21,7 +21,7 @@ use syn::{
 
 use super::{convert_error::ErrorContext, ConvertError};
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum TypeKind {
     Pod,    // trivial. Can be moved and copied in Rust.
     NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
@@ -158,11 +158,12 @@ impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} (kind={}, deps={}, rename_to={:?})",
+            "{} (kind={}, deps={}, rename_to={:?}, original_name={:?})",
             self.name.to_cpp_name(),
             self.detail,
             self.deps.iter().map(|d| d.to_cpp_name()).join(", "),
-            self.rename_to
+            self.rename_to,
+            self.original_name,
         )
     }
 }
