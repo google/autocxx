@@ -41,9 +41,7 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
 
     for mut api in apis.iter_mut() {
         match &mut api {
-            Api::Struct {
-                analysis, common, ..
-            } if abstract_types.contains(&common.name) => {
+            Api::Struct { analysis, name, .. } if abstract_types.contains(&name.name) => {
                 analysis.kind = TypeKind::Abstract;
             }
             _ => {}
@@ -60,7 +58,7 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
         for mut api in apis.iter_mut() {
             match &mut api {
                 Api::Struct {
-                    analysis: PodStructAnalysisBody { bases, kind },
+                    analysis: PodStructAnalysisBody { bases, kind, .. },
                     ..
                 } if *kind != TypeKind::Abstract
                     && (!abstract_types.is_disjoint(bases)

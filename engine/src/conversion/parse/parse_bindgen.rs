@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{ApiCommon, TypedefKind, UnanalyzedApi},
+        api::{ApiName, TypedefKind, UnanalyzedApi},
         ConvertError,
     },
     types::Namespace,
@@ -47,34 +47,24 @@ pub(crate) struct ParseBindgen<'a> {
     latest_virtual_this_type: Option<QualifiedName>,
 }
 
-pub(crate) fn api_common(ns: &Namespace, id: Ident, attrs: &[Attribute]) -> ApiCommon {
-    api_common_with_deps(ns, id, attrs, &[])
-}
-
-pub(crate) fn api_common_with_deps(
-    ns: &Namespace,
-    id: Ident,
-    attrs: &[Attribute],
-    deps: &[QualifiedName],
-) -> ApiCommon {
-    ApiCommon {
+pub(crate) fn api_name(ns: &Namespace, id: Ident, attrs: &[Attribute]) -> ApiName {
+    ApiName {
         name: QualifiedName::new(ns, id),
         cpp_name: get_bindgen_original_name_annotation(attrs),
-        deps: deps.iter().cloned().collect(),
     }
 }
 
-pub(crate) fn api_common_qualified(
+pub(crate) fn api_name_qualified(
     ns: &Namespace,
     id: Ident,
     attrs: &[Attribute],
-) -> Result<ApiCommon, ConvertErrorWithContext> {
+) -> Result<ApiName, ConvertErrorWithContext> {
     match validate_ident_ok_for_cxx(&id.to_string()) {
         Err(e) => {
             let ctx = ErrorContext::Item(id);
             Err(ConvertErrorWithContext(e, Some(ctx)))
         }
-        Ok(..) => Ok(api_common_with_deps(ns, id, attrs, &[])),
+        Ok(..) => Ok(api_name(ns, id, attrs)),
     }
 }
 
@@ -173,12 +163,12 @@ impl<'a> ParseBindgen<'a> {
                 let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
-                let common = api_common_qualified(ns, s.ident.clone(), &s.attrs)?;
+                let name = api_name_qualified(ns, s.ident.clone(), &s.attrs)?;
                 let api = if is_forward_declaration {
-                    UnanalyzedApi::ForwardDeclaration { common }
+                    UnanalyzedApi::ForwardDeclaration { name }
                 } else {
                     UnanalyzedApi::Struct {
-                        common,
+                        name,
                         item: s,
                         analysis: (),
                     }
@@ -191,7 +181,7 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Enum(e) => {
                 let api = UnanalyzedApi::Enum {
-                    common: api_common_qualified(ns, e.ident.clone(), &e.attrs)?,
+                    name: api_name_qualified(ns, e.ident.clone(), &e.attrs)?,
                     item: e,
                 };
                 if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
@@ -253,15 +243,11 @@ impl<'a> ParseBindgen<'a> {
                                 ));
                             }
                             self.apis.push(UnanalyzedApi::Typedef {
-                                common: api_common_with_deps(
-                                    ns,
-                                    new_id.clone(),
-                                    &use_item.attrs,
-                                    &[old_tyname],
-                                ),
+                                name: api_name(ns, new_id.clone(), &use_item.attrs),
                                 item: TypedefKind::Use(parse_quote! {
                                     pub use #old_path as #new_id;
                                 }),
+                                old_tyname: Some(old_tyname),
                                 analysis: (),
                             });
                             break;
@@ -278,15 +264,16 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Const(const_item) => {
                 self.apis.push(UnanalyzedApi::Const {
-                    common: api_common(ns, const_item.ident.clone(), &const_item.attrs),
+                    name: api_name(ns, const_item.ident.clone(), &const_item.attrs),
                     const_item,
                 });
                 Ok(())
             }
             Item::Type(ity) => {
                 self.apis.push(UnanalyzedApi::Typedef {
-                    common: api_common(ns, ity.ident.clone(), &ity.attrs),
+                    name: api_name(ns, ity.ident.clone(), &ity.attrs),
                     item: TypedefKind::Type(ity),
+                    old_tyname: None,
                     analysis: (),
                 });
                 Ok(())

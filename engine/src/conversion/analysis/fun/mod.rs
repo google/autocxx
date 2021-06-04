@@ -23,7 +23,7 @@ use crate::{
             has_attr,
             type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::{ApiCommon, TypedefKind},
+        api::{ApiName, FuncToConvert},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::convert_apis,
@@ -55,7 +55,10 @@ use self::{
     rust_name_tracker::RustNameTracker,
 };
 
-use super::pod::{PodAnalysis, PodStructAnalysisBody};
+use super::{
+    pod::{PodAnalysis, PodStructAnalysisBody},
+    tdef::TypedefAnalysisBody,
+};
 
 pub(crate) enum MethodKind {
     Normal,
@@ -93,6 +96,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
     pub(crate) cpp_wrapper: Option<AdditionalNeed>,
+    pub(crate) deps: HashSet<QualifiedName>,
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -115,7 +119,7 @@ struct ReturnTypeAnalysis {
 pub(crate) struct FnAnalysis;
 
 impl AnalysisPhase for FnAnalysis {
-    type TypedefAnalysis = TypedefKind;
+    type TypedefAnalysis = TypedefAnalysisBody;
     type StructAnalysis = PodStructAnalysisBody;
     type FunAnalysis = FnAnalysisBody;
 }
@@ -152,8 +156,9 @@ impl<'a> FnAnalyzer<'a> {
         let mut results = Vec::new();
         convert_apis(apis, &mut results, |api| {
             api.map(
-                |api| me.analyze_foreign_fn(api),
+                |name, fun, _| me.analyze_foreign_fn(name, fun),
                 Api::struct_unchanged,
+                Api::enum_unchanged,
                 Api::typedef_unchanged,
             )
         });
@@ -256,16 +261,13 @@ impl<'a> FnAnalyzer<'a> {
     /// The output of this analysis phase is used by both Rust and C++ codegen.
     fn analyze_foreign_fn(
         &mut self,
-        api: Api<PodAnalysis>,
+        name: ApiName,
+        func_information: Box<FuncToConvert>,
     ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
-        let (common, func_information) = match api {
-            Api::Function { common, fun, .. } => (common, fun),
-            _ => unreachable!(),
-        };
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
-        let mut cpp_name = common.cpp_name.clone();
-        let ns = common.name.get_namespace();
+        let mut cpp_name = name.cpp_name.clone();
+        let ns = name.name.get_namespace();
 
         // Let's gather some pre-wisdom about the name of the function.
         // We're shortly going to plunge into analyzing the parameters,
@@ -636,11 +638,11 @@ impl<'a> FnAnalyzer<'a> {
                 requires_unsafe,
                 vis,
                 cpp_wrapper,
+                deps,
             },
-            common: ApiCommon {
+            name: ApiName {
                 cpp_name,
                 name: QualifiedName::new(ns, id),
-                deps,
             },
         }))
     }
@@ -867,7 +869,21 @@ impl Api<FnAnalysis> {
         match self {
             Api::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
             Api::StringConstructor { .. } | Api::Const { .. } | Api::IgnoredItem { .. } => None,
-            _ => Some(self.common().name.get_final_ident()),
+            _ => Some(self.name().get_final_ident()),
+        }
+    }
+
+    /// Any dependencies on other APIs which this API has.
+    pub(crate) fn deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
+        match self {
+            Api::Typedef {
+                old_tyname,
+                analysis: TypedefAnalysisBody { deps, .. },
+                ..
+            } => Box::new(old_tyname.iter().chain(deps.iter())),
+            Api::Struct { analysis, .. } => Box::new(analysis.field_deps.iter()),
+            Api::Function { analysis, .. } => Box::new(analysis.deps.iter()),
+            _ => Box::new(std::iter::empty()),
         }
     }
 }

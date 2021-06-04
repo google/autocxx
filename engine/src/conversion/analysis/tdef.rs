@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
+
 use autocxx_parser::IncludeCppConfig;
 use syn::ItemType;
 
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, Annotated, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, ApiCommon, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, TypedefKind, UnanalyzedApi},
         convert_error::{ConvertErrorWithContext, ErrorContext},
-        error_reporter::report_any_error,
+        error_reporter::convert_apis,
         ConvertError,
     },
     types::QualifiedName,
@@ -28,12 +30,17 @@ use crate::{
 
 use super::remove_bindgen_attrs;
 
+pub(crate) struct TypedefAnalysisBody {
+    pub(crate) kind: TypedefKind,
+    pub(crate) deps: HashSet<QualifiedName>,
+}
+
 /// Analysis phase where typedef analysis has been performed but no other
 /// analyses just yet.
 pub(crate) struct TypedefAnalysis;
 
 impl AnalysisPhase for TypedefAnalysis {
-    type TypedefAnalysis = TypedefKind;
+    type TypedefAnalysis = TypedefAnalysisBody;
     type StructAnalysis = ();
     type FunAnalysis = ();
 }
@@ -45,104 +52,76 @@ pub(crate) fn convert_typedef_targets(
 ) -> Vec<Api<TypedefAnalysis>> {
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut extra_apis = Vec::new();
-    let mut problem_apis = Vec::new();
-    let new_apis = apis
-        .into_iter()
-        .filter_map(|api| match api {
-            Api::ForwardDeclaration { common } => Some(Api::ForwardDeclaration { common }),
-            Api::ConcreteType {
-                common,
-                rs_definition,
-                cpp_definition,
-            } => Some(Api::ConcreteType {
-                common,
-                rs_definition,
-                cpp_definition,
-            }),
-            Api::StringConstructor { common } => Some(Api::StringConstructor { common }),
-            Api::Function {
-                common,
-                fun,
-                analysis,
-            } => Some(Api::Function {
-                common,
-                fun,
-                analysis,
-            }),
-            Api::Const { common, const_item } => Some(Api::Const { common, const_item }),
-            Api::Typedef {
-                common,
-                item: TypedefKind::Type(ity),
-                analysis: _,
-            } => report_any_error(
-                &common.name.get_namespace().clone(),
-                &mut problem_apis,
-                || get_replacement_typedef(common, ity, &mut type_converter, &mut extra_apis),
-            ),
-            Api::Typedef {
-                common,
-                item,
-                analysis: _,
-            } => Some(Api::Typedef {
-                common,
-                item: item.clone(),
-                analysis: item,
-            }),
-            Api::Struct {
-                common,
-                item,
-                analysis,
-            } => Some(Api::Struct {
-                common,
-                item,
-                analysis,
-            }),
-            Api::Enum { common, item } => Some(Api::Enum { common, item }),
-            Api::CType { common, typename } => Some(Api::CType { common, typename }),
-            Api::IgnoredItem { common, err, ctx } => Some(Api::IgnoredItem { common, err, ctx }),
-        })
-        .collect::<Vec<_>>();
-    new_apis
-        .into_iter()
-        .chain(extra_apis.into_iter().chain(problem_apis).map(add_analysis))
-        .collect()
+    let mut results = Vec::new();
+    convert_apis(apis, &mut results, |api| {
+        api.map(
+            Api::fun_unchanged,
+            Api::struct_unchanged,
+            Api::enum_unchanged,
+            |name, item, old_tyname, _| {
+                Ok(Some(match item {
+                    TypedefKind::Type(ity) => get_replacement_typedef(
+                        name,
+                        ity,
+                        old_tyname,
+                        &mut type_converter,
+                        &mut extra_apis,
+                    )?,
+                    TypedefKind::Use { .. } => Api::Typedef {
+                        name,
+                        item: item.clone(),
+                        old_tyname,
+                        analysis: TypedefAnalysisBody {
+                            kind: item,
+                            deps: HashSet::new(),
+                        },
+                    },
+                }))
+            },
+        )
+    });
+    results.extend(extra_apis.into_iter().map(add_analysis));
+    results
 }
 
 fn get_replacement_typedef(
-    mut common: ApiCommon,
+    name: ApiName,
     ity: ItemType,
+    old_tyname: Option<QualifiedName>,
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
 ) -> Result<Api<TypedefAnalysis>, ConvertErrorWithContext> {
     let mut converted_type = ity.clone();
     let id = ity.ident.clone();
-    remove_bindgen_attrs(&mut converted_type.attrs)
-        .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))?;
+    remove_bindgen_attrs(&mut converted_type.attrs, id)?;
     let type_conversion_results = type_converter.convert_type(
         (*ity.ty).clone(),
-        common.name.get_namespace(),
+        name.name.get_namespace(),
         &TypeConversionContext::CxxInnerType,
     );
     match type_conversion_results {
         Err(err) => Err(ConvertErrorWithContext(
             err,
-            Some(ErrorContext::Item(common.name.get_final_ident())),
+            Some(ErrorContext::Item(name.name.get_final_ident())),
         )),
         Ok(Annotated {
             ty: syn::Type::Path(ref typ),
             ..
-        }) if QualifiedName::from_type_path(typ) == common.name => Err(ConvertErrorWithContext(
-            ConvertError::InfinitelyRecursiveTypedef(common.name.clone()),
-            Some(ErrorContext::Item(common.name.get_final_ident())),
+        }) if QualifiedName::from_type_path(typ) == name.name => Err(ConvertErrorWithContext(
+            ConvertError::InfinitelyRecursiveTypedef(name.name.clone()),
+            Some(ErrorContext::Item(name.name.get_final_ident())),
         )),
         Ok(mut final_type) => {
             converted_type.ty = Box::new(final_type.ty.clone());
             extra_apis.append(&mut final_type.extra_apis);
-            common.deps.extend(final_type.types_encountered);
             Ok(Api::Typedef {
-                common,
+                name,
                 item: TypedefKind::Type(ity),
-                analysis: TypedefKind::Type(converted_type),
+                old_tyname,
+                analysis: TypedefAnalysisBody {
+                    kind: TypedefKind::Type(converted_type),
+                    deps: final_type.types_encountered,
+                },
             })
         }
     }

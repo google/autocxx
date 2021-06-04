@@ -14,7 +14,7 @@
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiCommon, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, TypedefKind, UnanalyzedApi},
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -28,6 +28,8 @@ use syn::{
     parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
     TypePath, TypePtr,
 };
+
+use super::tdef::TypedefAnalysisBody;
 
 /// Results of some type conversion, annotated with a list of every type encountered,
 /// and optionally any extra APIs we need in order to use this type.
@@ -384,7 +386,7 @@ impl<'a> TypeConverter<'a> {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
                 let api = UnanalyzedApi::ConcreteType {
-                    common: ApiCommon::new_in_root_namespace(make_ident(&format!(
+                    name: ApiName::new_in_root_namespace(make_ident(&format!(
                         "AutocxxConcrete{}",
                         count
                     ))),
@@ -508,15 +510,15 @@ impl<'a> TypeConverter<'a> {
 pub(crate) fn add_analysis<A: AnalysisPhase>(api: UnanalyzedApi) -> Api<A> {
     match api {
         Api::ConcreteType {
-            common,
+            name,
             rs_definition,
             cpp_definition,
         } => Api::ConcreteType {
-            common,
+            name,
             rs_definition,
             cpp_definition,
         },
-        Api::IgnoredItem { common, err, ctx } => Api::IgnoredItem { common, err, ctx },
+        Api::IgnoredItem { name, err, ctx } => Api::IgnoredItem { name, err, ctx },
         _ => panic!("Function analysis created an unexpected type of extra API"),
     }
 }
@@ -530,10 +532,10 @@ impl TypedefTarget for () {
     }
 }
 
-impl TypedefTarget for TypedefKind {
+impl TypedefTarget for TypedefAnalysisBody {
     fn get_target(&self) -> Option<&Type> {
-        match self {
-            TypedefKind::Type(ty) => Some(&ty.ty),
+        match self.kind {
+            TypedefKind::Type(ref ty) => Some(&ty.ty),
             TypedefKind::Use(_) => None,
         }
     }

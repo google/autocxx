@@ -439,7 +439,7 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_c_mod_item: None,
                 bridge_items: Vec::new(),
                 global_items: Vec::new(),
-                bindgen_mod_item: Some(match analysis {
+                bindgen_mod_item: Some(match analysis.kind {
                     TypedefKind::Type(type_item) => Item::Type(type_item),
                     TypedefKind::Use(use_item) => Item::Use(use_item),
                 }),
