@@ -40,7 +40,7 @@ where
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
             eprintln!("Ignored item {}: {}", ctx.to_string(), err);
-            push_ignored_item(ns, ctx, err, apis);
+            apis.push(ignored_item(ns, ctx, err));
             None
         }
     }
@@ -175,13 +175,4 @@ fn ignored_item<A: AnalysisPhase>(ns: &Namespace, ctx: ErrorContext, err: Conver
         err,
         ctx,
     }
-}
-
-fn push_ignored_item(
-    ns: &Namespace,
-    ctx: ErrorContext,
-    err: ConvertError,
-    apis: &mut Vec<Api<impl AnalysisPhase>>,
-) {
-    apis.push(ignored_item(ns, ctx, err));
 }
