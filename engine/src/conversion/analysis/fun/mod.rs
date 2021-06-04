@@ -158,6 +158,7 @@ impl<'a> FnAnalyzer<'a> {
             api.map(
                 |name, fun, _| me.analyze_foreign_fn(name, fun),
                 Api::struct_unchanged,
+                Api::enum_unchanged,
                 Api::typedef_unchanged,
             )
         });

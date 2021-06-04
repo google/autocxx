@@ -223,10 +223,11 @@ impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
 pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
 
 impl<T: AnalysisPhase> Api<T> {
-    pub(crate) fn map<U, FF, SF, TF>(
+    pub(crate) fn map<U, FF, SF, EF, TF>(
         self,
         func_conversion: FF,
         struct_conversion: SF,
+        enum_conversion: EF,
         typedef_conversion: TF,
     ) -> Result<Option<Api<U>>, ConvertErrorWithContext>
     where
@@ -241,6 +242,7 @@ impl<T: AnalysisPhase> Api<T> {
             ItemStruct,
             T::StructAnalysis,
         ) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
+        EF: FnOnce(ApiName, ItemEnum) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
         TF: FnOnce(
             ApiName,
             TypedefKind,
@@ -264,8 +266,8 @@ impl<T: AnalysisPhase> Api<T> {
             Api::Const { name, const_item } => Api::Const { name, const_item },
             Api::CType { name, typename } => Api::CType { name, typename },
             Api::IgnoredItem { name, err, ctx } => Api::IgnoredItem { name, err, ctx },
-            Api::Enum { name, item } => Api::Enum { name, item },
             // Apply a mapping to the following
+            Api::Enum { name, item } => return enum_conversion(name, item),
             Api::Typedef {
                 name,
                 item,
@@ -321,5 +323,12 @@ impl<T: AnalysisPhase> Api<T> {
             fun,
             analysis,
         }))
+    }
+
+    pub(crate) fn enum_unchanged(
+        name: ApiName,
+        item: ItemEnum,
+    ) -> Result<Option<Api<T>>, ConvertErrorWithContext> {
+        Ok(Some(Api::Enum { name, item }))
     }
 }

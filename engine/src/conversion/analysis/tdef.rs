@@ -57,6 +57,7 @@ pub(crate) fn convert_typedef_targets(
         api.map(
             Api::fun_unchanged,
             Api::struct_unchanged,
+            Api::enum_unchanged,
             |name, item, old_tyname, _| {
                 Ok(Some(match item {
                     TypedefKind::Type(ity) => get_replacement_typedef(
