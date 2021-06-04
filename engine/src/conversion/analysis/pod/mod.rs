@@ -65,42 +65,42 @@ pub(crate) fn analyze_pod_apis(
     let mut extra_apis = Vec::new();
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut results = Vec::new();
-    convert_apis(apis, &mut results, |api| {
-        api.map(
-            Api::fun_unchanged,
-            |name, item, _| {
-                analyze_struct(
-                    &byvalue_checker,
-                    &mut type_converter,
-                    &mut extra_apis,
-                    name,
-                    item,
-                )
-            },
-            analyze_enum,
-            Api::typedef_unchanged,
-        )
-    });
+    convert_apis(
+        apis,
+        &mut results,
+        Api::fun_unchanged,
+        |name, item, _| {
+            analyze_struct(
+                &byvalue_checker,
+                &mut type_converter,
+                &mut extra_apis,
+                name,
+                item,
+            )
+        },
+        analyze_enum,
+        Api::typedef_unchanged,
+    );
     // Conceivably, the process of POD-analysing the first set of APIs could result
     // in us creating new APIs to concretize generic types.
     let extra_apis: Vec<Api<PodAnalysis>> = extra_apis.into_iter().map(add_analysis).collect();
     let mut more_extra_apis = Vec::new();
-    convert_apis(extra_apis, &mut results, |api| {
-        api.map(
-            Api::fun_unchanged,
-            |name, item, _| {
-                analyze_struct(
-                    &byvalue_checker,
-                    &mut type_converter,
-                    &mut more_extra_apis,
-                    name,
-                    item,
-                )
-            },
-            analyze_enum,
-            Api::typedef_unchanged,
-        )
-    });
+    convert_apis(
+        extra_apis,
+        &mut results,
+        Api::fun_unchanged,
+        |name, item, _| {
+            analyze_struct(
+                &byvalue_checker,
+                &mut type_converter,
+                &mut more_extra_apis,
+                name,
+                item,
+            )
+        },
+        analyze_enum,
+        Api::typedef_unchanged,
+    );
     assert!(more_extra_apis.is_empty());
     Ok(results)
 }

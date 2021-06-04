@@ -53,33 +53,33 @@ pub(crate) fn convert_typedef_targets(
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut extra_apis = Vec::new();
     let mut results = Vec::new();
-    convert_apis(apis, &mut results, |api| {
-        api.map(
-            Api::fun_unchanged,
-            Api::struct_unchanged,
-            Api::enum_unchanged,
-            |name, item, old_tyname, _| {
-                Ok(Some(match item {
-                    TypedefKind::Type(ity) => get_replacement_typedef(
-                        name,
-                        ity,
-                        old_tyname,
-                        &mut type_converter,
-                        &mut extra_apis,
-                    )?,
-                    TypedefKind::Use { .. } => Api::Typedef {
-                        name,
-                        item: item.clone(),
-                        old_tyname,
-                        analysis: TypedefAnalysisBody {
-                            kind: item,
-                            deps: HashSet::new(),
-                        },
+    convert_apis(
+        apis,
+        &mut results,
+        Api::fun_unchanged,
+        Api::struct_unchanged,
+        Api::enum_unchanged,
+        |name, item, old_tyname, _| {
+            Ok(Some(match item {
+                TypedefKind::Type(ity) => get_replacement_typedef(
+                    name,
+                    ity,
+                    old_tyname,
+                    &mut type_converter,
+                    &mut extra_apis,
+                )?,
+                TypedefKind::Use { .. } => Api::Typedef {
+                    name,
+                    item: item.clone(),
+                    old_tyname,
+                    analysis: TypedefAnalysisBody {
+                        kind: item,
+                        deps: HashSet::new(),
                     },
-                }))
-            },
-        )
-    });
+                },
+            }))
+        },
+    );
     results.extend(extra_apis.into_iter().map(add_analysis));
     results
 }

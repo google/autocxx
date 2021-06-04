@@ -154,14 +154,14 @@ impl<'a> FnAnalyzer<'a> {
             generate_utilities: Self::should_generate_utilities(&apis),
         };
         let mut results = Vec::new();
-        convert_apis(apis, &mut results, |api| {
-            api.map(
-                |name, fun, _| me.analyze_foreign_fn(name, fun),
-                Api::struct_unchanged,
-                Api::enum_unchanged,
-                Api::typedef_unchanged,
-            )
-        });
+        convert_apis(
+            apis,
+            &mut results,
+            |name, fun, _| me.analyze_foreign_fn(name, fun),
+            Api::struct_unchanged,
+            Api::enum_unchanged,
+            Api::typedef_unchanged,
+        );
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }
