@@ -231,7 +231,11 @@ impl<T: AnalysisPhase> Api<T> {
     ) -> Result<Option<Api<U>>, ConvertErrorWithContext>
     where
         U: AnalysisPhase,
-        FF: FnOnce(Api<T>) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
+        FF: FnOnce(
+            ApiName,
+            Box<FuncToConvert>,
+            T::FunAnalysis,
+        ) -> Result<Option<Api<U>>, ConvertErrorWithContext>,
         SF: FnOnce(
             ApiName,
             ItemStruct,
@@ -268,7 +272,11 @@ impl<T: AnalysisPhase> Api<T> {
                 old_tyname,
                 analysis,
             } => return typedef_conversion(name, item, old_tyname, analysis),
-            Api::Function { .. } => return func_conversion(self),
+            Api::Function {
+                name,
+                fun,
+                analysis,
+            } => return func_conversion(name, fun, analysis),
             Api::Struct {
                 name,
                 item,
@@ -299,6 +307,18 @@ impl<T: AnalysisPhase> Api<T> {
         Ok(Some(Api::Struct {
             name,
             item,
+            analysis,
+        }))
+    }
+
+    pub(crate) fn fun_unchanged(
+        name: ApiName,
+        fun: Box<FuncToConvert>,
+        analysis: T::FunAnalysis,
+    ) -> Result<Option<Api<T>>, ConvertErrorWithContext> {
+        Ok(Some(Api::Function {
+            name,
+            fun,
             analysis,
         }))
     }

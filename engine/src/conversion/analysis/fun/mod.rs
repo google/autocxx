@@ -23,7 +23,7 @@ use crate::{
             has_attr,
             type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::ApiName,
+        api::{ApiName, FuncToConvert},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::convert_apis,
@@ -156,7 +156,7 @@ impl<'a> FnAnalyzer<'a> {
         let mut results = Vec::new();
         convert_apis(apis, &mut results, |api| {
             api.map(
-                |api| me.analyze_foreign_fn(api),
+                |name, fun, _| me.analyze_foreign_fn(name, fun),
                 Api::struct_unchanged,
                 Api::typedef_unchanged,
             )
@@ -260,12 +260,9 @@ impl<'a> FnAnalyzer<'a> {
     /// The output of this analysis phase is used by both Rust and C++ codegen.
     fn analyze_foreign_fn(
         &mut self,
-        api: Api<PodAnalysis>,
+        name: ApiName,
+        func_information: Box<FuncToConvert>,
     ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
-        let (name, func_information) = match api {
-            Api::Function { name, fun, .. } => (name, fun),
-            _ => unreachable!(),
-        };
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
         let mut cpp_name = name.cpp_name.clone();

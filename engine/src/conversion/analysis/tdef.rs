@@ -22,7 +22,7 @@ use crate::{
         analysis::type_converter::{add_analysis, Annotated, TypeConversionContext, TypeConverter},
         api::{AnalysisPhase, Api, ApiName, TypedefKind, UnanalyzedApi},
         convert_error::{ConvertErrorWithContext, ErrorContext},
-        error_reporter::report_any_error,
+        error_reporter::convert_apis,
         ConvertError,
     },
     types::QualifiedName,
@@ -52,81 +52,35 @@ pub(crate) fn convert_typedef_targets(
 ) -> Vec<Api<TypedefAnalysis>> {
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut extra_apis = Vec::new();
-    let mut problem_apis = Vec::new();
-    let new_apis = apis
-        .into_iter()
-        .filter_map(|api| match api {
-            Api::ForwardDeclaration { name } => Some(Api::ForwardDeclaration { name }),
-            Api::ConcreteType {
-                name,
-                rs_definition,
-                cpp_definition,
-            } => Some(Api::ConcreteType {
-                name,
-                rs_definition,
-                cpp_definition,
-            }),
-            Api::StringConstructor { name } => Some(Api::StringConstructor { name }),
-            Api::Function {
-                name,
-                fun,
-                analysis,
-            } => Some(Api::Function {
-                name,
-                fun,
-                analysis,
-            }),
-            Api::Const { name, const_item } => Some(Api::Const { name, const_item }),
-            Api::Typedef {
-                name,
-                item: TypedefKind::Type(ity),
-                old_tyname,
-                analysis: _,
-            } => report_any_error(
-                &name.name.get_namespace().clone(),
-                &mut problem_apis,
-                || {
-                    get_replacement_typedef(
+    let mut results = Vec::new();
+    convert_apis(apis, &mut results, |api| {
+        api.map(
+            Api::fun_unchanged,
+            Api::struct_unchanged,
+            |name, item, old_tyname, _| {
+                Ok(Some(match item {
+                    TypedefKind::Type(ity) => get_replacement_typedef(
                         name,
                         ity,
                         old_tyname,
                         &mut type_converter,
                         &mut extra_apis,
-                    )
-                },
-            ),
-            Api::Typedef {
-                name,
-                item,
-                old_tyname,
-                analysis: _,
-            } => Some(Api::Typedef {
-                name,
-                item: item.clone(),
-                old_tyname,
-                analysis: TypedefAnalysisBody {
-                    kind: item,
-                    deps: HashSet::new(),
-                },
-            }),
-            Api::Struct {
-                name,
-                item,
-                analysis,
-            } => Some(Api::Struct {
-                name,
-                item,
-                analysis,
-            }),
-            Api::Enum { name, item } => Some(Api::Enum { name, item }),
-            Api::CType { name, typename } => Some(Api::CType { name, typename }),
-            Api::IgnoredItem { name, err, ctx } => Some(Api::IgnoredItem { name, err, ctx }),
-        })
-        .collect::<Vec<_>>();
-    new_apis
-        .into_iter()
-        .chain(extra_apis.into_iter().chain(problem_apis).map(add_analysis))
-        .collect()
+                    )?,
+                    TypedefKind::Use { .. } => Api::Typedef {
+                        name,
+                        item: item.clone(),
+                        old_tyname,
+                        analysis: TypedefAnalysisBody {
+                            kind: item,
+                            deps: HashSet::new(),
+                        },
+                    },
+                }))
+            },
+        )
+    });
+    results.extend(extra_apis.into_iter().map(add_analysis));
+    results
 }
 
 fn get_replacement_typedef(
