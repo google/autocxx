@@ -28,8 +28,10 @@ use super::fun::FnAnalysis;
 pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
     // If any items have names which can't be represented by cxx,
     // abort. This check should ideally be done at the times we fill in the
-    // `name` field of each `api` in the first place, at parse time. TODO - move
-    // to parsing phase.
+    // `name` field of each `api` in the first place, at parse time, though
+    // as the `name` field of each API may change during various analysis phases,
+    // currently it seems better to do it here to ensure we respect
+    // the output of any such changes.
     let mut intermediate = Vec::new();
     convert_item_apis(apis, &mut intermediate, |api| match api {
         Api::Typedef { ref name, .. }
