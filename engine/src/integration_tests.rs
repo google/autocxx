@@ -5771,8 +5771,6 @@ fn test_shared_ptr() {
 // - Out param pointers
 // - ExcludeUtilities
 // - Struct fields which are typedefs
-// Stuff which requires much more thought:
-// - Shared pointers
 // Negative tests:
 // - Private methods
 // - Private fields
