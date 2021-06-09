@@ -282,7 +282,7 @@ use autocxx_engine::IncludeCppEngine;
 ///   a reference on which you can call a method.
 /// * Getting a raw pointer in order to pass to some pre-existing function:
 ///   at present you need to do:
-///   ```rust,nocompile
+///   ```rust,ignore
 ///      let mut a = ffi::A::make_unique();
 ///      unsafe { ffi::TakePointerToA(std::pin::Pin::<&mut ffi::A>::into_inner_unchecked(a.pin_mut())) };
 ///   ```
@@ -419,7 +419,7 @@ use autocxx_engine::IncludeCppEngine;
 /// To do this, you'll need to use the [ability of one cxx::bridge mod to refer to types from another](https://cxx.rs/extern-c++.html#reusing-existing-binding-types),
 /// for example:
 ///
-/// ```rust,nocompile
+/// ```rust,ignore
 /// autocxx::include_cpp! {
 ///     #include "foo.h"
 ///     safety!(unsafe_ffi)
