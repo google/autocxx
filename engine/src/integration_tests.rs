@@ -702,6 +702,79 @@ fn test_take_pod_by_value() {
 }
 
 #[test]
+fn test_negative_take_as_pod_with_destructor() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+            inline ~Bob() {}
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test_expect_fail(cxx, hdr, rs, &["take_bob"], &["Bob"]);
+}
+
+#[test]
+fn test_negative_take_as_pod_with_move_constructor() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <type_traits>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+            inline Bob(Bob&& other_bob) {}
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test_expect_fail(cxx, hdr, rs, &["take_bob"], &["Bob"]);
+}
+
+#[test]
+fn test_take_as_pod_with_is_relocatable() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <type_traits>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+            inline ~Bob() {}
+            inline Bob(Bob&& other_bob) { a = other_bob.a; b = other_bob.b; }
+            using IsRelocatable = std::true_type;
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
+}
+
+#[test]
 fn test_take_pod_by_ref() {
     let cxx = indoc! {"
         uint32_t take_bob(const Bob& a) {
