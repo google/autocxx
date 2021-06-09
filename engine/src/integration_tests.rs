@@ -5675,6 +5675,48 @@ fn test_manual_bridge() {
 }
 
 #[test]
+fn test_manual_bridge_mixed_types() {
+    let hdr = indoc! {"
+        #include <memory>
+        struct A {
+            int a;
+        };
+        inline int take_A(const A& a) {
+            return a.a;
+        }
+        inline std::unique_ptr<A> give_A() {
+            auto a = std::make_unique<A>();
+            a->a = 5;
+            return a;
+        }
+    "};
+    let rs = |hdr| {
+        let hexathorpe = Token![#](Span::call_site());
+        quote! {
+            autocxx::include_cpp! {
+                #hexathorpe include #hdr
+                safety!(unsafe_ffi)
+                generate!("take_A")
+                generate!("A")
+            }
+            #[cxx::bridge]
+            mod ffi2 {
+                unsafe extern "C++" {
+                    include!(#hdr);
+                    type A = crate::ffi::A;
+                    fn give_A() -> UniquePtr<A>;
+                }
+            }
+            fn main() {
+                let a = ffi2::give_A();
+                assert_eq!(ffi::take_A(&a), autocxx::c_int(5));
+            }
+        }
+    };
+    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+}
+
+#[test]
 fn test_issue486() {
     let hdr = indoc! {"
         namespace a {
