@@ -39,7 +39,7 @@ pub enum ParseError {
     /// over. It could also cover errors in your syntax of the `include_cpp`
     /// macro or the directives inside.
     AutocxxCodegenError(EngineError),
-    /// There are two or more [autocxx::include_cpp] macros with the same
+    /// There are two or more `include_cpp` macros with the same
     /// mod name.
     ConflictingModNames,
 }
