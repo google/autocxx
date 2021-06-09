@@ -5473,20 +5473,6 @@ fn test_namespaced_constant() {
 }
 
 #[test]
-fn test_mbstate() {
-    // mbstate_t is currently on the bindgen blocklist, so this won't generate anything
-    // good, but shouldn't explode.
-    let hdr = indoc! {"
-        struct foo_mbstate_t {
-            int a;
-        };
-        inline void bar(foo_mbstate_t) {}
-    "};
-    let rs = quote! {};
-    run_test("", hdr, rs, &["bar"], &[]);
-}
-
-#[test]
 fn test_issue_470_492() {
     let hdr = indoc! {"
         namespace std {
