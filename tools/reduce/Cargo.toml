@@ -1,14 +1,14 @@
 [package]
 name = "autocxx-reduce"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["adetaylor <adetaylor@chromium.org>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-autocxx-gen = { version = "0.10.0", path="../../gen/cmd" }
-autocxx-engine = { version = "0.10.0", path="../../engine" }
+autocxx-gen = { version = "0.11.0", path="../../gen/cmd" }
+autocxx-engine = { version = "0.11.0", path="../../engine" }
 clap = "~2.33.0"
 tempfile = "3.1"
 indoc = "1.0"
