@@ -702,6 +702,79 @@ fn test_take_pod_by_value() {
 }
 
 #[test]
+fn test_negative_take_as_pod_with_destructor() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+            inline ~Bob() {}
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test_expect_fail(cxx, hdr, rs, &["take_bob"], &["Bob"]);
+}
+
+#[test]
+fn test_negative_take_as_pod_with_move_constructor() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <type_traits>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+            inline Bob(Bob&& other_bob) {}
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test_expect_fail(cxx, hdr, rs, &["take_bob"], &["Bob"]);
+}
+
+#[test]
+fn test_take_as_pod_with_is_relocatable() {
+    let cxx = indoc! {"
+        uint32_t take_bob(Bob a) {
+            return a.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <type_traits>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+            inline ~Bob() {}
+            inline Bob(Bob&& other_bob) { a = other_bob.a; b = other_bob.b; }
+            using IsRelocatable = std::true_type;
+        };
+        uint32_t take_bob(Bob a);
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob"], &["Bob"]);
+}
+
+#[test]
 fn test_take_pod_by_ref() {
     let cxx = indoc! {"
         uint32_t take_bob(const Bob& a) {
@@ -5473,20 +5546,6 @@ fn test_namespaced_constant() {
 }
 
 #[test]
-fn test_mbstate() {
-    // mbstate_t is currently on the bindgen blocklist, so this won't generate anything
-    // good, but shouldn't explode.
-    let hdr = indoc! {"
-        struct foo_mbstate_t {
-            int a;
-        };
-        inline void bar(foo_mbstate_t) {}
-    "};
-    let rs = quote! {};
-    run_test("", hdr, rs, &["bar"], &[]);
-}
-
-#[test]
 fn test_issue_470_492() {
     let hdr = indoc! {"
         namespace std {
@@ -5675,6 +5734,48 @@ fn test_manual_bridge() {
 }
 
 #[test]
+fn test_manual_bridge_mixed_types() {
+    let hdr = indoc! {"
+        #include <memory>
+        struct A {
+            int a;
+        };
+        inline int take_A(const A& a) {
+            return a.a;
+        }
+        inline std::unique_ptr<A> give_A() {
+            auto a = std::make_unique<A>();
+            a->a = 5;
+            return a;
+        }
+    "};
+    let rs = |hdr| {
+        let hexathorpe = Token![#](Span::call_site());
+        quote! {
+            autocxx::include_cpp! {
+                #hexathorpe include #hdr
+                safety!(unsafe_ffi)
+                generate!("take_A")
+                generate!("A")
+            }
+            #[cxx::bridge]
+            mod ffi2 {
+                unsafe extern "C++" {
+                    include!(#hdr);
+                    type A = crate::ffi::A;
+                    fn give_A() -> UniquePtr<A>;
+                }
+            }
+            fn main() {
+                let a = ffi2::give_A();
+                assert_eq!(ffi::take_A(&a), autocxx::c_int(5));
+            }
+        }
+    };
+    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+}
+
+#[test]
 fn test_issue486() {
     let hdr = indoc! {"
         namespace a {
@@ -5729,8 +5830,6 @@ fn test_shared_ptr() {
 // - Out param pointers
 // - ExcludeUtilities
 // - Struct fields which are typedefs
-// Stuff which requires much more thought:
-// - Shared pointers
 // Negative tests:
 // - Private methods
 // - Private fields

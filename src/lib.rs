@@ -55,11 +55,70 @@ use autocxx_engine::IncludeCppEngine;
 /// # }
 /// ```
 ///
-/// # Configuring the build
+/// The resulting bindings will use idiomatic Rust wrappers for types from the [cxx]
+/// crate, for example [cxx::UniquePtr] or [cxx::CxxString]. Due to the care and thought
+/// that's gone into the [cxx] crate, such bindings are pleasant and idiomatic to use
+/// from Rust, and usually don't require the `unsafe` keyword.
 ///
-/// To build this, you'll need to:
-/// * Run the `codegen` phase. You'll need to use the `autocxx-gen`
-///   crate or the `autocxx-build` crate to process the .rs code into C++ header and
+/// # User manual - introduction
+///
+/// [include_cpp] tries to make it possible to include C++ headers and use declared functions
+/// and types as-is. The resulting bindings use wrappers for C++ STL types from the [cxx]
+/// crate such as [cxx::UniquePtr] or [cxx::CxxString].
+///
+/// Why, then, do you need a manual? Three reasons:
+///
+/// * This manual will describe how to include `autocxx` in your build process.
+/// * `autocxx` chooses to generate Rust bindings for C++ APIs in particular ways,
+///   over which you have _some_ control. The manual discusses what and how.
+/// * The combination of `autocxx` and [cxx] are not perfect. There are some STL
+///   types and some fundamental C++ features which are not yet supported. Where that occurs,
+///   you may need to create some manual bindings or otherwise workaround deficiencies.
+///   This manual tells you how to spot such circumstances and work around them.
+///
+/// # Overview
+///
+/// Here's how to approach autocxx:
+///
+/// ```mermaid
+/// flowchart TB
+///     %%{init:{'flowchart':{'nodeSpacing': 60, 'rankSpacing': 30}}}%%
+///     autocxx[Add a dependency on autocxx in your project]
+///     which-build([Do you use cargo?])
+///     autocxx--->which-build
+///     autocxx-build[Add a dev dependency on autocxx-build]
+///     build-rs[In your build.rs, tell autocxx-build about your header include path]
+///     autocxx-build--->build-rs
+///     which-build-- Yes -->autocxx-build
+///     macro[Add include_cpp! macro: list headers and allowlist]
+///     build-rs--->macro
+///     autocxx-gen[Use autocxx-gen command line tool]
+///     which-build-- No -->autocxx-gen
+///     autocxx-gen--->macro
+///     build[Build]
+///     macro--->build
+///     check[Confirm generation using cargo expand]
+///     build--->check
+///     manual[Add manual cxx::bridge for anything missing]
+///     check--->manual
+///     use[Use generated ffi mod APIs]
+///     manual--->use
+/// ```
+///
+/// # Configuring the build - if you're using cargo
+///
+/// You'll use the `autocxx-build` crate. Simply copy from the
+/// [demo example](https://github.com/google/autocxx/blob/main/demo/build.rs).
+/// You'll need to provide it:
+/// * The list of `.rs` files which will have `include_cpp!` macros present
+/// * Your C++ header include path.
+///
+/// # Configuring the build - if you're not using cargo
+///
+/// See the `autocxx-gen` crate. You'll need to:
+///
+/// * Run the `codegen` phase. You'll need to use the [autocxx-gen]
+///   tool to process the .rs code into C++ header and
 ///   implementation files. This will also generate `.rs` side bindings.
 /// * Educate the procedural macro about where to find the generated `.rs` bindings. Set the
 ///   `AUTOCXX_RS` environment variable to a list of directories to search.
@@ -91,61 +150,171 @@ use autocxx_engine::IncludeCppEngine;
 ///     rsb --> l
 /// ```
 ///
-/// # Syntax
+/// # The `include_cpp` macro
 ///
-/// Within the brackets of the `include_cxx!(...)` macro, you should provide
+/// Within the braces of the `include_cpp!{...}` macro, you should provide
 /// a list of at least the following:
 ///
 /// * `#include "cpp_header.h"`: a header filename to parse and include
 /// * `generate!("type_or_function_name")`: a type or function name whose declaration
 ///   should be made available to C++.
-/// * Possibly, `safety!(unsafe)` - see discussion of `unsafe` later.
+/// * Optionally, `safety!(unsafe)` - see discussion of [`safety`].
 ///
 /// Other directives are possible as documented in this crate.
 ///
-/// # How to generate structs
+/// Now, try to build your Rust project. `autocxx` may fail to generate bindings
+/// for some of the items you specified with [generate] directives: remove
+/// those directives for now, then see the next section for advice.
 ///
-/// All C++ types can be owned within a [UniquePtr][autocxx_engine::cxx::UniquePtr]
-/// within Rust. To let this be possible, simply pass the names of these
-/// types within [generate] (or just [generate] any function which requires these types).
+/// # Did it work? How do I deal with failure?
 ///
-/// However, only _some_ C++ `struct`s can be owned _by value_ within Rust. Those
-/// types must be freely byte-copyable, because Rust is free to do that at
-/// any time. If you believe your `struct` meets those criteria, you can
-/// use [generate_pod] instead.
+/// Once you've achieved a successful build, you might wonder how to know what
+/// bindings have been generated. `cargo expand` will show you. In the (near) future,
+/// it's hoped that `rust-analyzer` will gain support for expanding procedural
+/// macros and you'll be able to see the bindings from Rust IDEs.
 ///
-/// Use [generate] under normal circumstances, but [generate_pod] only for structs
-/// where you absolutely do need to pass them truly by value and have direct field access.
+/// Either way, you'll find (for sure!) that `autocxx` hasn't been able to generate
+/// bindings for all your C++ APIs. This may manifest as a hard failure or a soft
+/// failure:
+/// * If you specified such an item in a [`generate`] directive (or similar such
+///   as [`generate_pod`]) then your build will fail.
+/// * If such APIs are methods belonging to a type, `autocxx` will generate other
+///   methods for the type but ignore those.
+///
+/// In this latter case, you should see helpful messages _in the generated bindings_
+/// as rust documentation explaining what went wrong.
+///
+/// If this happens (and it will!) your options are:
+/// * Add more, simpler C++ APIs which fulfil the same need but are compatible with
+///   `autocxx`.
+/// * Write manual bindings. This is most useful if a type is supported by [cxx]
+///   but not `autocxx` (for example, at the time of writing `std::array`). See
+///   the later section on 'combinining automatic and manual bindings'.
+///
+/// # The generated bindings
+///
+/// ## Pointers, references, and so-forth
+///
+/// `autocxx` knows how to deal with C++ APIs which take C++ types:
+/// * By value
+/// * By reference (const or not)
+/// * By raw pointer
+/// * By `std::unique_ptr`
+/// * By `std::shared_ptr`
+/// * By `std::weak_ptr`
+///
+/// (all of this is because the underlying [cxx] crate has such versatility).
+/// Some of these have some quirks in the way they're exposed in Rust, described below.
+///
+/// ### Passing between C++ and Rust by value
+///
+/// Rust is free to move data around at any time. That's _not OK_ for some C++ types
+/// which have non-trivial move constructors or destructors. Such types are common
+/// in C++ (for example, even C++ `std::string`s) and these types commonly appear
+/// in API declarations which we want to make available in Rust. Worse still, Rust
+/// has no visibility into whether a C++ type meets these criteria. What do we do?
+///
+/// You have a choice:
+/// * As standard, any C++ type passed by value will be `std::move`d on the C++ side
+///   into a `std::unique_ptr` before being passed to Rust, and similarly moved out
+///   of a `std::unique_ptr` when passed from Rust to C++.
+/// * If you know that your C++ type can be safely byte-copied, then you can
+///   override this behavior by using [`generate_pod`] instead of [`generate`].
+///
+/// There's not a significant ergonomic problem from the use of [`cxx::UniquePtr`].
+/// The main negative of the automatic boxing into [`cxx::UniquePtr`] is performance:
+/// specifiaclly, the need to
+/// allocate heap cells on the C++ side and move data into and out of them.
+/// You don't want to be doing this inside a tight loop (but if you're calling
+/// across the C++/Rust boundary in a tight loop, perhaps reconsider that boundary
+/// anyway).
+///
+/// If you want your type to be transferred between Rust and C++ truly _by value_
+/// then use [`generate_pod`] instead of [`generate`].
+///
+/// Specifically, to be compatible with [`generate_pod`], your C++ type must either:
+/// * Lack a move constructor _and_ lack a destructor
+/// * Or contain a human promise that it's relocatable, by implementing
+///   the C++ trait `IsRelocatable` per the instructions in
+///   [cxx.h](https://github.com/dtolnay/cxx/blob/master/include/cxx.h)
+///
+/// Otherwise, your build will fail.
 ///
 /// This doesn't just make a difference to the generated code for the type;
 /// it also makes a difference to any functions which take or return that type.
 /// If there's a C++ function which takes a struct by value, but that struct
 /// is not declared as POD-safe, then we'll generate wrapper functions to move
-/// that type into and out of [UniquePtr][autocxx_engine::cxx::UniquePtr]s.
+/// that type into and out of [`cxx::UniquePtr`]s.
 ///
-/// # Generated code
+/// ### References and pointers
 ///
-/// You will find that this macro expands to the equivalent of:
+/// We follow [cxx] norms here. Specifically:
+/// * A C++ reference becomes a Rust reference
+/// * A C++ pointer becomes a Rust pointer.
+/// * If a reference is returned with an ambiguous lifetime, we don't generate
+///   code for the function
+/// * Pointers require use of `unsafe`, references don't necessarily.
 ///
-/// ```no_run
-/// mod ffi {
-///     pub fn do_math(a: u32) -> u32
-/// #   { a+3 }
-///     pub const kMyCxxConst: i32 = 3;
-///     pub const MY_PREPROCESSOR_DEFINITION: i64 = 3i64;
-/// }
-/// ```
+/// That last point is key. If your C++ API takes pointers, you're going
+/// to have to use `unsafe`. Similarly, if your C++ API returns a pointer,
+/// you'll have to use `unsafe` to do anything useful with the pointer in Rust.
+/// This is intentional: a pointer from C++ might be subject to concurrent
+/// mutation, or it might have a lifetime that could disappear at any moment.
+/// As a human, you must promise that you understand the constraints around
+/// use of that pointer and that's what the `unsafe` keyword is for.
 ///
-/// # Built-in types
+/// Exactly the same issues apply to C++ references _in theory_, but in practice,
+/// they usually don't. Therefore [cxx] has taken the view that we can "trust"
+/// a C++ reference to a higher degree than a pointer, and autocxx follows that
+/// lead. In practice, of course, references are rarely return values from C++
+/// APIs so we rarely have to navel-gaze about the trustworthiness of a
+/// reference.
+///
+/// (See also the discussion of [`safety`] - if you haven't specified
+/// an unsafety policy, _all_ C++ APIs require `unsafe` so the discussion is moot.)
+///
+/// ### [`cxx::UniquePtr`]s
+///
+/// We use [`cxx::UniquePtr`] in completely the normal way, but there are a few
+/// quirks which you're more likely to run into with `autocxx`.
+///
+/// * Calling methods: you may need to use [`cxx::UniquePtr::pin_mut`] to get
+///   a reference on which you can call a method.
+/// * Getting a raw pointer in order to pass to some pre-existing function:
+///   at present you need to do:
+///   ```rust,ignore
+///      let mut a = ffi::A::make_unique();
+///      unsafe { ffi::TakePointerToA(std::pin::Pin::<&mut ffi::A>::into_inner_unchecked(a.pin_mut())) };
+///   ```
+///   This may be simplified in future.
+///
+/// ## Construction
+///
+/// Types gain a `make_unique` associated function. At present they only
+/// gain this if they have an explicit C++ constructor; this is a limitation
+/// which should be resolved in future.
+/// This will (of course) return a [`cxx::UniquePtr`] containing that type.
+///
+/// ## Built-in types
 ///
 /// The generated code uses `cxx` for interop: see that crate for many important
 /// considerations including safety and the list of built-in types, for example
-/// [UniquePtr][autocxx_engine::cxx::UniquePtr] and
-/// [CxxString][autocxx_engine::cxx::CxxString].
+/// [`cxx::UniquePtr`] and [`cxx::CxxString`].
 ///
-/// # Making strings
+/// There are almost no `autocxx`-specific types. At present, we do have
+/// [`c_int`] and similar, to wrap the integer types whose length
+/// varies in C++. It's hoped to contribute full support here to [cxx]
+/// in a future change.
 ///
-/// Functions that accept a `std::string` will actually accept anything that
+/// ## Strings
+///
+/// `autocxx` uses [cxx::CxxString]. However, as noted above, we can't
+/// just pass a C++ string by value, so we'll box and unbox it automatically
+/// such that you're really dealing with `UniquePtr<CxxString>` on the Rust
+/// side, even if the API just took or returned a plain old `std::string`.
+///
+/// However, to ease ergonomics, functions that accept a `std::string` will
+/// actually accept anything that
 /// implements a trait called `ffi::ToCppString`. That may either be a
 /// `UniquePtr<CxxString>` or just a plain old Rust string - which will be
 /// converted transparently to a C++ string.
@@ -155,16 +324,18 @@ use autocxx_engine::IncludeCppEngine;
 /// so that they can call through to a `make_string` implementation in
 /// the C++ that we're injecting into your C++ build system.
 ///
-/// None of that happens if you use `exclude_utilities`.
+/// (None of that happens if you use [exclude_utilities], so don't do that.)
 ///
-/// # Support for particular C++ features
+/// If you need to create a blank `UniquePtr<CxxString>` in Rust, such that
+/// (for example) you can pass its mutable reference or pointer into some
+/// pre-existing C++ API, there's currently no built in support for that.
+/// You should add an extra C++ API:
 ///
-/// ## Making other C++ types
+/// ```cpp
+/// std::string make_blank_string() { return std::string(); }
+/// ```
 ///
-/// Types gain a `make_unique` associated function. At present they only
-/// gain this if they have an explicit C++ constructor; this is a limitation
-/// which should be resolved in future.
-/// This will (of course) return a `UniquePtr` containing that type.
+/// and then use [`generate`] to make bindings for that.
 ///
 /// ## Preprocessor symbols
 ///
@@ -206,13 +377,10 @@ use autocxx_engine::IncludeCppEngine;
 ///
 /// C++ allows function overloads; Rust doesn't. `autocxx` follows the lead
 /// of `bindgen` here and generating overloads as `func`, `func1`, `func2` etc.
+/// This is essentially awful without `rust-analyzer` IDE support, which isn't
+/// quite there yet.
 ///
-/// ## C++ classes - why do I get warnings?
-///
-/// autocxx is not currently able to distinguish a C++ struct from a C++ class.
-/// It currently assumes they're all structs. This results in warnings
-/// from most compilers, but could cause actual binary mismatches
-/// on some ABIs. This is a temporary known limitation.
+/// `autocxx` doesn't yet support default paramters.
 ///
 /// ## Forward declarations
 ///
@@ -229,10 +397,59 @@ use autocxx_engine::IncludeCppEngine;
 /// we synthesize a concrete Rust type, corresponding to a C++ typedef, for each
 /// concrete instantiation of the type. Such generated types are always opaque,
 /// and never have methods attached. That's therefore enough to pass them
-/// between return types and parameters of other functions within `UniquePtr`s
+/// between return types and parameters of other functions within [`cxx::UniquePtr`]s
 /// but not really enough to do anything else with these types just yet. Hopefully,
 /// this will be improved in future. At present such types have a name
 /// `AutocxxConcrete{n}` but this may change in future.
+///
+/// ## Exceptions
+///
+/// Exceptions are not supported. If your C++ code is compiled with exceptions,
+/// you can expect serious runtime explosions. The underlying [cxx] crate has
+/// exception support, so it would be possible to add them.
+///
+/// # Mixing manual and automated bindings
+///
+/// `autocxx` uses [cxx] underneath, and its build process will happily spot and
+/// process and manually-crafted [`cxx::bridge`] mods which you include in your
+/// Rust source code. A common pattern good be to use `autocxx` to generate
+/// all the bindings possible, then hand-craft a [`cxx::bridge`] mod for the
+/// remainder where `autocxx` falls short.
+///
+/// To do this, you'll need to use the [ability of one cxx::bridge mod to refer to types from another](https://cxx.rs/extern-c++.html#reusing-existing-binding-types),
+/// for example:
+///
+/// ```rust,ignore
+/// autocxx::include_cpp! {
+///     #include "foo.h"
+///     safety!(unsafe_ffi)
+///     generate!("take_A")
+///     generate!("A")
+/// }
+/// #[cxx::bridge]
+/// mod ffi2 {
+///     unsafe extern "C++" {
+///         include!("foo.h");
+///         type A = crate::ffi::A;
+///         fn give_A() -> UniquePtr<A>; // in practice, autocxx could happily do this
+///     }
+/// }
+/// fn main() {
+///     let a = ffi2::give_A();
+///     assert_eq!(ffi::take_A(&a), autocxx::c_int(5));
+/// }
+/// ```
+///
+/// # Safety
+///
+/// # Examples
+///
+/// * [Demo](https://github.com/google/autocxx/tree/main/demo) - simplest possible demo
+/// * [S2 example](https://github.com/google/autocxx/tree/main/examples/s2) - example using S2 geometry library
+/// * [Integration tests](https://github.com/google/autocxx/blob/main/engine/src/integration_tests.rs)
+///   - hundreds of small snippets
+///
+/// Contributions of more examples to the `examples` directory are much appreciated!
 ///
 /// # Internals
 ///
@@ -340,7 +557,7 @@ macro_rules! name {
 /// or some `unsafe` function which you create.
 ///
 /// Alternatively, by specifying a `safety!` block you can
-/// declare that all generated functions are in fact safe.
+/// declare that most generated functions are in fact safe.
 /// Specifically, you'd specify:
 /// `safety!(unsafe)`
 /// or
@@ -364,6 +581,9 @@ macro_rules! name {
 /// that you've analyzed all possible ways that the code
 /// can be used and you are guaranteeing to the compiler that
 /// no badness can occur. Good luck.
+///
+/// Generated C++ APIs which use raw pointers remain `unsafe`
+/// no matter what policy you choose.
 #[macro_export]
 macro_rules! safety {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
