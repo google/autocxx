@@ -223,7 +223,7 @@ use autocxx_engine::IncludeCppEngine;
 ///
 /// There's not a significant ergonomic problem from the use of [`cxx::UniquePtr`].
 /// The main negative of the automatic boxing into [`cxx::UniquePtr`] is performance:
-/// specifiaclly, the need to
+/// specifically, the need to
 /// allocate heap cells on the C++ side and move data into and out of them.
 /// You don't want to be doing this inside a tight loop (but if you're calling
 /// across the C++/Rust boundary in a tight loop, perhaps reconsider that boundary
