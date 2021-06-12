@@ -328,14 +328,12 @@ use autocxx_engine::IncludeCppEngine;
 ///
 /// If you need to create a blank `UniquePtr<CxxString>` in Rust, such that
 /// (for example) you can pass its mutable reference or pointer into some
-/// pre-existing C++ API, there's currently no built in support for that.
-/// You should add an extra C++ API:
+/// pre-existing C++ API, call `ffi::make_string("")` which will return
+/// a blank `UniquePtr<CxxString>`.
 ///
-/// ```cpp
-/// std::string make_blank_string() { return std::string(); }
-/// ```
-///
-/// and then use [`generate`] to make bindings for that.
+/// Don't attempt to use [cxx::let_cpp_string] which will allocate the
+/// string on the stack, and is generally incompatible with the
+/// [cxx::UniquePtr]-based approaches we use here.
 ///
 /// ## Preprocessor symbols
 ///

@@ -405,7 +405,7 @@ impl<'a> RsCodeGenerator<'a> {
                     global_items: get_string_items(self.config),
                     bindgen_mod_item: None,
                     impl_entry: None,
-                    materialization: Use::Unused,
+                    materialization: Use::UsedFromCxxBridgeWithAlias(make_ident("make_string")),
                 }
             }
             Api::ConcreteType { .. } => RsCodegenResult {
