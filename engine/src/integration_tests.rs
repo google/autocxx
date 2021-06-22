@@ -4498,6 +4498,25 @@ fn test_double_underscore_typedef_ignored() {
 }
 
 #[test]
+fn test_double_underscores_fn_namespace() {
+    let hdr = indoc! {"
+    namespace __B {
+        inline void a() {}
+    };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        &[],
+        &[],
+        Some(quote! { generate_all!() }),
+        &[],
+        None,
+    );
+}
+
+#[test]
 fn test_typedef_to_ptr_is_marked_unsafe() {
     let hdr = indoc! {"
     struct _xlocalefoo; /* forward reference */
