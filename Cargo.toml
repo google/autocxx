@@ -32,7 +32,7 @@ aquamarine = "0.1" # docs
 
 [workspace]
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce"]
-exclude = ["examples/s2"]
+exclude = ["examples/s2", "examples/take-vec"]
 
 #[patch.crates-io]
 #cxx = { path="../cxx" }
