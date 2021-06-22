@@ -43,15 +43,21 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
             if let Some(ref cpp_name) = name.cpp_name {
                 // The C++ name might itself be outer_type::inner_type and thus may
                 // have multiple segments.
-                validate_all_segments_ok_for_cxx(QualifiedName::new_from_cpp_name(cpp_name).segment_iter())?;
+                validate_all_segments_ok_for_cxx(
+                    QualifiedName::new_from_cpp_name(cpp_name).segment_iter(),
+                )?;
             }
             Ok(Some(api))
         }
-        Api::Function { .. } // we don't handle functions here because
+        Api::Function { ref name, .. } => {
+            // we don't handle function names here because
             // the function analysis does an equivalent check. Instead of just rejecting
             // the function, it creates a wrapper function instead with a more
             // palatable name. That's preferable to rejecting the API entirely.
-        | Api::ConcreteType  { .. }
+            validate_all_segments_ok_for_cxx(name.name.segment_iter())?;
+            Ok(Some(api))
+        }
+        Api::ConcreteType { .. }
         | Api::CType { .. }
         | Api::StringConstructor { .. }
         | Api::IgnoredItem { .. } => Ok(Some(api)),
