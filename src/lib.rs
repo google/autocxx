@@ -169,9 +169,11 @@ use autocxx_engine::IncludeCppEngine;
 /// # Did it work? How do I deal with failure?
 ///
 /// Once you've achieved a successful build, you might wonder how to know what
-/// bindings have been generated. `cargo expand` will show you. In the (near) future,
-/// it's hoped that `rust-analyzer` will gain support for expanding procedural
-/// macros and you'll be able to see the bindings from Rust IDEs.
+/// bindings have been generated. `cargo expand` will show you. Alternatively,
+/// you can get autocompletion within an IDE supported by Rust analyzer. You'll
+/// need to enable _both_:
+/// * Rust-analyzer: Proc Macro: Enable
+/// * Rust-analyzer: Experimental: Proc Attr Macros
 ///
 /// Either way, you'll find (for sure!) that `autocxx` hasn't been able to generate
 /// bindings for all your C++ APIs. This may manifest as a hard failure or a soft
