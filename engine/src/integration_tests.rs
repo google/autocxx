@@ -2914,6 +2914,19 @@ fn test_make_string() {
 }
 
 #[test]
+fn test_string_make_unique() {
+    let hdr = indoc! {"
+        #include <string>
+        inline void take_string(const std::string*) {};
+    "};
+    let rs = quote! {
+        let s = ffi::make_string("");
+        unsafe { ffi::take_string(s.as_ref().unwrap()) };
+    };
+    run_test("", hdr, rs, &["take_string"], &[]);
+}
+
+#[test]
 fn test_string_constant() {
     let hdr = indoc! {"
         #include <cstdint>

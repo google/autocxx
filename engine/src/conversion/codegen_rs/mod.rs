@@ -70,8 +70,7 @@ enum Use {
     Custom(Box<Item>),
 }
 
-fn get_string_items(config: &IncludeCppConfig) -> Vec<Item> {
-    let makestring_name = make_ident(config.get_makestring_name());
+fn get_string_items() -> Vec<Item> {
     [
         Item::Trait(parse_quote! {
             pub trait ToCppString {
@@ -84,21 +83,21 @@ fn get_string_items(config: &IncludeCppConfig) -> Vec<Item> {
         Item::Impl(parse_quote! {
             impl ToCppString for &str {
                 fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
-                    cxxbridge::#makestring_name(self)
+                    make_string(self)
                 }
             }
         }),
         Item::Impl(parse_quote! {
             impl ToCppString for String {
                 fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
-                    cxxbridge::#makestring_name(&self)
+                    make_string(&self)
                 }
             }
         }),
         Item::Impl(parse_quote! {
             impl ToCppString for &String {
                 fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
-                    cxxbridge::#makestring_name(self)
+                    make_string(self)
                 }
             }
         }),
@@ -402,10 +401,10 @@ impl<'a> RsCodeGenerator<'a> {
                         fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;
                     ))),
                     bridge_items: Vec::new(),
-                    global_items: get_string_items(self.config),
+                    global_items: get_string_items(),
                     bindgen_mod_item: None,
                     impl_entry: None,
-                    materialization: Use::Unused,
+                    materialization: Use::UsedFromCxxBridgeWithAlias(make_ident("make_string")),
                 }
             }
             Api::ConcreteType { .. } => RsCodegenResult {
