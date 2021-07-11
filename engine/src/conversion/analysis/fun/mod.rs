@@ -133,7 +133,6 @@ pub(crate) struct FnAnalyzer<'a> {
     pod_safe_types: HashSet<QualifiedName>,
     config: &'a IncludeCppConfig,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
-    generate_utilities: bool,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -151,7 +150,6 @@ impl<'a> FnAnalyzer<'a> {
             config,
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
-            generate_utilities: Self::should_generate_utilities(&apis),
         };
         let mut results = Vec::new();
         convert_apis(
@@ -164,11 +162,6 @@ impl<'a> FnAnalyzer<'a> {
         );
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
-    }
-
-    fn should_generate_utilities(apis: &[Api<PodAnalysis>]) -> bool {
-        apis.iter()
-            .any(|api| matches!(api, Api::StringConstructor { .. }))
     }
 
     fn build_pod_safe_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
@@ -738,7 +731,9 @@ impl<'a> FnAnalyzer<'a> {
                 let tn = QualifiedName::from_type_path(p);
                 if self.pod_safe_types.contains(&tn) {
                     TypeConversionPolicy::new_unconverted(ty.clone())
-                } else if known_types().convertible_from_strs(&tn) && self.generate_utilities {
+                } else if known_types().convertible_from_strs(&tn)
+                    && !self.config.exclude_utilities()
+                {
                     TypeConversionPolicy::new_from_str(ty.clone())
                 } else {
                     TypeConversionPolicy::new_from_unique_ptr(ty.clone())
