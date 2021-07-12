@@ -70,48 +70,6 @@ enum Use {
     Custom(Box<Item>),
 }
 
-fn get_string_items() -> Vec<Item> {
-    [
-        Item::Trait(parse_quote! {
-            pub trait ToCppString {
-                fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString>;
-            }
-        }),
-        // We can't just impl<T: AsRef<str>> ToCppString for T
-        // because the compiler says that this trait could be implemented
-        // in future for cxx::UniquePtr<cxx::CxxString>. Fair enough.
-        Item::Impl(parse_quote! {
-            impl ToCppString for &str {
-                fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
-                    make_string(self)
-                }
-            }
-        }),
-        Item::Impl(parse_quote! {
-            impl ToCppString for String {
-                fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
-                    make_string(&self)
-                }
-            }
-        }),
-        Item::Impl(parse_quote! {
-            impl ToCppString for &String {
-                fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
-                    make_string(self)
-                }
-            }
-        }),
-        Item::Impl(parse_quote! {
-            impl ToCppString for cxx::UniquePtr<cxx::CxxString> {
-                fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
-                    self
-                }
-            }
-        }),
-    ]
-    .to_vec()
-}
-
 fn remove_nones<T>(input: Vec<Option<T>>) -> Vec<T> {
     input.into_iter().flatten().collect()
 }
@@ -141,6 +99,53 @@ impl<'a> RsCodeGenerator<'a> {
             config,
         };
         c.rs_codegen(all_apis)
+    }
+
+    fn get_string_items(&self) -> Vec<Item> {
+        let make_string_name = make_ident(self.config.get_makestring_name());
+        let unsafety = match self.config.unsafe_policy {
+            autocxx_parser::UnsafePolicy::AllFunctionsSafe => None,
+            autocxx_parser::UnsafePolicy::AllFunctionsUnsafe => Some(quote! { unsafe }),
+        };
+        [
+            Item::Trait(parse_quote! {
+                pub trait ToCppString {
+                    #unsafety fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString>;
+                }
+            }),
+            // We can't just impl<T: AsRef<str>> ToCppString for T
+            // because the compiler says that this trait could be implemented
+            // in future for cxx::UniquePtr<cxx::CxxString>. Fair enough.
+            Item::Impl(parse_quote! {
+                impl ToCppString for &str {
+                    #unsafety fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                        #make_string_name(self)
+                    }
+                }
+            }),
+            Item::Impl(parse_quote! {
+                impl ToCppString for String {
+                    #unsafety fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                        #make_string_name(&self)
+                    }
+                }
+            }),
+            Item::Impl(parse_quote! {
+                impl ToCppString for &String {
+                    #unsafety fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                        #make_string_name(self)
+                    }
+                }
+            }),
+            Item::Impl(parse_quote! {
+                impl ToCppString for cxx::UniquePtr<cxx::CxxString> {
+                    #unsafety fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
+                        self
+                    }
+                }
+            }),
+        ]
+        .to_vec()
     }
 
     fn rs_codegen(mut self, all_apis: Vec<Api<FnAnalysis>>) -> Vec<Item> {
@@ -176,6 +181,9 @@ impl<'a> RsCodeGenerator<'a> {
         let mut extern_c_mod_items = remove_nones(extern_c_mod_items);
         // And a list of global items to include at the top level.
         let mut all_items: Vec<Item> = all_items.into_iter().flatten().collect();
+        if !self.config.exclude_utilities() {
+            all_items.append(&mut self.get_string_items());
+        }
         // And finally any C++ we need to generate. And by "we" I mean autocxx not cxx.
         let has_additional_cpp_needs = additional_cpp_needs.into_iter().any(std::convert::identity);
         extern_c_mod_items.extend(self.build_include_foreign_items(has_additional_cpp_needs));
@@ -372,19 +380,6 @@ impl<'a> RsCodeGenerator<'a> {
         let id = name.get_final_ident();
         let cpp_call_name = api.effective_cpp_name().to_string();
         match api {
-            Api::StringConstructor { .. } => {
-                let make_string_name = make_ident(self.config.get_makestring_name());
-                RsCodegenResult {
-                    extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
-                        fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;
-                    ))),
-                    bridge_items: Vec::new(),
-                    global_items: get_string_items(),
-                    bindgen_mod_item: None,
-                    impl_entry: None,
-                    materialization: Use::UsedFromCxxBridgeWithAlias(make_ident("make_string")),
-                }
-            }
             Api::ConcreteType { .. } => RsCodegenResult {
                 global_items: self.generate_extern_type_impl(TypeKind::NonPod, &name),
                 bridge_items: create_impl_items(&id, self.config),

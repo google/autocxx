@@ -57,10 +57,7 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
             validate_all_segments_ok_for_cxx(name.name.segment_iter())?;
             Ok(Some(api))
         }
-        Api::ConcreteType { .. }
-        | Api::CType { .. }
-        | Api::StringConstructor { .. }
-        | Api::IgnoredItem { .. } => Ok(Some(api)),
+        Api::ConcreteType { .. } | Api::CType { .. } | Api::IgnoredItem { .. } => Ok(Some(api)),
     });
 
     // Reject any names which are duplicates within the cxx bridge mod,

@@ -13,9 +13,13 @@
 // limitations under the License.
 
 use autocxx_parser::IncludeCppConfig;
+use syn::parse_quote;
 
-use super::api::{ApiName, UnanalyzedApi};
-use crate::types::{make_ident, Namespace};
+use super::api::{ApiName, FuncToConvert, UnanalyzedApi};
+use crate::{
+    conversion::codegen_cpp::AdditionalNeed,
+    types::{make_ident, Namespace},
+};
 
 /// Adds items which we always add, cos they're useful.
 /// Any APIs or techniques which do not involve actual C++ interop
@@ -27,7 +31,17 @@ pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>, config: &Include
     // we run two passes through bindgen. i.e. the next 'if' is always true,
     // and we always generate an additional C++ file for our bindings additions,
     // unless the include_cpp macro has specified ExcludeUtilities.
-    apis.push(UnanalyzedApi::StringConstructor {
-        name: ApiName::new(&Namespace::new(), make_ident(config.get_makestring_name())),
-    });
+    let make_string_name = make_ident(config.get_makestring_name());
+    apis.push(UnanalyzedApi::Function {
+        name: ApiName::new(&Namespace::new(), make_string_name.clone()),
+        fun: Box::new(FuncToConvert {
+            item: parse_quote! {
+                fn #make_string_name(str_: rust::Str) -> std::unique_ptr<std::string>;
+            },
+            virtual_this_type: None,
+            self_ty: None,
+            fixed_cpp: Some(AdditionalNeed::MakeStringConstructor),
+        }),
+        analysis: (),
+    })
 }

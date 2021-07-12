@@ -91,7 +91,6 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B>(
                 cpp_definition,
             })),
             Api::ForwardDeclaration { name } => Ok(Some(Api::ForwardDeclaration { name })),
-            Api::StringConstructor { name } => Ok(Some(Api::StringConstructor { name })),
             Api::Const { name, const_item } => Ok(Some(Api::Const { name, const_item })),
             Api::CType { name, typename } => Ok(Some(Api::CType { name, typename })),
             Api::IgnoredItem { name, err, ctx } => Ok(Some(Api::IgnoredItem { name, err, ctx })),

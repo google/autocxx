@@ -2917,13 +2917,14 @@ fn test_make_string() {
 fn test_string_make_unique() {
     let hdr = indoc! {"
         #include <string>
+        std::string make_blank_string() { return std::string(); }
         inline void take_string(const std::string*) {};
     "};
     let rs = quote! {
-        let s = ffi::make_string("");
+        let s = ffi::make_blank_string();
         unsafe { ffi::take_string(s.as_ref().unwrap()) };
     };
-    run_test("", hdr, rs, &["take_string"], &[]);
+    run_test("", hdr, rs, &["take_string", "make_blank_string"], &[]);
 }
 
 #[test]
