@@ -847,8 +847,11 @@ impl Api<FnAnalysis> {
     /// And we can't answer the question _prior_ to this function analysis phase.
     pub(crate) fn additional_cpp(&self) -> Option<AdditionalNeed> {
         match &self {
-            Api::Function { analysis, .. } => analysis.cpp_wrapper.clone(),
-            Api::StringConstructor { .. } => Some(AdditionalNeed::MakeStringConstructor),
+            Api::Function { analysis, fun, .. } => fun
+                .as_ref()
+                .fixed_cpp
+                .clone()
+                .or_else(|| analysis.cpp_wrapper.clone()),
             Api::ConcreteType { rs_definition, .. } => {
                 Some(AdditionalNeed::ConcreteTemplatedTypeTypedef(
                     self.name().clone(),
@@ -863,7 +866,7 @@ impl Api<FnAnalysis> {
     pub(crate) fn cxxbridge_name(&self) -> Option<Ident> {
         match self {
             Api::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
-            Api::StringConstructor { .. } | Api::Const { .. } | Api::IgnoredItem { .. } => None,
+            Api::Const { .. } | Api::IgnoredItem { .. } => None,
             _ => Some(self.name().get_final_ident()),
         }
     }

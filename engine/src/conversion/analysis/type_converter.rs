@@ -453,8 +453,7 @@ impl<'a> TypeConverter<'a> {
                 | Api::Typedef { .. }
                 | Api::Enum { .. }
                 | Api::Struct { .. } => Some(api.name()),
-                Api::StringConstructor { .. }
-                | Api::Function { .. }
+                Api::Function { .. }
                 | Api::Const { .. }
                 | Api::CType { .. }
                 | Api::IgnoredItem { .. } => None,
