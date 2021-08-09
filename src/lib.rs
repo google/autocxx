@@ -620,7 +620,7 @@ pub use autocxx_macro::include_cpp_impl;
 macro_rules! ctype_wrapper {
     ($r:ident, $c:expr, $d:expr) => {
         #[doc=$d]
-        #[derive(Debug, Eq, Clone, PartialEq, Hash)]
+        #[derive(Debug, Eq, Copy, Clone, PartialEq, Hash)]
         #[allow(non_camel_case_types)]
         #[repr(transparent)]
         pub struct $r(pub ::std::os::raw::$r);
