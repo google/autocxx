@@ -275,6 +275,11 @@ use autocxx_engine::IncludeCppEngine;
 /// (See also the discussion of [`safety`] - if you haven't specified
 /// an unsafety policy, _all_ C++ APIs require `unsafe` so the discussion is moot.)
 ///
+/// If you're given a C++ object by pointer, and you want to interact with it,
+/// you'll need to figure out the guarantees attached to the C++ object - most
+/// notably its lifetime. To see some of the decision making process involved
+/// see the [Steam example](https://github.com/google/autocxx/tree/main/examples/steam-mini/src/main.rs).
+///
 /// ### [`cxx::UniquePtr`]s
 ///
 /// We use [`cxx::UniquePtr`] in completely the normal way, but there are a few
@@ -446,6 +451,7 @@ use autocxx_engine::IncludeCppEngine;
 ///
 /// * [Demo](https://github.com/google/autocxx/tree/main/demo) - simplest possible demo
 /// * [S2 example](https://github.com/google/autocxx/tree/main/examples/s2) - example using S2 geometry library
+/// * [Steam example](https://github.com/google/autocxx/tree/main/examples/steam-mini) - example using (something like) the Steam client library
 /// * [Integration tests](https://github.com/google/autocxx/blob/main/engine/src/integration_tests.rs)
 ///   - hundreds of small snippets
 ///
