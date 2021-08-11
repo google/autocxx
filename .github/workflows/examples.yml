@@ -23,5 +23,5 @@ jobs:
       working-directory: ./examples/s2
       run: cargo build --all --verbose
     - name: Build steam example
-      working-directory: ./examples/steam
+      working-directory: ./examples/steam-mini
       run: cargo build --all --verbose
