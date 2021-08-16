@@ -121,6 +121,7 @@ fn run_test(
         None,
         &[],
         None,
+        None,
     )
     .unwrap()
 }
@@ -150,6 +151,34 @@ fn run_test_ex(
         extra_directives,
         extra_clang_args,
         rust_code_checker,
+        None,
+    )
+    .unwrap()
+}
+
+/// A positive test, we expect to pass.
+#[allow(clippy::too_many_arguments)] // least typing for each test
+fn run_test_ex2(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code: TokenStream,
+    generate: &[&str],
+    generate_pods: &[&str],
+    extra_directives: Option<TokenStream>,
+    extra_clang_args: &[&str],
+    rust_code_checker: Option<RustCodeChecker>,
+    extra_rust: Option<TokenStream>,
+) {
+    do_run_test(
+        cxx_code,
+        header_code,
+        rust_code,
+        generate,
+        generate_pods,
+        extra_directives,
+        extra_clang_args,
+        rust_code_checker,
+        extra_rust,
     )
     .unwrap()
 }
@@ -169,6 +198,7 @@ fn run_test_expect_fail(
         generate_pods,
         None,
         &[],
+        None,
         None,
     )
     .expect_err("Unexpected success");
@@ -197,6 +227,7 @@ fn do_run_test(
     extra_directives: Option<TokenStream>,
     extra_clang_args: &[&str],
     rust_code_checker: Option<RustCodeChecker>,
+    extra_rust: Option<TokenStream>,
 ) -> Result<(), TestError> {
     // Step 1: Expand the snippet of Rust code into an entire
     //         program including include_cxx!
@@ -223,6 +254,8 @@ fn do_run_test(
                 #(#generate_pods)*
                 #extra_directives
             );
+
+            #extra_rust
 
             fn main() {
                 #rust_code
@@ -5854,6 +5887,37 @@ fn test_shared_ptr() {
         rs,
         &["make_shared_int", "take_shared_int", "shared_to_weak"],
         &[],
+    );
+}
+
+#[test]
+fn test_rust_reference() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    struct RustType;
+    inline uint32_t take_rust_reference(const RustType&) {
+        return 3;
+    }
+    "};
+    let rs = quote! {
+        let foo = RustType(3);
+        assert_eq!(ffi::take_rust_reference(&foo), 3);
+    };
+    run_test_ex2(
+        "",
+        hdr,
+        rs,
+        &["take_rust_reference"],
+        &[],
+        Some(quote! {
+            rust_type!(RustType)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            pub struct RustType(i32);
+        }),
     );
 }
 
