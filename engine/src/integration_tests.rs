@@ -337,7 +337,7 @@ where
     if !cxx_code.is_empty() {
         // Step 4: Write the C++ code snippet to a .cc file, along with a #include
         //         of the header emitted in step 5.
-        let cxx_code = format!("#include \"{}\"\n{}", "input.h", cxx_code);
+        let cxx_code = format!("#include \"input.h\"\n{}", cxx_code);
         let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
         b.file(cxx_path);
     }
@@ -5897,12 +5897,12 @@ fn test_rust_reference() {
 
     struct RustType;
     inline uint32_t take_rust_reference(const RustType&) {
-        return 3;
+        return 4;
     }
     "};
     let rs = quote! {
         let foo = RustType(3);
-        assert_eq!(ffi::take_rust_reference(&foo), 3);
+        assert_eq!(ffi::take_rust_reference(&foo), 4);
     };
     run_test_ex2(
         "",
@@ -5917,6 +5917,49 @@ fn test_rust_reference() {
         None,
         Some(quote! {
             pub struct RustType(i32);
+        }),
+    );
+}
+
+#[test]
+#[ignore]
+fn test_rust_reference_method() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    struct RustType;
+    uint32_t take_rust_reference(const RustType& foo);
+    "};
+    let cxx = indoc! {"
+    #include \"cxxgen.h\"
+    uint32_t take_rust_reference(const RustType& foo) {
+        return foo.get();
+    }"};
+    let rs = quote! {
+        let foo = RustType(3);
+        assert_eq!(ffi::take_rust_reference(&foo), 3);
+    };
+    run_test_ex2(
+        cxx,
+        hdr,
+        rs,
+        &["take_rust_reference"],
+        &[],
+        Some(quote! {
+            rust_type!(RustType)
+            extern_rust!(
+                fn get(self: &RustType) -> i32;
+            )
+        }),
+        &[],
+        None,
+        Some(quote! {
+            pub struct RustType(i32);
+            impl RustType {
+                pub fn get(&self) -> i32 {
+                    return self.0
+                }
+            }
         }),
     );
 }
