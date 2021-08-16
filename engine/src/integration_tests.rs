@@ -5922,6 +5922,37 @@ fn test_rust_reference() {
 }
 
 #[test]
+fn test_pass_thru_rust_reference() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    struct RustType;
+    inline const RustType& pass_rust_reference(const RustType& a) {
+        return a;
+    }
+    "};
+    let rs = quote! {
+        let foo = RustType(3);
+        assert_eq!(ffi::pass_rust_reference(&foo).0, 3);
+    };
+    run_test_ex2(
+        "",
+        hdr,
+        rs,
+        &["pass_rust_reference"],
+        &[],
+        Some(quote! {
+            rust_type!(RustType)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            pub struct RustType(i32);
+        }),
+    );
+}
+
+#[test]
 #[ignore]
 fn test_rust_reference_method() {
     let hdr = indoc! {"
