@@ -452,7 +452,8 @@ impl<'a> TypeConverter<'a> {
                 | Api::ConcreteType { .. }
                 | Api::Typedef { .. }
                 | Api::Enum { .. }
-                | Api::Struct { .. } => Some(api.name()),
+                | Api::Struct { .. }
+                | Api::RustType { .. } => Some(api.name()),
                 Api::StringConstructor { .. }
                 | Api::Function { .. }
                 | Api::Const { .. }

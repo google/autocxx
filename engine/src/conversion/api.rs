@@ -171,6 +171,8 @@ pub(crate) enum Api<T: AnalysisPhase> {
         err: ConvertError,
         ctx: ErrorContext,
     },
+    /// A Rust type which is not a C++ type.
+    RustType { name: ApiName },
 }
 
 impl<T: AnalysisPhase> Api<T> {
@@ -186,6 +188,7 @@ impl<T: AnalysisPhase> Api<T> {
             Api::Struct { name, .. } => name,
             Api::CType { name, .. } => name,
             Api::IgnoredItem { name, .. } => name,
+            Api::RustType { name, .. } => name,
         }
     }
 

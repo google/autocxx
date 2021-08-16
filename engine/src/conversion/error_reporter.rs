@@ -94,6 +94,7 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B>(
             Api::StringConstructor { name } => Ok(Some(Api::StringConstructor { name })),
             Api::Const { name, const_item } => Ok(Some(Api::Const { name, const_item })),
             Api::CType { name, typename } => Ok(Some(Api::CType { name, typename })),
+            Api::RustType { name } => Ok(Some(Api::RustType { name })),
             Api::IgnoredItem { name, err, ctx } => Ok(Some(Api::IgnoredItem { name, err, ctx })),
             // Apply a mapping to the following
             Api::Enum { name, item } => enum_conversion(name, item),

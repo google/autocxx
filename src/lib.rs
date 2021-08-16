@@ -606,6 +606,15 @@ macro_rules! exclude_impls {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// Declare that a given type is a Rust type. These may be used within
+/// references in the signatures of C++ functions, for instance.
+/// This will contribute to an `extern "Rust"` section of the generated
+/// `cxx` bindings.
+#[macro_export]
+macro_rules! rust_type {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! usage {
