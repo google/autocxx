@@ -60,6 +60,7 @@ impl Header {
 struct AdditionalFunction {
     type_definition: Option<String>, // are output before main declarations
     declaration: Option<String>,
+    definition: Option<String>,
     headers: Vec<Header>,
 }
 
@@ -146,11 +147,14 @@ impl<'a> CppCodeGenerator<'a> {
                 "#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
                 headers, self.inclusions, type_definitions, declarations
             );
+            let definitions = self.concat_additional_items(|x| x.definition.as_ref());
             log::info!("Additional C++ decls:\n{}", declarations);
             let header_name = format!("autocxxgen_{}.h", self.config.get_mod_name());
+            let definitions = format!("#include \"{}\"\n{}", header_name, definitions);
+            log::info!("Additional C++ defs:\n{}", definitions);
             Some(CppFilePair {
                 header: declarations.into_bytes(),
-                implementation: None,
+                implementation: definitions.into_bytes(),
                 header_name,
             })
         }
@@ -172,10 +176,19 @@ impl<'a> CppCodeGenerator<'a> {
 
     fn generate_string_constructor(&mut self) {
         let makestring_name = self.config.get_makestring_name();
-        let declaration = Some(format!("inline std::unique_ptr<std::string> {}(::rust::Str str) {{ return std::make_unique<std::string>(std::string(str)); }}", makestring_name));
+        let declaration = format!(
+            "std::unique_ptr<std::string> {}(::rust::Str str)",
+            makestring_name
+        );
+        let definition = Some(format!(
+            "{} {{ return std::make_unique<std::string>(std::string(str)); }}",
+            declaration
+        ));
+        let declaration = Some(format!("{};", declaration));
         self.additional_functions.push(AdditionalFunction {
             type_definition: None,
             declaration,
+            definition,
             headers: vec![
                 Header::system("memory"),
                 Header::system("string"),
@@ -267,13 +280,15 @@ impl<'a> CppCodeGenerator<'a> {
                 ret.cpp_conversion(&underlying_function_call, &self.original_name_map)?
             );
         };
-        let declaration = Some(format!(
-            "inline {} {{ {}; }}",
+        let definition = Some(format!(
+            "{} {{ {}; }}",
             declaration, underlying_function_call,
         ));
+        let declaration = Some(format!("{};", declaration));
         self.additional_functions.push(AdditionalFunction {
             type_definition: None,
             declaration,
+            definition,
             headers: vec![Header::system("memory")],
         });
         Ok(())
@@ -289,6 +304,7 @@ impl<'a> CppCodeGenerator<'a> {
         self.additional_functions.push(AdditionalFunction {
             type_definition: Some(format!("typedef {} {};", definition, our_name)),
             declaration: None,
+            definition: None,
             headers: Vec::new(),
         })
     }

@@ -82,8 +82,8 @@ pub use cxx;
 pub struct CppFilePair {
     /// Declarations to go into a header file.
     pub header: Vec<u8>,
-    /// Implementations to go into a .cpp file, if any.
-    pub implementation: Option<Vec<u8>>,
+    /// Implementations to go into a .cpp file.
+    pub implementation: Vec<u8>,
     /// The name which should be used for the header file
     /// (important as it may be `#include`d elsewhere)
     pub header_name: String,
@@ -481,7 +481,7 @@ pub fn do_cxx_cpp_generation(rs: TokenStream2) -> Result<CppFilePair, cxx_gen::E
     Ok(CppFilePair {
         header: cxx_generated.header,
         header_name: "cxxgen.h".into(),
-        implementation: Some(cxx_generated.implementation),
+        implementation: cxx_generated.implementation,
     })
 }
 

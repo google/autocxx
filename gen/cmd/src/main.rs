@@ -190,12 +190,10 @@ fn main() {
                 .generate_h_and_cxx()
                 .expect("Unable to generate header and C++ code");
             for pair in generations.0 {
+                let cppname = format!("gen{}.{}", counter, cpp);
+                write_to_file(&outdir, cppname, &pair.implementation);
                 write_to_file(&outdir, pair.header_name, &pair.header);
-                if let Some(implementation) = &pair.implementation {
-                    let cppname = format!("gen{}.{}", counter, cpp);
-                    write_to_file(&outdir, cppname, implementation);
-                    counter += 1;
-                }
+                counter += 1;
             }
         }
         write_placeholders(&outdir, counter, desired_number, cpp);
