@@ -33,6 +33,7 @@ enum Behavior {
     CByValue,
     CVariableLengthByValue,
     CVoid,
+    RustContainerByValueSafe,
 }
 
 /// Details about known special types, mostly primitives.
@@ -70,13 +71,14 @@ impl TypeDetails {
             | Behavior::RustStr
             | Behavior::CxxString
             | Behavior::CxxContainerByValueSafe
-            | Behavior::CxxContainerNotByValueSafe => {
+            | Behavior::CxxContainerNotByValueSafe
+            | Behavior::RustContainerByValueSafe => {
                 let tn = QualifiedName::new_from_cpp_name(&self.rs_name);
                 let cxx_name = tn.get_final_item();
                 let (templating, payload) = match self.behavior {
-                    Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => {
-                        ("template<typename T> ", "T* ptr")
-                    }
+                    Behavior::CxxContainerByValueSafe
+                    | Behavior::CxxContainerNotByValueSafe
+                    | Behavior::RustContainerByValueSafe => ("template<typename T> ", "T* ptr"),
                     _ => ("", "char* ptr"),
                 };
                 Some(format!(
@@ -115,6 +117,16 @@ impl TypeDetails {
     fn to_typename(&self) -> QualifiedName {
         QualifiedName::new_from_cpp_name(&self.rs_name)
     }
+
+    fn get_generic_behavior(&self) -> CxxGenericType {
+        match self.behavior {
+            Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => {
+                CxxGenericType::CppGeneric
+            }
+            Behavior::RustContainerByValueSafe => CxxGenericType::RustGeneric,
+            _ => CxxGenericType::NotGeneric,
+        }
+    }
 }
 
 /// Database of known types.
@@ -128,6 +140,18 @@ pub(crate) struct TypeDatabase {
 pub(crate) fn known_types() -> &'static TypeDatabase {
     static KNOWN_TYPES: OnceCell<TypeDatabase> = OnceCell::new();
     KNOWN_TYPES.get_or_init(create_type_database)
+}
+
+/// The type of payload that a cxx generic can contain.
+#[derive(PartialEq, Clone, Copy)]
+pub enum CxxGenericType {
+    /// Not a generic at all
+    NotGeneric,
+    /// Some generic like cxx::UniquePtr where the contents must be a
+    /// complete type.
+    CppGeneric,
+    /// Some generic like rust::Box where forward declarations are OK
+    RustGeneric,
 }
 
 impl TypeDatabase {
@@ -169,7 +193,8 @@ impl TypeDatabase {
                     | Behavior::RustString
                     | Behavior::RustByValue
                     | Behavior::CByValue
-                    | Behavior::CVariableLengthByValue => true,
+                    | Behavior::CVariableLengthByValue
+                    | Behavior::RustContainerByValueSafe => true,
                     Behavior::CxxString
                     | Behavior::CxxContainerNotByValueSafe
                     | Behavior::CVoid => false,
@@ -232,15 +257,10 @@ impl TypeDatabase {
     /// Whether this is a generic type acceptable to cxx. Otherwise,
     /// if we encounter a generic, we'll replace it with a synthesized concrete
     /// type.
-    pub(crate) fn is_cxx_acceptable_generic(&self, ty: &QualifiedName) -> bool {
+    pub(crate) fn cxx_generic_behavior(&self, ty: &QualifiedName) -> CxxGenericType {
         self.get(ty)
-            .map(|x| {
-                matches!(
-                    x.behavior,
-                    Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe
-                )
-            })
-            .unwrap_or(false)
+            .map(|x| x.get_generic_behavior())
+            .unwrap_or(CxxGenericType::NotGeneric)
     }
 
     pub(crate) fn is_cxx_acceptable_receiver(&self, ty: &QualifiedName) -> bool {
@@ -316,6 +336,12 @@ fn create_type_database() -> TypeDatabase {
         "String",
         "rust::String",
         Behavior::RustString,
+        None,
+    ));
+    db.insert(TypeDetails::new(
+        "std::boxed::Box",
+        "rust::Box",
+        Behavior::RustContainerByValueSafe,
         None,
     ));
     db.insert(TypeDetails::new(

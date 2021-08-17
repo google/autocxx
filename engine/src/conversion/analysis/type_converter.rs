@@ -18,7 +18,7 @@ use crate::{
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
-    known_types::known_types,
+    known_types::{known_types, CxxGenericType},
     types::{make_ident, Namespace, QualifiedName},
 };
 use autocxx_parser::IncludeCppConfig;
@@ -276,13 +276,17 @@ impl<'a> TypeConverter<'a> {
 
         // Finally let's see if it's generic.
         if let Some(last_seg) = Self::get_generic_args(&mut typ) {
-            if known_types().is_cxx_acceptable_generic(&tn) {
+            let generic_behavior = known_types().cxx_generic_behavior(&tn);
+            let forward_declarations_ok = generic_behavior == CxxGenericType::RustGeneric
+                || ctx.allow_instantiation_of_forward_declaration();
+            if generic_behavior != CxxGenericType::NotGeneric {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
                 self.confirm_inner_type_is_acceptable_generic_payload(
                     &last_seg.arguments,
                     &tn,
-                    ctx,
+                    generic_behavior,
+                    forward_declarations_ok,
                 )?;
                 if let PathArguments::AngleBracketed(ref mut ab) = last_seg.arguments {
                     let mut innerty = self.convert_punctuated(ab.args.clone(), ns)?;
@@ -404,7 +408,8 @@ impl<'a> TypeConverter<'a> {
         &self,
         path_args: &PathArguments,
         desc: &QualifiedName,
-        ctx: &TypeConversionContext,
+        generic_behavior: CxxGenericType,
+        forward_declarations_ok: bool,
     ) -> Result<(), ConvertError> {
         // For now, all supported generics accept the same payloads. This
         // may change in future in which case we'll need to accept more arguments here.
@@ -418,18 +423,27 @@ impl<'a> TypeConverter<'a> {
                     match inner {
                         GenericArgument::Type(Type::Path(typ)) => {
                             let inner_qn = QualifiedName::from_type_path(&typ);
-                            if !ctx.allow_instantiation_of_forward_declaration()
+                            if !forward_declarations_ok
                                 && self.forward_declarations.contains(&inner_qn)
                             {
                                 return Err(ConvertError::TypeContainingForwardDeclaration(
                                     inner_qn,
                                 ));
                             }
+                            if generic_behavior == CxxGenericType::RustGeneric {
+                                if !inner_qn.get_namespace().is_empty() {
+                                    return Err(ConvertError::RustTypeWithAPath(inner_qn));
+                                }
+                                if !self.config.is_rust_type(&inner_qn.get_final_ident()) {
+                                    return Err(ConvertError::BoxContainingNonRustType(inner_qn));
+                                }
+                            }
                             if let Some(more_generics) = typ.path.segments.last() {
                                 self.confirm_inner_type_is_acceptable_generic_payload(
                                     &more_generics.arguments,
                                     desc,
-                                    ctx,
+                                    generic_behavior,
+                                    forward_declarations_ok,
                                 )?;
                             }
                         }
