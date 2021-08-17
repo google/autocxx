@@ -29,6 +29,8 @@ proc-macro = true
 [dependencies]
 autocxx-parser = { path="../parser", version="0.11.1" }
 proc-macro-error = "1.0"
+proc-macro2 = "1.0.11"
+quote = "1.0"
 
 [dependencies.syn]
 version = "1.0"

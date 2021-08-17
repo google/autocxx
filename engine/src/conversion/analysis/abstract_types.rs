@@ -30,7 +30,7 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
             Api::Function {
                 analysis:
                     FnAnalysisBody {
-                        kind: FnKind::Method(self_ty_name, MethodKind::PureVirtual),
+                        kind: FnKind::Method(self_ty_name, MethodKind::PureVirtual(_)),
                         ..
                     },
                 ..

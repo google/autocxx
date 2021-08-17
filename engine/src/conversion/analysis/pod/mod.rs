@@ -108,9 +108,9 @@ pub(crate) fn analyze_pod_apis(
 fn analyze_enum(
     name: ApiName,
     mut item: ItemEnum,
-) -> Result<Option<Api<PodAnalysis>>, ConvertErrorWithContext> {
+) -> Result<Box<dyn Iterator<Item = Api<PodAnalysis>>>, ConvertErrorWithContext> {
     super::remove_bindgen_attrs(&mut item.attrs, name.name.get_final_ident())?;
-    Ok(Some(Api::Enum { name, item }))
+    Ok(Box::new(std::iter::once(Api::Enum { name, item })))
 }
 
 fn analyze_struct(
@@ -119,7 +119,7 @@ fn analyze_struct(
     extra_apis: &mut Vec<UnanalyzedApi>,
     name: ApiName,
     mut item: ItemStruct,
-) -> Result<Option<Api<PodAnalysis>>, ConvertErrorWithContext> {
+) -> Result<Box<dyn Iterator<Item = Api<PodAnalysis>>>, ConvertErrorWithContext> {
     let id = name.name.get_final_ident();
     super::remove_bindgen_attrs(&mut item.attrs, id.clone())?;
     let bases = get_bases(&item);
@@ -141,7 +141,7 @@ fn analyze_struct(
         // ... and say we don't depend on other types.
         TypeKind::NonPod
     };
-    Ok(Some(Api::Struct {
+    Ok(Box::new(std::iter::once(Api::Struct {
         name,
         item,
         analysis: PodStructAnalysisBody {
@@ -149,7 +149,7 @@ fn analyze_struct(
             bases,
             field_deps,
         },
-    }))
+    })))
 }
 
 fn get_struct_field_types(

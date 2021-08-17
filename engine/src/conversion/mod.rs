@@ -107,7 +107,8 @@ impl<'a> BridgeConverter<'a> {
                 let apis = parser.parse_items(items_to_process)?;
                 Self::dump_apis("parsing", &apis);
                 // Inside parse_results, we now have a list of APIs.
-                // We now enter various analysis phases. First, convert any typedefs.
+                // We now enter various analysis phases.
+                // Next, convert any typedefs.
                 // "Convert" means replacing bindgen-style type targets
                 // (e.g. root::std::unique_ptr) with cxx-style targets (e.g. UniquePtr).
                 let apis = convert_typedef_targets(self.config, apis);

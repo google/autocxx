@@ -60,7 +60,7 @@ pub(crate) fn convert_typedef_targets(
         Api::struct_unchanged,
         Api::enum_unchanged,
         |name, item, old_tyname, _| {
-            Ok(Some(match item {
+            Ok(Box::new(std::iter::once(match item {
                 TypedefKind::Type(ity) => get_replacement_typedef(
                     name,
                     ity,
@@ -77,7 +77,7 @@ pub(crate) fn convert_typedef_targets(
                         deps: HashSet::new(),
                     },
                 },
-            }))
+            })))
         },
     );
     results.extend(extra_apis.into_iter().map(add_analysis));

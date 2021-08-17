@@ -133,6 +133,7 @@ impl ParseForeignMod {
                 name: api_name(&self.ns, fun.item.sig.ident.clone(), &fun.item.attrs),
                 fun: Box::new(fun),
                 analysis: (),
+                name_for_gc: None,
             })
         }
     }

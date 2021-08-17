@@ -16,14 +16,16 @@ mod bridge_name_tracker;
 pub(crate) mod function_wrapper;
 mod overload_tracker;
 mod rust_name_tracker;
+mod subclass;
 
 use crate::{
     conversion::{
         analysis::{
+            fun::function_wrapper::CppFunctionKind,
             has_attr,
             type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::{ApiName, FuncToConvert},
+        api::{ApiName, FuncToConvert, SubclassName},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::convert_apis,
@@ -50,8 +52,10 @@ use crate::{
 };
 
 use self::{
-    bridge_name_tracker::BridgeNameTracker, overload_tracker::OverloadTracker,
+    bridge_name_tracker::BridgeNameTracker,
+    overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
+    subclass::{add_subclass_constructor, create_subclass_function},
 };
 
 use super::{
@@ -59,14 +63,22 @@ use super::{
     tdef::TypedefAnalysisBody,
 };
 
-pub(crate) enum MethodKind {
-    Normal,
-    Constructor,
-    Static,
-    Virtual,
-    PureVirtual,
+#[derive(Clone, Debug)]
+pub(crate) enum ReceiverMutability {
+    Const,
+    Mutable,
 }
 
+#[derive(Clone)]
+pub(crate) enum MethodKind {
+    Normal(ReceiverMutability),
+    Constructor,
+    Static,
+    Virtual(ReceiverMutability),
+    PureVirtual(ReceiverMutability),
+}
+
+#[derive(Clone)]
 pub(crate) enum FnKind {
     Function,
     Method(QualifiedName, MethodKind),
@@ -74,6 +86,8 @@ pub(crate) enum FnKind {
 
 /// Strategy for ensuring that the final, callable, Rust name
 /// is what the user originally expected.
+#[derive(Clone)]
+
 pub(crate) enum RustRenameStrategy {
     /// cxx::bridge name matches user expectations
     None,
@@ -84,6 +98,7 @@ pub(crate) enum RustRenameStrategy {
     RenameInOutputMod(Ident),
 }
 
+#[derive(Clone)]
 pub(crate) struct FnAnalysisBody {
     pub(crate) cxxbridge_name: Ident,
     pub(crate) rust_name: String,
@@ -92,20 +107,22 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) kind: FnKind,
     pub(crate) ret_type: ReturnType,
     pub(crate) param_details: Vec<ArgumentAnalysis>,
+    pub(crate) ret_conversion: Option<TypeConversionPolicy>,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
     pub(crate) cpp_wrapper: Option<CppFunction>,
     pub(crate) deps: HashSet<QualifiedName>,
 }
 
+#[derive(Clone)]
 pub(crate) struct ArgumentAnalysis {
     pub(crate) conversion: TypeConversionPolicy,
     pub(crate) name: Pat,
-    pub(crate) self_type: Option<QualifiedName>,
-    was_reference: bool,
-    deps: HashSet<QualifiedName>,
-    is_virtual: bool,
-    requires_unsafe: bool,
+    pub(crate) self_type: Option<(QualifiedName, ReceiverMutability)>,
+    pub(crate) was_reference: bool,
+    pub(crate) deps: HashSet<QualifiedName>,
+    pub(crate) is_virtual: bool,
+    pub(crate) requires_unsafe: bool,
 }
 
 struct ReturnTypeAnalysis {
@@ -132,6 +149,7 @@ pub(crate) struct FnAnalyzer<'a> {
     pod_safe_types: HashSet<QualifiedName>,
     config: &'a IncludeCppConfig,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
+    subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -149,12 +167,13 @@ impl<'a> FnAnalyzer<'a> {
             config,
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
+            subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
         };
         let mut results = Vec::new();
         convert_apis(
             apis,
             &mut results,
-            |name, fun, _| me.analyze_foreign_fn(name, fun),
+            |name, fun, _, _| me.analyze_foreign_fn(name, fun, false),
             Api::struct_unchanged,
             Api::enum_unchanged,
             Api::typedef_unchanged,
@@ -255,7 +274,8 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         func_information: Box<FuncToConvert>,
-    ) -> Result<Option<Api<FnAnalysis>>, ConvertErrorWithContext> {
+        always_allow: bool,
+    ) -> Result<Box<dyn Iterator<Item = Api<FnAnalysis>>>, ConvertErrorWithContext> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
         let mut cpp_name = name.cpp_name.clone();
@@ -267,7 +287,7 @@ impl<'a> FnAnalyzer<'a> {
         // for diagnostics whilst we do that.
         let initial_rust_name = fun.sig.ident.to_string();
         if initial_rust_name.ends_with("_destructor") {
-            return Ok(None);
+            return Ok(Box::new(std::iter::empty()));
         }
         let diagnostic_display_name = cpp_name.as_ref().unwrap_or(&initial_rust_name);
 
@@ -334,23 +354,26 @@ impl<'a> FnAnalyzer<'a> {
 
         // Let's spend some time figuring out the kind of this function (i.e. method,
         // virtual function, etc.)
-        let (is_static_method, self_ty) = if self_ty.is_none() {
-            // Even if we can't find a 'self' parameter this could conceivably
-            // be a static method.
-            let self_ty = func_information.self_ty.clone();
-            (self_ty.is_some(), self_ty)
-        } else {
-            (false, self_ty)
+        let (is_static_method, self_ty, receiver_mutability) = match self_ty {
+            None => {
+                // Even if we can't find a 'self' parameter this could conceivably
+                // be a static method.
+                let self_ty = func_information.self_ty.clone();
+                (self_ty.is_some(), self_ty, None)
+            }
+            Some((self_ty, receiver_mutability)) => {
+                (false, Some(self_ty), Some(receiver_mutability))
+            }
         };
 
         let (kind, error_context, rust_name) = if let Some(self_ty) = self_ty {
             // Some kind of method.
-            if !self.is_on_allowlist(&self_ty) {
+            if !self.is_on_allowlist(&self_ty) && !always_allow {
                 // Bindgen will output methods for types which have been encountered
                 // virally as arguments on other allowlisted types. But we don't want
                 // to generate methods unless the user has specifically asked us to.
                 // It may, for instance, be a private type.
-                return Ok(None);
+                return Ok(Box::new(std::iter::empty()));
             }
 
             // Method or static method.
@@ -380,14 +403,18 @@ impl<'a> FnAnalyzer<'a> {
                 MethodKind::Constructor
             } else if is_static_method {
                 MethodKind::Static
-            } else if param_details.iter().any(|pd| pd.is_virtual) {
-                if has_attr(&fun.attrs, "bindgen_pure_virtual") {
-                    MethodKind::PureVirtual
-                } else {
-                    MethodKind::Virtual
-                }
             } else {
-                MethodKind::Normal
+                let receiver_mutability =
+                    receiver_mutability.expect("Failed to find receiver details");
+                if param_details.iter().any(|pd| pd.is_virtual) {
+                    if has_attr(&fun.attrs, "bindgen_pure_virtual") {
+                        MethodKind::PureVirtual(receiver_mutability)
+                    } else {
+                        MethodKind::Virtual(receiver_mutability)
+                    }
+                } else {
+                    MethodKind::Normal(receiver_mutability)
+                }
             };
             let error_context = ErrorContext::Method {
                 self_ty: self_ty.get_final_ident(),
@@ -467,8 +494,6 @@ impl<'a> FnAnalyzer<'a> {
         let mut return_analysis = if let FnKind::Method(ref self_ty, MethodKind::Constructor) = kind
         {
             let constructed_type = self_ty.to_type_path();
-            let mut these_deps = HashSet::new();
-            these_deps.insert(self_ty.clone());
             ReturnTypeAnalysis {
                 rt: parse_quote! {
                     -> #constructed_type
@@ -477,7 +502,7 @@ impl<'a> FnAnalyzer<'a> {
                     #constructed_type
                 })),
                 was_reference: false,
-                deps: these_deps,
+                deps: std::iter::once(self_ty).cloned().collect(),
             }
         } else {
             self.convert_return_type(&fun.sig.output, ns, reference_return)
@@ -515,8 +540,8 @@ impl<'a> FnAnalyzer<'a> {
         // original function.
         let wrapper_function_needed = match kind {
             FnKind::Method(_, MethodKind::Static)
-            | FnKind::Method(_, MethodKind::Virtual)
-            | FnKind::Method(_, MethodKind::PureVirtual) => true,
+            | FnKind::Method(_, MethodKind::Virtual(_))
+            | FnKind::Method(_, MethodKind::PureVirtual(_)) => true,
             FnKind::Method(..) if cxxbridge_name != rust_name => true,
             _ if param_conversion_needed => true,
             _ if ret_type_conversion_needed => true,
@@ -580,9 +605,15 @@ impl<'a> FnAnalyzer<'a> {
             Some(CppFunction {
                 payload,
                 wrapper_function_name: cxxbridge_name.clone(),
-                return_conversion: ret_type_conversion,
+                return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
-                is_a_method: has_receiver,
+                kind: if has_receiver {
+                    CppFunctionKind::Method
+                } else {
+                    CppFunctionKind::Function
+                },
+                pass_obs_field: false,
+                qualification: None,
             })
         } else {
             None
@@ -615,26 +646,79 @@ impl<'a> FnAnalyzer<'a> {
             }
         };
 
-        Ok(Some(Api::Function {
+        let analysis = FnAnalysisBody {
+            cxxbridge_name,
+            rust_name: rust_name.clone(),
+            rust_rename_strategy,
+            params,
+            ret_conversion: ret_type_conversion,
+            kind: kind.clone(),
+            ret_type,
+            param_details,
+            requires_unsafe,
+            vis,
+            cpp_wrapper,
+            deps,
+        };
+        let name = ApiName {
+            cpp_name,
+            name: QualifiedName::new(ns, id),
+        };
+        let mut results = Vec::new();
+
+        // Consider whether we need to synthesize subclass items.
+        let mut to_synthesize = Vec::new();
+        match &kind {
+            FnKind::Method(sup, MethodKind::Constructor) => {
+                for sub in self.subclasses_by_superclass(sup) {
+                    add_subclass_constructor(sub, &mut results, &analysis, &func_information);
+                }
+            }
+            FnKind::Method(
+                sup,
+                MethodKind::Virtual(receiver_mutability)
+                | MethodKind::PureVirtual(receiver_mutability),
+            ) => {
+                for sub in self.subclasses_by_superclass(sup) {
+                    let subclass_function =
+                        create_subclass_function(sub, &analysis, &name, receiver_mutability, sup);
+                    results.push(subclass_function);
+
+                    let mut item = func_information.item.clone();
+                    item.sig.ident = SubclassName::get_super_fn_name(&rust_name);
+                    let self_ty = Some(QualifiedName::new(&Namespace::new(), sub.cpp()));
+                    to_synthesize.push(Box::new(FuncToConvert {
+                        item,
+                        virtual_this_type: self_ty.clone(),
+                        self_ty,
+                    }));
+                }
+            }
+            _ => {}
+        }
+        for maybe_wrap in to_synthesize {
+            let name = ApiName::new(name.name.get_namespace(), maybe_wrap.item.sig.ident.clone());
+            results.extend(self.analyze_foreign_fn(name, maybe_wrap, true)?);
+        }
+
+        results.push(Api::Function {
             fun: func_information,
-            analysis: FnAnalysisBody {
-                cxxbridge_name,
-                rust_name,
-                rust_rename_strategy,
-                params,
-                kind,
-                ret_type,
-                param_details,
-                requires_unsafe,
-                vis,
-                cpp_wrapper,
-                deps,
-            },
-            name: ApiName {
-                cpp_name,
-                name: QualifiedName::new(ns, id),
-            },
-        }))
+            analysis,
+            name,
+            name_for_gc: None,
+        });
+
+        Ok(Box::new(results.into_iter()))
+    }
+
+    fn subclasses_by_superclass(
+        &self,
+        sup: &QualifiedName,
+    ) -> Box<dyn Iterator<Item = &SubclassName> + '_> {
+        match self.subclasses_by_superclass.get(sup) {
+            Some(subs) => Box::new(subs.iter()),
+            None => Box::new(std::iter::empty()),
+        }
     }
 
     fn convert_fn_arg(
@@ -659,6 +743,11 @@ impl<'a> FnAnalyzer<'a> {
                                 elem, mutability, ..
                             }) => match elem.as_ref() {
                                 Type::Path(typ) => {
+                                    let receiver_mutability = if mutability.is_some() {
+                                        ReceiverMutability::Mutable
+                                    } else {
+                                        ReceiverMutability::Const
+                                    };
                                     let mut this_type = QualifiedName::from_type_path(typ);
                                     if this_type.is_cvoid() && pp.ident == "this" {
                                         is_virtual = true;
@@ -678,7 +767,7 @@ impl<'a> FnAnalyzer<'a> {
                                             * #mutability #const_token #this_type_path
                                         });
                                     }
-                                    Ok(this_type)
+                                    Ok((this_type, receiver_mutability))
                                 }
                                 _ => Err(ConvertError::UnexpectedThisType(
                                     ns.clone(),
@@ -825,12 +914,18 @@ impl<'a> FnAnalyzer<'a> {
 impl Api<FnAnalysis> {
     pub(crate) fn typename_for_allowlist(&self) -> QualifiedName {
         match &self {
+            Api::Function {
+                name_for_gc: Some(name),
+                ..
+            } => name.clone(),
             Api::Function { analysis, .. } => match analysis.kind {
                 FnKind::Method(ref self_ty, _) => self_ty.clone(),
                 FnKind::Function => {
                     QualifiedName::new(self.name().get_namespace(), make_ident(&analysis.rust_name))
                 }
             },
+            Api::RustSubclassFn { subclass, .. }
+            | Api::RustSubclassConstructor { subclass, .. } => subclass.0.name.clone(),
             _ => self.name().clone(),
         }
     }
@@ -843,7 +938,12 @@ impl Api<FnAnalysis> {
     pub(crate) fn needs_cpp_codegen(&self) -> bool {
         match &self {
             Api::Function { analysis, .. } => analysis.cpp_wrapper.is_some(),
-            Api::StringConstructor { .. } | Api::ConcreteType { .. } | Api::CType { .. } => true,
+            Api::StringConstructor { .. }
+            | Api::ConcreteType { .. }
+            | Api::CType { .. }
+            | Api::RustSubclassConstructor { .. }
+            | Api::RustSubclassFn { .. }
+            | Api::Subclass { .. } => true,
             _ => false,
         }
     }
@@ -851,7 +951,11 @@ impl Api<FnAnalysis> {
     pub(crate) fn cxxbridge_name(&self) -> Option<Ident> {
         match self {
             Api::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
-            Api::StringConstructor { .. } | Api::Const { .. } | Api::IgnoredItem { .. } => None,
+            Api::StringConstructor { .. }
+            | Api::Const { .. }
+            | Api::IgnoredItem { .. }
+            | Api::RustSubclassConstructor { .. }
+            | Api::RustSubclassFn { .. } => None,
             _ => Some(self.name().get_final_ident()),
         }
     }
@@ -866,6 +970,13 @@ impl Api<FnAnalysis> {
             } => Box::new(old_tyname.iter().chain(deps.iter())),
             Api::Struct { analysis, .. } => Box::new(analysis.field_deps.iter()),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter()),
+            Api::Subclass {
+                name: _,
+                superclass,
+            } => Box::new(std::iter::once(superclass)),
+            Api::RustSubclassFn { details, .. } => {
+                Box::new(std::iter::once(&details.super_fn_api_name))
+            }
             _ => Box::new(std::iter::empty()),
         }
     }

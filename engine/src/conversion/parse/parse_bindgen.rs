@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{ApiName, TypedefKind, UnanalyzedApi},
+        api::{Api, ApiName, SubclassName, TypedefKind, UnanalyzedApi},
         ConvertError,
     },
     types::Namespace,
@@ -104,10 +104,20 @@ impl<'a> ParseBindgen<'a> {
         if !self.config.exclude_utilities() {
             generate_utilities(&mut self.apis, self.config);
         }
+        self.add_subclasses();
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
         self.confirm_all_generate_directives_obeyed()?;
         Ok(self.apis)
+    }
+
+    fn add_subclasses(&mut self) {
+        self.apis
+            .extend(self.config.subclasses.iter().map(|sc| Api::Subclass {
+                // TODO support namespaces
+                name: SubclassName::new(sc.subclass.clone()),
+                superclass: QualifiedName::new_from_cpp_name(&sc.superclass),
+            }));
     }
 
     fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {

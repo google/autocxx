@@ -141,13 +141,13 @@ pub(super) fn gen_function(
         #vis #unsafety fn #cxxbridge_name ( #params ) #ret_type;
     ));
     RsCodegenResult {
-        extern_c_mod_item: Some(extern_c_mod_item),
+        extern_c_mod_items: vec![extern_c_mod_item],
         bridge_items: Vec::new(),
         global_items: Vec::new(),
-        bindgen_mod_item: None,
+        bindgen_mod_items: Vec::new(),
         impl_entry,
         materialization,
-        extern_rust_mod_item: None,
+        extern_rust_mod_items: Vec::new(),
     }
 }
 

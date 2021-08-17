@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::{Namespace, QualifiedName};
+use crate::types::{make_ident, Namespace, QualifiedName};
 use syn::{
-    ForeignItemFn, Ident, ImplItem, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, Type,
+    punctuated::Punctuated, token::Comma, FnArg, ForeignItemFn, Ident, ImplItem, ItemConst,
+    ItemEnum, ItemStruct, ItemType, ItemUse, ReturnType, Type,
 };
 
 use super::{
+    analysis::fun::{function_wrapper::CppFunction, ReceiverMutability},
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
@@ -81,6 +83,7 @@ pub(crate) enum TypedefKind {
 
 /// Name information for an API. This includes the name by
 /// which we know it in Rust, and its C++ name, which may differ.
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub(crate) struct ApiName {
     pub(crate) name: QualifiedName,
     pub(crate) cpp_name: Option<String>,
@@ -96,6 +99,42 @@ impl ApiName {
 
     pub(crate) fn new_in_root_namespace(id: Ident) -> Self {
         Self::new(&Namespace::new(), id)
+    }
+}
+
+/// A name representing a subclass.
+/// This is a simple newtype wrapper which exists such that
+/// we can consistently generate the names of the various subsidiary
+/// types which are required both in C++ and Rust codegen.
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub(crate) struct SubclassName(pub(crate) ApiName);
+
+impl SubclassName {
+    pub(crate) fn new(id: Ident) -> Self {
+        Self(ApiName::new_in_root_namespace(id))
+    }
+    pub(crate) fn id(&self) -> Ident {
+        self.0.name.get_final_ident()
+    }
+    /// Generate the name for the 'Holder' type
+    pub(crate) fn holder(&self) -> Ident {
+        self.with_suffix("Holder")
+    }
+    /// Generate the name for the 'Cpp' type
+    pub(crate) fn cpp(&self) -> Ident {
+        self.with_suffix("Cpp")
+    }
+    pub(crate) fn cpp_remove_ownership(&self) -> Ident {
+        self.with_suffix("Cpp_remove_ownership")
+    }
+    pub(crate) fn remove_ownership(&self) -> Ident {
+        self.with_suffix("_remove_ownership")
+    }
+    fn with_suffix(&self, suffix: &str) -> Ident {
+        make_ident(format!("{}{}", self.0.name.get_final_item(), suffix))
+    }
+    pub(crate) fn get_super_fn_name(id: &str) -> Ident {
+        make_ident(format!("{}_super", id))
     }
 }
 
@@ -131,6 +170,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// A function. May include some analysis.
     Function {
         name: ApiName,
+        name_for_gc: Option<QualifiedName>,
         fun: Box<FuncToConvert>,
         analysis: T::FunAnalysis,
     },
@@ -173,6 +213,33 @@ pub(crate) enum Api<T: AnalysisPhase> {
     },
     /// A Rust type which is not a C++ type.
     RustType { name: ApiName },
+    /// Some function for the extern "Rust" block.
+    RustSubclassFn {
+        name: ApiName,
+        subclass: SubclassName,
+        details: Box<RustSubclassFnDetails>,
+    },
+    // A constructor for a subclass.
+    RustSubclassConstructor {
+        name: ApiName,
+        subclass: SubclassName,
+        cpp_impl: Box<CppFunction>,
+    },
+    /// A Rust subclass of a C++ class.
+    Subclass {
+        name: SubclassName,
+        superclass: QualifiedName,
+    },
+}
+
+pub(crate) struct RustSubclassFnDetails {
+    pub(crate) params: Punctuated<FnArg, Comma>,
+    pub(crate) ret: ReturnType,
+    pub(crate) cpp_impl: CppFunction,
+    pub(crate) method_name: Ident,
+    pub(crate) superclass: QualifiedName,
+    pub(crate) receiver_mutability: ReceiverMutability,
+    pub(crate) super_fn_api_name: QualifiedName,
 }
 
 impl<T: AnalysisPhase> Api<T> {
@@ -189,6 +256,9 @@ impl<T: AnalysisPhase> Api<T> {
             Api::CType { name, .. } => name,
             Api::IgnoredItem { name, .. } => name,
             Api::RustType { name, .. } => name,
+            Api::RustSubclassFn { name, .. } => name,
+            Api::RustSubclassConstructor { name, .. } => name,
+            Api::Subclass { name, .. } => &name.0,
         }
     }
 
@@ -231,43 +301,57 @@ impl<T: AnalysisPhase> Api<T> {
         item: TypedefKind,
         old_tyname: Option<QualifiedName>,
         analysis: T::TypedefAnalysis,
-    ) -> Result<Option<Api<T>>, ConvertErrorWithContext> {
-        Ok(Some(Api::Typedef {
+    ) -> Result<Box<dyn Iterator<Item = Api<T>>>, ConvertErrorWithContext>
+    where
+        T: 'static,
+    {
+        Ok(Box::new(std::iter::once(Api::Typedef {
             name,
             item,
             old_tyname,
             analysis,
-        }))
+        })))
     }
 
     pub(crate) fn struct_unchanged(
         name: ApiName,
         item: ItemStruct,
         analysis: T::StructAnalysis,
-    ) -> Result<Option<Api<T>>, ConvertErrorWithContext> {
-        Ok(Some(Api::Struct {
+    ) -> Result<Box<dyn Iterator<Item = Api<T>>>, ConvertErrorWithContext>
+    where
+        T: 'static,
+    {
+        Ok(Box::new(std::iter::once(Api::Struct {
             name,
             item,
             analysis,
-        }))
+        })))
     }
 
     pub(crate) fn fun_unchanged(
         name: ApiName,
         fun: Box<FuncToConvert>,
         analysis: T::FunAnalysis,
-    ) -> Result<Option<Api<T>>, ConvertErrorWithContext> {
-        Ok(Some(Api::Function {
+        name_for_gc: Option<QualifiedName>,
+    ) -> Result<Box<dyn Iterator<Item = Api<T>>>, ConvertErrorWithContext>
+    where
+        T: 'static,
+    {
+        Ok(Box::new(std::iter::once(Api::Function {
             name,
             fun,
             analysis,
-        }))
+            name_for_gc,
+        })))
     }
 
     pub(crate) fn enum_unchanged(
         name: ApiName,
         item: ItemEnum,
-    ) -> Result<Option<Api<T>>, ConvertErrorWithContext> {
-        Ok(Some(Api::Enum { name, item }))
+    ) -> Result<Box<dyn Iterator<Item = Api<T>>>, ConvertErrorWithContext>
+    where
+        T: 'static,
+    {
+        Ok(Box::new(std::iter::once(Api::Enum { name, item })))
     }
 }
