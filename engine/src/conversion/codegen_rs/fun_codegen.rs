@@ -144,6 +144,7 @@ pub(super) fn gen_function(
         bindgen_mod_item: None,
         impl_entry,
         materialization,
+        extern_rust_mod_item: None,
     }
 }
 

@@ -164,7 +164,9 @@ impl<'a> ParseBindgen<'a> {
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
                 let name = api_name_qualified(ns, s.ident.clone(), &s.attrs)?;
-                let api = if is_forward_declaration {
+                let api = if ns.is_empty() && self.config.is_rust_type(&s.ident) {
+                    UnanalyzedApi::RustType { name }
+                } else if is_forward_declaration {
                     UnanalyzedApi::ForwardDeclaration { name }
                 } else {
                     UnanalyzedApi::Struct {

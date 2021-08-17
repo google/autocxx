@@ -104,6 +104,7 @@ pub struct IncludeCppConfig {
     blocklist: Vec<String>,
     exclude_utilities: bool,
     mod_name: Option<Ident>,
+    pub rust_types: Vec<Ident>,
 }
 
 impl Parse for IncludeCppConfig {
@@ -120,6 +121,7 @@ impl Parse for IncludeCppConfig {
         let mut allowlist = Allowlist::Unspecified;
         let mut blocklist = Vec::new();
         let mut pod_requests = Vec::new();
+        let mut rust_types = Vec::new();
         let mut exclude_utilities = false;
         let mut mod_name = None;
 
@@ -155,6 +157,11 @@ impl Parse for IncludeCppConfig {
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
                     blocklist.push(generate.value());
+                } else if ident == "rust_type" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let ident: syn::Ident = args.parse()?;
+                    rust_types.push(ident);
                 } else if ident == "parse_only" {
                     parse_only = true;
                     swallow_parentheses(&input, &ident)?;
@@ -194,6 +201,7 @@ impl Parse for IncludeCppConfig {
             parse_only,
             exclude_impls,
             pod_requests,
+            rust_types,
             allowlist,
             blocklist,
             exclude_utilities,
@@ -300,6 +308,10 @@ impl IncludeCppConfig {
                 .map(|i| i.to_string())
                 .unwrap_or_else(|| "default".into())
         )
+    }
+
+    pub fn is_rust_type(&self, id: &Ident) -> bool {
+        self.rust_types.contains(id)
     }
 }
 

@@ -52,7 +52,7 @@ use super::{
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::quote;
 
-unzip_n::unzip_n!(pub 3);
+unzip_n::unzip_n!(pub 4);
 
 /// Whether and how this item should be exposed in the mods constructed
 /// for actual end-user use.
@@ -166,14 +166,24 @@ impl<'a> RsCodeGenerator<'a> {
         // sub-mods by namespace. From here on, things are flat.
         let (_, rs_codegen_results): (Vec<_>, Vec<_>) =
             rs_codegen_results_and_namespaces.into_iter().unzip();
-        let (extern_c_mod_items, all_items, bridge_items) = rs_codegen_results
-            .into_iter()
-            .map(|api| (api.extern_c_mod_item, api.global_items, api.bridge_items))
-            .unzip_n_vec();
+        let (extern_c_mod_items, extern_rust_mod_items, all_items, bridge_items) =
+            rs_codegen_results
+                .into_iter()
+                .map(|api| {
+                    (
+                        api.extern_c_mod_item,
+                        api.extern_rust_mod_item,
+                        api.global_items,
+                        api.bridge_items,
+                    )
+                })
+                .unzip_n_vec();
         // Items for the [cxx::bridge] mod...
         let mut bridge_items: Vec<Item> = bridge_items.into_iter().flatten().collect();
         // Things to include in the "extern "C"" mod passed within the cxx::bridge
         let mut extern_c_mod_items = remove_nones(extern_c_mod_items);
+        // The same for extern "Rust"
+        let mut extern_rust_mod_items = remove_nones(extern_rust_mod_items);
         // And a list of global items to include at the top level.
         let mut all_items: Vec<Item> = all_items.into_iter().flatten().collect();
         // And finally any C++ we need to generate. And by "we" I mean autocxx not cxx.
@@ -187,6 +197,11 @@ impl<'a> RsCodeGenerator<'a> {
         );
         extern_c_mod.items.append(&mut extern_c_mod_items);
         bridge_items.push(Self::make_foreign_mod_unsafe(extern_c_mod));
+        let mut extern_rust_mod: ItemForeignMod = parse_quote!(
+            extern "Rust" {}
+        );
+        extern_rust_mod.items.append(&mut extern_rust_mod_items);
+        bridge_items.push(Item::ForeignMod(extern_rust_mod));
         // The extensive use of parse_quote here could end up
         // being a performance bottleneck. If so, we might want
         // to set the 'contents' field of the ItemMod
@@ -383,6 +398,7 @@ impl<'a> RsCodeGenerator<'a> {
                     bindgen_mod_item: None,
                     impl_entry: None,
                     materialization: Use::UsedFromCxxBridgeWithAlias(make_ident("make_string")),
+                    extern_rust_mod_item: None,
                 }
             }
             Api::ConcreteType { .. } => RsCodegenResult {
@@ -392,6 +408,7 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id.clone()))),
                 impl_entry: None,
                 materialization: Use::Unused,
+                extern_rust_mod_item: None,
             },
             Api::ForwardDeclaration { .. } => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Verbatim(self.generate_cxxbridge_type(&name))),
@@ -400,6 +417,7 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_item: Some(Item::Struct(new_non_pod_struct(id))),
                 impl_entry: None,
                 materialization: Use::UsedFromCxxBridge,
+                extern_rust_mod_item: None,
             },
             Api::Function { fun, analysis, .. } => {
                 gen_function(name.get_namespace(), *fun, analysis, cpp_call_name)
@@ -411,6 +429,7 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_c_mod_item: None,
                 bindgen_mod_item: Some(Item::Const(const_item)),
                 materialization: Use::UsedFromBindgen,
+                extern_rust_mod_item: None,
             },
             Api::Typedef { analysis, .. } => RsCodegenResult {
                 extern_c_mod_item: None,
@@ -422,6 +441,7 @@ impl<'a> RsCodeGenerator<'a> {
                 }),
                 impl_entry: None,
                 materialization: Use::UsedFromBindgen,
+                extern_rust_mod_item: None,
             },
             Api::Struct { item, analysis, .. } => {
                 self.generate_type(&name, id, item, analysis.kind, Item::Struct)
@@ -438,7 +458,24 @@ impl<'a> RsCodeGenerator<'a> {
                 })),
                 bindgen_mod_item: None,
                 materialization: Use::Unused,
+                extern_rust_mod_item: None,
             },
+            Api::RustType { .. } => {
+                let id = api.name().get_final_ident();
+                RsCodegenResult {
+                    extern_c_mod_item: None,
+                    bridge_items: Vec::new(),
+                    bindgen_mod_item: None,
+                    materialization: Use::Unused,
+                    global_items: vec![parse_quote! {
+                        use super::#id;
+                    }],
+                    impl_entry: None,
+                    extern_rust_mod_item: Some(parse_quote! {
+                        type #id;
+                    }),
+                }
+            }
             Api::IgnoredItem { err, ctx, .. } => Self::generate_error_entry(err, ctx),
         }
     }
@@ -465,6 +502,7 @@ impl<'a> RsCodeGenerator<'a> {
             extern_c_mod_item: Some(ForeignItem::Verbatim(self.generate_cxxbridge_type(name))),
             bindgen_mod_item: Some(item_type(item)),
             materialization: Use::UsedFromCxxBridge,
+            extern_rust_mod_item: None,
         }
     }
 
@@ -526,6 +564,7 @@ impl<'a> RsCodeGenerator<'a> {
             extern_c_mod_item: None,
             bindgen_mod_item: None,
             materialization,
+            extern_rust_mod_item: None,
         }
     }
 
@@ -639,6 +678,7 @@ impl<T: AnalysisPhase> HasNs for Api<T> {
 /// These are then concatenated together into the final generated code.
 struct RsCodegenResult {
     extern_c_mod_item: Option<ForeignItem>,
+    extern_rust_mod_item: Option<ForeignItem>,
     bridge_items: Vec<Item>,
     global_items: Vec<Item>,
     bindgen_mod_item: Option<Item>,
