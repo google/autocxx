@@ -50,6 +50,8 @@ pub enum ConvertError {
     ReservedName,
     DuplicateCxxBridgeName,
     UnsupportedReceiver,
+    BoxContainingNonRustType(QualifiedName),
+    RustTypeWithAPath(QualifiedName),
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -92,6 +94,8 @@ impl Display for ConvertError {
             ConvertError::ReservedName => write!(f, "The item name is a reserved word in Rust.")?,
             ConvertError::DuplicateCxxBridgeName => write!(f, "This item name is used in multiple namespaces. At present, autocxx and cxx allow only one type of a given name. This limitation will be fixed in future.")?,
             ConvertError::UnsupportedReceiver => write!(f, "This is a method on a type which can't be used as the receiver in Rust (i.e. self/this). This is probably because some type involves template specialization.")?,
+            ConvertError::BoxContainingNonRustType(ty) => write!(f, "A rust::Box<T> was encountered where T was not known to be a Rust type. Use rust_type!(T): {}", ty.to_cpp_name())?,
+            ConvertError::RustTypeWithAPath(ty) => write!(f, "A qualified Rust type was found (i.e. one containing ::): {}. Rust types must always be a simple identifier.", ty.to_cpp_name())?,
         }
         Ok(())
     }

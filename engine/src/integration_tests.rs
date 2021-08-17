@@ -5995,6 +5995,35 @@ fn test_rust_reference_method() {
     );
 }
 
+#[test]
+fn test_box() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct Foo;
+        inline void take_box(rust::Box<Foo>) {
+        }
+    "};
+    run_test_ex2(
+        "",
+        hdr,
+        quote! {
+            ffi::take_box(Box::new(Foo { a: "Hello".into() }))
+        },
+        &["take_box"],
+        &[],
+        Some(quote! {
+            rust_type!(Foo)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            pub struct Foo {
+                a: String,
+            }
+        }),
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
