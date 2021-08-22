@@ -44,7 +44,6 @@ use syn::{
 use crate::{
     conversion::{
         api::{AnalysisPhase, Api, TypeKind, UnanalyzedApi},
-        codegen_cpp::AdditionalNeed,
         ConvertError,
     },
     types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},
@@ -95,7 +94,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) param_details: Vec<ArgumentAnalysis>,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
-    pub(crate) cpp_wrapper: Option<AdditionalNeed>,
+    pub(crate) cpp_wrapper: Option<FunctionWrapper>,
     pub(crate) deps: HashSet<QualifiedName>,
 }
 
@@ -580,13 +579,13 @@ impl<'a> FnAnalyzer<'a> {
                 ));
             }
 
-            Some(AdditionalNeed::FunctionWrapper(Box::new(FunctionWrapper {
+            Some(FunctionWrapper {
                 payload,
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion,
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
                 is_a_method: has_receiver,
-            })))
+            })
         } else {
             None
         };
@@ -849,27 +848,6 @@ impl Api<FnAnalysis> {
             Api::Function { analysis, .. } => analysis.cpp_wrapper.is_some(),
             Api::StringConstructor { .. } | Api::ConcreteType { .. } | Api::CType { .. } => true,
             _ => false,
-        }
-    }
-
-    /// Whether this API requires generation of additional C++, and if so,
-    /// what.
-    /// This seems an odd place for this function (as opposed to in the [codegen_rs]
-    /// module) but, as it happens, even our Rust codegen phase needs to know if
-    /// more C++ is needed (so it can add #includes in the cxx mod).
-    /// And we can't answer the question _prior_ to this function analysis phase.
-    pub(crate) fn additional_cpp(&self) -> Option<AdditionalNeed> {
-        match &self {
-            Api::Function { analysis, .. } => analysis.cpp_wrapper.clone(),
-            Api::StringConstructor { .. } => Some(AdditionalNeed::MakeStringConstructor),
-            Api::ConcreteType { rs_definition, .. } => {
-                Some(AdditionalNeed::ConcreteTemplatedTypeTypedef(
-                    self.name().clone(),
-                    rs_definition.clone(),
-                ))
-            }
-            Api::CType { typename, .. } => Some(AdditionalNeed::CTypeTypedef(typename.clone())),
-            _ => None,
         }
     }
 

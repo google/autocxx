@@ -15,11 +15,10 @@
 mod function_wrapper_cpp;
 pub(crate) mod type_to_cpp;
 
-use crate::{types::QualifiedName, CppFilePair};
+use crate::{conversion::analysis::fun::FnAnalysisBody, types::QualifiedName, CppFilePair};
 use autocxx_parser::IncludeCppConfig;
 use itertools::Itertools;
 use std::collections::HashSet;
-use syn::Type;
 use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
 use super::{
@@ -30,15 +29,6 @@ use super::{
     api::Api,
     ConvertError,
 };
-
-/// Instructions for new C++ which we need to generate.
-#[derive(Clone)]
-pub(crate) enum AdditionalNeed {
-    MakeStringConstructor,
-    FunctionWrapper(Box<FunctionWrapper>),
-    CTypeTypedef(QualifiedName),
-    ConcreteTemplatedTypeTypedef(QualifiedName, Box<Type>),
-}
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
 struct Header {
@@ -93,7 +83,9 @@ impl<'a> CppCodeGenerator<'a> {
         config: &'a IncludeCppConfig,
     ) -> Result<Option<CppFilePair>, ConvertError> {
         let mut gen = CppCodeGenerator::new(inclusions, original_name_map_from_apis(apis), config);
-        gen.add_needs(apis.iter().filter_map(|api| api.additional_cpp()))?;
+        // The 'filter' on the following line is designed to ensure we don't accidentally
+        // end up out of sync with needs_cpp_codegen
+        gen.add_needs(apis.iter().filter(|api| api.needs_cpp_codegen()))?;
         Ok(gen.generate())
     }
 
@@ -110,20 +102,28 @@ impl<'a> CppCodeGenerator<'a> {
         }
     }
 
-    fn add_needs(
+    // It's important to keep this in sync with Api::needs_cpp_codegen.
+    fn add_needs<'b>(
         &mut self,
-        additions: impl Iterator<Item = AdditionalNeed>,
+        apis: impl Iterator<Item = &'a Api<FnAnalysis>>,
     ) -> Result<(), ConvertError> {
-        for need in additions {
-            match need {
-                AdditionalNeed::MakeStringConstructor => self.generate_string_constructor(),
-                AdditionalNeed::FunctionWrapper(by_value_wrapper) => {
-                    self.generate_by_value_wrapper(&by_value_wrapper)?
-                }
-                AdditionalNeed::CTypeTypedef(tn) => self.generate_ctype_typedef(&tn),
-                AdditionalNeed::ConcreteTemplatedTypeTypedef(tn, def) => {
-                    self.generate_typedef(&tn, type_to_cpp(&def, &self.original_name_map)?)
-                }
+        for api in apis {
+            match &api {
+                Api::StringConstructor { .. } => self.generate_string_constructor(),
+                Api::Function {
+                    analysis:
+                        FnAnalysisBody {
+                            cpp_wrapper: Some(cpp_wrapper),
+                            ..
+                        },
+                    ..
+                } => self.generate_by_value_wrapper(cpp_wrapper)?,
+                Api::ConcreteType { rs_definition, .. } => self.generate_typedef(
+                    &api.name(),
+                    type_to_cpp(&rs_definition, &self.original_name_map)?,
+                ),
+                Api::CType { typename, .. } => self.generate_ctype_typedef(&typename),
+                _ => panic!("Should have filtered on needs_cpp_codegen"),
             }
         }
         Ok(())
