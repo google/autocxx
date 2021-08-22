@@ -839,6 +839,19 @@ impl Api<FnAnalysis> {
         }
     }
 
+    /// Whether this API requires generation of additional C++.
+    /// This seems an odd place for this function (as opposed to in the [codegen_cpp]
+    /// module) but, as it happens, even our Rust codegen phase needs to know if
+    /// more C++ is needed (so it can add #includes in the cxx mod).
+    /// And we can't answer the question _prior_ to this function analysis phase.
+    pub(crate) fn needs_cpp_codegen(&self) -> bool {
+        match &self {
+            Api::Function { analysis, .. } => analysis.cpp_wrapper.is_some(),
+            Api::StringConstructor { .. } | Api::ConcreteType { .. } | Api::CType { .. } => true,
+            _ => false,
+        }
+    }
+
     /// Whether this API requires generation of additional C++, and if so,
     /// what.
     /// This seems an odd place for this function (as opposed to in the [codegen_rs]

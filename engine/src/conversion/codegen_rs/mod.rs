@@ -149,7 +149,7 @@ impl<'a> RsCodeGenerator<'a> {
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
-                let more_cpp_needed = api.additional_cpp().is_some();
+                let more_cpp_needed = api.needs_cpp_codegen();
                 let name = api.name().clone();
                 let gen = self.generate_rs_for_api(api);
                 ((name, gen), more_cpp_needed)
