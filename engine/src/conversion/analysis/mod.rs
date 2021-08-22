@@ -38,7 +38,7 @@ fn remove_bindgen_attrs(
     attrs: &mut Vec<Attribute>,
     id: Ident,
 ) -> Result<(), ConvertErrorWithContext> {
-    if has_attr(&attrs, "bindgen_unused_template_param") {
+    if has_attr(attrs, "bindgen_unused_template_param") {
         return Err(ConvertErrorWithContext(
             ConvertError::UnusedTemplateParam,
             Some(ErrorContext::Item(id)),

@@ -242,7 +242,7 @@ impl<'a> TypeConverter<'a> {
         let (typ, tn) = match self.resolve_typedef(&original_tn) {
             None => (typ, original_tn),
             Some(Type::Path(resolved_tp)) => {
-                let resolved_tn = QualifiedName::from_type_path(&resolved_tp);
+                let resolved_tn = QualifiedName::from_type_path(resolved_tp);
                 deps.insert(resolved_tn.clone());
                 (resolved_tp.clone(), resolved_tn)
             }
@@ -277,9 +277,9 @@ impl<'a> TypeConverter<'a> {
         // Finally let's see if it's generic.
         if let Some(last_seg) = Self::get_generic_args(&mut typ) {
             let generic_behavior = known_types().cxx_generic_behavior(&tn);
-            let forward_declarations_ok = generic_behavior == CxxGenericType::RustGeneric
+            let forward_declarations_ok = generic_behavior == CxxGenericType::Rust
                 || ctx.allow_instantiation_of_forward_declaration();
-            if generic_behavior != CxxGenericType::NotGeneric {
+            if generic_behavior != CxxGenericType::Not {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
                 self.confirm_inner_type_is_acceptable_generic_payload(
@@ -331,7 +331,7 @@ impl<'a> TypeConverter<'a> {
                     let mut innerty =
                         self.convert_type(t, ns, &TypeConversionContext::CxxInnerType)?;
                     types_encountered.extend(innerty.types_encountered.drain());
-                    extra_apis.extend(innerty.extra_apis.drain(..));
+                    extra_apis.append(&mut innerty.extra_apis);
                     GenericArgument::Type(innerty.ty)
                 }
                 _ => arg,
@@ -346,7 +346,7 @@ impl<'a> TypeConverter<'a> {
     }
 
     fn resolve_typedef<'b>(&'b self, tn: &QualifiedName) -> Option<&'b Type> {
-        self.typedefs.get(&tn).map(|resolution| match resolution {
+        self.typedefs.get(tn).map(|resolution| match resolution {
             Type::Path(typ) => {
                 let tn = QualifiedName::from_type_path(typ);
                 self.resolve_typedef(&tn).unwrap_or(resolution)
@@ -422,7 +422,7 @@ impl<'a> TypeConverter<'a> {
                 for inner in &ab.args {
                     match inner {
                         GenericArgument::Type(Type::Path(typ)) => {
-                            let inner_qn = QualifiedName::from_type_path(&typ);
+                            let inner_qn = QualifiedName::from_type_path(typ);
                             if !forward_declarations_ok
                                 && self.forward_declarations.contains(&inner_qn)
                             {
@@ -430,7 +430,7 @@ impl<'a> TypeConverter<'a> {
                                     inner_qn,
                                 ));
                             }
-                            if generic_behavior == CxxGenericType::RustGeneric {
+                            if generic_behavior == CxxGenericType::Rust {
                                 if !inner_qn.get_namespace().is_empty() {
                                     return Err(ConvertError::RustTypeWithAPath(inner_qn));
                                 }

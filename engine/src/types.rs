@@ -179,7 +179,7 @@ impl QualifiedName {
 
     /// Output the fully-qualified C++ name of this type.
     pub(crate) fn to_cpp_name(&self) -> String {
-        let special_cpp_name = known_types().special_cpp_name(&self);
+        let special_cpp_name = known_types().special_cpp_name(self);
         match special_cpp_name {
             Some(name) => name,
             None => self.0.iter().chain(std::iter::once(&self.1)).join("::"),
@@ -221,7 +221,7 @@ impl QualifiedName {
 impl Display for QualifiedName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for seg in &self.0 {
-            f.write_str(&seg)?;
+            f.write_str(seg)?;
             f.write_str("::")?;
         }
         f.write_str(&self.1)

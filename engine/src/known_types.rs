@@ -121,10 +121,10 @@ impl TypeDetails {
     fn get_generic_behavior(&self) -> CxxGenericType {
         match self.behavior {
             Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => {
-                CxxGenericType::CppGeneric
+                CxxGenericType::Cpp
             }
-            Behavior::RustContainerByValueSafe => CxxGenericType::RustGeneric,
-            _ => CxxGenericType::NotGeneric,
+            Behavior::RustContainerByValueSafe => CxxGenericType::Rust,
+            _ => CxxGenericType::Not,
         }
     }
 }
@@ -146,12 +146,12 @@ pub(crate) fn known_types() -> &'static TypeDatabase {
 #[derive(PartialEq, Clone, Copy)]
 pub enum CxxGenericType {
     /// Not a generic at all
-    NotGeneric,
+    Not,
     /// Some generic like cxx::UniquePtr where the contents must be a
     /// complete type.
-    CppGeneric,
+    Cpp,
     /// Some generic like rust::Box where forward declarations are OK
-    RustGeneric,
+    Rust,
 }
 
 impl TypeDatabase {
@@ -207,7 +207,7 @@ impl TypeDatabase {
     /// but a reference in Rust. This only applies to rust::Str
     /// (C++ name) which is &str in Rust.
     pub(crate) fn should_dereference_in_cpp(&self, tn: &QualifiedName) -> bool {
-        self.get(&tn)
+        self.get(tn)
             .map(|td| matches!(td.behavior, Behavior::RustStr))
             .unwrap_or(false)
     }
@@ -218,7 +218,7 @@ impl TypeDatabase {
     /// any PathArguments within this TypePath - callers should
     /// put them back again if needs be.
     pub(crate) fn consider_substitution(&self, tn: &QualifiedName) -> Option<TypePath> {
-        self.get(&tn).map(|td| td.to_type_path())
+        self.get(tn).map(|td| td.to_type_path())
     }
 
     pub(crate) fn special_cpp_name(&self, rs: &QualifiedName) -> Option<String> {
@@ -260,7 +260,7 @@ impl TypeDatabase {
     pub(crate) fn cxx_generic_behavior(&self, ty: &QualifiedName) -> CxxGenericType {
         self.get(ty)
             .map(|x| x.get_generic_behavior())
-            .unwrap_or(CxxGenericType::NotGeneric)
+            .unwrap_or(CxxGenericType::Not)
     }
 
     pub(crate) fn is_cxx_acceptable_receiver(&self, ty: &QualifiedName) -> bool {

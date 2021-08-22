@@ -128,7 +128,7 @@ fn analyze_struct(
         // It's POD so let's mark dependencies on things in its field
         get_struct_field_types(
             type_converter,
-            &name.name.get_namespace(),
+            name.name.get_namespace(),
             &item,
             &mut field_deps,
             extra_apis,
@@ -176,7 +176,7 @@ fn get_bases(item: &ItemStruct) -> HashSet<QualifiedName> {
                 .ident
                 .as_ref()
                 .filter(|id| id.to_string().starts_with("_base"))
-                .map(|_| QualifiedName::from_type_path(&typ)),
+                .map(|_| QualifiedName::from_type_path(typ)),
             _ => None,
         })
         .collect()

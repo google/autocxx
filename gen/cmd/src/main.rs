@@ -238,7 +238,7 @@ fn write_placeholders(
         }
         while counter < desired_number {
             let fname = format!("gen{}.{}", counter, extension);
-            write_to_file(&outdir, fname, BLANK.as_bytes());
+            write_to_file(outdir, fname, BLANK.as_bytes());
             counter += 1;
         }
     }

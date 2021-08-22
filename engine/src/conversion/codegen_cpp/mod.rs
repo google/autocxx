@@ -119,10 +119,10 @@ impl<'a> CppCodeGenerator<'a> {
                     ..
                 } => self.generate_by_value_wrapper(cpp_wrapper)?,
                 Api::ConcreteType { rs_definition, .. } => self.generate_typedef(
-                    &api.name(),
-                    type_to_cpp(&rs_definition, &self.original_name_map)?,
+                    api.name(),
+                    type_to_cpp(rs_definition, &self.original_name_map)?,
                 ),
-                Api::CType { typename, .. } => self.generate_ctype_typedef(&typename),
+                Api::CType { typename, .. } => self.generate_ctype_typedef(typename),
                 _ => panic!("Should have filtered on needs_cpp_codegen"),
             }
         }

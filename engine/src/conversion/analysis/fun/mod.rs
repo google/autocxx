@@ -273,7 +273,7 @@ impl<'a> FnAnalyzer<'a> {
 
         // Now let's analyze all the parameters.
         // See if any have annotations which our fork of bindgen has craftily inserted...
-        let (reference_params, reference_return) = Self::get_reference_parameters_and_return(&fun);
+        let (reference_params, reference_return) = Self::get_reference_parameters_and_return(fun);
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .sig
             .inputs
@@ -281,7 +281,7 @@ impl<'a> FnAnalyzer<'a> {
             .map(|i| {
                 self.convert_fn_arg(
                     i,
-                    &ns,
+                    ns,
                     diagnostic_display_name,
                     virtual_this.clone(),
                     &reference_params,
@@ -324,7 +324,7 @@ impl<'a> FnAnalyzer<'a> {
             Some(cpp_name) => {
                 if initial_rust_name.ends_with('_') {
                     initial_rust_name // case 2
-                } else if validate_ident_ok_for_rust(&cpp_name).is_err() {
+                } else if validate_ident_ok_for_rust(cpp_name).is_err() {
                     format!("{}_", cpp_name) // case 5
                 } else {
                     cpp_name.to_string() // cases 3, 4, 6
@@ -362,7 +362,7 @@ impl<'a> FnAnalyzer<'a> {
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
             let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
-            let mut rust_name = overload_tracker.get_method_real_name(&type_ident, ideal_rust_name);
+            let mut rust_name = overload_tracker.get_method_real_name(type_ident, ideal_rust_name);
             let method_kind = if rust_name.starts_with(&type_ident) {
                 // It's a constructor. bindgen generates
                 // fn new(this: *Type, ...args)
@@ -419,7 +419,7 @@ impl<'a> FnAnalyzer<'a> {
                 FnKind::Function => None,
             },
             &rust_name,
-            &ns,
+            ns,
         );
         if cxxbridge_name != rust_name && cpp_name.is_none() {
             cpp_name = Some(rust_name.clone());
@@ -446,7 +446,7 @@ impl<'a> FnAnalyzer<'a> {
         }
 
         // Reject move constructors.
-        if Self::is_move_constructor(&fun) {
+        if Self::is_move_constructor(fun) {
             return Err(contextualize_error(
                 ConvertError::MoveConstructorUnsupported,
             ));
@@ -455,7 +455,7 @@ impl<'a> FnAnalyzer<'a> {
         match kind {
             FnKind::Method(_, MethodKind::Static) => {}
             FnKind::Method(ref self_ty, _) => {
-                if !known_types().is_cxx_acceptable_receiver(&self_ty) {
+                if !known_types().is_cxx_acceptable_receiver(self_ty) {
                     return Err(contextualize_error(ConvertError::UnsupportedReceiver));
                 }
             }
@@ -480,7 +480,7 @@ impl<'a> FnAnalyzer<'a> {
                 deps: these_deps,
             }
         } else {
-            self.convert_return_type(&fun.sig.output, &ns, reference_return)
+            self.convert_return_type(&fun.sig.output, ns, reference_return)
                 .map_err(contextualize_error)?
         };
         let mut deps = params_deps;
@@ -507,7 +507,7 @@ impl<'a> FnAnalyzer<'a> {
         // See https://github.com/dtolnay/cxx/issues/878 for the reason for this next line.
         let effective_cpp_name = cpp_name.as_ref().unwrap_or(&rust_name);
         let cpp_name_incompatible_with_cxx =
-            validate_ident_ok_for_rust(&effective_cpp_name).is_err();
+            validate_ident_ok_for_rust(effective_cpp_name).is_err();
         // If possible, we'll put knowledge of the C++ API directly into the cxx::bridge
         // mod. However, there are various circumstances where cxx can't work with the existing
         // C++ API and we need to create a C++ wrapper function which is more cxx-compliant.
@@ -829,10 +829,9 @@ impl Api<FnAnalysis> {
         match &self {
             Api::Function { analysis, .. } => match analysis.kind {
                 FnKind::Method(ref self_ty, _) => self_ty.clone(),
-                FnKind::Function => QualifiedName::new(
-                    &self.name().get_namespace(),
-                    make_ident(&analysis.rust_name),
-                ),
+                FnKind::Function => {
+                    QualifiedName::new(self.name().get_namespace(), make_ident(&analysis.rust_name))
+                }
             },
             _ => self.name().clone(),
         }

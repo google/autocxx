@@ -62,7 +62,7 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
                     ..
                 } if *kind != TypeKind::Abstract
                     && (!abstract_types.is_disjoint(bases)
-                        || any_missing_from_allowlist(config, &bases)) =>
+                        || any_missing_from_allowlist(config, bases)) =>
                 {
                     *kind = TypeKind::Abstract;
                     abstract_types.insert(api.name().clone());
@@ -85,7 +85,7 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
                     ..
                 },
                 ..
-        } if abstract_types.contains(&self_ty))
+        } if abstract_types.contains(self_ty))
     })
 }
 

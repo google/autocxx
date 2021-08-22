@@ -41,7 +41,7 @@ pub(crate) fn namespaced_name_using_original_name_map(
     qual_name: &QualifiedName,
     original_name_map: &CppNameMap,
 ) -> String {
-    if let Some(cpp_name) = original_name_map.get(&qual_name) {
+    if let Some(cpp_name) = original_name_map.get(qual_name) {
         qual_name
             .get_namespace()
             .iter()

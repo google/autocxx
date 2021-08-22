@@ -93,7 +93,7 @@ impl ByValueChecker {
                     let typedef_type = match analysis.kind {
                         TypedefKind::Type(ref type_item) => match type_item.ty.as_ref() {
                             Type::Path(typ) => {
-                                let target_tn = QualifiedName::from_type_path(&typ);
+                                let target_tn = QualifiedName::from_type_path(typ);
                                 known_types().consider_substitution(&target_tn)
                             }
                             _ => None,
@@ -113,7 +113,7 @@ impl ByValueChecker {
                     }
                 }
                 Api::Struct { item, .. } => {
-                    byvalue_checker.ingest_struct(&item, &api.name().get_namespace())
+                    byvalue_checker.ingest_struct(item, api.name().get_namespace())
                 }
                 Api::Enum { .. } => {
                     byvalue_checker
@@ -235,7 +235,7 @@ impl ByValueChecker {
         for f in &def.fields {
             let fty = &f.ty;
             if let Type::Path(p) = fty {
-                results.push(QualifiedName::from_type_path(&p));
+                results.push(QualifiedName::from_type_path(p));
             }
             // TODO handle anything else which bindgen might spit out, e.g. arrays?
         }
