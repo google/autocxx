@@ -103,14 +103,14 @@ impl<'a> BridgeConverter<'a> {
             Some((_, items)) => {
                 // Parse the bindgen mod.
                 let items_to_process = items.drain(..).collect();
-                let parser = ParseBindgen::new(&self.config);
+                let parser = ParseBindgen::new(self.config);
                 let apis = parser.parse_items(items_to_process)?;
                 Self::dump_apis("parsing", &apis);
                 // Inside parse_results, we now have a list of APIs.
                 // We now enter various analysis phases. First, convert any typedefs.
                 // "Convert" means replacing bindgen-style type targets
                 // (e.g. root::std::unique_ptr) with cxx-style targets (e.g. UniquePtr).
-                let apis = convert_typedef_targets(&self.config, apis);
+                let apis = convert_typedef_targets(self.config, apis);
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
                 // Specifically, let's confirm that the items requested by the user to be
@@ -118,7 +118,7 @@ impl<'a> BridgeConverter<'a> {
                 // This returns a new list of `Api`s, which will be parameterized with
                 // the analysis results. It also returns an object which can be used
                 // by subsequent phases to work out which objects are POD.
-                let analyzed_apis = analyze_pod_apis(apis, &self.config)?;
+                let analyzed_apis = analyze_pod_apis(apis, self.config)?;
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions. This is probably the most complex
@@ -129,7 +129,7 @@ impl<'a> BridgeConverter<'a> {
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
-                mark_types_abstract(&self.config, &mut analyzed_apis);
+                mark_types_abstract(self.config, &mut analyzed_apis);
                 Self::dump_apis("main analyses", &analyzed_apis);
                 // Remove any APIs whose names are not compatible with cxx.
                 let analyzed_apis = check_names(analyzed_apis);
@@ -141,7 +141,7 @@ impl<'a> BridgeConverter<'a> {
                 Self::dump_apis("removing ignored dependents", &analyzed_apis);
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis =
-                    filter_apis_by_following_edges_from_allowlist(analyzed_apis, &self.config);
+                    filter_apis_by_following_edges_from_allowlist(analyzed_apis, self.config);
                 // Determine what variably-sized C types (e.g. int) we need to include
                 analysis::ctypes::append_ctype_information(&mut analyzed_apis);
                 Self::dump_apis("GC", &analyzed_apis);
@@ -153,7 +153,7 @@ impl<'a> BridgeConverter<'a> {
                     analyzed_apis,
                     self.include_list,
                     bindgen_mod,
-                    &self.config,
+                    self.config,
                 );
                 Ok(CodegenResults { rs, cpp })
             }

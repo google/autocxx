@@ -372,12 +372,12 @@ impl IncludeCppEngine {
         }
 
         let mod_name = self.config.get_mod_name();
-        let mut builder = self.make_bindgen_builder(&inc_dirs, &extra_clang_args);
+        let mut builder = self.make_bindgen_builder(&inc_dirs, extra_clang_args);
         if let Some(dep_recorder) = dep_recorder {
             builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
         }
         let header_contents = self.build_header();
-        self.dump_header_if_so_configured(&header_contents, &inc_dirs, &extra_clang_args);
+        self.dump_header_if_so_configured(&header_contents, &inc_dirs, extra_clang_args);
         let header_and_prelude = format!("{}\n\n{}", known_types().get_prelude(), header_contents);
         builder = builder.header_contents("example.hpp", &header_and_prelude);
 

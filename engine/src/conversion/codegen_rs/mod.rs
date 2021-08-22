@@ -149,7 +149,7 @@ impl<'a> RsCodeGenerator<'a> {
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
-                let more_cpp_needed = api.additional_cpp().is_some();
+                let more_cpp_needed = api.needs_cpp_codegen();
                 let name = api.name().clone();
                 let gen = self.generate_rs_for_api(api);
                 ((name, gen), more_cpp_needed)
@@ -492,7 +492,7 @@ impl<'a> RsCodeGenerator<'a> {
         F: FnOnce(T) -> Item,
     {
         RsCodegenResult {
-            global_items: self.generate_extern_type_impl(analysis, &name),
+            global_items: self.generate_extern_type_impl(analysis, name),
             impl_entry: None,
             bridge_items: if analysis.can_be_instantiated() {
                 create_impl_items(&id, self.config)
@@ -664,13 +664,13 @@ impl<'a> RsCodeGenerator<'a> {
 
 impl HasNs for (QualifiedName, RsCodegenResult) {
     fn get_namespace(&self) -> &Namespace {
-        &self.0.get_namespace()
+        self.0.get_namespace()
     }
 }
 
 impl<T: AnalysisPhase> HasNs for Api<T> {
     fn get_namespace(&self) -> &Namespace {
-        &self.name().get_namespace()
+        self.name().get_namespace()
     }
 }
 

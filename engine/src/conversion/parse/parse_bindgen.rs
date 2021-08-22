@@ -102,7 +102,7 @@ impl<'a> ParseBindgen<'a> {
     ) -> Result<Vec<UnanalyzedApi>, ConvertError> {
         let items = Self::find_items_in_root(items)?;
         if !self.config.exclude_utilities() {
-            generate_utilities(&mut self.apis, &self.config);
+            generate_utilities(&mut self.apis, self.config);
         }
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
