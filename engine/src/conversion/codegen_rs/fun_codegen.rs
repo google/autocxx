@@ -15,8 +15,11 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    parse::Parser, parse_quote, punctuated::Punctuated, token::Unsafe, Attribute, FnArg,
-    ForeignItem, Ident, ImplItem, Item, ReturnType,
+    parse::Parser,
+    parse_quote,
+    punctuated::Punctuated,
+    token::{Comma, Unsafe},
+    Attribute, FnArg, ForeignItem, Ident, ImplItem, Item, ReturnType,
 };
 
 use super::{
@@ -151,8 +154,8 @@ pub(super) fn gen_function(
 fn generate_arg_lists(
     param_details: &[ArgumentAnalysis],
     is_constructor: bool,
-) -> (Punctuated<FnArg, syn::Token![,]>, Vec<TokenStream>) {
-    let mut wrapper_params: Punctuated<FnArg, syn::Token![,]> = Punctuated::new();
+) -> (Punctuated<FnArg, Comma>, Vec<TokenStream>) {
+    let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
     let mut arg_list = Vec::new();
 
     for pd in param_details {

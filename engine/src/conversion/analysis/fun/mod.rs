@@ -37,8 +37,8 @@ use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use function_wrapper::{FunctionWrapper, FunctionWrapperPayload, TypeConversionPolicy};
 use proc_macro2::Span;
 use syn::{
-    parse_quote, punctuated::Punctuated, FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType,
-    Type, TypePtr, Visibility,
+    parse_quote, punctuated::Punctuated, token::Comma, FnArg, ForeignItemFn, Ident, LitStr, Pat,
+    ReturnType, Type, TypePtr, Visibility,
 };
 
 use crate::{
@@ -88,7 +88,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) cxxbridge_name: Ident,
     pub(crate) rust_name: String,
     pub(crate) rust_rename_strategy: RustRenameStrategy,
-    pub(crate) params: Punctuated<FnArg, syn::Token![,]>,
+    pub(crate) params: Punctuated<FnArg, Comma>,
     pub(crate) kind: FnKind,
     pub(crate) ret_type: ReturnType,
     pub(crate) param_details: Vec<ArgumentAnalysis>,
@@ -288,7 +288,7 @@ impl<'a> FnAnalyzer<'a> {
                 )
             })
             .partition(Result::is_ok);
-        let (mut params, mut param_details): (Punctuated<_, syn::Token![,]>, Vec<_>) =
+        let (mut params, mut param_details): (Punctuated<_, Comma>, Vec<_>) =
             param_details.into_iter().map(Result::unwrap).unzip();
 
         let params_deps: HashSet<_> = param_details

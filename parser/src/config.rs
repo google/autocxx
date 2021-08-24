@@ -126,7 +126,7 @@ impl Parse for IncludeCppConfig {
         let mut mod_name = None;
 
         while !input.is_empty() {
-            let has_hexathorpe = input.parse::<Option<syn::Token![#]>>()?.is_some();
+            let has_hexathorpe = input.parse::<Option<syn::token::Pound>>()?.is_some();
             let ident: syn::Ident = input.parse()?;
             if has_hexathorpe {
                 if ident != "include" {
@@ -135,7 +135,7 @@ impl Parse for IncludeCppConfig {
                 let hdr: syn::LitStr = input.parse()?;
                 inclusions.push(hdr.value());
             } else {
-                input.parse::<Option<syn::Token![!]>>()?;
+                input.parse::<Option<syn::token::Bang>>()?;
                 if ident == "generate" {
                     let args;
                     syn::parenthesized!(args in input);
