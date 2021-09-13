@@ -34,7 +34,7 @@ use crate::{
 use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
-use function_wrapper::{FunctionWrapper, FunctionWrapperPayload, TypeConversionPolicy};
+use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
 use proc_macro2::Span;
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, ForeignItemFn, Ident, LitStr, Pat,
@@ -94,7 +94,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) param_details: Vec<ArgumentAnalysis>,
     pub(crate) requires_unsafe: bool,
     pub(crate) vis: Visibility,
-    pub(crate) cpp_wrapper: Option<FunctionWrapper>,
+    pub(crate) cpp_wrapper: Option<CppFunction>,
     pub(crate) deps: HashSet<QualifiedName>,
 }
 
@@ -535,11 +535,9 @@ impl<'a> FnAnalyzer<'a> {
             };
             cxxbridge_name = make_ident(&format!("{}{}autocxx_wrapper", cxxbridge_name, joiner));
             let (payload, has_receiver) = match kind {
-                FnKind::Method(_, MethodKind::Constructor) => {
-                    (FunctionWrapperPayload::Constructor, false)
-                }
+                FnKind::Method(_, MethodKind::Constructor) => (CppFunctionBody::Constructor, false),
                 FnKind::Method(ref self_ty, MethodKind::Static) => (
-                    FunctionWrapperPayload::StaticMethodCall(
+                    CppFunctionBody::StaticMethodCall(
                         ns.clone(),
                         self_ty.get_final_ident(),
                         cpp_construction_ident,
@@ -547,11 +545,11 @@ impl<'a> FnAnalyzer<'a> {
                     false,
                 ),
                 FnKind::Method(..) => (
-                    FunctionWrapperPayload::FunctionCall(ns.clone(), cpp_construction_ident),
+                    CppFunctionBody::FunctionCall(ns.clone(), cpp_construction_ident),
                     true,
                 ),
                 _ => (
-                    FunctionWrapperPayload::FunctionCall(ns.clone(), cpp_construction_ident),
+                    CppFunctionBody::FunctionCall(ns.clone(), cpp_construction_ident),
                     false,
                 ),
             };
@@ -579,7 +577,7 @@ impl<'a> FnAnalyzer<'a> {
                 ));
             }
 
-            Some(FunctionWrapper {
+            Some(CppFunction {
                 payload,
                 wrapper_function_name: cxxbridge_name.clone(),
                 return_conversion: ret_type_conversion,

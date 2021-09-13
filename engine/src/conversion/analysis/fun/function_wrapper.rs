@@ -109,14 +109,14 @@ impl TypeConversionPolicy {
     }
 }
 
-pub(crate) enum FunctionWrapperPayload {
+pub(crate) enum CppFunctionBody {
     FunctionCall(Namespace, Ident),
     StaticMethodCall(Namespace, Ident, Ident),
     Constructor,
 }
 
-pub(crate) struct FunctionWrapper {
-    pub(crate) payload: FunctionWrapperPayload,
+pub(crate) struct CppFunction {
+    pub(crate) payload: CppFunctionBody,
     pub(crate) wrapper_function_name: Ident,
     pub(crate) return_conversion: Option<TypeConversionPolicy>,
     pub(crate) argument_conversion: Vec<TypeConversionPolicy>,

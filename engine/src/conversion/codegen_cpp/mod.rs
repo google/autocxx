@@ -23,7 +23,7 @@ use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
 use super::{
     analysis::fun::{
-        function_wrapper::{FunctionWrapper, FunctionWrapperPayload},
+        function_wrapper::{CppFunction, CppFunctionBody},
         FnAnalysis,
     },
     api::Api,
@@ -189,7 +189,7 @@ impl<'a> CppCodeGenerator<'a> {
         })
     }
 
-    fn generate_by_value_wrapper(&mut self, details: &FunctionWrapper) -> Result<(), ConvertError> {
+    fn generate_by_value_wrapper(&mut self, details: &CppFunction) -> Result<(), ConvertError> {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
         // We could easily do this the other way round, and when
@@ -245,8 +245,8 @@ impl<'a> CppCodeGenerator<'a> {
         let receiver = if is_a_method { arg_list.next() } else { None };
         let arg_list = arg_list.join(", ");
         let mut underlying_function_call = match &details.payload {
-            FunctionWrapperPayload::Constructor => arg_list,
-            FunctionWrapperPayload::FunctionCall(ns, id) => match receiver {
+            CppFunctionBody::Constructor => arg_list,
+            CppFunctionBody::FunctionCall(ns, id) => match receiver {
                 Some(receiver) => format!("{}.{}({})", receiver, id.to_string(), arg_list),
                 None => {
                     let underlying_function_call = ns
@@ -257,7 +257,7 @@ impl<'a> CppCodeGenerator<'a> {
                     format!("{}({})", underlying_function_call, arg_list)
                 }
             },
-            FunctionWrapperPayload::StaticMethodCall(ns, ty_id, fn_id) => {
+            CppFunctionBody::StaticMethodCall(ns, ty_id, fn_id) => {
                 let underlying_function_call = ns
                     .into_iter()
                     .cloned()
