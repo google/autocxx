@@ -109,14 +109,12 @@ impl TypeConversionPolicy {
     }
 }
 
-#[derive(Clone)] // TODO wish this didn't need to be cloneable
 pub(crate) enum FunctionWrapperPayload {
     FunctionCall(Namespace, Ident),
     StaticMethodCall(Namespace, Ident, Ident),
     Constructor,
 }
 
-#[derive(Clone)] // TODO wish this didn't need to be cloneable
 pub(crate) struct FunctionWrapper {
     pub(crate) payload: FunctionWrapperPayload,
     pub(crate) wrapper_function_name: Ident,
