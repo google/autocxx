@@ -118,7 +118,7 @@ impl<'a> CppCodeGenerator<'a> {
                             ..
                         },
                     ..
-                } => self.generate_by_value_wrapper(cpp_wrapper)?,
+                } => self.generate_cpp_function(cpp_wrapper)?,
                 Api::ConcreteType { rs_definition, .. } => self.generate_typedef(
                     api.name(),
                     type_to_cpp(rs_definition, &self.original_name_map)?,
@@ -189,7 +189,7 @@ impl<'a> CppCodeGenerator<'a> {
         })
     }
 
-    fn generate_by_value_wrapper(&mut self, details: &CppFunction) -> Result<(), ConvertError> {
+    fn generate_cpp_function(&mut self, details: &CppFunction) -> Result<(), ConvertError> {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
         // We could easily do this the other way round, and when
