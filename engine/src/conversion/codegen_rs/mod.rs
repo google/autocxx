@@ -617,9 +617,6 @@ impl<'a> RsCodeGenerator<'a> {
             },
         ];
         if let Some(methods) = methods {
-            bindgen_mod_items.push(parse_quote! {
-                use autocxx::subclass::CppSubclass;
-            });
             let supers = make_ident(format!("{}_supers", super_name));
             let methods_impls: Vec<ImplItem> = methods
                 .iter()
@@ -637,6 +634,7 @@ impl<'a> RsCodeGenerator<'a> {
                     let param_names = m.param_names.iter().skip(1);
                     parse_quote! {
                         fn #supern(#params) #ret {
+                            use autocxx::subclass::CppSubclass;
                             self.#peer_fn().#cpp_method_name(#(#param_names),*)
                         }
                     }
@@ -662,6 +660,7 @@ impl<'a> RsCodeGenerator<'a> {
         bindgen_mod_items.push(parse_quote! {
             impl AsRef<#super_id> for super::super::super::#id {
                 fn as_ref(&self) -> &cxxbridge::#super_id {
+                    use autocxx::subclass::CppSubclass;
                     self.peer().#as_id()
                 }
             }
@@ -670,6 +669,7 @@ impl<'a> RsCodeGenerator<'a> {
         bindgen_mod_items.push(parse_quote! {
             impl super::super::super::#id {
                 pub fn pin_mut(&mut self) -> std::pin::Pin<&mut cxxbridge::#super_id> {
+                    use autocxx::subclass::CppSubclass;
                     self.peer_mut().#as_mut_id()
                 }
             }
