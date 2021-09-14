@@ -176,19 +176,11 @@ impl<'a> CppCodeGenerator<'a> {
 
     fn generate_string_constructor(&mut self) {
         let makestring_name = self.config.get_makestring_name();
-        let declaration = format!(
-            "std::unique_ptr<std::string> {}(::rust::Str str)",
-            makestring_name
-        );
-        let definition = Some(format!(
-            "{} {{ return std::make_unique<std::string>(std::string(str)); }}",
-            declaration
-        ));
-        let declaration = Some(format!("{};", declaration));
+        let declaration = Some(format!("inline std::unique_ptr<std::string> {}(::rust::Str str) {{ return std::make_unique<std::string>(std::string(str)); }}", makestring_name));
         self.additional_functions.push(AdditionalFunction {
             type_definition: None,
             declaration,
-            definition,
+            definition: None,
             headers: vec![
                 Header::system("memory"),
                 Header::system("string"),
