@@ -37,6 +37,7 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
+use itertools::Itertools;
 use proc_macro2::Span;
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, ForeignItemFn, Ident, LitStr, Pat,
@@ -979,5 +980,9 @@ impl Api<FnAnalysis> {
             }
             _ => Box::new(std::iter::empty()),
         }
+    }
+
+    pub(crate) fn format_deps(&self) -> String {
+        self.deps().join(",")
     }
 }

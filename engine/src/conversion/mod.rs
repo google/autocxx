@@ -34,7 +34,7 @@ use crate::{CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
-        abstract_types::mark_types_abstract, check_names,
+        abstract_types::mark_types_abstract, check_names, fun::FnAnalysis,
         gc::filter_apis_by_following_edges_from_allowlist, pod::analyze_pod_apis,
         remove_ignored::filter_apis_by_ignored_dependents, tdef::convert_typedef_targets,
     },
@@ -86,6 +86,18 @@ impl<'a> BridgeConverter<'a> {
         }
     }
 
+    fn dump_apis_with_deps(label: &str, apis: &[Api<FnAnalysis>]) {
+        if LOG_APIS {
+            log::info!(
+                "APIs after {}:\n{}",
+                label,
+                apis.iter()
+                    .map(|api| { format!("  {:?}, deps={}", api, api.format_deps()) })
+                    .join("\n")
+            )
+        }
+    }
+
     /// Convert a TokenStream of bindgen-generated bindings to a form
     /// suitable for cxx.
     ///
@@ -131,7 +143,7 @@ impl<'a> BridgeConverter<'a> {
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
                 mark_types_abstract(self.config, &mut analyzed_apis);
-                Self::dump_apis("main analyses", &analyzed_apis);
+                Self::dump_apis_with_deps("main analyses", &analyzed_apis);
                 // Remove any APIs whose names are not compatible with cxx.
                 let analyzed_apis = check_names(analyzed_apis);
                 // During parsing or subsequent processing we might have encountered
@@ -139,13 +151,13 @@ impl<'a> BridgeConverter<'a> {
                 // There might be other items depending on such things. Let's remove them
                 // too.
                 let analyzed_apis = filter_apis_by_ignored_dependents(analyzed_apis);
-                Self::dump_apis("removing ignored dependents", &analyzed_apis);
+                Self::dump_apis_with_deps("removing ignored dependents", &analyzed_apis);
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis =
                     filter_apis_by_following_edges_from_allowlist(analyzed_apis, self.config);
                 // Determine what variably-sized C types (e.g. int) we need to include
                 analysis::ctypes::append_ctype_information(&mut analyzed_apis);
-                Self::dump_apis("GC", &analyzed_apis);
+                Self::dump_apis_with_deps("GC", &analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
                 let cpp =
