@@ -24,7 +24,9 @@ use syn::parse_quote;
 impl TypeConversionPolicy {
     pub(super) fn rust_wrapper_unconverted_type(&self) -> Type {
         match self.rust_conversion {
-            RustConversionType::None => self.converted_rust_type(),
+            RustConversionType::None | RustConversionType::ToBoxedUpHolder(..) => {
+                self.converted_rust_type()
+            }
             RustConversionType::FromStr => parse_quote! { impl ToCppString },
         }
     }
@@ -33,6 +35,9 @@ impl TypeConversionPolicy {
         match self.rust_conversion {
             RustConversionType::None => quote! { #var },
             RustConversionType::FromStr => quote! ( #var .into_cpp() ),
+            RustConversionType::ToBoxedUpHolder(ref holder_type) => quote! {
+                Box::new(#holder_type(#var))
+            },
         }
     }
 }

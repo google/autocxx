@@ -337,7 +337,7 @@ where
     if !cxx_code.is_empty() {
         // Step 4: Write the C++ code snippet to a .cc file, along with a #include
         //         of the header emitted in step 5.
-        let cxx_code = format!("#include \"input.h\"\n{}", cxx_code);
+        let cxx_code = format!("#include \"input.h\"\n#include \"cxxgen.h\"\n{}", cxx_code);
         let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
         b.file(cxx_path);
     }
@@ -6019,6 +6019,815 @@ fn test_box() {
         Some(quote! {
             pub struct Foo {
                 a: String,
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_mut() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo() = 0;
+        virtual ~Observer() {}
+    };
+    inline void bar() {}
+    "};
+    run_test_ex2(
+        "",
+        hdr,
+        quote! {
+            MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+        },
+        &["bar"],
+        &[],
+        Some(quote! {
+            subclass!("Observer",MyObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::is_subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                fn foo(&mut self) {
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_const() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo() const = 0;
+        virtual ~Observer() {}
+    };
+    inline void bar() {}
+    "};
+    run_test_ex2(
+        "",
+        hdr,
+        quote! {
+            MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+        },
+        &["bar"],
+        &[],
+        Some(quote! {
+            subclass!("Observer",MyObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::is_subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                fn foo(&self) {
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_return() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual uint32_t foo() const = 0;
+        virtual ~Observer() {}
+    };
+    inline void bar() {}
+    "};
+    run_test_ex2(
+        "",
+        hdr,
+        quote! {
+            MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+        },
+        &["bar"],
+        &[],
+        Some(quote! {
+            subclass!("Observer",MyObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::is_subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                fn foo(&self) -> u32 {
+                    4
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_passed_to_fn() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual uint32_t foo() const = 0;
+        virtual ~Observer() {}
+    };
+    inline void take_observer(const Observer&) {}
+    "};
+    run_test_ex2(
+        "",
+        hdr,
+        quote! {
+            let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+            ffi::take_observer(o.borrow().as_ref());
+        },
+        &["take_observer"],
+        &[],
+        Some(quote! {
+            subclass!("Observer",MyObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::is_subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                fn foo(&self) -> u32 {
+                    4
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_non_pv_subclass() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo() const {}
+        virtual ~Observer() {}
+    };
+    inline void bar() {}
+    "};
+    run_test_ex2(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+            obs.borrow().foo();
+        },
+        &["bar"],
+        &[],
+        Some(quote! {
+            subclass!("Observer",MyObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::is_subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_allocation_not_self_owned() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    extern \"C\" void mark_freed() noexcept;
+    extern \"C\" void mark_allocated() noexcept;
+
+    class TestObserver {
+    public:
+        TestObserver() {
+            mark_allocated();
+        }
+        virtual void a() const = 0;
+        virtual ~TestObserver() {
+            mark_freed();
+        }
+    };
+    inline void TriggerTestObserverA(const TestObserver& obs) {
+        obs.a();
+    }
+    "};
+    run_test_ex2(
+        "",
+        hdr,
+        quote! {
+            assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+
+            // Test when owned by C++
+            let obs = MyTestObserver::new_cpp_owned(
+                MyTestObserver::new(),
+                ffi::MyTestObserverCpp::make_unique,
+            );
+            assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+            let obs_superclass = obs.as_ref().unwrap(); // &subclass
+            let obs_superclass = unsafe { std::mem::transmute::<&ffi::MyTestObserverCpp, &ffi::TestObserver>(obs_superclass) };
+            ffi::TriggerTestObserverA(obs_superclass);
+            assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
+            std::mem::drop(obs);
+            Lazy::force(&STATUS).lock().unwrap().a_called = false;
+            assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+
+            // Test when owned by Rust
+            let obs = MyTestObserver::new_rust_owned(
+                MyTestObserver::new(),
+                ffi::MyTestObserverCpp::make_unique,
+            );
+            //let cpp_peer_ptr = unsafe { obs.borrow_mut().peer_mut().get_unchecked_mut() as *mut ffi::MyTestObserverCpp };
+            assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+            ffi::TriggerTestObserverA(obs.as_ref().borrow().as_ref());
+            assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
+            Lazy::force(&STATUS).lock().unwrap().a_called = false;
+            std::mem::drop(obs);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+        },
+        &["TriggerTestObserverA"],
+        &[],
+        Some(quote! {
+            subclass!("TestObserver",MyTestObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use once_cell::sync::Lazy;
+            use std::sync::Mutex;
+
+            use autocxx::subclass::CppSubclass;
+            use ffi::TestObserver_methods;
+            #[autocxx::subclass::is_subclass]
+            pub struct MyTestObserver {
+                data: ExternalEngine,
+            }
+            impl TestObserver_methods for MyTestObserver {
+                fn a(&self) {
+                    self.data.do_something();
+                }
+            }
+            impl MyTestObserver {
+                fn new() -> Self {
+                    Self {
+                        cpp_peer: Default::default(),
+                        data: ExternalEngine::default(),
+                    }
+                }
+            }
+
+            #[no_mangle]
+            pub fn mark_allocated() {
+                Lazy::force(&STATUS).lock().unwrap().cpp_allocated = true;
+            }
+
+            #[no_mangle]
+            pub fn mark_freed() {
+                Lazy::force(&STATUS).lock().unwrap().cpp_allocated = false;
+            }
+
+            #[derive(Default)]
+            struct Status {
+                cpp_allocated: bool,
+                rust_allocated: bool,
+                a_called: bool,
+            }
+
+            static STATUS: Lazy<Mutex<Status>> = Lazy::new(|| Mutex::new(Status::default()));
+
+            pub struct ExternalEngine;
+
+            impl ExternalEngine {
+                fn do_something(&self) {
+                    Lazy::force(&STATUS).lock().unwrap().a_called = true;
+                }
+            }
+
+            impl Default for ExternalEngine {
+                fn default() -> Self {
+                    Lazy::force(&STATUS).lock().unwrap().rust_allocated = true;
+                    ExternalEngine
+                }
+            }
+
+            impl Drop for ExternalEngine {
+                fn drop(&mut self) {
+                    Lazy::force(&STATUS).lock().unwrap().rust_allocated = false;
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_allocation_self_owned() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    extern \"C\" void mark_freed() noexcept;
+    extern \"C\" void mark_allocated() noexcept;
+
+    class TestObserver {
+    public:
+        TestObserver() {
+            mark_allocated();
+        }
+        virtual void a() const = 0;
+        virtual ~TestObserver() {
+            mark_freed();
+        }
+    };
+    inline void TriggerTestObserverA(const TestObserver& obs) {
+        const_cast<TestObserver&>(obs).a();
+    }
+    "};
+    run_test_ex2(
+        "",
+        hdr,
+        quote! {
+            assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+
+            // Test when owned by C++
+            let obs = MyTestObserver::new_cpp_owned(
+                MyTestObserver::new(false),
+                ffi::MyTestObserverCpp::make_unique,
+            );
+            assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+            let obs_superclass = obs.as_ref().unwrap(); // &subclass
+            let obs_superclass = unsafe { std::mem::transmute::<&ffi::MyTestObserverCpp, &ffi::TestObserver>(obs_superclass) };
+
+            ffi::TriggerTestObserverA(obs_superclass);
+            assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
+            std::mem::drop(obs);
+            Lazy::force(&STATUS).lock().unwrap().a_called = false;
+            assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+
+            // Test when owned by Rust
+            let obs = MyTestObserver::new_rust_owned(
+                MyTestObserver::new(false),
+                ffi::MyTestObserverCpp::make_unique,
+            );
+            assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+            ffi::TriggerTestObserverA(obs.as_ref().borrow().as_ref());
+
+            assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
+            Lazy::force(&STATUS).lock().unwrap().a_called = false;
+            std::mem::drop(obs);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+
+            // Test when self-owned
+            let obs = MyTestObserver::new_self_owned(
+                MyTestObserver::new(true),
+                ffi::MyTestObserverCpp::make_unique,
+            );
+            let obs_superclass_ptr: *const ffi::TestObserver = obs.as_ref().borrow().as_ref();
+            // Retain just a pointer on the Rust side, so there is no Rust-side
+            // ownership.
+            std::mem::drop(obs);
+            assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+            assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
+            ffi::TriggerTestObserverA(unsafe { obs_superclass_ptr.as_ref().unwrap() });
+
+            assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
+        },
+        &["TriggerTestObserverA"],
+        &[],
+        Some(quote! {
+            subclass!("TestObserver",MyTestObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use once_cell::sync::Lazy;
+            use std::sync::Mutex;
+
+            use autocxx::subclass::CppSubclass;
+            use autocxx::subclass::CppSubclassSelfOwned;
+            use ffi::TestObserver_methods;
+            #[autocxx::subclass::is_subclass(self_owned)]
+            pub struct MyTestObserver {
+                data: ExternalEngine,
+                self_owning: bool,
+            }
+            impl TestObserver_methods for MyTestObserver {
+                fn a(&self) {
+                    self.data.do_something();
+                    if self.self_owning {
+                        self.delete_self();
+                    }
+                }
+            }
+            impl MyTestObserver {
+                fn new(self_owning: bool) -> Self {
+                    Self {
+                        cpp_peer: Default::default(),
+                        data: ExternalEngine::default(),
+                        self_owning,
+                    }
+                }
+            }
+
+            #[no_mangle]
+            pub fn mark_allocated() {
+                Lazy::force(&STATUS).lock().unwrap().cpp_allocated = true;
+            }
+
+            #[no_mangle]
+            pub fn mark_freed() {
+                Lazy::force(&STATUS).lock().unwrap().cpp_allocated = false;
+            }
+
+            #[derive(Default)]
+            struct Status {
+                cpp_allocated: bool,
+                rust_allocated: bool,
+                a_called: bool,
+            }
+
+            static STATUS: Lazy<Mutex<Status>> = Lazy::new(|| Mutex::new(Status::default()));
+
+            pub struct ExternalEngine;
+
+            impl ExternalEngine {
+                fn do_something(&self) {
+                    Lazy::force(&STATUS).lock().unwrap().a_called = true;
+                }
+            }
+
+            impl Default for ExternalEngine {
+                fn default() -> Self {
+                    Lazy::force(&STATUS).lock().unwrap().rust_allocated = true;
+                    ExternalEngine
+                }
+            }
+
+            impl Drop for ExternalEngine {
+                fn drop(&mut self) {
+                    Lazy::force(&STATUS).lock().unwrap().rust_allocated = false;
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_calls() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    extern \"C\" void mark_c_called() noexcept;
+    extern \"C\" void mark_d_called() noexcept;
+    extern \"C\" void mark_e_called() noexcept;
+    extern \"C\" void mark_f_called() noexcept;
+    extern \"C\" void mark_g_called() noexcept;
+    extern \"C\" void mark_h_called() noexcept;
+
+    class TestObserver {
+    public:
+        TestObserver() {}
+        virtual uint32_t a(uint32_t) const = 0;
+        virtual uint32_t b(uint32_t) = 0;
+        virtual uint32_t c(uint32_t) const { mark_c_called(); return 0; };
+        virtual uint32_t d(uint32_t) { mark_d_called(); return 0; };
+        virtual uint32_t e(uint32_t) const { mark_e_called(); return 0; };
+        virtual uint32_t f(uint32_t) { mark_f_called(); return 0; };
+        virtual uint32_t g(uint32_t) const { mark_g_called(); return 0; };
+        virtual uint32_t h(uint32_t) { mark_h_called(); return 0; };
+        virtual ~TestObserver() {}
+    };
+
+    extern TestObserver* obs;
+
+    inline void register_observer(TestObserver& a) {
+        obs = &a;
+    }
+    inline uint32_t call_a(uint32_t param) {
+        return obs->a(param);
+    }
+    inline uint32_t call_b(uint32_t param) {
+        return obs->b(param);
+    }
+    inline uint32_t call_c(uint32_t param) {
+        return obs->c(param);
+    }
+    inline uint32_t call_d(uint32_t param) {
+        return obs->d(param);
+    }
+    inline uint32_t call_e(uint32_t param) {
+        return obs->e(param);
+    }
+    inline uint32_t call_f(uint32_t param) {
+        return obs->f(param);
+    }
+    inline uint32_t call_g(uint32_t param) {
+        return obs->g(param);
+    }
+    inline uint32_t call_h(uint32_t param) {
+        return obs->h(param);
+    }
+    "};
+    run_test_ex2(
+        "TestObserver* obs;",
+        hdr,
+        quote! {
+            let obs = MyTestObserver::new_rust_owned(
+                MyTestObserver::default(),
+                ffi::MyTestObserverCpp::make_unique,
+            );
+            ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
+            assert_eq!(ffi::call_a(1), 2);
+            assert!(Lazy::force(&STATUS).lock().unwrap().sub_a_called);
+            *Lazy::force(&STATUS).lock().unwrap() = Default::default();
+
+            assert_eq!(ffi::call_b(1), 3);
+            assert!(Lazy::force(&STATUS).lock().unwrap().sub_b_called);
+            *Lazy::force(&STATUS).lock().unwrap() = Default::default();
+
+            assert_eq!(ffi::call_c(1), 4);
+            assert!(Lazy::force(&STATUS).lock().unwrap().sub_c_called);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().super_c_called);
+            *Lazy::force(&STATUS).lock().unwrap() = Default::default();
+
+            assert_eq!(ffi::call_d(1), 5);
+            assert!(Lazy::force(&STATUS).lock().unwrap().sub_d_called);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().super_d_called);
+            *Lazy::force(&STATUS).lock().unwrap() = Default::default();
+
+            assert_eq!(ffi::call_e(1), 0);
+            assert!(Lazy::force(&STATUS).lock().unwrap().sub_e_called);
+            assert!(Lazy::force(&STATUS).lock().unwrap().super_e_called);
+            *Lazy::force(&STATUS).lock().unwrap() = Default::default();
+
+            assert_eq!(ffi::call_f(1), 0);
+            assert!(Lazy::force(&STATUS).lock().unwrap().sub_f_called);
+            assert!(Lazy::force(&STATUS).lock().unwrap().super_f_called);
+            *Lazy::force(&STATUS).lock().unwrap() = Default::default();
+
+            assert_eq!(ffi::call_g(1), 0);
+            assert!(Lazy::force(&STATUS).lock().unwrap().super_g_called);
+            *Lazy::force(&STATUS).lock().unwrap() = Default::default();
+
+            assert_eq!(ffi::call_h(1), 0);
+            assert!(Lazy::force(&STATUS).lock().unwrap().super_h_called);
+            *Lazy::force(&STATUS).lock().unwrap() = Default::default();
+        },
+        &[
+            "register_observer",
+            "call_a",
+            "call_b",
+            "call_c",
+            "call_d",
+            "call_e",
+            "call_f",
+            "call_g",
+            "call_h",
+        ],
+        &[],
+        Some(quote! {
+            subclass!("TestObserver",MyTestObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use once_cell::sync::Lazy;
+            use std::sync::Mutex;
+
+            use autocxx::subclass::CppSubclass;
+            use ffi::TestObserver_methods;
+            #[autocxx::subclass::is_subclass]
+            #[derive(Default)]
+            pub struct MyTestObserver {
+            }
+            impl TestObserver_methods for MyTestObserver {
+
+                // a and b are pure virtual
+                fn a(&self, param: u32) -> u32 {
+                    Lazy::force(&STATUS).lock().unwrap().sub_a_called = true;
+                    param + 1
+                }
+                fn b(&mut self, param: u32) -> u32 {
+                    Lazy::force(&STATUS).lock().unwrap().sub_b_called = true;
+                    param + 2
+                }
+
+                // c and d we override the superclass
+                fn c(&self, param: u32) -> u32 {
+                    Lazy::force(&STATUS).lock().unwrap().sub_c_called = true;
+                    param + 3
+                }
+                fn d(&mut self, param: u32) -> u32 {
+                    Lazy::force(&STATUS).lock().unwrap().sub_d_called = true;
+                    param + 4
+                }
+
+                // e and f we call through to the superclass
+                fn e(&self, param: u32) -> u32 {
+                    Lazy::force(&STATUS).lock().unwrap().sub_e_called = true;
+                    self.peer().e_super(param)
+                }
+                fn f(&mut self, param: u32) -> u32 {
+                    Lazy::force(&STATUS).lock().unwrap().sub_f_called = true;
+                    self.peer_mut().f_super(param)
+                }
+
+                // g and h we do not do anything, so calls should only call
+                // the superclass
+            }
+
+            #[no_mangle]
+            pub fn mark_c_called() {
+                Lazy::force(&STATUS).lock().unwrap().super_c_called = true;
+            }
+            #[no_mangle]
+            pub fn mark_d_called() {
+                Lazy::force(&STATUS).lock().unwrap().super_d_called = true;
+            }
+            #[no_mangle]
+            pub fn mark_e_called() {
+                Lazy::force(&STATUS).lock().unwrap().super_e_called = true;
+            }
+            #[no_mangle]
+            pub fn mark_f_called() {
+                Lazy::force(&STATUS).lock().unwrap().super_f_called = true;
+            }
+            #[no_mangle]
+            pub fn mark_g_called() {
+                Lazy::force(&STATUS).lock().unwrap().super_g_called = true;
+            }
+            #[no_mangle]
+            pub fn mark_h_called() {
+                Lazy::force(&STATUS).lock().unwrap().super_h_called = true;
+            }
+
+            #[derive(Default)]
+            struct Status {
+                super_c_called: bool,
+                super_d_called: bool,
+                super_e_called: bool,
+                super_f_called: bool,
+                super_g_called: bool,
+                super_h_called: bool,
+                sub_a_called: bool,
+                sub_b_called: bool,
+                sub_c_called: bool,
+                sub_d_called: bool,
+                sub_e_called: bool,
+                sub_f_called: bool,
+            }
+
+            static STATUS: Lazy<Mutex<Status>> = Lazy::new(|| Mutex::new(Status::default()));
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_types() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <string>
+
+    struct Pod {
+        uint32_t a;
+    };
+    struct NonPod {
+        std::string a;
+    };
+    class TestObserver {
+    public:
+        TestObserver() {}
+        virtual std::string s(std::string p) const { return p; }
+        virtual Pod p(Pod p) const { return p; }
+        virtual NonPod n(NonPod p) const { return p; }
+        virtual ~TestObserver() {}
+    };
+
+    extern TestObserver* obs;
+
+    inline void register_observer(TestObserver& a) {
+        obs = &a;
+    }
+    inline std::string call_s(std::string param) {
+        return obs->s(param);
+    }
+    inline Pod call_p(Pod param) {
+        return obs->p(param);
+    }
+    inline NonPod call_n(NonPod param) {
+        return obs->n(param);
+    }
+    inline NonPod make_non_pod(std::string a) {
+        NonPod p;
+        p.a = a;
+        return p;
+    }
+    "};
+    run_test_ex2(
+        "TestObserver* obs;",
+        hdr,
+        quote! {
+            let obs = MyTestObserver::new_rust_owned(
+                MyTestObserver::default(),
+                ffi::MyTestObserverCpp::make_unique,
+            );
+            ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
+            ffi::call_p(ffi::Pod { a: 3 });
+            ffi::call_s("hello");
+            ffi::call_n(ffi::make_non_pod("goodbye"));
+        },
+        &[
+            "register_observer",
+            "call_s",
+            "call_n",
+            "call_p",
+            "NonPod",
+            "make_non_pod",
+        ],
+        &["Pod"],
+        Some(quote! {
+            subclass!("TestObserver",MyTestObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::TestObserver_methods;
+            #[autocxx::subclass::is_subclass]
+            #[derive(Default)]
+            pub struct MyTestObserver {
+            }
+            impl TestObserver_methods for MyTestObserver {
+                fn s(&self, p: cxx::UniquePtr<cxx::CxxString>) -> cxx::UniquePtr<cxx::CxxString> {
+                    self.peer().s_super(p)
+                }
+
+                fn p(&self, p: ffi::Pod) -> ffi::Pod {
+                    self.peer().p_super(p)
+                }
+
+                fn n(&self, p: cxx::UniquePtr<ffi::NonPod>) -> cxx::UniquePtr<ffi::NonPod> {
+                    self.peer().n_super(p)
+                }
             }
         }),
     );

@@ -17,7 +17,11 @@ use std::collections::HashMap;
 use syn::Ident;
 
 use crate::{
-    conversion::{api::Api, error_reporter::convert_item_apis, ConvertError},
+    conversion::{
+        api::{Api, SubclassName},
+        error_reporter::convert_item_apis,
+        ConvertError,
+    },
     types::{validate_ident_ok_for_cxx, QualifiedName},
 };
 
@@ -47,7 +51,15 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
                     QualifiedName::new_from_cpp_name(cpp_name).segment_iter(),
                 )?;
             }
-            Ok(Some(api))
+            Ok(Box::new(std::iter::once(api)))
+        }
+        Api::Subclass {
+            name: SubclassName(ref name),
+            ref superclass,
+        } => {
+            validate_all_segments_ok_for_cxx(name.name.segment_iter())?;
+            validate_all_segments_ok_for_cxx(superclass.segment_iter())?;
+            Ok(Box::new(std::iter::once(api)))
         }
         Api::Function { ref name, .. } => {
             // we don't handle function names here because
@@ -55,13 +67,15 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
             // the function, it creates a wrapper function instead with a more
             // palatable name. That's preferable to rejecting the API entirely.
             validate_all_segments_ok_for_cxx(name.name.segment_iter())?;
-            Ok(Some(api))
+            Ok(Box::new(std::iter::once(api)))
         }
         Api::ConcreteType { .. }
         | Api::CType { .. }
         | Api::StringConstructor { .. }
         | Api::RustType { .. }
-        | Api::IgnoredItem { .. } => Ok(Some(api)),
+        | Api::RustSubclassFn { .. }
+        | Api::RustSubclassConstructor { .. }
+        | Api::IgnoredItem { .. } => Ok(Box::new(std::iter::once(api))),
     });
 
     // Reject any names which are duplicates within the cxx bridge mod,
@@ -81,10 +95,10 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
             if *names_found.entry(name).or_default() > 1usize {
                 Err(ConvertError::DuplicateCxxBridgeName)
             } else {
-                Ok(Some(api))
+                Ok(Box::new(std::iter::once(api)))
             }
         } else {
-            Ok(Some(api))
+            Ok(Box::new(std::iter::once(api)))
         }
     });
     results

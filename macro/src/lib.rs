@@ -13,14 +13,79 @@
 // limitations under the License.
 
 use autocxx_parser::IncludeCpp;
-use proc_macro::TokenStream;
-use proc_macro_error::proc_macro_error;
-use syn::parse_macro_input;
+use proc_macro2::{Ident, Span};
+use proc_macro_error::{abort, proc_macro_error};
+use quote::quote;
+use syn::parse::{Parse, ParseStream, Parser};
+use syn::{parse_macro_input, Fields, ItemStruct, Result as ParseResult};
+
+struct SelfOwned(bool);
+
+impl Parse for SelfOwned {
+    fn parse(input: ParseStream) -> ParseResult<Self> {
+        // TODO make this less liberal
+        let id = input.parse::<Option<Ident>>()?;
+        match id {
+            Some(id) if id == "self_owned" => Ok(Self(true)),
+            _ => Ok(Self(false)),
+        }
+    }
+}
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
 #[proc_macro]
-pub fn include_cpp_impl(input: TokenStream) -> TokenStream {
+pub fn include_cpp_impl(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let include_cpp = parse_macro_input!(input as IncludeCpp);
-    TokenStream::from(include_cpp.generate_rs())
+    proc_macro::TokenStream::from(include_cpp.generate_rs())
+}
+
+/// Attribute to state that a Rust `struct` is a C++ subclass.
+/// This adds an additional field to the struct which autocxx uses to
+/// track a C++ instantiation of this Rust subclass.
+#[proc_macro_error]
+#[proc_macro_attribute]
+pub fn is_subclass(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let mut s: ItemStruct =
+        syn::parse(item).unwrap_or_else(|_| abort!(Span::call_site(), "Expected a struct"));
+    let id = &s.ident;
+    let cpp_ident = Ident::new(&format!("{}Cpp", id.to_string()), Span::call_site());
+    match &mut s.fields {
+        Fields::Named(fields) => {
+            let input = quote! {
+                cpp_peer: autocxx::subclass::CppSubclassCppPeerHolder<ffi:: #cpp_ident>
+            };
+            let parser = syn::Field::parse_named;
+            let f = parser.parse2(input).unwrap();
+            fields.named.push(f);
+        }
+        _ => abort!(Span::call_site(), "Expect a struct with named fields"),
+    }
+    let self_owned: SelfOwned = syn::parse(attr)
+        .unwrap_or_else(|_| abort!(Span::call_site(), "Unable to parse attributes"));
+    let self_owned_bit = if self_owned.0 {
+        Some(quote! {
+            impl autocxx::subclass::CppSubclassSelfOwned<ffi::#cpp_ident> for #id {}
+        })
+    } else {
+        None
+    };
+    let toks = quote! {
+        #s
+
+        impl autocxx::subclass::CppSubclass<ffi::#cpp_ident> for #id {
+            fn peer_holder_mut(&mut self) -> &mut autocxx::subclass::CppSubclassCppPeerHolder<ffi::#cpp_ident> {
+                &mut self.cpp_peer
+            }
+            fn peer_holder(&self) -> &autocxx::subclass::CppSubclassCppPeerHolder<ffi::#cpp_ident> {
+                &self.cpp_peer
+            }
+        }
+
+        #self_owned_bit
+    };
+    toks.into()
 }

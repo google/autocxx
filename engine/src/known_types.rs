@@ -428,6 +428,7 @@ pub(crate) fn type_lacks_copy_constructor(ty: &Type) -> bool {
         Type::Path(typ) => {
             let tn = QualifiedName::from_type_path(typ);
             tn.to_cpp_name().starts_with("std::unique_ptr")
+                || tn.to_cpp_name().starts_with("rust::Box")
         }
         _ => false,
     }

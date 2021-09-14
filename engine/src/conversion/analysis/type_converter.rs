@@ -467,11 +467,14 @@ impl<'a> TypeConverter<'a> {
                 | Api::Typedef { .. }
                 | Api::Enum { .. }
                 | Api::Struct { .. }
+                | Api::Subclass { .. }
                 | Api::RustType { .. } => Some(api.name()),
                 Api::StringConstructor { .. }
                 | Api::Function { .. }
                 | Api::Const { .. }
                 | Api::CType { .. }
+                | Api::RustSubclassFn { .. }
+                | Api::RustSubclassConstructor { .. }
                 | Api::IgnoredItem { .. } => None,
             })
             .cloned()

@@ -21,6 +21,8 @@
 // do anything - all the magic is handled entirely by
 // autocxx_macro::include_cpp_impl.
 
+pub mod subclass;
+
 #[allow(unused_imports)] // doc cross-reference only
 use autocxx_engine::IncludeCppEngine;
 
@@ -612,6 +614,15 @@ macro_rules! exclude_impls {
 /// `cxx` bindings.
 #[macro_export]
 macro_rules! rust_type {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
+/// Declare a Rust subclass of a C++ class.
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+/// Use this in conjunction with [`subclass::is_subclass`].
+#[macro_export]
+macro_rules! subclass {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 

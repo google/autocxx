@@ -15,17 +15,28 @@
 use crate::types::Namespace;
 use syn::{parse_quote, Ident, Type};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum CppConversionType {
     None,
     FromUniquePtrToValue,
     FromValueToUniquePtr,
 }
 
-#[derive(Clone)]
+impl CppConversionType {
+    fn inverse(&self) -> Self {
+        match self {
+            CppConversionType::None => CppConversionType::None,
+            CppConversionType::FromUniquePtrToValue => CppConversionType::FromValueToUniquePtr,
+            CppConversionType::FromValueToUniquePtr => CppConversionType::FromUniquePtrToValue,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub(crate) enum RustConversionType {
     None,
     FromStr,
+    ToBoxedUpHolder(Ident),
 }
 
 /// A policy for converting types. Conversion may occur on both the Rust and
@@ -39,7 +50,7 @@ pub(crate) enum RustConversionType {
 /// * Finally, the actual C++ API receives a `std::string` by value.
 /// The implementation here is distributed across this file, and
 /// `function_wrapper_rs` and `function_wrapper_cpp`.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct TypeConversionPolicy {
     pub(crate) unwrapped_type: Type,
     pub(crate) cpp_conversion: CppConversionType,
@@ -79,6 +90,14 @@ impl TypeConversionPolicy {
         }
     }
 
+    pub(crate) fn box_up_subclass_holder(ty: Type, holder_name: Ident) -> Self {
+        TypeConversionPolicy {
+            unwrapped_type: ty,
+            cpp_conversion: CppConversionType::None,
+            rust_conversion: RustConversionType::ToBoxedUpHolder(holder_name),
+        }
+    }
+
     pub(crate) fn cpp_work_needed(&self) -> bool {
         !matches!(self.cpp_conversion, CppConversionType::None)
     }
@@ -107,20 +126,41 @@ impl TypeConversionPolicy {
     pub(crate) fn rust_work_needed(&self) -> bool {
         !matches!(self.rust_conversion, RustConversionType::None)
     }
+
+    pub(crate) fn inverse(&self) -> Self {
+        Self {
+            unwrapped_type: self.unwrapped_type.clone(),
+            cpp_conversion: self.cpp_conversion.inverse(),
+            rust_conversion: self.rust_conversion.clone(),
+        }
+    }
 }
 
-#[derive(Clone)] // TODO wish this didn't need to be cloneable
-pub(crate) enum FunctionWrapperPayload {
+#[derive(Clone)]
+
+pub(crate) enum CppFunctionBody {
     FunctionCall(Namespace, Ident),
     StaticMethodCall(Namespace, Ident, Ident),
     Constructor,
+    AssignSubclassHolderField,
 }
 
-#[derive(Clone)] // TODO wish this didn't need to be cloneable
-pub(crate) struct FunctionWrapper {
-    pub(crate) payload: FunctionWrapperPayload,
+#[derive(Clone)]
+
+pub(crate) enum CppFunctionKind {
+    Function,
+    Method,
+    ConstMethod,
+    Constructor,
+}
+
+#[derive(Clone)]
+pub(crate) struct CppFunction {
+    pub(crate) payload: CppFunctionBody,
     pub(crate) wrapper_function_name: Ident,
     pub(crate) return_conversion: Option<TypeConversionPolicy>,
     pub(crate) argument_conversion: Vec<TypeConversionPolicy>,
-    pub(crate) is_a_method: bool,
+    pub(crate) kind: CppFunctionKind,
+    pub(crate) pass_obs_field: bool,
+    pub(crate) qualification: Option<Ident>,
 }

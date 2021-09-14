@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
+
 use proc_macro2::Span;
 use syn::{
     parse::{Parse, ParseStream},
-    LitStr, Token,
+    parse_quote, LitStr, Token,
 };
 use syn::{Ident, Result as ParseResult};
 
@@ -53,7 +55,7 @@ impl Parse for UnsafePolicy {
 /// Allowlist configuration.
 #[derive(Hash, Debug)]
 pub enum Allowlist {
-    Unspecified,
+    Unspecified(Vec<String>),
     All,
     Specific(Vec<String>),
 }
@@ -61,8 +63,12 @@ pub enum Allowlist {
 impl Allowlist {
     pub(crate) fn push(&mut self, item: LitStr) -> ParseResult<()> {
         match self {
-            Allowlist::Unspecified => {
-                *self = Allowlist::Specific(vec![item.value()]);
+            Allowlist::Unspecified(ref mut uncommitted_list) => {
+                let new_list = uncommitted_list
+                    .drain(..)
+                    .chain(std::iter::once(item.value()))
+                    .collect();
+                *self = Allowlist::Specific(new_list);
             }
             Allowlist::All => {
                 return Err(syn::Error::new(
@@ -73,6 +79,15 @@ impl Allowlist {
             Allowlist::Specific(list) => list.push(item.value()),
         };
         Ok(())
+    }
+
+    /// Sometimes we need to push things onto the allowlist without making
+    /// a commitment whether we're in `allowlist` or `allowlist_all` mode.
+    pub(crate) fn push_uncommitted(&mut self, item: LitStr) {
+        match self {
+            Allowlist::Unspecified(list) | Allowlist::Specific(list) => list.push(item.value()),
+            Allowlist::All => {}
+        }
     }
 
     pub(crate) fn set_all(&mut self, ident: &Ident) -> ParseResult<()> {
@@ -89,8 +104,14 @@ impl Allowlist {
 
 impl Default for Allowlist {
     fn default() -> Self {
-        Allowlist::Unspecified
+        Allowlist::Unspecified(Vec::new())
     }
+}
+
+#[derive(Hash, Debug)]
+pub struct Subclass {
+    pub superclass: String,
+    pub subclass: Ident,
 }
 
 #[derive(Hash, Debug)]
@@ -105,6 +126,7 @@ pub struct IncludeCppConfig {
     exclude_utilities: bool,
     mod_name: Option<Ident>,
     pub rust_types: Vec<Ident>,
+    pub subclasses: Vec<Subclass>,
 }
 
 impl Parse for IncludeCppConfig {
@@ -118,12 +140,13 @@ impl Parse for IncludeCppConfig {
         let mut parse_only = false;
         let mut exclude_impls = false;
         let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
-        let mut allowlist = Allowlist::Unspecified;
+        let mut allowlist = Allowlist::default();
         let mut blocklist = Vec::new();
         let mut pod_requests = Vec::new();
         let mut rust_types = Vec::new();
         let mut exclude_utilities = false;
         let mut mod_name = None;
+        let mut subclasses = Vec::new();
 
         while !input.is_empty() {
             let has_hexathorpe = input.parse::<Option<syn::token::Pound>>()?.is_some();
@@ -162,6 +185,19 @@ impl Parse for IncludeCppConfig {
                     syn::parenthesized!(args in input);
                     let ident: syn::Ident = args.parse()?;
                     rust_types.push(ident);
+                } else if ident == "subclass" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let superclass: syn::LitStr = args.parse()?;
+                    args.parse::<syn::token::Comma>()?;
+                    let subclass: syn::Ident = args.parse()?;
+                    let sub_string = subclass.to_string();
+                    subclasses.push(Subclass {
+                        superclass: superclass.value(),
+                        subclass,
+                    });
+                    allowlist.push_uncommitted(superclass);
+                    allowlist.push_uncommitted(parse_quote! { #sub_string });
                 } else if ident == "parse_only" {
                     parse_only = true;
                     swallow_parentheses(&input, &ident)?;
@@ -206,6 +242,7 @@ impl Parse for IncludeCppConfig {
             blocklist,
             exclude_utilities,
             mod_name,
+            subclasses,
         })
     }
 }
@@ -262,7 +299,7 @@ impl IncludeCppConfig {
                     .cloned()
                     .chain(self.active_utilities()),
             )),
-            Allowlist::Unspecified => unreachable!(),
+            Allowlist::Unspecified(_) => unreachable!(),
         }
     }
 
@@ -312,6 +349,12 @@ impl IncludeCppConfig {
 
     pub fn is_rust_type(&self, id: &Ident) -> bool {
         self.rust_types.contains(id)
+    }
+
+    pub fn superclasses(&self) -> impl Iterator<Item = &String> {
+        let mut uniquified = HashSet::new();
+        uniquified.extend(self.subclasses.iter().map(|sc| &sc.superclass));
+        uniquified.into_iter()
     }
 }
 
