@@ -272,15 +272,14 @@ impl<'a> CppCodeGenerator<'a> {
                 ret.cpp_conversion(&underlying_function_call, &self.original_name_map)?
             );
         };
-        let definition = Some(format!(
+        let declaration = Some(format!(
             "{} {{ {}; }}",
             declaration, underlying_function_call,
         ));
-        let declaration = Some(format!("{};", declaration));
         self.additional_functions.push(AdditionalFunction {
             type_definition: None,
             declaration,
-            definition,
+            definition: None,
             headers: vec![Header::system("memory")],
         });
         Ok(())
