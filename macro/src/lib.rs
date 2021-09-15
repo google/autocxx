@@ -15,7 +15,7 @@
 use autocxx_parser::IncludeCpp;
 use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, proc_macro_error};
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::parse::{Parse, ParseStream, Parser};
 use syn::{parse_macro_input, Fields, ItemStruct, Result as ParseResult};
 
@@ -23,11 +23,14 @@ struct SelfOwned(bool);
 
 impl Parse for SelfOwned {
     fn parse(input: ParseStream) -> ParseResult<Self> {
-        // TODO make this less liberal
         let id = input.parse::<Option<Ident>>()?;
         match id {
             Some(id) if id == "self_owned" => Ok(Self(true)),
-            _ => Ok(Self(false)),
+            Some(id) => Err(syn::Error::new_spanned(
+                id.into_token_stream(),
+                "Expected self_owned",
+            )),
+            None => Ok(Self(false)),
         }
     }
 }

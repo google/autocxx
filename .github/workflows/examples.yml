@@ -25,3 +25,6 @@ jobs:
     - name: Build steam example
       working-directory: ./examples/steam-mini
       run: cargo build --all --verbose
+    - name: Build subclass example
+      working-directory: ./examples/subclass
+      run: cargo build --all --verbose
