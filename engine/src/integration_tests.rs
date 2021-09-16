@@ -6833,6 +6833,64 @@ fn test_pv_subclass_types() {
     );
 }
 
+#[ignore] // https://github.com/google/autocxx/issues/596
+#[test]
+fn test_pv_subclass_constructors() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <string>
+
+    class TestObserver {
+    public:
+        TestObserver() {}
+        TestObserver(uint8_t) {}
+        TestObserver(std::string) {}
+        virtual void call() const { }
+        virtual ~TestObserver() {}
+    };
+
+    extern TestObserver* obs;
+
+    inline void register_observer(TestObserver& a) {
+        obs = &a;
+    }
+    inline void do_a_thing() {
+        return obs->call();
+    }
+    "};
+    run_test_ex2(
+        "TestObserver* obs;",
+        hdr,
+        quote! {
+            let obs = MyTestObserver::new_rust_owned(
+                MyTestObserver::default(),
+                ffi::MyTestObserverCpp::make_unique,
+            );
+            ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
+            ffi::do_a_thing();
+        },
+        &["register_observer", "do_a_thing"],
+        &[],
+        Some(quote! {
+            subclass!("TestObserver",MyTestObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            #[autocxx::subclass::is_subclass]
+            #[derive(Default)]
+            pub struct MyTestObserver {
+            }
+            impl ffi::TestObserver_methods for MyTestObserver {
+                fn call(&self) {
+                    self.peer().call()
+                }
+            }
+        }),
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
