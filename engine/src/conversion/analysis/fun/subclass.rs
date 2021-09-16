@@ -14,7 +14,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use syn::parse_quote;
+use proc_macro2::Ident;
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
+use syn::{parse_quote, FnArg};
 
 use crate::conversion::analysis::fun::ReceiverMutability;
 use crate::conversion::analysis::pod::PodAnalysis;
@@ -107,76 +110,35 @@ pub(super) fn create_subclass_function(
     subclass_function
 }
 
-pub(super) fn add_subclass_constructor(
+pub(super) fn create_subclass_constructor(
     sub: &SubclassName,
-    new_apis: &mut Vec<Api<FnAnalysis>>,
     analysis: &super::FnAnalysisBody,
-    fun: &crate::conversion::api::FuncToConvert,
-) {
+    superclass_name: Ident,
+) -> Api<FnAnalysis> {
     let holder_name = sub.holder();
     let cpp = sub.cpp();
+    let argument_conversion = 
+    std::iter::once(TypeConversionPolicy::new_unconverted(
+        parse_quote! {
+            rust::Box< #holder_name >
+        },
+    )).chain(analysis
+        .param_details
+        .iter()
+        .map(|p| p.conversion.clone()))
+        .collect();
     let cpp_impl = CppFunction {
-        payload: CppFunctionBody::AssignSubclassHolderField,
+        payload: CppFunctionBody::ConstructSuperclass(superclass_name),
         wrapper_function_name: cpp.clone(),
         return_conversion: None,
-        argument_conversion: vec![TypeConversionPolicy::new_unconverted(parse_quote! {
-            rust::Box< #holder_name >
-        })],
+        argument_conversion,
         kind: CppFunctionKind::Constructor,
         pass_obs_field: false,
         qualification: Some(cpp.clone()),
     };
-    new_apis.push(Api::RustSubclassConstructor {
+    Api::RustSubclassConstructor {
         name: ApiName::new_in_root_namespace(cpp.clone()),
         subclass: sub.clone(),
         cpp_impl: Box::new(cpp_impl),
-    });
-    let wrapper_name = make_ident(format!("{}_make_unique", cpp));
-    let mut constructor_wrapper = analysis.clone();
-    let id = sub.0.name.get_final_ident();
-    constructor_wrapper.param_details.insert(
-        0,
-        ArgumentAnalysis {
-            conversion: TypeConversionPolicy::box_up_subclass_holder(
-                parse_quote! {
-                    autocxx::subclass::CppSubclassRustPeerHolder<super::super::super:: #id>
-                },
-                holder_name.clone(),
-            ),
-            name: parse_quote! {rs_peer},
-            self_type: None,
-            was_reference: false,
-            deps: HashSet::new(),
-            is_virtual: false,
-            requires_unsafe: false,
-        },
-    );
-    constructor_wrapper
-        .params
-        .insert(0, parse_quote! { rs_peer: Box<#holder_name> });
-    constructor_wrapper.cxxbridge_name = wrapper_name.clone();
-    constructor_wrapper.ret_type = parse_quote! { -> cxx::UniquePtr < #cpp > };
-    constructor_wrapper.kind = FnKind::Method(
-        QualifiedName::new(&Namespace::new(), cpp.clone()),
-        MethodKind::Static,
-    );
-    constructor_wrapper.cpp_wrapper = Some(CppFunction {
-        payload: CppFunctionBody::Constructor,
-        wrapper_function_name: wrapper_name.clone(),
-        return_conversion: Some(TypeConversionPolicy::new_to_unique_ptr(
-            parse_quote! { #cpp },
-        )),
-        argument_conversion: vec![TypeConversionPolicy::new_unconverted(parse_quote! {
-            rust::Box< #holder_name >
-        })],
-        kind: CppFunctionKind::Function,
-        pass_obs_field: false,
-        qualification: None,
-    });
-    new_apis.push(Api::Function {
-        name: ApiName::new_in_root_namespace(wrapper_name),
-        name_for_gc: Some(sub.0.name.clone()),
-        analysis: constructor_wrapper,
-        fun: Box::new(fun.clone()),
-    })
+    }
 }

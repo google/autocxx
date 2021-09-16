@@ -353,6 +353,9 @@ impl<'a> CppCodeGenerator<'a> {
             .collect();
         let mut arg_list = arg_list?.into_iter();
         let receiver = if is_a_method { arg_list.next() } else { None };
+        if matches!(&details.payload, CppFunctionBody::ConstructSuperclass(_)) {
+            arg_list.next();
+        }
         let arg_list = if details.pass_obs_field {
             std::iter::once("*obs".to_string())
                 .chain(arg_list)
@@ -360,17 +363,17 @@ impl<'a> CppCodeGenerator<'a> {
         } else {
             arg_list.join(", ")
         };
-        let mut underlying_function_call = match &details.payload {
-            CppFunctionBody::Constructor => arg_list,
+        let (mut underlying_function_call, field_assignments) = match &details.payload {
+            CppFunctionBody::Constructor => (arg_list, "".to_string()),
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
-                Some(receiver) => format!("{}.{}({})", receiver, id.to_string(), arg_list),
+                Some(receiver) => (format!("{}.{}({})", receiver, id.to_string(), arg_list), "".to_string()),
                 None => {
                     let underlying_function_call = ns
                         .into_iter()
                         .cloned()
                         .chain(std::iter::once(id.to_string()))
                         .join("::");
-                    format!("{}({})", underlying_function_call, arg_list)
+                    (format!("{}({})", underlying_function_call, arg_list), "".to_string())
                 }
             },
             CppFunctionBody::StaticMethodCall(ns, ty_id, fn_id) => {
@@ -379,9 +382,9 @@ impl<'a> CppCodeGenerator<'a> {
                     .cloned()
                     .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
                     .join("::");
-                format!("{}({})", underlying_function_call, arg_list)
+                (format!("{}({})", underlying_function_call, arg_list), "".to_string())
             }
-            CppFunctionBody::AssignSubclassHolderField => "".to_string(),
+            CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list),
         };
         if let Some(ret) = &details.return_conversion {
             underlying_function_call = format!(
@@ -399,11 +402,16 @@ impl<'a> CppCodeGenerator<'a> {
         if !underlying_function_call.is_empty() {
             underlying_function_call = format!("{};", underlying_function_call);
         }
-        let field_assignments = if let CppFunctionBody::AssignSubclassHolderField = &details.payload
+        let field_assignments = if let CppFunctionBody::ConstructSuperclass(superclass_name) = &details.payload
         {
-            ": obs(std::move(arg0))"
+            let superclass_construction = if field_assignments.is_empty() {
+                "".to_string()
+            } else {
+                format!("{}({}), ", superclass_name, field_assignments)
+            };
+            format!(": {}obs(std::move(arg0))", superclass_construction)
         } else {
-            ""
+            "".into()
         };
         let definition_after_sig =
             format!("{} {{ {} }}", field_assignments, underlying_function_call,);

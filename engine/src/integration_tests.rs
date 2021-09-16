@@ -6841,9 +6841,9 @@ fn test_pv_subclass_constructors() {
 
     class TestObserver {
     public:
-        TestObserver() {}
+        //TestObserver() {}
         TestObserver(uint8_t) {}
-        TestObserver(std::string) {}
+        //TestObserver(std::string) {}
         virtual void call() const { }
         virtual ~TestObserver() {}
     };
@@ -6868,10 +6868,7 @@ fn test_pv_subclass_constructors() {
             ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
             ffi::call();
         },
-        &[
-            "register_observer",
-            "call",
-        ],
+        &["register_observer", "call"],
         &[],
         Some(quote! {
             subclass!("TestObserver",MyTestObserver)

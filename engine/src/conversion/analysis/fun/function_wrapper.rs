@@ -142,7 +142,7 @@ pub(crate) enum CppFunctionBody {
     FunctionCall(Namespace, Ident),
     StaticMethodCall(Namespace, Ident, Ident),
     Constructor,
-    AssignSubclassHolderField,
+    ConstructSuperclass(Ident),
 }
 
 #[derive(Clone)]

@@ -56,7 +56,7 @@ use self::{
     bridge_name_tracker::BridgeNameTracker,
     overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
-    subclass::{add_subclass_constructor, create_subclass_function},
+    subclass::{create_subclass_constructor, create_subclass_function},
 };
 
 use super::{
@@ -672,7 +672,17 @@ impl<'a> FnAnalyzer<'a> {
         match &kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 for sub in self.subclasses_by_superclass(sup) {
-                    add_subclass_constructor(sub, &mut results, &analysis, &func_information);
+                    let subclass_constructor = create_subclass_constructor(sub, &analysis, sup.get_final_ident());
+                    results.push(subclass_constructor);
+
+                    let mut item = func_information.item.clone();
+                    item.sig.ident = SubclassName::get_super_fn_name(&rust_name);
+                    let self_ty = Some(QualifiedName::new(&Namespace::new(), sub.cpp()));
+                    to_synthesize.push(Box::new(FuncToConvert {
+                        item,
+                        virtual_this_type: self_ty.clone(),
+                        self_ty,
+                    }));
                 }
             }
             FnKind::Method(
