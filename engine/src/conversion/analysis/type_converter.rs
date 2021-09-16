@@ -469,8 +469,7 @@ impl<'a> TypeConverter<'a> {
                 | Api::Struct { .. }
                 | Api::Subclass { .. }
                 | Api::RustType { .. } => Some(api.name()),
-                Api::StringConstructor { .. }
-                | Api::Function { .. }
+                Api::Function { .. }
                 | Api::Const { .. }
                 | Api::CType { .. }
                 | Api::RustSubclassFn { .. }

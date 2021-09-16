@@ -175,7 +175,7 @@ impl<'a> RsCodeGenerator<'a> {
             .map(|api| {
                 let more_cpp_needed = api.needs_cpp_codegen();
                 let name = api.name().clone();
-                let gen = self.generate_rs_for_api(api, &mut methods_by_superclass);
+                let gen = self.generate_rs_for_api(api, &mut methods_by_superclass, self.config);
                 ((name, gen), more_cpp_needed)
             })
             .unzip();
@@ -462,25 +462,12 @@ impl<'a> RsCodeGenerator<'a> {
         &self,
         api: Api<FnAnalysis>,
         associated_methods: &mut HashMap<String, Vec<SuperclassMethod>>,
+        config: &IncludeCppConfig,
     ) -> RsCodegenResult {
         let name = api.name().clone();
         let id = name.get_final_ident();
         let cpp_call_name = api.effective_cpp_name().to_string();
         match api {
-            Api::StringConstructor { .. } => {
-                let make_string_name = make_ident(self.config.get_makestring_name());
-                RsCodegenResult {
-                    extern_c_mod_items: vec![ForeignItem::Fn(parse_quote!(
-                        fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;
-                    ))],
-                    bridge_items: Vec::new(),
-                    global_items: get_string_items(),
-                    bindgen_mod_items: Vec::new(),
-                    impl_entry: None,
-                    materialization: Use::UsedFromCxxBridgeWithAlias(make_ident("make_string")),
-                    extern_rust_mod_items: Vec::new(),
-                }
-            }
             Api::ConcreteType { .. } => RsCodegenResult {
                 global_items: self.generate_extern_type_impl(TypeKind::NonPod, &name),
                 bridge_items: create_impl_items(&id, self.config),
@@ -503,9 +490,14 @@ impl<'a> RsCodeGenerator<'a> {
                 materialization: Use::UsedFromCxxBridge,
                 extern_rust_mod_items: Vec::new(),
             },
-            Api::Function { fun, analysis, .. } => {
-                gen_function(name.get_namespace(), *fun, analysis, cpp_call_name)
-            }
+            Api::Function { fun, analysis, .. } => gen_function(
+                name.get_namespace(),
+                id,
+                *fun,
+                analysis,
+                cpp_call_name,
+                config,
+            ),
             Api::Const { const_item, .. } => RsCodegenResult {
                 global_items: Vec::new(),
                 impl_entry: None,

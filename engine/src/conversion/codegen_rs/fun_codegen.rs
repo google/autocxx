@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use autocxx_parser::IncludeCppConfig;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
@@ -27,7 +28,6 @@ use super::{
     unqualify::{unqualify_params, unqualify_ret_type},
     RsCodegenResult, Use,
 };
-use crate::{conversion::api::FuncToConvert, types::make_ident};
 use crate::{
     conversion::{
         analysis::fun::{ArgumentAnalysis, FnAnalysisBody, FnKind, MethodKind, RustRenameStrategy},
@@ -35,12 +35,18 @@ use crate::{
     },
     types::{Namespace, QualifiedName},
 };
+use crate::{
+    conversion::{api::FuncToConvert, codegen_rs::get_string_items},
+    types::make_ident,
+};
 
 pub(super) fn gen_function(
     ns: &Namespace,
+    id: Ident,
     fun: FuncToConvert,
     analysis: FnAnalysisBody,
     cpp_call_name: String,
+    config: &IncludeCppConfig,
 ) -> RsCodegenResult {
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = analysis.rust_name;
@@ -140,10 +146,15 @@ pub(super) fn gen_function(
         #doc_attr
         #vis #unsafety fn #cxxbridge_name ( #params ) #ret_type;
     ));
+    let global_items = if id == config.get_makestring_name() {
+        get_string_items()
+    } else {
+        Vec::new()
+    };
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
         bridge_items: Vec::new(),
-        global_items: Vec::new(),
+        global_items,
         bindgen_mod_items: Vec::new(),
         impl_entry,
         materialization,

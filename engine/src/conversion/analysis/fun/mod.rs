@@ -939,8 +939,7 @@ impl Api<FnAnalysis> {
     pub(crate) fn needs_cpp_codegen(&self) -> bool {
         match &self {
             Api::Function { analysis, .. } => analysis.cpp_wrapper.is_some(),
-            Api::StringConstructor { .. }
-            | Api::ConcreteType { .. }
+            Api::ConcreteType { .. }
             | Api::CType { .. }
             | Api::RustSubclassConstructor { .. }
             | Api::RustSubclassFn { .. }
@@ -952,8 +951,7 @@ impl Api<FnAnalysis> {
     pub(crate) fn cxxbridge_name(&self) -> Option<Ident> {
         match self {
             Api::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
-            Api::StringConstructor { .. }
-            | Api::Const { .. }
+            Api::Const { .. }
             | Api::IgnoredItem { .. }
             | Api::RustSubclassConstructor { .. }
             | Api::RustSubclassFn { .. } => None,

@@ -164,9 +164,6 @@ pub(crate) enum Api<T: AnalysisPhase> {
         rs_definition: Box<Type>,
         cpp_definition: String,
     },
-    /// A simple note that we want to make a constructor for
-    /// a `std::string` on the heap.
-    StringConstructor { name: ApiName },
     /// A function. May include some analysis.
     Function {
         name: ApiName,
@@ -247,7 +244,6 @@ impl<T: AnalysisPhase> Api<T> {
         match self {
             Api::ForwardDeclaration { name } => name,
             Api::ConcreteType { name, .. } => name,
-            Api::StringConstructor { name } => name,
             Api::Function { name, .. } => name,
             Api::Const { name, .. } => name,
             Api::Typedef { name, .. } => name,

@@ -124,7 +124,11 @@ impl<'a> CppCodeGenerator<'a> {
         let mut deferred_apis = Vec::new();
         for api in apis {
             match &api {
-                Api::StringConstructor { .. } => self.generate_string_constructor(),
+                Api::Function { name, .. }
+                    if name.name.get_final_ident() == self.config.get_makestring_name() =>
+                {
+                    self.generate_string_constructor()
+                }
                 Api::Function {
                     analysis:
                         FnAnalysisBody {

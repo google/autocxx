@@ -71,7 +71,6 @@ pub(crate) fn check_names(apis: Vec<Api<FnAnalysis>>) -> Vec<Api<FnAnalysis>> {
         }
         Api::ConcreteType { .. }
         | Api::CType { .. }
-        | Api::StringConstructor { .. }
         | Api::RustType { .. }
         | Api::RustSubclassFn { .. }
         | Api::RustSubclassConstructor { .. }
