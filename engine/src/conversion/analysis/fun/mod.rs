@@ -736,13 +736,10 @@ impl<'a> FnAnalyzer<'a> {
         Ok(Some((analysis, name)))
     }
 
-    fn subclasses_by_superclass(
-        &self,
-        sup: &QualifiedName,
-    ) -> Box<dyn Iterator<Item = SubclassName>> {
+    fn subclasses_by_superclass(&self, sup: &QualifiedName) -> impl Iterator<Item = SubclassName> {
         match self.subclasses_by_superclass.get(sup) {
-            Some(subs) => Box::new(subs.clone().into_iter()),
-            None => Box::new(std::iter::empty()),
+            Some(subs) => subs.clone().into_iter(),
+            None => Vec::new().into_iter(),
         }
     }
 
