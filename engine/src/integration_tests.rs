@@ -204,6 +204,31 @@ fn run_test_expect_fail(
     .expect_err("Unexpected success");
 }
 
+fn run_test_expect_fail_ex(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code: TokenStream,
+    generate: &[&str],
+    generate_pods: &[&str],
+    extra_directives: Option<TokenStream>,
+    extra_clang_args: &[&str],
+    rust_code_checker: Option<RustCodeChecker>,
+    extra_rust: Option<TokenStream>,
+) {
+    do_run_test(
+        cxx_code,
+        header_code,
+        rust_code,
+        generate,
+        generate_pods,
+        extra_directives,
+        extra_clang_args,
+        rust_code_checker,
+        extra_rust,
+    )
+    .expect_err("Unexpected success");
+}
+
 /// In the future maybe the tests will distinguish the exact type of failure expected.
 #[derive(Debug)]
 enum TestError {
@@ -6885,6 +6910,94 @@ fn test_pv_subclass_constructors() {
             impl ffi::TestObserver_methods for MyTestObserver {
                 fn call(&self) {
                     self.peer().call()
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_fancy_constructor() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer(uint8_t) {}
+        virtual uint32_t foo() const = 0;
+        virtual ~Observer() {}
+    };
+    inline void take_observer(const Observer&) {}
+    "};
+    run_test_expect_fail_ex(
+        "",
+        hdr,
+        quote! {
+            let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+            ffi::take_observer(o.borrow().as_ref());
+        },
+        &["take_observer"],
+        &[],
+        Some(quote! {
+            subclass!("Observer",MyObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::is_subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                fn foo(&self) -> u32 {
+                    4
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_namespaced_superclass() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    namespace foo {
+    class Observer {
+    public:
+        Observer() {}
+        virtual uint32_t foo() const = 0;
+        virtual ~Observer() {}
+    };
+    }
+    inline void take_observer(const foo::Observer&) {}
+    "};
+    run_test_expect_fail_ex(
+        "",
+        hdr,
+        quote! {
+            let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+            ffi::take_observer(o.borrow().as_ref());
+        },
+        &["take_observer"],
+        &[],
+        Some(quote! {
+            subclass!("foo::Observer",MyObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::is_subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                fn foo(&self) -> u32 {
+                    4
                 }
             }
         }),

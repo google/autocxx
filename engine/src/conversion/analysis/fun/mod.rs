@@ -276,6 +276,12 @@ impl<'a> FnAnalyzer<'a> {
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 for sub in self.subclasses_by_superclass(sup) {
+                    if analysis.param_details.len() > 0 {
+                        return Err(ConvertErrorWithContext(
+                            ConvertError::SuperclassConstructorsTooFancy(sup.clone()),
+                            None,
+                        ));
+                    }
                     add_subclass_constructor(&sub, &mut results, &analysis, &func_information);
                 }
             }
