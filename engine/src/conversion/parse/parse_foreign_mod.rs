@@ -82,6 +82,7 @@ impl ParseForeignMod {
                     item,
                     virtual_this_type: virtual_this_type.clone(),
                     self_ty: None,
+                    obs_param: None,
                 });
                 Ok(())
             }

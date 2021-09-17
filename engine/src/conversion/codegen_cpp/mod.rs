@@ -366,14 +366,20 @@ impl<'a> CppCodeGenerator<'a> {
         let (mut underlying_function_call, field_assignments) = match &details.payload {
             CppFunctionBody::Constructor => (arg_list, "".to_string()),
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
-                Some(receiver) => (format!("{}.{}({})", receiver, id.to_string(), arg_list), "".to_string()),
+                Some(receiver) => (
+                    format!("{}.{}({})", receiver, id.to_string(), arg_list),
+                    "".to_string(),
+                ),
                 None => {
                     let underlying_function_call = ns
                         .into_iter()
                         .cloned()
                         .chain(std::iter::once(id.to_string()))
                         .join("::");
-                    (format!("{}({})", underlying_function_call, arg_list), "".to_string())
+                    (
+                        format!("{}({})", underlying_function_call, arg_list),
+                        "".to_string(),
+                    )
                 }
             },
             CppFunctionBody::StaticMethodCall(ns, ty_id, fn_id) => {
@@ -382,7 +388,10 @@ impl<'a> CppCodeGenerator<'a> {
                     .cloned()
                     .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
                     .join("::");
-                (format!("{}({})", underlying_function_call, arg_list), "".to_string())
+                (
+                    format!("{}({})", underlying_function_call, arg_list),
+                    "".to_string(),
+                )
             }
             CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list),
         };
@@ -402,17 +411,17 @@ impl<'a> CppCodeGenerator<'a> {
         if !underlying_function_call.is_empty() {
             underlying_function_call = format!("{};", underlying_function_call);
         }
-        let field_assignments = if let CppFunctionBody::ConstructSuperclass(superclass_name) = &details.payload
-        {
-            let superclass_construction = if field_assignments.is_empty() {
-                "".to_string()
+        let field_assignments =
+            if let CppFunctionBody::ConstructSuperclass(superclass_name) = &details.payload {
+                let superclass_construction = if field_assignments.is_empty() {
+                    "".to_string()
+                } else {
+                    format!("{}({}), ", superclass_name, field_assignments)
+                };
+                format!(": {}obs(std::move(arg0))", superclass_construction)
             } else {
-                format!("{}({}), ", superclass_name, field_assignments)
+                "".into()
             };
-            format!(": {}obs(std::move(arg0))", superclass_construction)
-        } else {
-            "".into()
-        };
         let definition_after_sig =
             format!("{} {{ {} }}", field_assignments, underlying_function_call,);
         let (declaration, definition) = if requires_rust_declarations {

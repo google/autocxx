@@ -12,27 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 use proc_macro2::Ident;
-use syn::{parse_quote};
+use syn::parse_quote;
 
 use crate::conversion::analysis::fun::ReceiverMutability;
 use crate::conversion::analysis::pod::PodAnalysis;
 use crate::conversion::api::{RustSubclassFnDetails, SubclassName};
 use crate::{
     conversion::{
-        analysis::fun::{
-            function_wrapper::{
-                CppFunction, CppFunctionBody, CppFunctionKind, TypeConversionPolicy,
-            },
+        analysis::fun::function_wrapper::{
+            CppFunction, CppFunctionBody, CppFunctionKind, TypeConversionPolicy,
         },
         api::{Api, ApiName},
     },
     types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::{FnAnalysis};
+use super::FnAnalysis;
 
 pub(super) fn subclasses_by_superclass(
     apis: &[Api<PodAnalysis>],
@@ -114,15 +112,11 @@ pub(super) fn create_subclass_constructor(
 ) -> Api<FnAnalysis> {
     let holder_name = sub.holder();
     let cpp = sub.cpp();
-    let argument_conversion = 
-    std::iter::once(TypeConversionPolicy::new_unconverted(
-        parse_quote! {
+    let argument_conversion =
+        std::iter::once(TypeConversionPolicy::new_unconverted(parse_quote! {
             rust::Box< #holder_name >
-        },
-    )).chain(analysis
-        .param_details
-        .iter()
-        .map(|p| p.conversion.clone()))
+        }))
+        .chain(analysis.param_details.iter().map(|p| p.conversion.clone()))
         .collect();
     let cpp_impl = CppFunction {
         payload: CppFunctionBody::ConstructSuperclass(superclass_name),

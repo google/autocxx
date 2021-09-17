@@ -55,7 +55,7 @@ impl Parse for UnsafePolicy {
 #[derive(Hash, Debug)]
 pub enum AllowlistItem {
     LiberalIfMissing(String),
-    StrictIfMissing(String)
+    StrictIfMissing(String),
 }
 
 impl AllowlistItem {
@@ -81,7 +81,9 @@ impl Allowlist {
             Allowlist::Unspecified(ref mut uncommitted_list) => {
                 let new_list = uncommitted_list
                     .drain(..)
-                    .chain(std::iter::once(AllowlistItem::StrictIfMissing(item.value())))
+                    .chain(std::iter::once(AllowlistItem::StrictIfMissing(
+                        item.value(),
+                    )))
                     .collect();
                 *self = Allowlist::Specific(new_list);
             }
@@ -100,8 +102,7 @@ impl Allowlist {
     /// a commitment whether we're in `allowlist` or `allowlist_all` mode.
     pub(crate) fn push_uncommitted(&mut self, item: AllowlistItem) {
         match self {
-            Allowlist::Unspecified(list) | Allowlist::Specific(list) => 
-                list.push(item),
+            Allowlist::Unspecified(list) | Allowlist::Specific(list) => list.push(item),
             Allowlist::All => {}
         }
     }
@@ -300,10 +301,17 @@ impl IncludeCppConfig {
     /// we should raise an error if we weren't able to do so.
     pub fn must_generate_list(&self) -> Box<dyn Iterator<Item = String> + '_> {
         if let Allowlist::Specific(items) = &self.allowlist {
-            Box::new(items.iter().map(|item| match item {
-                AllowlistItem::LiberalIfMissing(_) => None,
-                AllowlistItem::StrictIfMissing(item) => Some(item),
-            }).flatten().chain(self.pod_requests.iter()).cloned())
+            Box::new(
+                items
+                    .iter()
+                    .map(|item| match item {
+                        AllowlistItem::LiberalIfMissing(_) => None,
+                        AllowlistItem::StrictIfMissing(item) => Some(item),
+                    })
+                    .flatten()
+                    .chain(self.pod_requests.iter())
+                    .cloned(),
+            )
         } else {
             Box::new(self.pod_requests.iter().cloned())
         }

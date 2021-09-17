@@ -115,7 +115,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) deps: HashSet<QualifiedName>,
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub(crate) struct ArgumentAnalysis {
     pub(crate) conversion: TypeConversionPolicy,
     pub(crate) name: Pat,
@@ -256,6 +256,29 @@ impl<'a> FnAnalyzer<'a> {
         self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
     }
 
+    fn get_subclass_constructor_obs_param(
+        holder_name: &Ident,
+        id: &Ident,
+    ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
+        Ok((
+            parse_quote! { rs_peer: Box<#holder_name> },
+            ArgumentAnalysis {
+                conversion: TypeConversionPolicy::box_up_subclass_holder(
+                    parse_quote! {
+                        autocxx::subclass::CppSubclassRustPeerHolder<super::super::super:: #id>
+                    },
+                    holder_name.clone(),
+                ),
+                name: parse_quote! {rs_peer},
+                self_type: None,
+                was_reference: false,
+                deps: HashSet::new(),
+                is_virtual: false,
+                requires_unsafe: false,
+            },
+        ))
+    }
+
     /// Determine how to materialize a function.
     ///
     /// The main job here is to determine whether a function can simply be noted
@@ -295,22 +318,27 @@ impl<'a> FnAnalyzer<'a> {
         // Now let's analyze all the parameters.
         // See if any have annotations which our fork of bindgen has craftily inserted...
         let (reference_params, reference_return) = Self::get_reference_parameters_and_return(fun);
-        let (param_details, bads): (Vec<_>, Vec<_>) = fun
-            .sig
-            .inputs
-            .iter()
-            .map(|i| {
-                self.convert_fn_arg(
-                    i,
-                    ns,
-                    diagnostic_display_name,
-                    virtual_this.clone(),
-                    &reference_params,
-                )
-            })
-            .partition(Result::is_ok);
+        let param_iterator = fun.sig.inputs.iter().map(|i| {
+            self.convert_fn_arg(
+                i,
+                ns,
+                diagnostic_display_name,
+                virtual_this.clone(),
+                &reference_params,
+            )
+        });
+        let (param_details, bads): (Vec<_>, Vec<_>) =
+            if let Some((ref holder_name, ref id)) = func_information.obs_param {
+                std::iter::once(Self::get_subclass_constructor_obs_param(holder_name, id))
+                    .chain(param_iterator)
+                    .partition(Result::is_ok)
+            } else {
+                param_iterator.partition(Result::is_ok)
+            };
         let (mut params, mut param_details): (Punctuated<_, Comma>, Vec<_>) =
             param_details.into_iter().map(Result::unwrap).unzip();
+        log::info!("PARAMS: {:?}", params);
+        log::info!("PARAM DEETS: {:?}", param_details);
 
         let params_deps: HashSet<_> = param_details
             .iter()
@@ -591,6 +619,7 @@ impl<'a> FnAnalyzer<'a> {
             // Amend parameters for the function which we're asking cxx to generate.
             params.clear();
             for pd in &param_details {
+                log::info!("Making wrapper for {:?}", pd);
                 let type_name = pd.conversion.converted_rust_type();
                 let arg_name = if pd.self_type.is_some()
                     && !matches!(kind, FnKind::Method(_, MethodKind::Constructor))
@@ -682,18 +711,34 @@ impl<'a> FnAnalyzer<'a> {
         Ok(Box::new(results.into_iter()))
     }
 
-    fn generate_subclass_stuff(&mut self, results: &mut Vec<Api<FnAnalysis>>, name: &ApiName, analysis: &FnAnalysisBody, item: &ForeignItemFn) -> Result<(),ConvertErrorWithContext> {
+    fn generate_subclass_stuff(
+        &mut self,
+        results: &mut Vec<Api<FnAnalysis>>,
+        name: &ApiName,
+        analysis: &FnAnalysisBody,
+        item: &ForeignItemFn,
+    ) -> Result<(), ConvertErrorWithContext> {
         // Consider whether we need to synthesize subclass items.
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
-                for sub in self.subclasses_by_superclass(sup).cloned().collect::<Vec<_>>().into_iter() {
-                    let subclass_constructor = create_subclass_constructor(&sub, &analysis, sup.get_final_ident());
+                for sub in self
+                    .subclasses_by_superclass(sup)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                {
+                    let subclass_constructor =
+                        create_subclass_constructor(&sub, &analysis, sup.get_final_ident());
                     results.push(subclass_constructor);
 
                     let mut item = item.clone();
                     let cpp_name = sub.cpp();
                     let self_ty = Some(QualifiedName::new(&Namespace::new(), cpp_name.clone()));
-                    Self::fix_up_subclass_constructor_name(&mut item.sig.ident, &sup.get_final_ident(), &sub.cpp());
+                    Self::fix_up_subclass_constructor_name(
+                        &mut item.sig.ident,
+                        &sup.get_final_ident(),
+                        &sub.cpp(),
+                    );
                     match item.sig.inputs.first_mut().unwrap() {
                         FnArg::Typed(pt) => match &mut *pt.ty {
                             Type::Ptr(tp) => {
@@ -702,17 +747,19 @@ impl<'a> FnAnalyzer<'a> {
                                 *tp = parse_quote! {
                                      * #mutability #constness #cpp_name
                                 }
-                            },
+                            }
                             _ => {}
-                        }
-                        FnArg::Receiver(_) => {},
+                        },
+                        FnArg::Receiver(_) => {}
                     };
                     let fun = Box::new(FuncToConvert {
                         item,
                         virtual_this_type: self_ty.clone(),
                         self_ty,
+                        obs_param: Some((sub.holder(), sub.cpp())),
                     });
-                    let uniquified_name = format!("{}_{}", fun.item.sig.ident.to_string(), sub.cpp());
+                    let uniquified_name =
+                        format!("{}_{}", fun.item.sig.ident.to_string(), sub.cpp());
                     log::info!("New name is {:?}", uniquified_name);
                     let name = ApiName::new(name.name.get_namespace(), make_ident(uniquified_name));
                     results.extend(self.analyze_foreign_fn(name, fun, false)?);
@@ -723,7 +770,12 @@ impl<'a> FnAnalyzer<'a> {
                 MethodKind::Virtual(receiver_mutability)
                 | MethodKind::PureVirtual(receiver_mutability),
             ) => {
-                for sub in self.subclasses_by_superclass(sup).cloned().collect::<Vec<_>>().into_iter() {
+                for sub in self
+                    .subclasses_by_superclass(sup)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                {
                     let subclass_function =
                         create_subclass_function(&sub, &analysis, &name, receiver_mutability, sup);
                     results.push(subclass_function);
@@ -737,6 +789,7 @@ impl<'a> FnAnalyzer<'a> {
                         item,
                         virtual_this_type: self_ty.clone(),
                         self_ty,
+                        obs_param: None,
                     });
                     results.extend(self.analyze_foreign_fn(name, maybe_wrap, false)?);
                 }
@@ -746,8 +799,17 @@ impl<'a> FnAnalyzer<'a> {
         Ok(())
     }
 
-    fn fix_up_subclass_constructor_name(id: &mut Ident, superclass_id: &Ident, subclass_id: &Ident) {
-        log::info!("PREVIOUSLY: {}, SUP: {}, SUB: {}", id, superclass_id, subclass_id);
+    fn fix_up_subclass_constructor_name(
+        id: &mut Ident,
+        superclass_id: &Ident,
+        subclass_id: &Ident,
+    ) {
+        log::info!(
+            "PREVIOUSLY: {}, SUP: {}, SUB: {}",
+            id,
+            superclass_id,
+            subclass_id
+        );
         let old_id = id.to_string();
         let old_expected_prefix = format!("{}_{}", superclass_id, superclass_id);
         assert!(old_id.starts_with(&old_expected_prefix));
