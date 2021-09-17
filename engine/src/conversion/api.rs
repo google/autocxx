@@ -51,7 +51,7 @@ pub(crate) struct ImplBlockDetails {
 }
 /// A ForeignItemFn with a little bit of context about the
 /// type which is most likely to be 'this'
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub(crate) struct FuncToConvert {
     pub(crate) item: ForeignItemFn,
     pub(crate) virtual_this_type: Option<QualifiedName>,
