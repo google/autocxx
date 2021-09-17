@@ -174,7 +174,7 @@ impl<'a> FnAnalyzer<'a> {
         convert_apis(
             apis,
             &mut results,
-            |name, fun, _, _| me.analyze_foreign_fn(name, fun, false),
+            |name, fun, _, _| me.analyze_foreign_fn_and_subclasses(name, fun),
             Api::struct_unchanged,
             Api::enum_unchanged,
             Api::typedef_unchanged,
@@ -256,6 +256,73 @@ impl<'a> FnAnalyzer<'a> {
         self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
     }
 
+    /// Analyze a given function, and consider if the APIs that we
+    /// find also need to be replicated in subclasses.
+    fn analyze_foreign_fn_and_subclasses(
+        &mut self,
+        name: ApiName,
+        func_information: Box<FuncToConvert>,
+    ) -> Result<Box<dyn Iterator<Item = Api<FnAnalysis>>>, ConvertErrorWithContext> {
+        let maybe_analysis_and_name = self.analyze_foreign_fn(name, func_information.clone())?;
+
+        let (analysis, name) = match maybe_analysis_and_name {
+            None => return Ok(Box::new(std::iter::empty())),
+            Some((analysis, name)) => (analysis, name),
+        };
+
+        let mut results = Vec::new();
+
+        // Consider whether we need to synthesize subclass items.
+        match &analysis.kind {
+            FnKind::Method(sup, MethodKind::Constructor) => {
+                for sub in self.subclasses_by_superclass(sup) {
+                    add_subclass_constructor(&sub, &mut results, &analysis, &func_information);
+                }
+            }
+            FnKind::Method(
+                sup,
+                MethodKind::Virtual(receiver_mutability)
+                | MethodKind::PureVirtual(receiver_mutability),
+            ) => {
+                for sub in self.subclasses_by_superclass(sup) {
+                    let subclass_function =
+                        create_subclass_function(&sub, &analysis, &name, receiver_mutability, sup);
+                    results.push(subclass_function);
+
+                    let mut item = func_information.item.clone();
+                    item.sig.ident = SubclassName::get_super_fn_name(&analysis.rust_name);
+                    let self_ty = Some(QualifiedName::new(&Namespace::new(), sub.cpp()));
+                    let maybe_wrap = Box::new(FuncToConvert {
+                        item,
+                        virtual_this_type: self_ty.clone(),
+                        self_ty,
+                    });
+                    let name =
+                        ApiName::new(name.name.get_namespace(), maybe_wrap.item.sig.ident.clone());
+                    let maybe_another_api = self.analyze_foreign_fn(name, maybe_wrap)?;
+                    if let Some((analysis, name)) = maybe_another_api {
+                        results.push(Api::Function {
+                            fun: func_information.clone(),
+                            analysis,
+                            name,
+                            name_for_gc: None,
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        results.push(Api::Function {
+            fun: func_information,
+            analysis,
+            name,
+            name_for_gc: None,
+        });
+
+        Ok(Box::new(results.into_iter()))
+    }
+
     /// Determine how to materialize a function.
     ///
     /// The main job here is to determine whether a function can simply be noted
@@ -275,8 +342,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         func_information: Box<FuncToConvert>,
-        always_allow: bool,
-    ) -> Result<Box<dyn Iterator<Item = Api<FnAnalysis>>>, ConvertErrorWithContext> {
+    ) -> Result<Option<(FnAnalysisBody, ApiName)>, ConvertErrorWithContext> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
         let mut cpp_name = name.cpp_name.clone();
@@ -288,7 +354,7 @@ impl<'a> FnAnalyzer<'a> {
         // for diagnostics whilst we do that.
         let initial_rust_name = fun.sig.ident.to_string();
         if initial_rust_name.ends_with("_destructor") {
-            return Ok(Box::new(std::iter::empty()));
+            return Ok(None);
         }
         let diagnostic_display_name = cpp_name.as_ref().unwrap_or(&initial_rust_name);
 
@@ -369,12 +435,12 @@ impl<'a> FnAnalyzer<'a> {
 
         let (kind, error_context, rust_name) = if let Some(self_ty) = self_ty {
             // Some kind of method.
-            if !self.is_on_allowlist(&self_ty) && !always_allow {
+            if !self.is_on_allowlist(&self_ty) {
                 // Bindgen will output methods for types which have been encountered
                 // virally as arguments on other allowlisted types. But we don't want
                 // to generate methods unless the user has specifically asked us to.
                 // It may, for instance, be a private type.
-                return Ok(Box::new(std::iter::empty()));
+                return Ok(None);
             }
 
             // Method or static method.
@@ -653,7 +719,7 @@ impl<'a> FnAnalyzer<'a> {
             rust_rename_strategy,
             params,
             ret_conversion: ret_type_conversion,
-            kind: kind.clone(),
+            kind,
             ret_type,
             param_details,
             requires_unsafe,
@@ -665,60 +731,13 @@ impl<'a> FnAnalyzer<'a> {
             cpp_name,
             name: QualifiedName::new(ns, id),
         };
-        let mut results = Vec::new();
-
-        // Consider whether we need to synthesize subclass items.
-        let mut to_synthesize = Vec::new();
-        match &kind {
-            FnKind::Method(sup, MethodKind::Constructor) => {
-                for sub in self.subclasses_by_superclass(sup) {
-                    add_subclass_constructor(sub, &mut results, &analysis, &func_information);
-                }
-            }
-            FnKind::Method(
-                sup,
-                MethodKind::Virtual(receiver_mutability)
-                | MethodKind::PureVirtual(receiver_mutability),
-            ) => {
-                for sub in self.subclasses_by_superclass(sup) {
-                    let subclass_function =
-                        create_subclass_function(sub, &analysis, &name, receiver_mutability, sup);
-                    results.push(subclass_function);
-
-                    let mut item = func_information.item.clone();
-                    item.sig.ident = SubclassName::get_super_fn_name(&rust_name);
-                    let self_ty = Some(QualifiedName::new(&Namespace::new(), sub.cpp()));
-                    to_synthesize.push(Box::new(FuncToConvert {
-                        item,
-                        virtual_this_type: self_ty.clone(),
-                        self_ty,
-                    }));
-                }
-            }
-            _ => {}
-        }
-        for maybe_wrap in to_synthesize {
-            let name = ApiName::new(name.name.get_namespace(), maybe_wrap.item.sig.ident.clone());
-            results.extend(self.analyze_foreign_fn(name, maybe_wrap, true)?);
-        }
-
-        results.push(Api::Function {
-            fun: func_information,
-            analysis,
-            name,
-            name_for_gc: None,
-        });
-
-        Ok(Box::new(results.into_iter()))
+        Ok(Some((analysis, name)))
     }
 
-    fn subclasses_by_superclass(
-        &self,
-        sup: &QualifiedName,
-    ) -> Box<dyn Iterator<Item = &SubclassName> + '_> {
+    fn subclasses_by_superclass(&self, sup: &QualifiedName) -> impl Iterator<Item = SubclassName> {
         match self.subclasses_by_superclass.get(sup) {
-            Some(subs) => Box::new(subs.iter()),
-            None => Box::new(std::iter::empty()),
+            Some(subs) => subs.clone().into_iter(),
+            None => Vec::new().into_iter(),
         }
     }
 
