@@ -274,11 +274,10 @@ impl<'a> FnAnalyzer<'a> {
         let mut results = Vec::new();
 
         // Consider whether we need to synthesize subclass items.
-        let mut to_synthesize = Vec::new();
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 for sub in self.subclasses_by_superclass(sup) {
-                    add_subclass_constructor(sub, &mut results, &analysis, &func_information);
+                    add_subclass_constructor(&sub, &mut results, &analysis, &func_information);
                 }
             }
             FnKind::Method(
@@ -288,32 +287,31 @@ impl<'a> FnAnalyzer<'a> {
             ) => {
                 for sub in self.subclasses_by_superclass(sup) {
                     let subclass_function =
-                        create_subclass_function(sub, &analysis, &name, receiver_mutability, sup);
+                        create_subclass_function(&sub, &analysis, &name, receiver_mutability, sup);
                     results.push(subclass_function);
 
                     let mut item = func_information.item.clone();
                     item.sig.ident = SubclassName::get_super_fn_name(&analysis.rust_name);
                     let self_ty = Some(QualifiedName::new(&Namespace::new(), sub.cpp()));
-                    to_synthesize.push(Box::new(FuncToConvert {
+                    let maybe_wrap = Box::new(FuncToConvert {
                         item,
                         virtual_this_type: self_ty.clone(),
                         self_ty,
-                    }));
+                    });
+                    let name =
+                        ApiName::new(name.name.get_namespace(), maybe_wrap.item.sig.ident.clone());
+                    let maybe_another_api = self.analyze_foreign_fn(name, maybe_wrap, true)?;
+                    if let Some((analysis, name)) = maybe_another_api {
+                        results.push(Api::Function {
+                            fun: func_information.clone(),
+                            analysis,
+                            name,
+                            name_for_gc: None,
+                        });
+                    }
                 }
             }
             _ => {}
-        }
-        for maybe_wrap in to_synthesize {
-            let name = ApiName::new(name.name.get_namespace(), maybe_wrap.item.sig.ident.clone());
-            let maybe_another_api = self.analyze_foreign_fn(name, maybe_wrap, true)?;
-            if let Some((analysis, name)) = maybe_another_api {
-                results.push(Api::Function {
-                    fun: func_information.clone(),
-                    analysis,
-                    name,
-                    name_for_gc: None,
-                });
-            }
         }
 
         results.push(Api::Function {
@@ -741,9 +739,9 @@ impl<'a> FnAnalyzer<'a> {
     fn subclasses_by_superclass(
         &self,
         sup: &QualifiedName,
-    ) -> Box<dyn Iterator<Item = &SubclassName> + '_> {
+    ) -> Box<dyn Iterator<Item = SubclassName>> {
         match self.subclasses_by_superclass.get(sup) {
-            Some(subs) => Box::new(subs.iter()),
+            Some(subs) => Box::new(subs.clone().into_iter()),
             None => Box::new(std::iter::empty()),
         }
     }
