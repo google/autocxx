@@ -17,7 +17,7 @@ use std::collections::HashSet;
 use proc_macro2::Span;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_quote, LitStr, Token,
+    LitStr, Token,
 };
 use syn::{Ident, Result as ParseResult};
 
@@ -52,12 +52,27 @@ impl Parse for UnsafePolicy {
     }
 }
 
+#[derive(Hash, Debug)]
+pub enum AllowlistItem {
+    LiberalIfMissing(String),
+    StrictIfMissing(String)
+}
+
+impl AllowlistItem {
+    fn get(&self) -> &String {
+        match self {
+            AllowlistItem::LiberalIfMissing(item) => item,
+            AllowlistItem::StrictIfMissing(item) => item,
+        }
+    }
+}
+
 /// Allowlist configuration.
 #[derive(Hash, Debug)]
 pub enum Allowlist {
-    Unspecified(Vec<String>),
+    Unspecified(Vec<AllowlistItem>),
     All,
-    Specific(Vec<String>),
+    Specific(Vec<AllowlistItem>),
 }
 
 impl Allowlist {
@@ -66,7 +81,7 @@ impl Allowlist {
             Allowlist::Unspecified(ref mut uncommitted_list) => {
                 let new_list = uncommitted_list
                     .drain(..)
-                    .chain(std::iter::once(item.value()))
+                    .chain(std::iter::once(AllowlistItem::StrictIfMissing(item.value())))
                     .collect();
                 *self = Allowlist::Specific(new_list);
             }
@@ -76,16 +91,17 @@ impl Allowlist {
                     "use either generate!/generate_pod! or generate_all!, not both.",
                 ))
             }
-            Allowlist::Specific(list) => list.push(item.value()),
+            Allowlist::Specific(list) => list.push(AllowlistItem::StrictIfMissing(item.value())),
         };
         Ok(())
     }
 
     /// Sometimes we need to push things onto the allowlist without making
     /// a commitment whether we're in `allowlist` or `allowlist_all` mode.
-    pub(crate) fn push_uncommitted(&mut self, item: LitStr) {
+    pub(crate) fn push_uncommitted(&mut self, item: AllowlistItem) {
         match self {
-            Allowlist::Unspecified(list) | Allowlist::Specific(list) => list.push(item.value()),
+            Allowlist::Unspecified(list) | Allowlist::Specific(list) => 
+                list.push(item),
             Allowlist::All => {}
         }
     }
@@ -192,12 +208,14 @@ impl Parse for IncludeCppConfig {
                     args.parse::<syn::token::Comma>()?;
                     let subclass: syn::Ident = args.parse()?;
                     let sub_string = subclass.to_string();
+                    let sub_string_cpp = format!("{}Cpp", sub_string);
                     subclasses.push(Subclass {
                         superclass: superclass.value(),
                         subclass,
                     });
-                    allowlist.push_uncommitted(superclass);
-                    allowlist.push_uncommitted(parse_quote! { #sub_string });
+                    allowlist.push_uncommitted(AllowlistItem::StrictIfMissing(superclass.value()));
+                    allowlist.push_uncommitted(AllowlistItem::StrictIfMissing(sub_string));
+                    allowlist.push_uncommitted(AllowlistItem::LiberalIfMissing(sub_string_cpp));
                 } else if ident == "parse_only" {
                     parse_only = true;
                     swallow_parentheses(&input, &ident)?;
@@ -282,7 +300,10 @@ impl IncludeCppConfig {
     /// we should raise an error if we weren't able to do so.
     pub fn must_generate_list(&self) -> Box<dyn Iterator<Item = String> + '_> {
         if let Allowlist::Specific(items) = &self.allowlist {
-            Box::new(items.iter().chain(self.pod_requests.iter()).cloned())
+            Box::new(items.iter().map(|item| match item {
+                AllowlistItem::LiberalIfMissing(_) => None,
+                AllowlistItem::StrictIfMissing(item) => Some(item),
+            }).flatten().chain(self.pod_requests.iter()).cloned())
         } else {
             Box::new(self.pod_requests.iter().cloned())
         }
@@ -295,6 +316,7 @@ impl IncludeCppConfig {
             Allowlist::Specific(items) => Some(Box::new(
                 items
                     .iter()
+                    .map(AllowlistItem::get)
                     .chain(self.pod_requests.iter())
                     .cloned()
                     .chain(self.active_utilities()),

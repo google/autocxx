@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 
 use proc_macro2::Ident;
-use syn::punctuated::Punctuated;
-use syn::token::Comma;
-use syn::{parse_quote, FnArg};
+use syn::{parse_quote};
 
 use crate::conversion::analysis::fun::ReceiverMutability;
 use crate::conversion::analysis::pod::PodAnalysis;
@@ -28,14 +26,13 @@ use crate::{
             function_wrapper::{
                 CppFunction, CppFunctionBody, CppFunctionKind, TypeConversionPolicy,
             },
-            ArgumentAnalysis,
         },
         api::{Api, ApiName},
     },
     types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::{FnAnalysis, FnKind, MethodKind};
+use super::{FnAnalysis};
 
 pub(super) fn subclasses_by_superclass(
     apis: &[Api<PodAnalysis>],

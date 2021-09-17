@@ -174,7 +174,7 @@ impl<'a> FnAnalyzer<'a> {
         convert_apis(
             apis,
             &mut results,
-            |name, fun, _, _| me.analyze_foreign_fn(name, fun, false, true),
+            |name, fun, _, _| me.analyze_foreign_fn(name, fun, true),
             Api::struct_unchanged,
             Api::enum_unchanged,
             Api::typedef_unchanged,
@@ -275,7 +275,6 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         func_information: Box<FuncToConvert>,
-        always_allow: bool,
         recurse_into_subclasses: bool,
     ) -> Result<Box<dyn Iterator<Item = Api<FnAnalysis>>>, ConvertErrorWithContext> {
         let fun = &func_information.item;
@@ -370,7 +369,7 @@ impl<'a> FnAnalyzer<'a> {
 
         let (kind, error_context, rust_name) = if let Some(self_ty) = self_ty {
             // Some kind of method.
-            if !self.is_on_allowlist(&self_ty) && !always_allow {
+            if !self.is_on_allowlist(&self_ty) {
                 // Bindgen will output methods for types which have been encountered
                 // virally as arguments on other allowlisted types. But we don't want
                 // to generate methods unless the user has specifically asked us to.
@@ -655,7 +654,7 @@ impl<'a> FnAnalyzer<'a> {
             rust_rename_strategy,
             params,
             ret_conversion: ret_type_conversion,
-            kind: kind.clone(),
+            kind,
             ret_type,
             param_details,
             requires_unsafe,
@@ -685,22 +684,38 @@ impl<'a> FnAnalyzer<'a> {
 
     fn generate_subclass_stuff(&mut self, results: &mut Vec<Api<FnAnalysis>>, name: &ApiName, analysis: &FnAnalysisBody, item: &ForeignItemFn) -> Result<(),ConvertErrorWithContext> {
         // Consider whether we need to synthesize subclass items.
-        let mut to_synthesize = Vec::new();
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
-                for sub in self.subclasses_by_superclass(sup) {
-                    let subclass_constructor = create_subclass_constructor(sub, &analysis, sup.get_final_ident());
+                for sub in self.subclasses_by_superclass(sup).cloned().collect::<Vec<_>>().into_iter() {
+                    let subclass_constructor = create_subclass_constructor(&sub, &analysis, sup.get_final_ident());
                     results.push(subclass_constructor);
 
-                    let item = item.clone();
-                    let self_ty = Some(QualifiedName::new(&Namespace::new(), sub.cpp()));
-                    log::info!("Passing self_ty of {:?}", self_ty);
-                    let mut fun = FuncToConvert {
+                    let mut item = item.clone();
+                    let cpp_name = sub.cpp();
+                    let self_ty = Some(QualifiedName::new(&Namespace::new(), cpp_name.clone()));
+                    Self::fix_up_subclass_constructor_name(&mut item.sig.ident, &sup.get_final_ident(), &sub.cpp());
+                    match item.sig.inputs.first_mut().unwrap() {
+                        FnArg::Typed(pt) => match &mut *pt.ty {
+                            Type::Ptr(tp) => {
+                                let mutability = tp.mutability;
+                                let constness = tp.const_token;
+                                *tp = parse_quote! {
+                                     * #mutability #constness #cpp_name
+                                }
+                            },
+                            _ => {}
+                        }
+                        FnArg::Receiver(_) => {},
+                    };
+                    let fun = Box::new(FuncToConvert {
                         item,
                         virtual_this_type: self_ty.clone(),
                         self_ty,
-                    };
-                    to_synthesize.push((sub.cpp(), Box::new(fun)));
+                    });
+                    let uniquified_name = format!("{}_{}", fun.item.sig.ident.to_string(), sub.cpp());
+                    log::info!("New name is {:?}", uniquified_name);
+                    let name = ApiName::new(name.name.get_namespace(), make_ident(uniquified_name));
+                    results.extend(self.analyze_foreign_fn(name, fun, false)?);
                 }
             }
             FnKind::Method(
@@ -708,30 +723,36 @@ impl<'a> FnAnalyzer<'a> {
                 MethodKind::Virtual(receiver_mutability)
                 | MethodKind::PureVirtual(receiver_mutability),
             ) => {
-                for sub in self.subclasses_by_superclass(sup) {
+                for sub in self.subclasses_by_superclass(sup).cloned().collect::<Vec<_>>().into_iter() {
                     let subclass_function =
-                        create_subclass_function(sub, &analysis, &name, receiver_mutability, sup);
+                        create_subclass_function(&sub, &analysis, &name, receiver_mutability, sup);
                     results.push(subclass_function);
 
                     let mut item = item.clone();
                     item.sig.ident = SubclassName::get_super_fn_name(&analysis.rust_name);
-                    let self_ty = Some(QualifiedName::new(&Namespace::new(), sub.cpp()));
-                    to_synthesize.push((sub.cpp(), Box::new(FuncToConvert {
+                    let subclass_name = sub.cpp();
+                    let self_ty = Some(QualifiedName::new(&Namespace::new(), subclass_name));
+                    let name = ApiName::new(name.name.get_namespace(), item.sig.ident.clone());
+                    let maybe_wrap = Box::new(FuncToConvert {
                         item,
                         virtual_this_type: self_ty.clone(),
                         self_ty,
-                    })));
+                    });
+                    results.extend(self.analyze_foreign_fn(name, maybe_wrap, false)?);
                 }
             }
             _ => {}
         }
-        for (subclass_name, maybe_wrap) in to_synthesize {
-            let uniquified_name = format!("{}_{}", maybe_wrap.item.sig.ident.to_string(), subclass_name);
-            log::info!("New name is {:?}", uniquified_name);
-            let name = ApiName::new(name.name.get_namespace(), make_ident(uniquified_name));
-            results.extend(self.analyze_foreign_fn(name, maybe_wrap, true, false)?);
-        }
         Ok(())
+    }
+
+    fn fix_up_subclass_constructor_name(id: &mut Ident, superclass_id: &Ident, subclass_id: &Ident) {
+        log::info!("PREVIOUSLY: {}, SUP: {}, SUB: {}", id, superclass_id, subclass_id);
+        let old_id = id.to_string();
+        let old_expected_prefix = format!("{}_{}", superclass_id, superclass_id);
+        assert!(old_id.starts_with(&old_expected_prefix));
+        let old_suffix = &old_id[old_expected_prefix.len()..];
+        *id = make_ident(format!("{}_{}{}", subclass_id, subclass_id, old_suffix));
     }
 
     fn subclasses_by_superclass(
