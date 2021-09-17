@@ -297,7 +297,12 @@ impl IncludeCppConfig {
                     .iter()
                     .chain(self.pod_requests.iter())
                     .cloned()
-                    .chain(self.active_utilities()),
+                    .chain(self.active_utilities())
+                    .chain(
+                        self.subclasses
+                            .iter()
+                            .map(|sc| format!("{}Cpp", sc.subclass)),
+                    ),
             )),
             Allowlist::Unspecified(_) => unreachable!(),
         }

@@ -263,8 +263,7 @@ impl<'a> FnAnalyzer<'a> {
         name: ApiName,
         func_information: Box<FuncToConvert>,
     ) -> Result<Box<dyn Iterator<Item = Api<FnAnalysis>>>, ConvertErrorWithContext> {
-        let maybe_analysis_and_name =
-            self.analyze_foreign_fn(name, func_information.clone(), false)?;
+        let maybe_analysis_and_name = self.analyze_foreign_fn(name, func_information.clone())?;
 
         let (analysis, name) = match maybe_analysis_and_name {
             None => return Ok(Box::new(std::iter::empty())),
@@ -300,7 +299,7 @@ impl<'a> FnAnalyzer<'a> {
                     });
                     let name =
                         ApiName::new(name.name.get_namespace(), maybe_wrap.item.sig.ident.clone());
-                    let maybe_another_api = self.analyze_foreign_fn(name, maybe_wrap, true)?;
+                    let maybe_another_api = self.analyze_foreign_fn(name, maybe_wrap)?;
                     if let Some((analysis, name)) = maybe_another_api {
                         results.push(Api::Function {
                             fun: func_information.clone(),
@@ -343,7 +342,6 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         func_information: Box<FuncToConvert>,
-        always_allow: bool,
     ) -> Result<Option<(FnAnalysisBody, ApiName)>, ConvertErrorWithContext> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
@@ -437,7 +435,7 @@ impl<'a> FnAnalyzer<'a> {
 
         let (kind, error_context, rust_name) = if let Some(self_ty) = self_ty {
             // Some kind of method.
-            if !self.is_on_allowlist(&self_ty) && !always_allow {
+            if !self.is_on_allowlist(&self_ty) {
                 // Bindgen will output methods for types which have been encountered
                 // virally as arguments on other allowlisted types. But we don't want
                 // to generate methods unless the user has specifically asked us to.
