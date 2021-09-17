@@ -17,7 +17,7 @@ use std::collections::HashSet;
 use proc_macro2::Span;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_quote, LitStr, Token,
+    LitStr, Token,
 };
 use syn::{Ident, Result as ParseResult};
 
@@ -79,15 +79,6 @@ impl Allowlist {
             Allowlist::Specific(list) => list.push(item.value()),
         };
         Ok(())
-    }
-
-    /// Sometimes we need to push things onto the allowlist without making
-    /// a commitment whether we're in `allowlist` or `allowlist_all` mode.
-    pub(crate) fn push_uncommitted(&mut self, item: LitStr) {
-        match self {
-            Allowlist::Unspecified(list) | Allowlist::Specific(list) => list.push(item.value()),
-            Allowlist::All => {}
-        }
     }
 
     pub(crate) fn set_all(&mut self, ident: &Ident) -> ParseResult<()> {
@@ -191,13 +182,10 @@ impl Parse for IncludeCppConfig {
                     let superclass: syn::LitStr = args.parse()?;
                     args.parse::<syn::token::Comma>()?;
                     let subclass: syn::Ident = args.parse()?;
-                    let sub_string = subclass.to_string();
                     subclasses.push(Subclass {
                         superclass: superclass.value(),
                         subclass,
                     });
-                    allowlist.push_uncommitted(superclass);
-                    allowlist.push_uncommitted(parse_quote! { #sub_string });
                 } else if ident == "parse_only" {
                     parse_only = true;
                     swallow_parentheses(&input, &ident)?;
@@ -301,7 +289,14 @@ impl IncludeCppConfig {
                     .chain(
                         self.subclasses
                             .iter()
-                            .map(|sc| format!("{}Cpp", sc.subclass)),
+                            .map(|sc| {
+                                [
+                                    format!("{}Cpp", sc.subclass),
+                                    sc.subclass.to_string(),
+                                    sc.superclass.clone(),
+                                ]
+                            })
+                            .flatten(),
                     ),
             )),
             Allowlist::Unspecified(_) => unreachable!(),
