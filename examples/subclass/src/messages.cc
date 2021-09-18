@@ -44,6 +44,9 @@ public:
 
 std::vector<std::reference_wrapper<const MessageProducer>> producers;
 std::vector<std::reference_wrapper<const MessageDisplayer>> displayers;
+CppExampleProducer cpp_producer;
+CppExampleDisplayer cpp_displayer;
+
 
 // Maybe we should use a language which tracks lifetimes
 // better than this. If only such a language existed.
@@ -55,11 +58,12 @@ void register_producer(const MessageProducer& producer) {
     producers.push_back(producer);
 }
 
-void run_demo() {
-    CppExampleProducer cpp_producer;
+void register_cpp_thingies() {
     register_producer(cpp_producer);
-    CppExampleDisplayer cpp_displayer;
     register_displayer(cpp_displayer);
+}
+
+void run_demo() {
     for (auto& producer: producers) {
         auto msg = producer.get().get_message();
         for (auto& displayer: displayers) {
