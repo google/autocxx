@@ -65,7 +65,7 @@ pub fn is_subclass(
             let f = parser.parse2(input).unwrap();
             fields.named.push(f);
         }
-        _ => abort!(Span::call_site(), "Expect a struct with named fields"),
+        _ => abort!(Span::call_site(), "Expect a struct with named fields - use struct A{} as opposed to struct A; or struct A()"),
     }
     let self_owned: SelfOwned = syn::parse(attr)
         .unwrap_or_else(|_| abort!(Span::call_site(), "Unable to parse attributes"));
