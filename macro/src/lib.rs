@@ -17,21 +17,47 @@ use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, proc_macro_error};
 use quote::{quote, ToTokens};
 use syn::parse::{Parse, ParseStream, Parser};
+use syn::token::Comma;
 use syn::{parse_macro_input, Fields, ItemStruct, Result as ParseResult};
 
-struct SelfOwned(bool);
+#[derive(Default)]
+struct SubclassAttrs {
+    self_owned: bool,
+    superclass: Option<String>,
+}
 
-impl Parse for SelfOwned {
+impl Parse for SubclassAttrs {
     fn parse(input: ParseStream) -> ParseResult<Self> {
-        let id = input.parse::<Option<Ident>>()?;
-        match id {
-            Some(id) if id == "self_owned" => Ok(Self(true)),
-            Some(id) => Err(syn::Error::new_spanned(
-                id.into_token_stream(),
-                "Expected self_owned",
-            )),
-            None => Ok(Self(false)),
+        let mut me = Self::default();
+        let mut id = input.parse::<Option<Ident>>()?;
+        while id.is_some() {
+            match id {
+                Some(id) if id == "self_owned" => me.self_owned = true,
+                Some(id) if id == "superclass" => {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let superclass: syn::LitStr = args.parse()?;
+                    if me.superclass.is_some() {
+                        return Err(syn::Error::new_spanned(
+                            id.into_token_stream(),
+                            "Expected single superclass specification",
+                        ));
+                    }
+                    me.superclass = Some(superclass.value());
+                }
+                Some(id) => return Err(syn::Error::new_spanned(
+                    id.into_token_stream(),
+                    "Expected self_owned or superclass",
+                )),
+                None => {}
+            };
+            let comma = input.parse::<Option<Comma>>()?;
+            if comma.is_none() {
+                break;
+            }
+            id = input.parse::<Option<Ident>>()?;
         }
+        Ok(me)
     }
 }
 
@@ -67,9 +93,9 @@ pub fn is_subclass(
         }
         _ => abort!(Span::call_site(), "Expect a struct with named fields - use struct A{} as opposed to struct A; or struct A()"),
     }
-    let self_owned: SelfOwned = syn::parse(attr)
+    let subclass_attrs: SubclassAttrs = syn::parse(attr)
         .unwrap_or_else(|_| abort!(Span::call_site(), "Unable to parse attributes"));
-    let self_owned_bit = if self_owned.0 {
+    let self_owned_bit = if subclass_attrs.self_owned {
         Some(quote! {
             impl autocxx::subclass::CppSubclassSelfOwned<ffi::#cpp_ident> for #id {}
         })
