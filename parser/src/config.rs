@@ -180,6 +180,12 @@ impl Parse for IncludeCppConfig {
                     let args;
                     syn::parenthesized!(args in input);
                     let superclass: syn::LitStr = args.parse()?;
+                    if superclass.value().contains("::") {
+                        return Err(syn::Error::new(
+                            superclass.span(),
+                            "at this time, superclasses can't be in namespaces - see https://github.com/google/autocxx/issues/599",
+                        ));
+                    }
                     args.parse::<syn::token::Comma>()?;
                     let subclass: syn::Ident = args.parse()?;
                     subclasses.push(Subclass {
