@@ -96,6 +96,14 @@ fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
             {
                 Segment::Cxx(CxxBridge::from(itm))
             }
+            Item::Struct(ref its) => {
+                let attrs = &its.attrs;
+                let is_superclass_attr = attrs.iter().filter(|attr| attr.path.segments.last().map(|seg| seg.ident.to_string() == "is_superclass") == Some(true)).next();
+                if let Some(is_superclass_attr) = is_superclass_attr {
+                    
+                }
+                Segment::Other(item)
+            }
             _ => Segment::Other(item),
         });
     }

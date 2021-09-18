@@ -20,46 +20,6 @@ use syn::parse::{Parse, ParseStream, Parser};
 use syn::token::Comma;
 use syn::{parse_macro_input, Fields, ItemStruct, Result as ParseResult};
 
-#[derive(Default)]
-struct SubclassAttrs {
-    self_owned: bool,
-    superclass: Option<String>,
-}
-
-impl Parse for SubclassAttrs {
-    fn parse(input: ParseStream) -> ParseResult<Self> {
-        let mut me = Self::default();
-        let mut id = input.parse::<Option<Ident>>()?;
-        while id.is_some() {
-            match id {
-                Some(id) if id == "self_owned" => me.self_owned = true,
-                Some(id) if id == "superclass" => {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let superclass: syn::LitStr = args.parse()?;
-                    if me.superclass.is_some() {
-                        return Err(syn::Error::new_spanned(
-                            id.into_token_stream(),
-                            "Expected single superclass specification",
-                        ));
-                    }
-                    me.superclass = Some(superclass.value());
-                }
-                Some(id) => return Err(syn::Error::new_spanned(
-                    id.into_token_stream(),
-                    "Expected self_owned or superclass",
-                )),
-                None => {}
-            };
-            let comma = input.parse::<Option<Comma>>()?;
-            if comma.is_none() {
-                break;
-            }
-            id = input.parse::<Option<Ident>>()?;
-        }
-        Ok(me)
-    }
-}
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
