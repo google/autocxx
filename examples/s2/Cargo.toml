@@ -21,7 +21,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cxx = "1.0.52"
+cxx = "1.0.54"
 autocxx = { path = "../..", version="0.11.1" }
 
 [build-dependencies]
