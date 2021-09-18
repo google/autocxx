@@ -34,6 +34,7 @@ public:
     virtual ~MessageDisplayer() {};
 };
 
+void register_cpp_thingies();
 void register_producer(const MessageProducer& producer);
 void register_displayer(const MessageDisplayer& displayer);
 

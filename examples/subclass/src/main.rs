@@ -26,6 +26,7 @@ include_cpp! {
     safety!(unsafe)
     // What types and functions we want to generate
     generate!("run_demo")
+    generate!("register_cpp_thingies")
     generate!("register_producer")
     generate!("register_displayer")
     // Declare some C++ classes have Rust subclasses.
@@ -130,6 +131,8 @@ impl ffi::MessageDisplayer_methods for BoxDisplayer {
 }
 
 fn main() {
+    // Register some C++ example classes.
+    ffi::register_cpp_thingies();
     // Create a message displayer. We create and pass an instance of
     // the subclass on the Rust side - that's the first parameter -
     // and also a closure which calls an appropriate C++ constructor for
