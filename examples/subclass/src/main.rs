@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This example shows some Rust subclasses of C++ classes.
+
 use autocxx::include_cpp;
 use autocxx::subclass::{is_subclass, CppSubclass};
 use cxx::CxxString;
@@ -48,6 +50,15 @@ static SHAKESPEARE_QUOTES: [&str; 10] = [
     "Now is the winter of our discontent.",
 ];
 
+// Here's the definition of MessageDisplayer from src/messages.h:
+// ```cpp
+// class MessageDisplayer {
+// public:
+//     MessageDisplayer() {}
+//     virtual void display_message(const std::string& message) const = 0;
+//     virtual ~MessageDisplayer() {};
+// };
+// ```
 // The following lines define a subclass of MessageDisplayer,
 // together with the "subclass!" directive above in the include_cpp!
 // macro. See the main function at the bottom for how this subclass
@@ -68,6 +79,15 @@ impl ffi::MessageDisplayer_methods for UwuDisplayer {
 }
 
 // And here's a different pure virtual class.
+// Here's its definition from src/messages.h:
+// ```cpp
+// class MessageProducer {
+// public:
+//     MessageProducer() {} // necessary due to https://github.com/google/autocxx/issues/122
+//     virtual std::string get_message() const = 0;
+//     virtual ~MessageProducer() {};
+// };
+// ```
 // This one is notable only in that the interface of the C++ class
 // involves std::string, yet in Rust the subclass uses
 // std::unique_ptr<std::string> (for all the normal reasons in autocxx -
