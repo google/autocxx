@@ -965,6 +965,7 @@ impl<'a> FnAnalyzer<'a> {
             let id_str = self_ty.get_final_item().to_string();
             let fake_api_name = ApiName::new(self_ty.get_namespace(), id.clone());
             let ns = self_ty.get_namespace().clone();
+            let path = self_ty.to_type_path();
             let items = report_any_error(&ns, apis, || {
                 self.analyze_foreign_fn_and_subclasses(
                     fake_api_name,
@@ -972,7 +973,7 @@ impl<'a> FnAnalyzer<'a> {
                         item: parse_quote! {
                             #[bindgen_original_name(#id_str)]
                             #[bindgen_special_member("default_ctor")]
-                            pub fn #id(this: *mut root::#id);
+                            pub fn #id(this: *mut #path);
                         },
                         virtual_this_type: Some(self_ty.clone()),
                         self_ty: Some(self_ty),

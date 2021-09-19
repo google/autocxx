@@ -7019,6 +7019,22 @@ fn test_no_constructor_make_unique() {
 }
 
 #[test]
+fn test_no_constructor_make_unique_ns() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    namespace B {
+    struct A {
+        uint32_t a;
+    };
+    }
+    "};
+    let rs = quote! {
+        ffi::B::A::make_unique();
+    };
+    run_test("", hdr, rs, &["B::A"], &[]);
+}
+
+#[test]
 fn test_no_constructor_pod_make_unique() {
     let hdr = indoc! {"
     #include <stdint.h>
