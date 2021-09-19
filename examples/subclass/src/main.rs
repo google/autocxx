@@ -163,9 +163,13 @@ impl ffi::MessageDisplayer_methods for BoxDisplayer {
 
 fn main() {
     ffi::register_cpp_thingies();
+    // Construct a Rust-owned UwuDisplayer. We can also construct
+    // a C++-owned or self-owned subclass - see docs for `CppSubclass`.
     let uwu = UwuDisplayer::default_rust_owned();
     // The next line casts the &UwuDisplayerCpp to a &MessageDisplayer.
     ffi::register_displayer(uwu.as_ref().borrow().as_ref());
+    // Constructs in just the same way as the first one, but using
+    // our explicit constructor.
     let boxd = BoxDisplayer::new();
     ffi::register_displayer(boxd.as_ref().borrow().as_ref());
     let shakespeare = QuoteProducer::new();
