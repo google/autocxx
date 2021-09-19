@@ -224,6 +224,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
         name: ApiName,
         subclass: SubclassName,
         cpp_impl: Box<CppFunction>,
+        is_trivial: bool,
     },
     /// A Rust subclass of a C++ class.
     Subclass {

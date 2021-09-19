@@ -32,7 +32,7 @@ use crate::{
     types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::{FnAnalysis, FnKind, MethodKind};
+use super::{FnAnalysis, FnAnalysisBody, FnKind, MethodKind};
 
 pub(super) fn subclasses_by_superclass(
     apis: &[Api<PodAnalysis>],
@@ -130,6 +130,7 @@ pub(super) fn add_subclass_constructor(
         name: ApiName::new_in_root_namespace(cpp.clone()),
         subclass: sub.clone(),
         cpp_impl: Box::new(cpp_impl),
+        is_trivial: determine_if_trivial(&analysis),
     });
     let wrapper_name = make_ident(format!("{}_make_unique", cpp));
     let mut constructor_wrapper = analysis.clone();
@@ -149,6 +150,7 @@ pub(super) fn add_subclass_constructor(
             deps: HashSet::new(),
             is_virtual: false,
             requires_unsafe: false,
+            is_subclass_holder: true,
         },
     );
     constructor_wrapper
@@ -179,4 +181,14 @@ pub(super) fn add_subclass_constructor(
         analysis: constructor_wrapper,
         fun: Box::new(fun.clone()),
     })
+}
+
+// Work out if this constructor is simple enough that we can autogenerate
+// code to call it.
+fn determine_if_trivial(analysis: &FnAnalysisBody) -> bool {
+    let mut param_iterator = analysis.param_details.iter();
+    match param_iterator.next() {
+        None => false,
+        Some(pd) => pd.is_subclass_holder && param_iterator.next().is_none(),
+    }
 }

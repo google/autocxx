@@ -101,12 +101,13 @@ fn make_owning_peer<CppPeer, PeerConstructor, Subclass, PeerBoxer>(
 where
     CppPeer: CppSubclassCppPeer,
     Subclass: CppSubclass<CppPeer>,
-    PeerConstructor: FnOnce(CppSubclassRustPeerHolder<Subclass>) -> UniquePtr<CppPeer>,
+    PeerConstructor:
+        FnOnce(&mut Subclass, CppSubclassRustPeerHolder<Subclass>) -> UniquePtr<CppPeer>,
     PeerBoxer: FnOnce(Rc<RefCell<Subclass>>) -> CppSubclassRustPeerHolder<Subclass>,
 {
     let me = Rc::new(RefCell::new(me));
     let holder = peer_boxer(me.clone());
-    let cpp_side = peer_constructor(holder);
+    let cpp_side = peer_constructor(&mut me.as_ref().borrow_mut(), holder);
     me.as_ref()
         .borrow_mut()
         .peer_holder_mut()
@@ -114,15 +115,40 @@ where
     me
 }
 
+/// A trait to be implemented by a subclass which knows how to construct
+/// its C++ peer object. Specifically, the implementation here will
+/// arrange to call one or other of the `make_unique` methods to be
+/// found on the superclass of the C++ object. If the superclass
+/// has a single trivial constructor, then this is implemented
+/// automatically for you. If there are multiple constructors, or
+/// a single constructor which takes parameters, you'll need to implement
+/// this trait for your subclass in order to call the correct
+/// constructor.
+pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
+    /// Create the C++ peer. This method will be automatically generated
+    /// for you *except* in cases where the superclass has multiple constructors,
+    /// or its only constructor takes parameters. In such a case you'll need
+    /// to implement this by calling a `make_unique` method on the
+    /// `<my subclass name>Cpp` type, passing `peer_holder` as the first
+    /// argument.
+    fn make_peer(&mut self, peer_holder: CppSubclassRustPeerHolder<Self>) -> UniquePtr<CppPeer>;
+}
+
 /// A subclass of a C++ type.
 ///
-/// To create a Rust subclass of a C++ class, you must do three things:
+/// To create a Rust subclass of a C++ class, you must do these things:
 /// * Use the `subclass` directive in your [`crate::include_cpp`] macro
 /// * Create a `struct` to act as your subclass, and add the #[`is_subclass`] attribute.
 /// * Use the [`CppSubclass`] trait, and instantiate the subclass using
 ///   [`CppSubclass::new_rust_owned`] or [`CppSubclass::new_cpp_owned`]
 ///   constructors. (You can use [`CppSubclassSelfOwned`] if you need that
-///   instead.)
+///   instead; also, see [`CppSubclassSelfOwnedDefault`] and [`CppSubclassDefault`]
+///   to arrange for easier constructors to exist.
+/// * You _may_ need to implement [`CppPeerConstructor`] for your subclass,
+///   but only if autocxx determines that there are multiple possible superclass
+///   constructors so you need to call one explicitly (or if there's a single
+///   non-trivial superclass constructor.) autocxx will implemente this trait
+///   for you if there's no ambiguity.
 ///
 /// # How to access your Rust structure from outside
 ///
@@ -142,7 +168,7 @@ where
 /// # How _not_ to implement virtual methods
 ///
 /// If you don't want to implement a virtual method, don't: the superclass
-/// method will be called instead. Naturally, you must implement any virtual
+/// method will be called instead. Naturally, you must implement any pure virtual
 /// methods.
 ///
 /// # How it works
@@ -158,14 +184,14 @@ where
 ///    [`Rc`] reference to this Rust-side object. In turn, the Rust-side object
 ///    owns the C++-side peer via a [`UniquePtr`]. This is what's set up by
 ///    [`CppSubclass::new_rust_owned`]. The C++-side peer _does not_ own the Rust
-///    object; it just has a weak pointer. (Otherwise we'd get a reference)
-///    loop and nothing would ever be freed.
+///    object; it just has a weak pointer. (Otherwise we'd get a reference
+///    loop and nothing would ever be freed.)
 /// 3. The object pair is self-owned and will stay around forever until
 ///    [`CppSubclassSelfOwned::delete_self`] is called. In this case there's a strong reference
 ///    from the C++ to the Rust and from the Rust to the C++. This is useful
 ///    for cases where the subclass is listening for events, and needs to
 ///    stick around until a particular event occurs then delete itself.
-pub trait CppSubclass<CppPeer: CppSubclassCppPeer> {
+pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> {
     /// Return the field which holds the C++ peer object. This is normally
     /// implemented by the #[`is_subclass`] macro, but you're welcome to
     /// implement it yourself if you prefer.
@@ -191,38 +217,24 @@ pub trait CppSubclass<CppPeer: CppSubclassCppPeer> {
     /// Creates a new instance of this subclass. This instance is owned by the
     /// returned [`cxx::UniquePtr`] and is thus suitable to be passed around
     /// in C++.
-    fn new_cpp_owned<PeerConstructor, Subclass>(
-        me: Subclass,
-        peer_constructor: PeerConstructor,
-    ) -> UniquePtr<CppPeer>
-    where
-        Subclass: CppSubclass<CppPeer>,
-        PeerConstructor: FnOnce(CppSubclassRustPeerHolder<Subclass>) -> UniquePtr<CppPeer>,
-    {
+    fn new_cpp_owned(me: Self) -> UniquePtr<CppPeer> {
         let me = Rc::new(RefCell::new(me));
         let holder = CppSubclassRustPeerHolder::Owned(me.clone());
-        let mut cpp_side = peer_constructor(holder);
-        me.as_ref()
-            .borrow_mut()
-            .peer_holder_mut()
-            .set_unowned(&mut cpp_side);
+        let mut borrowed = me.as_ref().borrow_mut();
+        let mut cpp_side = borrowed.make_peer(holder);
+        borrowed.peer_holder_mut().set_unowned(&mut cpp_side);
         cpp_side
     }
 
     /// Creates a new instance of this subclass. This instance is not owned
     /// by C++, and therefore will be deleted when it goes out of scope in
     /// Rust.
-    fn new_rust_owned<PeerConstructor, Subclass>(
-        me: Subclass,
-        peer_constructor: PeerConstructor,
-    ) -> Rc<RefCell<Subclass>>
-    where
-        Subclass: CppSubclass<CppPeer>,
-        PeerConstructor: FnOnce(CppSubclassRustPeerHolder<Subclass>) -> UniquePtr<CppPeer>,
-    {
-        make_owning_peer(me, peer_constructor, |me| {
-            CppSubclassRustPeerHolder::Unowned(Rc::downgrade(&me))
-        })
+    fn new_rust_owned(me: Self) -> Rc<RefCell<Self>> {
+        make_owning_peer(
+            me,
+            |obj, holder| obj.make_peer(holder),
+            |me| CppSubclassRustPeerHolder::Unowned(Rc::downgrade(&me)),
+        )
     }
 }
 
@@ -237,16 +249,12 @@ pub trait CppSubclassSelfOwned<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer
     /// use [`CppSubclassSelfOwned::delete_self`].
     /// The return value may be useful to register this, etc. but can ultimately
     /// be discarded without destroying this object.
-    fn new_self_owned<PeerConstructor, Subclass>(
-        me: Subclass,
-        peer_constructor: PeerConstructor,
-    ) -> Rc<RefCell<Subclass>>
-    where
-        CppPeer: CppSubclassCppPeer,
-        Subclass: CppSubclass<CppPeer>,
-        PeerConstructor: FnOnce(CppSubclassRustPeerHolder<Subclass>) -> UniquePtr<CppPeer>,
-    {
-        make_owning_peer(me, peer_constructor, CppSubclassRustPeerHolder::Owned)
+    fn new_self_owned(me: Self) -> Rc<RefCell<Self>> {
+        make_owning_peer(
+            me,
+            |obj, holder| obj.make_peer(holder),
+            CppSubclassRustPeerHolder::Owned,
+        )
     }
 
     /// Relinquishes ownership from the C++ side. If there are no outstanding
@@ -254,5 +262,32 @@ pub trait CppSubclassSelfOwned<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer
     /// of this subclass instance.
     fn delete_self(&self) {
         self.peer().relinquish_ownership()
+    }
+}
+
+/// Provides default constructors for subclasses which implement `Default`.
+pub trait CppSubclassDefault<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer> + Default {
+    /// Create a Rust-owned instance of this subclass, initializing with default values. See
+    /// [`CppSubclass`] for more details of the ownership models available.
+    fn default_rust_owned() -> Rc<RefCell<Self>> {
+        Self::new_rust_owned(Self::default())
+    }
+
+    /// Create a C++-owned instance of this subclass, initializing with default values. See
+    /// [`CppSubclass`] for more details of the ownership models available.
+    fn default_cpp_owned() -> UniquePtr<CppPeer> {
+        Self::new_cpp_owned(Self::default())
+    }
+}
+
+/// Provides default constructors for subclasses which implement `Default`
+/// and are self-owning.
+pub trait CppSubclassSelfOwnedDefault<CppPeer: CppSubclassCppPeer>:
+    CppSubclassSelfOwned<CppPeer> + Default
+{
+    /// Create a self-owned instance of this subclass, initializing with default values. See
+    /// [`CppSubclass`] for more details of the ownership models available.
+    fn default_self_owned() -> Rc<RefCell<Self>> {
+        Self::new_self_owned(Self::default())
     }
 }

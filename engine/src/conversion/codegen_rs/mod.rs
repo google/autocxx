@@ -20,7 +20,7 @@ mod namespace_organizer;
 mod non_pod_struct;
 pub(crate) mod unqualify;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::IncludeCppConfig;
 // The following should not need to be exposed outside
@@ -169,13 +169,19 @@ impl<'a> RsCodeGenerator<'a> {
         // First off, when we generate structs we may need to add some methods
         // if they're superclasses.
         let mut methods_by_superclass = self.accumulate_superclass_methods(&all_apis);
+        let subclasses_with_a_single_trivial_constructor =
+            find_trivially_constructed_subclasses(&all_apis);
         // Now let's generate the Rust code.
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
                 let more_cpp_needed = api.needs_cpp_codegen();
                 let name = api.name().clone();
-                let gen = self.generate_rs_for_api(api, &mut methods_by_superclass);
+                let gen = self.generate_rs_for_api(
+                    api,
+                    &mut methods_by_superclass,
+                    &subclasses_with_a_single_trivial_constructor,
+                );
                 ((name, gen), more_cpp_needed)
             })
             .unzip();
@@ -462,6 +468,7 @@ impl<'a> RsCodeGenerator<'a> {
         &self,
         api: Api<FnAnalysis>,
         associated_methods: &mut HashMap<String, Vec<SuperclassMethod>>,
+        subclasses_with_a_single_trivial_constructor: &HashSet<QualifiedName>,
     ) -> RsCodegenResult {
         let name = api.name().clone();
         let id = name.get_final_ident();
@@ -573,7 +580,9 @@ impl<'a> RsCodeGenerator<'a> {
                 name, superclass, ..
             } => {
                 let methods = associated_methods.get(&superclass.get_final_item().to_string());
-                self.generate_subclass(name, &superclass, methods)
+                let generate_peer_constructor =
+                    subclasses_with_a_single_trivial_constructor.contains(&name.0.name);
+                self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
             }
             Api::RustSubclassConstructor { .. } => RsCodegenResult::default(),
             Api::IgnoredItem { err, ctx, .. } => Self::generate_error_entry(err, ctx),
@@ -585,6 +594,7 @@ impl<'a> RsCodeGenerator<'a> {
         sub: SubclassName,
         superclass: &QualifiedName,
         methods: Option<&Vec<SuperclassMethod>>,
+        generate_peer_constructor: bool,
     ) -> RsCodegenResult {
         let super_name = superclass.get_final_item();
         let super_id = superclass.get_final_ident();
@@ -647,6 +657,15 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             });
         }
+        if generate_peer_constructor {
+            bindgen_mod_items.push(parse_quote! {
+                impl autocxx::subclass::CppPeerConstructor<#cpp> for super::super::super::#id {
+                    fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<#cpp> {
+                        #cpp :: make_unique(peer_holder)
+                    }
+                }
+            })
+        };
 
         // Once for each superclass, in future...
         let as_id = make_ident(format!("As_{}", super_name));
@@ -993,6 +1012,29 @@ impl<'a> RsCodeGenerator<'a> {
     fn find_output_mod_root(ns: &Namespace) -> impl Iterator<Item = Ident> {
         std::iter::repeat(make_ident("super")).take(ns.depth())
     }
+}
+
+fn find_trivially_constructed_subclasses(apis: &[Api<FnAnalysis>]) -> HashSet<QualifiedName> {
+    let (complex_constructors, simple_constructors): (Vec<_>, Vec<_>) = apis
+        .iter()
+        .map(|api| match api {
+            Api::RustSubclassConstructor {
+                subclass,
+                is_trivial,
+                ..
+            } => Some((&subclass.0.name, is_trivial)),
+            _ => None,
+        })
+        .flatten()
+        .partition(|(_, trivial)| **trivial);
+    let simple_constructors: HashSet<_> =
+        simple_constructors.into_iter().map(|(qn, _)| qn).collect();
+    let complex_constructors: HashSet<_> =
+        complex_constructors.into_iter().map(|(qn, _)| qn).collect();
+    (&simple_constructors - &complex_constructors)
+        .into_iter()
+        .cloned()
+        .collect()
 }
 
 impl HasNs for (QualifiedName, RsCodegenResult) {

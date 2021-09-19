@@ -64,7 +64,7 @@ use autocxx_engine::IncludeCppEngine;
 ///
 /// # User manual - introduction
 ///
-/// [include_cpp] tries to make it possible to include C++ headers and use declared functions
+/// [`include_cpp`] tries to make it possible to include C++ headers and use declared functions
 /// and types as-is. The resulting bindings use wrappers for C++ STL types from the [cxx]
 /// crate such as [cxx::UniquePtr] or [cxx::CxxString].
 ///
@@ -152,7 +152,7 @@ use autocxx_engine::IncludeCppEngine;
 ///     rsb --> l
 /// ```
 ///
-/// # The `include_cpp` macro
+/// # The [`include_cpp`] macro
 ///
 /// Within the braces of the `include_cpp!{...}` macro, you should provide
 /// a list of at least the following:
@@ -389,6 +389,10 @@ use autocxx_engine::IncludeCppEngine;
 ///
 /// `autocxx` doesn't yet support default paramters.
 ///
+/// It's fairly likely we'll change the model here in the future, such that
+/// we can pass tuples of different parameter types into a single function
+/// implementation.
+///
 /// ## Forward declarations
 ///
 /// A type which is incomplete in the C++ headers (i.e. represented only by a forward
@@ -414,6 +418,14 @@ use autocxx_engine::IncludeCppEngine;
 /// Exceptions are not supported. If your C++ code is compiled with exceptions,
 /// you can expect serious runtime explosions. The underlying [cxx] crate has
 /// exception support, so it would be possible to add them.
+///
+/// # Subclasses
+///
+/// There is limited and experimental support for creating Rust subclasses of
+/// C++ classes. (Yes, more experimental than all the rest of this!)
+/// See [`subclass::CppSubclass`] for information about how you do this.
+/// This is useful primarily if you want to listen out for messages broadcast
+/// using the C++ observer/listener pattern.
 ///
 /// # Mixing manual and automated bindings
 ///
@@ -454,6 +466,7 @@ use autocxx_engine::IncludeCppEngine;
 /// * [Demo](https://github.com/google/autocxx/tree/main/demo) - simplest possible demo
 /// * [S2 example](https://github.com/google/autocxx/tree/main/examples/s2) - example using S2 geometry library
 /// * [Steam example](https://github.com/google/autocxx/tree/main/examples/steam-mini) - example using (something like) the Steam client library
+/// * [Subclass example](https://github.com/google/autocxx/tree/main/examples/subclass) - example using subclasses
 /// * [Integration tests](https://github.com/google/autocxx/blob/main/engine/src/integration_tests.rs)
 ///   - hundreds of small snippets
 ///
@@ -621,6 +634,9 @@ macro_rules! rust_type {
 /// A directive to be included inside
 /// [include_cpp] - see [include_cpp] for general information.
 /// Use this in conjunction with [`subclass::is_subclass`].
+/// See [`subclass::CppSubclass`] for information about the
+/// multiple steps you need to take to be able to make Rust
+/// subclasses of a C++ class.
 #[macro_export]
 macro_rules! subclass {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };

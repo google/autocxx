@@ -124,6 +124,7 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) deps: HashSet<QualifiedName>,
     pub(crate) is_virtual: bool,
     pub(crate) requires_unsafe: bool,
+    pub(crate) is_subclass_holder: bool,
 }
 
 struct ReturnTypeAnalysis {
@@ -221,7 +222,7 @@ impl<'a> FnAnalyzer<'a> {
         ty: Box<Type>,
         ns: &Namespace,
         convert_ptrs_to_references: bool,
-    ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool), ConvertError> {
+    ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool, bool), ConvertError> {
         let annotated = self.type_converter.convert_boxed_type(
             ty,
             ns,
@@ -234,6 +235,7 @@ impl<'a> FnAnalyzer<'a> {
             annotated.ty,
             annotated.types_encountered,
             annotated.requires_unsafe,
+            annotated.is_subclass_holder,
         ))
     }
 
@@ -829,7 +831,7 @@ impl<'a> FnAnalyzer<'a> {
                     }
                     _ => old_pat,
                 };
-                let (new_ty, deps, requires_unsafe) =
+                let (new_ty, deps, requires_unsafe, is_subclass_holder) =
                     self.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
                 let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
                 let conversion = self.argument_conversion_details(&new_ty);
@@ -845,6 +847,7 @@ impl<'a> FnAnalyzer<'a> {
                         deps,
                         is_virtual,
                         requires_unsafe,
+                        is_subclass_holder,
                     },
                 )
             }
@@ -899,7 +902,7 @@ impl<'a> FnAnalyzer<'a> {
             },
             ReturnType::Type(rarrow, boxed_type) => {
                 // TODO remove the below clone
-                let (boxed_type, deps, _) =
+                let (boxed_type, deps, ..) =
                     self.convert_boxed_type(boxed_type.clone(), ns, convert_ptr_to_reference)?;
                 let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
                 let conversion = self.return_type_conversion_details(boxed_type.as_ref());
