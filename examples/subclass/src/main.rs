@@ -58,8 +58,11 @@ static SHAKESPEARE_QUOTES: [&str; 10] = [
 pub struct UwuDisplayer {}
 
 impl ffi::MessageDisplayer_methods for UwuDisplayer {
-    fn display_message(&self, msg: &CxxString) {
-        let uwu = uwuifier::uwuify_str_sse(msg.to_str().unwrap());
+    fn display_message(&self, _msg: &CxxString) {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        let uwu = uwuifier::uwuify_str_sse(_msg.to_str().unwrap());
+        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+        let uwu = "uwuification is unavailable for this pwatform :(";
         println!("{}", uwu);
     }
 }
