@@ -15,7 +15,7 @@
 // This example shows some Rust subclasses of C++ classes.
 
 use autocxx::include_cpp;
-use autocxx::subclass::{is_subclass, CppSubclass};
+use autocxx::subclass::{is_subclass, CppSubclass, CppSubclassDefault};
 use cxx::CxxString;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -64,22 +64,10 @@ static SHAKESPEARE_QUOTES: [&str; 10] = [
 #[derive(Default)]
 pub struct UwuDisplayer {}
 
-impl UwuDisplayer {
-    fn new() -> Rc<RefCell<Self>> {
-        // We create and pass an instance of
-        // the subclass on the Rust side - that's the first parameter -
-        // and also a closure which calls an appropriate C++ constructor for
-        // the C++ side peer object. Constructors exist for each superclass
-        // constructor, so effectively this is a call to the C++ superclass
-        // constructor.
-        // The `new_rust_owned` function in the `CppSubclass` trait
-        // (which we implement) takes care of gluing the C++ and Rust side
-        // objects together.
-        // We could have said `new_cpp_owned` instead, which would
-        // have given us a cxx::UniquePtr that we could have passed to C++.
-        Self::new_rust_owned(Self::default())
-    }
-}
+// As this type derives from Default, this makes some
+// default constructors available (used later). This might later
+// move into syntactic sugar like `#[derive(DefaultCppSubclass)]`.
+impl CppSubclassDefault<ffi::UwuDisplayerCpp> for UwuDisplayer {}
 
 impl ffi::MessageDisplayer_methods for UwuDisplayer {
     fn display_message(&self, _msg: &CxxString) {
@@ -110,6 +98,8 @@ impl ffi::MessageDisplayer_methods for UwuDisplayer {
 #[derive(Default)]
 pub struct QuoteProducer {}
 
+// This does the same as the `impl CppSubclassDefault` for the previous example;
+// either could be used. This is just a bit more explicit.
 impl QuoteProducer {
     fn new() -> Rc<RefCell<Self>> {
         Self::new_rust_owned(Self::default())
@@ -173,7 +163,7 @@ impl ffi::MessageDisplayer_methods for BoxDisplayer {
 
 fn main() {
     ffi::register_cpp_thingies();
-    let uwu = UwuDisplayer::new();
+    let uwu = UwuDisplayer::default_rust_owned();
     // The next line casts the &UwuDisplayerCpp to a &MessageDisplayer.
     ffi::register_displayer(uwu.as_ref().borrow().as_ref());
     let boxd = BoxDisplayer::new();
