@@ -946,6 +946,9 @@ impl<'a> FnAnalyzer<'a> {
     /// we can simply generate the sort of thing bindgen generates, then ask
     /// the existing code in this phase to figure out what to do with it.
     fn add_missing_make_uniques(&mut self, apis: &mut Vec<Api<FnAnalysis>>) {
+        if self.config.exclude_impls {
+            return;
+        }
         let mut types_without_constructors = Self::find_all_types(apis);
         for api in apis.iter() {
             if let Api::Function {
