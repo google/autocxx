@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-use super::fun::{FnAnalysis, FnAnalysisBody, FnKind};
+use super::fun::{FnAnalysis, FnKind, FnPhase};
 use crate::conversion::api::ApiName;
 use crate::conversion::{convert_error::ErrorContext, ConvertError};
 use crate::{conversion::api::Api, known_types};
@@ -23,9 +23,7 @@ use crate::{conversion::api::Api, known_types};
 /// We also eliminate any APIs that depend on some type that we just don't
 /// know about at all. In either case, we don't simply remove the type, but instead
 /// replace it with an error marker.
-pub(crate) fn filter_apis_by_ignored_dependents(
-    mut apis: Vec<Api<FnAnalysis>>,
-) -> Vec<Api<FnAnalysis>> {
+pub(crate) fn filter_apis_by_ignored_dependents(mut apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
     let (ignored_items, valid_items): (Vec<&Api<_>>, Vec<&Api<_>>) = apis.iter().partition(|api| {
         matches!(
             api,
@@ -70,7 +68,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(
     apis
 }
 
-fn create_ignore_item(api: Api<FnAnalysis>, err: ConvertError) -> Api<FnAnalysis> {
+fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Api<FnPhase> {
     let id = api.name().get_final_ident();
     log::info!("Marking as ignored: {} because {}", id.to_string(), err);
     Api::IgnoredItem {
@@ -82,7 +80,7 @@ fn create_ignore_item(api: Api<FnAnalysis>, err: ConvertError) -> Api<FnAnalysis
         ctx: match api {
             Api::Function {
                 analysis:
-                    FnAnalysisBody {
+                    FnAnalysis {
                         kind: FnKind::Method(self_ty, _),
                         ..
                     },

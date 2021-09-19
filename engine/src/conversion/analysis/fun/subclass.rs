@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use syn::parse_quote;
 
 use crate::conversion::analysis::fun::ReceiverMutability;
-use crate::conversion::analysis::pod::PodAnalysis;
+use crate::conversion::analysis::pod::PodPhase;
 use crate::conversion::api::{RustSubclassFnDetails, SubclassName};
 use crate::{
     conversion::{
@@ -32,10 +32,10 @@ use crate::{
     types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::{FnAnalysis, FnAnalysisBody, FnKind, MethodKind};
+use super::{FnAnalysis, FnKind, FnPhase, MethodKind};
 
 pub(super) fn subclasses_by_superclass(
-    apis: &[Api<PodAnalysis>],
+    apis: &[Api<PodPhase>],
 ) -> HashMap<QualifiedName, Vec<SubclassName>> {
     let mut subclasses_per_superclass: HashMap<QualifiedName, Vec<SubclassName>> = HashMap::new();
 
@@ -52,11 +52,11 @@ pub(super) fn subclasses_by_superclass(
 
 pub(super) fn create_subclass_function(
     sub: &SubclassName,
-    analysis: &super::FnAnalysisBody,
+    analysis: &super::FnAnalysis,
     name: &ApiName,
     receiver_mutability: &ReceiverMutability,
     superclass: &QualifiedName,
-) -> Api<FnAnalysis> {
+) -> Api<FnPhase> {
     let cpp = sub.cpp();
     let holder_name = sub.holder();
     let rust_call_name = make_ident(format!(
@@ -78,7 +78,7 @@ pub(super) fn create_subclass_function(
         &Namespace::new(),
         SubclassName::get_super_fn_name(&analysis.rust_name.to_string()),
     );
-    let subclass_function: Api<FnAnalysis> = Api::RustSubclassFn {
+    let subclass_function: Api<FnPhase> = Api::RustSubclassFn {
         name: ApiName::new_in_root_namespace(rust_call_name.clone()),
         subclass: sub.clone(),
         details: Box::new(RustSubclassFnDetails {
@@ -109,8 +109,8 @@ pub(super) fn create_subclass_function(
 
 pub(super) fn add_subclass_constructor(
     sub: &SubclassName,
-    new_apis: &mut Vec<Api<FnAnalysis>>,
-    analysis: &super::FnAnalysisBody,
+    new_apis: &mut Vec<Api<FnPhase>>,
+    analysis: &super::FnAnalysis,
     fun: &crate::conversion::api::FuncToConvert,
 ) {
     let holder_name = sub.holder();
@@ -185,7 +185,7 @@ pub(super) fn add_subclass_constructor(
 
 // Work out if this constructor is simple enough that we can autogenerate
 // code to call it.
-fn determine_if_trivial(analysis: &FnAnalysisBody) -> bool {
+fn determine_if_trivial(analysis: &FnAnalysis) -> bool {
     let mut param_iterator = analysis.param_details.iter();
     match param_iterator.next() {
         None => false,

@@ -18,7 +18,7 @@ use autocxx_parser::IncludeCppConfig;
 
 use crate::{conversion::api::Api, types::QualifiedName};
 
-use super::fun::FnAnalysis;
+use super::fun::FnPhase;
 
 /// This is essentially mark-and-sweep garbage collection of the
 /// [Api]s that we've discovered. Why do we do this, you might wonder?
@@ -38,9 +38,9 @@ use super::fun::FnAnalysis;
 ///    don't care about the other parameter types passed into those
 ///    APIs either.
 pub(crate) fn filter_apis_by_following_edges_from_allowlist(
-    mut apis: Vec<Api<FnAnalysis>>,
+    mut apis: Vec<Api<FnPhase>>,
     config: &IncludeCppConfig,
-) -> Vec<Api<FnAnalysis>> {
+) -> Vec<Api<FnPhase>> {
     let mut todos: Vec<QualifiedName> = apis
         .iter()
         .filter(|api| {
@@ -50,7 +50,7 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
         .map(Api::name)
         .cloned()
         .collect();
-    let mut by_typename: HashMap<QualifiedName, Vec<Api<FnAnalysis>>> = HashMap::new();
+    let mut by_typename: HashMap<QualifiedName, Vec<Api<FnPhase>>> = HashMap::new();
     for api in apis.drain(..) {
         let tn = api.name().clone();
         by_typename.entry(tn).or_default().push(api);

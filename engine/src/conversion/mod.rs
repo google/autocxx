@@ -34,7 +34,7 @@ use crate::{CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
-        abstract_types::mark_types_abstract, check_names, fun::FnAnalysis,
+        abstract_types::mark_types_abstract, check_names, fun::FnPhase,
         gc::filter_apis_by_following_edges_from_allowlist, pod::analyze_pod_apis,
         remove_ignored::filter_apis_by_ignored_dependents, tdef::convert_typedef_targets,
     },
@@ -86,7 +86,7 @@ impl<'a> BridgeConverter<'a> {
         }
     }
 
-    fn dump_apis_with_deps(label: &str, apis: &[Api<FnAnalysis>]) {
+    fn dump_apis_with_deps(label: &str, apis: &[Api<FnPhase>]) {
         if LOG_APIS {
             log::info!(
                 "APIs after {}:\n{}",

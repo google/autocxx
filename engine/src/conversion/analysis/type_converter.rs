@@ -29,7 +29,7 @@ use syn::{
     TypePath, TypePtr,
 };
 
-use super::tdef::TypedefAnalysisBody;
+use super::tdef::TypedefAnalysis;
 
 /// Results of some type conversion, annotated with a list of every type encountered,
 /// and optionally any extra APIs we need in order to use this type.
@@ -577,7 +577,7 @@ impl TypedefTarget for () {
     }
 }
 
-impl TypedefTarget for TypedefAnalysisBody {
+impl TypedefTarget for TypedefAnalysis {
     fn get_target(&self) -> Option<&Type> {
         match self.kind {
             TypedefKind::Type(ref ty) => Some(&ty.ty),
