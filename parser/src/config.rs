@@ -362,6 +362,12 @@ impl IncludeCppConfig {
         uniquified.extend(self.subclasses.iter().map(|sc| &sc.superclass));
         uniquified.into_iter()
     }
+
+    pub fn is_subclass_holder(&self, id: &str) -> bool {
+        self.subclasses
+            .iter()
+            .any(|sc| format!("{}Holder", sc.subclass.to_string()) == id)
+    }
 }
 
 #[cfg(test)]

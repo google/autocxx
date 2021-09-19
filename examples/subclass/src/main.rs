@@ -22,7 +22,7 @@ use std::rc::Rc;
 
 include_cpp! {
     #include "messages.h"
-    safety!(unsafe)
+    safety!(unsafe) // unsafety policy; see docs
     // What types and functions we want to generate
     generate!("run_demo")
     generate!("register_cpp_thingies")
@@ -77,7 +77,7 @@ impl UwuDisplayer {
         // objects together.
         // We could have said `new_cpp_owned` instead, which would
         // have given us a cxx::UniquePtr that we could have passed to C++.
-        Self::new_rust_owned(Self::default(), ffi::UwuDisplayerCpp::make_unique)
+        Self::new_rust_owned(Self::default())
     }
 }
 
@@ -112,7 +112,7 @@ pub struct QuoteProducer {}
 
 impl QuoteProducer {
     fn new() -> Rc<RefCell<Self>> {
-        Self::new_rust_owned(Self::default(), ffi::QuoteProducerCpp::make_unique)
+        Self::new_rust_owned(Self::default())
     }
 }
 
@@ -144,17 +144,14 @@ pub struct BoxDisplayer {
 
 impl BoxDisplayer {
     fn new() -> Rc<RefCell<Self>> {
-        Self::new_rust_owned(
-            Self {
-                // As we're allocating this class ourselves instead of using [`Default`]
-                // we need to initialize the `cpp_peer` member ourselves. This member is
-                // inserted by the `#[is_subclass]` annotation. autocxx will
-                // later use this to store a pointer back to the C++ peer.
-                cpp_peer: Default::default(),
-                message_count: RefCell::new(1usize),
-            },
-            ffi::BoxDisplayerCpp::make_unique,
-        )
+        Self::new_rust_owned(Self {
+            // As we're allocating this class ourselves instead of using [`Default`]
+            // we need to initialize the `cpp_peer` member ourselves. This member is
+            // inserted by the `#[is_subclass]` annotation. autocxx will
+            // later use this to store a pointer back to the C++ peer.
+            cpp_peer: Default::default(),
+            message_count: RefCell::new(1usize),
+        })
     }
 }
 
