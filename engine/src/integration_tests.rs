@@ -6066,7 +6066,7 @@ fn test_pv_subclass_mut() {
         "",
         hdr,
         quote! {
-            MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+            MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
         },
         &["bar"],
         &[],
@@ -6107,7 +6107,7 @@ fn test_pv_subclass_const() {
         "",
         hdr,
         quote! {
-            MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+            MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
         },
         &["bar"],
         &[],
@@ -6148,7 +6148,7 @@ fn test_pv_subclass_return() {
         "",
         hdr,
         quote! {
-            MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+            MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
         },
         &["bar"],
         &[],
@@ -6190,7 +6190,7 @@ fn test_pv_subclass_passed_to_fn() {
         "",
         hdr,
         quote! {
-            let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+            let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
             ffi::take_observer(o.borrow().as_ref());
         },
         &["take_observer"],
@@ -6233,7 +6233,7 @@ fn test_non_pv_subclass() {
         "",
         hdr,
         quote! {
-            let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+            let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
             obs.borrow().foo();
         },
         &["bar"],
@@ -6287,8 +6287,7 @@ fn test_pv_subclass_allocation_not_self_owned() {
 
             // Test when owned by C++
             let obs = MyTestObserver::new_cpp_owned(
-                MyTestObserver::new(),
-                ffi::MyTestObserverCpp::make_unique,
+                MyTestObserver::new()
             );
             assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
@@ -6305,8 +6304,7 @@ fn test_pv_subclass_allocation_not_self_owned() {
 
             // Test when owned by Rust
             let obs = MyTestObserver::new_rust_owned(
-                MyTestObserver::new(),
-                ffi::MyTestObserverCpp::make_unique,
+                MyTestObserver::new()
             );
             //let cpp_peer_ptr = unsafe { obs.borrow_mut().peer_mut().get_unchecked_mut() as *mut ffi::MyTestObserverCpp };
             assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
@@ -6425,8 +6423,7 @@ fn test_pv_subclass_allocation_self_owned() {
 
             // Test when owned by C++
             let obs = MyTestObserver::new_cpp_owned(
-                MyTestObserver::new(false),
-                ffi::MyTestObserverCpp::make_unique,
+                MyTestObserver::new(false)
             );
             assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
@@ -6444,8 +6441,7 @@ fn test_pv_subclass_allocation_self_owned() {
 
             // Test when owned by Rust
             let obs = MyTestObserver::new_rust_owned(
-                MyTestObserver::new(false),
-                ffi::MyTestObserverCpp::make_unique,
+                MyTestObserver::new(false)
             );
             assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
@@ -6461,8 +6457,7 @@ fn test_pv_subclass_allocation_self_owned() {
 
             // Test when self-owned
             let obs = MyTestObserver::new_self_owned(
-                MyTestObserver::new(true),
-                ffi::MyTestObserverCpp::make_unique,
+                MyTestObserver::new(true)
             );
             let obs_superclass_ptr: *const ffi::TestObserver = obs.as_ref().borrow().as_ref();
             // Retain just a pointer on the Rust side, so there is no Rust-side
@@ -6617,8 +6612,7 @@ fn test_pv_subclass_calls() {
         hdr,
         quote! {
             let obs = MyTestObserver::new_rust_owned(
-                MyTestObserver::default(),
-                ffi::MyTestObserverCpp::make_unique,
+                MyTestObserver::default()
             );
             ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
             assert_eq!(ffi::call_a(1), 2);
@@ -6812,8 +6806,7 @@ fn test_pv_subclass_types() {
         hdr,
         quote! {
             let obs = MyTestObserver::new_rust_owned(
-                MyTestObserver::default(),
-                ffi::MyTestObserverCpp::make_unique,
+                MyTestObserver::default()
             );
             ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
             ffi::call_p(ffi::Pod { a: 3 });
@@ -6888,8 +6881,7 @@ fn test_pv_subclass_constructors() {
         hdr,
         quote! {
             let obs = MyTestObserver::new_rust_owned(
-                MyTestObserver::default(),
-                ffi::MyTestObserverCpp::make_unique,
+                MyTestObserver::default()
             );
             ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
             ffi::do_a_thing();
@@ -6978,7 +6970,7 @@ fn test_pv_subclass_namespaced_superclass() {
         "",
         hdr,
         quote! {
-            let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
+            let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
             ffi::take_observer(o.borrow().as_ref());
         },
         &["take_observer"],
