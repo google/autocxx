@@ -7048,6 +7048,19 @@ fn test_no_constructor_pod_make_unique() {
     run_test("", hdr, rs, &[], &["A"]);
 }
 
+#[test]
+fn test_no_constructor_pv() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    class A {
+    public:
+        virtual void foo() = 0;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
