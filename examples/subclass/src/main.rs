@@ -21,11 +21,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 include_cpp! {
-    // C++ headers we want to include.
     #include "messages.h"
-    // Safety policy. We are marking that this whole C++ inclusion is unsafe
-    // which means the functions themselves do not need to be marked
-    // as unsafe. Other policies are possible.
     safety!(unsafe)
     // What types and functions we want to generate
     generate!("run_demo")
@@ -79,6 +75,8 @@ impl UwuDisplayer {
         // The `new_rust_owned` function in the `CppSubclass` trait
         // (which we implement) takes care of gluing the C++ and Rust side
         // objects together.
+        // We could have said `new_cpp_owned` instead, which would
+        // have given us a cxx::UniquePtr that we could have passed to C++.
         Self::new_rust_owned(Self::default(), ffi::UwuDisplayerCpp::make_unique)
     }
 }
@@ -177,18 +175,12 @@ impl ffi::MessageDisplayer_methods for BoxDisplayer {
 }
 
 fn main() {
-    // Register some C++ example classes.
     ffi::register_cpp_thingies();
-    // Create a message displayer.
     let uwu = UwuDisplayer::new();
     // The next line casts the &UwuDisplayerCpp to a &MessageDisplayer.
     ffi::register_displayer(uwu.as_ref().borrow().as_ref());
-    // Same again for the next message displayer object.
-    // In each case, we could have said `new_cpp_owned` instead, which would
-    // have given us a cxx::UniquePtr that we could have passed to C++.
     let boxd = BoxDisplayer::new();
     ffi::register_displayer(boxd.as_ref().borrow().as_ref());
-    // Let's register a producer too.
     let shakespeare = QuoteProducer::new();
     ffi::register_producer(shakespeare.as_ref().borrow().as_ref());
     ffi::run_demo();
