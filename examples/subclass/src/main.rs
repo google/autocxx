@@ -18,6 +18,7 @@ use autocxx::include_cpp;
 use autocxx::subclass::{is_subclass, CppSubclass};
 use cxx::CxxString;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 include_cpp! {
     // C++ headers we want to include.
@@ -67,6 +68,12 @@ static SHAKESPEARE_QUOTES: [&str; 10] = [
 #[derive(Default)]
 pub struct UwuDisplayer {}
 
+impl UwuDisplayer {
+    fn new() -> Rc<RefCell<Self>> {
+        Self::new_rust_owned(Self::default(), ffi::UwuDisplayerCpp::make_unique)
+    }
+}
+
 impl ffi::MessageDisplayer_methods for UwuDisplayer {
     fn display_message(&self, _msg: &CxxString) {
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -96,6 +103,12 @@ impl ffi::MessageDisplayer_methods for UwuDisplayer {
 #[derive(Default)]
 pub struct QuoteProducer {}
 
+impl QuoteProducer {
+    fn new() -> Rc<RefCell<Self>> {
+        Self::new_rust_owned(Self::default(), ffi::QuoteProducerCpp::make_unique)
+    }
+}
+
 impl ffi::MessageProducer_methods for QuoteProducer {
     fn get_message(&self) -> cxx::UniquePtr<CxxString> {
         use ffi::ToCppString;
@@ -123,15 +136,18 @@ pub struct BoxDisplayer {
 }
 
 impl BoxDisplayer {
-    fn new() -> Self {
-        Self {
-            // As we're allocating this class ourselves instead of using [`Default`]
-            // we need to initialize the `cpp_peer` member ourselves. This member is
-            // inserted by the `#[is_subclass]` annotation. autocxx will
-            // later use this to store a pointer back to the C++ peer.
-            cpp_peer: Default::default(),
-            message_count: RefCell::new(1usize),
-        }
+    fn new() -> Rc<RefCell<Self>> {
+        Self::new_rust_owned(
+            Self {
+                // As we're allocating this class ourselves instead of using [`Default`]
+                // we need to initialize the `cpp_peer` member ourselves. This member is
+                // inserted by the `#[is_subclass]` annotation. autocxx will
+                // later use this to store a pointer back to the C++ peer.
+                cpp_peer: Default::default(),
+                message_count: RefCell::new(1usize),
+            },
+            ffi::BoxDisplayerCpp::make_unique,
+        )
     }
 }
 
@@ -160,18 +176,16 @@ fn main() {
     // the C++ side peer object. Constructors exist for each superclass
     // constructor, so effectively this is a call to the C++ superclass
     // constructor.
-    let uwu =
-        UwuDisplayer::new_rust_owned(UwuDisplayer::default(), ffi::UwuDisplayerCpp::make_unique);
+    let uwu = UwuDisplayer::new();
     // The next line casts the &UwuDisplayerCpp to a &MessageDisplayer.
     ffi::register_displayer(uwu.as_ref().borrow().as_ref());
     // Same again for the next message displayer object.
     // In each case, we could have said `new_cpp_owned` instead, which would
     // have given us a cxx::UniquePtr that we could have passed to C++.
-    let boxd = BoxDisplayer::new_rust_owned(BoxDisplayer::new(), ffi::BoxDisplayerCpp::make_unique);
+    let boxd = BoxDisplayer::new();
     ffi::register_displayer(boxd.as_ref().borrow().as_ref());
     // Let's register a producer too.
-    let shakespeare =
-        QuoteProducer::new_rust_owned(QuoteProducer::default(), ffi::QuoteProducerCpp::make_unique);
+    let shakespeare = QuoteProducer::new();
     ffi::register_producer(shakespeare.as_ref().borrow().as_ref());
     ffi::run_demo();
     ffi::run_demo();
