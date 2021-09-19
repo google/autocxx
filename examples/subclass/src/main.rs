@@ -70,6 +70,15 @@ pub struct UwuDisplayer {}
 
 impl UwuDisplayer {
     fn new() -> Rc<RefCell<Self>> {
+        // We create and pass an instance of
+        // the subclass on the Rust side - that's the first parameter -
+        // and also a closure which calls an appropriate C++ constructor for
+        // the C++ side peer object. Constructors exist for each superclass
+        // constructor, so effectively this is a call to the C++ superclass
+        // constructor.
+        // The `new_rust_owned` function in the `CppSubclass` trait
+        // (which we implement) takes care of gluing the C++ and Rust side
+        // objects together.
         Self::new_rust_owned(Self::default(), ffi::UwuDisplayerCpp::make_unique)
     }
 }
@@ -170,12 +179,7 @@ impl ffi::MessageDisplayer_methods for BoxDisplayer {
 fn main() {
     // Register some C++ example classes.
     ffi::register_cpp_thingies();
-    // Create a message displayer. We create and pass an instance of
-    // the subclass on the Rust side - that's the first parameter -
-    // and also a closure which calls an appropriate C++ constructor for
-    // the C++ side peer object. Constructors exist for each superclass
-    // constructor, so effectively this is a call to the C++ superclass
-    // constructor.
+    // Create a message displayer.
     let uwu = UwuDisplayer::new();
     // The next line casts the &UwuDisplayerCpp to a &MessageDisplayer.
     ffi::register_displayer(uwu.as_ref().borrow().as_ref());
