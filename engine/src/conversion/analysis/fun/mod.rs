@@ -28,7 +28,7 @@ use crate::{
         api::{ApiName, FuncToConvert, SubclassName},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
-        error_reporter::convert_apis,
+        error_reporter::{convert_apis, report_any_error},
     },
     known_types::known_types,
     types::validate_ident_ok_for_rust,
@@ -179,6 +179,7 @@ impl<'a> FnAnalyzer<'a> {
             Api::enum_unchanged,
             Api::typedef_unchanged,
         );
+        me.add_missing_make_uniques(&mut results);
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }
@@ -934,6 +935,61 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
         (ref_params, ref_return)
+    }
+
+    /// If a type has explicit constructors, bindgen will generate corresponding
+    /// constructor functions, which we'll have already converted to make_unique methods.
+    /// For types with no constructors, we synthesize one here.
+    /// It is tempting to make this a separate analysis phase, to be run later than
+    /// the function analysis; but that would make the code much more complex as it
+    /// would need to output a `FnAnalysisBody`. By running it as part of this phase
+    /// we can simply generate the sort of thing bindgen generates, then ask
+    /// the existing code in this phase to figure out what to do with it.
+    fn add_missing_make_uniques(&mut self, apis: &mut Vec<Api<FnAnalysis>>) {
+        let mut types_without_constructors = Self::find_all_types(apis);
+        for api in apis.iter() {
+            if let Api::Function {
+                analysis:
+                    FnAnalysisBody {
+                        kind: FnKind::Method(self_ty, MethodKind::Constructor),
+                        ..
+                    },
+                ..
+            } = api
+            {
+                types_without_constructors.remove(self_ty);
+            }
+        }
+        for self_ty in types_without_constructors {
+            let id = self_ty.get_final_ident();
+            let id_str = self_ty.get_final_item().to_string();
+            let fake_api_name = ApiName::new(self_ty.get_namespace(), id.clone());
+            let ns = self_ty.get_namespace().clone();
+            let items = report_any_error(&ns, apis, || {
+                self.analyze_foreign_fn_and_subclasses(
+                    fake_api_name,
+                    Box::new(FuncToConvert {
+                        item: parse_quote! {
+                            #[bindgen_original_name(#id_str)]
+                            #[bindgen_special_member("default_ctor")]
+                            pub fn #id(this: *mut root::#id);
+                        },
+                        virtual_this_type: Some(self_ty.clone()),
+                        self_ty: Some(self_ty),
+                    }),
+                )
+            });
+            apis.extend(items.into_iter().flatten());
+        }
+    }
+
+    fn find_all_types(apis: &[Api<FnAnalysis>]) -> HashSet<QualifiedName> {
+        apis.iter()
+            .filter_map(|api| match api {
+                Api::Struct { .. } => Some(api.name().clone()),
+                _ => None,
+            })
+            .collect::<HashSet<_>>()
     }
 }
 
