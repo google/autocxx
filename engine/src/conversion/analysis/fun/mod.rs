@@ -28,7 +28,7 @@ use crate::{
         api::{ApiName, FuncToConvert, SubclassName},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
-        error_reporter::convert_apis,
+        error_reporter::{convert_apis, report_any_error},
     },
     known_types::known_types,
     types::validate_ident_ok_for_rust,
@@ -151,6 +151,7 @@ pub(crate) struct FnAnalyzer<'a> {
     config: &'a IncludeCppConfig,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
+    has_unrepresentable_constructors: HashSet<QualifiedName>,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -169,6 +170,7 @@ impl<'a> FnAnalyzer<'a> {
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
+            has_unrepresentable_constructors: HashSet::new(),
         };
         let mut results = Vec::new();
         convert_apis(
@@ -179,6 +181,7 @@ impl<'a> FnAnalyzer<'a> {
             Api::enum_unchanged,
             Api::typedef_unchanged,
         );
+        me.add_missing_make_uniques(&mut results);
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }
@@ -510,6 +513,17 @@ impl<'a> FnAnalyzer<'a> {
             )
         };
 
+        // Skip private methods; but if we've a private constructor, keep
+        // a note of it.
+        let cpp_private_or_protected = Self::is_private(&func_information.item);
+        if cpp_private_or_protected {
+            if let FnKind::Method(self_ty, MethodKind::Constructor) = &kind {
+                self.has_unrepresentable_constructors
+                    .insert(self_ty.clone());
+            }
+            return Ok(None);
+        }
+
         // The name we use within the cxx::bridge mod may be different
         // from both the C++ name and the Rust name, because it's a flat
         // namespace so we might need to prepend some stuff to make it unique.
@@ -545,16 +559,17 @@ impl<'a> FnAnalyzer<'a> {
             return Err(contextualize_error(ConvertError::UnusedTemplateParam));
         }
 
-        // Reject move constructors.
-        if Self::is_move_constructor(fun) {
-            return Err(contextualize_error(
-                ConvertError::MoveConstructorUnsupported,
-            ));
-        }
-
         match kind {
             FnKind::Method(_, MethodKind::Static) => {}
             FnKind::Method(ref self_ty, _) => {
+                // Reject move constructors.
+                if Self::is_move_constructor(fun) {
+                    self.has_unrepresentable_constructors
+                        .insert(self_ty.clone());
+                    return Err(contextualize_error(
+                        ConvertError::MoveConstructorUnsupported,
+                    ));
+                }
                 if !known_types().is_cxx_acceptable_receiver(self_ty) {
                     return Err(contextualize_error(ConvertError::UnsupportedReceiver));
                 }
@@ -899,6 +914,12 @@ impl<'a> FnAnalyzer<'a> {
         Ok(result)
     }
 
+    fn is_private(fun: &ForeignItemFn) -> bool {
+        fun.attrs
+            .iter()
+            .any(|a| a.path.is_ident("bindgen_visibility_private"))
+    }
+
     fn get_bindgen_special_member_annotation(fun: &ForeignItemFn) -> Option<String> {
         fun.attrs
             .iter()
@@ -934,6 +955,72 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
         (ref_params, ref_return)
+    }
+
+    /// If a type has explicit constructors, bindgen will generate corresponding
+    /// constructor functions, which we'll have already converted to make_unique methods.
+    /// For types with no constructors, we synthesize one here.
+    /// It is tempting to make this a separate analysis phase, to be run later than
+    /// the function analysis; but that would make the code much more complex as it
+    /// would need to output a `FnAnalysisBody`. By running it as part of this phase
+    /// we can simply generate the sort of thing bindgen generates, then ask
+    /// the existing code in this phase to figure out what to do with it.
+    fn add_missing_make_uniques(&mut self, apis: &mut Vec<Api<FnAnalysis>>) {
+        if self.config.exclude_impls {
+            return;
+        }
+        let types_without_constructors = Self::find_all_types(apis);
+        // For types with private constructors, we won't have generated code for them,
+        // but we equally don't want to synthesize a public constructor. The same applies
+        // to other types of constructor we might skip e.g. move constructors.
+        let mut types_without_constructors =
+            &types_without_constructors - &self.has_unrepresentable_constructors;
+        // Now subtract all the actual constructors we know of.
+        for api in apis.iter() {
+            if let Api::Function {
+                analysis:
+                    FnAnalysisBody {
+                        kind: FnKind::Method(self_ty, MethodKind::Constructor),
+                        ..
+                    },
+                ..
+            } = api
+            {
+                types_without_constructors.remove(self_ty);
+            }
+        }
+        // We are left with those types where we should synthesize a constructor.
+        for self_ty in types_without_constructors {
+            let id = self_ty.get_final_ident();
+            let id_str = self_ty.get_final_item().to_string();
+            let fake_api_name = ApiName::new(self_ty.get_namespace(), id.clone());
+            let ns = self_ty.get_namespace().clone();
+            let path = self_ty.to_type_path();
+            let items = report_any_error(&ns, apis, || {
+                self.analyze_foreign_fn_and_subclasses(
+                    fake_api_name,
+                    Box::new(FuncToConvert {
+                        item: parse_quote! {
+                            #[bindgen_original_name(#id_str)]
+                            #[bindgen_special_member("default_ctor")]
+                            pub fn #id(this: *mut #path);
+                        },
+                        virtual_this_type: Some(self_ty.clone()),
+                        self_ty: Some(self_ty),
+                    }),
+                )
+            });
+            apis.extend(items.into_iter().flatten());
+        }
+    }
+
+    fn find_all_types(apis: &[Api<FnAnalysis>]) -> HashSet<QualifiedName> {
+        apis.iter()
+            .filter_map(|api| match api {
+                Api::Struct { .. } => Some(api.name().clone()),
+                _ => None,
+            })
+            .collect::<HashSet<_>>()
     }
 }
 

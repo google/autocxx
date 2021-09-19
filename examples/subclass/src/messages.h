@@ -22,14 +22,12 @@
 
 class MessageProducer {
 public:
-    MessageProducer() {} // necessary due to https://github.com/google/autocxx/issues/122
     virtual std::string get_message() const = 0;
     virtual ~MessageProducer() {};
 };
 
 class MessageDisplayer {
 public:
-    MessageDisplayer() {}
     virtual void display_message(const std::string& message) const = 0;
     virtual ~MessageDisplayer() {};
 };
