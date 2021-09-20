@@ -130,7 +130,7 @@ pub(super) fn add_subclass_constructor(
         name: ApiName::new_in_root_namespace(cpp.clone()),
         subclass: sub.clone(),
         cpp_impl: Box::new(cpp_impl),
-        is_trivial: determine_if_trivial(&analysis),
+        is_trivial: determine_if_trivial(analysis),
     });
     let wrapper_name = make_ident(format!("{}_make_unique", cpp));
     let mut constructor_wrapper = analysis.clone();
