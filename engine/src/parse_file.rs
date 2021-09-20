@@ -16,6 +16,7 @@ use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
     RebuildDependencyRecorder,
 };
+use autocxx_parser::{Subclass, SubclassAttrs};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::{collections::HashSet, fmt::Display, io::Read, path::PathBuf};
@@ -42,6 +43,8 @@ pub enum ParseError {
     /// There are two or more `include_cpp` macros with the same
     /// mod name.
     ConflictingModNames,
+    ZeroModsForDynamicDiscovery,
+    MultipleModsForDynamicDiscovery,
 }
 
 impl Display for ParseError {
@@ -54,6 +57,10 @@ impl Display for ParseError {
                 write!(f, "Unable to parse include_cpp! macro: {}", err)?,
             ParseError::ConflictingModNames =>
                 write!(f, "There are two or more include_cpp! macros with the same output mod name. Use name!")?,
+            ParseError::ZeroModsForDynamicDiscovery =>
+                write!(f, "This file contains extra information to append to an include_cpp! but no such include_cpp! was found in this file.")?,
+            ParseError::MultipleModsForDynamicDiscovery =>
+                write!(f, "This file contains extra information to append to an include_cpp! but multiple such include_cpp! declarations were found in this file.")?,
         }
         Ok(())
     }
@@ -72,6 +79,7 @@ pub fn parse_file<P1: AsRef<Path>>(rs_file: P1) -> Result<ParsedFile, ParseError
 
 fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
     let mut results = Vec::new();
+    let mut extra_superclasses = Vec::new();
     for item in source.items {
         results.push(match item {
             Item::Macro(mac)
@@ -96,8 +104,55 @@ fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
             {
                 Segment::Cxx(CxxBridge::from(itm))
             }
+            Item::Struct(ref its) => {
+                let attrs = &its.attrs;
+                let is_superclass_attr = attrs
+                    .iter()
+                    .filter(|attr| {
+                        attr.path
+                            .segments
+                            .last()
+                            .map(|seg| seg.ident.to_string() == "is_subclass")
+                            .unwrap_or(false)
+                    })
+                    .next();
+                if let Some(is_superclass_attr) = is_superclass_attr {
+                    if !is_superclass_attr.tokens.is_empty() {
+                        let subclass = its.ident.clone();
+                        let args: SubclassAttrs = is_superclass_attr
+                            .parse_args()
+                            .map_err(ParseError::Syntax)?;
+                        if let Some(superclass) = args.superclass {
+                            extra_superclasses.push(Subclass {
+                                superclass,
+                                subclass,
+                            })
+                        }
+                    }
+                }
+                Segment::Other(item)
+            }
             _ => Segment::Other(item),
         });
+    }
+    if !extra_superclasses.is_empty() {
+        let mut autocxx_seg_iterator = results.iter_mut().filter_map(|seg| match seg {
+            Segment::Autocxx(engine) => Some(engine),
+            _ => None,
+        });
+        let our_seg = autocxx_seg_iterator.next();
+        match our_seg {
+            None => return Err(ParseError::ZeroModsForDynamicDiscovery),
+            Some(engine) => {
+                engine
+                    .config_mut()
+                    .subclasses
+                    .append(&mut extra_superclasses);
+            }
+        }
+        if autocxx_seg_iterator.next().is_some() {
+            return Err(ParseError::MultipleModsForDynamicDiscovery);
+        }
     }
     Ok(ParsedFile(results))
 }

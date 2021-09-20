@@ -170,9 +170,12 @@ pub(crate) fn build_with_existing_parsed_file(
     }
 
     for include_cpp in parsed_file.get_rs_buildables() {
-        let fname = include_cpp.get_rs_filename();
         let rs = include_cpp.generate_rs();
-        generated_rs.push(write_rs_to_file(&rsdir, &fname, rs)?);
+        generated_rs.push(write_rs_to_file(
+            &rsdir,
+            &include_cpp.config.get_rs_filename(),
+            rs,
+        )?);
     }
     if counter == 0 {
         Err(BuilderError::NoIncludeCxxMacrosFound)

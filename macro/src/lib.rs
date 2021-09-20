@@ -12,28 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx_parser::IncludeCpp;
+use autocxx_parser::{IncludeCpp, SubclassAttrs};
 use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, proc_macro_error};
-use quote::{quote, ToTokens};
-use syn::parse::{Parse, ParseStream, Parser};
-use syn::{parse_macro_input, Fields, ItemStruct, Result as ParseResult};
-
-struct SelfOwned(bool);
-
-impl Parse for SelfOwned {
-    fn parse(input: ParseStream) -> ParseResult<Self> {
-        let id = input.parse::<Option<Ident>>()?;
-        match id {
-            Some(id) if id == "self_owned" => Ok(Self(true)),
-            Some(id) => Err(syn::Error::new_spanned(
-                id.into_token_stream(),
-                "Expected self_owned",
-            )),
-            None => Ok(Self(false)),
-        }
-    }
-}
+use quote::quote;
+use syn::parse::Parser;
+use syn::{parse_macro_input, Fields, ItemStruct};
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
@@ -65,11 +49,11 @@ pub fn is_subclass(
             let f = parser.parse2(input).unwrap();
             fields.named.push(f);
         }
-        _ => abort!(Span::call_site(), "Expect a struct with named fields"),
+        _ => abort!(Span::call_site(), "Expect a struct with named fields - use struct A{} as opposed to struct A; or struct A()"),
     }
-    let self_owned: SelfOwned = syn::parse(attr)
+    let subclass_attrs: SubclassAttrs = syn::parse(attr)
         .unwrap_or_else(|_| abort!(Span::call_site(), "Unable to parse attributes"));
-    let self_owned_bit = if self_owned.0 {
+    let self_owned_bit = if subclass_attrs.self_owned {
         Some(quote! {
             impl autocxx::subclass::CppSubclassSelfOwned<ffi::#cpp_ident> for #id {}
         })

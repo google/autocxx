@@ -35,12 +35,7 @@ use conversion::BridgeConverter;
 use parse_callbacks::AutocxxParseCallbacks;
 use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
-use std::{
-    collections::hash_map::DefaultHasher,
-    fmt::Display,
-    hash::{Hash, Hasher},
-    path::PathBuf,
-};
+use std::{fmt::Display, path::PathBuf};
 use std::{
     fs::File,
     io::prelude::*,
@@ -265,6 +260,13 @@ impl IncludeCppEngine {
         mac.parse_body::<IncludeCppEngine>().map_err(Error::Parsing)
     }
 
+    pub fn config_mut(&mut self) -> &mut IncludeCppConfig {
+        if !matches!(self.state, State::NotGenerated) {
+            panic!("Can't alter config after generation commenced");
+        }
+        &mut self.config
+    }
+
     fn build_header(&self) -> String {
         join(
             self.config
@@ -318,10 +320,7 @@ impl IncludeCppEngine {
     }
 
     pub fn get_rs_filename(&self) -> String {
-        let mut hasher = DefaultHasher::new();
-        self.config.hash(&mut hasher);
-        let id = hasher.finish();
-        format!("{}.rs", id)
+        self.config.get_rs_filename()
     }
 
     /// Generate the Rust bindings. Call `generate` first.

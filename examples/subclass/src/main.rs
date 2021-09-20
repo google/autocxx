@@ -28,10 +28,6 @@ include_cpp! {
     generate!("register_cpp_thingies")
     generate!("register_producer")
     generate!("register_displayer")
-    // Declare some C++ classes have Rust subclasses.
-    subclass!("MessageDisplayer",UwuDisplayer)
-    subclass!("MessageDisplayer",BoxDisplayer)
-    subclass!("MessageProducer",QuoteProducer)
 }
 
 static SHAKESPEARE_QUOTES: [&str; 10] = [
@@ -60,7 +56,7 @@ static SHAKESPEARE_QUOTES: [&str; 10] = [
 // macro. See the main function at the bottom for how this subclass
 // is instantiated.
 
-#[is_subclass]
+#[is_subclass(superclass("MessageDisplayer"))]
 #[derive(Default)]
 pub struct UwuDisplayer {}
 
@@ -94,7 +90,7 @@ impl ffi::MessageDisplayer_methods for UwuDisplayer {
 // for now, at least, we can't hold non-trivial C++ objects on the Rust stack.)
 // All the boxing and unboxing is done automatically by autocxx layers.
 
-#[is_subclass]
+#[is_subclass(superclass("MessageProducer"))]
 #[derive(Default)]
 pub struct QuoteProducer {}
 
@@ -127,7 +123,7 @@ impl ffi::MessageProducer_methods for QuoteProducer {
 // doing stuff. In C++ you'd probably need a const_cast. Here we use
 // interior mutability.
 
-#[is_subclass]
+#[is_subclass(superclass("MessageDisplayer"))]
 pub struct BoxDisplayer {
     message_count: RefCell<usize>,
 }
