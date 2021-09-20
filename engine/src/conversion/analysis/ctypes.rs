@@ -20,11 +20,11 @@ use crate::conversion::api::ApiName;
 use crate::types::Namespace;
 use crate::{conversion::api::Api, known_types::known_types, types::QualifiedName};
 
-use super::fun::FnAnalysis;
+use super::fun::FnPhase;
 
 /// Spot any variable-length C types (e.g. unsigned long)
 /// used in the [Api]s and append those as extra APIs.
-pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
+pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnPhase>>) {
     let ctypes: HashMap<Ident, QualifiedName> = apis
         .iter()
         .map(|api| api.deps())

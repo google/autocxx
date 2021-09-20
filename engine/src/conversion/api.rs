@@ -67,9 +67,9 @@ pub(crate) trait AnalysisPhase {
 }
 
 /// No analysis has been applied to this API.
-pub(crate) struct NullAnalysis;
+pub(crate) struct NullPhase;
 
-impl AnalysisPhase for NullAnalysis {
+impl AnalysisPhase for NullPhase {
     type TypedefAnalysis = ();
     type StructAnalysis = ();
     type FunAnalysis = ();
@@ -294,7 +294,7 @@ impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     }
 }
 
-pub(crate) type UnanalyzedApi = Api<NullAnalysis>;
+pub(crate) type UnanalyzedApi = Api<NullPhase>;
 
 impl<T: AnalysisPhase> Api<T> {
     pub(crate) fn typedef_unchanged(

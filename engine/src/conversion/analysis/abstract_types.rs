@@ -15,21 +15,21 @@
 use autocxx_parser::IncludeCppConfig;
 
 use super::{
-    fun::{FnAnalysis, FnAnalysisBody, FnKind, MethodKind},
-    pod::PodStructAnalysisBody,
+    fun::{FnAnalysis, FnKind, FnPhase, MethodKind},
+    pod::PodAnalysis,
 };
 use crate::conversion::api::TypeKind;
 use crate::{conversion::api::Api, types::QualifiedName};
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
-pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<FnAnalysis>>) {
+pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<FnPhase>>) {
     let mut abstract_types: HashSet<_> = apis
         .iter()
         .filter_map(|api| match &api {
             Api::Function {
                 analysis:
-                    FnAnalysisBody {
+                    FnAnalysis {
                         kind: FnKind::Method(self_ty_name, MethodKind::PureVirtual(_)),
                         ..
                     },
@@ -58,7 +58,7 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
         for mut api in apis.iter_mut() {
             match &mut api {
                 Api::Struct {
-                    analysis: PodStructAnalysisBody { bases, kind, .. },
+                    analysis: PodAnalysis { bases, kind, .. },
                     ..
                 } if *kind != TypeKind::Abstract
                     && (!abstract_types.is_disjoint(bases)
@@ -80,7 +80,7 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
         !matches!(&api,
         Api::Function {
             analysis:
-                FnAnalysisBody {
+                FnAnalysis {
                     kind: FnKind::Method(self_ty, MethodKind::Constructor),
                     ..
                 },

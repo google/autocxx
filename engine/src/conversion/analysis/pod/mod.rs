@@ -32,19 +32,19 @@ use crate::{
     types::{Namespace, QualifiedName},
 };
 
-use super::tdef::{TypedefAnalysis, TypedefAnalysisBody};
+use super::tdef::{TypedefAnalysis, TypedefPhase};
 
-pub(crate) struct PodStructAnalysisBody {
+pub(crate) struct PodAnalysis {
     pub(crate) kind: TypeKind,
     pub(crate) bases: HashSet<QualifiedName>,
     pub(crate) field_deps: HashSet<QualifiedName>,
 }
 
-pub(crate) struct PodAnalysis;
+pub(crate) struct PodPhase;
 
-impl AnalysisPhase for PodAnalysis {
-    type TypedefAnalysis = TypedefAnalysisBody;
-    type StructAnalysis = PodStructAnalysisBody;
+impl AnalysisPhase for PodPhase {
+    type TypedefAnalysis = TypedefAnalysis;
+    type StructAnalysis = PodAnalysis;
     type FunAnalysis = ();
 }
 
@@ -54,9 +54,9 @@ impl AnalysisPhase for PodAnalysis {
 /// and an object which can be used to query the POD status of any
 /// type whether or not it's one of the [Api]s.
 pub(crate) fn analyze_pod_apis(
-    apis: Vec<Api<TypedefAnalysis>>,
+    apis: Vec<Api<TypedefPhase>>,
     config: &IncludeCppConfig,
-) -> Result<Vec<Api<PodAnalysis>>, ConvertError> {
+) -> Result<Vec<Api<PodPhase>>, ConvertError> {
     // This next line will return an error if any of the 'generate_pod'
     // directives from the user can't be met because, for instance,
     // a type contains a std::string or some other type which can't be
@@ -83,7 +83,7 @@ pub(crate) fn analyze_pod_apis(
     );
     // Conceivably, the process of POD-analysing the first set of APIs could result
     // in us creating new APIs to concretize generic types.
-    let extra_apis: Vec<Api<PodAnalysis>> = extra_apis.into_iter().map(add_analysis).collect();
+    let extra_apis: Vec<Api<PodPhase>> = extra_apis.into_iter().map(add_analysis).collect();
     let mut more_extra_apis = Vec::new();
     convert_apis(
         extra_apis,
@@ -108,7 +108,7 @@ pub(crate) fn analyze_pod_apis(
 fn analyze_enum(
     name: ApiName,
     mut item: ItemEnum,
-) -> Result<Box<dyn Iterator<Item = Api<PodAnalysis>>>, ConvertErrorWithContext> {
+) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
     super::remove_bindgen_attrs(&mut item.attrs, name.name.get_final_ident())?;
     Ok(Box::new(std::iter::once(Api::Enum { name, item })))
 }
@@ -119,7 +119,7 @@ fn analyze_struct(
     extra_apis: &mut Vec<UnanalyzedApi>,
     name: ApiName,
     mut item: ItemStruct,
-) -> Result<Box<dyn Iterator<Item = Api<PodAnalysis>>>, ConvertErrorWithContext> {
+) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
     let id = name.name.get_final_ident();
     super::remove_bindgen_attrs(&mut item.attrs, id.clone())?;
     let bases = get_bases(&item);
@@ -144,7 +144,7 @@ fn analyze_struct(
     Ok(Box::new(std::iter::once(Api::Struct {
         name,
         item,
-        analysis: PodStructAnalysisBody {
+        analysis: PodAnalysis {
             kind: type_kind,
             bases,
             field_deps,

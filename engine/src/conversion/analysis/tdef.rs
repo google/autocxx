@@ -30,17 +30,17 @@ use crate::{
 
 use super::remove_bindgen_attrs;
 
-pub(crate) struct TypedefAnalysisBody {
+pub(crate) struct TypedefAnalysis {
     pub(crate) kind: TypedefKind,
     pub(crate) deps: HashSet<QualifiedName>,
 }
 
 /// Analysis phase where typedef analysis has been performed but no other
 /// analyses just yet.
-pub(crate) struct TypedefAnalysis;
+pub(crate) struct TypedefPhase;
 
-impl AnalysisPhase for TypedefAnalysis {
-    type TypedefAnalysis = TypedefAnalysisBody;
+impl AnalysisPhase for TypedefPhase {
+    type TypedefAnalysis = TypedefAnalysis;
     type StructAnalysis = ();
     type FunAnalysis = ();
 }
@@ -49,7 +49,7 @@ impl AnalysisPhase for TypedefAnalysis {
 pub(crate) fn convert_typedef_targets(
     config: &IncludeCppConfig,
     apis: Vec<UnanalyzedApi>,
-) -> Vec<Api<TypedefAnalysis>> {
+) -> Vec<Api<TypedefPhase>> {
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut extra_apis = Vec::new();
     let mut results = Vec::new();
@@ -72,7 +72,7 @@ pub(crate) fn convert_typedef_targets(
                     name,
                     item: item.clone(),
                     old_tyname,
-                    analysis: TypedefAnalysisBody {
+                    analysis: TypedefAnalysis {
                         kind: item,
                         deps: HashSet::new(),
                     },
@@ -90,7 +90,7 @@ fn get_replacement_typedef(
     old_tyname: Option<QualifiedName>,
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
-) -> Result<Api<TypedefAnalysis>, ConvertErrorWithContext> {
+) -> Result<Api<TypedefPhase>, ConvertErrorWithContext> {
     let mut converted_type = ity.clone();
     let id = ity.ident.clone();
     remove_bindgen_attrs(&mut converted_type.attrs, id)?;
@@ -118,7 +118,7 @@ fn get_replacement_typedef(
                 name,
                 item: TypedefKind::Type(ity),
                 old_tyname,
-                analysis: TypedefAnalysisBody {
+                analysis: TypedefAnalysis {
                     kind: TypedefKind::Type(converted_type),
                     deps: final_type.types_encountered,
                 },

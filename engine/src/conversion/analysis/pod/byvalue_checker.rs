@@ -15,7 +15,7 @@
 use crate::{conversion::ConvertError, known_types::known_types};
 use crate::{
     conversion::{
-        analysis::tdef::TypedefAnalysis,
+        analysis::tdef::TypedefPhase,
         api::{Api, TypedefKind},
     },
     types::{Namespace, QualifiedName},
@@ -75,7 +75,7 @@ impl ByValueChecker {
     /// Scan APIs to work out which are by-value safe. Constructs a [ByValueChecker]
     /// that others can use to query the results.
     pub(crate) fn new_from_apis(
-        apis: &[Api<TypedefAnalysis>],
+        apis: &[Api<TypedefPhase>],
         config: &IncludeCppConfig,
     ) -> Result<ByValueChecker, ConvertError> {
         let mut byvalue_checker = ByValueChecker::new();

@@ -50,14 +50,14 @@ use self::{
 };
 
 use super::{
-    analysis::fun::{FnAnalysis, ReceiverMutability},
-    api::{AnalysisPhase, Api, ImplBlockDetails, SubclassName, TypeKind, TypedefKind},
-};
-use super::{
-    analysis::fun::{FnAnalysisBody, FnKind},
+    analysis::fun::{FnAnalysis, FnKind},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
+};
+use super::{
+    analysis::fun::{FnPhase, ReceiverMutability},
+    api::{AnalysisPhase, Api, ImplBlockDetails, SubclassName, TypeKind, TypedefKind},
 };
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::quote;
@@ -150,7 +150,7 @@ pub(crate) struct RsCodeGenerator<'a> {
 impl<'a> RsCodeGenerator<'a> {
     /// Generate code for a set of APIs that was discovered during parsing.
     pub(crate) fn generate_rs_code(
-        all_apis: Vec<Api<FnAnalysis>>,
+        all_apis: Vec<Api<FnPhase>>,
         include_list: &'a [String],
         bindgen_mod: ItemMod,
         config: &'a IncludeCppConfig,
@@ -164,7 +164,7 @@ impl<'a> RsCodeGenerator<'a> {
         c.rs_codegen(all_apis)
     }
 
-    fn rs_codegen(mut self, all_apis: Vec<Api<FnAnalysis>>) -> Vec<Item> {
+    fn rs_codegen(mut self, all_apis: Vec<Api<FnPhase>>) -> Vec<Item> {
         // ... and now let's start to generate the output code.
         // First off, when we generate structs we may need to add some methods
         // if they're superclasses.
@@ -263,7 +263,7 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn accumulate_superclass_methods(
         &self,
-        apis: &[Api<FnAnalysis>],
+        apis: &[Api<FnPhase>],
     ) -> HashMap<String, Vec<SuperclassMethod>> {
         let mut results = HashMap::new();
         results.extend(
@@ -275,7 +275,7 @@ impl<'a> RsCodeGenerator<'a> {
             if let Api::Function {
                 name,
                 analysis:
-                    FnAnalysisBody {
+                    FnAnalysis {
                         kind: FnKind::Method(receiver, method_kind),
                         params,
                         ret_type,
@@ -466,7 +466,7 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn generate_rs_for_api(
         &self,
-        api: Api<FnAnalysis>,
+        api: Api<FnPhase>,
         associated_methods: &mut HashMap<String, Vec<SuperclassMethod>>,
         subclasses_with_a_single_trivial_constructor: &HashSet<QualifiedName>,
     ) -> RsCodegenResult {
@@ -1014,7 +1014,7 @@ impl<'a> RsCodeGenerator<'a> {
     }
 }
 
-fn find_trivially_constructed_subclasses(apis: &[Api<FnAnalysis>]) -> HashSet<QualifiedName> {
+fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
     let (complex_constructors, simple_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .map(|api| match api {

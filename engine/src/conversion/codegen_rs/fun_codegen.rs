@@ -30,7 +30,7 @@ use super::{
 use crate::{conversion::api::FuncToConvert, types::make_ident};
 use crate::{
     conversion::{
-        analysis::fun::{ArgumentAnalysis, FnAnalysisBody, FnKind, MethodKind, RustRenameStrategy},
+        analysis::fun::{ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy},
         api::ImplBlockDetails,
     },
     types::{Namespace, QualifiedName},
@@ -39,7 +39,7 @@ use crate::{
 pub(super) fn gen_function(
     ns: &Namespace,
     fun: FuncToConvert,
-    analysis: FnAnalysisBody,
+    analysis: FnAnalysis,
     cpp_call_name: String,
 ) -> RsCodegenResult {
     let cxxbridge_name = analysis.cxxbridge_name;

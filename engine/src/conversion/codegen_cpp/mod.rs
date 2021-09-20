@@ -16,7 +16,7 @@ mod function_wrapper_cpp;
 pub(crate) mod type_to_cpp;
 
 use crate::{
-    conversion::analysis::fun::{function_wrapper::CppFunctionKind, FnAnalysisBody},
+    conversion::analysis::fun::{function_wrapper::CppFunctionKind, FnAnalysis},
     types::{make_ident, QualifiedName},
     CppFilePair,
 };
@@ -28,7 +28,7 @@ use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 use super::{
     analysis::fun::{
         function_wrapper::{CppFunction, CppFunctionBody},
-        FnAnalysis,
+        FnPhase,
     },
     api::{Api, SubclassName},
     ConvertError,
@@ -91,7 +91,7 @@ pub(crate) struct CppCodeGenerator<'a> {
 impl<'a> CppCodeGenerator<'a> {
     pub(crate) fn generate_cpp_code(
         inclusions: String,
-        apis: &[Api<FnAnalysis>],
+        apis: &[Api<FnPhase>],
         config: &'a IncludeCppConfig,
     ) -> Result<Option<CppFilePair>, ConvertError> {
         let mut gen = CppCodeGenerator::new(inclusions, original_name_map_from_apis(apis), config);
@@ -117,7 +117,7 @@ impl<'a> CppCodeGenerator<'a> {
     // It's important to keep this in sync with Api::needs_cpp_codegen.
     fn add_needs<'b>(
         &mut self,
-        apis: impl Iterator<Item = &'a Api<FnAnalysis>>,
+        apis: impl Iterator<Item = &'a Api<FnPhase>>,
     ) -> Result<(), ConvertError> {
         let mut constructors_by_subclass: HashMap<SubclassName, Vec<&CppFunction>> = HashMap::new();
         let mut methods_by_subclass: HashMap<SubclassName, Vec<&CppFunction>> = HashMap::new();
@@ -127,7 +127,7 @@ impl<'a> CppCodeGenerator<'a> {
                 Api::StringConstructor { .. } => self.generate_string_constructor(),
                 Api::Function {
                     analysis:
-                        FnAnalysisBody {
+                        FnAnalysis {
                             cpp_wrapper: Some(cpp_wrapper),
                             ..
                         },

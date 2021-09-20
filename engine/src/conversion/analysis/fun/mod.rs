@@ -60,8 +60,8 @@ use self::{
 };
 
 use super::{
-    pod::{PodAnalysis, PodStructAnalysisBody},
-    tdef::TypedefAnalysisBody,
+    pod::{PodAnalysis, PodPhase},
+    tdef::TypedefAnalysis,
 };
 
 #[derive(Clone, Debug)]
@@ -100,7 +100,7 @@ pub(crate) enum RustRenameStrategy {
 }
 
 #[derive(Clone)]
-pub(crate) struct FnAnalysisBody {
+pub(crate) struct FnAnalysis {
     pub(crate) cxxbridge_name: Ident,
     pub(crate) rust_name: String,
     pub(crate) rust_rename_strategy: RustRenameStrategy,
@@ -134,12 +134,12 @@ struct ReturnTypeAnalysis {
     deps: HashSet<QualifiedName>,
 }
 
-pub(crate) struct FnAnalysis;
+pub(crate) struct FnPhase;
 
-impl AnalysisPhase for FnAnalysis {
-    type TypedefAnalysis = TypedefAnalysisBody;
-    type StructAnalysis = PodStructAnalysisBody;
-    type FunAnalysis = FnAnalysisBody;
+impl AnalysisPhase for FnPhase {
+    type TypedefAnalysis = TypedefAnalysis;
+    type StructAnalysis = PodAnalysis;
+    type FunAnalysis = FnAnalysis;
 }
 
 pub(crate) struct FnAnalyzer<'a> {
@@ -157,10 +157,10 @@ pub(crate) struct FnAnalyzer<'a> {
 
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
-        apis: Vec<Api<PodAnalysis>>,
+        apis: Vec<Api<PodPhase>>,
         unsafe_policy: UnsafePolicy,
         config: &'a IncludeCppConfig,
-    ) -> Vec<Api<FnAnalysis>> {
+    ) -> Vec<Api<FnPhase>> {
         let mut me = Self {
             unsafe_policy,
             rust_name_tracker: RustNameTracker::new(),
@@ -187,12 +187,12 @@ impl<'a> FnAnalyzer<'a> {
         results
     }
 
-    fn build_pod_safe_type_set(apis: &[Api<PodAnalysis>]) -> HashSet<QualifiedName> {
+    fn build_pod_safe_type_set(apis: &[Api<PodPhase>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct {
                     analysis:
-                        PodStructAnalysisBody {
+                        PodAnalysis {
                             kind: TypeKind::Pod,
                             ..
                         },
@@ -267,7 +267,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         func_information: Box<FuncToConvert>,
-    ) -> Result<Box<dyn Iterator<Item = Api<FnAnalysis>>>, ConvertErrorWithContext> {
+    ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
         let maybe_analysis_and_name = self.analyze_foreign_fn(name, func_information.clone())?;
 
         let (analysis, name) = match maybe_analysis_and_name {
@@ -353,7 +353,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         func_information: Box<FuncToConvert>,
-    ) -> Result<Option<(FnAnalysisBody, ApiName)>, ConvertErrorWithContext> {
+    ) -> Result<Option<(FnAnalysis, ApiName)>, ConvertErrorWithContext> {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
         let mut cpp_name = name.cpp_name.clone();
@@ -736,7 +736,7 @@ impl<'a> FnAnalyzer<'a> {
             }
         };
 
-        let analysis = FnAnalysisBody {
+        let analysis = FnAnalysis {
             cxxbridge_name,
             rust_name: rust_name.clone(),
             rust_rename_strategy,
@@ -968,7 +968,7 @@ impl<'a> FnAnalyzer<'a> {
     /// would need to output a `FnAnalysisBody`. By running it as part of this phase
     /// we can simply generate the sort of thing bindgen generates, then ask
     /// the existing code in this phase to figure out what to do with it.
-    fn add_missing_make_uniques(&mut self, apis: &mut Vec<Api<FnAnalysis>>) {
+    fn add_missing_make_uniques(&mut self, apis: &mut Vec<Api<FnPhase>>) {
         if self.config.exclude_impls {
             return;
         }
@@ -982,7 +982,7 @@ impl<'a> FnAnalyzer<'a> {
         for api in apis.iter() {
             if let Api::Function {
                 analysis:
-                    FnAnalysisBody {
+                    FnAnalysis {
                         kind: FnKind::Method(self_ty, MethodKind::Constructor),
                         ..
                     },
@@ -1017,7 +1017,7 @@ impl<'a> FnAnalyzer<'a> {
         }
     }
 
-    fn find_all_types(apis: &[Api<FnAnalysis>]) -> HashSet<QualifiedName> {
+    fn find_all_types(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct { .. } => Some(api.name().clone()),
@@ -1027,7 +1027,7 @@ impl<'a> FnAnalyzer<'a> {
     }
 }
 
-impl Api<FnAnalysis> {
+impl Api<FnPhase> {
     pub(crate) fn typename_for_allowlist(&self) -> QualifiedName {
         match &self {
             Api::Function {
@@ -1081,7 +1081,7 @@ impl Api<FnAnalysis> {
         match self {
             Api::Typedef {
                 old_tyname,
-                analysis: TypedefAnalysisBody { deps, .. },
+                analysis: TypedefAnalysis { deps, .. },
                 ..
             } => Box::new(old_tyname.iter().chain(deps.iter())),
             Api::Struct { analysis, .. } => Box::new(analysis.field_deps.iter()),
