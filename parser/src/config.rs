@@ -371,7 +371,13 @@ impl IncludeCppConfig {
 
     /// Return the filename to which generated .rs should be written.
     pub fn get_rs_filename(&self) -> String {
-        "autocxx-gen.rs".into()
+        format!(
+            "autocxx-{}-gen.rs",
+            self.mod_name
+                .as_ref()
+                .map(|id| id.to_string())
+                .unwrap_or("ffi-default".into())
+        )
     }
 }
 
