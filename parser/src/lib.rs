@@ -14,14 +14,16 @@
 
 mod config;
 pub mod file_locations;
+mod is_superclass;
 
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
 };
 
-pub use config::{IncludeCppConfig, UnsafePolicy};
+pub use config::{IncludeCppConfig, Subclass, UnsafePolicy};
 use file_locations::FileLocationStrategy;
+pub use is_superclass::SubclassAttrs;
 use proc_macro2::TokenStream as TokenStream2;
 use syn::Result as ParseResult;
 use syn::{

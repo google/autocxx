@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx_parser::IncludeCpp;
+use autocxx_parser::{IncludeCpp, SubclassAttrs};
 use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, proc_macro_error};
-use quote::{quote, ToTokens};
-use syn::parse::{Parse, ParseStream, Parser};
-use syn::token::Comma;
-use syn::{parse_macro_input, Fields, ItemStruct, Result as ParseResult};
-
+use quote::quote;
+use syn::parse::Parser;
+use syn::{parse_macro_input, Fields, ItemStruct};
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]

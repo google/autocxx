@@ -12,11 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use proc_macro2::Ident;
+use quote::ToTokens;
+use syn::Result as ParseResult;
+use syn::{
+    parse::{Parse, ParseStream},
+    token::Comma,
+};
 
 #[derive(Default)]
-struct SubclassAttrs {
-    self_owned: bool,
-    superclass: Option<String>,
+pub struct SubclassAttrs {
+    pub self_owned: bool,
+    pub superclass: Option<String>,
 }
 
 impl Parse for SubclassAttrs {
@@ -38,10 +45,12 @@ impl Parse for SubclassAttrs {
                     }
                     me.superclass = Some(superclass.value());
                 }
-                Some(id) => return Err(syn::Error::new_spanned(
-                    id.into_token_stream(),
-                    "Expected self_owned or superclass",
-                )),
+                Some(id) => {
+                    return Err(syn::Error::new_spanned(
+                        id.into_token_stream(),
+                        "Expected self_owned or superclass",
+                    ))
+                }
                 None => {}
             };
             let comma = input.parse::<Option<Comma>>()?;
