@@ -16,11 +16,6 @@ mod config;
 pub mod file_locations;
 mod is_superclass;
 
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
-};
-
 pub use config::{IncludeCppConfig, Subclass, UnsafePolicy};
 use file_locations::FileLocationStrategy;
 pub use is_superclass::SubclassAttrs;
@@ -49,20 +44,12 @@ impl IncludeCpp {
         mac.parse_body::<IncludeCpp>()
     }
 
-    pub fn get_rs_filename(&self) -> String {
-        let mut hasher = DefaultHasher::new();
-        self.config.hash(&mut hasher);
-        let id = hasher.finish();
-        format!("{}.rs", id)
-    }
-
     /// Generate the Rust bindings.
     pub fn generate_rs(&self) -> TokenStream2 {
         if self.config.parse_only {
             return TokenStream2::new();
         }
-        let fname = self.get_rs_filename();
-        FileLocationStrategy::new().make_include(fname)
+        FileLocationStrategy::new().make_include(&self.config.get_rs_filename())
     }
 
     pub fn get_config(&self) -> &IncludeCppConfig {

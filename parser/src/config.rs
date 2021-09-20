@@ -368,6 +368,11 @@ impl IncludeCppConfig {
             .iter()
             .any(|sc| format!("{}Holder", sc.subclass.to_string()) == id)
     }
+
+    /// Return the filename to which generated .rs should be written.
+    pub fn get_rs_filename(&self) -> String {
+        "autocxx-gen.rs".into()
+    }
 }
 
 #[cfg(test)]

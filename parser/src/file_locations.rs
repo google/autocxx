@@ -64,7 +64,7 @@ impl FileLocationStrategy {
     /// Make a macro to include a given generated Rust file name.
     /// This can't simply be calculated from `get_rs_dir` because
     /// of limitations in rust-analyzer.
-    pub fn make_include(&self, fname: String) -> TokenStream {
+    pub fn make_include(&self, fname: &str) -> TokenStream {
         match self {
             FileLocationStrategy::FromAutocxxRs(custom_dir) => {
                 let fname = custom_dir.join(fname).to_str().unwrap().to_string();
