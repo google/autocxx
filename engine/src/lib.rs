@@ -30,7 +30,7 @@ mod builder;
 #[cfg(test)]
 mod integration_tests;
 
-use autocxx_parser::{IncludeCppConfig, Subclass, UnsafePolicy};
+use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use parse_callbacks::AutocxxParseCallbacks;
 use parse_file::CppBuildable;
@@ -265,8 +265,11 @@ impl IncludeCppEngine {
         mac.parse_body::<IncludeCppEngine>().map_err(Error::Parsing)
     }
 
-    pub fn add_subclass(&mut self, sc: Subclass) {
-        self.config.subclasses.push(sc);
+    pub fn config_mut(&mut self) -> &mut IncludeCppConfig {
+        if !matches!(self.state, State::NotGenerated) {
+            panic!("Can't alter config after generation commenced");
+        }
+        &mut self.config
     }
 
     fn build_header(&self) -> String {

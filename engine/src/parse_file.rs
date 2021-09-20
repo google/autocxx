@@ -105,6 +105,7 @@ fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
                 Segment::Cxx(CxxBridge::from(itm))
             }
             Item::Struct(ref its) => {
+                log::info!("Found struct");
                 let attrs = &its.attrs;
                 let is_superclass_attr = attrs
                     .iter()
@@ -112,17 +113,25 @@ fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
                         attr.path
                             .segments
                             .last()
-                            .map(|seg| seg.ident.to_string() == "is_superclass")
-                            == Some(true)
+                            .map(|seg| seg.ident.to_string() == "is_subclass")
+                            .unwrap_or(false)
                     })
                     .next();
                 if let Some(is_superclass_attr) = is_superclass_attr {
-                    let args: SubclassAttrs = is_superclass_attr
-                        .parse_args()
-                        .map_err(ParseError::Syntax)?;
-                    let subclass_id = its.ident.clone();
-                    if let Some(superclass) = args.superclass {
-                        extra_superclasses.push((superclass, subclass_id))
+                    if !is_superclass_attr.tokens.is_empty() {
+                        let subclass = its.ident.clone();
+                        log::info!("Found SC attr for {}", subclass);
+                        let args: SubclassAttrs = is_superclass_attr
+                            .parse_args()
+                            .map_err(ParseError::Syntax)?;
+                        log::info!("Parse non-doom SC attr");
+                        if let Some(superclass) = args.superclass {
+                            log::info!("Parse non-doom SC attr with superclass {}", superclass);
+                            extra_superclasses.push(Subclass {
+                                superclass,
+                                subclass,
+                            })
+                        }
                     }
                 }
                 Segment::Other(item)
@@ -131,6 +140,7 @@ fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
         });
     }
     if !extra_superclasses.is_empty() {
+        log::info!("HERE");
         let mut autocxx_seg_iterator = results.iter_mut().filter_map(|seg| match seg {
             Segment::Autocxx(engine) => Some(engine),
             _ => None,
@@ -139,12 +149,10 @@ fn parse_file_contents(source: syn::File) -> Result<ParsedFile, ParseError> {
         match our_seg {
             None => return Err(ParseError::ZeroModsForDynamicDiscovery),
             Some(engine) => {
-                for (superclass, subclass) in extra_superclasses.into_iter() {
-                    engine.add_subclass(Subclass {
-                        superclass,
-                        subclass,
-                    });
-                }
+                engine
+                    .config_mut()
+                    .subclasses
+                    .append(&mut extra_superclasses);
             }
         }
         if autocxx_seg_iterator.next().is_some() {
