@@ -57,7 +57,6 @@ static SHAKESPEARE_QUOTES: [&str; 10] = [
 // is instantiated.
 
 #[is_subclass(superclass("MessageDisplayer"))]
-//#[is_subclass]
 #[derive(Default)]
 pub struct UwuDisplayer {}
 
