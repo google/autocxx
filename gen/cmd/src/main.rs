@@ -152,6 +152,11 @@ fn main() {
                 .requires("gen-rs-include")
         )
         .arg(
+            Arg::with_name("auto-allowlist")
+                .long("auto-allowlist")
+                .help("Dynamically construct allowlist from real uses of APIs.")
+        )
+        .arg(
             Arg::with_name("clang-args")
                 .last(true)
                 .multiple(true)
@@ -160,8 +165,11 @@ fn main() {
         .get_matches();
 
     env_logger::builder().init();
-    let mut parsed_file = parse_file(matches.value_of("INPUT").unwrap())
-        .expect("Unable to parse Rust file and interpret autocxx macro");
+    let mut parsed_file = parse_file(
+        matches.value_of("INPUT").unwrap(),
+        matches.is_present("auto-allowlist"),
+    )
+    .expect("Unable to parse Rust file and interpret autocxx macro");
     let incs = matches
         .values_of("inc")
         .unwrap_or_default()

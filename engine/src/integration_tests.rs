@@ -335,14 +335,11 @@ where
     let rs_path = write_rust_to_file(&rust_code);
 
     info!("Path is {:?}", tdir.path());
-    let build_results = crate::builder::build_to_custom_directory(
-        &rs_path,
-        &[tdir.path()],
-        &extra_clang_args,
-        Some(target_dir.clone()),
-        None,
-    )
-    .map_err(TestError::AutoCxx)?;
+    let build_results = crate::Builder::new_internal(&rs_path, &[tdir.path()])
+        .extra_clang_args(&extra_clang_args)
+        .custom_gendir(target_dir.clone())
+        .build_listing_files()
+        .map_err(TestError::AutoCxx)?;
     let mut b = build_results.0;
     let generated_rs_files = build_results.1;
 

@@ -61,7 +61,7 @@ pub enum Allowlist {
 }
 
 impl Allowlist {
-    pub(crate) fn push(&mut self, item: LitStr) -> ParseResult<()> {
+    pub fn push(&mut self, item: LitStr) -> ParseResult<()> {
         match self {
             Allowlist::Unspecified(ref mut uncommitted_list) => {
                 let new_list = uncommitted_list
@@ -112,7 +112,7 @@ pub struct IncludeCppConfig {
     pub parse_only: bool,
     pub exclude_impls: bool,
     pod_requests: Vec<String>,
-    allowlist: Allowlist,
+    pub allowlist: Allowlist,
     blocklist: Vec<String>,
     exclude_utilities: bool,
     mod_name: Option<Ident>,
@@ -376,8 +376,19 @@ impl IncludeCppConfig {
             self.mod_name
                 .as_ref()
                 .map(|id| id.to_string())
-                .unwrap_or("ffi-default".into())
+                .unwrap_or_else(|| "ffi-default".into())
         )
+    }
+
+    pub fn confirm_complete(&self) -> ParseResult<()> {
+        if matches!(self.allowlist, Allowlist::Unspecified(_)) {
+            Err(syn::Error::new(
+                Span::call_site(),
+                "expected either generate! or generate_all!",
+            ))
+        } else {
+            Ok(())
+        }
     }
 }
 

@@ -14,7 +14,7 @@
 
 fn main() {
     let path = std::path::PathBuf::from("src");
-    let mut b = autocxx_build::build("src/main.rs", &[&path], &[]).unwrap();
+    let mut b = autocxx_build::builder("src/main.rs", &[&path]).expect_build();
     b.flag_if_supported("-std=c++14").compile("autocxx-demo");
 
     println!("cargo:rerun-if-changed=src/main.rs");
