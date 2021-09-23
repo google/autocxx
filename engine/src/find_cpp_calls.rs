@@ -387,6 +387,19 @@ mod tests {
     }
 
     #[test]
+    fn test_in_ns() {
+        let mut cpplist = CppList::default();
+        let itm = Item::Fn(parse_quote! {
+            fn bar() {
+                ffi::a::b::xxx();
+            }
+        });
+        cpplist.search_item(&itm);
+        assert!(!cpplist.0.is_empty());
+        assert!(cpplist.0.iter().next().unwrap() == "a::b::xxx");
+    }
+
+    #[test]
     fn test_deep_nested_thingy() {
         let mut cpplist = CppList::default();
         let itm = Item::Fn(parse_quote! {
