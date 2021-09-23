@@ -16,9 +16,11 @@ use std::collections::HashSet;
 
 use itertools::Itertools;
 use syn::{
-    Expr, ExprAssign, ExprAssignOp, ExprAwait, ExprBinary, ExprBox, ExprBreak, ExprCast, ExprField,
-    ExprGroup, ExprLet, ExprParen, ExprReference, ExprTry, ExprType, ExprUnary, ImplItem, Item,
-    Path, Stmt, TraitItem,
+    punctuated::Punctuated, Binding, Expr, ExprAssign, ExprAssignOp, ExprAwait, ExprBinary,
+    ExprBox, ExprBreak, ExprCast, ExprField, ExprGroup, ExprLet, ExprParen, ExprReference, ExprTry,
+    ExprType, ExprUnary, ImplItem, Item, Pat, PatBox, PatReference, PatSlice, PatTuple, Path,
+    ReturnType, Stmt, TraitItem, Type, TypeArray, TypeGroup, TypeParamBound, TypeParen, TypePtr,
+    TypeReference, TypeSlice,
 };
 
 #[derive(Default)]
@@ -30,6 +32,16 @@ impl CppList {
             Item::Fn(fun) => {
                 for stmt in &fun.block.stmts {
                     self.search_stmt(stmt)
+                }
+                self.search_return_type(&fun.sig.output);
+                for i in &fun.sig.inputs {
+                    match i {
+                        syn::FnArg::Receiver(_) => {}
+                        syn::FnArg::Typed(pt) => {
+                            self.search_pat(&pt.pat);
+                            self.search_type(&pt.ty);
+                        }
+                    }
                 }
             }
             Item::Impl(imp) => {
@@ -53,13 +65,16 @@ impl CppList {
         }
     }
 
-    fn consider_path(&mut self, path: &Path) {
+    fn search_path(&mut self, path: &Path) {
         let mut seg_iter = path.segments.iter();
         if let Some(first_seg) = seg_iter.next() {
             if first_seg.ident == "ffi" {
                 self.0
                     .insert(seg_iter.map(|seg| seg.ident.to_string()).join("::"));
             }
+        }
+        for seg in path.segments.iter() {
+            self.search_path_arguments(&seg.arguments);
         }
     }
 
@@ -83,6 +98,7 @@ impl CppList {
                 if let Some((_, expr)) = &lcl.init {
                     self.search_expr(expr)
                 }
+                self.search_pat(&lcl.pat);
             }
             Stmt::Item(itm) => self.search_item(itm),
             Stmt::Expr(exp) | Stmt::Semi(exp, _) => self.search_expr(exp),
@@ -92,7 +108,7 @@ impl CppList {
     fn search_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Path(exp) => {
-                self.consider_path(&exp.path);
+                self.search_path(&exp.path);
             }
             Expr::Macro(_) => {}
             Expr::Array(array) => self.search_exprs(array.elems.iter()),
@@ -113,7 +129,6 @@ impl CppList {
             })
             | Expr::Cast(ExprCast { expr, .. })
             | Expr::Group(ExprGroup { expr, .. })
-            | Expr::Let(ExprLet { expr, .. })
             | Expr::Paren(ExprParen { expr, .. })
             | Expr::Reference(ExprReference { expr, .. })
             | Expr::Try(ExprTry { expr, .. })
@@ -142,6 +157,10 @@ impl CppList {
             Expr::Index(exidx) => {
                 self.search_expr(&exidx.expr);
                 self.search_expr(&exidx.index);
+            }
+            Expr::Let(ExprLet { expr, pat, .. }) => {
+                self.search_expr(expr);
+                self.search_pat(pat);
             }
             Expr::Loop(exloo) => self.search_stmts(exloo.body.stmts.iter()),
             Expr::Match(exm) => {
@@ -207,6 +226,115 @@ impl CppList {
             }
         }
     }
+
+    fn search_pat(&mut self, pat: &Pat) {
+        match pat {
+            Pat::Box(PatBox { pat, .. }) | Pat::Reference(PatReference { pat, .. }) => {
+                self.search_pat(pat)
+            }
+            Pat::Ident(_) | Pat::Lit(_) | Pat::Macro(_) | Pat::Range(_) | Pat::Rest(_) => {}
+            Pat::Or(pator) => {
+                for case in &pator.cases {
+                    self.search_pat(case);
+                }
+            }
+            Pat::Path(pp) => self.search_path(&pp.path),
+            Pat::Slice(PatSlice { elems, .. }) | Pat::Tuple(PatTuple { elems, .. }) => {
+                for case in elems {
+                    self.search_pat(case);
+                }
+            }
+            Pat::Struct(ps) => {
+                self.search_path(&ps.path);
+                for f in &ps.fields {
+                    self.search_pat(&f.pat);
+                }
+            }
+            Pat::TupleStruct(tps) => {
+                self.search_path(&tps.path);
+                for f in &tps.pat.elems {
+                    self.search_pat(f);
+                }
+            }
+            Pat::Type(pt) => {
+                self.search_pat(&pt.pat);
+                self.search_type(&pt.ty);
+            }
+            _ => {}
+        }
+    }
+
+    fn search_type(&mut self, ty: &Type) {
+        match ty {
+            Type::Array(TypeArray { elem, .. })
+            | Type::Group(TypeGroup { elem, .. })
+            | Type::Paren(TypeParen { elem, .. })
+            | Type::Ptr(TypePtr { elem, .. })
+            | Type::Reference(TypeReference { elem, .. })
+            | Type::Slice(TypeSlice { elem, .. }) => self.search_type(elem),
+            Type::BareFn(tf) => {
+                for input in &tf.inputs {
+                    self.search_type(&input.ty);
+                }
+                self.search_return_type(&tf.output);
+            }
+            Type::ImplTrait(tyit) => {
+                for b in &tyit.bounds {
+                    if let syn::TypeParamBound::Trait(tyt) = b {
+                        self.search_path(&tyt.path)
+                    }
+                }
+            }
+            Type::Infer(_) | Type::Macro(_) | Type::Never(_) => {}
+            Type::Path(typ) => self.search_path(&typ.path),
+            Type::TraitObject(tto) => self.search_type_param_bounds(&tto.bounds),
+            Type::Tuple(tt) => {
+                for e in &tt.elems {
+                    self.search_type(e)
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn search_type_param_bounds(&mut self, bounds: &Punctuated<TypeParamBound, syn::token::Add>) {
+        for b in bounds {
+            if let syn::TypeParamBound::Trait(tpbt) = b {
+                self.search_path(&tpbt.path)
+            }
+        }
+    }
+
+    fn search_return_type(&mut self, output: &ReturnType) {
+        if let ReturnType::Type(_, ty) = &output {
+            self.search_type(ty)
+        }
+    }
+
+    fn search_path_arguments(&mut self, arguments: &syn::PathArguments) {
+        match arguments {
+            syn::PathArguments::None => {}
+            syn::PathArguments::AngleBracketed(paab) => {
+                for arg in &paab.args {
+                    match arg {
+                        syn::GenericArgument::Lifetime(_) => {}
+                        syn::GenericArgument::Type(ty)
+                        | syn::GenericArgument::Binding(Binding { ty, .. }) => self.search_type(ty),
+                        syn::GenericArgument::Constraint(c) => {
+                            self.search_type_param_bounds(&c.bounds)
+                        }
+                        syn::GenericArgument::Const(c) => self.search_expr(c),
+                    }
+                }
+            }
+            syn::PathArguments::Parenthesized(pas) => {
+                self.search_return_type(&pas.output);
+                for t in &pas.inputs {
+                    self.search_type(t);
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -264,6 +392,40 @@ mod tests {
         let itm = Item::Fn(parse_quote! {
             fn bar() {
                 a + 3 * foo(ffi::xxx());
+            }
+        });
+        cpplist.search_item(&itm);
+        assert_found(&cpplist);
+    }
+
+    #[test]
+    fn test_ty_in_let() {
+        let mut cpplist = CppList::default();
+        let itm = Item::Fn(parse_quote! {
+            fn bar() {
+                let foo: ffi::xxx = bar();
+            }
+        });
+        cpplist.search_item(&itm);
+        assert_found(&cpplist);
+    }
+
+    #[test]
+    fn test_ty_in_fn() {
+        let mut cpplist = CppList::default();
+        let itm = Item::Fn(parse_quote! {
+            fn bar(a: &mut ffi::xxx) {
+            }
+        });
+        cpplist.search_item(&itm);
+        assert_found(&cpplist);
+    }
+
+    #[test]
+    fn test_ty_in_fn_up() {
+        let mut cpplist = CppList::default();
+        let itm = Item::Fn(parse_quote! {
+            fn bar(a: cxx::UniquePtr<ffi::xxx>) {
             }
         });
         cpplist.search_item(&itm);
