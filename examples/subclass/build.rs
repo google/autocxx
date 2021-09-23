@@ -14,7 +14,7 @@
 
 fn main() {
     let path = std::path::PathBuf::from("src");
-    let mut b = autocxx_build::builder("src/main.rs", &[&path])
+    let mut b = autocxx_build::Builder::new("src/main.rs", &[&path])
         .auto_allowlist(true)
         .expect_build();
     b.flag_if_supported("-std=c++17")

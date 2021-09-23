@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use autocxx_engine::Builder;
-
-use autocxx_engine::{BuilderBuild, BuilderError, RebuildDependencyRecorder};
+use autocxx_engine::{BuilderBuild, BuilderContext, BuilderError, RebuildDependencyRecorder};
 use std::{collections::HashSet, io::Write, sync::Mutex};
 use std::{ffi::OsStr, path::Path};
 
+pub type Builder = autocxx_engine::Builder<CargoBuilderContext>;
+
 #[deprecated]
-/// Use [`builder`] instead
+/// Use [`Builder::new`] instead
 pub fn build<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
@@ -30,13 +30,13 @@ where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
-    builder(rs_file, autocxx_incs)
+    Builder::new(rs_file, autocxx_incs)
         .extra_clang_args(extra_clang_args)
         .build()
 }
 
 #[deprecated]
-/// Use [`builder`] instead
+/// Use [`Builder::new`] instead
 pub fn expect_build<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
@@ -47,28 +47,23 @@ where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
-    builder(rs_file, autocxx_incs)
+    Builder::new(rs_file, autocxx_incs)
         .extra_clang_args(extra_clang_args)
         .expect_build()
 }
 
-fn setup_logging() {
-    env_logger::builder()
-        .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
-        .init();
-}
+#[doc(hidden)]
+pub struct CargoBuilderContext;
 
-/// Create a builder object.
-/// You'll need to call `build` on this twice, effectively...
-/// the first time, this will return a [`cc::Build`] and then
-/// you'll need to use that to build the C++ code.
-pub fn builder(
-    rs_file: impl AsRef<Path>,
-    autocxx_incs: impl IntoIterator<Item = impl AsRef<OsStr>>,
-) -> Builder {
-    setup_logging();
-    let b = Builder::new_internal(rs_file, autocxx_incs);
-    b.dependency_recorder(Box::new(CargoRebuildDependencyRecorder::new()))
+impl BuilderContext for CargoBuilderContext {
+    fn setup() {
+        env_logger::builder()
+            .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
+            .init();
+    }
+    fn get_dependency_recorder() -> Option<Box<dyn RebuildDependencyRecorder>> {
+        Some(Box::new(CargoRebuildDependencyRecorder::new()))
+    }
 }
 
 #[derive(Debug)]

@@ -18,6 +18,7 @@ use proc_macro2::TokenStream;
 use crate::{ParseError, RebuildDependencyRecorder};
 use std::ffi::OsString;
 use std::io::Write;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::{ffi::OsStr, io, process};
 use std::{fmt::Display, fs::File};
@@ -59,22 +60,41 @@ pub struct BuilderSuccess(pub BuilderBuild, pub Vec<PathBuf>);
 /// Results of a build.
 pub type BuilderResult = Result<BuilderSuccess, BuilderError>;
 
+/// The context in which a builder object lives. Callbacks for various
+/// purposes.
+pub trait BuilderContext {
+    /// Perform any initialization specific to the context in which this
+    /// builder lives.
+    fn setup() {}
+
+    /// Create a dependency recorder, if any.
+    fn get_dependency_recorder() -> Option<Box<dyn RebuildDependencyRecorder>>;
+}
+
 /// An object to allow building of bindings from a `build.rs` file.
-pub struct Builder {
+pub struct Builder<BuilderContext> {
     rs_file: PathBuf,
     autocxx_incs: Vec<OsString>,
     extra_clang_args: Vec<String>,
     dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     custom_gendir: Option<PathBuf>,
     auto_allowlist: bool,
+    // This member is to ensure that this type is parameterized
+    // by a BuilderContext. The goal is to balance three needs:
+    // (1) have most of the functionality over in autocxx_engine,
+    // (2) make it easy for callers simply to call Builder::new,
+    // (3) ensure that the Builder does a few tasks specific to its use
+    // in a cargo environment.
+    ctx: PhantomData<BuilderContext>,
 }
 
-impl Builder {
+impl<CTX: BuilderContext> Builder<CTX> {
     #[doc(hidden)]
-    pub fn new_internal(
+    pub fn new(
         rs_file: impl AsRef<Path>,
         autocxx_incs: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Self {
+        CTX::setup();
         Self {
             rs_file: rs_file.as_ref().to_path_buf(),
             autocxx_incs: autocxx_incs
@@ -82,9 +102,10 @@ impl Builder {
                 .map(|s| s.as_ref().to_os_string())
                 .collect(),
             extra_clang_args: Vec::new(),
-            dependency_recorder: None,
+            dependency_recorder: CTX::get_dependency_recorder(),
             custom_gendir: None,
             auto_allowlist: false,
+            ctx: PhantomData,
         }
     }
 
@@ -97,15 +118,6 @@ impl Builder {
     /// Where to generate the code.
     pub fn custom_gendir(mut self, custom_gendir: PathBuf) -> Self {
         self.custom_gendir = Some(custom_gendir);
-        self
-    }
-
-    /// Specify an object to be informed of which header files this build depends upon.
-    pub fn dependency_recorder(
-        mut self,
-        dependency_recorder: Box<dyn RebuildDependencyRecorder>,
-    ) -> Self {
-        self.dependency_recorder = Some(dependency_recorder);
         self
     }
 

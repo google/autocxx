@@ -61,7 +61,9 @@ use log::info;
 use autocxx_bindgen as bindgen;
 
 #[cfg(any(test, feature = "build"))]
-pub use builder::{Builder, BuilderBuild, BuilderError, BuilderResult, BuilderSuccess};
+pub use builder::{
+    Builder, BuilderBuild, BuilderContext, BuilderError, BuilderResult, BuilderSuccess,
+};
 pub use parse_file::{parse_file, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;

@@ -29,6 +29,8 @@ use syn::{Item, Token};
 use tempfile::{tempdir, TempDir};
 use test_env_log::test;
 
+use crate::BuilderContext;
+
 const KEEP_TEMPDIRS: bool = false;
 
 fn get_builder() -> &'static Mutex<LinkableTryBuilder> {
@@ -296,6 +298,14 @@ fn do_run_test(
     )
 }
 
+struct TestBuilderContext;
+
+impl BuilderContext for TestBuilderContext {
+    fn get_dependency_recorder() -> Option<Box<dyn crate::RebuildDependencyRecorder>> {
+        None
+    }
+}
+
 fn do_run_test_manual<F>(
     cxx_code: &str,
     header_code: &str,
@@ -335,7 +345,7 @@ where
     let rs_path = write_rust_to_file(&rust_code);
 
     info!("Path is {:?}", tdir.path());
-    let build_results = crate::Builder::new_internal(&rs_path, &[tdir.path()])
+    let build_results = crate::Builder::<TestBuilderContext>::new(&rs_path, &[tdir.path()])
         .extra_clang_args(&extra_clang_args)
         .custom_gendir(target_dir.clone())
         .build_listing_files()
