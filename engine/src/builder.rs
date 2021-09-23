@@ -82,8 +82,9 @@ pub struct Builder<BuilderContext> {
     // This member is to ensure that this type is parameterized
     // by a BuilderContext. The goal is to balance three needs:
     // (1) have most of the functionality over in autocxx_engine,
-    // (2) make it easy for callers simply to call Builder::new,
-    // (3) ensure that the Builder does a few tasks specific to its use
+    // (2) expose this type to users of autocxx_build and to
+    //     make it easy for callers simply to call Builder::new,
+    // (3) ensure that such a Builder does a few tasks specific to its use
     // in a cargo environment.
     ctx: PhantomData<BuilderContext>,
 }
