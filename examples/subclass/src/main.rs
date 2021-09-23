@@ -14,6 +14,8 @@
 
 // This example shows some Rust subclasses of C++ classes.
 
+mod uwu;
+
 use autocxx::include_cpp;
 use autocxx::subclass::{is_subclass, CppSubclass, CppSubclassDefault};
 use cxx::CxxString;
@@ -66,11 +68,8 @@ pub struct UwuDisplayer {}
 impl CppSubclassDefault<ffi::UwuDisplayerCpp> for UwuDisplayer {}
 
 impl ffi::MessageDisplayer_methods for UwuDisplayer {
-    fn display_message(&self, _msg: &CxxString) {
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        let uwu = uwuifier::uwuify_str_sse(_msg.to_str().unwrap());
-        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-        let uwu = "uwuification is unavailable for this pwatform :(";
+    fn display_message(&self, msg: &CxxString) {
+        let uwu = uwu::uwu(msg.to_str().unwrap());
         println!("{}", uwu);
     }
 }
