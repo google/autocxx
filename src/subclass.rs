@@ -26,6 +26,19 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 pub use autocxx_macro::is_subclass;
 pub use autocxx_macro::CppSubclassDefault;
 
+/// A prelude containing all the traits and macros required to create
+/// Rust subclasses of C++ classes. It's recommended that you:
+///
+/// ```rust
+/// use autocxx::subclass::prelude::*;
+/// ```
+pub mod prelude {
+    pub use super::{
+        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault, CppSubclassDefaultImpl,
+        CppSubclassSelfOwned,
+    };
+}
+
 #[doc(hidden)]
 pub trait CppSubclassCppPeer: UniquePtrTarget {
     fn relinquish_ownership(&self);

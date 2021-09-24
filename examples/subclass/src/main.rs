@@ -17,7 +17,7 @@
 mod uwu;
 
 use autocxx::include_cpp;
-use autocxx::subclass::{is_subclass, CppSubclass, CppSubclassDefault, CppSubclassDefaultImpl};
+use autocxx::subclass::prelude::*;
 use cxx::CxxString;
 use std::cell::RefCell;
 use std::rc::Rc;
