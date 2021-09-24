@@ -24,7 +24,7 @@ keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
 
 [dependencies]
-autocxx-engine = { version="0.11.2", path="../../engine" }
+autocxx-engine = { version="=0.11.2", path="../../engine" }
 clap = "~2.33"
 quote = "1.0.7"
 proc-macro2 = "1.0"
