@@ -180,9 +180,10 @@ impl<CTX: BuilderContext> Builder<CTX> {
             for filepair in generated_code.0 {
                 let fname = format!("gen{}.cxx", counter);
                 counter += 1;
-                let gen_cxx_path = write_to_file(&cxxdir, &fname, &filepair.implementation)?;
-                builder.file(gen_cxx_path);
-
+                if let Some(implementation) = &filepair.implementation {
+                    let gen_cxx_path = write_to_file(&cxxdir, &fname, &implementation)?;
+                    builder.file(gen_cxx_path);
+                }
                 write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
             }
         }

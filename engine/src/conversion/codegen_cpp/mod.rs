@@ -197,17 +197,26 @@ impl<'a> CppCodeGenerator<'a> {
                 "#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
                 headers, self.inclusions, type_definitions, declarations
             );
-            let definitions = self.concat_additional_items(|x| x.definition.as_ref());
             log::info!("Additional C++ decls:\n{}", declarations);
             let header_name = format!("autocxxgen_{}.h", self.config.get_mod_name());
-            let definitions = format!(
-                "#include \"{}\"\n{}\n{}",
-                header_name, cpp_headers, definitions
-            );
-            log::info!("Additional C++ defs:\n{}", definitions);
+            let implementation = if self
+                .additional_functions
+                .iter()
+                .any(|x| x.definition.is_some())
+            {
+                let definitions = self.concat_additional_items(|x| x.definition.as_ref());
+                let definitions = format!(
+                    "#include \"{}\"\n{}\n{}",
+                    header_name, cpp_headers, definitions
+                );
+                log::info!("Additional C++ defs:\n{}", definitions);
+                Some(definitions.into_bytes())
+            } else {
+                None
+            };
             Some(CppFilePair {
                 header: declarations.into_bytes(),
-                implementation: definitions.into_bytes(),
+                implementation,
                 header_name,
             })
         }
