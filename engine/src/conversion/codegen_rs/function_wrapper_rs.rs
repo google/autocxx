@@ -24,8 +24,12 @@ use syn::parse_quote;
 impl TypeConversionPolicy {
     pub(super) fn rust_wrapper_unconverted_type(&self) -> Type {
         match self.rust_conversion {
-            RustConversionType::None | RustConversionType::ToBoxedUpHolder(..) => {
-                self.converted_rust_type()
+            RustConversionType::None => self.converted_rust_type(),
+            RustConversionType::ToBoxedUpHolder(ref sub) => {
+                let id = sub.id();
+                parse_quote! { autocxx::subclass::CppSubclassRustPeerHolder<
+                    super::super::super:: #id>
+                }
             }
             RustConversionType::FromStr => parse_quote! { impl ToCppString },
         }
@@ -35,9 +39,12 @@ impl TypeConversionPolicy {
         match self.rust_conversion {
             RustConversionType::None => quote! { #var },
             RustConversionType::FromStr => quote! ( #var .into_cpp() ),
-            RustConversionType::ToBoxedUpHolder(ref holder_type) => quote! {
-                Box::new(#holder_type(#var))
-            },
+            RustConversionType::ToBoxedUpHolder(ref sub) => {
+                let holder_type = sub.holder();
+                quote! {
+                    Box::new(#holder_type(#var))
+                }
+            }
         }
     }
 }

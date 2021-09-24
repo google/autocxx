@@ -120,12 +120,15 @@ impl std::fmt::Debug for ApiName {
 /// This is a simple newtype wrapper which exists such that
 /// we can consistently generate the names of the various subsidiary
 /// types which are required both in C++ and Rust codegen.
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub(crate) struct SubclassName(pub(crate) ApiName);
 
 impl SubclassName {
     pub(crate) fn new(id: Ident) -> Self {
         Self(ApiName::new_in_root_namespace(id))
+    }
+    pub(crate) fn from_holder_name(id: &Ident) -> Self {
+        Self::new(make_ident(id.to_string().strip_suffix("Holder").unwrap()))
     }
     pub(crate) fn id(&self) -> Ident {
         self.0.name.get_final_ident()
@@ -312,6 +315,19 @@ impl<T: AnalysisPhase> Api<T> {
         self.cpp_name()
             .as_deref()
             .unwrap_or_else(|| self.name().get_final_item())
+    }
+
+    pub(crate) fn valid_types(&self) -> Box<dyn Iterator<Item = QualifiedName>> {
+        match self {
+            Api::Subclass { name, .. } => Box::new(
+                vec![
+                    self.name().clone(),
+                    QualifiedName::new(&Namespace::new(), name.holder()),
+                ]
+                .into_iter(),
+            ),
+            _ => Box::new(std::iter::once(self.name().clone())),
+        }
     }
 }
 

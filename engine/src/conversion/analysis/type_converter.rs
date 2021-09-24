@@ -22,6 +22,7 @@ use crate::{
     types::{make_ident, Namespace, QualifiedName},
 };
 use autocxx_parser::IncludeCppConfig;
+use proc_macro2::Ident;
 use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
 use syn::{
@@ -38,7 +39,7 @@ pub(crate) struct Annotated<T> {
     pub(crate) types_encountered: HashSet<QualifiedName>,
     pub(crate) extra_apis: Vec<UnanalyzedApi>,
     pub(crate) requires_unsafe: bool,
-    pub(crate) is_subclass_holder: bool,
+    pub(crate) subclass_holder: Option<Ident>,
 }
 
 impl<T> Annotated<T> {
@@ -47,14 +48,14 @@ impl<T> Annotated<T> {
         types_encountered: HashSet<QualifiedName>,
         extra_apis: Vec<UnanalyzedApi>,
         requires_unsafe: bool,
-        is_subclass_holder: bool,
+        subclass_holder: Option<Ident>,
     ) -> Self {
         Self {
             ty,
             types_encountered,
             extra_apis,
             requires_unsafe,
-            is_subclass_holder,
+            subclass_holder,
         }
     }
 
@@ -64,7 +65,7 @@ impl<T> Annotated<T> {
             types_encountered: self.types_encountered,
             extra_apis: self.extra_apis,
             requires_unsafe: self.requires_unsafe,
-            is_subclass_holder: self.is_subclass_holder,
+            subclass_holder: self.subclass_holder,
         }
     }
 }
@@ -163,7 +164,7 @@ impl<'a> TypeConverter<'a> {
                             newp.types_encountered,
                             newp.extra_apis,
                             false,
-                            false,
+                            None,
                         )
                     } else {
                         newp
@@ -181,7 +182,7 @@ impl<'a> TypeConverter<'a> {
                     innerty.types_encountered,
                     innerty.extra_apis,
                     false,
-                    false,
+                    None,
                 )
             }
             Type::Ptr(ptr) if ctx.convert_ptrs_to_references() => {
@@ -197,7 +198,7 @@ impl<'a> TypeConverter<'a> {
                     innerty.types_encountered,
                     innerty.extra_apis,
                     true,
-                    false,
+                    None,
                 )
             }
             _ => return Err(ConvertError::UnknownType(ty.to_token_stream().to_string())),
@@ -259,18 +260,10 @@ impl<'a> TypeConverter<'a> {
                     deps,
                     Vec::new(),
                     true,
-                    false,
+                    None,
                 ))
             }
-            Some(other) => {
-                return Ok(Annotated::new(
-                    other.clone(),
-                    deps,
-                    Vec::new(),
-                    false,
-                    false,
-                ))
-            }
+            Some(other) => return Ok(Annotated::new(other.clone(), deps, Vec::new(), false, None)),
         };
 
         // Now let's see if it's a known type.
@@ -289,7 +282,7 @@ impl<'a> TypeConverter<'a> {
         };
 
         let mut extra_apis = Vec::new();
-        let mut is_subclass_holder = false;
+        let mut subclass_holder = None;
 
         // Finally let's see if it's generic.
         if let Some(last_seg) = Self::get_generic_args(&mut typ) {
@@ -299,7 +292,7 @@ impl<'a> TypeConverter<'a> {
             if generic_behavior != CxxGenericType::Not {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
-                is_subclass_holder = self.confirm_inner_type_is_acceptable_generic_payload(
+                subclass_holder = self.confirm_inner_type_is_acceptable_generic_payload(
                     &last_seg.arguments,
                     &tn,
                     generic_behavior,
@@ -326,7 +319,7 @@ impl<'a> TypeConverter<'a> {
             deps,
             extra_apis,
             false,
-            is_subclass_holder,
+            subclass_holder,
         ))
     }
 
@@ -365,7 +358,7 @@ impl<'a> TypeConverter<'a> {
             types_encountered,
             extra_apis,
             false,
-            false,
+            None,
         ))
     }
 
@@ -434,11 +427,11 @@ impl<'a> TypeConverter<'a> {
         desc: &QualifiedName,
         generic_behavior: CxxGenericType,
         forward_declarations_ok: bool,
-    ) -> Result<bool, ConvertError> {
+    ) -> Result<Option<Ident>, ConvertError> {
         // For now, all supported generics accept the same payloads. This
         // may change in future in which case we'll need to accept more arguments here.
         match path_args {
-            PathArguments::None => Ok(false),
+            PathArguments::None => Ok(None),
             PathArguments::Parenthesized(_) => Err(
                 ConvertError::TemplatedTypeContainingNonPathArg(desc.clone()),
             ),
@@ -461,9 +454,14 @@ impl<'a> TypeConverter<'a> {
                                 if !self.config.is_rust_type(&inner_qn.get_final_ident()) {
                                     return Err(ConvertError::BoxContainingNonRustType(inner_qn));
                                 }
-                                return Ok(self
+                                if self
                                     .config
-                                    .is_subclass_holder(&inner_qn.get_final_ident().to_string()));
+                                    .is_subclass_holder(&inner_qn.get_final_ident().to_string())
+                                {
+                                    return Ok(Some(inner_qn.get_final_ident()));
+                                } else {
+                                    return Ok(None);
+                                }
                             }
                             if let Some(more_generics) = typ.path.segments.last() {
                                 self.confirm_inner_type_is_acceptable_generic_payload(
@@ -481,7 +479,7 @@ impl<'a> TypeConverter<'a> {
                         }
                     }
                 }
-                Ok(false)
+                Ok(None)
             }
         }
     }

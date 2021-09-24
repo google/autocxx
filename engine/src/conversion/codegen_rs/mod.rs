@@ -1023,7 +1023,7 @@ impl<'a> RsCodeGenerator<'a> {
 }
 
 fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
-    let (complex_constructors, simple_constructors): (Vec<_>, Vec<_>) = apis
+    let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .map(|api| match api {
             Api::RustSubclassConstructor {

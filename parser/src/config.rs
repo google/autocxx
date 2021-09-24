@@ -325,6 +325,8 @@ impl IncludeCppConfig {
             Some(mut items) => {
                 items.any(|item| item == cpp_name)
                     || self.active_utilities().iter().any(|item| *item == cpp_name)
+                    || self.is_subclass_holder(cpp_name)
+                    || self.is_subclass_cpp(cpp_name)
             }
         }
     }
@@ -348,7 +350,7 @@ impl IncludeCppConfig {
     }
 
     pub fn is_rust_type(&self, id: &Ident) -> bool {
-        self.rust_types.contains(id)
+        self.rust_types.contains(id) || self.is_subclass_holder(&id.to_string())
     }
 
     pub fn superclasses(&self) -> impl Iterator<Item = &String> {
@@ -361,6 +363,12 @@ impl IncludeCppConfig {
         self.subclasses
             .iter()
             .any(|sc| format!("{}Holder", sc.subclass.to_string()) == id)
+    }
+
+    fn is_subclass_cpp(&self, id: &str) -> bool {
+        self.subclasses
+            .iter()
+            .any(|sc| format!("{}Cpp", sc.subclass.to_string()) == id)
     }
 
     /// Return the filename to which generated .rs should be written.

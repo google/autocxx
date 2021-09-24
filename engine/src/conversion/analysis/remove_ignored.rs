@@ -39,8 +39,8 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: Vec<Api<FnPhase>>) -> 
         .collect();
     let valid_types: HashSet<_> = valid_items
         .into_iter()
-        .map(|api| api.name())
-        .cloned()
+        .map(|api| api.valid_types())
+        .flatten()
         .collect();
     let mut iterate_again = true;
     while iterate_again {

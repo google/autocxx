@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::{Namespace, QualifiedName};
+use crate::{
+    conversion::api::SubclassName,
+    types::{Namespace, QualifiedName},
+};
 use syn::{parse_quote, Ident, Type};
 
 #[derive(Clone, Debug)]
@@ -36,7 +39,7 @@ impl CppConversionType {
 pub(crate) enum RustConversionType {
     None,
     FromStr,
-    ToBoxedUpHolder(Ident),
+    ToBoxedUpHolder(SubclassName),
 }
 
 /// A policy for converting types. Conversion may occur on both the Rust and
@@ -90,11 +93,11 @@ impl TypeConversionPolicy {
         }
     }
 
-    pub(crate) fn box_up_subclass_holder(ty: Type, holder_name: Ident) -> Self {
+    pub(crate) fn box_up_subclass_holder(ty: Type, subclass: SubclassName) -> Self {
         TypeConversionPolicy {
             unwrapped_type: ty,
             cpp_conversion: CppConversionType::None,
-            rust_conversion: RustConversionType::ToBoxedUpHolder(holder_name),
+            rust_conversion: RustConversionType::ToBoxedUpHolder(subclass),
         }
     }
 
@@ -142,7 +145,7 @@ pub(crate) enum CppFunctionBody {
     FunctionCall(Namespace, Ident),
     StaticMethodCall(Namespace, Ident, Ident),
     Constructor,
-    AssignSubclassHolderField,
+    ConstructSuperclass(String),
 }
 
 #[derive(Clone)]

@@ -35,8 +35,8 @@ pub use autocxx_macro::CppSubclassSelfOwnedDefault;
 /// ```
 pub mod prelude {
     pub use super::{
-        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault, CppSubclassSelfOwned,
-        CppSubclassSelfOwnedDefault,
+        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault,
+        CppSubclassRustPeerHolder, CppSubclassSelfOwned, CppSubclassSelfOwnedDefault,
     };
 }
 
@@ -229,13 +229,6 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 ///   be passed to different threads in C++. A future version of this code
 ///   will give the option to use `Arc` and `Mutex` internally rather than
 ///   `Rc` and `RefCell`, solving this problem.
-///
-/// * *Complex or multiple constructors*. At present, this code doesn't work
-///   if the superclass has anything other than a single, zero-argument,
-///   constructor. This is
-///   [this issue](https://github.com/google/autocxx/issues/596) and is just a matter of doing
-///   a bit of work to plumb this together. (See [`CppPeerConstructor`] for
-///   how this will work when it's done.)
 ///
 /// * *Protected methods.* We don't do anything clever here - they're public.
 ///

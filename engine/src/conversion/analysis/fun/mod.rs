@@ -41,7 +41,7 @@ use itertools::Itertools;
 use proc_macro2::Span;
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, ForeignItemFn, Ident, LitStr, Pat,
-    ReturnType, Type, TypePtr, Visibility,
+    PatType, ReturnType, Type, TypePtr, Visibility,
 };
 
 use crate::{
@@ -56,7 +56,7 @@ use self::{
     bridge_name_tracker::BridgeNameTracker,
     overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
-    subclass::{add_subclass_constructor, create_subclass_function},
+    subclass::{create_subclass_constructor, create_subclass_function},
 };
 
 use super::{
@@ -115,7 +115,7 @@ pub(crate) struct FnAnalysis {
     pub(crate) deps: HashSet<QualifiedName>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct ArgumentAnalysis {
     pub(crate) conversion: TypeConversionPolicy,
     pub(crate) name: Pat,
@@ -124,7 +124,6 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) deps: HashSet<QualifiedName>,
     pub(crate) is_virtual: bool,
     pub(crate) requires_unsafe: bool,
-    pub(crate) is_subclass_holder: bool,
 }
 
 struct ReturnTypeAnalysis {
@@ -222,7 +221,7 @@ impl<'a> FnAnalyzer<'a> {
         ty: Box<Type>,
         ns: &Namespace,
         convert_ptrs_to_references: bool,
-    ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool, bool), ConvertError> {
+    ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool, Option<Ident>), ConvertError> {
         let annotated = self.type_converter.convert_boxed_type(
             ty,
             ns,
@@ -235,7 +234,7 @@ impl<'a> FnAnalyzer<'a> {
             annotated.ty,
             annotated.types_encountered,
             annotated.requires_unsafe,
-            annotated.is_subclass_holder,
+            annotated.subclass_holder,
         ))
     }
 
@@ -281,13 +280,51 @@ impl<'a> FnAnalyzer<'a> {
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 for sub in self.subclasses_by_superclass(sup) {
-                    if !analysis.param_details.is_empty() {
-                        return Err(ConvertErrorWithContext(
-                            ConvertError::SuperclassConstructorsTooFancy(sup.clone()),
-                            None,
-                        ));
+                    results.push(create_subclass_constructor(&sub, &analysis, sup));
+
+                    let subclass_constructor_name = make_ident(format!(
+                        "{}_{}",
+                        sub.cpp().get_final_item(),
+                        sub.cpp().get_final_item()
+                    ));
+                    let mut item = func_information.item.clone();
+                    item.sig.ident = subclass_constructor_name.clone();
+                    if let Some(FnArg::Typed(PatType { ty, .. })) = item.sig.inputs.first_mut() {
+                        if let Type::Ptr(TypePtr { elem, .. }) = &mut **ty {
+                            *elem = Box::new(Type::Path(sub.cpp().to_type_path()));
+                        } // TODO return an error under other circumstances
                     }
-                    add_subclass_constructor(&sub, &mut results, &analysis, &func_information);
+                    let mut existing_params = item.sig.inputs.into_iter();
+                    let self_param = existing_params.next();
+                    let holder = sub.holder();
+                    let boxed_holder_param: FnArg = parse_quote! {
+                        peer: rust::Box<#holder>
+                    };
+                    item.sig.inputs = self_param
+                        .into_iter()
+                        .chain(std::iter::once(boxed_holder_param))
+                        .chain(existing_params)
+                        .collect();
+                    let self_ty = Some(sub.cpp());
+                    let maybe_wrap = Box::new(FuncToConvert {
+                        item,
+                        virtual_this_type: self_ty.clone(),
+                        self_ty,
+                    });
+                    let mut subclass_constructor_name =
+                        ApiName::new_in_root_namespace(subclass_constructor_name);
+                    subclass_constructor_name.cpp_name =
+                        Some(sub.cpp().get_final_item().to_string());
+                    let maybe_another_api =
+                        self.analyze_foreign_fn(subclass_constructor_name, maybe_wrap)?;
+                    if let Some((analysis, name)) = maybe_another_api {
+                        results.push(Api::Function {
+                            fun: func_information.clone(),
+                            analysis,
+                            name,
+                            name_for_gc: None,
+                        });
+                    }
                 }
             }
             FnKind::Method(
@@ -318,6 +355,11 @@ impl<'a> FnAnalyzer<'a> {
 
                     let mut item = func_information.item.clone();
                     item.sig.ident = super_fn_name.get_final_ident();
+                    item.attrs = item
+                        .attrs
+                        .into_iter()
+                        .filter(|at| !at.path.is_ident("bindgen_pure_virtual"))
+                        .collect();
                     let self_ty = Some(sub.cpp());
                     let maybe_wrap = Box::new(FuncToConvert {
                         item,
@@ -846,10 +888,10 @@ impl<'a> FnAnalyzer<'a> {
                     }
                     _ => old_pat,
                 };
-                let (new_ty, deps, requires_unsafe, is_subclass_holder) =
+                let (new_ty, deps, requires_unsafe, subclass_holder) =
                     self.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
                 let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
-                let conversion = self.argument_conversion_details(&new_ty);
+                let conversion = self.argument_conversion_details(&new_ty, &subclass_holder);
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
                 (
@@ -862,7 +904,6 @@ impl<'a> FnAnalyzer<'a> {
                         deps,
                         is_virtual,
                         requires_unsafe,
-                        is_subclass_holder,
                     },
                 )
             }
@@ -870,7 +911,20 @@ impl<'a> FnAnalyzer<'a> {
         })
     }
 
-    fn argument_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
+    fn argument_conversion_details(
+        &self,
+        ty: &Type,
+        is_subclass_holder: &Option<Ident>,
+    ) -> TypeConversionPolicy {
+        if let Some(holder_id) = is_subclass_holder {
+            let subclass = SubclassName::from_holder_name(holder_id);
+            return TypeConversionPolicy::box_up_subclass_holder(
+                parse_quote! {
+                    rust::Box<#holder_id>
+                },
+                subclass,
+            );
+        }
         match ty {
             Type::Path(p) => {
                 let tn = QualifiedName::from_type_path(p);
