@@ -155,7 +155,8 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// * Use the `subclass` directive in your [`crate::include_cpp`] macro (or use
 ///   the auto-allow mode in your `build.rs`)
 /// * Create a `struct` to act as your subclass, and add the #[`is_subclass`] attribute.
-///   This adds a field to your struct for autocxx record-keeping.
+///   This adds a field to your struct for autocxx record-keeping. You can
+///   instead choose to implement [`CppSubclass`] a different way.
 /// * Use the [`CppSubclass`] trait, and instantiate the subclass using
 ///   [`CppSubclass::new_rust_owned`] or [`CppSubclass::new_cpp_owned`]
 ///   constructors. (You can use [`CppSubclassSelfOwned`] if you need that
@@ -211,18 +212,36 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 ///
 /// # Limitations
 ///
-/// The main thing to look out for is re-entrancy. If a (non-const) virtual
-/// method is called on your type, which then causes you to call back into C++,
-/// which results in a _second_ call into a (non-const) virtual method, we will
-/// try to create two mutable references to your subclass which isn't allowed
-/// in Rust and will therefore panic.
+/// * *Re-entrancy*. The main thing to look out for is re-entrancy. If a
+///   (non-const) virtual method is called on your type, which then causes you
+///   to call back into C++, which results in a _second_ call into a (non-const)
+///   virtual method, we will try to create two mutable references to your
+///   subclass which isn't allowed in Rust and will therefore panic.
 ///
-/// A future version of autocxx may provide the option of treating all
-/// non-const methods (in C++) as const methods on the Rust side, which will
-/// give the option of using interior mutability ([`std::cell::RefCell`])
-/// for you to safely handle this situation, whilst remaining compatible
-/// with existing C++ interfaces. If you need this, indicate support on
-/// [this issue](https://github.com/google/autocxx/issues/622).
+///   A future version of autocxx may provide the option of treating all
+///   non-const methods (in C++) as const methods on the Rust side, which will
+///   give the option of using interior mutability ([`std::cell::RefCell`])
+///   for you to safely handle this situation, whilst remaining compatible
+///   with existing C++ interfaces. If you need this, indicate support on
+///   [this issue](https://github.com/google/autocxx/issues/622).
+///
+/// * *Thread safety*. The subclass object is not thread-safe and shouldn't
+///   be passed to different threads in C++. A future version of this code
+///   will give the option to use `Arc` and `Mutex` internally rather than
+///   `Rc` and `RefCell`, solving this problem.
+///
+/// * *Complex or multiple constructors*. At present, this code doesn't work
+///   if the superclass has anything other than a single, zero-argument,
+///   constructor. This is
+///   https://github.com/google/autocxx/issues/596 and is just a matter of doing
+///   a bit of work to plumb this together. (See [`CppPeerConstructor`] for
+///   how this will work when it's done.)
+///
+/// * *Protected methods.* We don't do anything clever here - they're public.
+///
+/// * *Non-trivial class hierarchies*. We don't yet consider virtual methods
+///   on base classes of base classes. This is a temporary limitation,
+///   https://github.com/google/autocxx/issues/610.
 pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> {
     /// Return the field which holds the C++ peer object. This is normally
     /// implemented by the #[`is_subclass`] macro, but you're welcome to
