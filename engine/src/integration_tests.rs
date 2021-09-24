@@ -5885,6 +5885,25 @@ fn test_issue486() {
 }
 
 #[test]
+#[ignore]
+fn test_issue616() {
+    let hdr = indoc! {"
+        namespace N {
+            template <typename> class B{};
+            template <typename c> class C {
+            public:
+            using U = B<c>;
+            };
+            }
+            class A : N::C<A> {
+            U u;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_shared_ptr() {
     let hdr = indoc! {"
         #include <memory>
