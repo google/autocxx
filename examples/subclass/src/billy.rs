@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub(crate) fn uwu(msg: &str) -> String {
-    uwuifier::uwuify_str_sse(msg)
-}
-
-#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-pub(crate) fn uwu(_msg: &str) -> String {
-    "uwuification is unavailable for this pwatform :(".to_string()
-}
+pub(crate) static SHAKESPEARE_QUOTES: [&str; 10] = [
+    "All that glitters is not gold",
+    "Hell is empty and all the devils are here.",
+    "Good night, good night! parting is such sweet sorrow, That I shall say good night till it be morrow.",
+    "These violent delights have violent ends...",
+    "Something is rotten in the state of Denmark.",
+    "Love all, trust a few, do wrong to none.",
+    "The lady doth protest too much, methinks.",
+    "Brevity is the soul of wit.",
+    "Uneasy lies the head that wears a crown.",
+    "Now is the winter of our discontent.",
+];

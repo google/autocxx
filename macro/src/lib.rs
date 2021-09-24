@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use autocxx_parser::{IncludeCpp, SubclassAttrs};
+use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
@@ -22,9 +23,9 @@ use syn::{parse_macro_input, Fields, ItemStruct};
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
 #[proc_macro]
-pub fn include_cpp_impl(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn include_cpp_impl(input: TokenStream) -> TokenStream {
     let include_cpp = parse_macro_input!(input as IncludeCpp);
-    proc_macro::TokenStream::from(include_cpp.generate_rs())
+    TokenStream::from(include_cpp.generate_rs())
 }
 
 /// Attribute to state that a Rust `struct` is a C++ subclass.
@@ -32,10 +33,7 @@ pub fn include_cpp_impl(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 /// track a C++ instantiation of this Rust subclass.
 #[proc_macro_error]
 #[proc_macro_attribute]
-pub fn is_subclass(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
+pub fn is_subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut s: ItemStruct =
         syn::parse(item).unwrap_or_else(|_| abort!(Span::call_site(), "Expected a struct"));
     let id = &s.ident;
@@ -73,6 +71,21 @@ pub fn is_subclass(
         }
 
         #self_owned_bit
+    };
+    toks.into()
+}
+
+/// Derive macro which will add constructors which initialize all members
+/// as default.
+#[proc_macro_error]
+#[proc_macro_derive(CppSubclassDefault)]
+pub fn cpp_subclass_default_derive(input: TokenStream) -> TokenStream {
+    let s: ItemStruct =
+        syn::parse(input).unwrap_or_else(|_| abort!(Span::call_site(), "Expected a struct"));
+    let id = s.ident;
+    let cpp_ident = Ident::new(&format!("{}Cpp", id.to_string()), Span::call_site());
+    let toks = quote! {
+        impl autocxx::subclass::CppSubclassDefaultImpl<ffi::#cpp_ident> for #id {}
     };
     toks.into()
 }

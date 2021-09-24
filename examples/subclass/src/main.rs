@@ -14,10 +14,11 @@
 
 // This example shows some Rust subclasses of C++ classes.
 
+mod billy;
 mod uwu;
 
 use autocxx::include_cpp;
-use autocxx::subclass::{is_subclass, CppSubclass, CppSubclassDefault};
+use autocxx::subclass::prelude::*;
 use cxx::CxxString;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -27,19 +28,6 @@ include_cpp! {
     safety!(unsafe) // unsafety policy; see docs
 }
 
-static SHAKESPEARE_QUOTES: [&str; 10] = [
-    "All that glitters is not gold",
-    "Hell is empty and all the devils are here.",
-    "Good night, good night! parting is such sweet sorrow, That I shall say good night till it be morrow.",
-    "These violent delights have violent ends...",
-    "Something is rotten in the state of Denmark.",
-    "Love all, trust a few, do wrong to none.",
-    "The lady doth protest too much, methinks.",
-    "Brevity is the soul of wit.",
-    "Uneasy lies the head that wears a crown.",
-    "Now is the winter of our discontent.",
-];
-
 // Here's the definition of MessageDisplayer from src/messages.h:
 // ```cpp
 // class MessageDisplayer {
@@ -48,19 +36,13 @@ static SHAKESPEARE_QUOTES: [&str; 10] = [
 //     virtual ~MessageDisplayer() {};
 // };
 // ```
-// The following lines define a subclass of MessageDisplayer,
-// together with the "subclass!" directive above in the include_cpp!
-// macro. See the main function at the bottom for how this subclass
+// The following lines define a subclass of MessageDisplayer.
+// See the main function at the bottom for how this subclass
 // is instantiated.
 
 #[is_subclass(superclass("MessageDisplayer"))]
-#[derive(Default)]
+#[derive(CppSubclassDefault, Default)]
 pub struct UwuDisplayer {}
-
-// As this type derives from Default, this makes some
-// default constructors available (used later). This might later
-// move into syntactic sugar like `#[derive(DefaultCppSubclass)]`.
-impl CppSubclassDefault<ffi::UwuDisplayerCpp> for UwuDisplayer {}
 
 impl ffi::MessageDisplayer_methods for UwuDisplayer {
     fn display_message(&self, msg: &CxxString) {
@@ -88,8 +70,8 @@ impl ffi::MessageDisplayer_methods for UwuDisplayer {
 #[derive(Default)]
 pub struct QuoteProducer {}
 
-// This does the same as the `impl CppSubclassDefault` for the previous example;
-// either could be used. This is just a bit more explicit.
+// Here we've chosen to have an explicit constructor instead rather than deriving
+// from CppSubclassDefault. It's functionally the same.
 impl QuoteProducer {
     fn new() -> Rc<RefCell<Self>> {
         Self::new_rust_owned(Self::default())
@@ -99,7 +81,7 @@ impl QuoteProducer {
 impl ffi::MessageProducer_methods for QuoteProducer {
     fn get_message(&self) -> cxx::UniquePtr<CxxString> {
         use ffi::ToCppString;
-        SHAKESPEARE_QUOTES[fastrand::usize(0..SHAKESPEARE_QUOTES.len())].into_cpp()
+        billy::SHAKESPEARE_QUOTES[fastrand::usize(0..billy::SHAKESPEARE_QUOTES.len())].into_cpp()
     }
 }
 
