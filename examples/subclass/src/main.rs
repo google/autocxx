@@ -17,7 +17,7 @@
 mod uwu;
 
 use autocxx::include_cpp;
-use autocxx::subclass::{is_subclass, CppSubclass, CppSubclassDefault};
+use autocxx::subclass::{is_subclass, CppSubclass, CppSubclassDefault, CppSubclassDefaultImpl};
 use cxx::CxxString;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -54,13 +54,8 @@ static SHAKESPEARE_QUOTES: [&str; 10] = [
 // is instantiated.
 
 #[is_subclass(superclass("MessageDisplayer"))]
-#[derive(Default)]
+#[derive(CppSubclassDefault, Default)]
 pub struct UwuDisplayer {}
-
-// As this type derives from Default, this makes some
-// default constructors available (used later). This might later
-// move into syntactic sugar like `#[derive(DefaultCppSubclass)]`.
-impl CppSubclassDefault<ffi::UwuDisplayerCpp> for UwuDisplayer {}
 
 impl ffi::MessageDisplayer_methods for UwuDisplayer {
     fn display_message(&self, msg: &CxxString) {
