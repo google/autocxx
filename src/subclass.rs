@@ -160,7 +160,7 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// * Use the [`CppSubclass`] trait, and instantiate the subclass using
 ///   [`CppSubclass::new_rust_owned`] or [`CppSubclass::new_cpp_owned`]
 ///   constructors. (You can use [`CppSubclassSelfOwned`] if you need that
-///   instead; also, see [`CppSubclassDefaultSelfOwned`] and [`CppSubclassDefault`]
+///   instead; also, see [`CppSubclassSelfOwnedDefault`] and [`CppSubclassDefault`]
 ///   to arrange for easier constructors to exist.
 /// * You _may_ need to implement [`CppPeerConstructor`] for your subclass,
 ///   but only if autocxx determines that there are multiple possible superclass
@@ -233,7 +233,7 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// * *Complex or multiple constructors*. At present, this code doesn't work
 ///   if the superclass has anything other than a single, zero-argument,
 ///   constructor. This is
-///   https://github.com/google/autocxx/issues/596 and is just a matter of doing
+///   [this issue](https://github.com/google/autocxx/issues/596) and is just a matter of doing
 ///   a bit of work to plumb this together. (See [`CppPeerConstructor`] for
 ///   how this will work when it's done.)
 ///
@@ -241,10 +241,10 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 ///
 /// * *Non-trivial class hierarchies*. We don't yet consider virtual methods
 ///   on base classes of base classes. This is a temporary limitation,
-///   https://github.com/google/autocxx/issues/610.
+///   [see this issue](https://github.com/google/autocxx/issues/610).
 ///
 /// * *Namespaces.* Superclasses in namespaces are not yet supported:
-///   https://github.com/google/autocxx/issues/599.
+///   [see this issue](https://github.com/google/autocxx/issues/599).
 pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> {
     /// Return the field which holds the C++ peer object. This is normally
     /// implemented by the #[`is_subclass`] macro, but you're welcome to

@@ -25,7 +25,7 @@ fn main() {
 }
 ```
 
-See [demo/src/main.rs](demo/src/main.rs) for a basic example, and the [examples](examples/) directory for more.
+How to start: read the documentation for `include_cpp`. See [demo/src/main.rs](demo/src/main.rs) for a basic example, and the [examples](examples/) directory for more.
 
 The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string` - so the Rust code should not typically require use of unsafe code, unlike with normal `bindgen` bindings.
 
@@ -78,11 +78,11 @@ The project also contains test code which does this end-to-end, for all sorts of
 | std::vector | Works |
 | Field access to opaque objects via UniquePtr | - |
 | Plain-old-data structs containing opaque fields | Impossible by design, but may not be ergonomic so may need more thought |
-| Reference counting, std::shared_ptr | - |
+| Reference counting, std::shared_ptr | Works, but mutable references not allowed |
 | std::optional | - |
 | Function pointers | - |
 | Unique ptrs to primitives | - |
-| Inheritance from pure virtual classes | - |
+| Inheritance from pure virtual classes | Works, subject to various limitations |
 | Generic (templated) types | Works but no field access or methods |
 | Arrays | - |
 
@@ -128,8 +128,8 @@ any included header file changes. This is now handled automatically by our
 See [here](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html#configuring-the-build) for a diagram.
 
 Finally, this interop inevitably involves lots of fiddly small functions. It's likely to perform
-far better if you can achieve cross-language LTO. https://github.com/dtolnay/cxx/issues/371
-may give some useful hints - see also all the build-related help in https://cxx.rs/ which all
+far better if you can achieve cross-language LTO. [This issue](https://github.com/dtolnay/cxx/issues/371)
+may give some useful hints - see also all the build-related help in [the cxx manual](https://cxx.rs/) which all
 applies here too.
 
 # Directory structure
