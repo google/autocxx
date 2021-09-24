@@ -205,6 +205,14 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 ///    from the C++ to the Rust and from the Rust to the C++. This is useful
 ///    for cases where the subclass is listening for events, and needs to
 ///    stick around until a particular event occurs then delete itself.
+///
+/// # Limitations
+///
+/// The main thing to look out for is re-entrancy. If a (non-const) virtual
+/// method is called on your type, which then causes you to call back into C++,
+/// which results in a _second_ call into a (non-const) virtual method, we will
+/// try to create two mutable references to your subclass which isn't allowed
+/// in Rust and will therefore panic.
 pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> {
     /// Return the field which holds the C++ peer object. This is normally
     /// implemented by the #[`is_subclass`] macro, but you're welcome to
@@ -229,8 +237,8 @@ pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> 
     }
 
     /// Creates a new instance of this subclass. This instance is owned by the
-    /// returned [`cxx::UniquePtr`] and is thus suitable to be passed around
-    /// in C++.
+    /// returned [`cxx::UniquePtr`] and thus would typically be returned immediately
+    /// to C++ such that it can be owned on the C++ side.
     fn new_cpp_owned(me: Self) -> UniquePtr<CppPeer> {
         let me = Rc::new(RefCell::new(me));
         let holder = CppSubclassRustPeerHolder::Owned(me.clone());

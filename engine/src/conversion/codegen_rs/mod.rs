@@ -568,13 +568,16 @@ impl<'a> RsCodeGenerator<'a> {
                     }],
                 }
             }
-            Api::RustSubclassFn { details, .. } => Self::generate_subclass_fn(
+            Api::RustSubclassFn {
+                details, subclass, ..
+            } => Self::generate_subclass_fn(
                 details.params,
                 details.ret,
                 id,
                 details.method_name,
                 details.superclass,
                 details.receiver_mutability,
+                subclass,
             ),
             Api::Subclass {
                 name, superclass, ..
@@ -727,6 +730,7 @@ impl<'a> RsCodeGenerator<'a> {
         method_name: Ident,
         superclass: QualifiedName,
         receiver_mutability: ReceiverMutability,
+        subclass: SubclassName,
     ) -> RsCodegenResult {
         let global_def = quote! { fn #api_name(#params) #ret };
         let params = unqualify_params(params);
@@ -737,17 +741,19 @@ impl<'a> RsCodeGenerator<'a> {
         let superclass_id = superclass.get_final_ident();
         let superclass_id = make_ident(format!("{}_methods", superclass_id.to_string()));
         let (deref_ty, deref_call, borrow, mut_token) = match receiver_mutability {
-            ReceiverMutability::Const => ("Deref", "deref", "borrow", None),
+            ReceiverMutability::Const => ("Deref", "deref", "try_borrow", None),
             ReceiverMutability::Mutable => (
                 "DerefMut",
                 "deref_mut",
-                "borrow_mut",
+                "try_borrow_mut",
                 Some(syn::token::Mut(Span::call_site())),
             ),
         };
         let deref_ty = make_ident(deref_ty);
         let deref_call = make_ident(deref_call);
         let borrow = make_ident(borrow);
+        let destroy_panic_msg = format!("Rust subclass API (method {} of subclass {} of superclass {}) called after subclass destroyed", method_name, subclass.0.name, superclass_id);
+        let reentrancy_panic_msg = format!("Rust subclass API (method {} of subclass {} of superclass {}) called whilst subclass already borrowed - likely a re-entrant call",  method_name, subclass.0.name, superclass_id);
         RsCodegenResult {
             extern_c_mod_items: Vec::new(),
             bridge_items: Vec::new(),
@@ -757,11 +763,12 @@ impl<'a> RsCodeGenerator<'a> {
                 #global_def {
                     let rc = me.0
                         .get()
-                        .expect("Rust subclass destroyed prior to a method being called");
+                        .expect(#destroy_panic_msg);
                     let #mut_token b = rc
                         .as_ref()
                         .#borrow();
-                    let r = std::ops::#deref_ty::#deref_call(& #mut_token b);
+                    let r = std::ops::#deref_ty::#deref_call(& #mut_token b)
+                        .expect(#reentrancy_panic_msg);
                     #superclass_id :: #method_name
                         (r,
                         #args)
