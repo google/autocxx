@@ -7,8 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-autocxx-gen = { version = "0.11.2", path="../../gen/cmd" }
-autocxx-engine = { version = "0.11.2", path="../../engine" }
+autocxx-gen = { version = "=0.11.2", path="../../gen/cmd" }
+autocxx-engine = { version = "=0.11.2", path="../../engine" }
 clap = "~2.33.0"
 tempfile = "3.1"
 indoc = "1.0"
