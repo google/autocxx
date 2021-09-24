@@ -1,5 +1,4 @@
-//! Crate to `#include` C++ headers in your Rust code, and generate
-//! idiomatic bindings using `cxx`. See [include_cpp] for details.
+#![doc = include_str!("../README.md")]
 
 // Copyright 2020 Google LLC
 //
@@ -73,7 +72,7 @@ use autocxx_engine::IncludeCppEngine;
 /// * This manual will describe how to include `autocxx` in your build process.
 /// * `autocxx` chooses to generate Rust bindings for C++ APIs in particular ways,
 ///   over which you have _some_ control. The manual discusses what and how.
-/// * The combination of `autocxx` and [cxx] are not perfect. There are some STL
+/// * The combination of `autocxx` and [`cxx`] are not perfect. There are some STL
 ///   types and some fundamental C++ features which are not yet supported. Where that occurs,
 ///   you may need to create some manual bindings or otherwise workaround deficiencies.
 ///   This manual tells you how to spot such circumstances and work around them.
@@ -159,7 +158,7 @@ use autocxx_engine::IncludeCppEngine;
 ///
 /// * `#include "cpp_header.h"`: a header filename to parse and include
 /// * `generate!("type_or_function_name")`: a type or function name whose declaration
-///   should be made available to C++.
+///   should be made available to C++. (See the section on Allowlisting, below).
 /// * Optionally, `safety!(unsafe)` - see discussion of [`safety`].
 ///
 /// Other directives are possible as documented in this crate.
@@ -194,6 +193,24 @@ use autocxx_engine::IncludeCppEngine;
 /// * Write manual bindings. This is most useful if a type is supported by [cxx]
 ///   but not `autocxx` (for example, at the time of writing `std::array`). See
 ///   the later section on 'combinining automatic and manual bindings'.
+///
+/// # Allowlisting
+///
+/// How do you inform autocxx which bindings to generate? There are three
+/// strategies:
+///
+/// * *Recommended*: provide various [`generate`] directives in the
+///   [`include_cpp`] macro. This can specify functions or types.
+/// * *Not recommended*: in your `build.rs`, call `Builder::auto_allowlist`.
+///   This will attempt to spot _uses_ of FFI bindings anywhere in your Rust code
+///   and build the allowlist that way. This is experimental and has known limitations.
+/// * *Strongly not recommended*: use [`generate_all`]. This will attempt to
+///   generate Rust bindings for _any_ C++ type or function discovered in the
+///   header files. This is generally a disaster if you're including any
+///   remotely complex header file: we'll try to generate bindings for all sorts
+///   of STL types. This will be slow, and some may well cause problems.
+///   Effectively this is just a debug option to discover such problems. Don't
+///   use it!
 ///
 /// # The generated bindings
 ///

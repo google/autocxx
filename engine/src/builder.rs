@@ -124,6 +124,12 @@ impl<CTX: BuilderContext> Builder<CTX> {
 
     /// Automatically discover uses of the C++ `ffi` mod and generate the allowlist
     /// from that.
+    /// This is a highly experimental option, not currently recommended.
+    /// It doesn't work in cases where you're using a different name for your
+    /// `ffi` mod, or if you've got uses scattered across multiple files, or
+    /// if you're using `use` statements to rename mods or items. If this
+    /// proves to be a promising or helpful direction, autocxx would be happy
+    /// to accept pull requests to remove some of these limitations.
     pub fn auto_allowlist(mut self, do_it: bool) -> Self {
         self.auto_allowlist = do_it;
         self
@@ -250,7 +256,7 @@ fn write_rs_to_file(
 }
 
 fn rust_version_check() {
-    if !version_check::is_min_version("1.48.0").unwrap_or(false) {
-        panic!("Rust 1.48 or later is required.")
+    if !version_check::is_min_version("1.54.0").unwrap_or(false) {
+        panic!("Rust 1.54 or later is required.")
     }
 }
