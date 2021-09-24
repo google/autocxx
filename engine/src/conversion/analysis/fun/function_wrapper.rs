@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::Namespace;
+use crate::types::{Namespace, QualifiedName};
 use syn::{parse_quote, Ident, Type};
 
 #[derive(Clone, Debug)]
@@ -162,5 +162,5 @@ pub(crate) struct CppFunction {
     pub(crate) argument_conversion: Vec<TypeConversionPolicy>,
     pub(crate) kind: CppFunctionKind,
     pub(crate) pass_obs_field: bool,
-    pub(crate) qualification: Option<Ident>,
+    pub(crate) qualification: Option<QualifiedName>,
 }

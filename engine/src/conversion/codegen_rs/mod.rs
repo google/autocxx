@@ -68,22 +68,16 @@ unzip_n::unzip_n!(pub 4);
 /// for actual end-user use.
 #[derive(Clone)]
 enum Use {
-    /// Not used
-    Unused,
     /// Uses from cxx::bridge
     UsedFromCxxBridge,
     /// 'use' points to cxx::bridge with a different name
     UsedFromCxxBridgeWithAlias(Ident),
     /// 'use' directive points to bindgen
     UsedFromBindgen,
+    /// 'use' a specific name from bindgen.
+    UseSpecificNameFromBindgen(Ident),
     /// Some kind of custom item
     Custom(Box<Item>),
-}
-
-impl Default for Use {
-    fn default() -> Self {
-        Self::Unused
-    }
 }
 
 fn get_string_items() -> Vec<Item> {
@@ -264,12 +258,12 @@ impl<'a> RsCodeGenerator<'a> {
     fn accumulate_superclass_methods(
         &self,
         apis: &[Api<FnPhase>],
-    ) -> HashMap<String, Vec<SuperclassMethod>> {
+    ) -> HashMap<QualifiedName, Vec<SuperclassMethod>> {
         let mut results = HashMap::new();
         results.extend(
             self.config
                 .superclasses()
-                .map(|sc| (sc.clone(), Vec::new())),
+                .map(|sc| (QualifiedName::new_from_cpp_name(sc), Vec::new())),
         );
         for api in apis {
             if let Api::Function {
@@ -288,7 +282,7 @@ impl<'a> RsCodeGenerator<'a> {
                 match method_kind {
                     MethodKind::Virtual(receiver_mutability)
                     | MethodKind::PureVirtual(receiver_mutability) => {
-                        let list = results.get_mut(&receiver.to_cpp_name());
+                        let list = results.get_mut(&receiver);
                         if let Some(list) = list {
                             let param_names =
                                 param_details.iter().map(|pd| pd.name.clone()).collect();
@@ -351,17 +345,20 @@ impl<'a> RsCodeGenerator<'a> {
         output_items: &mut Vec<Item>,
     ) {
         for (name, codegen) in ns_entries.entries() {
-            match &codegen.materialization {
-                Use::UsedFromCxxBridgeWithAlias(alias) => {
-                    output_items.push(Self::generate_cxx_use_stmt(name, Some(alias)))
+            output_items.extend(codegen.materializations.iter().map(|materialization| {
+                match materialization {
+                    Use::UsedFromCxxBridgeWithAlias(alias) => {
+                        Self::generate_cxx_use_stmt(name, Some(alias))
+                    }
+                    Use::UsedFromCxxBridge => Self::generate_cxx_use_stmt(name, None),
+                    Use::UsedFromBindgen => Self::generate_bindgen_use_stmt(name),
+                    Use::UseSpecificNameFromBindgen(id) => {
+                        let name = QualifiedName::new(name.get_namespace(), id.clone());
+                        Self::generate_bindgen_use_stmt(&name)
+                    }
+                    Use::Custom(item) => *item.clone(),
                 }
-                Use::UsedFromCxxBridge => {
-                    output_items.push(Self::generate_cxx_use_stmt(name, None))
-                }
-                Use::UsedFromBindgen => output_items.push(Self::generate_bindgen_use_stmt(name)),
-                Use::Unused => {}
-                Use::Custom(item) => output_items.push(*item.clone()),
-            };
+            }));
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
             if child_ns_entries.is_empty() {
@@ -467,7 +464,7 @@ impl<'a> RsCodeGenerator<'a> {
     fn generate_rs_for_api(
         &self,
         api: Api<FnPhase>,
-        associated_methods: &mut HashMap<String, Vec<SuperclassMethod>>,
+        associated_methods: &mut HashMap<QualifiedName, Vec<SuperclassMethod>>,
         subclasses_with_a_single_trivial_constructor: &HashSet<QualifiedName>,
     ) -> RsCodegenResult {
         let name = api.name().clone();
@@ -484,7 +481,9 @@ impl<'a> RsCodeGenerator<'a> {
                     global_items: get_string_items(),
                     bindgen_mod_items: Vec::new(),
                     impl_entry: None,
-                    materialization: Use::UsedFromCxxBridgeWithAlias(make_ident("make_string")),
+                    materializations: vec![Use::UsedFromCxxBridgeWithAlias(make_ident(
+                        "make_string",
+                    ))],
                     extern_rust_mod_items: Vec::new(),
                 }
             }
@@ -496,7 +495,7 @@ impl<'a> RsCodeGenerator<'a> {
                 )],
                 bindgen_mod_items: vec![Item::Struct(new_non_pod_struct(id.clone()))],
                 impl_entry: None,
-                materialization: Use::Unused,
+                materializations: Vec::new(),
                 extern_rust_mod_items: Vec::new(),
             },
             Api::ForwardDeclaration { .. } => RsCodegenResult {
@@ -507,7 +506,7 @@ impl<'a> RsCodeGenerator<'a> {
                 global_items: self.generate_extern_type_impl(TypeKind::NonPod, &name),
                 bindgen_mod_items: vec![Item::Struct(new_non_pod_struct(id))],
                 impl_entry: None,
-                materialization: Use::UsedFromCxxBridge,
+                materializations: vec![Use::UsedFromCxxBridge],
                 extern_rust_mod_items: Vec::new(),
             },
             Api::Function { fun, analysis, .. } => {
@@ -519,7 +518,7 @@ impl<'a> RsCodeGenerator<'a> {
                 bridge_items: Vec::new(),
                 extern_c_mod_items: Vec::new(),
                 bindgen_mod_items: vec![Item::Const(const_item)],
-                materialization: Use::UsedFromBindgen,
+                materializations: vec![Use::UsedFromBindgen],
                 extern_rust_mod_items: Vec::new(),
             },
             Api::Typedef { analysis, .. } => RsCodegenResult {
@@ -531,11 +530,11 @@ impl<'a> RsCodeGenerator<'a> {
                     TypedefKind::Use(use_item) => Item::Use(use_item),
                 }],
                 impl_entry: None,
-                materialization: Use::UsedFromBindgen,
+                materializations: vec![Use::UsedFromBindgen],
                 extern_rust_mod_items: Vec::new(),
             },
             Api::Struct { item, analysis, .. } => {
-                let methods = associated_methods.get(&id.to_string());
+                let methods = associated_methods.get(&name);
                 self.generate_type(&name, id, item, analysis.kind, Item::Struct, methods)
             }
             Api::Enum { item, .. } => {
@@ -549,7 +548,7 @@ impl<'a> RsCodeGenerator<'a> {
                     type #id = autocxx::#id;
                 })],
                 bindgen_mod_items: Vec::new(),
-                materialization: Use::Unused,
+                materializations: Vec::new(),
                 extern_rust_mod_items: Vec::new(),
             },
             Api::RustType { .. } => {
@@ -558,7 +557,7 @@ impl<'a> RsCodeGenerator<'a> {
                     extern_c_mod_items: Vec::new(),
                     bridge_items: Vec::new(),
                     bindgen_mod_items: Vec::new(),
-                    materialization: Use::Unused,
+                    materializations: Vec::new(),
                     global_items: vec![parse_quote! {
                         use super::#id;
                     }],
@@ -582,7 +581,7 @@ impl<'a> RsCodeGenerator<'a> {
             Api::Subclass {
                 name, superclass, ..
             } => {
-                let methods = associated_methods.get(&superclass.get_final_item().to_string());
+                let methods = associated_methods.get(&superclass);
                 let generate_peer_constructor =
                     subclasses_with_a_single_trivial_constructor.contains(&name.0.name);
                 self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
@@ -600,23 +599,25 @@ impl<'a> RsCodeGenerator<'a> {
         generate_peer_constructor: bool,
     ) -> RsCodegenResult {
         let super_name = superclass.get_final_item();
-        let super_id = superclass.get_final_ident();
+        let super_path = superclass.to_type_path();
+        let super_cxxxbridge_id = superclass.get_final_ident();
         let id = sub.id();
         let holder = sub.holder();
-        let cpp = sub.cpp();
-        let full_cpp = QualifiedName::new(&Namespace::new(), cpp.clone());
+        let full_cpp = sub.cpp();
+        let cpp_path = full_cpp.to_type_path();
+        let cpp_id = full_cpp.get_final_ident();
         let mut global_items = self.generate_extern_type_impl(TypeKind::NonPod, &full_cpp);
         global_items.push(parse_quote! {
             pub use bindgen::root::#holder;
         });
         let relinquish_ownership_call = sub.cpp_remove_ownership();
         let mut bindgen_mod_items = vec![
-            Item::Struct(new_non_pod_struct(cpp.clone())),
+            Item::Struct(new_non_pod_struct(cpp_id.clone())),
             parse_quote! {
                 pub struct #holder(pub autocxx::subclass::CppSubclassRustPeerHolder<super::super::super::#id>);
             },
             parse_quote! {
-                impl autocxx::subclass::CppSubclassCppPeer for #cpp {
+                impl autocxx::subclass::CppSubclassCppPeer for #cpp_id {
                     fn relinquish_ownership(&self) {
                         self.#relinquish_ownership_call();
                     }
@@ -626,11 +627,11 @@ impl<'a> RsCodeGenerator<'a> {
         let mut extern_c_mod_items = vec![
             ForeignItem::Verbatim(self.generate_cxxbridge_type(&full_cpp)),
             parse_quote! {
-                fn #relinquish_ownership_call(self: &#cpp);
+                fn #relinquish_ownership_call(self: &#cpp_id);
             },
         ];
         if let Some(methods) = methods {
-            let supers = make_ident(format!("{}_supers", super_name));
+            let supers = SubclassName::get_supers_trait_name(superclass).to_type_path();
             let methods_impls: Vec<ImplItem> = methods
                 .iter()
                 .map(|m| {
@@ -662,9 +663,9 @@ impl<'a> RsCodeGenerator<'a> {
         }
         if generate_peer_constructor {
             bindgen_mod_items.push(parse_quote! {
-                impl autocxx::subclass::CppPeerConstructor<#cpp> for super::super::super::#id {
-                    fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<#cpp> {
-                        #cpp :: make_unique(peer_holder)
+                impl autocxx::subclass::CppPeerConstructor<#cpp_id> for super::super::super::#id {
+                    fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<#cpp_path> {
+                        #cpp_id :: make_unique(peer_holder)
                     }
                 }
             })
@@ -673,15 +674,15 @@ impl<'a> RsCodeGenerator<'a> {
         // Once for each superclass, in future...
         let as_id = make_ident(format!("As_{}", super_name));
         extern_c_mod_items.push(parse_quote! {
-            fn #as_id(self: &#cpp) -> &#super_id;
+            fn #as_id(self: &#cpp_id) -> &#super_cxxxbridge_id;
         });
         let as_mut_id = make_ident(format!("As_{}_mut", super_name));
         extern_c_mod_items.push(parse_quote! {
-            fn #as_mut_id(self: Pin<&mut #cpp>) -> Pin<&mut #super_id>;
+            fn #as_mut_id(self: Pin<&mut #cpp_id>) -> Pin<&mut #super_cxxxbridge_id>;
         });
         bindgen_mod_items.push(parse_quote! {
-            impl AsRef<#super_id> for super::super::super::#id {
-                fn as_ref(&self) -> &cxxbridge::#super_id {
+            impl AsRef<#super_path> for super::super::super::#id {
+                fn as_ref(&self) -> &cxxbridge::#super_cxxxbridge_id {
                     use autocxx::subclass::CppSubclass;
                     self.peer().#as_id()
                 }
@@ -690,7 +691,7 @@ impl<'a> RsCodeGenerator<'a> {
         // TODO it would be nice to impl AsMut here but pin prevents us
         bindgen_mod_items.push(parse_quote! {
             impl super::super::super::#id {
-                pub fn pin_mut(&mut self) -> std::pin::Pin<&mut cxxbridge::#super_id> {
+                pub fn pin_mut(&mut self) -> std::pin::Pin<&mut cxxbridge::#super_cxxxbridge_id> {
                     use autocxx::subclass::CppSubclass;
                     self.peer_mut().#as_mut_id()
                 }
@@ -705,11 +706,11 @@ impl<'a> RsCodeGenerator<'a> {
         });
         RsCodegenResult {
             extern_c_mod_items,
-            bridge_items: create_impl_items(&cpp, self.config),
+            bridge_items: create_impl_items(&cpp_id, self.config),
             bindgen_mod_items,
-            materialization: Use::Custom(Box::new(parse_quote! {
-                pub use cxxbridge::#cpp;
-            })),
+            materializations: vec![Use::Custom(Box::new(parse_quote! {
+                pub use cxxbridge::#cpp_id;
+            }))],
             global_items,
             impl_entry: None,
             extern_rust_mod_items: vec![
@@ -739,7 +740,8 @@ impl<'a> RsCodeGenerator<'a> {
         let args: Punctuated<Expr, Comma> =
             Self::args_from_sig(&cxxbridge_decl.sig.inputs).collect();
         let superclass_id = superclass.get_final_ident();
-        let superclass_id = make_ident(format!("{}_methods", superclass_id.to_string()));
+        let methods_trait = SubclassName::get_methods_trait_name(&superclass);
+        let methods_trait = methods_trait.to_type_path();
         let (deref_ty, deref_call, borrow, mut_token) = match receiver_mutability {
             ReceiverMutability::Const => ("Deref", "deref", "try_borrow", None),
             ReceiverMutability::Mutable => (
@@ -758,7 +760,7 @@ impl<'a> RsCodeGenerator<'a> {
             extern_c_mod_items: Vec::new(),
             bridge_items: Vec::new(),
             bindgen_mod_items: Vec::new(),
-            materialization: Use::Unused,
+            materializations: Vec::new(),
             global_items: vec![parse_quote! {
                 #global_def {
                     let rc = me.0
@@ -769,7 +771,7 @@ impl<'a> RsCodeGenerator<'a> {
                         .#borrow()
                         .expect(#reentrancy_panic_msg);
                     let r = std::ops::#deref_ty::#deref_call(& #mut_token b);
-                    #superclass_id :: #method_name
+                    #methods_trait :: #method_name
                         (r,
                         #args)
                 }
@@ -806,7 +808,8 @@ impl<'a> RsCodeGenerator<'a> {
         F: FnOnce(T) -> Item,
     {
         let mut bindgen_mod_items = vec![item_type(item)];
-        let mut global_items = self.generate_extern_type_impl(analysis, name);
+        let global_items = self.generate_extern_type_impl(analysis, name);
+        let mut materializations = vec![Use::UsedFromCxxBridge];
         if let Some(methods) = methods {
             let (supers, mains): (Vec<_>, Vec<_>) = methods
                 .iter()
@@ -832,8 +835,8 @@ impl<'a> RsCodeGenerator<'a> {
                     (a, b)
                 })
                 .unzip();
-            let supers_name = make_ident(format!("{}_supers", id.to_string()));
-            let methods_name = make_ident(format!("{}_methods", id.to_string()));
+            let supers_name = SubclassName::get_supers_trait_name(name).get_final_ident();
+            let methods_name = SubclassName::get_methods_trait_name(name).get_final_ident();
             bindgen_mod_items.push(parse_quote! {
                 #[allow(non_snake_case)]
                 pub trait #supers_name {
@@ -846,9 +849,7 @@ impl<'a> RsCodeGenerator<'a> {
                     #(#mains)*
                 }
             });
-            global_items.push(parse_quote! {
-                pub use bindgen::root::#methods_name;
-            });
+            materializations.push(Use::UseSpecificNameFromBindgen(methods_name));
         }
         RsCodegenResult {
             global_items,
@@ -860,7 +861,7 @@ impl<'a> RsCodeGenerator<'a> {
             },
             extern_c_mod_items: vec![ForeignItem::Verbatim(self.generate_cxxbridge_type(name))],
             bindgen_mod_items,
-            materialization: Use::UsedFromCxxBridge,
+            materializations,
             extern_rust_mod_items: Vec::new(),
         }
     }
@@ -875,10 +876,10 @@ impl<'a> RsCodeGenerator<'a> {
                 let id = Self::sanitize_error_ident(&id).unwrap_or(id);
                 (
                     None,
-                    Use::Custom(Box::new(parse_quote! {
+                    Some(Use::Custom(Box::new(parse_quote! {
                         #[doc = #err]
                         pub struct #id;
-                    })),
+                    }))),
                 )
             }
             ErrorContext::Method { self_ty, method }
@@ -897,7 +898,7 @@ impl<'a> RsCodeGenerator<'a> {
                         },
                         ty: self_ty,
                     })),
-                    Use::Unused,
+                    None,
                 )
             }
             ErrorContext::Method { self_ty, method } => {
@@ -909,10 +910,10 @@ impl<'a> RsCodeGenerator<'a> {
                 ));
                 (
                     None,
-                    Use::Custom(Box::new(parse_quote! {
+                    Some(Use::Custom(Box::new(parse_quote! {
                         #[doc = #err]
                         pub struct #id;
-                    })),
+                    }))),
                 )
             }
         };
@@ -922,7 +923,7 @@ impl<'a> RsCodeGenerator<'a> {
             bridge_items: Vec::new(),
             extern_c_mod_items: Vec::new(),
             bindgen_mod_items: Vec::new(),
-            materialization,
+            materializations: materialization.into_iter().collect(),
             extern_rust_mod_items: Vec::new(),
         }
     }
@@ -1066,5 +1067,5 @@ struct RsCodegenResult {
     global_items: Vec<Item>,
     bindgen_mod_items: Vec<Item>,
     impl_entry: Option<Box<ImplBlockDetails>>,
-    materialization: Use,
+    materializations: Vec<Use>,
 }
