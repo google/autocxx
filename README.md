@@ -10,7 +10,7 @@ The intention is that it has all the fluent safety from [cxx](https://github.com
 
 # Overview
 
-```rust
+```rust,ignore
 autocxx::include_cpp! {
     #include "url/origin.h"
     generate!("url::Origin")
@@ -168,7 +168,7 @@ in the way of useful diagnostics, because `stdout` is swallowed by cargo build s
 So, practically speaking, you would almost always move onto running one of the tests
 in the test suite. With suitable options, you can get plenty of output. For instance:
 
-```
+```ignore
 RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test  integration_tests::test_cycle_string_full_pipeline -- --nocapture
 ```
 
