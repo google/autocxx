@@ -242,9 +242,6 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// * *Non-trivial class hierarchies*. We don't yet consider virtual methods
 ///   on base classes of base classes. This is a temporary limitation,
 ///   [see this issue](https://github.com/google/autocxx/issues/610).
-///
-/// * *Namespaces.* Superclasses in namespaces are not yet supported:
-///   [see this issue](https://github.com/google/autocxx/issues/599).
 pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> {
     /// Return the field which holds the C++ peer object. This is normally
     /// implemented by the #[`is_subclass`] macro, but you're welcome to
