@@ -18,7 +18,7 @@ fn main() {
     // working directories.
     let path = std::path::PathBuf::from("s2geometry/src");
     let path2 = std::path::PathBuf::from("src");
-    let mut b = autocxx_build::build("src/main.rs", &[&path, &path2], &[]).unwrap();
+    let mut b = autocxx_build::Builder::new("src/main.rs", &[&path, &path2]).expect_build();
     b.flag_if_supported("-std=c++14")
         .compile("autocxx-s2-example");
     println!("cargo:rerun-if-changed=src/main.rs");

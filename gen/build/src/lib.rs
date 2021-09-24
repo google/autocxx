@@ -12,17 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx_engine::{
-    build as engine_build, expect_build as engine_expect_build, BuilderBuild, BuilderError,
-    RebuildDependencyRecorder,
-};
+use autocxx_engine::{BuilderBuild, BuilderContext, BuilderError, RebuildDependencyRecorder};
 use std::{collections::HashSet, io::Write, sync::Mutex};
 use std::{ffi::OsStr, path::Path};
 
-/// Build autocxx C++ files and return a cc::Build you can use to build
-/// more from a build.rs file.
-/// You need to provide the Rust file path and the iterator of paths
-/// which should be used as include directories.
+pub type Builder = autocxx_engine::Builder<CargoBuilderContext>;
+
+#[deprecated]
+/// Use [`Builder::new`] instead
 pub fn build<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
@@ -33,18 +30,13 @@ where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
-    setup_logging();
-    engine_build(
-        rs_file,
-        autocxx_incs,
-        extra_clang_args,
-        Some(Box::new(CargoRebuildDependencyRecorder::new())),
-    )
-    .map(|r| r.0)
+    Builder::new(rs_file, autocxx_incs)
+        .extra_clang_args(extra_clang_args)
+        .build()
 }
 
-/// Builds successfully, or exits the process displaying a suitable
-/// message.
+#[deprecated]
+/// Use [`Builder::new`] instead
 pub fn expect_build<P1, I, T>(
     rs_file: P1,
     autocxx_incs: I,
@@ -55,20 +47,23 @@ where
     I: IntoIterator<Item = T>,
     T: AsRef<OsStr>,
 {
-    setup_logging();
-    engine_expect_build(
-        rs_file,
-        autocxx_incs,
-        extra_clang_args,
-        Some(Box::new(CargoRebuildDependencyRecorder::new())),
-    )
-    .0
+    Builder::new(rs_file, autocxx_incs)
+        .extra_clang_args(extra_clang_args)
+        .expect_build()
 }
 
-fn setup_logging() {
-    env_logger::builder()
-        .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
-        .init();
+#[doc(hidden)]
+pub struct CargoBuilderContext;
+
+impl BuilderContext for CargoBuilderContext {
+    fn setup() {
+        env_logger::builder()
+            .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
+            .init();
+    }
+    fn get_dependency_recorder() -> Option<Box<dyn RebuildDependencyRecorder>> {
+        Some(Box::new(CargoRebuildDependencyRecorder::new()))
+    }
 }
 
 #[derive(Debug)]

@@ -18,6 +18,7 @@
 
 mod conversion;
 mod cxxbridge;
+mod find_cpp_calls;
 mod known_types;
 mod parse_callbacks;
 mod parse_file;
@@ -60,7 +61,9 @@ use log::info;
 use autocxx_bindgen as bindgen;
 
 #[cfg(any(test, feature = "build"))]
-pub use builder::{build, expect_build, BuilderBuild, BuilderError, BuilderResult, BuilderSuccess};
+pub use builder::{
+    Builder, BuilderBuild, BuilderContext, BuilderError, BuilderResult, BuilderSuccess,
+};
 pub use parse_file::{parse_file, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;

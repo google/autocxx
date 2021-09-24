@@ -15,8 +15,10 @@
 use autocxx_parser::file_locations::FileLocationStrategy;
 use proc_macro2::TokenStream;
 
-use crate::{ParseError, ParsedFile, RebuildDependencyRecorder};
+use crate::{ParseError, RebuildDependencyRecorder};
+use std::ffi::OsString;
 use std::io::Write;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::{ffi::OsStr, io, process};
 use std::{fmt::Display, fs::File};
@@ -58,129 +60,155 @@ pub struct BuilderSuccess(pub BuilderBuild, pub Vec<PathBuf>);
 /// Results of a build.
 pub type BuilderResult = Result<BuilderSuccess, BuilderError>;
 
-/// Build autocxx C++ files and return a cc::Build you can use to build
-/// more from a build.rs file.
-/// You need to provide the Rust file path and the iterator of paths
-/// which should be used as include directories.
-pub fn build<P1, I, T>(
-    rs_file: P1,
-    autocxx_incs: I,
-    extra_clang_args: &[&str],
-    dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-) -> BuilderResult
-where
-    P1: AsRef<Path>,
-    I: IntoIterator<Item = T>,
-    T: AsRef<OsStr>,
-{
-    build_to_custom_directory(
-        rs_file,
-        autocxx_incs,
-        extra_clang_args,
-        None,
-        dependency_recorder,
-    )
+/// The context in which a builder object lives. Callbacks for various
+/// purposes.
+pub trait BuilderContext {
+    /// Perform any initialization specific to the context in which this
+    /// builder lives.
+    fn setup() {}
+
+    /// Create a dependency recorder, if any.
+    fn get_dependency_recorder() -> Option<Box<dyn RebuildDependencyRecorder>>;
 }
 
-/// Builds successfully, or exits the process displaying a suitable
-/// message.
-pub fn expect_build<P1, I, T>(
-    rs_file: P1,
-    autocxx_incs: I,
-    extra_clang_args: &[&str],
+/// An object to allow building of bindings from a `build.rs` file.
+pub struct Builder<BuilderContext> {
+    rs_file: PathBuf,
+    autocxx_incs: Vec<OsString>,
+    extra_clang_args: Vec<String>,
     dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-) -> BuilderSuccess
-where
-    P1: AsRef<Path>,
-    I: IntoIterator<Item = T>,
-    T: AsRef<OsStr>,
-{
-    build(rs_file, autocxx_incs, extra_clang_args, dependency_recorder).unwrap_or_else(|err| {
-        let _ = writeln!(io::stderr(), "\n\nautocxx error: {}\n\n", err);
-        process::exit(1);
-    })
-}
-
-/// Like build, but you can specify the location where files should be generated.
-/// Not generally recommended for use in build scripts.
-pub(crate) fn build_to_custom_directory<P1, I, T>(
-    rs_file: P1,
-    autocxx_incs: I,
-    extra_clang_args: &[&str],
     custom_gendir: Option<PathBuf>,
-    dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-) -> BuilderResult
-where
-    P1: AsRef<Path>,
-    I: IntoIterator<Item = T>,
-    T: AsRef<OsStr>,
-{
-    rust_version_check();
-    let gen_location_strategy = match custom_gendir {
-        None => FileLocationStrategy::new(),
-        Some(custom_dir) => FileLocationStrategy::Custom(custom_dir),
-    };
-    let incdir = gen_location_strategy.get_include_dir();
-    ensure_created(&incdir)?;
-    let cxxdir = gen_location_strategy.get_cxx_dir();
-    ensure_created(&cxxdir)?;
-    let rsdir = gen_location_strategy.get_rs_dir();
-    ensure_created(&rsdir)?;
-    // We are incredibly unsophisticated in our directory arrangement here
-    // compared to cxx. I have no doubt that we will need to replicate just
-    // about everything cxx does, in due course...
-    // Write cxx.h to that location, as it may be needed by
-    // some of our generated code.
-    write_to_file(&incdir, "cxx.h", crate::HEADER.as_bytes())?;
-
-    let autocxx_inc = build_autocxx_inc(autocxx_incs, &incdir);
-    // pass on th
-    gen_location_strategy.set_cargo_env_vars_for_build();
-
-    let mut parsed_file = crate::parse_file(rs_file).map_err(BuilderError::ParseError)?;
-    parsed_file
-        .resolve_all(autocxx_inc, extra_clang_args, dependency_recorder)
-        .map_err(BuilderError::ParseError)?;
-    build_with_existing_parsed_file(parsed_file, cxxdir, incdir, rsdir)
+    auto_allowlist: bool,
+    // This member is to ensure that this type is parameterized
+    // by a BuilderContext. The goal is to balance three needs:
+    // (1) have most of the functionality over in autocxx_engine,
+    // (2) expose this type to users of autocxx_build and to
+    //     make it easy for callers simply to call Builder::new,
+    // (3) ensure that such a Builder does a few tasks specific to its use
+    // in a cargo environment.
+    ctx: PhantomData<BuilderContext>,
 }
 
-pub(crate) fn build_with_existing_parsed_file(
-    parsed_file: ParsedFile,
-    cxxdir: PathBuf,
-    incdir: PathBuf,
-    rsdir: PathBuf,
-) -> BuilderResult {
-    let mut counter = 0;
-    let mut builder = cc::Build::new();
-    builder.cpp(true);
-    let mut generated_rs = Vec::new();
-    builder.includes(parsed_file.include_dirs());
-    for include_cpp in parsed_file.get_cpp_buildables() {
-        let generated_code = include_cpp
-            .generate_h_and_cxx()
-            .map_err(BuilderError::InvalidCxx)?;
-        for filepair in generated_code.0 {
-            let fname = format!("gen{}.cxx", counter);
-            counter += 1;
-            let gen_cxx_path = write_to_file(&cxxdir, &fname, &filepair.implementation)?;
-            builder.file(gen_cxx_path);
-
-            write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
+impl<CTX: BuilderContext> Builder<CTX> {
+    #[doc(hidden)]
+    pub fn new(
+        rs_file: impl AsRef<Path>,
+        autocxx_incs: impl IntoIterator<Item = impl AsRef<OsStr>>,
+    ) -> Self {
+        CTX::setup();
+        Self {
+            rs_file: rs_file.as_ref().to_path_buf(),
+            autocxx_incs: autocxx_incs
+                .into_iter()
+                .map(|s| s.as_ref().to_os_string())
+                .collect(),
+            extra_clang_args: Vec::new(),
+            dependency_recorder: CTX::get_dependency_recorder(),
+            custom_gendir: None,
+            auto_allowlist: false,
+            ctx: PhantomData,
         }
     }
 
-    for include_cpp in parsed_file.get_rs_buildables() {
-        let rs = include_cpp.generate_rs();
-        generated_rs.push(write_rs_to_file(
-            &rsdir,
-            &include_cpp.config.get_rs_filename(),
-            rs,
-        )?);
+    /// Specify extra arguments for clang.
+    pub fn extra_clang_args(mut self, extra_clang_args: &[&str]) -> Self {
+        self.extra_clang_args = extra_clang_args.iter().map(|s| s.to_string()).collect();
+        self
     }
-    if counter == 0 {
-        Err(BuilderError::NoIncludeCxxMacrosFound)
-    } else {
-        Ok(BuilderSuccess(builder, generated_rs))
+
+    /// Where to generate the code.
+    pub fn custom_gendir(mut self, custom_gendir: PathBuf) -> Self {
+        self.custom_gendir = Some(custom_gendir);
+        self
+    }
+
+    /// Automatically discover uses of the C++ `ffi` mod and generate the allowlist
+    /// from that.
+    pub fn auto_allowlist(mut self, do_it: bool) -> Self {
+        self.auto_allowlist = do_it;
+        self
+    }
+
+    /// Build autocxx C++ files and return a cc::Build you can use to build
+    /// more from a build.rs file.
+    pub fn build(self) -> Result<BuilderBuild, BuilderError> {
+        self.build_listing_files().map(|r| r.0)
+    }
+
+    pub(crate) fn build_listing_files(self) -> Result<BuilderSuccess, BuilderError> {
+        let clang_args = &self
+            .extra_clang_args
+            .iter()
+            .map(|s| &s[..])
+            .collect::<Vec<_>>();
+        rust_version_check();
+        let gen_location_strategy = match self.custom_gendir {
+            None => FileLocationStrategy::new(),
+            Some(custom_dir) => FileLocationStrategy::Custom(custom_dir),
+        };
+        let incdir = gen_location_strategy.get_include_dir();
+        ensure_created(&incdir)?;
+        let cxxdir = gen_location_strategy.get_cxx_dir();
+        ensure_created(&cxxdir)?;
+        let rsdir = gen_location_strategy.get_rs_dir();
+        ensure_created(&rsdir)?;
+        // We are incredibly unsophisticated in our directory arrangement here
+        // compared to cxx. I have no doubt that we will need to replicate just
+        // about everything cxx does, in due course...
+        // Write cxx.h to that location, as it may be needed by
+        // some of our generated code.
+        write_to_file(&incdir, "cxx.h", crate::HEADER.as_bytes())?;
+
+        let autocxx_inc = build_autocxx_inc(self.autocxx_incs, &incdir);
+        // pass on th
+        gen_location_strategy.set_cargo_env_vars_for_build();
+
+        let mut parsed_file = crate::parse_file(self.rs_file, self.auto_allowlist)
+            .map_err(BuilderError::ParseError)?;
+        parsed_file
+            .resolve_all(autocxx_inc, clang_args, self.dependency_recorder)
+            .map_err(BuilderError::ParseError)?;
+        let mut counter = 0;
+        let mut builder = cc::Build::new();
+        builder.cpp(true);
+        let mut generated_rs = Vec::new();
+        builder.includes(parsed_file.include_dirs());
+        for include_cpp in parsed_file.get_cpp_buildables() {
+            let generated_code = include_cpp
+                .generate_h_and_cxx()
+                .map_err(BuilderError::InvalidCxx)?;
+            for filepair in generated_code.0 {
+                let fname = format!("gen{}.cxx", counter);
+                counter += 1;
+                let gen_cxx_path = write_to_file(&cxxdir, &fname, &filepair.implementation)?;
+                builder.file(gen_cxx_path);
+
+                write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
+            }
+        }
+
+        for include_cpp in parsed_file.get_rs_buildables() {
+            let rs = include_cpp.generate_rs();
+            generated_rs.push(write_rs_to_file(
+                &rsdir,
+                &include_cpp.config.get_rs_filename(),
+                rs,
+            )?);
+        }
+        if counter == 0 {
+            Err(BuilderError::NoIncludeCxxMacrosFound)
+        } else {
+            Ok(BuilderSuccess(builder, generated_rs))
+        }
+    }
+
+    /// Builds successfully, or exits the process displaying a suitable
+    /// message.
+    pub fn expect_build(self) -> BuilderBuild {
+        self.build().unwrap_or_else(|err| {
+            let _ = writeln!(io::stderr(), "\n\nautocxx error: {}\n\n", err);
+            process::exit(1);
+        })
     }
 }
 

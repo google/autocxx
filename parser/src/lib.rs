@@ -14,12 +14,12 @@
 
 mod config;
 pub mod file_locations;
-mod is_superclass;
+mod subclass_attrs;
 
 pub use config::{IncludeCppConfig, Subclass, UnsafePolicy};
 use file_locations::FileLocationStrategy;
-pub use is_superclass::SubclassAttrs;
 use proc_macro2::TokenStream as TokenStream2;
+pub use subclass_attrs::SubclassAttrs;
 use syn::Result as ParseResult;
 use syn::{
     parse::{Parse, ParseStream},

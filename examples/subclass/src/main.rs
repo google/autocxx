@@ -25,11 +25,6 @@ use std::rc::Rc;
 include_cpp! {
     #include "messages.h"
     safety!(unsafe) // unsafety policy; see docs
-    // What types and functions we want to generate
-    generate!("run_demo")
-    generate!("register_cpp_thingies")
-    generate!("register_producer")
-    generate!("register_displayer")
 }
 
 static SHAKESPEARE_QUOTES: [&str; 10] = [
