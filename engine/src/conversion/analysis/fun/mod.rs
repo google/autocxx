@@ -296,21 +296,36 @@ impl<'a> FnAnalyzer<'a> {
                 | MethodKind::PureVirtual(receiver_mutability),
             ) => {
                 for sub in self.subclasses_by_superclass(sup) {
-                    let subclass_function =
-                        create_subclass_function(&sub, &analysis, &name, receiver_mutability, sup);
+                    // For each subclass, we need to create a plain-C++ method to call its superclass
+                    // and a Rust/C++ bridge API to call _that_.
+                    // What we're generating here is entirely about the subclass, so the
+                    // superclass's namespace is irrelevant. We generate
+                    // all subclasses in the root namespace.
+                    let super_fn_name =
+                        SubclassName::get_super_fn_name(sup.get_namespace(), &analysis.rust_name);
+                    let super_fn_name =
+                        QualifiedName::new(&Namespace::new(), super_fn_name.get_final_ident());
+
+                    let subclass_function = create_subclass_function(
+                        &sub,
+                        &analysis,
+                        &name,
+                        receiver_mutability,
+                        sup,
+                        &super_fn_name,
+                    );
                     results.push(subclass_function);
 
                     let mut item = func_information.item.clone();
-                    item.sig.ident = SubclassName::get_super_fn_name(&analysis.rust_name);
-                    let self_ty = Some(QualifiedName::new(&Namespace::new(), sub.cpp()));
+                    item.sig.ident = super_fn_name.get_final_ident();
+                    let self_ty = Some(sub.cpp());
                     let maybe_wrap = Box::new(FuncToConvert {
                         item,
                         virtual_this_type: self_ty.clone(),
                         self_ty,
                     });
-                    let name =
-                        ApiName::new(name.name.get_namespace(), maybe_wrap.item.sig.ident.clone());
-                    let maybe_another_api = self.analyze_foreign_fn(name, maybe_wrap)?;
+                    let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
+                    let maybe_another_api = self.analyze_foreign_fn(super_fn_name, maybe_wrap)?;
                     if let Some((analysis, name)) = maybe_another_api {
                         results.push(Api::Function {
                             fun: func_information.clone(),
@@ -1090,9 +1105,7 @@ impl Api<FnPhase> {
                 name: _,
                 superclass,
             } => Box::new(std::iter::once(superclass)),
-            Api::RustSubclassFn { details, .. } => {
-                Box::new(std::iter::once(&details.super_fn_api_name))
-            }
+            Api::RustSubclassFn { details, .. } => Box::new(std::iter::once(&details.dependency)),
             _ => Box::new(std::iter::empty()),
         }
     }

@@ -56,6 +56,7 @@ pub(super) fn create_subclass_function(
     name: &ApiName,
     receiver_mutability: &ReceiverMutability,
     superclass: &QualifiedName,
+    dependency: &QualifiedName,
 ) -> Api<FnPhase> {
     let cpp = sub.cpp();
     let holder_name = sub.holder();
@@ -74,10 +75,6 @@ pub(super) fn create_subclass_function(
     } else {
         CppFunctionKind::ConstMethod
     };
-    let super_fn_api_name = QualifiedName::new(
-        &Namespace::new(),
-        SubclassName::get_super_fn_name(&analysis.rust_name.to_string()),
-    );
     let subclass_function: Api<FnPhase> = Api::RustSubclassFn {
         name: ApiName::new_in_root_namespace(rust_call_name.clone()),
         subclass: sub.clone(),
@@ -101,7 +98,7 @@ pub(super) fn create_subclass_function(
             },
             superclass: superclass.clone(),
             receiver_mutability: receiver_mutability.clone(),
-            super_fn_api_name,
+            dependency: dependency.clone(),
         }),
     };
     subclass_function
@@ -115,9 +112,10 @@ pub(super) fn add_subclass_constructor(
 ) {
     let holder_name = sub.holder();
     let cpp = sub.cpp();
+    let cpp_id = cpp.get_final_ident();
     let cpp_impl = CppFunction {
         payload: CppFunctionBody::AssignSubclassHolderField,
-        wrapper_function_name: cpp.clone(),
+        wrapper_function_name: cpp_id.clone(),
         return_conversion: None,
         argument_conversion: vec![TypeConversionPolicy::new_unconverted(parse_quote! {
             rust::Box< #holder_name >
@@ -127,12 +125,12 @@ pub(super) fn add_subclass_constructor(
         qualification: Some(cpp.clone()),
     };
     new_apis.push(Api::RustSubclassConstructor {
-        name: ApiName::new_in_root_namespace(cpp.clone()),
+        name: ApiName::new_from_qualified_name(cpp.clone()),
         subclass: sub.clone(),
         cpp_impl: Box::new(cpp_impl),
         is_trivial: determine_if_trivial(analysis),
     });
-    let wrapper_name = make_ident(format!("{}_make_unique", cpp));
+    let wrapper_name = make_ident(format!("{}_make_unique", cpp_id));
     let mut constructor_wrapper = analysis.clone();
     let id = sub.0.name.get_final_ident();
     constructor_wrapper.param_details.insert(
@@ -157,16 +155,14 @@ pub(super) fn add_subclass_constructor(
         .params
         .insert(0, parse_quote! { rs_peer: Box<#holder_name> });
     constructor_wrapper.cxxbridge_name = wrapper_name.clone();
-    constructor_wrapper.ret_type = parse_quote! { -> cxx::UniquePtr < #cpp > };
-    constructor_wrapper.kind = FnKind::Method(
-        QualifiedName::new(&Namespace::new(), cpp.clone()),
-        MethodKind::Static,
-    );
+    let cpp_path = cpp.to_type_path();
+    constructor_wrapper.ret_type = parse_quote! { -> cxx::UniquePtr < #cpp_path > };
+    constructor_wrapper.kind = FnKind::Method(cpp, MethodKind::Static);
     constructor_wrapper.cpp_wrapper = Some(CppFunction {
         payload: CppFunctionBody::Constructor,
         wrapper_function_name: wrapper_name.clone(),
         return_conversion: Some(TypeConversionPolicy::new_to_unique_ptr(
-            parse_quote! { #cpp },
+            parse_quote! { #cpp_path },
         )),
         argument_conversion: vec![TypeConversionPolicy::new_unconverted(parse_quote! {
             rust::Box< #holder_name >

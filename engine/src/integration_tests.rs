@@ -7025,7 +7025,7 @@ fn test_pv_subclass_namespaced_superclass() {
     let hdr = indoc! {"
     #include <cstdint>
 
-    namespace foo {
+    namespace a {
     class Observer {
     public:
         Observer() {}
@@ -7033,9 +7033,9 @@ fn test_pv_subclass_namespaced_superclass() {
         virtual ~Observer() {}
     };
     }
-    inline void take_observer(const foo::Observer&) {}
+    inline void take_observer(const a::Observer&) {}
     "};
-    run_test_expect_fail_ex(
+    run_test_ex2(
         "",
         hdr,
         quote! {
@@ -7045,18 +7045,17 @@ fn test_pv_subclass_namespaced_superclass() {
         &["take_observer"],
         &[],
         Some(quote! {
-            subclass!("foo::Observer",MyObserver)
+            subclass!("a::Observer",MyObserver)
         }),
         &[],
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
-            use ffi::Observer_methods;
             #[autocxx::subclass::is_subclass]
             pub struct MyObserver {
                 a: u32
             }
-            impl Observer_methods for MyObserver {
+            impl ffi::a::Observer_methods for MyObserver {
                 fn foo(&self) -> u32 {
                     4
                 }

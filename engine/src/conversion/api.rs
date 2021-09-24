@@ -91,8 +91,12 @@ pub(crate) struct ApiName {
 
 impl ApiName {
     pub(crate) fn new(ns: &Namespace, id: Ident) -> Self {
+        Self::new_from_qualified_name(QualifiedName::new(ns, id))
+    }
+
+    pub(crate) fn new_from_qualified_name(name: QualifiedName) -> Self {
         Self {
-            name: QualifiedName::new(ns, id),
+            name,
             cpp_name: None,
         }
     }
@@ -121,8 +125,9 @@ impl SubclassName {
         self.with_suffix("Holder")
     }
     /// Generate the name for the 'Cpp' type
-    pub(crate) fn cpp(&self) -> Ident {
-        self.with_suffix("Cpp")
+    pub(crate) fn cpp(&self) -> QualifiedName {
+        let id = self.with_suffix("Cpp");
+        QualifiedName::new(self.0.name.get_namespace(), id)
     }
     pub(crate) fn cpp_remove_ownership(&self) -> Ident {
         self.with_suffix("Cpp_remove_ownership")
@@ -133,8 +138,20 @@ impl SubclassName {
     fn with_suffix(&self, suffix: &str) -> Ident {
         make_ident(format!("{}{}", self.0.name.get_final_item(), suffix))
     }
-    pub(crate) fn get_super_fn_name(id: &str) -> Ident {
-        make_ident(format!("{}_super", id))
+    pub(crate) fn get_super_fn_name(superclass_namespace: &Namespace, id: &str) -> QualifiedName {
+        let id = make_ident(format!("{}_super", id));
+        QualifiedName::new(superclass_namespace, id)
+    }
+    pub(crate) fn get_methods_trait_name(superclass_name: &QualifiedName) -> QualifiedName {
+        Self::with_qualified_name_suffix(superclass_name, "methods")
+    }
+    pub(crate) fn get_supers_trait_name(superclass_name: &QualifiedName) -> QualifiedName {
+        Self::with_qualified_name_suffix(superclass_name, "supers")
+    }
+
+    fn with_qualified_name_suffix(name: &QualifiedName, suffix: &str) -> QualifiedName {
+        let id = make_ident(format!("{}_{}", name.get_final_item(), suffix));
+        QualifiedName::new(name.get_namespace(), id)
     }
 }
 
@@ -240,7 +257,7 @@ pub(crate) struct RustSubclassFnDetails {
     pub(crate) method_name: Ident,
     pub(crate) superclass: QualifiedName,
     pub(crate) receiver_mutability: ReceiverMutability,
-    pub(crate) super_fn_api_name: QualifiedName,
+    pub(crate) dependency: QualifiedName,
 }
 
 impl<T: AnalysisPhase> Api<T> {

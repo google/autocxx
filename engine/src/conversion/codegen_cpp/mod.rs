@@ -338,7 +338,7 @@ impl<'a> CppCodeGenerator<'a> {
         };
         let declaration = format!("{} {}({}){}", ret_type, name, args, constness);
         let qualification = if let Some(qualification) = &details.qualification {
-            format!("{}::", qualification.to_string())
+            format!("{}::", qualification.to_cpp_name())
         } else {
             "".to_string()
         };
@@ -485,8 +485,11 @@ impl<'a> CppCodeGenerator<'a> {
             let id = make_ident(method.wrapper_function_name.to_string());
             let mut super_method = method.clone();
             super_method.pass_obs_field = false;
-            super_method.wrapper_function_name =
-                SubclassName::get_super_fn_name(&method.wrapper_function_name.to_string());
+            super_method.wrapper_function_name = SubclassName::get_super_fn_name(
+                superclass.get_namespace(),
+                &method.wrapper_function_name.to_string(),
+            )
+            .get_final_ident();
             super_method.payload = CppFunctionBody::StaticMethodCall(
                 superclass.get_namespace().clone(),
                 superclass.get_final_ident(),

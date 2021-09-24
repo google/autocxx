@@ -68,10 +68,12 @@ pub(super) fn gen_function(
         _ => Vec::new(),
     };
     let mut materialization = match kind {
-        FnKind::Method(..) => Use::Unused,
+        FnKind::Method(..) => None,
         FnKind::Function => match analysis.rust_rename_strategy {
-            RustRenameStrategy::RenameInOutputMod(alias) => Use::UsedFromCxxBridgeWithAlias(alias),
-            _ => Use::UsedFromCxxBridge,
+            RustRenameStrategy::RenameInOutputMod(alias) => {
+                Some(Use::UsedFromCxxBridgeWithAlias(alias))
+            }
+            _ => Some(Use::UsedFromCxxBridge),
         },
     };
     let any_param_needs_rust_conversion = param_details
@@ -94,13 +96,13 @@ pub(super) fn gen_function(
             ));
         } else {
             // Generate plain old function
-            materialization = Use::Custom(generate_function_impl(
+            materialization = Some(Use::Custom(generate_function_impl(
                 &param_details,
                 &rust_name,
                 &ret_type,
                 &unsafety,
                 &doc_attr,
-            ));
+            )));
         }
     }
     if cxxbridge_name != cpp_call_name && !wrapper_function_needed {
@@ -146,7 +148,7 @@ pub(super) fn gen_function(
         global_items: Vec::new(),
         bindgen_mod_items: Vec::new(),
         impl_entry,
-        materialization,
+        materializations: materialization.into_iter().collect(),
         extern_rust_mod_items: Vec::new(),
     }
 }
