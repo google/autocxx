@@ -14,13 +14,13 @@
 
 [package]
 name = "autocxx-demo"
-version = "0.11.2"
+version = "0.12.0"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2018"
 
 [dependencies]
 cxx = "1.0.54"
-autocxx = { path = "..", version="0.11.2" }
+autocxx = { path = "..", version="0.12.0" }
 
 [build-dependencies]
-autocxx-build = { path = "../gen/build", version="0.11.2" }
+autocxx-build = { path = "../gen/build", version="0.12.0" }
