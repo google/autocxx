@@ -6259,7 +6259,7 @@ fn test_pv_subclass_derive_defaults() {
         "",
         hdr,
         quote! {
-            use autocxx::subclass::CppSubclassDefaultImpl;
+            use autocxx::subclass::CppSubclassDefault;
             let o = MyObserver::default_rust_owned();
             ffi::take_observer(o.borrow().as_ref());
         },

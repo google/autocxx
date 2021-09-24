@@ -25,6 +25,7 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 
 pub use autocxx_macro::is_subclass;
 pub use autocxx_macro::CppSubclassDefault;
+pub use autocxx_macro::CppSubclassSelfOwnedDefault;
 
 /// A prelude containing all the traits and macros required to create
 /// Rust subclasses of C++ classes. It's recommended that you:
@@ -34,8 +35,8 @@ pub use autocxx_macro::CppSubclassDefault;
 /// ```
 pub mod prelude {
     pub use super::{
-        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault, CppSubclassDefaultImpl,
-        CppSubclassSelfOwned,
+        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault, CppSubclassSelfOwned,
+        CppSubclassSelfOwnedDefault,
     };
 }
 
@@ -154,7 +155,8 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// * Use the `subclass` directive in your [`crate::include_cpp`] macro (or use
 ///   the auto-allow mode in your `build.rs`)
 /// * Create a `struct` to act as your subclass, and add the #[`is_subclass`] attribute.
-///   This adds a field to your struct for autocxx record-keeping.
+///   This adds a field to your struct for autocxx record-keeping. You can
+///   instead choose to implement [`CppSubclass`] a different way.
 /// * Use the [`CppSubclass`] trait, and instantiate the subclass using
 ///   [`CppSubclass::new_rust_owned`] or [`CppSubclass::new_cpp_owned`]
 ///   constructors. (You can use [`CppSubclassSelfOwned`] if you need that
@@ -210,18 +212,39 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 ///
 /// # Limitations
 ///
-/// The main thing to look out for is re-entrancy. If a (non-const) virtual
-/// method is called on your type, which then causes you to call back into C++,
-/// which results in a _second_ call into a (non-const) virtual method, we will
-/// try to create two mutable references to your subclass which isn't allowed
-/// in Rust and will therefore panic.
+/// * *Re-entrancy*. The main thing to look out for is re-entrancy. If a
+///   (non-const) virtual method is called on your type, which then causes you
+///   to call back into C++, which results in a _second_ call into a (non-const)
+///   virtual method, we will try to create two mutable references to your
+///   subclass which isn't allowed in Rust and will therefore panic.
 ///
-/// A future version of autocxx may provide the option of treating all
-/// non-const methods (in C++) as const methods on the Rust side, which will
-/// give the option of using interior mutability ([`std::cell::RefCell`])
-/// for you to safely handle this situation, whilst remaining compatible
-/// with existing C++ interfaces. If you need this, indicate support on
-/// [this issue](https://github.com/google/autocxx/issues/622).
+///   A future version of autocxx may provide the option of treating all
+///   non-const methods (in C++) as const methods on the Rust side, which will
+///   give the option of using interior mutability ([`std::cell::RefCell`])
+///   for you to safely handle this situation, whilst remaining compatible
+///   with existing C++ interfaces. If you need this, indicate support on
+///   [this issue](https://github.com/google/autocxx/issues/622).
+///
+/// * *Thread safety*. The subclass object is not thread-safe and shouldn't
+///   be passed to different threads in C++. A future version of this code
+///   will give the option to use `Arc` and `Mutex` internally rather than
+///   `Rc` and `RefCell`, solving this problem.
+///
+/// * *Complex or multiple constructors*. At present, this code doesn't work
+///   if the superclass has anything other than a single, zero-argument,
+///   constructor. This is
+///   https://github.com/google/autocxx/issues/596 and is just a matter of doing
+///   a bit of work to plumb this together. (See [`CppPeerConstructor`] for
+///   how this will work when it's done.)
+///
+/// * *Protected methods.* We don't do anything clever here - they're public.
+///
+/// * *Non-trivial class hierarchies*. We don't yet consider virtual methods
+///   on base classes of base classes. This is a temporary limitation,
+///   https://github.com/google/autocxx/issues/610.
+///
+/// * *Namespaces.* Superclasses in namespaces are not yet supported:
+///   https://github.com/google/autocxx/issues/599.
 pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> {
     /// Return the field which holds the C++ peer object. This is normally
     /// implemented by the #[`is_subclass`] macro, but you're welcome to
@@ -297,9 +320,7 @@ pub trait CppSubclassSelfOwned<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer
 }
 
 /// Provides default constructors for subclasses which implement `Default`.
-pub trait CppSubclassDefaultImpl<CppPeer: CppSubclassCppPeer>:
-    CppSubclass<CppPeer> + Default
-{
+pub trait CppSubclassDefault<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer> + Default {
     /// Create a Rust-owned instance of this subclass, initializing with default values. See
     /// [`CppSubclass`] for more details of the ownership models available.
     fn default_rust_owned() -> Rc<RefCell<Self>> {
@@ -315,7 +336,7 @@ pub trait CppSubclassDefaultImpl<CppPeer: CppSubclassCppPeer>:
 
 /// Provides default constructors for subclasses which implement `Default`
 /// and are self-owning.
-pub trait CppSubclassSelfOwnedDefaultImpl<CppPeer: CppSubclassCppPeer>:
+pub trait CppSubclassSelfOwnedDefault<CppPeer: CppSubclassCppPeer>:
     CppSubclassSelfOwned<CppPeer> + Default
 {
     /// Create a self-owned instance of this subclass, initializing with default values. See
