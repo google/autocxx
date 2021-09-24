@@ -6243,6 +6243,49 @@ fn test_pv_subclass_passed_to_fn() {
 }
 
 #[test]
+fn test_pv_subclass_derive_defaults() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual uint32_t foo() const = 0;
+        virtual ~Observer() {}
+    };
+    inline void take_observer(const Observer&) {}
+    "};
+    run_test_ex2(
+        "",
+        hdr,
+        quote! {
+            use autocxx::subclass::CppSubclassDefaultImpl;
+            let o = MyObserver::default_rust_owned();
+            ffi::take_observer(o.borrow().as_ref());
+        },
+        &["take_observer"],
+        &[],
+        Some(quote! {
+            subclass!("Observer",MyObserver)
+        }),
+        &[],
+        None,
+        Some(quote! {
+            #[autocxx::subclass::is_subclass]
+            #[derive(Default,autocxx::subclass::CppSubclassDefault)]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl ffi::Observer_methods for MyObserver {
+                fn foo(&self) -> u32 {
+                    4
+                }
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_non_pv_subclass() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -6964,50 +7007,6 @@ fn test_pv_subclass_fancy_constructor() {
         Some(quote! {
             use autocxx::subclass::CppSubclass;
             use ffi::Observer_methods;
-            #[autocxx::subclass::is_subclass]
-            pub struct MyObserver {
-                a: u32
-            }
-            impl Observer_methods for MyObserver {
-                fn foo(&self) -> u32 {
-                    4
-                }
-            }
-        }),
-    );
-}
-
-#[test]
-fn test_pv_subclass_derive_default() {
-    let hdr = indoc! {"
-    #include <cstdint>
-
-    class Observer {
-    public:
-        Observer(uint8_t) {}
-        virtual uint32_t foo() const = 0;
-        virtual ~Observer() {}
-    };
-    inline void take_observer(const Observer&) {}
-    "};
-    run_test_expect_fail_ex(
-        "",
-        hdr,
-        quote! {
-            let o = MyObserver::default_rust_owned();
-            ffi::take_observer(o.borrow().as_ref());
-        },
-        &["take_observer"],
-        &[],
-        Some(quote! {
-            subclass!("Observer",MyObserver)
-        }),
-        &[],
-        None,
-        Some(quote! {
-            use autocxx::subclass::CppSubclass;
-            use ffi::Observer_methods;
-            #[derive(autocxx::CppSubclassDefault)]
             #[autocxx::subclass::is_subclass]
             pub struct MyObserver {
                 a: u32
