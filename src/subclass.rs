@@ -25,6 +25,7 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 
 pub use autocxx_macro::is_subclass;
 pub use autocxx_macro::CppSubclassDefault;
+pub use autocxx_macro::CppSubclassSelfOwnedDefault;
 
 /// A prelude containing all the traits and macros required to create
 /// Rust subclasses of C++ classes. It's recommended that you:
@@ -34,8 +35,8 @@ pub use autocxx_macro::CppSubclassDefault;
 /// ```
 pub mod prelude {
     pub use super::{
-        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault, CppSubclassDefaultImpl,
-        CppSubclassSelfOwned,
+        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault, CppSubclassSelfOwned,
+        CppSubclassSelfOwnedDefault,
     };
 }
 
@@ -297,9 +298,7 @@ pub trait CppSubclassSelfOwned<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer
 }
 
 /// Provides default constructors for subclasses which implement `Default`.
-pub trait CppSubclassDefaultImpl<CppPeer: CppSubclassCppPeer>:
-    CppSubclass<CppPeer> + Default
-{
+pub trait CppSubclassDefault<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer> + Default {
     /// Create a Rust-owned instance of this subclass, initializing with default values. See
     /// [`CppSubclass`] for more details of the ownership models available.
     fn default_rust_owned() -> Rc<RefCell<Self>> {
@@ -315,7 +314,7 @@ pub trait CppSubclassDefaultImpl<CppPeer: CppSubclassCppPeer>:
 
 /// Provides default constructors for subclasses which implement `Default`
 /// and are self-owning.
-pub trait CppSubclassSelfOwnedDefaultImpl<CppPeer: CppSubclassCppPeer>:
+pub trait CppSubclassSelfOwnedDefault<CppPeer: CppSubclassCppPeer>:
     CppSubclassSelfOwned<CppPeer> + Default
 {
     /// Create a self-owned instance of this subclass, initializing with default values. See
