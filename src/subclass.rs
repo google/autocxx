@@ -151,12 +151,14 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// A subclass of a C++ type.
 ///
 /// To create a Rust subclass of a C++ class, you must do these things:
-/// * Use the `subclass` directive in your [`crate::include_cpp`] macro
+/// * Use the `subclass` directive in your [`crate::include_cpp`] macro (or use
+///   the auto-allow mode in your `build.rs`)
 /// * Create a `struct` to act as your subclass, and add the #[`is_subclass`] attribute.
+///   This adds a field to your struct for autocxx record-keeping.
 /// * Use the [`CppSubclass`] trait, and instantiate the subclass using
 ///   [`CppSubclass::new_rust_owned`] or [`CppSubclass::new_cpp_owned`]
 ///   constructors. (You can use [`CppSubclassSelfOwned`] if you need that
-///   instead; also, see [`CppSubclassSelfOwnedDefault`] and [`CppSubclassDefault`]
+///   instead; also, see [`CppSubclassDefaultSelfOwned`] and [`CppSubclassDefault`]
 ///   to arrange for easier constructors to exist.
 /// * You _may_ need to implement [`CppPeerConstructor`] for your subclass,
 ///   but only if autocxx determines that there are multiple possible superclass
@@ -213,6 +215,13 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// which results in a _second_ call into a (non-const) virtual method, we will
 /// try to create two mutable references to your subclass which isn't allowed
 /// in Rust and will therefore panic.
+///
+/// A future version of autocxx may provide the option of treating all
+/// non-const methods (in C++) as const methods on the Rust side, which will
+/// give the option of using interior mutability ([`std::cell::RefCell`])
+/// for you to safely handle this situation, whilst remaining compatible
+/// with existing C++ interfaces. If you need this, indicate support on
+/// [this issue](https://github.com/google/autocxx/issues/622).
 pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> {
     /// Return the field which holds the C++ peer object. This is normally
     /// implemented by the #[`is_subclass`] macro, but you're welcome to
