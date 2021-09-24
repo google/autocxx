@@ -198,7 +198,7 @@ fn main() {
                 .expect("Unable to generate header and C++ code");
             for pair in generations.0 {
                 let cppname = format!("gen{}.{}", counter, cpp);
-                write_to_file(&outdir, cppname, &pair.implementation);
+                write_to_file(&outdir, cppname, &pair.implementation.unwrap_or(Vec::new()));
                 write_to_file(&outdir, pair.header_name, &pair.header);
                 counter += 1;
             }
