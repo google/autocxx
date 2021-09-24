@@ -766,9 +766,9 @@ impl<'a> RsCodeGenerator<'a> {
                         .expect(#destroy_panic_msg);
                     let #mut_token b = rc
                         .as_ref()
-                        .#borrow();
-                    let r = std::ops::#deref_ty::#deref_call(& #mut_token b)
+                        .#borrow()
                         .expect(#reentrancy_panic_msg);
+                    let r = std::ops::#deref_ty::#deref_call(& #mut_token b);
                     #superclass_id :: #method_name
                         (r,
                         #args)
