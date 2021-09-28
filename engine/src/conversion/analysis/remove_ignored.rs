@@ -52,15 +52,23 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: Vec<Api<FnPhase>>) -> 
                     iterate_again = true;
                     ignored_items.insert(api.name().clone());
                     create_ignore_item(api, ConvertError::IgnoredDependent)
-                } else if !api
-                    .deps()
-                    .all(|dep| valid_types.contains(dep) || known_types().is_known_type(dep))
-                {
-                    iterate_again = true;
-                    ignored_items.insert(api.name().clone());
-                    create_ignore_item(api, ConvertError::UnknownDependentType)
                 } else {
-                    api
+                    let mut missing_deps = api
+                        .deps()
+                        .filter(|dep| {
+                            !valid_types.contains(dep) && !known_types().is_known_type(dep)
+                        })
+                        .cloned();
+                    let first = missing_deps.next();
+                    std::mem::drop(missing_deps);
+                    if let Some(missing_dep) = first {
+                        create_ignore_item(
+                            api,
+                            ConvertError::UnknownDependentType(missing_dep.clone()),
+                        )
+                    } else {
+                        api
+                    }
                 }
             })
             .collect();
