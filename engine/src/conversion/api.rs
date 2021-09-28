@@ -83,7 +83,7 @@ pub(crate) enum TypedefKind {
 
 /// Name information for an API. This includes the name by
 /// which we know it in Rust, and its C++ name, which may differ.
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ApiName {
     pub(crate) name: QualifiedName,
     pub(crate) cpp_name: Option<String>,
@@ -103,6 +103,16 @@ impl ApiName {
 
     pub(crate) fn new_in_root_namespace(id: Ident) -> Self {
         Self::new(&Namespace::new(), id)
+    }
+}
+
+impl std::fmt::Debug for ApiName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)?;
+        if let Some(cpp_name) = &self.cpp_name {
+            write!(f, " (cpp={})", cpp_name)?;
+        }
+        Ok(())
     }
 }
 
@@ -307,7 +317,7 @@ impl<T: AnalysisPhase> Api<T> {
 
 impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} (kind={})", self.name().to_cpp_name(), self)
+        write!(f, "{:?} (kind={})", self.name_info(), self)
     }
 }
 
