@@ -290,7 +290,11 @@ impl<'a> FnAnalyzer<'a> {
                     if let Some(FnArg::Typed(PatType { ty, .. })) = existing_params.first_mut() {
                         if let Type::Ptr(TypePtr { elem, .. }) = &mut **ty {
                             *elem = Box::new(Type::Path(sub.cpp().to_type_path()));
-                        } // TODO return an error under other circumstances
+                        } else {
+                            panic!("Unexpected self type parameter when creating subclass constructor");
+                        }
+                    } else {
+                        panic!("Unexpected self type parameter when creating subclass constructor");
                     }
                     let mut existing_params = existing_params.into_iter();
                     let self_param = existing_params.next();
