@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::doc_attr::get_doc_attr;
+use crate::conversion::doc_attr::get_doc_attr;
 use crate::types::make_ident;
 use proc_macro2::Ident;
 use quote::quote;

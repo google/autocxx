@@ -19,6 +19,7 @@ mod codegen_rs;
 #[cfg(test)]
 mod conversion_tests;
 mod convert_error;
+mod doc_attr;
 mod error_reporter;
 mod parse;
 mod utilities;

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::conversion::api::ApiName;
+use crate::conversion::doc_attr::get_doc_attr;
 use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
     api::{FuncToConvert, UnanalyzedApi},
@@ -22,10 +24,13 @@ use crate::{
     conversion::ConvertError,
     types::{Namespace, QualifiedName},
 };
-use std::collections::HashMap;
-use syn::{Block, Expr, ExprCall, ForeignItem, Ident, ImplItem, ItemImpl, Stmt, Type};
+use std::collections::{HashMap, HashSet};
+use syn::{
+    Block, Expr, ExprCall, ForeignItem, ForeignItemFn, Ident, ImplItem, ItemImpl, LitStr, Stmt,
+    Type,
+};
 
-use super::parse_bindgen::api_name;
+use super::parse_bindgen::get_bindgen_original_name_annotation;
 
 /// Parses a given bindgen-generated 'mod' into suitable
 /// [Api]s. In bindgen output, a given mod concerns
@@ -78,10 +83,30 @@ impl ParseForeignMod {
     ) -> Result<(), ConvertErrorWithContext> {
         match i {
             ForeignItem::Fn(item) => {
+                let is_private = Self::has_attr(&item, "bindgen_visibility_private");
+                let is_pure_virtual = Self::has_attr(&item, "bindgen_pure_virtual");
+                let unused_template_param =
+                    Self::has_attr(&item, "bindgen_unused_template_param_in_arg_or_return");
+                let is_move_constructor = Self::is_move_constructor(&item);
+                let (reference_args, return_type_is_reference) =
+                    Self::get_reference_parameters_and_return(&item);
+                let original_name = get_bindgen_original_name_annotation(&item.attrs);
+                let doc_attr = get_doc_attr(&item.attrs);
                 self.funcs_to_convert.push(FuncToConvert {
-                    item,
                     virtual_this_type: virtual_this_type.clone(),
                     self_ty: None,
+                    ident: item.sig.ident,
+                    doc_attr,
+                    inputs: item.sig.inputs,
+                    output: item.sig.output,
+                    vis: item.vis,
+                    is_pure_virtual,
+                    is_private,
+                    is_move_constructor,
+                    unused_template_param,
+                    return_type_is_reference,
+                    reference_args,
+                    original_name,
                 });
                 Ok(())
             }
@@ -94,6 +119,47 @@ impl ParseForeignMod {
                 None,
             )),
         }
+    }
+
+    fn has_attr(fun: &ForeignItemFn, attr_name: &str) -> bool {
+        fun.attrs.iter().any(|a| a.path.is_ident(attr_name))
+    }
+
+    fn get_bindgen_special_member_annotation(fun: &ForeignItemFn) -> Option<String> {
+        fun.attrs
+            .iter()
+            .filter_map(|a| {
+                if a.path.is_ident("bindgen_special_member") {
+                    let r: Result<LitStr, syn::Error> = a.parse_args();
+                    match r {
+                        Ok(ls) => Some(ls.value()),
+                        Err(_) => None,
+                    }
+                } else {
+                    None
+                }
+            })
+            .next()
+    }
+
+    fn is_move_constructor(fun: &ForeignItemFn) -> bool {
+        Self::get_bindgen_special_member_annotation(fun).map_or(false, |val| val == "move_ctor")
+    }
+
+    fn get_reference_parameters_and_return(fun: &ForeignItemFn) -> (HashSet<Ident>, bool) {
+        let mut ref_params = HashSet::new();
+        let mut ref_return = false;
+        for a in &fun.attrs {
+            if a.path.is_ident("bindgen_ret_type_reference") {
+                ref_return = true;
+            } else if a.path.is_ident("bindgen_arg_type_reference") {
+                let r: Result<Ident, syn::Error> = a.parse_args();
+                if let Ok(ls) = r {
+                    ref_params.insert(ls);
+                }
+            }
+        }
+        (ref_params, ref_return)
     }
 
     /// Record information from impl blocks encountered in bindgen
@@ -128,9 +194,13 @@ impl ParseForeignMod {
         apis.append(&mut self.ignored_apis);
         while !self.funcs_to_convert.is_empty() {
             let mut fun = self.funcs_to_convert.remove(0);
-            fun.self_ty = self.method_receivers.get(&fun.item.sig.ident).cloned();
+            fun.self_ty = self.method_receivers.get(&fun.ident).cloned();
             apis.push(UnanalyzedApi::Function {
-                name: api_name(&self.ns, fun.item.sig.ident.clone(), &fun.item.attrs),
+                name: ApiName::new_with_cpp_name(
+                    &self.ns,
+                    fun.ident.clone(),
+                    fun.original_name.clone(),
+                ),
                 fun: Box::new(fun),
                 analysis: (),
                 name_for_gc: None,

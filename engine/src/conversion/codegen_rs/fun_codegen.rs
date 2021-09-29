@@ -23,7 +23,6 @@ use syn::{
 };
 
 use super::{
-    doc_attr::get_doc_attr,
     unqualify::{unqualify_params, unqualify_ret_type},
     RsCodegenResult, Use,
 };
@@ -50,7 +49,7 @@ pub(super) fn gen_function(
     let params = analysis.params;
     let vis = analysis.vis;
     let kind = analysis.kind;
-    let doc_attr = get_doc_attr(&fun.item.attrs);
+    let doc_attr = fun.doc_attr;
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;

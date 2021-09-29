@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod doc_attr;
 mod fun_codegen;
 mod function_wrapper_rs;
 mod impl_item_creator;

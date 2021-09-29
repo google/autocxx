@@ -108,7 +108,7 @@ pub(super) fn create_subclass_constructor(
 ) -> Api<FnPhase> {
     let holder_name = sub.holder();
     let cpp = sub.cpp();
-    let cpp_id = cpp.get_final_ident();
+    let wrapper_function_name = cpp.get_final_ident();
     let initial_arg = TypeConversionPolicy::new_unconverted(parse_quote! {
         rust::Box< #holder_name >
     });
@@ -120,7 +120,7 @@ pub(super) fn create_subclass_constructor(
     );
     let cpp_impl = CppFunction {
         payload: CppFunctionBody::ConstructSuperclass(superclass.to_cpp_name()),
-        wrapper_function_name: cpp_id.clone(),
+        wrapper_function_name,
         return_conversion: None,
         argument_conversion: args.collect(),
         kind: CppFunctionKind::Constructor,
@@ -128,7 +128,7 @@ pub(super) fn create_subclass_constructor(
         qualification: Some(cpp.clone()),
     };
     Api::RustSubclassConstructor {
-        name: ApiName::new_from_qualified_name(cpp.clone()),
+        name: ApiName::new_from_qualified_name(cpp),
         subclass: sub.clone(),
         cpp_impl: Box::new(cpp_impl),
         is_trivial: analysis.param_details.is_empty(),

@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
+
 use crate::types::{make_ident, Namespace, QualifiedName};
 use syn::{
-    punctuated::Punctuated, token::Comma, FnArg, ForeignItemFn, Ident, ImplItem, ItemConst,
-    ItemEnum, ItemStruct, ItemType, ItemUse, ReturnType, Type,
+    punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ImplItem, ItemConst, ItemEnum,
+    ItemStruct, ItemType, ItemUse, ReturnType, Type, Visibility,
 };
 
 use super::{
@@ -49,11 +51,25 @@ pub(crate) struct ImplBlockDetails {
     pub(crate) item: ImplItem,
     pub(crate) ty: Ident,
 }
-/// A ForeignItemFn with a little bit of context about the
-/// type which is most likely to be 'this'
+
+/// A C++ function for which we need to generate bindings, but haven't
+/// yet analyzed in depth. This is little more than a `ForeignItemFn`
+/// broken down into its constituent parts, plus some metadata from the
+/// surrounding bindgen parsing context.
 #[derive(Clone)]
 pub(crate) struct FuncToConvert {
-    pub(crate) item: ForeignItemFn,
+    pub(crate) ident: Ident,
+    pub(crate) doc_attr: Option<Attribute>,
+    pub(crate) inputs: Punctuated<FnArg, Comma>,
+    pub(crate) output: ReturnType,
+    pub(crate) vis: Visibility,
+    pub(crate) is_pure_virtual: bool,
+    pub(crate) is_private: bool,
+    pub(crate) is_move_constructor: bool,
+    pub(crate) unused_template_param: bool,
+    pub(crate) return_type_is_reference: bool,
+    pub(crate) reference_args: HashSet<Ident>,
+    pub(crate) original_name: Option<String>,
     pub(crate) virtual_this_type: Option<QualifiedName>,
     pub(crate) self_ty: Option<QualifiedName>,
 }
@@ -92,6 +108,13 @@ pub(crate) struct ApiName {
 impl ApiName {
     pub(crate) fn new(ns: &Namespace, id: Ident) -> Self {
         Self::new_from_qualified_name(QualifiedName::new(ns, id))
+    }
+
+    pub(crate) fn new_with_cpp_name(ns: &Namespace, id: Ident, cpp_name: Option<String>) -> Self {
+        Self {
+            name: QualifiedName::new(ns, id),
+            cpp_name,
+        }
     }
 
     pub(crate) fn new_from_qualified_name(name: QualifiedName) -> Self {
