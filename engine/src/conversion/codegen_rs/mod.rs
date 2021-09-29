@@ -550,22 +550,32 @@ impl<'a> RsCodeGenerator<'a> {
                 materializations: Vec::new(),
                 extern_rust_mod_items: Vec::new(),
             },
-            Api::RustType { .. } => {
-                let id = api.name().get_final_ident();
-                RsCodegenResult {
-                    extern_c_mod_items: Vec::new(),
-                    bridge_items: Vec::new(),
-                    bindgen_mod_items: Vec::new(),
-                    materializations: Vec::new(),
-                    global_items: vec![parse_quote! {
-                        use super::#id;
-                    }],
-                    impl_entry: None,
-                    extern_rust_mod_items: vec![parse_quote! {
-                        type #id;
-                    }],
-                }
-            }
+            Api::RustType { path, .. } => RsCodegenResult {
+                extern_c_mod_items: Vec::new(),
+                bridge_items: Vec::new(),
+                bindgen_mod_items: Vec::new(),
+                materializations: Vec::new(),
+                global_items: vec![parse_quote! {
+                    use super::#path;
+                }],
+                impl_entry: None,
+                extern_rust_mod_items: vec![parse_quote! {
+                    type #id;
+                }],
+            },
+            Api::RustFn { sig, path, .. } => RsCodegenResult {
+                extern_c_mod_items: Vec::new(),
+                bridge_items: Vec::new(),
+                bindgen_mod_items: Vec::new(),
+                materializations: Vec::new(),
+                global_items: vec![parse_quote! {
+                    use super::#path;
+                }],
+                impl_entry: None,
+                extern_rust_mod_items: vec![parse_quote! {
+                    #sig;
+                }],
+            },
             Api::RustSubclassFn {
                 details, subclass, ..
             } => Self::generate_subclass_fn(

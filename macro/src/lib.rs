@@ -18,7 +18,7 @@ use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
 use syn::parse::Parser;
-use syn::{parse_macro_input, Fields, ItemStruct};
+use syn::{parse_macro_input, Fields, Item, ItemStruct};
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
@@ -73,4 +73,21 @@ pub fn is_subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
         #self_owned_bit
     };
     toks.into()
+}
+
+/// Attribute to state that a Rust function or type is to be exported to C++
+/// in the `extern "Rust"` section of the generated `cxx` bindings.
+#[proc_macro_error]
+#[proc_macro_attribute]
+pub fn extern_rust(attr: TokenStream, input: TokenStream) -> TokenStream {
+    if !attr.is_empty() {
+        abort!(Span::call_site(), "Expected no attributes");
+    }
+    let i: Item =
+        syn::parse(input.clone()).unwrap_or_else(|_| abort!(Span::call_site(), "Expected an item"));
+    match i {
+        Item::Struct(..) | Item::Enum(..) | Item::Fn(..) => {}
+        _ => abort!(Span::call_site(), "Expected a function, struct or enum"),
+    }
+    input
 }

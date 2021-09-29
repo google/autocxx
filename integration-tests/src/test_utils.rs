@@ -527,3 +527,14 @@ impl CodeCheckerFns for NoSystemHeadersChecker {
         true
     }
 }
+
+pub(crate) struct EnableAutodiscover;
+
+impl BuilderModifierFns for EnableAutodiscover {
+    fn modify_autocxx_builder(
+        &self,
+        builder: Builder<TestBuilderContext>,
+    ) -> Builder<TestBuilderContext> {
+        builder.auto_allowlist(true)
+    }
+}

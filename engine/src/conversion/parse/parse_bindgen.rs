@@ -104,20 +104,37 @@ impl<'a> ParseBindgen<'a> {
         if !self.config.exclude_utilities() {
             generate_utilities(&mut self.apis, self.config);
         }
-        self.add_subclasses();
+        self.add_apis_from_config();
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
         self.confirm_all_generate_directives_obeyed()?;
         Ok(self.apis)
     }
 
-    fn add_subclasses(&mut self) {
+    /// Some API items are not populated from bindgen output, but instead
+    /// directly from items in the config.
+    fn add_apis_from_config(&mut self) {
         self.apis
             .extend(self.config.subclasses.iter().map(|sc| Api::Subclass {
-                // TODO support namespaces
                 name: SubclassName::new(sc.subclass.clone()),
                 superclass: QualifiedName::new_from_cpp_name(&sc.superclass),
             }));
+        self.apis
+            .extend(self.config.extern_rust_funs.iter().map(|fun| {
+                let id = fun.sig.ident.clone();
+                Api::RustFn {
+                    name: ApiName::new_in_root_namespace(id),
+                    path: fun.path.clone(),
+                    sig: fun.sig.clone(),
+                }
+            }));
+        self.apis.extend(self.config.rust_types.iter().map(|path| {
+            let id = path.get_final_ident();
+            Api::RustType {
+                name: ApiName::new_in_root_namespace(id.clone()),
+                path: path.clone(),
+            }
+        }));
     }
 
     fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
@@ -175,19 +192,21 @@ impl<'a> ParseBindgen<'a> {
                 // types at the moment.
                 let name = api_name_qualified(ns, s.ident.clone(), &s.attrs)?;
                 let api = if ns.is_empty() && self.config.is_rust_type(&s.ident) {
-                    UnanalyzedApi::RustType { name }
+                    None
                 } else if is_forward_declaration {
-                    UnanalyzedApi::ForwardDeclaration { name }
+                    Some(UnanalyzedApi::ForwardDeclaration { name })
                 } else {
-                    UnanalyzedApi::Struct {
+                    Some(UnanalyzedApi::Struct {
                         name,
                         item: s,
                         analysis: (),
-                    }
+                    })
                 };
-                self.latest_virtual_this_type = Some(api.name().clone());
-                if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
-                    self.apis.push(api);
+                if let Some(api) = api {
+                    self.latest_virtual_this_type = Some(api.name().clone());
+                    if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
+                        self.apis.push(api);
+                    }
                 }
                 Ok(())
             }

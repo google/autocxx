@@ -14,10 +14,12 @@
 
 mod config;
 pub mod file_locations;
+mod path;
 mod subclass_attrs;
 
-pub use config::{IncludeCppConfig, Subclass, UnsafePolicy};
+pub use config::{IncludeCppConfig, RustFun, Subclass, UnsafePolicy};
 use file_locations::FileLocationStrategy;
+pub use path::RustPath;
 use proc_macro2::TokenStream as TokenStream2;
 pub use subclass_attrs::SubclassAttrs;
 use syn::Result as ParseResult;

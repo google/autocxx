@@ -500,7 +500,8 @@ impl<'a> TypeConverter<'a> {
                 | Api::CType { .. }
                 | Api::RustSubclassFn { .. }
                 | Api::RustSubclassConstructor { .. }
-                | Api::IgnoredItem { .. } => None,
+                | Api::IgnoredItem { .. }
+                | Api::RustFn { .. } => None,
             })
             .cloned()
             .collect()
