@@ -39,8 +39,8 @@ use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
 use itertools::Itertools;
 use proc_macro2::Span;
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, PatType, ReturnType,
-    Type, TypePtr, Visibility,
+    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
+    TypePtr, Visibility,
 };
 
 use crate::{
@@ -55,7 +55,10 @@ use self::{
     bridge_name_tracker::BridgeNameTracker,
     overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
-    subclass::{create_subclass_constructor, create_subclass_function},
+    subclass::{
+        create_subclass_constructor, create_subclass_constructor_wrapper,
+        create_subclass_fn_wrapper, create_subclass_function,
+    },
 };
 
 use super::{
@@ -279,55 +282,12 @@ impl<'a> FnAnalyzer<'a> {
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 for sub in self.subclasses_by_superclass(sup) {
+                    // Add a constructor to the actual subclass definition in pure C++
                     results.push(create_subclass_constructor(&sub, &analysis, sup));
-
-                    let subclass_constructor_name = make_ident(format!(
-                        "{}_{}",
-                        sub.cpp().get_final_item(),
-                        sub.cpp().get_final_item()
-                    ));
-                    let mut existing_params = fun.inputs.clone();
-                    if let Some(FnArg::Typed(PatType { ty, .. })) = existing_params.first_mut() {
-                        if let Type::Ptr(TypePtr { elem, .. }) = &mut **ty {
-                            *elem = Box::new(Type::Path(sub.cpp().to_type_path()));
-                        } else {
-                            panic!("Unexpected self type parameter when creating subclass constructor");
-                        }
-                    } else {
-                        panic!("Unexpected self type parameter when creating subclass constructor");
-                    }
-                    let mut existing_params = existing_params.into_iter();
-                    let self_param = existing_params.next();
-                    let holder = sub.holder();
-                    let boxed_holder_param: FnArg = parse_quote! {
-                        peer: rust::Box<#holder>
-                    };
-                    let inputs = self_param
-                        .into_iter()
-                        .chain(std::iter::once(boxed_holder_param))
-                        .chain(existing_params)
-                        .collect();
-                    let self_ty = Some(sub.cpp());
-                    let maybe_wrap = Box::new(FuncToConvert {
-                        virtual_this_type: self_ty.clone(),
-                        self_ty,
-                        ident: subclass_constructor_name.clone(),
-                        doc_attr: fun.doc_attr.clone(),
-                        inputs,
-                        output: fun.output.clone(),
-                        vis: fun.vis.clone(),
-                        is_pure_virtual: false,
-                        is_private: fun.is_private,
-                        is_move_constructor: false,
-                        original_name: None,
-                        unused_template_param: fun.unused_template_param,
-                        return_type_is_reference: fun.return_type_is_reference,
-                        reference_args: fun.reference_args.clone(),
-                    });
-                    let mut subclass_constructor_name =
-                        ApiName::new_in_root_namespace(subclass_constructor_name);
-                    subclass_constructor_name.cpp_name =
-                        Some(sub.cpp().get_final_item().to_string());
+                    // And consider adding an API (in Rust/cxx/maybe C++) such that we
+                    // can call this from Rust.
+                    let (maybe_wrap, subclass_constructor_name) =
+                        create_subclass_constructor_wrapper(sub, &fun);
                     let maybe_another_api =
                         self.analyze_foreign_fn(subclass_constructor_name, maybe_wrap)?;
                     if let Some((analysis, name)) = maybe_another_api {
@@ -352,38 +312,19 @@ impl<'a> FnAnalyzer<'a> {
                     // superclass's namespace is irrelevant. We generate
                     // all subclasses in the root namespace.
                     let super_fn_name =
-                        SubclassName::get_super_fn_name(sup.get_namespace(), &analysis.rust_name);
-                    let super_fn_name =
-                        QualifiedName::new(&Namespace::new(), super_fn_name.get_final_ident());
+                        SubclassName::get_super_fn_name(&Namespace::new(), &analysis.rust_name);
 
-                    let subclass_function = create_subclass_function(
+                    results.push(create_subclass_function(
                         &sub,
                         &analysis,
                         &name,
                         receiver_mutability,
                         sup,
                         &super_fn_name,
-                    );
-                    results.push(subclass_function);
+                    ));
 
-                    let self_ty = Some(sub.cpp());
-                    let maybe_wrap = Box::new(FuncToConvert {
-                        virtual_this_type: self_ty.clone(),
-                        self_ty,
-                        ident: super_fn_name.get_final_ident(),
-                        doc_attr: fun.doc_attr.clone(),
-                        inputs: fun.inputs.clone(),
-                        output: fun.output.clone(),
-                        vis: fun.vis.clone(),
-                        is_pure_virtual: false,
-                        is_private: false,
-                        is_move_constructor: false,
-                        unused_template_param: fun.unused_template_param,
-                        original_name: None,
-                        return_type_is_reference: fun.return_type_is_reference,
-                        reference_args: fun.reference_args.clone(),
-                    });
-                    let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
+                    let (maybe_wrap, super_fn_name) =
+                        create_subclass_fn_wrapper(sub, super_fn_name, &fun);
                     let maybe_another_api = self.analyze_foreign_fn(super_fn_name, maybe_wrap)?;
                     if let Some((analysis, name)) = maybe_another_api {
                         results.push(Api::Function {

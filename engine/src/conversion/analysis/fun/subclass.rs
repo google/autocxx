@@ -14,11 +14,11 @@
 
 use std::collections::HashMap;
 
-use syn::parse_quote;
+use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 
 use crate::conversion::analysis::fun::ReceiverMutability;
 use crate::conversion::analysis::pod::PodPhase;
-use crate::conversion::api::{RustSubclassFnDetails, SubclassName};
+use crate::conversion::api::{FuncToConvert, RustSubclassFnDetails, SubclassName};
 use crate::{
     conversion::{
         analysis::fun::function_wrapper::{
@@ -45,6 +45,32 @@ pub(super) fn subclasses_by_superclass(
         }
     }
     subclasses_per_superclass
+}
+
+pub(super) fn create_subclass_fn_wrapper(
+    sub: SubclassName,
+    super_fn_name: QualifiedName,
+    fun: &Box<FuncToConvert>,
+) -> (Box<FuncToConvert>, ApiName) {
+    let self_ty = Some(sub.cpp());
+    let maybe_wrap = Box::new(FuncToConvert {
+        virtual_this_type: self_ty.clone(),
+        self_ty,
+        ident: super_fn_name.get_final_ident(),
+        doc_attr: fun.doc_attr.clone(),
+        inputs: fun.inputs.clone(),
+        output: fun.output.clone(),
+        vis: fun.vis.clone(),
+        is_pure_virtual: false,
+        is_private: false,
+        is_move_constructor: false,
+        unused_template_param: fun.unused_template_param,
+        original_name: None,
+        return_type_is_reference: fun.return_type_is_reference,
+        reference_args: fun.reference_args.clone(),
+    });
+    let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
+    (maybe_wrap, super_fn_name)
 }
 
 pub(super) fn create_subclass_function(
@@ -99,6 +125,58 @@ pub(super) fn create_subclass_function(
         }),
     };
     subclass_function
+}
+
+pub(super) fn create_subclass_constructor_wrapper(
+    sub: SubclassName,
+    fun: &Box<FuncToConvert>,
+) -> (Box<FuncToConvert>, ApiName) {
+    let subclass_constructor_name = make_ident(format!(
+        "{}_{}",
+        sub.cpp().get_final_item(),
+        sub.cpp().get_final_item()
+    ));
+    let mut existing_params = fun.inputs.clone();
+    if let Some(FnArg::Typed(PatType { ty, .. })) = existing_params.first_mut() {
+        if let Type::Ptr(TypePtr { elem, .. }) = &mut **ty {
+            *elem = Box::new(Type::Path(sub.cpp().to_type_path()));
+        } else {
+            panic!("Unexpected self type parameter when creating subclass constructor");
+        }
+    } else {
+        panic!("Unexpected self type parameter when creating subclass constructor");
+    }
+    let mut existing_params = existing_params.into_iter();
+    let self_param = existing_params.next();
+    let holder = sub.holder();
+    let boxed_holder_param: FnArg = parse_quote! {
+        peer: rust::Box<#holder>
+    };
+    let inputs = self_param
+        .into_iter()
+        .chain(std::iter::once(boxed_holder_param))
+        .chain(existing_params)
+        .collect();
+    let self_ty = Some(sub.cpp());
+    let maybe_wrap = Box::new(FuncToConvert {
+        virtual_this_type: self_ty.clone(),
+        self_ty,
+        ident: subclass_constructor_name.clone(),
+        doc_attr: fun.doc_attr.clone(),
+        inputs,
+        output: fun.output.clone(),
+        vis: fun.vis.clone(),
+        is_pure_virtual: false,
+        is_private: fun.is_private,
+        is_move_constructor: false,
+        original_name: None,
+        unused_template_param: fun.unused_template_param,
+        return_type_is_reference: fun.return_type_is_reference,
+        reference_args: fun.reference_args.clone(),
+    });
+    let mut subclass_constructor_name = ApiName::new_in_root_namespace(subclass_constructor_name);
+    subclass_constructor_name.cpp_name = Some(sub.cpp().get_final_item().to_string());
+    (maybe_wrap, subclass_constructor_name)
 }
 
 pub(super) fn create_subclass_constructor(
