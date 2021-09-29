@@ -187,7 +187,7 @@ impl<CTX: BuilderContext> Builder<CTX> {
                 let fname = format!("gen{}.cxx", counter);
                 counter += 1;
                 if let Some(implementation) = &filepair.implementation {
-                    let gen_cxx_path = write_to_file(&cxxdir, &fname, &implementation)?;
+                    let gen_cxx_path = write_to_file(&cxxdir, &fname, implementation)?;
                     builder.file(gen_cxx_path);
                 }
                 write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
