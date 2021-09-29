@@ -12,27 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use syn::parse_quote;
+use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 
 use crate::conversion::analysis::fun::ReceiverMutability;
 use crate::conversion::analysis::pod::PodPhase;
-use crate::conversion::api::{RustSubclassFnDetails, SubclassName};
+use crate::conversion::api::{FuncToConvert, RustSubclassFnDetails, SubclassName};
 use crate::{
     conversion::{
-        analysis::fun::{
-            function_wrapper::{
-                CppFunction, CppFunctionBody, CppFunctionKind, TypeConversionPolicy,
-            },
-            ArgumentAnalysis,
+        analysis::fun::function_wrapper::{
+            CppFunction, CppFunctionBody, CppFunctionKind, TypeConversionPolicy,
         },
         api::{Api, ApiName},
     },
     types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::{FnAnalysis, FnKind, FnPhase, MethodKind};
+use super::FnPhase;
 
 pub(super) fn subclasses_by_superclass(
     apis: &[Api<PodPhase>],
@@ -48,6 +45,32 @@ pub(super) fn subclasses_by_superclass(
         }
     }
     subclasses_per_superclass
+}
+
+pub(super) fn create_subclass_fn_wrapper(
+    sub: SubclassName,
+    super_fn_name: QualifiedName,
+    fun: &Box<FuncToConvert>,
+) -> (Box<FuncToConvert>, ApiName) {
+    let self_ty = Some(sub.cpp());
+    let maybe_wrap = Box::new(FuncToConvert {
+        virtual_this_type: self_ty.clone(),
+        self_ty,
+        ident: super_fn_name.get_final_ident(),
+        doc_attr: fun.doc_attr.clone(),
+        inputs: fun.inputs.clone(),
+        output: fun.output.clone(),
+        vis: fun.vis.clone(),
+        is_pure_virtual: false,
+        is_private: false,
+        is_move_constructor: false,
+        unused_template_param: fun.unused_template_param,
+        original_name: None,
+        return_type_is_reference: fun.return_type_is_reference,
+        reference_args: fun.reference_args.clone(),
+    });
+    let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
+    (maybe_wrap, super_fn_name)
 }
 
 pub(super) fn create_subclass_function(
@@ -104,87 +127,88 @@ pub(super) fn create_subclass_function(
     subclass_function
 }
 
-pub(super) fn add_subclass_constructor(
+pub(super) fn create_subclass_constructor_wrapper(
+    sub: SubclassName,
+    fun: &Box<FuncToConvert>,
+) -> (Box<FuncToConvert>, ApiName) {
+    let subclass_constructor_name = make_ident(format!(
+        "{}_{}",
+        sub.cpp().get_final_item(),
+        sub.cpp().get_final_item()
+    ));
+    let mut existing_params = fun.inputs.clone();
+    if let Some(FnArg::Typed(PatType { ty, .. })) = existing_params.first_mut() {
+        if let Type::Ptr(TypePtr { elem, .. }) = &mut **ty {
+            *elem = Box::new(Type::Path(sub.cpp().to_type_path()));
+        } else {
+            panic!("Unexpected self type parameter when creating subclass constructor");
+        }
+    } else {
+        panic!("Unexpected self type parameter when creating subclass constructor");
+    }
+    let mut existing_params = existing_params.into_iter();
+    let self_param = existing_params.next();
+    let holder = sub.holder();
+    let boxed_holder_param: FnArg = parse_quote! {
+        peer: rust::Box<#holder>
+    };
+    let inputs = self_param
+        .into_iter()
+        .chain(std::iter::once(boxed_holder_param))
+        .chain(existing_params)
+        .collect();
+    let self_ty = Some(sub.cpp());
+    let maybe_wrap = Box::new(FuncToConvert {
+        virtual_this_type: self_ty.clone(),
+        self_ty,
+        ident: subclass_constructor_name.clone(),
+        doc_attr: fun.doc_attr.clone(),
+        inputs,
+        output: fun.output.clone(),
+        vis: fun.vis.clone(),
+        is_pure_virtual: false,
+        is_private: fun.is_private,
+        is_move_constructor: false,
+        original_name: None,
+        unused_template_param: fun.unused_template_param,
+        return_type_is_reference: fun.return_type_is_reference,
+        reference_args: fun.reference_args.clone(),
+    });
+    let mut subclass_constructor_name = ApiName::new_in_root_namespace(subclass_constructor_name);
+    subclass_constructor_name.cpp_name = Some(sub.cpp().get_final_item().to_string());
+    (maybe_wrap, subclass_constructor_name)
+}
+
+pub(super) fn create_subclass_constructor(
     sub: &SubclassName,
-    new_apis: &mut Vec<Api<FnPhase>>,
     analysis: &super::FnAnalysis,
-    fun: &crate::conversion::api::FuncToConvert,
-) {
+    superclass: &QualifiedName,
+) -> Api<FnPhase> {
     let holder_name = sub.holder();
     let cpp = sub.cpp();
-    let cpp_id = cpp.get_final_ident();
+    let wrapper_function_name = cpp.get_final_ident();
+    let initial_arg = TypeConversionPolicy::new_unconverted(parse_quote! {
+        rust::Box< #holder_name >
+    });
+    let args = std::iter::once(initial_arg).chain(
+        analysis
+            .param_details
+            .iter()
+            .map(|aa| aa.conversion.clone()),
+    );
     let cpp_impl = CppFunction {
-        payload: CppFunctionBody::AssignSubclassHolderField,
-        wrapper_function_name: cpp_id.clone(),
+        payload: CppFunctionBody::ConstructSuperclass(superclass.to_cpp_name()),
+        wrapper_function_name,
         return_conversion: None,
-        argument_conversion: vec![TypeConversionPolicy::new_unconverted(parse_quote! {
-            rust::Box< #holder_name >
-        })],
+        argument_conversion: args.collect(),
         kind: CppFunctionKind::Constructor,
         pass_obs_field: false,
         qualification: Some(cpp.clone()),
     };
-    new_apis.push(Api::RustSubclassConstructor {
-        name: ApiName::new_from_qualified_name(cpp.clone()),
+    Api::RustSubclassConstructor {
+        name: ApiName::new_from_qualified_name(cpp),
         subclass: sub.clone(),
         cpp_impl: Box::new(cpp_impl),
-        is_trivial: determine_if_trivial(analysis),
-    });
-    let wrapper_name = make_ident(format!("{}_make_unique", cpp_id));
-    let mut constructor_wrapper = analysis.clone();
-    let id = sub.0.name.get_final_ident();
-    constructor_wrapper.param_details.insert(
-        0,
-        ArgumentAnalysis {
-            conversion: TypeConversionPolicy::box_up_subclass_holder(
-                parse_quote! {
-                    autocxx::subclass::CppSubclassRustPeerHolder<super::super::super:: #id>
-                },
-                holder_name.clone(),
-            ),
-            name: parse_quote! {rs_peer},
-            self_type: None,
-            was_reference: false,
-            deps: HashSet::new(),
-            is_virtual: false,
-            requires_unsafe: false,
-            is_subclass_holder: true,
-        },
-    );
-    constructor_wrapper
-        .params
-        .insert(0, parse_quote! { rs_peer: Box<#holder_name> });
-    constructor_wrapper.cxxbridge_name = wrapper_name.clone();
-    let cpp_path = cpp.to_type_path();
-    constructor_wrapper.ret_type = parse_quote! { -> cxx::UniquePtr < #cpp_path > };
-    constructor_wrapper.kind = FnKind::Method(cpp, MethodKind::Static);
-    constructor_wrapper.cpp_wrapper = Some(CppFunction {
-        payload: CppFunctionBody::Constructor,
-        wrapper_function_name: wrapper_name.clone(),
-        return_conversion: Some(TypeConversionPolicy::new_to_unique_ptr(
-            parse_quote! { #cpp_path },
-        )),
-        argument_conversion: vec![TypeConversionPolicy::new_unconverted(parse_quote! {
-            rust::Box< #holder_name >
-        })],
-        kind: CppFunctionKind::Function,
-        pass_obs_field: false,
-        qualification: None,
-    });
-    new_apis.push(Api::Function {
-        name: ApiName::new_in_root_namespace(wrapper_name),
-        name_for_gc: Some(sub.0.name.clone()),
-        analysis: constructor_wrapper,
-        fun: Box::new(fun.clone()),
-    })
-}
-
-// Work out if this constructor is simple enough that we can autogenerate
-// code to call it.
-fn determine_if_trivial(analysis: &FnAnalysis) -> bool {
-    let mut param_iterator = analysis.param_details.iter();
-    match param_iterator.next() {
-        None => false,
-        Some(pd) => pd.is_subclass_holder && param_iterator.next().is_none(),
+        is_trivial: analysis.param_details.is_empty(),
     }
 }

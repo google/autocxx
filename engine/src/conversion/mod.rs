@@ -19,6 +19,7 @@ mod codegen_rs;
 #[cfg(test)]
 mod conversion_tests;
 mod convert_error;
+mod doc_attr;
 mod error_reporter;
 mod parse;
 mod utilities;
@@ -142,8 +143,9 @@ impl<'a> BridgeConverter<'a> {
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
+                Self::dump_apis_with_deps("analyze fns", &analyzed_apis);
                 mark_types_abstract(self.config, &mut analyzed_apis);
-                Self::dump_apis_with_deps("main analyses", &analyzed_apis);
+                Self::dump_apis_with_deps("marking abstract", &analyzed_apis);
                 // Remove any APIs whose names are not compatible with cxx.
                 let analyzed_apis = check_names(analyzed_apis);
                 // During parsing or subsequent processing we might have encountered

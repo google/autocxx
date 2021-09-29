@@ -22,7 +22,6 @@ use crate::{
     conversion::{
         analysis::{
             fun::function_wrapper::CppFunctionKind,
-            has_attr,
             type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{ApiName, FuncToConvert, SubclassName},
@@ -40,8 +39,8 @@ use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
 use itertools::Itertools;
 use proc_macro2::Span;
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, FnArg, ForeignItemFn, Ident, LitStr, Pat,
-    ReturnType, Type, TypePtr, Visibility,
+    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
+    TypePtr, Visibility,
 };
 
 use crate::{
@@ -56,7 +55,10 @@ use self::{
     bridge_name_tracker::BridgeNameTracker,
     overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
-    subclass::{add_subclass_constructor, create_subclass_function},
+    subclass::{
+        create_subclass_constructor, create_subclass_constructor_wrapper,
+        create_subclass_fn_wrapper, create_subclass_function,
+    },
 };
 
 use super::{
@@ -115,7 +117,7 @@ pub(crate) struct FnAnalysis {
     pub(crate) deps: HashSet<QualifiedName>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct ArgumentAnalysis {
     pub(crate) conversion: TypeConversionPolicy,
     pub(crate) name: Pat,
@@ -124,7 +126,6 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) deps: HashSet<QualifiedName>,
     pub(crate) is_virtual: bool,
     pub(crate) requires_unsafe: bool,
-    pub(crate) is_subclass_holder: bool,
 }
 
 struct ReturnTypeAnalysis {
@@ -222,7 +223,7 @@ impl<'a> FnAnalyzer<'a> {
         ty: Box<Type>,
         ns: &Namespace,
         convert_ptrs_to_references: bool,
-    ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool, bool), ConvertError> {
+    ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool, Option<Ident>), ConvertError> {
         let annotated = self.type_converter.convert_boxed_type(
             ty,
             ns,
@@ -235,7 +236,7 @@ impl<'a> FnAnalyzer<'a> {
             annotated.ty,
             annotated.types_encountered,
             annotated.requires_unsafe,
-            annotated.is_subclass_holder,
+            annotated.subclass_holder,
         ))
     }
 
@@ -266,9 +267,9 @@ impl<'a> FnAnalyzer<'a> {
     fn analyze_foreign_fn_and_subclasses(
         &mut self,
         name: ApiName,
-        func_information: Box<FuncToConvert>,
+        fun: Box<FuncToConvert>,
     ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
-        let maybe_analysis_and_name = self.analyze_foreign_fn(name, func_information.clone())?;
+        let maybe_analysis_and_name = self.analyze_foreign_fn(name, fun.clone())?;
 
         let (analysis, name) = match maybe_analysis_and_name {
             None => return Ok(Box::new(std::iter::empty())),
@@ -281,13 +282,22 @@ impl<'a> FnAnalyzer<'a> {
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 for sub in self.subclasses_by_superclass(sup) {
-                    if !analysis.param_details.is_empty() {
-                        return Err(ConvertErrorWithContext(
-                            ConvertError::SuperclassConstructorsTooFancy(sup.clone()),
-                            None,
-                        ));
+                    // Add a constructor to the actual subclass definition in pure C++
+                    results.push(create_subclass_constructor(&sub, &analysis, sup));
+                    // And consider adding an API (in Rust/cxx/maybe C++) such that we
+                    // can call this from Rust.
+                    let (maybe_wrap, subclass_constructor_name) =
+                        create_subclass_constructor_wrapper(sub, &fun);
+                    let maybe_another_api =
+                        self.analyze_foreign_fn(subclass_constructor_name, maybe_wrap)?;
+                    if let Some((analysis, name)) = maybe_another_api {
+                        results.push(Api::Function {
+                            fun: fun.clone(),
+                            analysis,
+                            name,
+                            name_for_gc: None,
+                        });
                     }
-                    add_subclass_constructor(&sub, &mut results, &analysis, &func_information);
                 }
             }
             FnKind::Method(
@@ -302,33 +312,23 @@ impl<'a> FnAnalyzer<'a> {
                     // superclass's namespace is irrelevant. We generate
                     // all subclasses in the root namespace.
                     let super_fn_name =
-                        SubclassName::get_super_fn_name(sup.get_namespace(), &analysis.rust_name);
-                    let super_fn_name =
-                        QualifiedName::new(&Namespace::new(), super_fn_name.get_final_ident());
+                        SubclassName::get_super_fn_name(&Namespace::new(), &analysis.rust_name);
 
-                    let subclass_function = create_subclass_function(
+                    results.push(create_subclass_function(
                         &sub,
                         &analysis,
                         &name,
                         receiver_mutability,
                         sup,
                         &super_fn_name,
-                    );
-                    results.push(subclass_function);
+                    ));
 
-                    let mut item = func_information.item.clone();
-                    item.sig.ident = super_fn_name.get_final_ident();
-                    let self_ty = Some(sub.cpp());
-                    let maybe_wrap = Box::new(FuncToConvert {
-                        item,
-                        virtual_this_type: self_ty.clone(),
-                        self_ty,
-                    });
-                    let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
+                    let (maybe_wrap, super_fn_name) =
+                        create_subclass_fn_wrapper(sub, super_fn_name, &fun);
                     let maybe_another_api = self.analyze_foreign_fn(super_fn_name, maybe_wrap)?;
                     if let Some((analysis, name)) = maybe_another_api {
                         results.push(Api::Function {
-                            fun: func_information.clone(),
+                            fun: fun.clone(),
                             analysis,
                             name,
                             name_for_gc: None,
@@ -340,7 +340,7 @@ impl<'a> FnAnalyzer<'a> {
         }
 
         results.push(Api::Function {
-            fun: func_information,
+            fun,
             analysis,
             name,
             name_for_gc: None,
@@ -367,10 +367,9 @@ impl<'a> FnAnalyzer<'a> {
     fn analyze_foreign_fn(
         &mut self,
         name: ApiName,
-        func_information: Box<FuncToConvert>,
+        fun: Box<FuncToConvert>,
     ) -> Result<Option<(FnAnalysis, ApiName)>, ConvertErrorWithContext> {
-        let fun = &func_information.item;
-        let virtual_this = &func_information.virtual_this_type;
+        let virtual_this = &fun.virtual_this_type;
         let mut cpp_name = name.cpp_name.clone();
         let ns = name.name.get_namespace();
 
@@ -378,7 +377,7 @@ impl<'a> FnAnalyzer<'a> {
         // We're shortly going to plunge into analyzing the parameters,
         // and it would be nice to have some idea of the function name
         // for diagnostics whilst we do that.
-        let initial_rust_name = fun.sig.ident.to_string();
+        let initial_rust_name = fun.ident.to_string();
         if initial_rust_name.ends_with("_destructor") {
             return Ok(None);
         }
@@ -386,9 +385,7 @@ impl<'a> FnAnalyzer<'a> {
 
         // Now let's analyze all the parameters.
         // See if any have annotations which our fork of bindgen has craftily inserted...
-        let (reference_params, reference_return) = Self::get_reference_parameters_and_return(fun);
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
-            .sig
             .inputs
             .iter()
             .map(|i| {
@@ -397,7 +394,7 @@ impl<'a> FnAnalyzer<'a> {
                     ns,
                     diagnostic_display_name,
                     virtual_this.clone(),
-                    &reference_params,
+                    &fun.reference_args,
                 )
             })
             .partition(Result::is_ok);
@@ -451,7 +448,7 @@ impl<'a> FnAnalyzer<'a> {
             None => {
                 // Even if we can't find a 'self' parameter this could conceivably
                 // be a static method.
-                let self_ty = func_information.self_ty.clone();
+                let self_ty = fun.self_ty.clone();
                 (self_ty.is_some(), self_ty, None)
             }
             Some((self_ty, receiver_mutability)) => {
@@ -500,7 +497,7 @@ impl<'a> FnAnalyzer<'a> {
                 let receiver_mutability =
                     receiver_mutability.expect("Failed to find receiver details");
                 if param_details.iter().any(|pd| pd.is_virtual) {
-                    if has_attr(&fun.attrs, "bindgen_pure_virtual") {
+                    if fun.is_pure_virtual {
                         MethodKind::PureVirtual(receiver_mutability)
                     } else {
                         MethodKind::Virtual(receiver_mutability)
@@ -532,8 +529,7 @@ impl<'a> FnAnalyzer<'a> {
 
         // Skip private methods; but if we've a private constructor, keep
         // a note of it.
-        let cpp_private_or_protected = Self::is_private(&func_information.item);
-        if cpp_private_or_protected {
+        if fun.is_private {
             if let FnKind::Method(self_ty, MethodKind::Constructor) = &kind {
                 self.has_unrepresentable_constructors
                     .insert(self_ty.clone());
@@ -572,7 +568,7 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
         // Second, reject any functions handling types which we flake out on.
-        if has_attr(&fun.attrs, "bindgen_unused_template_param_in_arg_or_return") {
+        if fun.unused_template_param {
             return Err(contextualize_error(ConvertError::UnusedTemplateParam));
         }
 
@@ -580,7 +576,7 @@ impl<'a> FnAnalyzer<'a> {
             FnKind::Method(_, MethodKind::Static) => {}
             FnKind::Method(ref self_ty, _) => {
                 // Reject move constructors.
-                if Self::is_move_constructor(fun) {
+                if fun.is_move_constructor {
                     self.has_unrepresentable_constructors
                         .insert(self_ty.clone());
                     return Err(contextualize_error(
@@ -610,7 +606,7 @@ impl<'a> FnAnalyzer<'a> {
                 deps: std::iter::once(self_ty).cloned().collect(),
             }
         } else {
-            self.convert_return_type(&fun.sig.output, ns, reference_return)
+            self.convert_return_type(&fun.output, ns, fun.return_type_is_reference)
                 .map_err(contextualize_error)?
         };
         let mut deps = params_deps;
@@ -724,7 +720,7 @@ impl<'a> FnAnalyzer<'a> {
             None
         };
 
-        let vis = func_information.item.vis.clone();
+        let vis = fun.vis.clone();
 
         // Naming, part two.
         // Work out our final naming strategy.
@@ -846,10 +842,10 @@ impl<'a> FnAnalyzer<'a> {
                     }
                     _ => old_pat,
                 };
-                let (new_ty, deps, requires_unsafe, is_subclass_holder) =
+                let (new_ty, deps, requires_unsafe, subclass_holder) =
                     self.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
                 let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
-                let conversion = self.argument_conversion_details(&new_ty);
+                let conversion = self.argument_conversion_details(&new_ty, &subclass_holder);
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
                 (
@@ -862,7 +858,6 @@ impl<'a> FnAnalyzer<'a> {
                         deps,
                         is_virtual,
                         requires_unsafe,
-                        is_subclass_holder,
                     },
                 )
             }
@@ -870,7 +865,20 @@ impl<'a> FnAnalyzer<'a> {
         })
     }
 
-    fn argument_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
+    fn argument_conversion_details(
+        &self,
+        ty: &Type,
+        is_subclass_holder: &Option<Ident>,
+    ) -> TypeConversionPolicy {
+        if let Some(holder_id) = is_subclass_holder {
+            let subclass = SubclassName::from_holder_name(holder_id);
+            return TypeConversionPolicy::box_up_subclass_holder(
+                parse_quote! {
+                    rust::Box<#holder_id>
+                },
+                subclass,
+            );
+        }
         match ty {
             Type::Path(p) => {
                 let tn = QualifiedName::from_type_path(p);
@@ -932,49 +940,6 @@ impl<'a> FnAnalyzer<'a> {
         Ok(result)
     }
 
-    fn is_private(fun: &ForeignItemFn) -> bool {
-        fun.attrs
-            .iter()
-            .any(|a| a.path.is_ident("bindgen_visibility_private"))
-    }
-
-    fn get_bindgen_special_member_annotation(fun: &ForeignItemFn) -> Option<String> {
-        fun.attrs
-            .iter()
-            .filter_map(|a| {
-                if a.path.is_ident("bindgen_special_member") {
-                    let r: Result<LitStr, syn::Error> = a.parse_args();
-                    match r {
-                        Ok(ls) => Some(ls.value()),
-                        Err(_) => None,
-                    }
-                } else {
-                    None
-                }
-            })
-            .next()
-    }
-
-    fn is_move_constructor(fun: &ForeignItemFn) -> bool {
-        Self::get_bindgen_special_member_annotation(fun).map_or(false, |val| val == "move_ctor")
-    }
-
-    fn get_reference_parameters_and_return(fun: &ForeignItemFn) -> (HashSet<Ident>, bool) {
-        let mut ref_params = HashSet::new();
-        let mut ref_return = false;
-        for a in &fun.attrs {
-            if a.path.is_ident("bindgen_ret_type_reference") {
-                ref_return = true;
-            } else if a.path.is_ident("bindgen_arg_type_reference") {
-                let r: Result<Ident, syn::Error> = a.parse_args();
-                if let Ok(ls) = r {
-                    ref_params.insert(ls);
-                }
-            }
-        }
-        (ref_params, ref_return)
-    }
-
     /// If a type has explicit constructors, bindgen will generate corresponding
     /// constructor functions, which we'll have already converted to make_unique methods.
     /// For types with no constructors, we synthesize one here.
@@ -1009,22 +974,28 @@ impl<'a> FnAnalyzer<'a> {
         }
         // We are left with those types where we should synthesize a constructor.
         for self_ty in types_without_constructors {
-            let id = self_ty.get_final_ident();
-            let id_str = self_ty.get_final_item().to_string();
-            let fake_api_name = ApiName::new(self_ty.get_namespace(), id.clone());
+            let ident = self_ty.get_final_ident();
+            let fake_api_name = ApiName::new(self_ty.get_namespace(), ident.clone());
             let ns = self_ty.get_namespace().clone();
             let path = self_ty.to_type_path();
             let items = report_any_error(&ns, apis, || {
                 self.analyze_foreign_fn_and_subclasses(
                     fake_api_name,
                     Box::new(FuncToConvert {
-                        item: parse_quote! {
-                            #[bindgen_original_name(#id_str)]
-                            #[bindgen_special_member("default_ctor")]
-                            pub fn #id(this: *mut #path);
-                        },
                         virtual_this_type: Some(self_ty.clone()),
                         self_ty: Some(self_ty),
+                        ident,
+                        doc_attr: None,
+                        inputs: parse_quote! { this: *mut #path },
+                        output: ReturnType::Default,
+                        vis: parse_quote! { pub },
+                        is_pure_virtual: false,
+                        is_private: false,
+                        is_move_constructor: false,
+                        unused_template_param: false,
+                        return_type_is_reference: false,
+                        reference_args: HashSet::new(),
+                        original_name: None,
                     }),
                 )
             });

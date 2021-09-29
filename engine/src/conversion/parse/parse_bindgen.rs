@@ -47,7 +47,7 @@ pub(crate) struct ParseBindgen<'a> {
     latest_virtual_this_type: Option<QualifiedName>,
 }
 
-pub(crate) fn api_name(ns: &Namespace, id: Ident, attrs: &[Attribute]) -> ApiName {
+fn api_name(ns: &Namespace, id: Ident, attrs: &[Attribute]) -> ApiName {
     ApiName {
         name: QualifiedName::new(ns, id),
         cpp_name: get_bindgen_original_name_annotation(attrs),
@@ -68,7 +68,7 @@ pub(crate) fn api_name_qualified(
     }
 }
 
-fn get_bindgen_original_name_annotation(attrs: &[Attribute]) -> Option<String> {
+pub(super) fn get_bindgen_original_name_annotation(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
         .filter_map(|a| {

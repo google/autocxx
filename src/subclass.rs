@@ -35,8 +35,8 @@ pub use autocxx_macro::CppSubclassSelfOwnedDefault;
 /// ```
 pub mod prelude {
     pub use super::{
-        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault, CppSubclassSelfOwned,
-        CppSubclassSelfOwnedDefault,
+        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault,
+        CppSubclassRustPeerHolder, CppSubclassSelfOwned, CppSubclassSelfOwnedDefault,
     };
 }
 
@@ -230,21 +230,11 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 ///   will give the option to use `Arc` and `Mutex` internally rather than
 ///   `Rc` and `RefCell`, solving this problem.
 ///
-/// * *Complex or multiple constructors*. At present, this code doesn't work
-///   if the superclass has anything other than a single, zero-argument,
-///   constructor. This is
-///   [this issue](https://github.com/google/autocxx/issues/596) and is just a matter of doing
-///   a bit of work to plumb this together. (See [`CppPeerConstructor`] for
-///   how this will work when it's done.)
-///
 /// * *Protected methods.* We don't do anything clever here - they're public.
 ///
 /// * *Non-trivial class hierarchies*. We don't yet consider virtual methods
 ///   on base classes of base classes. This is a temporary limitation,
 ///   [see this issue](https://github.com/google/autocxx/issues/610).
-///
-/// * *Namespaces.* Superclasses in namespaces are not yet supported:
-///   [see this issue](https://github.com/google/autocxx/issues/599).
 pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> {
     /// Return the field which holds the C++ peer object. This is normally
     /// implemented by the #[`is_subclass`] macro, but you're welcome to

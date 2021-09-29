@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
+
 use crate::types::{make_ident, Namespace, QualifiedName};
 use syn::{
-    punctuated::Punctuated, token::Comma, FnArg, ForeignItemFn, Ident, ImplItem, ItemConst,
-    ItemEnum, ItemStruct, ItemType, ItemUse, ReturnType, Type,
+    punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ImplItem, ItemConst, ItemEnum,
+    ItemStruct, ItemType, ItemUse, ReturnType, Type, Visibility,
 };
 
 use super::{
@@ -49,11 +51,25 @@ pub(crate) struct ImplBlockDetails {
     pub(crate) item: ImplItem,
     pub(crate) ty: Ident,
 }
-/// A ForeignItemFn with a little bit of context about the
-/// type which is most likely to be 'this'
+
+/// A C++ function for which we need to generate bindings, but haven't
+/// yet analyzed in depth. This is little more than a `ForeignItemFn`
+/// broken down into its constituent parts, plus some metadata from the
+/// surrounding bindgen parsing context.
 #[derive(Clone)]
 pub(crate) struct FuncToConvert {
-    pub(crate) item: ForeignItemFn,
+    pub(crate) ident: Ident,
+    pub(crate) doc_attr: Option<Attribute>,
+    pub(crate) inputs: Punctuated<FnArg, Comma>,
+    pub(crate) output: ReturnType,
+    pub(crate) vis: Visibility,
+    pub(crate) is_pure_virtual: bool,
+    pub(crate) is_private: bool,
+    pub(crate) is_move_constructor: bool,
+    pub(crate) unused_template_param: bool,
+    pub(crate) return_type_is_reference: bool,
+    pub(crate) reference_args: HashSet<Ident>,
+    pub(crate) original_name: Option<String>,
     pub(crate) virtual_this_type: Option<QualifiedName>,
     pub(crate) self_ty: Option<QualifiedName>,
 }
@@ -83,7 +99,7 @@ pub(crate) enum TypedefKind {
 
 /// Name information for an API. This includes the name by
 /// which we know it in Rust, and its C++ name, which may differ.
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ApiName {
     pub(crate) name: QualifiedName,
     pub(crate) cpp_name: Option<String>,
@@ -92,6 +108,13 @@ pub(crate) struct ApiName {
 impl ApiName {
     pub(crate) fn new(ns: &Namespace, id: Ident) -> Self {
         Self::new_from_qualified_name(QualifiedName::new(ns, id))
+    }
+
+    pub(crate) fn new_with_cpp_name(ns: &Namespace, id: Ident, cpp_name: Option<String>) -> Self {
+        Self {
+            name: QualifiedName::new(ns, id),
+            cpp_name,
+        }
     }
 
     pub(crate) fn new_from_qualified_name(name: QualifiedName) -> Self {
@@ -106,16 +129,29 @@ impl ApiName {
     }
 }
 
+impl std::fmt::Debug for ApiName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)?;
+        if let Some(cpp_name) = &self.cpp_name {
+            write!(f, " (cpp={})", cpp_name)?;
+        }
+        Ok(())
+    }
+}
+
 /// A name representing a subclass.
 /// This is a simple newtype wrapper which exists such that
 /// we can consistently generate the names of the various subsidiary
 /// types which are required both in C++ and Rust codegen.
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub(crate) struct SubclassName(pub(crate) ApiName);
 
 impl SubclassName {
     pub(crate) fn new(id: Ident) -> Self {
         Self(ApiName::new_in_root_namespace(id))
+    }
+    pub(crate) fn from_holder_name(id: &Ident) -> Self {
+        Self::new(make_ident(id.to_string().strip_suffix("Holder").unwrap()))
     }
     pub(crate) fn id(&self) -> Ident {
         self.0.name.get_final_ident()
@@ -303,11 +339,24 @@ impl<T: AnalysisPhase> Api<T> {
             .as_deref()
             .unwrap_or_else(|| self.name().get_final_item())
     }
+
+    pub(crate) fn valid_types(&self) -> Box<dyn Iterator<Item = QualifiedName>> {
+        match self {
+            Api::Subclass { name, .. } => Box::new(
+                vec![
+                    self.name().clone(),
+                    QualifiedName::new(&Namespace::new(), name.holder()),
+                ]
+                .into_iter(),
+            ),
+            _ => Box::new(std::iter::once(self.name().clone())),
+        }
+    }
 }
 
 impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} (kind={})", self.name().to_cpp_name(), self)
+        write!(f, "{:?} (kind={})", self.name_info(), self)
     }
 }
 

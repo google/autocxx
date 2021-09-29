@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod doc_attr;
 mod fun_codegen;
 mod function_wrapper_rs;
 mod impl_item_creator;
@@ -75,7 +74,7 @@ enum Use {
     /// 'use' directive points to bindgen
     UsedFromBindgen,
     /// 'use' a specific name from bindgen.
-    UseSpecificNameFromBindgen(Ident),
+    SpecificNameFromBindgen(Ident),
     /// Some kind of custom item
     Custom(Box<Item>),
 }
@@ -282,7 +281,7 @@ impl<'a> RsCodeGenerator<'a> {
                 match method_kind {
                     MethodKind::Virtual(receiver_mutability)
                     | MethodKind::PureVirtual(receiver_mutability) => {
-                        let list = results.get_mut(&receiver);
+                        let list = results.get_mut(receiver);
                         if let Some(list) = list {
                             let param_names =
                                 param_details.iter().map(|pd| pd.name.clone()).collect();
@@ -352,7 +351,7 @@ impl<'a> RsCodeGenerator<'a> {
                     }
                     Use::UsedFromCxxBridge => Self::generate_cxx_use_stmt(name, None),
                     Use::UsedFromBindgen => Self::generate_bindgen_use_stmt(name),
-                    Use::UseSpecificNameFromBindgen(id) => {
+                    Use::SpecificNameFromBindgen(id) => {
                         let name = QualifiedName::new(name.get_namespace(), id.clone());
                         Self::generate_bindgen_use_stmt(&name)
                     }
@@ -849,7 +848,7 @@ impl<'a> RsCodeGenerator<'a> {
                     #(#mains)*
                 }
             });
-            materializations.push(Use::UseSpecificNameFromBindgen(methods_name));
+            materializations.push(Use::SpecificNameFromBindgen(methods_name));
         }
         RsCodegenResult {
             global_items,
@@ -1023,7 +1022,7 @@ impl<'a> RsCodeGenerator<'a> {
 }
 
 fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
-    let (complex_constructors, simple_constructors): (Vec<_>, Vec<_>) = apis
+    let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .map(|api| match api {
             Api::RustSubclassConstructor {

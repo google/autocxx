@@ -6920,7 +6920,6 @@ fn test_pv_subclass_types() {
     );
 }
 
-#[ignore] // https://github.com/google/autocxx/issues/596
 #[test]
 fn test_pv_subclass_constructors() {
     let hdr = indoc! {"
@@ -6963,14 +6962,19 @@ fn test_pv_subclass_constructors() {
         &[],
         None,
         Some(quote! {
-            use autocxx::subclass::CppSubclass;
-            #[autocxx::subclass::is_subclass]
+            use autocxx::subclass::prelude::*;
+            #[is_subclass]
             #[derive(Default)]
             pub struct MyTestObserver {
             }
             impl ffi::TestObserver_methods for MyTestObserver {
                 fn call(&self) {
-                    self.peer().call()
+                    self.peer().call_super()
+                }
+            }
+            impl CppPeerConstructor<ffi::MyTestObserverCpp> for MyTestObserver {
+                fn make_peer(&mut self, peer_holder: CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<ffi::MyTestObserverCpp> {
+                    ffi::MyTestObserverCpp::make_unique1(peer_holder, 3u8)
                 }
             }
         }),
