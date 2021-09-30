@@ -50,7 +50,7 @@ pub(super) fn subclasses_by_superclass(
 pub(super) fn create_subclass_fn_wrapper(
     sub: SubclassName,
     super_fn_name: QualifiedName,
-    fun: &Box<FuncToConvert>,
+    fun: &FuncToConvert,
 ) -> (Box<FuncToConvert>, ApiName) {
     let self_ty = Some(sub.cpp());
     let maybe_wrap = Box::new(FuncToConvert {
@@ -129,7 +129,7 @@ pub(super) fn create_subclass_function(
 
 pub(super) fn create_subclass_constructor_wrapper(
     sub: SubclassName,
-    fun: &Box<FuncToConvert>,
+    fun: &FuncToConvert,
 ) -> (Box<FuncToConvert>, ApiName) {
     let subclass_constructor_name = make_ident(format!(
         "{}_{}",
