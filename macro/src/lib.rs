@@ -18,7 +18,7 @@ use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
 use syn::parse::Parser;
-use syn::{parse_macro_input, parse_quote, Fields, ItemStruct};
+use syn::{parse_macro_input, Fields, ItemStruct};
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
@@ -71,33 +71,6 @@ pub fn is_subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         #self_owned_bit
-    };
-    toks.into()
-}
-
-/// Derive macro which will add constructors which initialize all members
-/// as default.
-#[proc_macro_error]
-#[proc_macro_derive(CppSubclassDefault)]
-pub fn cpp_subclass_default_derive(input: TokenStream) -> TokenStream {
-    derive_default(input, parse_quote! { CppSubclassDefault })
-}
-
-/// Derive macro which will add constructors which initialize all members
-/// as default, for a self-owned subclass.
-#[proc_macro_error]
-#[proc_macro_derive(CppSubclassSelfOwnedDefault)]
-pub fn cpp_subclass_default_derive_self_owned(input: TokenStream) -> TokenStream {
-    derive_default(input, parse_quote! { CppSubclassSelfOwnedDefault })
-}
-
-fn derive_default(input: TokenStream, trt: Ident) -> TokenStream {
-    let s: ItemStruct =
-        syn::parse(input).unwrap_or_else(|_| abort!(Span::call_site(), "Expected a struct"));
-    let id = s.ident;
-    let cpp_ident = Ident::new(&format!("{}Cpp", id.to_string()), Span::call_site());
-    let toks = quote! {
-        impl autocxx::subclass::#trt<ffi::#cpp_ident> for #id {}
     };
     toks.into()
 }

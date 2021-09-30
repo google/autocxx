@@ -24,8 +24,6 @@ use std::{
 use cxx::{memory::UniquePtrTarget, UniquePtr};
 
 pub use autocxx_macro::is_subclass;
-pub use autocxx_macro::CppSubclassDefault;
-pub use autocxx_macro::CppSubclassSelfOwnedDefault;
 
 /// A prelude containing all the traits and macros required to create
 /// Rust subclasses of C++ classes. It's recommended that you:
@@ -313,12 +311,22 @@ pub trait CppSubclassSelfOwned<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer
 pub trait CppSubclassDefault<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer> + Default {
     /// Create a Rust-owned instance of this subclass, initializing with default values. See
     /// [`CppSubclass`] for more details of the ownership models available.
+    fn default_rust_owned() -> Rc<RefCell<Self>>;
+
+    /// Create a C++-owned instance of this subclass, initializing with default values. See
+    /// [`CppSubclass`] for more details of the ownership models available.
+    fn default_cpp_owned() -> UniquePtr<CppPeer>;
+}
+
+impl<T, CppPeer> CppSubclassDefault<CppPeer> for T
+where
+    T: CppSubclass<CppPeer> + Default,
+    CppPeer: CppSubclassCppPeer,
+{
     fn default_rust_owned() -> Rc<RefCell<Self>> {
         Self::new_rust_owned(Self::default())
     }
 
-    /// Create a C++-owned instance of this subclass, initializing with default values. See
-    /// [`CppSubclass`] for more details of the ownership models available.
     fn default_cpp_owned() -> UniquePtr<CppPeer> {
         Self::new_cpp_owned(Self::default())
     }
@@ -331,6 +339,14 @@ pub trait CppSubclassSelfOwnedDefault<CppPeer: CppSubclassCppPeer>:
 {
     /// Create a self-owned instance of this subclass, initializing with default values. See
     /// [`CppSubclass`] for more details of the ownership models available.
+    fn default_self_owned() -> Rc<RefCell<Self>>;
+}
+
+impl<T, CppPeer> CppSubclassSelfOwnedDefault<CppPeer> for T
+where
+    T: CppSubclassSelfOwned<CppPeer> + Default,
+    CppPeer: CppSubclassCppPeer,
+{
     fn default_self_owned() -> Rc<RefCell<Self>> {
         Self::new_self_owned(Self::default())
     }

@@ -41,7 +41,7 @@ include_cpp! {
 // is instantiated.
 
 #[is_subclass(superclass("MessageDisplayer"))]
-#[derive(CppSubclassDefault, Default)]
+#[derive(Default)]
 pub struct UwuDisplayer {}
 
 impl ffi::MessageDisplayer_methods for UwuDisplayer {
