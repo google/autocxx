@@ -6272,7 +6272,7 @@ fn test_pv_subclass_derive_defaults() {
         None,
         Some(quote! {
             #[autocxx::subclass::is_subclass]
-            #[derive(Default,autocxx::subclass::CppSubclassDefault)]
+            #[derive(Default)]
             pub struct MyObserver {
                 a: u32
             }
