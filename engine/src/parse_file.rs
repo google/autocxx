@@ -191,7 +191,10 @@ enum Segment {
 }
 
 pub trait CppBuildable {
-    fn generate_h_and_cxx(&self) -> Result<GeneratedCpp, cxx_gen::Error>;
+    fn generate_h_and_cxx(
+        &self,
+        suppress_system_headers: bool,
+    ) -> Result<GeneratedCpp, cxx_gen::Error>;
 }
 
 impl ParsedFile {
@@ -234,6 +237,7 @@ impl ParsedFile {
         autocxx_inc: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
+        suppress_system_headers: bool,
     ) -> Result<(), ParseError> {
         let mut mods_found = HashSet::new();
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
@@ -251,7 +255,12 @@ impl ParsedFile {
                 return Err(ParseError::ConflictingModNames);
             }
             include_cpp
-                .generate(autocxx_inc.clone(), extra_clang_args, dep_recorder)
+                .generate(
+                    autocxx_inc.clone(),
+                    extra_clang_args,
+                    dep_recorder,
+                    suppress_system_headers,
+                )
                 .map_err(ParseError::AutocxxCodegenError)?
         }
         Ok(())
