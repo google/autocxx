@@ -482,23 +482,24 @@ static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
 
 pub fn do_cxx_cpp_generation(
     rs: TokenStream2,
-    suppress_system_haeaders: bool,
+    suppress_system_headers: bool,
 ) -> Result<CppFilePair, cxx_gen::Error> {
     let opt = cxx_gen::Opt::default();
     let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
     Ok(CppFilePair {
-        header: strip_system_headers(cxx_generated.header, suppress_system_haeaders),
+        header: strip_system_headers(cxx_generated.header, suppress_system_headers),
         header_name: "cxxgen.h".into(),
         implementation: Some(strip_system_headers(
             cxx_generated.implementation,
-            suppress_system_haeaders,
+            suppress_system_headers,
         )),
     })
 }
 
 pub(crate) fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool) -> Vec<u8> {
     if suppress_system_headers {
-        crate::HEADER
+        std::str::from_utf8(&input)
+            .unwrap()
             .lines()
             .filter(|l| !l.starts_with("#include <"))
             .join("\n")
