@@ -123,11 +123,17 @@ pub(crate) fn run_test(
     .unwrap()
 }
 
+// A trait for objects which can check the output of the code creation
+// process.
+pub(crate) trait CodeCheckerFns {
+    fn check_rust(&self, rs: syn::File) -> Result<(), TestError>;
+}
+
 // A function applied to the resultant generated Rust code
 // which can be used to inspect that code.
-pub(crate) type CodeChecker = Box<dyn FnOnce(syn::File) -> Result<(), TestError>>;
+pub(crate) type CodeChecker = Box<dyn CodeCheckerFns>;
 
-// A function to modify Builders
+// A trait for objects which can modify builders for testing purposes.
 pub(crate) trait BuilderModifierFns {
     fn modify_autocxx_builder(
         &self,
@@ -339,7 +345,7 @@ where
             .map_err(TestError::RsFileRead)?;
 
         let ast = syn::parse_file(&content).map_err(TestError::RsFileParse)?;
-        rust_code_checker(ast)?;
+        rust_code_checker.check_rust(ast)?;
     }
 
     let target = rust_info::get().target_triple.unwrap();
@@ -412,17 +418,20 @@ impl BuilderModifierFns for ClangArgAdder {
 /// Generates a closure which can be used to ensure that the given symbol
 /// is mentioned in the output and has documentation attached.
 /// The idea is that this is what we do in cases where we can't generate code properly.
-pub(crate) fn make_error_finder(
-    error_symbol: &str,
-) -> Box<dyn FnOnce(syn::File) -> Result<(), TestError>> {
-    let error_symbol = error_symbol.to_string();
-    Box::new(move |f| {
-        let ffi_items = find_ffi_items(f)?;
+pub(crate) fn make_error_finder(error_symbol: &'static str) -> CodeChecker {
+    Box::new(ErrorFinder(error_symbol))
+}
+
+struct ErrorFinder(&'static str);
+
+impl CodeCheckerFns for ErrorFinder {
+    fn check_rust(&self, rs: syn::File) -> Result<(), TestError> {
+        let ffi_items = find_ffi_items(rs)?;
         // Ensure there's some kind of struct entry for this symbol
         let error_item = ffi_items
             .into_iter()
             .filter_map(|i| match i {
-                Item::Struct(its) if its.ident == error_symbol => Some(its),
+                Item::Struct(its) if its.ident == self.0 => Some(its),
                 _ => None,
             })
             .next()
@@ -434,7 +443,7 @@ pub(crate) fn make_error_finder(
             .find(|a| a.path.get_ident().filter(|p| *p == "doc").is_some())
             .ok_or(TestError::RsCodeExaminationFail)?;
         Ok(())
-    })
+    }
 }
 
 fn find_ffi_items(f: syn::File) -> Result<Vec<Item>, TestError> {
@@ -451,19 +460,23 @@ fn find_ffi_items(f: syn::File) -> Result<Vec<Item>, TestError> {
         .1)
 }
 
-/// Returns a closure which simply hunts for a given string in the results
-pub(crate) fn make_string_finder(
-    error_texts: Vec<&str>,
-) -> Box<dyn FnOnce(syn::File) -> Result<(), TestError> + '_> {
-    Box::new(|f| {
+struct StringFinder(Vec<&'static str>);
+
+impl CodeCheckerFns for StringFinder {
+    fn check_rust(&self, rs: syn::File) -> Result<(), TestError> {
         let mut ts = TokenStream::new();
-        f.to_tokens(&mut ts);
+        rs.to_tokens(&mut ts);
         let toks = ts.to_string();
-        for msg in error_texts {
+        for msg in &self.0 {
             if !toks.contains(msg) {
                 return Err(TestError::RsCodeExaminationFail);
             };
         }
         Ok(())
-    })
+    }
+}
+
+/// Returns a closure which simply hunts for a given string in the results
+pub(crate) fn make_string_finder(error_texts: Vec<&'static str>) -> CodeChecker {
+    Box::new(StringFinder(error_texts))
 }
