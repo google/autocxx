@@ -55,7 +55,9 @@ impl Display for BuilderError {
 
 pub type BuilderBuild = cc::Build;
 
-pub struct BuilderSuccess(pub BuilderBuild, pub Vec<PathBuf>);
+/// For test purposes only, a [`cc::Build`] and lists of Rust and C++
+/// files generated.
+pub struct BuilderSuccess(pub BuilderBuild, pub Vec<PathBuf>, pub Vec<PathBuf>);
 
 /// Results of a build.
 pub type BuilderResult = Result<BuilderSuccess, BuilderError>;
@@ -200,6 +202,7 @@ impl<CTX: BuilderContext> Builder<CTX> {
         let mut builder = cc::Build::new();
         builder.cpp(true);
         let mut generated_rs = Vec::new();
+        let mut generated_cpp = Vec::new();
         builder.includes(parsed_file.include_dirs());
         for include_cpp in parsed_file.get_cpp_buildables() {
             let generated_code = include_cpp
@@ -210,9 +213,11 @@ impl<CTX: BuilderContext> Builder<CTX> {
                 counter += 1;
                 if let Some(implementation) = &filepair.implementation {
                     let gen_cxx_path = write_to_file(&cxxdir, &fname, implementation)?;
-                    builder.file(gen_cxx_path);
+                    builder.file(&gen_cxx_path);
+                    generated_cpp.push(gen_cxx_path);
                 }
                 write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
+                generated_cpp.push(incdir.join(filepair.header_name));
             }
         }
 
@@ -227,7 +232,7 @@ impl<CTX: BuilderContext> Builder<CTX> {
         if counter == 0 {
             Err(BuilderError::NoIncludeCxxMacrosFound)
         } else {
-            Ok(BuilderSuccess(builder, generated_rs))
+            Ok(BuilderSuccess(builder, generated_rs, generated_cpp))
         }
     }
 

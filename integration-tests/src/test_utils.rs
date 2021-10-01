@@ -14,7 +14,7 @@
 
 use std::{
     fs::File,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     panic::RefUnwindSafe,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -126,7 +126,15 @@ pub(crate) fn run_test(
 // A trait for objects which can check the output of the code creation
 // process.
 pub(crate) trait CodeCheckerFns {
-    fn check_rust(&self, rs: syn::File) -> Result<(), TestError>;
+    fn check_rust(&self, _rs: syn::File) -> Result<(), TestError> {
+        Ok(())
+    }
+    fn check_cpp(&self, _cpp: &[PathBuf]) -> Result<(), TestError> {
+        Ok(())
+    }
+    fn skip_build(&self) -> bool {
+        false
+    }
 }
 
 // A function applied to the resultant generated Rust code
@@ -139,7 +147,9 @@ pub(crate) trait BuilderModifierFns {
         &self,
         builder: Builder<TestBuilderContext>,
     ) -> Builder<TestBuilderContext>;
-    fn modify_cc_builder<'a>(&self, builder: &'a mut cc::Build) -> &'a mut cc::Build;
+    fn modify_cc_builder<'a>(&self, builder: &'a mut cc::Build) -> &'a mut cc::Build {
+        builder
+    }
 }
 
 pub(crate) type BuilderModifier = Box<dyn BuilderModifierFns>;
@@ -218,6 +228,7 @@ pub(crate) enum TestError {
     RsFileRead(std::io::Error),
     RsFileParse(syn::Error),
     RsCodeExaminationFail,
+    CppCodeExaminationFail,
 }
 
 pub(crate) fn directives_from_lists(
@@ -337,7 +348,7 @@ where
     let mut b = build_results.0;
     let generated_rs_files = build_results.1;
 
-    if let Some(rust_code_checker) = rust_code_checker {
+    if let Some(code_checker) = &rust_code_checker {
         let mut file = File::open(generated_rs_files.get(0).ok_or(TestError::NoRs)?)
             .map_err(TestError::RsFileOpen)?;
         let mut content = String::new();
@@ -345,7 +356,11 @@ where
             .map_err(TestError::RsFileRead)?;
 
         let ast = syn::parse_file(&content).map_err(TestError::RsFileParse)?;
-        rust_code_checker.check_rust(ast)?;
+        code_checker.check_rust(ast)?;
+        code_checker.check_cpp(&build_results.2)?;
+        if code_checker.skip_build() {
+            return Ok(());
+        }
     }
 
     let target = rust_info::get().target_triple.unwrap();
@@ -476,7 +491,39 @@ impl CodeCheckerFns for StringFinder {
     }
 }
 
-/// Returns a closure which simply hunts for a given string in the results
+/// Returns a code checker which simply hunts for a given string in the results
 pub(crate) fn make_string_finder(error_texts: Vec<&'static str>) -> CodeChecker {
     Box::new(StringFinder(error_texts))
+}
+
+pub(crate) struct SetSuppressSystemHeaders;
+
+impl BuilderModifierFns for SetSuppressSystemHeaders {
+    fn modify_autocxx_builder(
+        &self,
+        builder: Builder<TestBuilderContext>,
+    ) -> Builder<TestBuilderContext> {
+        builder.suppress_system_headers(true)
+    }
+}
+
+pub(crate) struct NoSystemHeadersChecker;
+
+impl CodeCheckerFns for NoSystemHeadersChecker {
+    fn check_cpp(&self, cpp: &[PathBuf]) -> Result<(), TestError> {
+        for filename in cpp {
+            let file = File::open(filename).unwrap();
+            if BufReader::new(file)
+                .lines()
+                .find(|l| l.as_ref().unwrap().starts_with("#include <"))
+                .is_some()
+            {
+                return Err(TestError::CppCodeExaminationFail);
+            }
+        }
+        Ok(())
+    }
+    fn skip_build(&self) -> bool {
+        true
+    }
 }

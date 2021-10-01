@@ -15,6 +15,7 @@
 use crate::test_utils::{
     directives_from_lists, do_run_test_manual, make_clang_arg_adder, make_error_finder,
     make_string_finder, run_test, run_test_ex, run_test_expect_fail, run_test_expect_fail_ex,
+    NoSystemHeadersChecker, SetSuppressSystemHeaders,
 };
 use indoc::indoc;
 use proc_macro2::Span;
@@ -6659,6 +6660,25 @@ fn test_no_constructor_pv() {
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_suppress_system_includes() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    inline void a() {};
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! { generate("a")},
+        Some(Box::new(SetSuppressSystemHeaders)),
+        Some(Box::new(NoSystemHeadersChecker)),
+        None,
+    );
 }
 
 // Yet to test:
