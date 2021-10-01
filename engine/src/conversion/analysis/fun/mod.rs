@@ -64,6 +64,7 @@ use self::{
 use super::{
     pod::{PodAnalysis, PodPhase},
     tdef::TypedefAnalysis,
+    type_converter::Annotated,
 };
 
 #[derive(Clone, Debug)]
@@ -223,21 +224,13 @@ impl<'a> FnAnalyzer<'a> {
         ty: Box<Type>,
         ns: &Namespace,
         convert_ptrs_to_references: bool,
-    ) -> Result<(Box<Type>, HashSet<QualifiedName>, bool, Option<Ident>), ConvertError> {
-        let annotated = self.type_converter.convert_boxed_type(
-            ty,
-            ns,
-            &TypeConversionContext::CxxOuterType {
-                convert_ptrs_to_references,
-            },
-        )?;
-        self.extra_apis.extend(annotated.extra_apis);
-        Ok((
-            annotated.ty,
-            annotated.types_encountered,
-            annotated.requires_unsafe,
-            annotated.subclass_holder,
-        ))
+    ) -> Result<Annotated<Box<Type>>, ConvertError> {
+        let ctx = TypeConversionContext::CxxOuterType {
+            convert_ptrs_to_references,
+        };
+        let mut annotated = self.type_converter.convert_boxed_type(ty, ns, &ctx)?;
+        self.extra_apis.append(&mut annotated.extra_apis);
+        Ok(annotated)
     }
 
     fn get_cxx_bridge_name(
@@ -842,8 +835,9 @@ impl<'a> FnAnalyzer<'a> {
                     }
                     _ => old_pat,
                 };
-                let (new_ty, deps, requires_unsafe, subclass_holder) =
-                    self.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
+                let annotated_type = self.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
+                let new_ty = annotated_type.ty;
+                let subclass_holder = annotated_type.subclass_holder;
                 let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
                 let conversion = self.argument_conversion_details(&new_ty, &subclass_holder);
                 pt.pat = Box::new(new_pat.clone());
@@ -855,9 +849,9 @@ impl<'a> FnAnalyzer<'a> {
                         name: new_pat,
                         conversion,
                         was_reference,
-                        deps,
+                        deps: annotated_type.types_encountered,
                         is_virtual,
-                        requires_unsafe,
+                        requires_unsafe: annotated_type.requires_unsafe,
                     },
                 )
             }
@@ -925,15 +919,16 @@ impl<'a> FnAnalyzer<'a> {
             },
             ReturnType::Type(rarrow, boxed_type) => {
                 // TODO remove the below clone
-                let (boxed_type, deps, ..) =
+                let annotated_type =
                     self.convert_boxed_type(boxed_type.clone(), ns, convert_ptr_to_reference)?;
+                let boxed_type = annotated_type.ty;
                 let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
                 let conversion = self.return_type_conversion_details(boxed_type.as_ref());
                 ReturnTypeAnalysis {
                     rt: ReturnType::Type(*rarrow, boxed_type),
                     conversion: Some(conversion),
                     was_reference,
-                    deps,
+                    deps: annotated_type.types_encountered,
                 }
             }
         };
