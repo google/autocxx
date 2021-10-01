@@ -149,7 +149,7 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
             return Err(ParseError::DiscoveredRustItemsWhenNotInAutoDiscover);
         }
     }
-    if !extra_superclasses.is_empty() || !discoveries.is_empty() {
+    if !extra_superclasses.is_empty() || (auto_allowlist && !discoveries.is_empty()) {
         let mut autocxx_seg_iterator = results.iter_mut().filter_map(|seg| match seg {
             Segment::Autocxx(engine) => Some(engine),
             _ => None,
