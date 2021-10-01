@@ -29,6 +29,7 @@ use syn::{Item, Token};
 use tempfile::{tempdir, TempDir};
 use test_env_log::test;
 
+use crate::Builder;
 use crate::BuilderContext;
 
 const KEEP_TEMPDIRS: bool = false;
@@ -118,10 +119,8 @@ fn run_test(
         cxx_code,
         header_code,
         rust_code,
-        generate,
-        generate_pods,
+        directives_from_lists(generate, generate_pods, None),
         None,
-        &[],
         None,
         None,
     )
@@ -132,42 +131,17 @@ fn run_test(
 // which can be used to inspect that code.
 type RustCodeChecker = Box<dyn FnOnce(syn::File) -> Result<(), TestError>>;
 
+// A function to modify Builders
+type BuilderModifier = Box<dyn FnOnce(Builder<TestBuilderContext>) -> Builder<TestBuilderContext>>;
+
 /// A positive test, we expect to pass.
 #[allow(clippy::too_many_arguments)] // least typing for each test
 fn run_test_ex(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-    extra_directives: Option<TokenStream>,
-    extra_clang_args: &[&str],
-    rust_code_checker: Option<RustCodeChecker>,
-) {
-    do_run_test(
-        cxx_code,
-        header_code,
-        rust_code,
-        generate,
-        generate_pods,
-        extra_directives,
-        extra_clang_args,
-        rust_code_checker,
-        None,
-    )
-    .unwrap()
-}
-
-/// A positive test, we expect to pass.
-#[allow(clippy::too_many_arguments)] // least typing for each test
-fn run_test_ex2(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-    extra_directives: Option<TokenStream>,
-    extra_clang_args: &[&str],
+    directives: TokenStream,
+    builder_modifier: Option<BuilderModifier>,
     rust_code_checker: Option<RustCodeChecker>,
     extra_rust: Option<TokenStream>,
 ) {
@@ -175,10 +149,8 @@ fn run_test_ex2(
         cxx_code,
         header_code,
         rust_code,
-        generate,
-        generate_pods,
-        extra_directives,
-        extra_clang_args,
+        directives,
+        builder_modifier,
         rust_code_checker,
         extra_rust,
     )
@@ -196,10 +168,8 @@ fn run_test_expect_fail(
         cxx_code,
         header_code,
         rust_code,
-        generate,
-        generate_pods,
+        directives_from_lists(generate, generate_pods, None),
         None,
-        &[],
         None,
         None,
     )
@@ -210,10 +180,8 @@ fn run_test_expect_fail_ex(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-    extra_directives: Option<TokenStream>,
-    extra_clang_args: &[&str],
+    directives: TokenStream,
+    builder_modifier: Option<BuilderModifier>,
     rust_code_checker: Option<RustCodeChecker>,
     extra_rust: Option<TokenStream>,
 ) {
@@ -221,10 +189,8 @@ fn run_test_expect_fail_ex(
         cxx_code,
         header_code,
         rust_code,
-        generate,
-        generate_pods,
-        extra_directives,
-        extra_clang_args,
+        directives,
+        builder_modifier,
         rust_code_checker,
         extra_rust,
     )
@@ -244,20 +210,11 @@ enum TestError {
     RsCodeExaminationFail,
 }
 
-#[allow(clippy::too_many_arguments)] // least typing for each test
-fn do_run_test(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code: TokenStream,
+fn directives_from_lists(
     generate: &[&str],
     generate_pods: &[&str],
     extra_directives: Option<TokenStream>,
-    extra_clang_args: &[&str],
-    rust_code_checker: Option<RustCodeChecker>,
-    extra_rust: Option<TokenStream>,
-) -> Result<(), TestError> {
-    // Step 1: Expand the snippet of Rust code into an entire
-    //         program including include_cxx!
+) -> TokenStream {
     let generate = generate.iter().map(|s| {
         quote! {
             generate!(#s)
@@ -268,7 +225,23 @@ fn do_run_test(
             generate_pod!(#s)
         }
     });
+    quote! {
+        #(#generate)*
+        #(#generate_pods)*
+        #extra_directives
+    }
+}
 
+#[allow(clippy::too_many_arguments)] // least typing for each test
+fn do_run_test(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code: TokenStream,
+    directives: TokenStream,
+    builder_modifier: Option<BuilderModifier>,
+    rust_code_checker: Option<RustCodeChecker>,
+    extra_rust: Option<TokenStream>,
+) -> Result<(), TestError> {
     let hexathorpe = Token![#](Span::call_site());
     let unexpanded_rust = |hdr: &str| {
         quote! {
@@ -277,9 +250,7 @@ fn do_run_test(
             include_cpp!(
                 #hexathorpe include #hdr
                 safety!(unsafe_ffi)
-                #(#generate)*
-                #(#generate_pods)*
-                #extra_directives
+                #directives
             );
 
             #extra_rust
@@ -293,7 +264,7 @@ fn do_run_test(
         cxx_code,
         header_code,
         unexpanded_rust,
-        extra_clang_args,
+        builder_modifier,
         rust_code_checker,
     )
 }
@@ -310,7 +281,7 @@ fn do_run_test_manual<F>(
     cxx_code: &str,
     header_code: &str,
     rust_code_generator: F,
-    extra_clang_args: &[&str],
+    builder_modifier: Option<BuilderModifier>,
     rust_code_checker: Option<RustCodeChecker>,
 ) -> Result<(), TestError>
 where
@@ -345,11 +316,14 @@ where
     let rs_path = write_rust_to_file(&rust_code);
 
     info!("Path is {:?}", tdir.path());
-    let build_results = crate::Builder::<TestBuilderContext>::new(&rs_path, &[tdir.path()])
-        .extra_clang_args(&extra_clang_args)
-        .custom_gendir(target_dir.clone())
-        .build_listing_files()
-        .map_err(TestError::AutoCxx)?;
+    let builder = crate::Builder::<TestBuilderContext>::new(&rs_path, &[tdir.path()])
+        .custom_gendir(target_dir.clone());
+    let builder = if let Some(builder_modifier) = builder_modifier {
+        builder_modifier(builder)
+    } else {
+        builder
+    };
+    let build_results = builder.build_listing_files().map_err(TestError::AutoCxx)?;
     let mut b = build_results.0;
     let generated_rs_files = build_results.1;
 
@@ -374,16 +348,12 @@ where
         b.file(cxx_path);
     }
 
-    let mut b = b
+    let b = b
         .out_dir(&target_dir)
         .host(&target)
         .target(&target)
         .opt_level(1)
         .flag("-std=c++14");
-    // Pass extra_clang_args last so that we have a chance to override the `-std` flag.
-    for f in extra_clang_args {
-        b = b.flag(f);
-    }
     b.include(tdir.path())
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
@@ -4272,10 +4242,9 @@ fn test_issues_217_222() {
         "",
         hdr,
         rs,
-        &["GURL"],
-        &[],
-        Some(quote! { block!("StringPiece") block!("Replacements") }),
-        &[],
+        quote! { generate!("GURL") block!("StringPiece") block!("Replacements") },
+        None,
+        None,
         None,
     );
 }
@@ -4586,10 +4555,9 @@ fn test_double_underscores_fn_namespace() {
         "",
         hdr,
         quote! {},
-        &[],
-        &[],
-        Some(quote! { generate_all!() }),
-        &[],
+        quote! { generate_all!() },
+        None,
+        None,
         None,
     );
 }
@@ -4852,6 +4820,14 @@ fn test_pointer_to_pointer() {
     run_test("", hdr, rs, &["operations_research::Solver"], &[]);
 }
 
+fn make_clang_arg_adder(args: &[&str]) -> Option<BuilderModifier> {
+    let args: Vec<_> = args.iter().map(|a| a.to_string()).collect();
+    Some(Box::new(move |b| {
+        let refs: Vec<_> = args.iter().map(|s| s.as_str()).collect();
+        b.extra_clang_args(&refs)
+    }))
+}
+
 #[test]
 fn test_defines_effective() {
     let hdr = indoc! {"
@@ -4863,7 +4839,15 @@ fn test_defines_effective() {
     let rs = quote! {
         ffi::a();
     };
-    run_test_ex("", hdr, rs, &["a"], &[], None, &["-DFOO"], None);
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! { generate!("a") },
+        make_clang_arg_adder(&["-DFOO"]),
+        None,
+        None,
+    );
 }
 
 #[test]
@@ -5241,11 +5225,10 @@ fn test_error_generated_for_static_data() {
         "",
         hdr,
         rs,
-        &["FOO"],
-        &[],
+        quote! { generate!("FOO")},
         None,
-        &[],
         Some(make_error_finder("FOO")),
+        None,
     );
 }
 
@@ -5262,11 +5245,10 @@ fn test_error_generated_for_array_dependent_function() {
         "",
         hdr,
         rs,
-        &["take_func"],
-        &[],
+        quote! { generate! ("take_func")},
         None,
-        &[],
         Some(make_error_finder("take_func")),
+        None,
     );
 }
 
@@ -5285,13 +5267,12 @@ fn test_error_generated_for_array_dependent_method() {
         "",
         hdr,
         rs,
-        &["A"],
-        &[],
+        quote! { generate! ("A")},
         None,
-        &[],
         Some(make_string_finder(
             ["take_func", "couldn't be generated"].to_vec(),
         )),
+        None,
     );
 }
 
@@ -5353,13 +5334,12 @@ fn test_doc_passthru() {
         "",
         hdr,
         rs,
-        &["A", "get_a"],
-        &["B"],
+        directives_from_lists(&["A", "get_a"], &["B"], None),
         None,
-        &[],
         Some(make_string_finder(
             ["Giraffes", "Elephants", "Rhinos"].to_vec(),
         )),
+        None,
     );
 }
 
@@ -5430,10 +5410,9 @@ fn test_stringview() {
         "",
         hdr,
         rs,
-        &["take_string_view", "return_string_view"],
-        &[],
+        directives_from_lists(&["take_string_view", "return_string_view"], &[], None),
+        make_clang_arg_adder(&["-std=c++17"]),
         None,
-        &["-std=c++17"],
         None,
     );
 }
@@ -5460,7 +5439,7 @@ fn test_include_cpp_alone() {
             }
         }
     };
-    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
@@ -5484,7 +5463,7 @@ fn test_include_cpp_in_path() {
             }
         }
     };
-    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
@@ -5520,12 +5499,11 @@ fn test_bitset() {
         "",
         hdr,
         rs,
-        &[],
-        &[],
-        Some(quote! {
+        quote! {
             generate_all!()
-        }),
-        &[],
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5621,10 +5599,12 @@ fn test_overloaded_ignored_function() {
         "",
         hdr,
         rs,
-        &["A"],
-        &[],
-        Some(quote! { block!("Blocked") }),
-        &[],
+        quote! {
+            generate!("A")
+            block!("Blocked")
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5658,12 +5638,11 @@ fn test_issue_470_492() {
         "",
         hdr,
         rs,
-        &[],
-        &[],
-        Some(quote! {
+        quote! {
             generate_all!()
-        }),
-        &[],
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5680,13 +5659,13 @@ fn test_no_impl() {
         "",
         hdr,
         rs,
-        &["A"],
-        &[],
-        Some(quote! {
+        quote! {
             exclude_impls!()
             exclude_utilities!()
-        }),
-        &[],
+            generate!("A")
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5706,12 +5685,11 @@ fn test_generate_all() {
         "",
         hdr,
         rs,
-        &[],
-        &[],
-        Some(quote! {
+        quote! {
             generate_all!()
-        }),
-        &[],
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5732,12 +5710,11 @@ fn test_std_thing() {
         "",
         hdr,
         rs,
-        &[],
-        &[],
-        Some(quote! {
+        quote! {
             generate_all!()
-        }),
-        &[],
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5792,7 +5769,7 @@ fn test_two_mods() {
             }
         }
     };
-    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
@@ -5827,7 +5804,7 @@ fn test_manual_bridge() {
             }
         }
     };
-    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
@@ -5869,7 +5846,7 @@ fn test_manual_bridge_mixed_types() {
             }
         }
     };
-    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
@@ -5955,16 +5932,15 @@ fn test_rust_reference() {
         let foo = RustType(3);
         assert_eq!(ffi::take_rust_reference(&foo), 4);
     };
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         rs,
-        &["take_rust_reference"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_rust_reference")
             rust_type!(RustType)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             pub struct RustType(i32);
@@ -5986,16 +5962,15 @@ fn test_pass_thru_rust_reference() {
         let foo = RustType(3);
         assert_eq!(ffi::pass_rust_reference(&foo).0, 3);
     };
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         rs,
-        &["pass_rust_reference"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("pass_rust_reference")
             rust_type!(RustType)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             pub struct RustType(i32);
@@ -6021,19 +5996,18 @@ fn test_rust_reference_method() {
         let foo = RustType(3);
         assert_eq!(ffi::take_rust_reference(&foo), 3);
     };
-    run_test_ex2(
+    run_test_ex(
         cxx,
         hdr,
         rs,
-        &["take_rust_reference"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_rust_reference")
             rust_type!(RustType)
             extern_rust!(
                 fn get(self: &RustType) -> i32;
             )
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             pub struct RustType(i32);
@@ -6054,18 +6028,17 @@ fn test_box() {
         inline void take_box(rust::Box<Foo>) {
         }
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             ffi::take_box(Box::new(Foo { a: "Hello".into() }))
         },
-        &["take_box"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_box")
             rust_type!(Foo)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             pub struct Foo {
@@ -6088,18 +6061,17 @@ fn test_pv_subclass_mut() {
     };
     inline void bar() {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
         },
-        &["bar"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("bar")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6129,18 +6101,17 @@ fn test_pv_subclass_const() {
     };
     inline void bar() {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
         },
-        &["bar"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("bar")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6170,18 +6141,17 @@ fn test_pv_subclass_return() {
     };
     inline void bar() {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
         },
-        &["bar"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("bar")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6212,19 +6182,18 @@ fn test_pv_subclass_passed_to_fn() {
     };
     inline void take_observer(const Observer&) {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
             ffi::take_observer(o.borrow().as_ref());
         },
-        &["take_observer"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_observer")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6255,7 +6224,7 @@ fn test_pv_subclass_derive_defaults() {
     };
     inline void take_observer(const Observer&) {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
@@ -6263,12 +6232,11 @@ fn test_pv_subclass_derive_defaults() {
             let o = MyObserver::default_rust_owned();
             ffi::take_observer(o.borrow().as_ref());
         },
-        &["take_observer"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_observer")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             #[autocxx::subclass::is_subclass]
@@ -6298,19 +6266,18 @@ fn test_non_pv_subclass() {
     };
     inline void bar() {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
             obs.borrow().foo();
         },
-        &["bar"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("bar")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6346,7 +6313,7 @@ fn test_pv_subclass_allocation_not_self_owned() {
         obs.a();
     }
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
@@ -6387,12 +6354,11 @@ fn test_pv_subclass_allocation_not_self_owned() {
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
         },
-        &["TriggerTestObserverA"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("TriggerTestObserverA")
             subclass!("TestObserver",MyTestObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use once_cell::sync::Lazy;
@@ -6482,7 +6448,7 @@ fn test_pv_subclass_allocation_self_owned() {
         const_cast<TestObserver&>(obs).a();
     }
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
@@ -6541,12 +6507,11 @@ fn test_pv_subclass_allocation_self_owned() {
             assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
         },
-        &["TriggerTestObserverA"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("TriggerTestObserverA")
             subclass!("TestObserver",MyTestObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use once_cell::sync::Lazy;
@@ -6676,7 +6641,7 @@ fn test_pv_subclass_calls() {
         return obs->h(param);
     }
     "};
-    run_test_ex2(
+    run_test_ex(
         "TestObserver* obs;",
         hdr,
         quote! {
@@ -6720,22 +6685,19 @@ fn test_pv_subclass_calls() {
             assert!(Lazy::force(&STATUS).lock().unwrap().super_h_called);
             *Lazy::force(&STATUS).lock().unwrap() = Default::default();
         },
-        &[
-            "register_observer",
-            "call_a",
-            "call_b",
-            "call_c",
-            "call_d",
-            "call_e",
-            "call_f",
-            "call_g",
-            "call_h",
-        ],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("register_observer")
+            generate!("call_a")
+            generate!("call_b")
+            generate!("call_c")
+            generate!("call_d")
+            generate!("call_e")
+            generate!("call_f")
+            generate!("call_g")
+            generate!("call_h")
             subclass!("TestObserver",MyTestObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use once_cell::sync::Lazy;
@@ -6870,7 +6832,7 @@ fn test_pv_subclass_types() {
         return p;
     }
     "};
-    run_test_ex2(
+    run_test_ex(
         "TestObserver* obs;",
         hdr,
         quote! {
@@ -6882,19 +6844,17 @@ fn test_pv_subclass_types() {
             ffi::call_s("hello");
             ffi::call_n(ffi::make_non_pod("goodbye"));
         },
-        &[
-            "register_observer",
-            "call_s",
-            "call_n",
-            "call_p",
-            "NonPod",
-            "make_non_pod",
-        ],
-        &["Pod"],
-        Some(quote! {
+        quote! {
+            generate!("register_observer")
+            generate!("call_s")
+            generate!("call_n")
+            generate!("call_p")
+            generate!("NonPod")
+            generate!("make_non_pod")
+            generate_pod!("Pod")
             subclass!("TestObserver",MyTestObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6944,7 +6904,7 @@ fn test_pv_subclass_constructors() {
         return obs->call();
     }
     "};
-    run_test_ex2(
+    run_test_ex(
         "TestObserver* obs;",
         hdr,
         quote! {
@@ -6954,12 +6914,12 @@ fn test_pv_subclass_constructors() {
             ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
             ffi::do_a_thing();
         },
-        &["register_observer", "do_a_thing"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("register_observer")
+            generate!("do_a_thing")
             subclass!("TestObserver",MyTestObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::prelude::*;
@@ -7001,12 +6961,11 @@ fn test_pv_subclass_fancy_constructor() {
             let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
             ffi::take_observer(o.borrow().as_ref());
         },
-        &["take_observer"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_observer")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -7039,19 +6998,18 @@ fn test_pv_subclass_namespaced_superclass() {
     }
     inline void take_observer(const a::Observer&) {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
             ffi::take_observer(o.borrow().as_ref());
         },
-        &["take_observer"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_observer")
             subclass!("a::Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
