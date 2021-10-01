@@ -128,8 +128,15 @@ pub(crate) fn run_test(
 pub(crate) type RustCodeChecker = Box<dyn FnOnce(syn::File) -> Result<(), TestError>>;
 
 // A function to modify Builders
-pub(crate) type BuilderModifier =
-    Box<dyn FnOnce(Builder<TestBuilderContext>) -> Builder<TestBuilderContext>>;
+pub(crate) trait BuilderModifierFns {
+    fn modify_autocxx_builder(
+        &self,
+        builder: Builder<TestBuilderContext>,
+    ) -> Builder<TestBuilderContext>;
+    fn modify_cc_builder<'a>(&self, builder: &'a mut cc::Build) -> &'a mut cc::Build;
+}
+
+pub(crate) type BuilderModifier = Box<dyn BuilderModifierFns>;
 
 /// A positive test, we expect to pass.
 #[allow(clippy::too_many_arguments)] // least typing for each test
@@ -315,8 +322,8 @@ where
     info!("Path is {:?}", tdir.path());
     let builder = Builder::<TestBuilderContext>::new(&rs_path, &[tdir.path()])
         .custom_gendir(target_dir.clone());
-    let builder = if let Some(builder_modifier) = builder_modifier {
-        builder_modifier(builder)
+    let builder = if let Some(builder_modifier) = &builder_modifier {
+        builder_modifier.modify_autocxx_builder(builder)
     } else {
         builder
     };
@@ -351,6 +358,11 @@ where
         .target(&target)
         .opt_level(1)
         .flag("-std=c++14");
+    let b = if let Some(builder_modifier) = builder_modifier {
+        builder_modifier.modify_cc_builder(b)
+    } else {
+        b
+    };
     b.include(tdir.path())
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
@@ -373,12 +385,28 @@ where
     Ok(())
 }
 
+struct ClangArgAdder(Vec<String>);
+
 pub(crate) fn make_clang_arg_adder(args: &[&str]) -> Option<BuilderModifier> {
     let args: Vec<_> = args.iter().map(|a| a.to_string()).collect();
-    Some(Box::new(move |b| {
-        let refs: Vec<_> = args.iter().map(|s| s.as_str()).collect();
-        b.extra_clang_args(&refs)
-    }))
+    Some(Box::new(ClangArgAdder(args)))
+}
+
+impl BuilderModifierFns for ClangArgAdder {
+    fn modify_autocxx_builder(
+        &self,
+        builder: Builder<TestBuilderContext>,
+    ) -> Builder<TestBuilderContext> {
+        let refs: Vec<_> = self.0.iter().map(|s| s.as_str()).collect();
+        builder.extra_clang_args(&refs)
+    }
+
+    fn modify_cc_builder<'a>(&self, mut builder: &'a mut cc::Build) -> &'a mut cc::Build {
+        for f in &self.0 {
+            builder = builder.flag(f);
+        }
+        builder
+    }
 }
 
 /// Generates a closure which can be used to ensure that the given symbol
