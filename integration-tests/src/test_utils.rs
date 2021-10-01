@@ -125,7 +125,7 @@ pub(crate) fn run_test(
 
 // A function applied to the resultant generated Rust code
 // which can be used to inspect that code.
-pub(crate) type RustCodeChecker = Box<dyn FnOnce(syn::File) -> Result<(), TestError>>;
+pub(crate) type CodeChecker = Box<dyn FnOnce(syn::File) -> Result<(), TestError>>;
 
 // A function to modify Builders
 pub(crate) trait BuilderModifierFns {
@@ -146,7 +146,7 @@ pub(crate) fn run_test_ex(
     rust_code: TokenStream,
     directives: TokenStream,
     builder_modifier: Option<BuilderModifier>,
-    rust_code_checker: Option<RustCodeChecker>,
+    rust_code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
 ) {
     do_run_test(
@@ -186,7 +186,7 @@ pub(crate) fn run_test_expect_fail_ex(
     rust_code: TokenStream,
     directives: TokenStream,
     builder_modifier: Option<BuilderModifier>,
-    rust_code_checker: Option<RustCodeChecker>,
+    rust_code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
 ) {
     do_run_test(
@@ -243,7 +243,7 @@ fn do_run_test(
     rust_code: TokenStream,
     directives: TokenStream,
     builder_modifier: Option<BuilderModifier>,
-    rust_code_checker: Option<RustCodeChecker>,
+    rust_code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
 ) -> Result<(), TestError> {
     let hexathorpe = Token![#](Span::call_site());
@@ -286,7 +286,7 @@ pub(crate) fn do_run_test_manual<F>(
     header_code: &str,
     rust_code_generator: F,
     builder_modifier: Option<BuilderModifier>,
-    rust_code_checker: Option<RustCodeChecker>,
+    rust_code_checker: Option<CodeChecker>,
 ) -> Result<(), TestError>
 where
     F: FnOnce(&'static str) -> TokenStream,
