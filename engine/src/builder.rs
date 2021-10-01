@@ -153,7 +153,9 @@ impl<CTX: BuilderContext> Builder<CTX> {
         self.build_listing_files().map(|r| r.0)
     }
 
-    pub(crate) fn build_listing_files(self) -> Result<BuilderSuccess, BuilderError> {
+    /// For use in tests only, this does the build and returns additional information
+    /// about the files generated which can subsequently be examined for correctness.
+    pub fn build_listing_files(self) -> Result<BuilderSuccess, BuilderError> {
         let clang_args = &self
             .extra_clang_args
             .iter()

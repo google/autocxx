@@ -31,7 +31,7 @@ cxx = "1.0.54" # ... also needed because expansion of type_id refers to ::cxx
 aquamarine = "0.1" # docs
 
 [workspace]
-members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce"]
+members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce", "integration-tests"]
 exclude = ["examples/s2", "examples/steam-mini", "examples/subclass"]
 
 #[patch.crates-io]

@@ -28,9 +28,6 @@ mod types;
 #[cfg(any(test, feature = "build"))]
 mod builder;
 
-#[cfg(test)]
-mod integration_tests;
-
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use parse_callbacks::AutocxxParseCallbacks;
