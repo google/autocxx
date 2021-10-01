@@ -169,7 +169,7 @@ So, practically speaking, you would almost always move onto running one of the t
 in the test suite. With suitable options, you can get plenty of output. For instance:
 
 ```ignore
-RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test  integration_tests::test_cycle_string_full_pipeline -- --nocapture
+RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test --all test_cycle_string_full_pipeline -- --nocapture
 ```
 
 This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
