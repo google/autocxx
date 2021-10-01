@@ -110,7 +110,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Bindgen(_) => write!(f, "Bindgen was unable to generate the initial .rs bindings for this file. This may indicate a parsing problem with the C++ headers.")?,
-            Error::Parsing(err) => write!(f, "The Rust file could not be parsede: {}", err)?,
+            Error::Parsing(err) => write!(f, "The Rust file could not be parsed: {}", err)?,
             Error::NoAutoCxxInc => write!(f, "No C++ include directory was provided.")?,
             Error::Conversion(err) => write!(f, "autocxx could not generate the requested bindings. {}", err)?,
         }
