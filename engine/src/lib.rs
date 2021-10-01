@@ -501,13 +501,12 @@ pub fn do_cxx_cpp_generation(
 
 pub(crate) fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool) -> Vec<u8> {
     if suppress_system_headers {
-        let mut result = Vec::new();
-        for l in crate::HEADER.lines() {
-            if !l.starts_with("#include <") {
-                result.extend(l.as_bytes());
-            }
-        }
-        result
+        crate::HEADER
+            .lines()
+            .filter(|l| !l.starts_with("#include <"))
+            .join("\n")
+            .as_bytes()
+            .to_vec()
     } else {
         input
     }
