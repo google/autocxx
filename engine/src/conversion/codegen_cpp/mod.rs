@@ -59,6 +59,10 @@ impl Header {
             format!("#include \"{}\"", self.name)
         }
     }
+
+    fn is_system(&self) -> bool {
+        self.system
+    }
 }
 
 enum ConversionDirection {
@@ -86,6 +90,7 @@ pub(crate) struct CppCodeGenerator<'a> {
     inclusions: String,
     original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
+    suppress_system_headers: bool,
 }
 
 impl<'a> CppCodeGenerator<'a> {
@@ -93,8 +98,14 @@ impl<'a> CppCodeGenerator<'a> {
         inclusions: String,
         apis: &[Api<FnPhase>],
         config: &'a IncludeCppConfig,
+        suppress_system_headers: bool,
     ) -> Result<Option<CppFilePair>, ConvertError> {
-        let mut gen = CppCodeGenerator::new(inclusions, original_name_map_from_apis(apis), config);
+        let mut gen = CppCodeGenerator::new(
+            inclusions,
+            original_name_map_from_apis(apis),
+            config,
+            suppress_system_headers,
+        );
         // The 'filter' on the following line is designed to ensure we don't accidentally
         // end up out of sync with needs_cpp_codegen
         gen.add_needs(apis.iter().filter(|api| api.needs_cpp_codegen()))?;
@@ -105,12 +116,14 @@ impl<'a> CppCodeGenerator<'a> {
         inclusions: String,
         original_name_map: CppNameMap,
         config: &'a IncludeCppConfig,
+        suppress_system_headers: bool,
     ) -> Self {
         CppCodeGenerator {
             additional_functions: Vec::new(),
             inclusions,
             original_name_map,
             config,
+            suppress_system_headers,
         }
     }
 
@@ -177,20 +190,8 @@ impl<'a> CppCodeGenerator<'a> {
         if self.additional_functions.is_empty() {
             None
         } else {
-            let headers: HashSet<Header> = self
-                .additional_functions
-                .iter()
-                .map(|x| x.headers.iter().cloned())
-                .flatten()
-                .collect();
-            let headers = headers.iter().map(|x| x.include_stmt()).join("\n");
-            let cpp_headers: HashSet<Header> = self
-                .additional_functions
-                .iter()
-                .map(|x| x.cpp_headers.iter().cloned())
-                .flatten()
-                .collect();
-            let cpp_headers = cpp_headers.iter().map(|x| x.include_stmt()).join("\n");
+            let headers = self.collect_headers(|additional_need| &additional_need.headers);
+            let cpp_headers = self.collect_headers(|additional_need| &additional_need.cpp_headers);
             let type_definitions = self.concat_additional_items(|x| x.type_definition.as_ref());
             let declarations = self.concat_additional_items(|x| x.declaration.as_ref());
             let declarations = format!(
@@ -220,6 +221,20 @@ impl<'a> CppCodeGenerator<'a> {
                 header_name,
             })
         }
+    }
+
+    fn collect_headers<F>(&self, filter: F) -> String
+    where
+        F: Fn(&AdditionalFunction) -> &[Header],
+    {
+        let cpp_headers: HashSet<_> = self
+            .additional_functions
+            .iter()
+            .map(|x| filter(x).iter())
+            .flatten()
+            .filter(|x| !self.suppress_system_headers || !x.is_system())
+            .collect(); // uniqify
+        cpp_headers.iter().map(|x| x.include_stmt()).join("\n")
     }
 
     fn concat_additional_items<F>(&self, field_access: F) -> String

@@ -110,6 +110,7 @@ impl<'a> BridgeConverter<'a> {
         mut bindgen_mod: ItemMod,
         unsafe_policy: UnsafePolicy,
         inclusions: String,
+        suppress_system_headers: bool,
     ) -> Result<CodegenResults, ConvertError> {
         match &mut bindgen_mod.content {
             None => Err(ConvertError::NoContent),
@@ -162,8 +163,12 @@ impl<'a> BridgeConverter<'a> {
                 Self::dump_apis_with_deps("GC", &analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
-                let cpp =
-                    CppCodeGenerator::generate_cpp_code(inclusions, &analyzed_apis, self.config)?;
+                let cpp = CppCodeGenerator::generate_cpp_code(
+                    inclusions,
+                    &analyzed_apis,
+                    self.config,
+                    suppress_system_headers,
+                )?;
                 let rs = RsCodeGenerator::generate_rs_code(
                     analyzed_apis,
                     self.include_list,

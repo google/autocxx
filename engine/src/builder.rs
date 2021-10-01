@@ -15,7 +15,7 @@
 use autocxx_parser::file_locations::FileLocationStrategy;
 use proc_macro2::TokenStream;
 
-use crate::{ParseError, RebuildDependencyRecorder};
+use crate::{strip_system_headers, ParseError, RebuildDependencyRecorder};
 use std::ffi::OsString;
 use std::io::Write;
 use std::marker::PhantomData;
@@ -55,7 +55,9 @@ impl Display for BuilderError {
 
 pub type BuilderBuild = cc::Build;
 
-pub struct BuilderSuccess(pub BuilderBuild, pub Vec<PathBuf>);
+/// For test purposes only, a [`cc::Build`] and lists of Rust and C++
+/// files generated.
+pub struct BuilderSuccess(pub BuilderBuild, pub Vec<PathBuf>, pub Vec<PathBuf>);
 
 /// Results of a build.
 pub type BuilderResult = Result<BuilderSuccess, BuilderError>;
@@ -79,6 +81,7 @@ pub struct Builder<BuilderContext> {
     dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     custom_gendir: Option<PathBuf>,
     auto_allowlist: bool,
+    suppress_system_headers: bool,
     // This member is to ensure that this type is parameterized
     // by a BuilderContext. The goal is to balance three needs:
     // (1) have most of the functionality over in autocxx_engine,
@@ -106,6 +109,7 @@ impl<CTX: BuilderContext> Builder<CTX> {
             dependency_recorder: CTX::get_dependency_recorder(),
             custom_gendir: None,
             auto_allowlist: false,
+            suppress_system_headers: false,
             ctx: PhantomData,
         }
     }
@@ -135,13 +139,25 @@ impl<CTX: BuilderContext> Builder<CTX> {
         self
     }
 
+    /// Whether to suppress inclusion of system headers (`memory`, `string` etc.)
+    /// from generated C++ bindings code. This should not normally be used,
+    /// but can occasionally be useful if you're reducing a test case and you
+    /// have a preprocessed header file which already contains absolutely everything
+    /// that the bindings could ever need.
+    pub fn suppress_system_headers(mut self, do_it: bool) -> Self {
+        self.suppress_system_headers = do_it;
+        self
+    }
+
     /// Build autocxx C++ files and return a cc::Build you can use to build
     /// more from a build.rs file.
     pub fn build(self) -> Result<BuilderBuild, BuilderError> {
         self.build_listing_files().map(|r| r.0)
     }
 
-    pub(crate) fn build_listing_files(self) -> Result<BuilderSuccess, BuilderError> {
+    /// For use in tests only, this does the build and returns additional information
+    /// about the files generated which can subsequently be examined for correctness.
+    pub fn build_listing_files(self) -> Result<BuilderSuccess, BuilderError> {
         let clang_args = &self
             .extra_clang_args
             .iter()
@@ -163,34 +179,45 @@ impl<CTX: BuilderContext> Builder<CTX> {
         // about everything cxx does, in due course...
         // Write cxx.h to that location, as it may be needed by
         // some of our generated code.
-        write_to_file(&incdir, "cxx.h", crate::HEADER.as_bytes())?;
+        write_to_file(
+            &incdir,
+            "cxx.h",
+            &Self::get_cxx_header_bytes(self.suppress_system_headers),
+        )?;
 
         let autocxx_inc = build_autocxx_inc(self.autocxx_incs, &incdir);
-        // pass on th
         gen_location_strategy.set_cargo_env_vars_for_build();
 
         let mut parsed_file = crate::parse_file(self.rs_file, self.auto_allowlist)
             .map_err(BuilderError::ParseError)?;
         parsed_file
-            .resolve_all(autocxx_inc, clang_args, self.dependency_recorder)
+            .resolve_all(
+                autocxx_inc,
+                clang_args,
+                self.dependency_recorder,
+                self.suppress_system_headers,
+            )
             .map_err(BuilderError::ParseError)?;
         let mut counter = 0;
         let mut builder = cc::Build::new();
         builder.cpp(true);
         let mut generated_rs = Vec::new();
+        let mut generated_cpp = Vec::new();
         builder.includes(parsed_file.include_dirs());
         for include_cpp in parsed_file.get_cpp_buildables() {
             let generated_code = include_cpp
-                .generate_h_and_cxx()
+                .generate_h_and_cxx(self.suppress_system_headers)
                 .map_err(BuilderError::InvalidCxx)?;
             for filepair in generated_code.0 {
                 let fname = format!("gen{}.cxx", counter);
                 counter += 1;
                 if let Some(implementation) = &filepair.implementation {
                     let gen_cxx_path = write_to_file(&cxxdir, &fname, implementation)?;
-                    builder.file(gen_cxx_path);
+                    builder.file(&gen_cxx_path);
+                    generated_cpp.push(gen_cxx_path);
                 }
                 write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
+                generated_cpp.push(incdir.join(filepair.header_name));
             }
         }
 
@@ -205,7 +232,7 @@ impl<CTX: BuilderContext> Builder<CTX> {
         if counter == 0 {
             Err(BuilderError::NoIncludeCxxMacrosFound)
         } else {
-            Ok(BuilderSuccess(builder, generated_rs))
+            Ok(BuilderSuccess(builder, generated_rs, generated_cpp))
         }
     }
 
@@ -216,6 +243,10 @@ impl<CTX: BuilderContext> Builder<CTX> {
             let _ = writeln!(io::stderr(), "\n\nautocxx error: {}\n\n", err);
             process::exit(1);
         })
+    }
+
+    fn get_cxx_header_bytes(suppress_system_headers: bool) -> Vec<u8> {
+        strip_system_headers(crate::HEADER.as_bytes().to_vec(), suppress_system_headers)
     }
 }
 

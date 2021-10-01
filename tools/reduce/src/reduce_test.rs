@@ -67,6 +67,7 @@ fn test_reduce_preprocessed() -> Result<(), Box<dyn std::error::Error>> {
             .arg("--outdir")
             .arg(demo_code_dir.to_str().unwrap())
             .arg("--gen-cpp")
+            .arg("--suppress-system-headers")
             .assert()
             .success();
         Ok("autocxx-preprocessed.h".into())

@@ -157,6 +157,11 @@ fn main() {
                 .help("Dynamically construct allowlist from real uses of APIs.")
         )
         .arg(
+            Arg::with_name("suppress-system-headers")
+                .long("suppress-system-headers")
+                .help("Do not refer to any system headers from generated code. May be useful for minimization.")
+        )
+        .arg(
             Arg::with_name("clang-args")
                 .last(true)
                 .multiple(true)
@@ -179,11 +184,12 @@ fn main() {
         .values_of("clang-args")
         .unwrap_or_default()
         .collect();
+    let suppress_system_headers = matches.is_present("suppress-system-headers");
     // In future, we should provide an option to write a .d file here
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56
     parsed_file
-        .resolve_all(incs, &extra_clang_args, None)
+        .resolve_all(incs, &extra_clang_args, None, suppress_system_headers)
         .expect("Unable to resolve macro");
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
     let desired_number = matches
@@ -194,7 +200,7 @@ fn main() {
         let mut counter = 0usize;
         for include_cxx in parsed_file.get_cpp_buildables() {
             let generations = include_cxx
-                .generate_h_and_cxx()
+                .generate_h_and_cxx(suppress_system_headers)
                 .expect("Unable to generate header and C++ code");
             for pair in generations.0 {
                 let cppname = format!("gen{}.{}", counter, cpp);

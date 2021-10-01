@@ -336,10 +336,7 @@ fn create_interestingness_test(
     let precompile_step = make_compile_step(precompile, "concat.h", extra_clang_args);
     // For the compile afterwards, we have to avoid including any system headers.
     // We rely on equivalent content being hermetically inside concat.h.
-    let postcompile_step = format!(
-        "; mv gen0.cc gen0-orig.cc && sed -e 's/#include <.*>//g' < gen0-orig.cc | sed -e 's/#include \"cxx.h\"//g' > gen0.cc && mv autocxxgen.h autocxxgen-orig.h && sed -e 's/#include <.*>//g' < autocxxgen-orig.h | sed -e 's/#include \"cxx.h\"//g' > autocxxgen.h && {} 2>&1",
-        make_compile_step(postcompile, "gen0.cc", extra_clang_args)
-    );
+    let postcompile_step = make_compile_step(postcompile, "gen0.cc", extra_clang_args);
     let content = format!(
         indoc! {"
         #!/bin/sh
@@ -350,7 +347,7 @@ fn create_interestingness_test(
         mv concat.h concat-body.h
         echo Codegen
         (echo \"#ifndef __CONCAT_H__\"; echo \"#define __CONCAT_H__\"; echo '#include \"concat-body.h\"'; echo \"#endif\") > concat.h
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h {}) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h ; {} 2>&1 ) | grep \"{}\"  >/dev/null 2>&1
         echo Remove
         rm concat.h
         echo Swap back

@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC
+// Copyright 2021 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,399 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::test_utils::{
+    directives_from_lists, do_run_test_manual, make_clang_arg_adder, make_error_finder,
+    make_string_finder, run_test, run_test_ex, run_test_expect_fail, run_test_expect_fail_ex,
+    NoSystemHeadersChecker, SetSuppressSystemHeaders,
+};
 use indoc::indoc;
-use log::info;
-use once_cell::sync::OnceCell;
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::Span;
 use quote::quote;
-use quote::ToTokens;
-use quote::TokenStreamExt;
-use std::fs::File;
-use std::io::Read;
-use std::io::Write;
-use std::panic::RefUnwindSafe;
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use syn::{Item, Token};
-use tempfile::{tempdir, TempDir};
+use syn::Token;
 use test_env_log::test;
-
-use crate::BuilderContext;
-
-const KEEP_TEMPDIRS: bool = false;
-
-fn get_builder() -> &'static Mutex<LinkableTryBuilder> {
-    static INSTANCE: OnceCell<Mutex<LinkableTryBuilder>> = OnceCell::new();
-    INSTANCE.get_or_init(|| Mutex::new(LinkableTryBuilder::new()))
-}
-
-/// TryBuild which maintains a directory of libraries to link.
-/// This is desirable because otherwise, if we alter the RUSTFLAGS
-/// then trybuild rebuilds *everything* including all the dev-dependencies.
-/// This object exists purely so that we use the same RUSTFLAGS for every
-/// test case.
-struct LinkableTryBuilder {
-    /// Directory in which we'll keep any linkable libraries
-    temp_dir: TempDir,
-}
-
-impl LinkableTryBuilder {
-    fn new() -> Self {
-        LinkableTryBuilder {
-            temp_dir: tempdir().unwrap(),
-        }
-    }
-
-    fn move_items_into_temp_dir<P1: AsRef<Path>>(&self, src_path: &P1, pattern: &str) {
-        for item in std::fs::read_dir(src_path).unwrap() {
-            let item = item.unwrap();
-            if item.file_name().into_string().unwrap().contains(pattern) {
-                let dest = self.temp_dir.path().join(item.file_name());
-                if dest.exists() {
-                    std::fs::remove_file(&dest).unwrap();
-                }
-                std::fs::rename(item.path(), dest).unwrap();
-            }
-        }
-    }
-
-    fn build<P1: AsRef<Path>, P2: AsRef<Path>, P3: AsRef<Path> + RefUnwindSafe>(
-        &self,
-        library_path: &P1,
-        library_name: &str,
-        header_path: &P2,
-        header_names: &[&str],
-        rs_path: &P3,
-        generated_rs_files: Vec<PathBuf>,
-    ) -> std::thread::Result<()> {
-        // Copy all items from the source dir into our temporary dir if their name matches
-        // the pattern given in `library_name`.
-        self.move_items_into_temp_dir(library_path, library_name);
-        for header_name in header_names {
-            self.move_items_into_temp_dir(header_path, header_name);
-        }
-        for generated_rs in generated_rs_files {
-            self.move_items_into_temp_dir(
-                &generated_rs.parent().unwrap().to_path_buf(),
-                &generated_rs.file_name().unwrap().to_str().unwrap(),
-            );
-        }
-        let temp_path = self.temp_dir.path().to_str().unwrap();
-        std::env::set_var("RUSTFLAGS", format!("-L {}", temp_path));
-        std::env::set_var("AUTOCXX_RS", temp_path);
-        std::panic::catch_unwind(|| {
-            let test_cases = trybuild::TestCases::new();
-            test_cases.pass(rs_path)
-        })
-    }
-}
-
-fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
-    let path = tdir.path().join(filename);
-    let mut f = File::create(&path).unwrap();
-    f.write_all(content.as_bytes()).unwrap();
-    path
-}
-
-/// A positive test, we expect to pass.
-fn run_test(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-) {
-    do_run_test(
-        cxx_code,
-        header_code,
-        rust_code,
-        generate,
-        generate_pods,
-        None,
-        &[],
-        None,
-        None,
-    )
-    .unwrap()
-}
-
-// A function applied to the resultant generated Rust code
-// which can be used to inspect that code.
-type RustCodeChecker = Box<dyn FnOnce(syn::File) -> Result<(), TestError>>;
-
-/// A positive test, we expect to pass.
-#[allow(clippy::too_many_arguments)] // least typing for each test
-fn run_test_ex(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-    extra_directives: Option<TokenStream>,
-    extra_clang_args: &[&str],
-    rust_code_checker: Option<RustCodeChecker>,
-) {
-    do_run_test(
-        cxx_code,
-        header_code,
-        rust_code,
-        generate,
-        generate_pods,
-        extra_directives,
-        extra_clang_args,
-        rust_code_checker,
-        None,
-    )
-    .unwrap()
-}
-
-/// A positive test, we expect to pass.
-#[allow(clippy::too_many_arguments)] // least typing for each test
-fn run_test_ex2(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-    extra_directives: Option<TokenStream>,
-    extra_clang_args: &[&str],
-    rust_code_checker: Option<RustCodeChecker>,
-    extra_rust: Option<TokenStream>,
-) {
-    do_run_test(
-        cxx_code,
-        header_code,
-        rust_code,
-        generate,
-        generate_pods,
-        extra_directives,
-        extra_clang_args,
-        rust_code_checker,
-        extra_rust,
-    )
-    .unwrap()
-}
-
-fn run_test_expect_fail(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-) {
-    do_run_test(
-        cxx_code,
-        header_code,
-        rust_code,
-        generate,
-        generate_pods,
-        None,
-        &[],
-        None,
-        None,
-    )
-    .expect_err("Unexpected success");
-}
-
-fn run_test_expect_fail_ex(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-    extra_directives: Option<TokenStream>,
-    extra_clang_args: &[&str],
-    rust_code_checker: Option<RustCodeChecker>,
-    extra_rust: Option<TokenStream>,
-) {
-    do_run_test(
-        cxx_code,
-        header_code,
-        rust_code,
-        generate,
-        generate_pods,
-        extra_directives,
-        extra_clang_args,
-        rust_code_checker,
-        extra_rust,
-    )
-    .expect_err("Unexpected success");
-}
-
-/// In the future maybe the tests will distinguish the exact type of failure expected.
-#[derive(Debug)]
-enum TestError {
-    AutoCxx(crate::BuilderError),
-    CppBuild(cc::Error),
-    RsBuild,
-    NoRs,
-    RsFileOpen(std::io::Error),
-    RsFileRead(std::io::Error),
-    RsFileParse(syn::Error),
-    RsCodeExaminationFail,
-}
-
-#[allow(clippy::too_many_arguments)] // least typing for each test
-fn do_run_test(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-    extra_directives: Option<TokenStream>,
-    extra_clang_args: &[&str],
-    rust_code_checker: Option<RustCodeChecker>,
-    extra_rust: Option<TokenStream>,
-) -> Result<(), TestError> {
-    // Step 1: Expand the snippet of Rust code into an entire
-    //         program including include_cxx!
-    let generate = generate.iter().map(|s| {
-        quote! {
-            generate!(#s)
-        }
-    });
-    let generate_pods = generate_pods.iter().map(|s| {
-        quote! {
-            generate_pod!(#s)
-        }
-    });
-
-    let hexathorpe = Token![#](Span::call_site());
-    let unexpanded_rust = |hdr: &str| {
-        quote! {
-            use autocxx::include_cpp;
-
-            include_cpp!(
-                #hexathorpe include #hdr
-                safety!(unsafe_ffi)
-                #(#generate)*
-                #(#generate_pods)*
-                #extra_directives
-            );
-
-            #extra_rust
-
-            fn main() {
-                #rust_code
-            }
-        }
-    };
-    do_run_test_manual(
-        cxx_code,
-        header_code,
-        unexpanded_rust,
-        extra_clang_args,
-        rust_code_checker,
-    )
-}
-
-struct TestBuilderContext;
-
-impl BuilderContext for TestBuilderContext {
-    fn get_dependency_recorder() -> Option<Box<dyn crate::RebuildDependencyRecorder>> {
-        None
-    }
-}
-
-fn do_run_test_manual<F>(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code_generator: F,
-    extra_clang_args: &[&str],
-    rust_code_checker: Option<RustCodeChecker>,
-) -> Result<(), TestError>
-where
-    F: FnOnce(&'static str) -> TokenStream,
-{
-    const HEADER_NAME: &str = "input.h";
-    let mut rust_code = rust_code_generator(HEADER_NAME);
-    // Step 2: Write the C++ header snippet to a temp file
-    let tdir = tempdir().unwrap();
-    write_to_file(
-        &tdir,
-        HEADER_NAME,
-        &format!("#pragma once\n{}", header_code),
-    );
-    write_to_file(&tdir, "cxx.h", crate::HEADER);
-
-    rust_code.append_all(quote! {
-        #[link(name="autocxx-demo")]
-        extern {}
-    });
-    info!("Unexpanded Rust: {}", rust_code);
-
-    let write_rust_to_file = |ts: &TokenStream| -> PathBuf {
-        // Step 3: Write the Rust code to a temp file
-        let rs_code = format!("{}", ts);
-        write_to_file(&tdir, "input.rs", &rs_code)
-    };
-
-    let target_dir = tdir.path().join("target");
-    std::fs::create_dir(&target_dir).unwrap();
-
-    let rs_path = write_rust_to_file(&rust_code);
-
-    info!("Path is {:?}", tdir.path());
-    let build_results = crate::Builder::<TestBuilderContext>::new(&rs_path, &[tdir.path()])
-        .extra_clang_args(&extra_clang_args)
-        .custom_gendir(target_dir.clone())
-        .build_listing_files()
-        .map_err(TestError::AutoCxx)?;
-    let mut b = build_results.0;
-    let generated_rs_files = build_results.1;
-
-    if let Some(rust_code_checker) = rust_code_checker {
-        let mut file = File::open(generated_rs_files.get(0).ok_or(TestError::NoRs)?)
-            .map_err(TestError::RsFileOpen)?;
-        let mut content = String::new();
-        file.read_to_string(&mut content)
-            .map_err(TestError::RsFileRead)?;
-
-        let ast = syn::parse_file(&content).map_err(TestError::RsFileParse)?;
-        rust_code_checker(ast)?;
-    }
-
-    let target = rust_info::get().target_triple.unwrap();
-
-    if !cxx_code.is_empty() {
-        // Step 4: Write the C++ code snippet to a .cc file, along with a #include
-        //         of the header emitted in step 5.
-        let cxx_code = format!("#include \"input.h\"\n#include \"cxxgen.h\"\n{}", cxx_code);
-        let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
-        b.file(cxx_path);
-    }
-
-    let mut b = b
-        .out_dir(&target_dir)
-        .host(&target)
-        .target(&target)
-        .opt_level(1)
-        .flag("-std=c++14");
-    // Pass extra_clang_args last so that we have a chance to override the `-std` flag.
-    for f in extra_clang_args {
-        b = b.flag(f);
-    }
-    b.include(tdir.path())
-        .try_compile("autocxx-demo")
-        .map_err(TestError::CppBuild)?;
-    // Step 8: use the trybuild crate to build the Rust file.
-    let r = get_builder().lock().unwrap().build(
-        &target_dir,
-        "autocxx-demo",
-        &tdir.path(),
-        &["input.h", "cxx.h"],
-        &rs_path,
-        generated_rs_files,
-    );
-    if r.is_err() {
-        return Err(TestError::RsBuild); // details of Rust panic are a bit messy to include, and
-                                        // not important at the moment.
-    }
-    if KEEP_TEMPDIRS {
-        println!("Tempdir: {:?}", tdir.into_path().to_str());
-    }
-    Ok(())
-}
 
 #[test]
 fn test_return_void() {
@@ -460,9 +77,6 @@ fn test_two_funcs_with_definition() {
         ffi::do_nothing1();
         ffi::do_nothing2();
     };
-    println!("Here");
-
-    info!("Here2");
     run_test(cxx, hdr, rs, &["do_nothing1", "do_nothing2"], &[]);
 }
 
@@ -4272,10 +3886,9 @@ fn test_issues_217_222() {
         "",
         hdr,
         rs,
-        &["GURL"],
-        &[],
-        Some(quote! { block!("StringPiece") block!("Replacements") }),
-        &[],
+        quote! { generate!("GURL") block!("StringPiece") block!("Replacements") },
+        None,
+        None,
         None,
     );
 }
@@ -4586,10 +4199,9 @@ fn test_double_underscores_fn_namespace() {
         "",
         hdr,
         quote! {},
-        &[],
-        &[],
-        Some(quote! { generate_all!() }),
-        &[],
+        quote! { generate_all!() },
+        None,
+        None,
         None,
     );
 }
@@ -4863,7 +4475,15 @@ fn test_defines_effective() {
     let rs = quote! {
         ffi::a();
     };
-    run_test_ex("", hdr, rs, &["a"], &[], None, &["-DFOO"], None);
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! { generate!("a") },
+        make_clang_arg_adder(&["-DFOO"]),
+        None,
+        None,
+    );
 }
 
 #[test]
@@ -5186,46 +4806,6 @@ fn test_issue_506() {
     run_test("", hdr, rs, &["spanner::Database", "spanner::Row"], &[]);
 }
 
-fn find_ffi_items(f: syn::File) -> Result<Vec<Item>, TestError> {
-    Ok(f.items
-        .into_iter()
-        .filter_map(|i| match i {
-            Item::Mod(itm) => Some(itm),
-            _ => None,
-        })
-        .next()
-        .ok_or(TestError::RsCodeExaminationFail)?
-        .content
-        .ok_or(TestError::RsCodeExaminationFail)?
-        .1)
-}
-
-/// Generates a closure which can be used to ensure that the given symbol
-/// is mentioned in the output and has documentation attached.
-/// The idea is that this is what we do in cases where we can't generate code properly.
-fn make_error_finder(error_symbol: &str) -> Box<dyn FnOnce(syn::File) -> Result<(), TestError>> {
-    let error_symbol = error_symbol.to_string();
-    Box::new(move |f| {
-        let ffi_items = find_ffi_items(f)?;
-        // Ensure there's some kind of struct entry for this symbol
-        let error_item = ffi_items
-            .into_iter()
-            .filter_map(|i| match i {
-                Item::Struct(its) if its.ident == error_symbol => Some(its),
-                _ => None,
-            })
-            .next()
-            .ok_or(TestError::RsCodeExaminationFail)?;
-        // Ensure doc attribute
-        error_item
-            .attrs
-            .into_iter()
-            .find(|a| a.path.get_ident().filter(|p| *p == "doc").is_some())
-            .ok_or(TestError::RsCodeExaminationFail)?;
-        Ok(())
-    })
-}
-
 #[test]
 fn test_error_generated_for_static_data() {
     let hdr = indoc! {"
@@ -5241,11 +4821,10 @@ fn test_error_generated_for_static_data() {
         "",
         hdr,
         rs,
-        &["FOO"],
-        &[],
+        quote! { generate!("FOO")},
         None,
-        &[],
         Some(make_error_finder("FOO")),
+        None,
     );
 }
 
@@ -5262,11 +4841,10 @@ fn test_error_generated_for_array_dependent_function() {
         "",
         hdr,
         rs,
-        &["take_func"],
-        &[],
+        quote! { generate! ("take_func")},
         None,
-        &[],
         Some(make_error_finder("take_func")),
+        None,
     );
 }
 
@@ -5285,13 +4863,12 @@ fn test_error_generated_for_array_dependent_method() {
         "",
         hdr,
         rs,
-        &["A"],
-        &[],
+        quote! { generate! ("A")},
         None,
-        &[],
         Some(make_string_finder(
             ["take_func", "couldn't be generated"].to_vec(),
         )),
+        None,
     );
 }
 
@@ -5316,23 +4893,6 @@ fn test_keyword_method() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
-/// Returns a closure which simply hunts for a given string in the results
-fn make_string_finder(
-    error_texts: Vec<&str>,
-) -> Box<dyn FnOnce(syn::File) -> Result<(), TestError> + '_> {
-    Box::new(|f| {
-        let mut ts = TokenStream::new();
-        f.to_tokens(&mut ts);
-        let toks = ts.to_string();
-        for msg in error_texts {
-            if !toks.contains(msg) {
-                return Err(TestError::RsCodeExaminationFail);
-            };
-        }
-        Ok(())
-    })
-}
-
 #[test]
 fn test_doc_passthru() {
     let hdr = indoc! {"
@@ -5353,13 +4913,12 @@ fn test_doc_passthru() {
         "",
         hdr,
         rs,
-        &["A", "get_a"],
-        &["B"],
+        directives_from_lists(&["A", "get_a"], &["B"], None),
         None,
-        &[],
         Some(make_string_finder(
             ["Giraffes", "Elephants", "Rhinos"].to_vec(),
         )),
+        None,
     );
 }
 
@@ -5430,10 +4989,9 @@ fn test_stringview() {
         "",
         hdr,
         rs,
-        &["take_string_view", "return_string_view"],
-        &[],
+        directives_from_lists(&["take_string_view", "return_string_view"], &[], None),
+        make_clang_arg_adder(&["-std=c++17"]),
         None,
-        &["-std=c++17"],
         None,
     );
 }
@@ -5460,7 +5018,7 @@ fn test_include_cpp_alone() {
             }
         }
     };
-    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
@@ -5484,7 +5042,7 @@ fn test_include_cpp_in_path() {
             }
         }
     };
-    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
@@ -5520,12 +5078,11 @@ fn test_bitset() {
         "",
         hdr,
         rs,
-        &[],
-        &[],
-        Some(quote! {
+        quote! {
             generate_all!()
-        }),
-        &[],
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5621,10 +5178,12 @@ fn test_overloaded_ignored_function() {
         "",
         hdr,
         rs,
-        &["A"],
-        &[],
-        Some(quote! { block!("Blocked") }),
-        &[],
+        quote! {
+            generate!("A")
+            block!("Blocked")
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5658,12 +5217,11 @@ fn test_issue_470_492() {
         "",
         hdr,
         rs,
-        &[],
-        &[],
-        Some(quote! {
+        quote! {
             generate_all!()
-        }),
-        &[],
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5680,13 +5238,13 @@ fn test_no_impl() {
         "",
         hdr,
         rs,
-        &["A"],
-        &[],
-        Some(quote! {
+        quote! {
             exclude_impls!()
             exclude_utilities!()
-        }),
-        &[],
+            generate!("A")
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5706,12 +5264,11 @@ fn test_generate_all() {
         "",
         hdr,
         rs,
-        &[],
-        &[],
-        Some(quote! {
+        quote! {
             generate_all!()
-        }),
-        &[],
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5732,12 +5289,11 @@ fn test_std_thing() {
         "",
         hdr,
         rs,
-        &[],
-        &[],
-        Some(quote! {
+        quote! {
             generate_all!()
-        }),
-        &[],
+        },
+        None,
+        None,
         None,
     );
 }
@@ -5792,7 +5348,7 @@ fn test_two_mods() {
             }
         }
     };
-    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
@@ -5827,7 +5383,7 @@ fn test_manual_bridge() {
             }
         }
     };
-    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
@@ -5869,7 +5425,7 @@ fn test_manual_bridge_mixed_types() {
             }
         }
     };
-    do_run_test_manual("", hdr, rs, &[], None).unwrap();
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
@@ -5955,16 +5511,15 @@ fn test_rust_reference() {
         let foo = RustType(3);
         assert_eq!(ffi::take_rust_reference(&foo), 4);
     };
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         rs,
-        &["take_rust_reference"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_rust_reference")
             rust_type!(RustType)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             pub struct RustType(i32);
@@ -5986,16 +5541,15 @@ fn test_pass_thru_rust_reference() {
         let foo = RustType(3);
         assert_eq!(ffi::pass_rust_reference(&foo).0, 3);
     };
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         rs,
-        &["pass_rust_reference"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("pass_rust_reference")
             rust_type!(RustType)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             pub struct RustType(i32);
@@ -6021,19 +5575,18 @@ fn test_rust_reference_method() {
         let foo = RustType(3);
         assert_eq!(ffi::take_rust_reference(&foo), 3);
     };
-    run_test_ex2(
+    run_test_ex(
         cxx,
         hdr,
         rs,
-        &["take_rust_reference"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_rust_reference")
             rust_type!(RustType)
             extern_rust!(
                 fn get(self: &RustType) -> i32;
             )
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             pub struct RustType(i32);
@@ -6054,18 +5607,17 @@ fn test_box() {
         inline void take_box(rust::Box<Foo>) {
         }
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             ffi::take_box(Box::new(Foo { a: "Hello".into() }))
         },
-        &["take_box"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_box")
             rust_type!(Foo)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             pub struct Foo {
@@ -6088,18 +5640,17 @@ fn test_pv_subclass_mut() {
     };
     inline void bar() {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
         },
-        &["bar"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("bar")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6129,18 +5680,17 @@ fn test_pv_subclass_const() {
     };
     inline void bar() {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
         },
-        &["bar"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("bar")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6170,18 +5720,17 @@ fn test_pv_subclass_return() {
     };
     inline void bar() {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
         },
-        &["bar"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("bar")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6212,19 +5761,18 @@ fn test_pv_subclass_passed_to_fn() {
     };
     inline void take_observer(const Observer&) {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
             ffi::take_observer(o.borrow().as_ref());
         },
-        &["take_observer"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_observer")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6255,7 +5803,7 @@ fn test_pv_subclass_derive_defaults() {
     };
     inline void take_observer(const Observer&) {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
@@ -6263,12 +5811,11 @@ fn test_pv_subclass_derive_defaults() {
             let o = MyObserver::default_rust_owned();
             ffi::take_observer(o.borrow().as_ref());
         },
-        &["take_observer"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_observer")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             #[autocxx::subclass::is_subclass]
@@ -6298,19 +5845,18 @@ fn test_non_pv_subclass() {
     };
     inline void bar() {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
             obs.borrow().foo();
         },
-        &["bar"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("bar")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6346,7 +5892,7 @@ fn test_pv_subclass_allocation_not_self_owned() {
         obs.a();
     }
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
@@ -6387,12 +5933,11 @@ fn test_pv_subclass_allocation_not_self_owned() {
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
         },
-        &["TriggerTestObserverA"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("TriggerTestObserverA")
             subclass!("TestObserver",MyTestObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use once_cell::sync::Lazy;
@@ -6482,7 +6027,7 @@ fn test_pv_subclass_allocation_self_owned() {
         const_cast<TestObserver&>(obs).a();
     }
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
@@ -6541,12 +6086,11 @@ fn test_pv_subclass_allocation_self_owned() {
             assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
         },
-        &["TriggerTestObserverA"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("TriggerTestObserverA")
             subclass!("TestObserver",MyTestObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use once_cell::sync::Lazy;
@@ -6676,7 +6220,7 @@ fn test_pv_subclass_calls() {
         return obs->h(param);
     }
     "};
-    run_test_ex2(
+    run_test_ex(
         "TestObserver* obs;",
         hdr,
         quote! {
@@ -6720,22 +6264,19 @@ fn test_pv_subclass_calls() {
             assert!(Lazy::force(&STATUS).lock().unwrap().super_h_called);
             *Lazy::force(&STATUS).lock().unwrap() = Default::default();
         },
-        &[
-            "register_observer",
-            "call_a",
-            "call_b",
-            "call_c",
-            "call_d",
-            "call_e",
-            "call_f",
-            "call_g",
-            "call_h",
-        ],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("register_observer")
+            generate!("call_a")
+            generate!("call_b")
+            generate!("call_c")
+            generate!("call_d")
+            generate!("call_e")
+            generate!("call_f")
+            generate!("call_g")
+            generate!("call_h")
             subclass!("TestObserver",MyTestObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use once_cell::sync::Lazy;
@@ -6870,7 +6411,7 @@ fn test_pv_subclass_types() {
         return p;
     }
     "};
-    run_test_ex2(
+    run_test_ex(
         "TestObserver* obs;",
         hdr,
         quote! {
@@ -6882,19 +6423,17 @@ fn test_pv_subclass_types() {
             ffi::call_s("hello");
             ffi::call_n(ffi::make_non_pod("goodbye"));
         },
-        &[
-            "register_observer",
-            "call_s",
-            "call_n",
-            "call_p",
-            "NonPod",
-            "make_non_pod",
-        ],
-        &["Pod"],
-        Some(quote! {
+        quote! {
+            generate!("register_observer")
+            generate!("call_s")
+            generate!("call_n")
+            generate!("call_p")
+            generate!("NonPod")
+            generate!("make_non_pod")
+            generate_pod!("Pod")
             subclass!("TestObserver",MyTestObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -6944,7 +6483,7 @@ fn test_pv_subclass_constructors() {
         return obs->call();
     }
     "};
-    run_test_ex2(
+    run_test_ex(
         "TestObserver* obs;",
         hdr,
         quote! {
@@ -6954,12 +6493,12 @@ fn test_pv_subclass_constructors() {
             ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
             ffi::do_a_thing();
         },
-        &["register_observer", "do_a_thing"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("register_observer")
+            generate!("do_a_thing")
             subclass!("TestObserver",MyTestObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::prelude::*;
@@ -7001,12 +6540,11 @@ fn test_pv_subclass_fancy_constructor() {
             let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() }, ffi::MyObserverCpp::make_unique);
             ffi::take_observer(o.borrow().as_ref());
         },
-        &["take_observer"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_observer")
             subclass!("Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -7039,19 +6577,18 @@ fn test_pv_subclass_namespaced_superclass() {
     }
     inline void take_observer(const a::Observer&) {}
     "};
-    run_test_ex2(
+    run_test_ex(
         "",
         hdr,
         quote! {
             let o = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
             ffi::take_observer(o.borrow().as_ref());
         },
-        &["take_observer"],
-        &[],
-        Some(quote! {
+        quote! {
+            generate!("take_observer")
             subclass!("a::Observer",MyObserver)
-        }),
-        &[],
+        },
+        None,
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
@@ -7123,6 +6660,25 @@ fn test_no_constructor_pv() {
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_suppress_system_includes() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    inline void a() {};
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! { generate("a")},
+        Some(Box::new(SetSuppressSystemHeaders)),
+        Some(Box::new(NoSystemHeadersChecker)),
+        None,
+    );
 }
 
 // Yet to test:

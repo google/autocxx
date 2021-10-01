@@ -33,7 +33,7 @@ fn do_test(input: ItemMod) {
     let tc = parse_quote! {};
     let bc = BridgeConverter::new(&[], &tc);
     let inclusions = "".into();
-    bc.convert(input, UnsafePolicy::AllFunctionsSafe, inclusions)
+    bc.convert(input, UnsafePolicy::AllFunctionsSafe, inclusions, false)
         .unwrap();
 }
 

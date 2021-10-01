@@ -28,9 +28,6 @@ mod types;
 #[cfg(any(test, feature = "build"))]
 mod builder;
 
-#[cfg(test)]
-mod integration_tests;
-
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use parse_callbacks::AutocxxParseCallbacks;
@@ -363,6 +360,7 @@ impl IncludeCppEngine {
         inc_dirs: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
+        suppress_system_headers: bool,
     ) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -389,7 +387,12 @@ impl IncludeCppEngine {
         let converter = BridgeConverter::new(&self.config.inclusions, &self.config);
 
         let conversion = converter
-            .convert(bindings, self.config.unsafe_policy.clone(), header_contents)
+            .convert(
+                bindings,
+                self.config.unsafe_policy.clone(),
+                header_contents,
+                suppress_system_headers,
+            )
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;
         let mut new_bindings: ItemMod = parse_quote! {
@@ -477,26 +480,49 @@ static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
     "sys/types.h",
 ];
 
-pub fn do_cxx_cpp_generation(rs: TokenStream2) -> Result<CppFilePair, cxx_gen::Error> {
+pub fn do_cxx_cpp_generation(
+    rs: TokenStream2,
+    suppress_system_headers: bool,
+) -> Result<CppFilePair, cxx_gen::Error> {
     let opt = cxx_gen::Opt::default();
     let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
     Ok(CppFilePair {
-        header: cxx_generated.header,
+        header: strip_system_headers(cxx_generated.header, suppress_system_headers),
         header_name: "cxxgen.h".into(),
-        implementation: Some(cxx_generated.implementation),
+        implementation: Some(strip_system_headers(
+            cxx_generated.implementation,
+            suppress_system_headers,
+        )),
     })
+}
+
+pub(crate) fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool) -> Vec<u8> {
+    if suppress_system_headers {
+        std::str::from_utf8(&input)
+            .unwrap()
+            .lines()
+            .filter(|l| !l.starts_with("#include <"))
+            .join("\n")
+            .as_bytes()
+            .to_vec()
+    } else {
+        input
+    }
 }
 
 impl CppBuildable for IncludeCppEngine {
     /// Generate C++-side bindings for these APIs. Call `generate` first.
-    fn generate_h_and_cxx(&self) -> Result<GeneratedCpp, cxx_gen::Error> {
+    fn generate_h_and_cxx(
+        &self,
+        suppress_system_headers: bool,
+    ) -> Result<GeneratedCpp, cxx_gen::Error> {
         let mut files = Vec::new();
         match &self.state {
             State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
             State::NotGenerated => panic!("Call generate() first"),
             State::Generated(gen_results) => {
                 let rs = gen_results.item_mod.to_token_stream();
-                files.push(do_cxx_cpp_generation(rs)?);
+                files.push(do_cxx_cpp_generation(rs, suppress_system_headers)?);
                 if let Some(cpp_file_pair) = &gen_results.cpp {
                     files.push(cpp_file_pair.clone());
                 }
