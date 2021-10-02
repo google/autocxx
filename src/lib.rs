@@ -727,3 +727,5 @@ pub struct BindingGenerationFailure {
     _unallocatable: [*const u8; 0],
     _pinned: core::marker::PhantomData<core::marker::PhantomPinned>,
 }
+
+pub use autocxx_macro::extern_rust;

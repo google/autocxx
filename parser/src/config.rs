@@ -17,9 +17,11 @@ use std::collections::HashSet;
 use proc_macro2::Span;
 use syn::{
     parse::{Parse, ParseStream},
-    LitStr, Token,
+    LitStr, Signature, Token,
 };
 use syn::{Ident, Result as ParseResult};
+
+use crate::RustPath;
 
 #[derive(PartialEq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
@@ -99,13 +101,19 @@ impl Default for Allowlist {
     }
 }
 
-#[derive(Hash, Debug)]
+#[derive(Debug)]
 pub struct Subclass {
     pub superclass: String,
     pub subclass: Ident,
 }
 
-#[derive(Hash, Debug)]
+#[derive(Debug)]
+pub struct RustFun {
+    pub path: RustPath,
+    pub sig: Signature,
+}
+
+#[derive(Debug)]
 pub struct IncludeCppConfig {
     pub inclusions: Vec<String>,
     pub unsafe_policy: UnsafePolicy,
@@ -116,8 +124,9 @@ pub struct IncludeCppConfig {
     blocklist: Vec<String>,
     exclude_utilities: bool,
     mod_name: Option<Ident>,
-    pub rust_types: Vec<Ident>,
+    pub rust_types: Vec<RustPath>,
     pub subclasses: Vec<Subclass>,
+    pub extern_rust_funs: Vec<RustFun>,
 }
 
 impl Parse for IncludeCppConfig {
@@ -174,8 +183,8 @@ impl Parse for IncludeCppConfig {
                 } else if ident == "rust_type" {
                     let args;
                     syn::parenthesized!(args in input);
-                    let ident: syn::Ident = args.parse()?;
-                    rust_types.push(ident);
+                    let id: Ident = args.parse()?;
+                    rust_types.push(RustPath::new_from_ident(id));
                 } else if ident == "subclass" {
                     let args;
                     syn::parenthesized!(args in input);
@@ -231,6 +240,7 @@ impl Parse for IncludeCppConfig {
             exclude_utilities,
             mod_name,
             subclasses,
+            extern_rust_funs: Vec::new(),
         })
     }
 }
@@ -292,7 +302,7 @@ impl IncludeCppConfig {
                             .map(|sc| {
                                 [
                                     format!("{}Cpp", sc.subclass),
-                                    sc.subclass.to_string(),
+                                    sc.subclass.to_string(), // TODO may not be necessary
                                     sc.superclass.clone(),
                                 ]
                             })
@@ -327,6 +337,7 @@ impl IncludeCppConfig {
                     || self.active_utilities().iter().any(|item| *item == cpp_name)
                     || self.is_subclass_holder(cpp_name)
                     || self.is_subclass_cpp(cpp_name)
+                    || self.is_rust_fun(cpp_name)
             }
         }
     }
@@ -350,7 +361,17 @@ impl IncludeCppConfig {
     }
 
     pub fn is_rust_type(&self, id: &Ident) -> bool {
-        self.rust_types.contains(id) || self.is_subclass_holder(&id.to_string())
+        self.rust_types
+            .iter()
+            .any(|rt| rt.get_final_ident() == &id.to_string())
+            || self.is_subclass_holder(&id.to_string())
+    }
+
+    fn is_rust_fun(&self, possible_fun: &str) -> bool {
+        self.extern_rust_funs
+            .iter()
+            .map(|fun| &fun.sig.ident)
+            .any(|id| id == possible_fun)
     }
 
     pub fn superclasses(&self) -> impl Iterator<Item = &String> {

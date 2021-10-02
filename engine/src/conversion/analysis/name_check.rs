@@ -75,6 +75,7 @@ pub(crate) fn check_names(apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
         | Api::RustType { .. }
         | Api::RustSubclassFn { .. }
         | Api::RustSubclassConstructor { .. }
+        | Api::RustFn { .. }
         | Api::IgnoredItem { .. } => Ok(Box::new(std::iter::once(api))),
     });
 

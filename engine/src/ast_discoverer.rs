@@ -14,20 +14,54 @@
 
 use std::collections::HashSet;
 
+use autocxx_parser::{RustFun, RustPath};
 use itertools::Itertools;
+use proc_macro2::Ident;
 use syn::{
-    punctuated::Punctuated, Binding, Expr, ExprAssign, ExprAssignOp, ExprAwait, ExprBinary,
-    ExprBox, ExprBreak, ExprCast, ExprField, ExprGroup, ExprLet, ExprParen, ExprReference, ExprTry,
-    ExprType, ExprUnary, ImplItem, Item, Pat, PatBox, PatReference, PatSlice, PatTuple, Path,
-    ReturnType, Stmt, TraitItem, Type, TypeArray, TypeGroup, TypeParamBound, TypeParen, TypePtr,
-    TypeReference, TypeSlice,
+    punctuated::Punctuated, Attribute, Binding, Expr, ExprAssign, ExprAssignOp, ExprAwait,
+    ExprBinary, ExprBox, ExprBreak, ExprCast, ExprField, ExprGroup, ExprLet, ExprParen,
+    ExprReference, ExprTry, ExprType, ExprUnary, ImplItem, Item, ItemEnum, ItemStruct, Pat, PatBox,
+    PatReference, PatSlice, PatTuple, Path, ReturnType, Stmt, TraitItem, Type, TypeArray,
+    TypeGroup, TypeParamBound, TypeParen, TypePtr, TypeReference, TypeSlice,
 };
 
 #[derive(Default)]
-pub(super) struct CppList(pub(super) HashSet<String>);
+pub(super) struct Discoveries {
+    pub(super) cpp_list: HashSet<String>,
+    pub(super) extern_rust_funs: Vec<RustFun>,
+    pub(super) extern_rust_types: Vec<RustPath>,
+}
 
-impl CppList {
+impl Discoveries {
     pub(super) fn search_item(&mut self, item: &Item) {
+        let mut this_mod = PerModDiscoveries {
+            discoveries: self,
+            mod_path: None,
+        };
+        this_mod.search_item(item);
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.cpp_list.is_empty()
+            && self.extern_rust_funs.is_empty()
+            && self.extern_rust_types.is_empty()
+    }
+}
+
+struct PerModDiscoveries<'a> {
+    discoveries: &'a mut Discoveries,
+    mod_path: Option<RustPath>,
+}
+
+impl<'b> PerModDiscoveries<'b> {
+    fn deeper_path(&self, id: &Ident) -> RustPath {
+        match &self.mod_path {
+            None => RustPath::new_from_ident(id.clone()),
+            Some(mod_path) => mod_path.append(id.clone()),
+        }
+    }
+
+    fn search_item(&mut self, item: &Item) {
         match item {
             Item::Fn(fun) => {
                 for stmt in &fun.block.stmts {
@@ -43,6 +77,12 @@ impl CppList {
                         }
                     }
                 }
+                if Self::has_extern_rust_attr(&fun.attrs) {
+                    self.discoveries.extern_rust_funs.push(RustFun {
+                        path: self.deeper_path(&fun.sig.ident),
+                        sig: fun.sig.clone(),
+                    });
+                }
             }
             Item::Impl(imp) => {
                 for item in &imp.items {
@@ -51,8 +91,13 @@ impl CppList {
             }
             Item::Mod(md) => {
                 if let Some((_, items)) = &md.content {
+                    let mod_path = Some(self.deeper_path(&md.ident));
+                    let mut new_mod = PerModDiscoveries {
+                        discoveries: self.discoveries,
+                        mod_path,
+                    };
                     for item in items {
-                        self.search_item(item)
+                        new_mod.search_item(item)
                     }
                 }
             }
@@ -60,6 +105,14 @@ impl CppList {
                 for item in &tr.items {
                     self.search_trait_item(item)
                 }
+            }
+            Item::Struct(ItemStruct { ident, attrs, .. })
+            | Item::Enum(ItemEnum { ident, attrs, .. })
+                if Self::has_extern_rust_attr(attrs) =>
+            {
+                self.discoveries
+                    .extern_rust_types
+                    .push(self.deeper_path(ident));
             }
             _ => {}
         }
@@ -69,7 +122,8 @@ impl CppList {
         let mut seg_iter = path.segments.iter();
         if let Some(first_seg) = seg_iter.next() {
             if first_seg.ident == "ffi" {
-                self.0
+                self.discoveries
+                    .cpp_list
                     .insert(seg_iter.map(|seg| seg.ident.to_string()).join("::"));
             }
         }
@@ -335,113 +389,168 @@ impl CppList {
             }
         }
     }
+
+    fn has_extern_rust_attr(attrs: &[Attribute]) -> bool {
+        attrs
+            .iter()
+            .find(|attr| {
+                attr.path
+                    .segments
+                    .last()
+                    .map(|seg| seg.ident == "extern_rust")
+                    .unwrap_or_default()
+            })
+            .is_some()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use syn::{parse_quote, Item};
+    use syn::parse_quote;
 
-    use super::CppList;
+    use super::Discoveries;
 
-    fn assert_found(cpp_list: &CppList) {
-        assert!(!cpp_list.0.is_empty());
-        assert!(cpp_list.0.iter().next().unwrap() == "xxx");
+    fn assert_cpp_found(discoveries: &Discoveries) {
+        assert!(!discoveries.cpp_list.is_empty());
+        assert!(discoveries.cpp_list.iter().next().unwrap() == "xxx");
     }
 
     #[test]
     fn test_mod_plain_call() {
-        let mut cpplist = CppList::default();
-        let itm = Item::Mod(parse_quote! {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
             mod foo {
                 fn bar() {
                     ffi::xxx()
                 }
             }
-        });
-        cpplist.search_item(&itm);
-        assert_found(&cpplist);
+        };
+        discoveries.search_item(&itm);
+        assert_cpp_found(&discoveries);
     }
 
     #[test]
     fn test_plain_call() {
-        let mut cpplist = CppList::default();
-        let itm = Item::Fn(parse_quote! {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
             fn bar() {
                 ffi::xxx()
             }
-        });
-        cpplist.search_item(&itm);
-        assert_found(&cpplist);
+        };
+        discoveries.search_item(&itm);
+        assert_cpp_found(&discoveries);
     }
 
     #[test]
     fn test_plain_call_with_semi() {
-        let mut cpplist = CppList::default();
-        let itm = Item::Fn(parse_quote! {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
             fn bar() {
                 ffi::xxx();
             }
-        });
-        cpplist.search_item(&itm);
-        assert_found(&cpplist);
+        };
+        discoveries.search_item(&itm);
+        assert_cpp_found(&discoveries);
     }
 
     #[test]
     fn test_in_ns() {
-        let mut cpplist = CppList::default();
-        let itm = Item::Fn(parse_quote! {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
             fn bar() {
                 ffi::a::b::xxx();
             }
-        });
-        cpplist.search_item(&itm);
-        assert!(!cpplist.0.is_empty());
-        assert!(cpplist.0.iter().next().unwrap() == "a::b::xxx");
+        };
+        discoveries.search_item(&itm);
+        assert!(!discoveries.cpp_list.is_empty());
+        assert!(discoveries.cpp_list.iter().next().unwrap() == "a::b::xxx");
     }
 
     #[test]
     fn test_deep_nested_thingy() {
-        let mut cpplist = CppList::default();
-        let itm = Item::Fn(parse_quote! {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
             fn bar() {
                 a + 3 * foo(ffi::xxx());
             }
-        });
-        cpplist.search_item(&itm);
-        assert_found(&cpplist);
+        };
+        discoveries.search_item(&itm);
+        assert_cpp_found(&discoveries);
     }
 
     #[test]
     fn test_ty_in_let() {
-        let mut cpplist = CppList::default();
-        let itm = Item::Fn(parse_quote! {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
             fn bar() {
                 let foo: ffi::xxx = bar();
             }
-        });
-        cpplist.search_item(&itm);
-        assert_found(&cpplist);
+        };
+        discoveries.search_item(&itm);
+        assert_cpp_found(&discoveries);
     }
 
     #[test]
     fn test_ty_in_fn() {
-        let mut cpplist = CppList::default();
-        let itm = Item::Fn(parse_quote! {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
             fn bar(a: &mut ffi::xxx) {
             }
-        });
-        cpplist.search_item(&itm);
-        assert_found(&cpplist);
+        };
+        discoveries.search_item(&itm);
+        assert_cpp_found(&discoveries);
     }
 
     #[test]
     fn test_ty_in_fn_up() {
-        let mut cpplist = CppList::default();
-        let itm = Item::Fn(parse_quote! {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
             fn bar(a: cxx::UniquePtr<ffi::xxx>) {
             }
-        });
-        cpplist.search_item(&itm);
-        assert_found(&cpplist);
+        };
+        discoveries.search_item(&itm);
+        assert_cpp_found(&discoveries);
+    }
+
+    #[test]
+    fn test_extern_rust_fun() {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
+            #[autocxx::extern_rust]
+            fn bar(a: cxx::UniquePtr<ffi::xxx>) {
+            }
+        };
+        discoveries.search_item(&itm);
+        assert!(
+            discoveries
+                .extern_rust_funs
+                .iter()
+                .next()
+                .unwrap()
+                .sig
+                .ident
+                == "bar"
+        );
+    }
+
+    #[test]
+    fn test_extern_rust_ty() {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
+            #[autocxx::extern_rust]
+            struct Bar {
+
+            }
+        };
+        discoveries.search_item(&itm);
+        assert!(
+            discoveries
+                .extern_rust_types
+                .iter()
+                .next()
+                .unwrap()
+                .get_final_ident()
+                == "Bar"
+        );
     }
 }

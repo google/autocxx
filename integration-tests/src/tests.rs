@@ -15,7 +15,7 @@
 use crate::test_utils::{
     directives_from_lists, do_run_test_manual, make_clang_arg_adder, make_error_finder,
     make_string_finder, run_test, run_test_ex, run_test_expect_fail, run_test_expect_fail_ex,
-    NoSystemHeadersChecker, SetSuppressSystemHeaders,
+    EnableAutodiscover, NoSystemHeadersChecker, SetSuppressSystemHeaders,
 };
 use indoc::indoc;
 use proc_macro2::Span;
@@ -5586,11 +5586,13 @@ fn test_rust_reference_method() {
                 fn get(self: &RustType) -> i32;
             )
         },
-        None,
+        Some(Box::new(EnableAutodiscover)),
         None,
         Some(quote! {
+            #[autocxx::extern_rust]
             pub struct RustType(i32);
             impl RustType {
+                #[autocxx::extern_rust]
                 pub fn get(&self) -> i32 {
                     return self.0
                 }
@@ -5622,6 +5624,114 @@ fn test_box() {
         Some(quote! {
             pub struct Foo {
                 a: String,
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_box_via_extern_rust() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct Foo;
+        inline void take_box(rust::Box<Foo>) {
+        }
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            ffi::take_box(Box::new(Foo { a: "Hello".into() }))
+        },
+        quote! {
+            generate!("take_box")
+        },
+        Some(Box::new(EnableAutodiscover)),
+        None,
+        Some(quote! {
+            #[autocxx::extern_rust]
+            pub struct Foo {
+                a: String,
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_box_via_extern_rust_in_mod() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct Foo;
+        inline void take_box(rust::Box<Foo>) {
+        }
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            ffi::take_box(Box::new(bar::Foo { a: "Hello".into() }))
+        },
+        quote! {
+            generate!("take_box")
+        },
+        Some(Box::new(EnableAutodiscover)),
+        None,
+        Some(quote! {
+            mod bar {
+                #[autocxx::extern_rust]
+                pub struct Foo {
+                    pub a: String,
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_extern_rust_fn() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        inline void do_thing() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! {
+            generate!("do_thing")
+        },
+        Some(Box::new(EnableAutodiscover)),
+        None,
+        Some(quote! {
+            #[autocxx::extern_rust]
+            fn my_rust_fun() {
+
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_extern_rust_fn_in_mod() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        inline void do_thing() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! {
+            generate!("do_thing")
+        },
+        Some(Box::new(EnableAutodiscover)),
+        None,
+        Some(quote! {
+            mod bar {
+                #[autocxx::extern_rust]
+                pub fn my_rust_fun() {
+
+                }
             }
         }),
     );

@@ -110,8 +110,11 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                         Api::CType { name, typename } => {
                             Ok(Box::new(std::iter::once(Api::CType { name, typename })))
                         }
-                        Api::RustType { name } => {
-                            Ok(Box::new(std::iter::once(Api::RustType { name })))
+                        Api::RustType { name, path } => {
+                            Ok(Box::new(std::iter::once(Api::RustType { name, path })))
+                        }
+                        Api::RustFn { name, sig, path } => {
+                            Ok(Box::new(std::iter::once(Api::RustFn { name, sig, path })))
                         }
                         Api::RustSubclassFn {
                             name,

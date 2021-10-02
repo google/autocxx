@@ -15,9 +15,10 @@
 use std::collections::HashSet;
 
 use crate::types::{make_ident, Namespace, QualifiedName};
+use autocxx_parser::RustPath;
 use syn::{
     punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ImplItem, ItemConst, ItemEnum,
-    ItemStruct, ItemType, ItemUse, ReturnType, Type, Visibility,
+    ItemStruct, ItemType, ItemUse, ReturnType, Signature, Type, Visibility,
 };
 
 use super::{
@@ -265,7 +266,13 @@ pub(crate) enum Api<T: AnalysisPhase> {
         ctx: ErrorContext,
     },
     /// A Rust type which is not a C++ type.
-    RustType { name: ApiName },
+    RustType { name: ApiName, path: RustPath },
+    /// A function for the 'extern Rust' block which is not a C++ type.
+    RustFn {
+        name: ApiName,
+        sig: Signature,
+        path: RustPath,
+    },
     /// Some function for the extern "Rust" block.
     RustSubclassFn {
         name: ApiName,
@@ -310,6 +317,7 @@ impl<T: AnalysisPhase> Api<T> {
             Api::CType { name, .. } => name,
             Api::IgnoredItem { name, .. } => name,
             Api::RustType { name, .. } => name,
+            Api::RustFn { name, .. } => name,
             Api::RustSubclassFn { name, .. } => name,
             Api::RustSubclassConstructor { name, .. } => name,
             Api::Subclass { name, .. } => &name.0,

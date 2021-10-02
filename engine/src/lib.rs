@@ -16,9 +16,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod ast_discoverer;
 mod conversion;
 mod cxxbridge;
-mod find_cpp_calls;
 mod known_types;
 mod parse_callbacks;
 mod parse_file;

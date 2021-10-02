@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::find_cpp_calls::CppList;
+use crate::ast_discoverer::Discoveries;
 use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
     RebuildDependencyRecorder,
@@ -46,6 +46,7 @@ pub enum ParseError {
     ConflictingModNames,
     ZeroModsForDynamicDiscovery,
     MultipleModsForDynamicDiscovery,
+    DiscoveredRustItemsWhenNotInAutoDiscover,
 }
 
 impl Display for ParseError {
@@ -62,6 +63,8 @@ impl Display for ParseError {
                 write!(f, "This file contains extra information to append to an include_cpp! but no such include_cpp! was found in this file.")?,
             ParseError::MultipleModsForDynamicDiscovery =>
                 write!(f, "This file contains extra information to append to an include_cpp! but multiple such include_cpp! declarations were found in this file.")?,
+            ParseError::DiscoveredRustItemsWhenNotInAutoDiscover =>
+                write!(f, "This file contains extra information to append to an \"extern Rust\" but auto-discover was switched off.")?,
         }
         Ok(())
     }
@@ -84,7 +87,7 @@ pub fn parse_file<P1: AsRef<Path>>(
 fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<ParsedFile, ParseError> {
     let mut results = Vec::new();
     let mut extra_superclasses = Vec::new();
-    let mut extra_cpps = CppList::default();
+    let mut discoveries = Discoveries::default();
     for item in source.items {
         results.push(match item {
             Item::Macro(mac)
@@ -132,16 +135,21 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                         }
                     }
                 }
+                discoveries.search_item(&item);
                 Segment::Other(item)
             }
-            _ if auto_allowlist => {
-                extra_cpps.search_item(&item);
+            _ => {
+                discoveries.search_item(&item);
                 Segment::Other(item)
             }
-            _ => Segment::Other(item),
         });
     }
-    if !extra_superclasses.is_empty() || !extra_cpps.0.is_empty() {
+    if !auto_allowlist {
+        if !discoveries.extern_rust_types.is_empty() || !discoveries.extern_rust_funs.is_empty() {
+            return Err(ParseError::DiscoveredRustItemsWhenNotInAutoDiscover);
+        }
+    }
+    if !extra_superclasses.is_empty() || (auto_allowlist && !discoveries.is_empty()) {
         let mut autocxx_seg_iterator = results.iter_mut().filter_map(|seg| match seg {
             Segment::Autocxx(engine) => Some(engine),
             _ => None,
@@ -154,13 +162,23 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                     .config_mut()
                     .subclasses
                     .append(&mut extra_superclasses);
-                for cpp in extra_cpps.0 {
-                    engine
-                        .config_mut()
-                        .allowlist
-                        .push(LitStr::new(&cpp, Span::call_site()))
-                        .map_err(ParseError::Syntax)?;
+                if auto_allowlist {
+                    for cpp in discoveries.cpp_list {
+                        engine
+                            .config_mut()
+                            .allowlist
+                            .push(LitStr::new(&cpp, Span::call_site()))
+                            .map_err(ParseError::Syntax)?;
+                    }
                 }
+                engine
+                    .config_mut()
+                    .extern_rust_funs
+                    .append(&mut discoveries.extern_rust_funs);
+                engine
+                    .config_mut()
+                    .rust_types
+                    .append(&mut discoveries.extern_rust_types);
             }
         }
         if autocxx_seg_iterator.next().is_some() {
