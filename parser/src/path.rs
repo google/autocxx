@@ -30,7 +30,7 @@ impl RustPath {
     }
 
     pub fn get_final_ident(&self) -> &Ident {
-        &self.0.last().unwrap()
+        self.0.last().unwrap()
     }
 }
 

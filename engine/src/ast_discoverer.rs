@@ -391,16 +391,13 @@ impl<'b> PerModDiscoveries<'b> {
     }
 
     fn has_extern_rust_attr(attrs: &[Attribute]) -> bool {
-        attrs
-            .iter()
-            .find(|attr| {
-                attr.path
-                    .segments
-                    .last()
-                    .map(|seg| seg.ident == "extern_rust")
-                    .unwrap_or_default()
-            })
-            .is_some()
+        attrs.iter().any(|attr| {
+            attr.path
+                .segments
+                .last()
+                .map(|seg| seg.ident == "extern_rust")
+                .unwrap_or_default()
+        })
     }
 }
 

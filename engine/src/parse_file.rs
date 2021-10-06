@@ -144,10 +144,10 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
             }
         });
     }
-    if !auto_allowlist {
-        if !discoveries.extern_rust_types.is_empty() || !discoveries.extern_rust_funs.is_empty() {
-            return Err(ParseError::DiscoveredRustItemsWhenNotInAutoDiscover);
-        }
+    if !auto_allowlist
+        && (!discoveries.extern_rust_types.is_empty() || !discoveries.extern_rust_funs.is_empty())
+    {
+        return Err(ParseError::DiscoveredRustItemsWhenNotInAutoDiscover);
     }
     if !extra_superclasses.is_empty() || (auto_allowlist && !discoveries.is_empty()) {
         let mut autocxx_seg_iterator = results.iter_mut().filter_map(|seg| match seg {
