@@ -15,6 +15,7 @@
 use std::collections::HashSet;
 
 use proc_macro2::Span;
+use quote::ToTokens;
 use syn::{
     parse::{Parse, ParseStream},
     LitStr, Signature, Token,
@@ -107,10 +108,18 @@ pub struct Subclass {
     pub subclass: Ident,
 }
 
-#[derive(Debug)]
 pub struct RustFun {
     pub path: RustPath,
     pub sig: Signature,
+}
+
+impl std::fmt::Debug for RustFun {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RustFun")
+            .field("path", &self.path)
+            .field("sig", &self.sig.to_token_stream().to_string())
+            .finish()
+    }
 }
 
 #[derive(Debug)]
