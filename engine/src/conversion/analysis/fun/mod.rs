@@ -118,7 +118,7 @@ pub(crate) struct FnAnalysis {
     pub(crate) deps: HashSet<QualifiedName>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct ArgumentAnalysis {
     pub(crate) conversion: TypeConversionPolicy,
     pub(crate) name: Pat,

@@ -121,7 +121,6 @@ fn get_string_items() -> Vec<Item> {
     .to_vec()
 }
 
-#[derive(Debug)]
 struct SuperclassMethod {
     name: Ident,
     params: Punctuated<FnArg, Comma>,
