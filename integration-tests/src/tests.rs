@@ -5582,17 +5582,17 @@ fn test_rust_reference_method() {
         quote! {
             generate!("take_rust_reference")
             rust_type!(RustType)
-            extern_rust!(
+            extern_rust_function!(
                 fn get(self: &RustType) -> i32;
             )
         },
         Some(Box::new(EnableAutodiscover)),
         None,
         Some(quote! {
-            #[autocxx::extern_rust]
+            #[autocxx::extern_rust_type]
             pub struct RustType(i32);
             impl RustType {
-                #[autocxx::extern_rust]
+                #[autocxx::extern_rust_function]
                 pub fn get(&self) -> i32 {
                     return self.0
                 }
@@ -5649,7 +5649,7 @@ fn test_box_via_extern_rust() {
         Some(Box::new(EnableAutodiscover)),
         None,
         Some(quote! {
-            #[autocxx::extern_rust]
+            #[autocxx::extern_rust_type]
             pub struct Foo {
                 a: String,
             }
@@ -5678,7 +5678,7 @@ fn test_box_via_extern_rust_in_mod() {
         None,
         Some(quote! {
             mod bar {
-                #[autocxx::extern_rust]
+                #[autocxx::extern_rust_type]
                 pub struct Foo {
                     pub a: String,
                 }
@@ -5703,7 +5703,7 @@ fn test_extern_rust_fn() {
         Some(Box::new(EnableAutodiscover)),
         None,
         Some(quote! {
-            #[autocxx::extern_rust]
+            #[autocxx::extern_rust_function]
             fn my_rust_fun() {
 
             }
@@ -5728,7 +5728,7 @@ fn test_extern_rust_fn_in_mod() {
         None,
         Some(quote! {
             mod bar {
-                #[autocxx::extern_rust]
+                #[autocxx::extern_rust_function]
                 pub fn my_rust_fun() {
 
                 }
