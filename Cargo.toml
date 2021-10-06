@@ -22,6 +22,10 @@ repository = "https://github.com/google/autocxx"
 edition = "2018"
 keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
+
+# This is stricter about avoiding optional features in dependencies
+# such as 'syn'. We build this way such that CI spots any mistakes
+# where we are depending on such features.
 resolver = "2"
 
 [dependencies]
