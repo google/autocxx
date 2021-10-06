@@ -638,24 +638,10 @@ macro_rules! exclude_impls {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
-/// Declare that a given type is a Rust type. These may be used within
-/// references in the signatures of C++ functions, for instance.
-/// This will contribute to an `extern "Rust"` section of the generated
-/// `cxx` bindings.
+/// Deprecated - use [`extern_rust_type`] instead.
 #[macro_export]
+#[deprecated]
 macro_rules! rust_type {
-    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
-}
-
-/// Declare a Rust subclass of a C++ class.
-/// A directive to be included inside
-/// [include_cpp] - see [include_cpp] for general information.
-/// Use this in conjunction with [`subclass::is_subclass`].
-/// See [`subclass::CppSubclass`] for information about the
-/// multiple steps you need to take to be able to make Rust
-/// subclasses of a C++ class.
-#[macro_export]
-macro_rules! subclass {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
@@ -728,4 +714,71 @@ pub struct BindingGenerationFailure {
     _pinned: core::marker::PhantomData<core::marker::PhantomPinned>,
 }
 
-pub use autocxx_macro::extern_rust;
+/// Declare that this is a Rust type which is to be exported to C++.
+/// You can use this in two ways:
+/// * as an attribute macro on a Rust type, for instance:
+///   ```
+///   # use autocxx_macro::extern_rust_type as extern_rust_type;
+///   #[extern_rust_type]
+///   struct Bar;
+///   ```
+/// * as a directive within the [include_cpp] macro, in which case
+///   provide the type path in brackets:
+///   ```
+///   # use autocxx_macro::include_cpp_impl as include_cpp;
+///   include_cpp!(
+///   #   parse_only!()
+///       #include "input.h"
+///       extern_rust_type!(Bar)
+///       safety!(unsafe)
+///   );
+///   struct Bar;
+///   ```
+/// These may be used within references in the signatures of C++ functions,
+/// for instance. This will contribute to an `extern "Rust"` section of the
+/// generated `cxx` bindings, and this type will appear in the C++ header
+/// generated for use in C++.
+pub use autocxx_macro::extern_rust_type;
+
+/// Declare that a given function is a Rust function which is to be exported
+/// to C++. This is used as an attribute macro on a Rust function, for instance:
+/// ```
+/// # use autocxx_macro::extern_rust_function as extern_rust_function;
+/// #[extern_rust_function]
+/// pub fn call_me_from_cpp() { }
+/// ```
+pub use autocxx_macro::extern_rust_function;
+
+/// Declare a Rust subclass of a C++ class.
+/// You can use this in two ways:
+/// * As an attribute macro on a struct which is to be a subclass.
+///   In this case, you must specify the superclass as described below.
+///   For instance,
+///   ```nocompile
+///   # use autocxx_macro::subclass as subclass;
+///   #[subclass(superclass("MyCppSuperclass"))]
+///   struct Bar {};
+///   ```
+/// * as a directive within the [include_cpp] macro, in which case you
+///   must provide two arguments of the superclass and then the
+///   subclass:
+///   ```
+///   # use autocxx_macro::include_cpp_impl as include_cpp;
+///   include_cpp!(
+///   #   parse_only!()
+///       #include "input.h"
+///       subclass!("MyCppSuperclass",Bar)
+///       safety!(unsafe)
+///   );
+///   struct Bar {
+///     // ...
+///   }
+///   ```
+///   In this latter case, you'll need to implement the trait
+///   [`subclass::CppSubclass`] for the struct, so it's
+///   generally easier to use the former option.
+///   
+/// See [`subclass::CppSubclass`] for information about the
+/// multiple steps you need to take to be able to make Rust
+/// subclasses of a C++ class.
+pub use autocxx_macro::subclass;

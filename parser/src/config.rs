@@ -180,7 +180,7 @@ impl Parse for IncludeCppConfig {
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
                     blocklist.push(generate.value());
-                } else if ident == "rust_type" {
+                } else if ident == "rust_type" || ident == "extern_rust_type" {
                     let args;
                     syn::parenthesized!(args in input);
                     let id: Ident = args.parse()?;

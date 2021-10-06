@@ -118,7 +118,7 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                     attr.path
                         .segments
                         .last()
-                        .map(|seg| seg.ident == "is_subclass")
+                        .map(|seg| seg.ident == "is_subclass" || seg.ident == "subclass")
                         .unwrap_or(false)
                 });
                 if let Some(is_superclass_attr) = is_superclass_attr {
