@@ -129,9 +129,14 @@ impl<CTX: BuilderContext> Builder<CTX> {
     /// Automatically discover uses of the C++ `ffi` mod and generate the allowlist
     /// from that.
     /// This is a highly experimental option, not currently recommended.
-    /// It doesn't work in cases where you're using a different name for your
-    /// `ffi` mod, or if you've got uses scattered across multiple files, or
-    /// if you're using `use` statements to rename mods or items. If this
+    /// It doesn't work in the following cases:
+    /// * Static function calls on types within the FFI mod.
+    /// * Anything inside a macro invocation.
+    /// * You're using a different name for your `ffi` mod
+    /// * You're using multiple FFI mods
+    /// * You've got usages scattered across files beyond that with the
+    ///   `include_cpp` invocation
+    /// * You're using `use` statements to rename mods or items. If this
     /// proves to be a promising or helpful direction, autocxx would be happy
     /// to accept pull requests to remove some of these limitations.
     pub fn auto_allowlist(mut self, do_it: bool) -> Self {

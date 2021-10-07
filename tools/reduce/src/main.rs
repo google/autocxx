@@ -1,6 +1,3 @@
-//! Crate to `#include` C++ headers in your Rust code, and generate
-//! idiomatic bindings using `cxx`. See [include_cpp] for details.
-
 // Copyright 2020 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
