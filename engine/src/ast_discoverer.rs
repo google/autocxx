@@ -516,7 +516,7 @@ mod tests {
     fn test_extern_rust_fun() {
         let mut discoveries = Discoveries::default();
         let itm = parse_quote! {
-            #[autocxx::extern_rust]
+            #[autocxx::extern_rust::extern_rust_fun]
             fn bar(a: cxx::UniquePtr<ffi::xxx>) {
             }
         };
@@ -537,7 +537,7 @@ mod tests {
     fn test_extern_rust_ty() {
         let mut discoveries = Discoveries::default();
         let itm = parse_quote! {
-            #[autocxx::extern_rust]
+            #[autocxx::extern_rust::extern_rust_type]
             struct Bar {
 
             }
