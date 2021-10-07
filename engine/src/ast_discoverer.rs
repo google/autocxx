@@ -14,7 +14,10 @@
 
 use std::collections::HashSet;
 
-use autocxx_parser::{RustFun, RustPath};
+use autocxx_parser::{
+    directives::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE},
+    RustFun, RustPath,
+};
 use itertools::Itertools;
 use proc_macro2::Ident;
 use syn::{
@@ -77,7 +80,7 @@ impl<'b> PerModDiscoveries<'b> {
                         }
                     }
                 }
-                if Self::has_extern_rust_attr(&fun.attrs) {
+                if Self::has_attr(&fun.attrs, EXTERN_RUST_FUN) {
                     self.discoveries.extern_rust_funs.push(RustFun {
                         path: self.deeper_path(&fun.sig.ident),
                         sig: fun.sig.clone(),
@@ -108,7 +111,7 @@ impl<'b> PerModDiscoveries<'b> {
             }
             Item::Struct(ItemStruct { ident, attrs, .. })
             | Item::Enum(ItemEnum { ident, attrs, .. })
-                if Self::has_extern_rust_attr(attrs) =>
+                if Self::has_attr(attrs, EXTERN_RUST_TYPE) =>
             {
                 self.discoveries
                     .extern_rust_types
@@ -390,14 +393,14 @@ impl<'b> PerModDiscoveries<'b> {
         }
     }
 
-    fn has_extern_rust_attr(attrs: &[Attribute]) -> bool {
+    fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
         attrs
             .iter()
             .find(|attr| {
                 attr.path
                     .segments
                     .last()
-                    .map(|seg| seg.ident == "extern_rust")
+                    .map(|seg| seg.ident == attr_name)
                     .unwrap_or_default()
             })
             .is_some()

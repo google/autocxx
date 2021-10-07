@@ -17,6 +17,7 @@ use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
     RebuildDependencyRecorder,
 };
+use autocxx_parser::directives::SUBCLASS;
 use autocxx_parser::{Subclass, SubclassAttrs};
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
@@ -118,7 +119,7 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                     attr.path
                         .segments
                         .last()
-                        .map(|seg| seg.ident == "is_subclass" || seg.ident == "subclass")
+                        .map(|seg| seg.ident == "is_subclass" || seg.ident == SUBCLASS)
                         .unwrap_or(false)
                 });
                 if let Some(is_superclass_attr) = is_superclass_attr {

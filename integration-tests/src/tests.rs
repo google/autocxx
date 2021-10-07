@@ -5765,7 +5765,7 @@ fn test_pv_subclass_mut() {
         Some(quote! {
             use autocxx::subclass::CppSubclass;
             use ffi::Observer_methods;
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             pub struct MyObserver {
                 a: u32
             }
@@ -5805,7 +5805,7 @@ fn test_pv_subclass_const() {
         Some(quote! {
             use autocxx::subclass::CppSubclass;
             use ffi::Observer_methods;
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             pub struct MyObserver {
                 a: u32
             }
@@ -5845,7 +5845,7 @@ fn test_pv_subclass_return() {
         Some(quote! {
             use autocxx::subclass::CppSubclass;
             use ffi::Observer_methods;
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             pub struct MyObserver {
                 a: u32
             }
@@ -5887,7 +5887,7 @@ fn test_pv_subclass_passed_to_fn() {
         Some(quote! {
             use autocxx::subclass::CppSubclass;
             use ffi::Observer_methods;
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             pub struct MyObserver {
                 a: u32
             }
@@ -5928,7 +5928,7 @@ fn test_pv_subclass_derive_defaults() {
         None,
         None,
         Some(quote! {
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             #[derive(Default)]
             pub struct MyObserver {
                 a: u32
@@ -5971,7 +5971,7 @@ fn test_non_pv_subclass() {
         Some(quote! {
             use autocxx::subclass::CppSubclass;
             use ffi::Observer_methods;
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             pub struct MyObserver {
                 a: u32
             }
@@ -6055,7 +6055,7 @@ fn test_pv_subclass_allocation_not_self_owned() {
 
             use autocxx::subclass::CppSubclass;
             use ffi::TestObserver_methods;
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             pub struct MyTestObserver {
                 data: ExternalEngine,
             }
@@ -6209,7 +6209,7 @@ fn test_pv_subclass_allocation_self_owned() {
             use autocxx::subclass::CppSubclass;
             use autocxx::subclass::CppSubclassSelfOwned;
             use ffi::TestObserver_methods;
-            #[autocxx::subclass::is_subclass(self_owned)]
+            #[autocxx::subclass::subclass(self_owned)]
             pub struct MyTestObserver {
                 data: ExternalEngine,
                 self_owning: bool,
@@ -6394,7 +6394,7 @@ fn test_pv_subclass_calls() {
 
             use autocxx::subclass::CppSubclass;
             use ffi::TestObserver_methods;
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             #[derive(Default)]
             pub struct MyTestObserver {
             }
@@ -6548,7 +6548,7 @@ fn test_pv_subclass_types() {
         Some(quote! {
             use autocxx::subclass::CppSubclass;
             use ffi::TestObserver_methods;
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             #[derive(Default)]
             pub struct MyTestObserver {
             }
@@ -6612,7 +6612,7 @@ fn test_pv_subclass_constructors() {
         None,
         Some(quote! {
             use autocxx::subclass::prelude::*;
-            #[is_subclass]
+            #[subclass]
             #[derive(Default)]
             pub struct MyTestObserver {
             }
@@ -6659,7 +6659,7 @@ fn test_pv_subclass_fancy_constructor() {
         Some(quote! {
             use autocxx::subclass::CppSubclass;
             use ffi::Observer_methods;
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             pub struct MyObserver {
                 a: u32
             }
@@ -6702,7 +6702,7 @@ fn test_pv_subclass_namespaced_superclass() {
         None,
         Some(quote! {
             use autocxx::subclass::CppSubclass;
-            #[autocxx::subclass::is_subclass]
+            #[autocxx::subclass::subclass]
             pub struct MyObserver {
                 a: u32
             }

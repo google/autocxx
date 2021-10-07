@@ -21,7 +21,10 @@ use syn::{
 };
 use syn::{Ident, Result as ParseResult};
 
-use crate::RustPath;
+use crate::{
+    directives::{EXTERN_RUST_TYPE, SUBCLASS},
+    RustPath,
+};
 
 #[derive(PartialEq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
@@ -180,12 +183,12 @@ impl Parse for IncludeCppConfig {
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
                     blocklist.push(generate.value());
-                } else if ident == "rust_type" || ident == "extern_rust_type" {
+                } else if ident == "rust_type" || ident == EXTERN_RUST_TYPE {
                     let args;
                     syn::parenthesized!(args in input);
                     let id: Ident = args.parse()?;
                     rust_types.push(RustPath::new_from_ident(id));
-                } else if ident == "subclass" {
+                } else if ident == SUBCLASS {
                     let args;
                     syn::parenthesized!(args in input);
                     let superclass: syn::LitStr = args.parse()?;
