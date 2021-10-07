@@ -5668,13 +5668,11 @@ fn test_box_via_extern_rust() {
         quote! {
             ffi::take_box(Box::new(Foo { a: "Hello".into() }))
         },
-        quote! {
-            generate!("take_box")
-        },
+        quote! {},
         Some(Box::new(EnableAutodiscover)),
         None,
         Some(quote! {
-            #[autocxx::extern_rust_type]
+            #[autocxx::extern_rust::extern_rust_type]
             pub struct Foo {
                 a: String,
             }
@@ -5696,14 +5694,12 @@ fn test_box_via_extern_rust_in_mod() {
         quote! {
             ffi::take_box(Box::new(bar::Foo { a: "Hello".into() }))
         },
-        quote! {
-            generate!("take_box")
-        },
+        quote! {},
         Some(Box::new(EnableAutodiscover)),
         None,
         Some(quote! {
             mod bar {
-                #[autocxx::extern_rust_type]
+                #[autocxx::extern_rust::extern_rust_type]
                 pub struct Foo {
                     pub a: String,
                 }
