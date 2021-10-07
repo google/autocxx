@@ -6571,6 +6571,7 @@ fn test_pv_subclass_types() {
 
 #[test]
 fn test_pv_subclass_constructors() {
+    // Also tests a Rust-side subclass type which is an empty struct
     let hdr = indoc! {"
     #include <cstdint>
     #include <string>
@@ -6614,8 +6615,7 @@ fn test_pv_subclass_constructors() {
             use autocxx::subclass::prelude::*;
             #[is_subclass]
             #[derive(Default)]
-            pub struct MyTestObserver {
-            }
+            pub struct MyTestObserver;
             impl ffi::TestObserver_methods for MyTestObserver {
                 fn call(&self) {
                     self.peer().call_super()

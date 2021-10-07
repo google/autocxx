@@ -18,7 +18,7 @@ use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
 use syn::parse::Parser;
-use syn::{parse_macro_input, Fields, Item, ItemStruct};
+use syn::{parse_macro_input, parse_quote, Fields, Item, ItemStruct};
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
@@ -38,17 +38,23 @@ pub fn is_subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
         syn::parse(item).unwrap_or_else(|_| abort!(Span::call_site(), "Expected a struct"));
     let id = &s.ident;
     let cpp_ident = Ident::new(&format!("{}Cpp", id.to_string()), Span::call_site());
-    match &mut s.fields {
+    let input = quote! {
+        cpp_peer: autocxx::subclass::CppSubclassCppPeerHolder<ffi:: #cpp_ident>
+    };
+    let parser = syn::Field::parse_named;
+    let new_field = parser.parse2(input).unwrap();
+    s.fields = match &mut s.fields {
         Fields::Named(fields) => {
-            let input = quote! {
-                cpp_peer: autocxx::subclass::CppSubclassCppPeerHolder<ffi:: #cpp_ident>
-            };
-            let parser = syn::Field::parse_named;
-            let f = parser.parse2(input).unwrap();
-            fields.named.push(f);
-        }
-        _ => abort!(Span::call_site(), "Expect a struct with named fields - use struct A{} as opposed to struct A; or struct A()"),
-    }
+            fields.named.push(new_field);
+            s.fields
+        },
+        Fields::Unit => Fields::Named(parse_quote! {
+            {
+                #new_field
+            }
+        }),
+        _ => abort!(Span::call_site(), "Expect a struct with named fields - use struct A{} or struct A; as opposed to struct A()"),
+    };
     let subclass_attrs: SubclassAttrs = syn::parse(attr)
         .unwrap_or_else(|_| abort!(Span::call_site(), "Unable to parse attributes"));
     let self_owned_bit = if subclass_attrs.self_owned {

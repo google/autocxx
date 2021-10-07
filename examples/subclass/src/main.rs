@@ -68,7 +68,7 @@ impl ffi::MessageDisplayer_methods for UwuDisplayer {
 
 #[is_subclass(superclass("MessageProducer"))]
 #[derive(Default)]
-pub struct QuoteProducer {}
+pub struct QuoteProducer;
 
 // Here we've chosen to have an explicit constructor instead rather than deriving
 // from CppSubclassDefault. It's functionally the same.
