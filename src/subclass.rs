@@ -23,9 +23,43 @@ use std::{
 
 use cxx::{memory::UniquePtrTarget, UniquePtr};
 
-/// Deprecated - use [`macro@self::super::subclass`] instead.
+/// Deprecated - use [`subclass`] instead.
 #[deprecated]
 pub use autocxx_macro::subclass as is_subclass;
+
+/// Declare a Rust subclass of a C++ class.
+/// You can use this in two ways:
+/// * As an attribute macro on a struct which is to be a subclass.
+///   In this case, you must specify the superclass as described below.
+///   For instance,
+///   ```nocompile
+///   # use autocxx_macro::subclass as subclass;
+///   #[subclass(superclass("MyCppSuperclass"))]
+///   struct Bar {};
+///   ```
+/// * as a directive within the [include_cpp] macro, in which case you
+///   must provide two arguments of the superclass and then the
+///   subclass:
+///   ```
+///   # use autocxx_macro::include_cpp_impl as include_cpp;
+///   include_cpp!(
+///   #   parse_only!()
+///       #include "input.h"
+///       subclass!("MyCppSuperclass",Bar)
+///       safety!(unsafe)
+///   );
+///   struct Bar {
+///     // ...
+///   }
+///   ```
+///   In this latter case, you'll need to implement the trait
+///   [`CppSubclass`] for the struct, so it's
+///   generally easier to use the former option.
+///
+/// See [`CppSubclass`] for information about the
+/// multiple steps you need to take to be able to make Rust
+/// subclasses of a C++ class.
+pub use autocxx_macro::subclass;
 
 /// A prelude containing all the traits and macros required to create
 /// Rust subclasses of C++ classes. It's recommended that you:
