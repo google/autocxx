@@ -22,7 +22,7 @@ use crate::{
     conversion::{
         analysis::{
             fun::function_wrapper::CppFunctionKind,
-            type_converter::{add_analysis, TypeConversionContext, TypeConverter},
+            type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{ApiName, FuncToConvert, SubclassName},
         convert_error::ConvertErrorWithContext,
@@ -837,9 +837,12 @@ impl<'a> FnAnalyzer<'a> {
                 };
                 let annotated_type = self.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
                 let new_ty = annotated_type.ty;
-                let subclass_holder = annotated_type.subclass_holder;
-                let was_reference = matches!(new_ty.as_ref(), Type::Reference(_));
-                let conversion = self.argument_conversion_details(&new_ty, &subclass_holder);
+                let subclass_holder = match &annotated_type.kind {
+                    type_converter::TypeKind::SubclassHolder(holder) => Some(holder),
+                    _ => None,
+                };
+                let conversion =
+                    self.argument_conversion_details(&new_ty, &subclass_holder.cloned());
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
                 (
@@ -848,10 +851,17 @@ impl<'a> FnAnalyzer<'a> {
                         self_type,
                         name: new_pat,
                         conversion,
-                        was_reference,
+                        was_reference: matches!(
+                            annotated_type.kind,
+                            type_converter::TypeKind::Reference
+                                | type_converter::TypeKind::MutableReference
+                        ),
                         deps: annotated_type.types_encountered,
                         is_virtual,
-                        requires_unsafe: annotated_type.requires_unsafe,
+                        requires_unsafe: matches!(
+                            annotated_type.kind,
+                            type_converter::TypeKind::Pointer
+                        ),
                     },
                 )
             }
