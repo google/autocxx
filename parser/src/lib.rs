@@ -28,6 +28,15 @@ use syn::{
     Macro,
 };
 
+#[doc(hidden)]
+/// Ensure consistency between the `include_cpp!` parser
+/// and the standalone macro discoverer
+pub mod directives {
+    pub static EXTERN_RUST_TYPE: &str = "extern_rust_type";
+    pub static EXTERN_RUST_FUN: &str = "extern_rust_fun";
+    pub static SUBCLASS: &str = "subclass";
+}
+
 /// Core of the autocxx engine. See `generate` for most details
 /// on how this works.
 pub struct IncludeCpp {

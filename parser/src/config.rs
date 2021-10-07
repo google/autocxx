@@ -22,7 +22,10 @@ use syn::{
 };
 use syn::{Ident, Result as ParseResult};
 
-use crate::RustPath;
+use crate::{
+    directives::{EXTERN_RUST_TYPE, SUBCLASS},
+    RustPath,
+};
 
 #[derive(PartialEq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
@@ -189,12 +192,12 @@ impl Parse for IncludeCppConfig {
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
                     blocklist.push(generate.value());
-                } else if ident == "rust_type" {
+                } else if ident == "rust_type" || ident == EXTERN_RUST_TYPE {
                     let args;
                     syn::parenthesized!(args in input);
                     let id: Ident = args.parse()?;
                     rust_types.push(RustPath::new_from_ident(id));
-                } else if ident == "subclass" {
+                } else if ident == SUBCLASS {
                     let args;
                     syn::parenthesized!(args in input);
                     let superclass: syn::LitStr = args.parse()?;
@@ -412,12 +415,17 @@ impl IncludeCppConfig {
         )
     }
 
-    pub fn confirm_complete(&self) -> ParseResult<()> {
+    pub fn confirm_complete(&mut self, auto_allowlist: bool) -> ParseResult<()> {
         if matches!(self.allowlist, Allowlist::Unspecified(_)) {
-            Err(syn::Error::new(
-                Span::call_site(),
-                "expected either generate! or generate_all!",
-            ))
+            if auto_allowlist {
+                self.allowlist = Allowlist::Specific(Vec::new());
+                Ok(())
+            } else {
+                Err(syn::Error::new(
+                    Span::call_site(),
+                    "expected either generate! or generate_all!",
+                ))
+            }
         } else {
             Ok(())
         }

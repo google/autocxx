@@ -23,7 +23,43 @@ use std::{
 
 use cxx::{memory::UniquePtrTarget, UniquePtr};
 
-pub use autocxx_macro::is_subclass;
+/// Deprecated - use [`subclass`] instead.
+#[deprecated]
+pub use autocxx_macro::subclass as is_subclass;
+
+/// Declare a Rust subclass of a C++ class.
+/// You can use this in two ways:
+/// * As an attribute macro on a struct which is to be a subclass.
+///   In this case, you must specify the superclass as described below.
+///   For instance,
+///   ```nocompile
+///   # use autocxx_macro::subclass as subclass;
+///   #[subclass(superclass("MyCppSuperclass"))]
+///   struct Bar {};
+///   ```
+/// * as a directive within the [include_cpp] macro, in which case you
+///   must provide two arguments of the superclass and then the
+///   subclass:
+///   ```
+///   # use autocxx_macro::include_cpp_impl as include_cpp;
+///   include_cpp!(
+///   #   parse_only!()
+///       #include "input.h"
+///       subclass!("MyCppSuperclass",Bar)
+///       safety!(unsafe)
+///   );
+///   struct Bar {
+///     // ...
+///   }
+///   ```
+///   In this latter case, you'll need to implement the trait
+///   [`CppSubclass`] for the struct, so it's
+///   generally easier to use the former option.
+///
+/// See [`CppSubclass`] for information about the
+/// multiple steps you need to take to be able to make Rust
+/// subclasses of a C++ class.
+pub use autocxx_macro::subclass;
 
 /// A prelude containing all the traits and macros required to create
 /// Rust subclasses of C++ classes. It's recommended that you:
@@ -33,7 +69,7 @@ pub use autocxx_macro::is_subclass;
 /// ```
 pub mod prelude {
     pub use super::{
-        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault,
+        is_subclass, subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault,
         CppSubclassRustPeerHolder, CppSubclassSelfOwned, CppSubclassSelfOwnedDefault,
     };
 }
@@ -150,11 +186,14 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// A subclass of a C++ type.
 ///
 /// To create a Rust subclass of a C++ class, you must do these things:
-/// * Use the `subclass` directive in your [`crate::include_cpp`] macro (or use
-///   the auto-allow mode in your `build.rs`)
-/// * Create a `struct` to act as your subclass, and add the #[`is_subclass`] attribute.
+/// * Create a `struct` to act as your subclass, and add the #[`macro@crate::subclass`] attribute.
 ///   This adds a field to your struct for autocxx record-keeping. You can
-///   instead choose to implement [`CppSubclass`] a different way.
+///   instead choose to implement [`CppSubclass`] a different way, in which case
+///   you must provide the [`macro@crate::subclass`] inside your [`crate::include_cpp`]
+///   macro. (`autocxx` will do the required codegen for your subclass
+///   whether it discovers a [`macro@crate::subclass`] directive inside your
+///   [`crate::include_cpp`], or elsewhere used as an attribute macro,
+///   or both.)
 /// * Use the [`CppSubclass`] trait, and instantiate the subclass using
 ///   [`CppSubclass::new_rust_owned`] or [`CppSubclass::new_cpp_owned`]
 ///   constructors. (You can use [`CppSubclassSelfOwned`] if you need that

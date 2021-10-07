@@ -117,9 +117,6 @@ impl BoxDisplayer {
     }
 }
 
-#[autocxx::extern_rust]
-fn create_box_displayer() {}
-
 impl ffi::MessageDisplayer_methods for BoxDisplayer {
     fn display_message(&self, msg: &CxxString) {
         let msg = textwrap::fill(msg.to_str().unwrap(), 70);
