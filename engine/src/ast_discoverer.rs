@@ -394,16 +394,13 @@ impl<'b> PerModDiscoveries<'b> {
     }
 
     fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
-        attrs
-            .iter()
-            .find(|attr| {
-                attr.path
-                    .segments
-                    .last()
-                    .map(|seg| seg.ident == attr_name)
-                    .unwrap_or_default()
-            })
-            .is_some()
+        attrs.iter().any(|attr| {
+            attr.path
+                .segments
+                .last()
+                .map(|seg| seg.ident == attr_name)
+                .unwrap_or_default()
+        })
     }
 }
 

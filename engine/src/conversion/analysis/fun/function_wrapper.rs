@@ -53,7 +53,7 @@ pub(crate) enum RustConversionType {
 /// * Finally, the actual C++ API receives a `std::string` by value.
 /// The implementation here is distributed across this file, and
 /// `function_wrapper_rs` and `function_wrapper_cpp`.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct TypeConversionPolicy {
     pub(crate) unwrapped_type: Type,
     pub(crate) cpp_conversion: CppConversionType,
