@@ -191,7 +191,9 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
         _ => None,
     });
     for seg in autocxx_seg_iterator {
-        seg.config.confirm_complete().map_err(ParseError::Syntax)?;
+        seg.config
+            .confirm_complete(auto_allowlist)
+            .map_err(ParseError::Syntax)?;
     }
     Ok(ParsedFile(results))
 }

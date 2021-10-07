@@ -5517,11 +5517,40 @@ fn test_rust_reference() {
         rs,
         quote! {
             generate!("take_rust_reference")
-            rust_type!(RustType)
+            extern_rust_type!(RustType)
         },
         None,
         None,
         Some(quote! {
+            pub struct RustType(i32);
+        }),
+    );
+}
+
+#[test]
+fn test_rust_reference_autodiscover() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    struct RustType;
+    inline uint32_t take_rust_reference(const RustType&) {
+        return 4;
+    }
+    "};
+    let rs = quote! {
+        let foo = RustType(3);
+        let result = ffi::take_rust_reference(&foo);
+        assert_eq!(result, 4);
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! {},
+        Some(Box::new(EnableAutodiscover)),
+        None,
+        Some(quote! {
+            #[autocxx::extern_rust::extern_rust_type]
             pub struct RustType(i32);
         }),
     );
@@ -5547,7 +5576,7 @@ fn test_pass_thru_rust_reference() {
         rs,
         quote! {
             generate!("pass_rust_reference")
-            rust_type!(RustType)
+            extern_rust_type!(RustType)
         },
         None,
         None,
@@ -5581,10 +5610,6 @@ fn test_rust_reference_method() {
         rs,
         quote! {
             generate!("take_rust_reference")
-            rust_type!(RustType)
-            extern_rust_function!(
-                fn get(self: &RustType) -> i32;
-            )
         },
         Some(Box::new(EnableAutodiscover)),
         None,
@@ -5617,7 +5642,7 @@ fn test_box() {
         },
         quote! {
             generate!("take_box")
-            rust_type!(Foo)
+            extern_rust_type!(Foo)
         },
         None,
         None,
