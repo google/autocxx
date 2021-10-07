@@ -5724,7 +5724,7 @@ fn test_extern_rust_fn() {
         Some(Box::new(EnableAutodiscover)),
         None,
         Some(quote! {
-            #[autocxx::extern_rust_function]
+            #[autocxx::extern_rust::extern_rust_function]
             fn my_rust_fun() {
 
             }
@@ -5749,7 +5749,7 @@ fn test_extern_rust_fn_in_mod() {
         None,
         Some(quote! {
             mod bar {
-                #[autocxx::extern_rust_function]
+                #[autocxx::extern_rust::extern_rust_function]
                 pub fn my_rust_fun() {
 
                 }

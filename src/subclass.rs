@@ -69,10 +69,9 @@ pub use autocxx_macro::subclass;
 /// ```
 pub mod prelude {
     pub use super::{
-        is_subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault,
+        is_subclass, subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault,
         CppSubclassRustPeerHolder, CppSubclassSelfOwned, CppSubclassSelfOwnedDefault,
     };
-    pub use crate::subclass;
 }
 
 #[doc(hidden)]
