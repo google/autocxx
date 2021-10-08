@@ -3541,14 +3541,14 @@ fn test_nested_type_constructor() {
         public:
             class B {
             public:
-                B(const std::string& param) {}
+                B(const std::string&) {}
                 int b;
             };
             int a;
         };
     "};
     let rs = quote! {
-        ffi::A::make_unique(&make_string("Hello"));
+        ffi::A_B::make_unique(&ffi::make_string("Hello"));
     };
     run_test("", hdr, rs, &["A_B"], &[]);
 }
