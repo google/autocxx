@@ -538,3 +538,40 @@ impl BuilderModifierFns for EnableAutodiscover {
         builder.auto_allowlist(true)
     }
 }
+
+/// Searches generated C++ for strings we want to find, or want _not_ to find,
+/// or both.
+pub(crate) struct CppMatcher<'a> {
+    positive_matches: &'a [&'a str],
+    negative_matches: &'a [&'a str],
+}
+
+impl<'a> CppMatcher<'a> {
+    pub(crate) fn new(positive_matches: &'a [&'a str], negative_matches: &'a [&'a str]) -> Self {
+        Self {
+            positive_matches,
+            negative_matches,
+        }
+    }
+}
+
+impl<'a> CodeCheckerFns for CppMatcher<'a> {
+    fn check_cpp(&self, cpp: &[PathBuf]) -> Result<(), TestError> {
+        let mut positives_needed = self.positive_matches.to_vec();
+        for filename in cpp {
+            let file = File::open(filename).unwrap();
+            let lines = BufReader::new(file).lines();
+            for l in lines.filter_map(|l| l.ok()) {
+                if self.negative_matches.iter().any(|neg| l.contains(neg)) {
+                    return Err(TestError::CppCodeExaminationFail);
+                }
+                positives_needed.retain(|pos| !l.contains(pos));
+            }
+        }
+        if positives_needed.is_empty() {
+            Ok(())
+        } else {
+            Err(TestError::CppCodeExaminationFail)
+        }
+    }
+}
