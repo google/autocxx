@@ -162,7 +162,7 @@ pub(crate) fn run_test_ex(
     rust_code: TokenStream,
     directives: TokenStream,
     builder_modifier: Option<BuilderModifier>,
-    rust_code_checker: Option<CodeChecker>,
+    code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
 ) {
     do_run_test(
@@ -171,7 +171,7 @@ pub(crate) fn run_test_ex(
         rust_code,
         directives,
         builder_modifier,
-        rust_code_checker,
+        code_checker,
         extra_rust,
     )
     .unwrap()
@@ -202,7 +202,7 @@ pub(crate) fn run_test_expect_fail_ex(
     rust_code: TokenStream,
     directives: TokenStream,
     builder_modifier: Option<BuilderModifier>,
-    rust_code_checker: Option<CodeChecker>,
+    code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
 ) {
     do_run_test(
@@ -211,7 +211,7 @@ pub(crate) fn run_test_expect_fail_ex(
         rust_code,
         directives,
         builder_modifier,
-        rust_code_checker,
+        code_checker,
         extra_rust,
     )
     .expect_err("Unexpected success");
