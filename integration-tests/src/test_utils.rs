@@ -162,7 +162,7 @@ pub(crate) fn run_test_ex(
     rust_code: TokenStream,
     directives: TokenStream,
     builder_modifier: Option<BuilderModifier>,
-    rust_code_checker: Option<CodeChecker>,
+    code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
 ) {
     do_run_test(
@@ -171,7 +171,7 @@ pub(crate) fn run_test_ex(
         rust_code,
         directives,
         builder_modifier,
-        rust_code_checker,
+        code_checker,
         extra_rust,
     )
     .unwrap()
@@ -202,7 +202,7 @@ pub(crate) fn run_test_expect_fail_ex(
     rust_code: TokenStream,
     directives: TokenStream,
     builder_modifier: Option<BuilderModifier>,
-    rust_code_checker: Option<CodeChecker>,
+    code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
 ) {
     do_run_test(
@@ -211,7 +211,7 @@ pub(crate) fn run_test_expect_fail_ex(
         rust_code,
         directives,
         builder_modifier,
-        rust_code_checker,
+        code_checker,
         extra_rust,
     )
     .expect_err("Unexpected success");
@@ -536,5 +536,42 @@ impl BuilderModifierFns for EnableAutodiscover {
         builder: Builder<TestBuilderContext>,
     ) -> Builder<TestBuilderContext> {
         builder.auto_allowlist(true)
+    }
+}
+
+/// Searches generated C++ for strings we want to find, or want _not_ to find,
+/// or both.
+pub(crate) struct CppMatcher<'a> {
+    positive_matches: &'a [&'a str],
+    negative_matches: &'a [&'a str],
+}
+
+impl<'a> CppMatcher<'a> {
+    pub(crate) fn new(positive_matches: &'a [&'a str], negative_matches: &'a [&'a str]) -> Self {
+        Self {
+            positive_matches,
+            negative_matches,
+        }
+    }
+}
+
+impl<'a> CodeCheckerFns for CppMatcher<'a> {
+    fn check_cpp(&self, cpp: &[PathBuf]) -> Result<(), TestError> {
+        let mut positives_needed = self.positive_matches.to_vec();
+        for filename in cpp {
+            let file = File::open(filename).unwrap();
+            let lines = BufReader::new(file).lines();
+            for l in lines.filter_map(|l| l.ok()) {
+                if self.negative_matches.iter().any(|neg| l.contains(neg)) {
+                    return Err(TestError::CppCodeExaminationFail);
+                }
+                positives_needed.retain(|pos| !l.contains(pos));
+            }
+        }
+        if positives_needed.is_empty() {
+            Ok(())
+        } else {
+            Err(TestError::CppCodeExaminationFail)
+        }
     }
 }

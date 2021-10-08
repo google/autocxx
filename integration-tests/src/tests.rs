@@ -15,7 +15,7 @@
 use crate::test_utils::{
     directives_from_lists, do_run_test_manual, make_clang_arg_adder, make_error_finder,
     make_string_finder, run_test, run_test_ex, run_test_expect_fail, run_test_expect_fail_ex,
-    EnableAutodiscover, NoSystemHeadersChecker, SetSuppressSystemHeaders,
+    CppMatcher, EnableAutodiscover, NoSystemHeadersChecker, SetSuppressSystemHeaders,
 };
 use indoc::indoc;
 use proc_macro2::Span;
@@ -6808,6 +6808,32 @@ fn test_suppress_system_includes() {
         quote! { generate("a")},
         Some(Box::new(SetSuppressSystemHeaders)),
         Some(Box::new(NoSystemHeadersChecker)),
+        None,
+    );
+}
+
+#[test]
+fn test_no_rvo_move() {
+    let hdr = indoc! {"
+    #include <memory>
+    class A {
+    public:
+        static std::unique_ptr<A> create() { return std::make_unique<A>(); }
+    };
+    "};
+    let rs = quote! {
+        ffi::A::create();
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! { generate!("A") },
+        None,
+        Some(Box::new(CppMatcher::new(
+            &["return A::create();"],
+            &["return std::move(A::create());"],
+        ))),
         None,
     );
 }
