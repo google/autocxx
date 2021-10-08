@@ -26,13 +26,16 @@ use super::{
     unqualify::{unqualify_params, unqualify_ret_type},
     RsCodegenResult, Use,
 };
-use crate::{conversion::api::FuncToConvert, types::make_ident};
 use crate::{
     conversion::{
         analysis::fun::{ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy},
         api::ImplBlockDetails,
     },
     types::{Namespace, QualifiedName},
+};
+use crate::{
+    conversion::{api::FuncToConvert, codegen_rs::lifetime::add_explicit_lifetime_if_necessary},
+    types::make_ident,
 };
 
 pub(super) fn gen_function(
@@ -111,6 +114,10 @@ pub(super) fn gen_function(
             ))
             .unwrap();
     }
+    // In very rare occasions, we might need to give an explicit lifetime.
+    let (lifetime_tokens, params, ret_type) =
+        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type);
+
     // Finally - namespace support. All the Types in everything
     // above this point are fully qualified. We need to unqualify them.
     // We need to do that _after_ the above wrapper_function_needed
@@ -120,7 +127,7 @@ pub(super) fn gen_function(
     // and the following code will act to unqualify only those types
     // which the user has declared.
     let params = unqualify_params(params);
-    let ret_type = unqualify_ret_type(ret_type);
+    let ret_type = unqualify_ret_type(ret_type.into_owned());
     // And we need to make an attribute for the namespace that the function
     // itself is in.
     let namespace_attr = if ns.is_empty() || wrapper_function_needed {
@@ -139,7 +146,7 @@ pub(super) fn gen_function(
         #(#rust_name_attr)*
         #(#cpp_name_attr)*
         #doc_attr
-        #vis #unsafety fn #cxxbridge_name ( #params ) #ret_type;
+        #vis #unsafety fn #cxxbridge_name #lifetime_tokens ( #params ) #ret_type;
     ));
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
@@ -187,11 +194,13 @@ fn generate_method_impl(
     doc_attr: &Option<Attribute>,
 ) -> Box<ImplBlockDetails> {
     let (wrapper_params, arg_list) = generate_arg_lists(param_details, is_constructor);
+    let (lifetime_tokens, wrapper_params, ret_type) =
+        add_explicit_lifetime_if_necessary(param_details, wrapper_params, ret_type);
     let rust_name = make_ident(&rust_name);
     Box::new(ImplBlockDetails {
         item: ImplItem::Method(parse_quote! {
             #doc_attr
-            pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
+            pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                 cxxbridge::#cxxbridge_name ( #(#arg_list),* )
             }
         }),

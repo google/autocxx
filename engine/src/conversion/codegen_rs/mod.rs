@@ -15,6 +15,7 @@
 mod fun_codegen;
 mod function_wrapper_rs;
 mod impl_item_creator;
+mod lifetime;
 mod namespace_organizer;
 mod non_pod_struct;
 pub(crate) mod unqualify;

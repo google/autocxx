@@ -2159,6 +2159,24 @@ fn test_return_reference() {
 }
 
 #[test]
+fn test_member_return_reference() {
+    let hdr = indoc! {"
+        #include <string>
+        class A {
+        public:
+            virtual const std::string& get_str() { return a; }
+            virtual ~A() {}
+            std::string a;
+        };
+    "};
+    let rs = quote! {
+        let mut b = ffi::A::make_unique();
+        b.pin_mut().get_str();
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_destructor() {
     let hdr = indoc! {"
         struct WithDtor {

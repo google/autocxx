@@ -32,14 +32,22 @@ use syn::{
 
 use super::tdef::TypedefAnalysis;
 
+/// Certain kinds of type may require special handling by callers.
+pub(crate) enum TypeKind {
+    Regular,
+    Pointer,
+    SubclassHolder(Ident),
+    Reference,
+    MutableReference,
+}
+
 /// Results of some type conversion, annotated with a list of every type encountered,
 /// and optionally any extra APIs we need in order to use this type.
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<QualifiedName>,
     pub(crate) extra_apis: Vec<UnanalyzedApi>,
-    pub(crate) requires_unsafe: bool,
-    pub(crate) subclass_holder: Option<Ident>,
+    pub(crate) kind: TypeKind,
 }
 
 impl<T> Annotated<T> {
@@ -47,15 +55,13 @@ impl<T> Annotated<T> {
         ty: T,
         types_encountered: HashSet<QualifiedName>,
         extra_apis: Vec<UnanalyzedApi>,
-        requires_unsafe: bool,
-        subclass_holder: Option<Ident>,
+        kind: TypeKind,
     ) -> Self {
         Self {
             ty,
             types_encountered,
             extra_apis,
-            requires_unsafe,
-            subclass_holder,
+            kind,
         }
     }
 
@@ -64,8 +70,7 @@ impl<T> Annotated<T> {
             ty: fun(self.ty),
             types_encountered: self.types_encountered,
             extra_apis: self.extra_apis,
-            requires_unsafe: self.requires_unsafe,
-            subclass_holder: self.subclass_holder,
+            kind: self.kind,
         }
     }
 }
@@ -163,8 +168,7 @@ impl<'a> TypeConverter<'a> {
                             }),
                             newp.types_encountered,
                             newp.extra_apis,
-                            false,
-                            None,
+                            TypeKind::Reference,
                         )
                     } else {
                         newp
@@ -181,8 +185,7 @@ impl<'a> TypeConverter<'a> {
                     Type::Reference(r),
                     innerty.types_encountered,
                     innerty.extra_apis,
-                    false,
-                    None,
+                    TypeKind::Reference,
                 )
             }
             Type::Ptr(ptr) if ctx.convert_ptrs_to_references() => {
@@ -197,8 +200,7 @@ impl<'a> TypeConverter<'a> {
                     Type::Ptr(ptr),
                     innerty.types_encountered,
                     innerty.extra_apis,
-                    true,
-                    None,
+                    TypeKind::Pointer,
                 )
             }
             _ => return Err(ConvertError::UnknownType(ty.to_token_stream().to_string())),
@@ -259,11 +261,17 @@ impl<'a> TypeConverter<'a> {
                     Type::Ptr(resolved_tp.clone()),
                     deps,
                     Vec::new(),
-                    true,
-                    None,
+                    TypeKind::Pointer,
                 ))
             }
-            Some(other) => return Ok(Annotated::new(other.clone(), deps, Vec::new(), false, None)),
+            Some(other) => {
+                return Ok(Annotated::new(
+                    other.clone(),
+                    deps,
+                    Vec::new(),
+                    TypeKind::Regular,
+                ))
+            }
         };
 
         // Now let's see if it's a known type.
@@ -282,7 +290,7 @@ impl<'a> TypeConverter<'a> {
         };
 
         let mut extra_apis = Vec::new();
-        let mut subclass_holder = None;
+        let mut kind = TypeKind::Regular;
 
         // Finally let's see if it's generic.
         if let Some(last_seg) = Self::get_generic_args(&mut typ) {
@@ -292,7 +300,7 @@ impl<'a> TypeConverter<'a> {
             if generic_behavior != CxxGenericType::Not {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
-                subclass_holder = self.confirm_inner_type_is_acceptable_generic_payload(
+                kind = self.confirm_inner_type_is_acceptable_generic_payload(
                     &last_seg.arguments,
                     &tn,
                     generic_behavior,
@@ -314,13 +322,7 @@ impl<'a> TypeConverter<'a> {
                 deps.insert(new_tn);
             }
         }
-        Ok(Annotated::new(
-            Type::Path(typ),
-            deps,
-            extra_apis,
-            false,
-            subclass_holder,
-        ))
+        Ok(Annotated::new(Type::Path(typ), deps, extra_apis, kind))
     }
 
     fn get_generic_args(typ: &mut TypePath) -> Option<&mut PathSegment> {
@@ -357,8 +359,7 @@ impl<'a> TypeConverter<'a> {
             new_pun,
             types_encountered,
             extra_apis,
-            false,
-            None,
+            TypeKind::Regular,
         ))
     }
 
@@ -383,14 +384,20 @@ impl<'a> TypeConverter<'a> {
         // a wobbler if not. rust::Str should only be seen _by value_ in C++
         // headers; it manifests as &str in Rust but on the C++ side it must
         // be a plain value. We should detect and abort.
-        Ok(elem.map(|elem| match mutability {
+        let mut outer = elem.map(|elem| match mutability {
             Some(_) => Type::Path(parse_quote! {
                 ::std::pin::Pin < & #mutability #elem >
             }),
             None => Type::Reference(parse_quote! {
                 & #elem
             }),
-        }))
+        });
+        outer.kind = if mutability.is_some() {
+            TypeKind::MutableReference
+        } else {
+            TypeKind::Reference
+        };
+        Ok(outer)
     }
 
     fn get_templated_typename(
@@ -427,11 +434,11 @@ impl<'a> TypeConverter<'a> {
         desc: &QualifiedName,
         generic_behavior: CxxGenericType,
         forward_declarations_ok: bool,
-    ) -> Result<Option<Ident>, ConvertError> {
+    ) -> Result<TypeKind, ConvertError> {
         // For now, all supported generics accept the same payloads. This
         // may change in future in which case we'll need to accept more arguments here.
         match path_args {
-            PathArguments::None => Ok(None),
+            PathArguments::None => Ok(TypeKind::Regular),
             PathArguments::Parenthesized(_) => Err(
                 ConvertError::TemplatedTypeContainingNonPathArg(desc.clone()),
             ),
@@ -458,9 +465,11 @@ impl<'a> TypeConverter<'a> {
                                     .config
                                     .is_subclass_holder(&inner_qn.get_final_ident().to_string())
                                 {
-                                    return Ok(Some(inner_qn.get_final_ident()));
+                                    return Ok(TypeKind::SubclassHolder(
+                                        inner_qn.get_final_ident(),
+                                    ));
                                 } else {
-                                    return Ok(None);
+                                    return Ok(TypeKind::Regular);
                                 }
                             }
                             if let Some(more_generics) = typ.path.segments.last() {
@@ -479,7 +488,7 @@ impl<'a> TypeConverter<'a> {
                         }
                     }
                 }
-                Ok(None)
+                Ok(TypeKind::Regular)
             }
         }
     }
