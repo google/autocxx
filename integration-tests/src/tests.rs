@@ -3534,6 +3534,26 @@ fn test_nested_type_in_namespace() {
 }
 
 #[test]
+fn test_nested_type_constructor() {
+    let hdr = indoc! {"
+        #include <string>
+        class A {
+        public:
+            class B {
+            public:
+                B(const std::string& param) {}
+                int b;
+            };
+            int a;
+        };
+    "};
+    let rs = quote! {
+        ffi::A::make_unique(&make_string("Hello"));
+    };
+    run_test("", hdr, rs, &["A_B"], &[]);
+}
+
+#[test]
 fn test_generic_type() {
     let hdr = indoc! {"
         #include <cstdint>
