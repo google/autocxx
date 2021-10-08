@@ -53,10 +53,11 @@ impl TypeConversionPolicy {
         &self,
         var_name: &str,
         cpp_name_map: &CppNameMap,
+        use_rvo: bool,
     ) -> Result<String, ConvertError> {
         Ok(match self.cpp_conversion {
             CppConversionType::None => {
-                if type_lacks_copy_constructor(&self.unwrapped_type) {
+                if type_lacks_copy_constructor(&self.unwrapped_type) && !use_rvo {
                     format!("std::move({})", var_name)
                 } else {
                     var_name.to_string()

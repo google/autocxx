@@ -367,12 +367,14 @@ impl<'a> CppCodeGenerator<'a> {
             .enumerate()
             .map(|(counter, conv)| match conversion_direction {
                 ConversionDirection::RustCallsCpp => {
-                    conv.cpp_conversion(&get_arg_name(counter), &self.original_name_map)
+                    conv.cpp_conversion(&get_arg_name(counter), &self.original_name_map, false)
                 }
                 ConversionDirection::CppCallsCpp => Ok(get_arg_name(counter)),
-                ConversionDirection::CppCallsRust => conv
-                    .inverse()
-                    .cpp_conversion(&get_arg_name(counter), &self.original_name_map),
+                ConversionDirection::CppCallsRust => conv.inverse().cpp_conversion(
+                    &get_arg_name(counter),
+                    &self.original_name_map,
+                    false,
+                ),
             })
             .collect();
         let mut arg_list = arg_list?.into_iter();
@@ -423,12 +425,17 @@ impl<'a> CppCodeGenerator<'a> {
             underlying_function_call = format!(
                 "return {}",
                 match conversion_direction {
-                    ConversionDirection::RustCallsCpp =>
-                        ret.cpp_conversion(&underlying_function_call, &self.original_name_map)?,
+                    ConversionDirection::RustCallsCpp => ret.cpp_conversion(
+                        &underlying_function_call,
+                        &self.original_name_map,
+                        true
+                    )?,
                     ConversionDirection::CppCallsCpp => underlying_function_call,
-                    ConversionDirection::CppCallsRust => ret
-                        .inverse()
-                        .cpp_conversion(&underlying_function_call, &self.original_name_map)?,
+                    ConversionDirection::CppCallsRust => ret.inverse().cpp_conversion(
+                        &underlying_function_call,
+                        &self.original_name_map,
+                        true
+                    )?,
                 }
             );
         };
