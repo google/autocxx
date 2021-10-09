@@ -253,12 +253,11 @@ impl<'a> ParseBindgen<'a> {
                             let old_id = &urn.ident;
                             let new_id = &urn.rename;
                             let new_tyname = QualifiedName::new(ns, new_id.clone());
-                            if segs.remove(0) != "self" {
-                                panic!("Path didn't start with self");
-                            }
-                            if segs.remove(0) != "super" {
-                                panic!("Path didn't start with self::super");
-                            }
+                            assert!(segs.remove(0) == "self", "Path didn't start with self");
+                            assert!(
+                                segs.remove(0) == "super",
+                                "Path didn't start with self::super"
+                            );
                             // This is similar to the path encountered within 'tree'
                             // but without the self::super prefix which is unhelpful
                             // in our output mod, because we prefer relative paths

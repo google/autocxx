@@ -155,6 +155,7 @@ pub(crate) struct FnAnalyzer<'a> {
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
     has_unrepresentable_constructors: HashSet<QualifiedName>,
+    nested_type_name_map: HashMap<QualifiedName, String>,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -174,6 +175,7 @@ impl<'a> FnAnalyzer<'a> {
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
             has_unrepresentable_constructors: HashSet::new(),
+            nested_type_name_map: Self::build_nested_type_map(&apis),
         };
         let mut results = Vec::new();
         convert_apis(
@@ -216,6 +218,25 @@ impl<'a> FnAnalyzer<'a> {
                         },
                     ),
             )
+            .collect()
+    }
+
+    /// Builds a mapping from a qualified type name to the last 'nest'
+    /// of its name, if it has multiple elements.
+    fn build_nested_type_map(apis: &[Api<PodPhase>]) -> HashMap<QualifiedName, String> {
+        apis.iter()
+            .filter_map(|api| match api {
+                Api::Struct { name, .. } | Api::Enum { name, .. } => {
+                    let cpp_name = name
+                        .cpp_name
+                        .as_deref()
+                        .unwrap_or_else(|| name.name.get_final_item());
+                    cpp_name
+                        .rsplit_once("::")
+                        .map(|(_, suffix)| (name.name.clone(), suffix.to_string()))
+                }
+                _ => None,
+            })
             .collect()
     }
 
@@ -410,7 +431,6 @@ impl<'a> FnAnalyzer<'a> {
 
         // End of parameter processing.
         // Work out naming, part one.
-        // The Rust name... it's more complicated.
         // bindgen may have mangled the name either because it's invalid Rust
         // syntax (e.g. a keyword like 'async') or it's an overload.
         // If the former, we respect that mangling. If the latter, we don't,
@@ -469,36 +489,41 @@ impl<'a> FnAnalyzer<'a> {
             // strip off the class name.
             let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
             let mut rust_name = overload_tracker.get_method_real_name(type_ident, ideal_rust_name);
-            let method_kind = if rust_name.starts_with(&type_ident) {
-                // It's a constructor. bindgen generates
-                // fn new(this: *Type, ...args)
-                // We want
-                // fn make_unique(...args) -> Type
-                // which later code will convert to
-                // fn make_unique(...args) -> UniquePtr<Type>
-                // If there are multiple constructors, bindgen generates
-                // new, new1, new2 etc. and we'll keep those suffixes.
-                let constructor_suffix = &rust_name[type_ident.len()..];
-                rust_name = format!("make_unique{}", constructor_suffix);
-                // Strip off the 'this' arg.
-                params = params.into_iter().skip(1).collect();
-                param_details.remove(0);
-                MethodKind::Constructor
-            } else if is_static_method {
-                MethodKind::Static
-            } else {
-                let receiver_mutability =
-                    receiver_mutability.expect("Failed to find receiver details");
-                if param_details.iter().any(|pd| pd.is_virtual) {
-                    if fun.is_pure_virtual {
-                        MethodKind::PureVirtual(receiver_mutability)
-                    } else {
-                        MethodKind::Virtual(receiver_mutability)
-                    }
+            let nested_type_ident = self
+                .nested_type_name_map
+                .get(&self_ty)
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| self_ty.get_final_item());
+            let method_kind =
+                if let Some(constructor_suffix) = rust_name.strip_prefix(nested_type_ident) {
+                    // It's a constructor. bindgen generates
+                    // fn Type(this: *mut Type, ...args)
+                    // We want
+                    // fn make_unique(...args) -> Type
+                    // which later code will convert to
+                    // fn make_unique(...args) -> UniquePtr<Type>
+                    // If there are multiple constructors, bindgen generates
+                    // new, new1, new2 etc. and we'll keep those suffixes.
+                    rust_name = format!("make_unique{}", constructor_suffix);
+                    // Strip off the 'this' arg.
+                    params = params.into_iter().skip(1).collect();
+                    param_details.remove(0);
+                    MethodKind::Constructor
+                } else if is_static_method {
+                    MethodKind::Static
                 } else {
-                    MethodKind::Normal(receiver_mutability)
-                }
-            };
+                    let receiver_mutability =
+                        receiver_mutability.expect("Failed to find receiver details");
+                    if param_details.iter().any(|pd| pd.is_virtual) {
+                        if fun.is_pure_virtual {
+                            MethodKind::PureVirtual(receiver_mutability)
+                        } else {
+                            MethodKind::Virtual(receiver_mutability)
+                        }
+                    } else {
+                        MethodKind::Normal(receiver_mutability)
+                    }
+                };
             let error_context = ErrorContext::Method {
                 self_ty: self_ty.get_final_ident(),
                 method: make_ident(&rust_name),
