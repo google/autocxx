@@ -261,9 +261,10 @@ impl IncludeCppEngine {
     }
 
     pub fn config_mut(&mut self) -> &mut IncludeCppConfig {
-        if !matches!(self.state, State::NotGenerated) {
-            panic!("Can't alter config after generation commenced");
-        }
+        assert!(
+            matches!(self.state, State::NotGenerated),
+            "Can't alter config after generation commenced"
+        );
         &mut self.config
     }
 
@@ -562,9 +563,7 @@ pub fn preprocess(
     cmd.arg(listing_path.to_str().unwrap());
     cmd.stderr(Stdio::inherit());
     let result = cmd.output().expect("failed to execute clang++");
-    if !result.status.success() {
-        panic!("failed to preprocess");
-    }
+    assert!(result.status.success(), "failed to preprocess");
     let mut file = File::create(preprocess_path)?;
     file.write_all(&result.stdout)?;
     Ok(())
