@@ -17,10 +17,11 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     panic::RefUnwindSafe,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::Arc,
 };
 
 use autocxx_engine::{Builder, BuilderContext, BuilderError, RebuildDependencyRecorder, HEADER};
+use lockfree_object_pool::{MutexObjectPool, MutexOwnedReusable};
 use log::info;
 use once_cell::sync::OnceCell;
 use proc_macro2::{Span, TokenStream};
@@ -30,9 +31,11 @@ use tempfile::{tempdir, TempDir};
 
 const KEEP_TEMPDIRS: bool = false;
 
-fn get_builder() -> &'static Mutex<LinkableTryBuilder> {
-    static INSTANCE: OnceCell<Mutex<LinkableTryBuilder>> = OnceCell::new();
-    INSTANCE.get_or_init(|| Mutex::new(LinkableTryBuilder::new()))
+fn get_builder() -> MutexOwnedReusable<LinkableTryBuilder> {
+    static INSTANCE: OnceCell<Arc<MutexObjectPool<LinkableTryBuilder>>> = OnceCell::new();
+    let pool = INSTANCE
+        .get_or_init(|| Arc::new(MutexObjectPool::new(|| LinkableTryBuilder::new(), |_| {})));
+    pool.pull_owned()
 }
 
 /// TryBuild which maintains a directory of libraries to link.
@@ -388,7 +391,7 @@ where
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
     // Step 8: use the trybuild crate to build the Rust file.
-    let r = get_builder().lock().unwrap().build(
+    let r = get_builder().build(
         &target_dir,
         "autocxx-demo",
         &tdir.path(),
