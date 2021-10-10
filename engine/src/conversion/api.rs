@@ -29,22 +29,17 @@ use super::{
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
-    Pod,    // trivial. Can be moved and copied in Rust.
-    NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
+    Pod,          // trivial. Can be moved and copied in Rust.
+    NonPod,       // has destructor or non-trivial move constructors. Can only hold by UniquePtr
+    NonPodNested, // same, but nested inside another C++ struct/class.
+    // We have to do different codegen here because cxx can't cope with
+    // nested classes declared as 'type X;' so we instead have to do
+    // 'type X = super::bindgen::X;'
     Abstract, // has pure virtual members - can't even generate UniquePtr.
-            // It's possible that the type itself isn't pure virtual, but it inherits from
-            // some other type which is pure virtual. Alternatively, maybe we just don't
-            // know if the base class is pure virtual because it wasn't on the allowlist,
-            // in which case we'll err on the side of caution.
-}
-
-impl TypeKind {
-    pub(crate) fn can_be_instantiated(&self) -> bool {
-        match self {
-            TypeKind::Pod | TypeKind::NonPod => true,
-            TypeKind::Abstract => false,
-        }
-    }
+              // It's possible that the type itself isn't pure virtual, but it inherits from
+              // some other type which is pure virtual. Alternatively, maybe we just don't
+              // know if the base class is pure virtual because it wasn't on the allowlist,
+              // in which case we'll err on the side of caution.
 }
 
 /// An entry which needs to go into an `impl` block for a given type.
@@ -127,6 +122,13 @@ impl ApiName {
 
     pub(crate) fn new_in_root_namespace(id: Ident) -> Self {
         Self::new(&Namespace::new(), id)
+    }
+
+    pub(crate) fn is_nested_struct_or_class(&self) -> bool {
+        self.cpp_name
+            .as_ref()
+            .map(|n| n.contains("::"))
+            .unwrap_or_default()
     }
 }
 

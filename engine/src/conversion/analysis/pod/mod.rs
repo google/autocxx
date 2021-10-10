@@ -24,7 +24,6 @@ use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
         api::{AnalysisPhase, Api, ApiName, TypeKind, UnanalyzedApi},
-        codegen_rs::make_non_pod,
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
         ConvertError,
@@ -135,10 +134,9 @@ fn analyze_struct(
         )
         .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))?;
         TypeKind::Pod
+    } else if name.is_nested_struct_or_class() {
+        TypeKind::NonPodNested
     } else {
-        // It's non-POD. So also, make the fields opaque...
-        make_non_pod(&mut item);
-        // ... and say we don't depend on other types.
         TypeKind::NonPod
     };
     Ok(Box::new(std::iter::once(Api::Struct {
