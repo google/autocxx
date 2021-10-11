@@ -6876,6 +6876,25 @@ fn test_no_rvo_move() {
     );
 }
 
+#[test]
+fn test_abstract_up() {
+    let hdr = indoc! {"
+    #include <memory>
+    class A {
+    public:
+        virtual void foo() = 0;
+        virtual ~A() {}
+    };
+    class B : public A {
+    public:
+        void foo() {}
+    };
+    inline std::unique_ptr<A> get_a() { return std::make_unique<B>(); }
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A", "get_a"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
