@@ -139,13 +139,13 @@ impl<'a> BridgeConverter<'a> {
                 // require C++ wrapper functions. This is probably the most complex
                 // part of `autocxx`. Again, this returns a new set of `Api`s, but
                 // parameterized by a richer set of metadata.
-                let mut analyzed_apis =
+                let analyzed_apis =
                     FnAnalyzer::analyze_functions(analyzed_apis, unsafe_policy, self.config);
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
                 Self::dump_apis_with_deps("analyze fns", &analyzed_apis);
-                mark_types_abstract(self.config, &mut analyzed_apis);
+                let analyzed_apis = mark_types_abstract(self.config, analyzed_apis);
                 Self::dump_apis_with_deps("marking abstract", &analyzed_apis);
                 // Remove any APIs whose names are not compatible with cxx.
                 let analyzed_apis = check_names(analyzed_apis);

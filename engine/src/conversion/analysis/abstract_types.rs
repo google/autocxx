@@ -18,12 +18,15 @@ use super::{
     fun::{FnAnalysis, FnKind, FnPhase, MethodKind},
     pod::PodAnalysis,
 };
-use crate::conversion::api::TypeKind;
+use crate::conversion::{api::TypeKind, error_reporter::convert_item_apis, ConvertError};
 use crate::{conversion::api::Api, types::QualifiedName};
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
-pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<FnPhase>>) {
+pub(crate) fn mark_types_abstract(
+    config: &IncludeCppConfig,
+    mut apis: Vec<Api<FnPhase>>,
+) -> Vec<Api<FnPhase>> {
     let mut abstract_types: HashSet<_> = apis
         .iter()
         .filter_map(|api| match &api {
@@ -86,7 +89,37 @@ pub(crate) fn mark_types_abstract(config: &IncludeCppConfig, apis: &mut Vec<Api<
                 },
                 ..
         } if abstract_types.contains(self_ty))
-    })
+    });
+
+    // Finally, if there are any types which are nested inside other types,
+    // they can't be abstract. This is due to two small limitations in cxx.
+    // Imagine we have class Foo { class Bar }
+    // 1) using "type Foo = super::bindgen::root::Foo_Bar" results
+    //    in the creation of std::unique_ptr code which isn't acceptable
+    //    for an abtract class
+    // 2) using "type Foo;" isn't possible unless Foo is a top-level item
+    //    within its namespace. Any outer names will be interpreted as namespace
+    //    names and result in cxx generating "namespace Foo { class Bar }"".
+    let mut results = Vec::new();
+    convert_item_apis(apis, &mut results, |api| match api {
+        Api::Struct {
+            analysis:
+                PodAnalysis {
+                    kind: TypeKind::Abstract,
+                    ..
+                },
+            ..
+        } if api
+            .cpp_name()
+            .as_ref()
+            .map(|n| n.contains("::"))
+            .unwrap_or_default() =>
+        {
+            Err(ConvertError::AbstractNestedType)
+        }
+        _ => Ok(Box::new(std::iter::once(api))),
+    });
+    results
 }
 
 fn any_missing_from_allowlist(config: &IncludeCppConfig, bases: &HashSet<QualifiedName>) -> bool {
