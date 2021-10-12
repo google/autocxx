@@ -883,7 +883,10 @@ impl<'a> RsCodeGenerator<'a> {
                     #(#mains)*
                 }
             });
-            materializations.push(Use::SpecificNameFromBindgen(methods_name));
+            materializations.extend([
+                Use::SpecificNameFromBindgen(methods_name),
+                Use::SpecificNameFromBindgen(supers_name),
+            ]);
         }
     }
 
