@@ -37,7 +37,7 @@ aquamarine = "0.1" # docs
 
 [workspace]
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce", "integration-tests"]
-exclude = ["examples/s2", "examples/steam-mini", "examples/subclass"]
+exclude = ["examples/s2", "examples/steam-mini", "examples/subclass", "examples/chromium-fake-render-frame-host"]
 
 #[patch.crates-io]
 #cxx = { path="../cxx" }
