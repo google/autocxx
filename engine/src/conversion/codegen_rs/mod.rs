@@ -1055,7 +1055,11 @@ impl<'a> RsCodeGenerator<'a> {
 }
 
 fn get_unsafe_token(requires_unsafe: bool) -> TokenStream {
-    if requires_unsafe { quote! { unsafe } } else { quote! {} }
+    if requires_unsafe {
+        quote! { unsafe }
+    } else {
+        quote! {}
+    }
 }
 
 fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
