@@ -5917,6 +5917,50 @@ fn test_pv_subclass_const() {
 }
 
 #[test]
+fn test_pv_subclass_ptr_param() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    struct A {
+        uint8_t a;
+    };
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo(const A*) const {};
+        virtual ~Observer() {}
+    };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
+        },
+        quote! {
+            generate!("A")
+            subclass!("Observer",MyObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                unsafe fn foo(&self, a: *const ffi::A) {
+                    use ffi::Observer_supers;
+                    self.foo_super(a)
+                }
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_pv_subclass_return() {
     let hdr = indoc! {"
     #include <cstdint>

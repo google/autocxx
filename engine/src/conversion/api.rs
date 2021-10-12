@@ -303,6 +303,7 @@ pub(crate) struct RustSubclassFnDetails {
     pub(crate) superclass: QualifiedName,
     pub(crate) receiver_mutability: ReceiverMutability,
     pub(crate) dependency: QualifiedName,
+    pub(crate) requires_unsafe: bool,
 }
 
 impl<T: AnalysisPhase> Api<T> {
