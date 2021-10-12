@@ -768,3 +768,10 @@ pub mod extern_rust {
     /// ```
     pub use autocxx_macro::extern_rust_function;
 }
+
+/// Equivalent to [`std::convert::AsMut`], but returns a pinned mutable reference
+/// such that cxx methods can be called on it.
+pub trait PinMut<T>: AsRef<T> {
+    /// Return a pinned mutable reference to a type.
+    fn pin_mut(&mut self) -> std::pin::Pin<&mut T>;
+}
