@@ -43,8 +43,7 @@ fn main() {
     // can't outlive the WebContents. That's nice. But currently
     // it stores an exclusive (a.k.a. mutable) reference, and we may
     // well want to relax that in future.
-    // (If we are still using autocxx by then, this would be
-    // https://github.com/google/autocxx/issues/622)
+    // (This relates to https://github.com/google/autocxx/issues/622)
     let mut rfh_handle = RenderFrameHostHandle::from_id(c_int(3), c_int(0), frame.pin_mut());
 
     // We can directly call methods on the RFH.
