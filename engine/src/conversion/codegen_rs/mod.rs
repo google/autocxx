@@ -23,20 +23,21 @@ pub(crate) mod unqualify;
 use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::IncludeCppConfig;
-// The following should not need to be exposed outside
-// codegen_rs but currently Rust codegen happens everywhere... TODO
-pub(crate) use non_pod_struct::make_non_pod;
 
 use proc_macro2::{Span, TokenStream};
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, Expr, FnArg, ForeignItem, ForeignItemFn,
-    Ident, ImplItem, Item, ItemForeignMod, ItemMod, Pat, ReturnType, TraitItem,
+    parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
+    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Pat, ReturnType, TraitItem,
 };
 
 use crate::{
     conversion::{
         analysis::fun::MethodKind,
-        codegen_rs::unqualify::{unqualify_params, unqualify_ret_type},
+        codegen_rs::{
+            non_pod_struct::{make_non_pod, new_non_pod_struct},
+            unqualify::{unqualify_params, unqualify_ret_type},
+        },
+        doc_attr::get_doc_attr,
     },
     known_types::known_types,
     types::{make_ident, Namespace, QualifiedName},
@@ -46,7 +47,6 @@ use impl_item_creator::create_impl_items;
 use self::{
     fun_codegen::gen_function,
     namespace_organizer::{HasNs, NamespaceEntries},
-    non_pod_struct::new_non_pod_struct,
 };
 
 use super::{
@@ -60,7 +60,7 @@ use super::{
     api::{AnalysisPhase, Api, ImplBlockDetails, SubclassName, TypeKind, TypedefKind},
 };
 use super::{convert_error::ErrorContext, ConvertError};
-use quote::quote;
+use quote::{quote, ToTokens};
 
 unzip_n::unzip_n!(pub 4);
 
@@ -510,20 +510,26 @@ impl<'a> RsCodeGenerator<'a> {
                 materializations: vec![Use::UsedFromBindgen],
                 extern_rust_mod_items: Vec::new(),
             },
-            Api::Struct { item, analysis, .. } => self.generate_type(
-                &name,
-                id,
-                analysis.kind,
-                || Some(Item::Struct(item)),
-                associated_methods,
-            ),
-            Api::Enum { item, .. } => self.generate_type(
-                &name,
-                id,
-                TypeKind::Pod,
-                || Some(Item::Enum(item)),
-                associated_methods,
-            ),
+            Api::Struct { item, analysis, .. } => {
+                let doc_attr = get_doc_attr(&item.attrs);
+                self.generate_type(
+                    &name,
+                    id,
+                    analysis.kind,
+                    || Some((Item::Struct(item), doc_attr)),
+                    associated_methods,
+                )
+            }
+            Api::Enum { item, .. } => {
+                let doc_attr = get_doc_attr(&item.attrs);
+                self.generate_type(
+                    &name,
+                    id,
+                    TypeKind::Pod,
+                    || Some((Item::Enum(item), doc_attr)),
+                    associated_methods,
+                )
+            }
             Api::ForwardDeclaration { .. } | Api::ConcreteType { .. } => {
                 self.generate_type(&name, id, TypeKind::Abstract, || None, associated_methods)
             }
@@ -603,13 +609,15 @@ impl<'a> RsCodeGenerator<'a> {
         let full_cpp = sub.cpp();
         let cpp_path = full_cpp.to_type_path();
         let cpp_id = full_cpp.get_final_ident();
-        let mut global_items = self.generate_extern_type_impl(TypeKind::NonPod, &full_cpp);
+        let mut global_items = Vec::new();
         global_items.push(parse_quote! {
             pub use bindgen::root::#holder;
         });
         let relinquish_ownership_call = sub.cpp_remove_ownership();
         let mut bindgen_mod_items = vec![
-            Item::Struct(new_non_pod_struct(cpp_id.clone())),
+            parse_quote! {
+                pub use cxxbridge::#cpp_id;
+            },
             parse_quote! {
                 pub struct #holder(pub autocxx::subclass::CppSubclassRustPeerHolder<super::super::super::#id>);
             },
@@ -622,7 +630,7 @@ impl<'a> RsCodeGenerator<'a> {
             },
         ];
         let mut extern_c_mod_items = vec![
-            self.generate_cxxbridge_type(&full_cpp, true),
+            self.generate_cxxbridge_type(&full_cpp, false, None),
             parse_quote! {
                 fn #relinquish_ownership_call(self: &#cpp_id);
             },
@@ -801,7 +809,7 @@ impl<'a> RsCodeGenerator<'a> {
         associated_methods: &HashMap<QualifiedName, Vec<SuperclassMethod>>,
     ) -> RsCodegenResult
     where
-        F: FnOnce() -> Option<Item>,
+        F: FnOnce() -> Option<(Item, Option<Attribute>)>,
     {
         let mut bindgen_mod_items = Vec::new();
         let mut materializations = vec![Use::UsedFromCxxBridge];
@@ -811,29 +819,48 @@ impl<'a> RsCodeGenerator<'a> {
             &mut materializations,
             associated_methods.get(name),
         );
-        if type_kind.can_be_instantiated() {
-            bindgen_mod_items
-                .push(item_creator().expect("Instantiable types must provide instance"));
-            let global_items = self.generate_extern_type_impl(type_kind, name);
-            RsCodegenResult {
-                global_items,
-                impl_entry: None,
-                bridge_items: create_impl_items(&id, self.config),
-                extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true)],
-                bindgen_mod_items,
-                materializations,
-                extern_rust_mod_items: Vec::new(),
+        let orig_item = item_creator();
+        match type_kind {
+            TypeKind::Pod | TypeKind::NonPodNested => {
+                let mut item = orig_item
+                    .expect("Instantiable types must provide instance")
+                    .0;
+                if matches!(type_kind, TypeKind::NonPodNested) {
+                    // We have to use 'type A = super::bindgen::A::B'
+                    // because if we use simply 'type A', there is no combination
+                    // of cxx-acceptable attributes which will inform cxx that
+                    // A is a class rather than a namespace.
+                    if let Item::Struct(ref mut s) = item {
+                        // Retain generics and doc attrs.
+                        make_non_pod(s);
+                    } else {
+                        // enum
+                        item = Item::Struct(new_non_pod_struct(id.clone()));
+                    }
+                }
+                bindgen_mod_items.push(item);
+                RsCodegenResult {
+                    global_items: self.generate_extern_type_impl(type_kind, name),
+                    impl_entry: None,
+                    bridge_items: create_impl_items(&id, self.config),
+                    extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, None)],
+                    bindgen_mod_items,
+                    materializations,
+                    extern_rust_mod_items: Vec::new(),
+                }
             }
-        } else {
-            bindgen_mod_items.push(Item::Use(parse_quote! { pub use cxxbridge::#id; }));
-            RsCodegenResult {
-                extern_c_mod_items: vec![self.generate_cxxbridge_type(name, false)],
-                extern_rust_mod_items: Vec::new(),
-                bridge_items: Vec::new(),
-                global_items: Vec::new(),
-                bindgen_mod_items,
-                impl_entry: None,
-                materializations,
+            TypeKind::NonPod | TypeKind::Abstract => {
+                bindgen_mod_items.push(Item::Use(parse_quote! { pub use cxxbridge::#id; }));
+                let doc_attr = orig_item.map(|maybe_item| maybe_item.1).flatten();
+                RsCodegenResult {
+                    extern_c_mod_items: vec![self.generate_cxxbridge_type(name, false, doc_attr)],
+                    extern_rust_mod_items: Vec::new(),
+                    bridge_items: Vec::new(),
+                    global_items: Vec::new(),
+                    bindgen_mod_items,
+                    impl_entry: None,
+                    materializations,
+                }
             }
         }
     }
@@ -1002,9 +1029,14 @@ impl<'a> RsCodeGenerator<'a> {
         &self,
         name: &QualifiedName,
         references_bindgen: bool,
+        doc_attr: Option<Attribute>,
     ) -> ForeignItem {
         let ns = name.get_namespace();
         let id = name.get_final_ident();
+        // The following lines actually Tell A Lie.
+        // If we have a nested class, B::C, within namespace A,
+        // we actually have to tell cxx that we have nested class C
+        // within namespace A.
         let mut ns_components: Vec<_> = ns.iter().cloned().collect();
         let mut cxx_name = None;
         if let Some(cpp_name) = self.original_name_map.get(name) {
@@ -1026,6 +1058,10 @@ impl<'a> RsCodeGenerator<'a> {
             for_extern_c_ts.extend(quote! {
                 #[cxx_name = #n]
             });
+        }
+
+        if let Some(doc_attr) = doc_attr {
+            doc_attr.to_tokens(&mut for_extern_c_ts);
         }
 
         if references_bindgen {

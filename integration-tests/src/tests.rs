@@ -3534,6 +3534,24 @@ fn test_nested_type_in_namespace() {
 }
 
 #[test]
+fn test_nested_enum_in_namespace() {
+    let hdr = indoc! {"
+        namespace N {
+            struct A {
+                A() {}
+                enum B {
+                    C,
+                    D,
+                };
+            };
+        };
+        void take_A_B(N::A::B);
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["take_A_B"], &[]);
+}
+
+#[test]
 fn test_abstract_nested_type() {
     let hdr = indoc! {"
         namespace N {
