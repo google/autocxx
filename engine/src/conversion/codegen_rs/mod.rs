@@ -51,6 +51,7 @@ use self::{
 
 use super::{
     analysis::fun::{FnAnalysis, FnKind},
+    api::RustSubclassFnDetails,
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
@@ -128,6 +129,7 @@ struct SuperclassMethod {
     param_names: Vec<Pat>,
     ret_type: ReturnType,
     receiver_mutability: ReceiverMutability,
+    requires_unsafe: bool,
 }
 
 /// Type which handles generation of Rust code.
@@ -291,6 +293,7 @@ impl<'a> RsCodeGenerator<'a> {
                                 ret_type: ret_type.clone(),
                                 param_names,
                                 receiver_mutability: receiver_mutability.clone(),
+                                requires_unsafe: param_details.iter().any(|pd| pd.requires_unsafe),
                             })
                         }
                     }
@@ -566,15 +569,7 @@ impl<'a> RsCodeGenerator<'a> {
             },
             Api::RustSubclassFn {
                 details, subclass, ..
-            } => Self::generate_subclass_fn(
-                details.params,
-                details.ret,
-                id,
-                details.method_name,
-                details.superclass,
-                details.receiver_mutability,
-                subclass,
-            ),
+            } => Self::generate_subclass_fn(id, *details, subclass),
             Api::Subclass {
                 name, superclass, ..
             } => {
@@ -643,8 +638,9 @@ impl<'a> RsCodeGenerator<'a> {
                     let peer_fn = make_ident(peer_fn);
                     *(params.iter_mut().next().unwrap()) = first_param;
                     let param_names = m.param_names.iter().skip(1);
+                    let unsafe_token = get_unsafe_token(m.requires_unsafe);
                     parse_quote! {
-                        fn #supern(#params) #ret {
+                        #unsafe_token fn #supern(#params) #ret {
                             use autocxx::subclass::CppSubclass;
                             self.#peer_fn().#cpp_method_name(#(#param_names),*)
                         }
@@ -722,24 +718,25 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn generate_subclass_fn(
-        params: Punctuated<FnArg, Comma>,
-        ret: ReturnType,
         api_name: Ident,
-        method_name: Ident,
-        superclass: QualifiedName,
-        receiver_mutability: ReceiverMutability,
+        details: RustSubclassFnDetails,
         subclass: SubclassName,
     ) -> RsCodegenResult {
-        let global_def = quote! { fn #api_name(#params) #ret };
+        let params = details.params;
+        let ret = details.ret;
+        let unsafe_token = get_unsafe_token(details.requires_unsafe);
+        let global_def = quote! { #unsafe_token fn #api_name(#params) #ret };
         let params = unqualify_params(params);
         let ret = unqualify_ret_type(ret);
-        let cxxbridge_decl: ForeignItemFn = parse_quote! { fn #api_name(#params) #ret; };
+        let method_name = details.method_name;
+        let cxxbridge_decl: ForeignItemFn =
+            parse_quote! { #unsafe_token fn #api_name(#params) #ret; };
         let args: Punctuated<Expr, Comma> =
             Self::args_from_sig(&cxxbridge_decl.sig.inputs).collect();
-        let superclass_id = superclass.get_final_ident();
-        let methods_trait = SubclassName::get_methods_trait_name(&superclass);
+        let superclass_id = details.superclass.get_final_ident();
+        let methods_trait = SubclassName::get_methods_trait_name(&details.superclass);
         let methods_trait = methods_trait.to_type_path();
-        let (deref_ty, deref_call, borrow, mut_token) = match receiver_mutability {
+        let (deref_ty, deref_call, borrow, mut_token) = match details.receiver_mutability {
             ReceiverMutability::Const => ("Deref", "deref", "try_borrow", None),
             ReceiverMutability::Mutable => (
                 "DerefMut",
@@ -858,11 +855,12 @@ impl<'a> RsCodeGenerator<'a> {
                         ReceiverMutability::Mutable => parse_quote!(&mut self),
                     };
                     let ret_type = &method.ret_type;
+                    let unsafe_token = get_unsafe_token(method.requires_unsafe);
                     let a: TraitItem = parse_quote!(
-                        fn #super_id(#params) #ret_type;
+                        #unsafe_token fn #super_id(#params) #ret_type;
                     );
                     let b: TraitItem = parse_quote!(
-                        fn #id(#params) #ret_type {
+                        #unsafe_token fn #id(#params) #ret_type {
                             self.#super_id(#param_names)
                         }
                     );
@@ -1054,6 +1052,10 @@ impl<'a> RsCodeGenerator<'a> {
     fn find_output_mod_root(ns: &Namespace) -> impl Iterator<Item = Ident> {
         std::iter::repeat(make_ident("super")).take(ns.depth())
     }
+}
+
+fn get_unsafe_token(requires_unsafe: bool) -> TokenStream {
+    if requires_unsafe { quote! { unsafe } } else { quote! {} }
 }
 
 fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {

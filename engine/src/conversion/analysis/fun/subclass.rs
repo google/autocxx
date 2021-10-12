@@ -122,6 +122,7 @@ pub(super) fn create_subclass_function(
             superclass: superclass.clone(),
             receiver_mutability: receiver_mutability.clone(),
             dependency: dependency.clone(),
+            requires_unsafe: analysis.param_details.iter().any(|pd| pd.requires_unsafe),
         }),
     };
     subclass_function

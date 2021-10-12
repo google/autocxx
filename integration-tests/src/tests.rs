@@ -5909,7 +5909,7 @@ fn test_pv_subclass_ptr_param() {
     class Observer {
     public:
         Observer() {}
-        virtual void foo(const A*) const = 0;
+        virtual void foo(const A*) const {};
         virtual ~Observer() {}
     };
     "};
@@ -5934,13 +5934,13 @@ fn test_pv_subclass_ptr_param() {
             }
             impl Observer_methods for MyObserver {
                 unsafe fn foo(&self, a: *const ffi::A) {
-                    unsafe { self.foo_super(a) }
+                    use ffi::Observer_supers;
+                    self.foo_super(a)
                 }
             }
         }),
     );
 }
-
 
 #[test]
 fn test_pv_subclass_return() {
