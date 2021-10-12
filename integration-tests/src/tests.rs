@@ -3534,6 +3534,28 @@ fn test_nested_type_in_namespace() {
 }
 
 #[test]
+fn test_abstract_nested_type() {
+    let hdr = indoc! {"
+        namespace N {
+            class A {
+            public:
+                A() {}
+                class B {
+                private:
+                    B() {}
+                public:
+                    virtual ~B() {}
+                    virtual void Foo() = 0;
+                };
+            };
+        };
+        void take_A_B(const N::A::B&);
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["take_A_B", "N::A_B"], &[]);
+}
+
+#[test]
 fn test_nested_type_constructor() {
     let hdr = indoc! {"
         #include <string>
