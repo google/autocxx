@@ -235,6 +235,8 @@ fn cast_to_superclass(
     // This horrid code will all go away once we implement
     // https://github.com/google/autocxx/issues/592; safe wrappers will
     // be automatically generated to allow upcasting to superclasses.
+    // NB this code is probably actually _wrong_ too meanwhile; we need to cast
+    // on the C++ side.
     let subclass_obs_ptr =
         unsafe { Pin::into_inner_unchecked(obs) } as *mut ffi::RenderFrameHostForWebContentsCpp;
     unsafe {
