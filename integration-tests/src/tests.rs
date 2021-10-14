@@ -7616,6 +7616,30 @@ fn test_call_superclass() {
     run_test("", hdr, rs, &["A", "B", "get_b"], &[]);
 }
 
+#[test]
+fn test_pass_superclass() {
+    let hdr = indoc! {"
+    #include <memory>
+    class A {
+    public:
+        virtual void foo() const {};
+        virtual ~A() {}
+    };
+    class B : public A {
+    public:
+        void bar() const {}
+    };
+    inline std::unique_ptr<B> get_b() { return std::make_unique<B>(); }
+    inline void takes_a(const A&) {}
+    "};
+    let rs = quote! {
+        let b = ffi::get_b();
+        ffi::take_a(&b);
+    };
+    run_test("", hdr, rs, &["A", "B", "get_b", "take_a"], &[]);
+}
+
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
