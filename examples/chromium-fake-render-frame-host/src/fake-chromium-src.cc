@@ -14,6 +14,7 @@
 
 #include "fake-chromium-header.h"
 #include <map>
+#include <algorithm>
 
 using namespace content;
 
