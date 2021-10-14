@@ -54,7 +54,7 @@ use crate::ffi;
 ///
 /// In addition, each time you extract the value from this
 /// `RenderFrameHostHandle`, a liveness check is performed. This involves
-///
+/// not just a null check but also some reference count manipulation.
 /// If you're going to access the `RenderFrameHost` multiple times, it's
 /// advised that you call [`RenderFrameHostHandle::try_borrow`] or
 /// [`RenderFrameHostHandle::try_borrow_mut`] and then use
