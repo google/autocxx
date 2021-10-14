@@ -18,7 +18,7 @@ use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
 use syn::parse::Parser;
-use syn::{parse_macro_input, parse_quote, Fields, Item, ItemStruct};
+use syn::{parse_macro_input, parse_quote, Fields, Item, ItemStruct, Visibility};
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
@@ -36,6 +36,10 @@ pub fn include_cpp_impl(input: TokenStream) -> TokenStream {
 pub fn subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut s: ItemStruct =
         syn::parse(item).unwrap_or_else(|_| abort!(Span::call_site(), "Expected a struct"));
+    if !matches!(s.vis, Visibility::Public(..)) {
+        use syn::spanned::Spanned;
+        abort!(s.vis.span(), "Rust subclasses of C++ types must by public");
+    }
     let id = &s.ident;
     let cpp_ident = Ident::new(&format!("{}Cpp", id.to_string()), Span::call_site());
     let input = quote! {
