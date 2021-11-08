@@ -3827,6 +3827,26 @@ fn test_typedef_in_pod_struct() {
 }
 
 #[test]
+fn test_cint_in_pod_struct() {
+    let hdr = indoc! {"
+        #include <string>
+        struct A {
+            int a;
+        };
+        inline uint32_t take_a(A a) {
+            return a.a;
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::A {
+            a: 32,
+        };
+        assert_eq!(ffi::take_a(a), 32);
+    };
+    run_test("", hdr, rs, &["take_a"], &["A"]);
+}
+
+#[test]
 fn test_typedef_to_std_in_struct() {
     let hdr = indoc! {"
         #include <string>
