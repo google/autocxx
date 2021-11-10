@@ -31,3 +31,6 @@ jobs:
     - name: Build pod example
       working-directory: ./examples/pod
       run: cargo build --all --verbose
+    - name: Build chromium render-frame-host example
+      working-directory: ./examples/chromium-fake-render-frame-host
+      run: cargo build --all --verbose
