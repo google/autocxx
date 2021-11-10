@@ -28,3 +28,6 @@ jobs:
     - name: Build subclass example
       working-directory: ./examples/subclass
       run: cargo build --all --verbose
+    - name: Build pod example
+      working-directory: ./examples/pod
+      run: cargo build --all --verbose
