@@ -7040,7 +7040,7 @@ fn test_abstract_up() {
 }
 
 #[test]
-fn test_protected_method() {
+fn test_class_having_protected_method() {
     let hdr = indoc! {"
         class A {
         protected:
@@ -7052,7 +7052,7 @@ fn test_protected_method() {
 }
 
 #[test]
-fn test_private_method() {
+fn test_class_having_private_method() {
     let hdr = indoc! {"
         class A {
         private:
