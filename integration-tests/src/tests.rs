@@ -7039,6 +7039,30 @@ fn test_abstract_up() {
     run_test("", hdr, rs, &["A", "get_a"], &[]);
 }
 
+#[test]
+fn test_protected_method() {
+    let hdr = indoc! {"
+        class A {
+        protected:
+            uint32_t protected_method();
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &[], &["A"]);
+}
+
+#[test]
+fn test_private_method() {
+    let hdr = indoc! {"
+        class A {
+        private:
+            uint32_t private_method();
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &[], &["A"]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
