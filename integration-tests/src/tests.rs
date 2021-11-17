@@ -7039,6 +7039,32 @@ fn test_abstract_up() {
     run_test("", hdr, rs, &["A", "get_a"], &[]);
 }
 
+#[test]
+fn test_class_having_protected_method() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    class A {
+    protected:
+        inline uint32_t protected_method() { return 0; }
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &[], &["A"]);
+}
+
+#[test]
+fn test_class_having_private_method() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    class A {
+    private:
+        inline uint32_t private_method() { return 0; }
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &[], &["A"]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers

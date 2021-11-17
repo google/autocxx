@@ -48,6 +48,14 @@ pub(crate) struct ImplBlockDetails {
     pub(crate) ty: Ident,
 }
 
+/// C++ visibility.
+#[derive(Clone, PartialEq, Eq, Copy)]
+pub(crate) enum CppVisibility {
+    Public,
+    Protected,
+    Private,
+}
+
 /// A C++ function for which we need to generate bindings, but haven't
 /// yet analyzed in depth. This is little more than a `ForeignItemFn`
 /// broken down into its constituent parts, plus some metadata from the
@@ -60,7 +68,7 @@ pub(crate) struct FuncToConvert {
     pub(crate) output: ReturnType,
     pub(crate) vis: Visibility,
     pub(crate) is_pure_virtual: bool,
-    pub(crate) is_private: bool,
+    pub(crate) cpp_vis: CppVisibility,
     pub(crate) is_move_constructor: bool,
     pub(crate) unused_template_param: bool,
     pub(crate) return_type_is_reference: bool,

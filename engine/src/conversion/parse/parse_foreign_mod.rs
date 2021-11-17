@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::api::ApiName;
+use crate::conversion::api::{ApiName, CppVisibility};
 use crate::conversion::doc_attr::get_doc_attr;
 use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
@@ -76,6 +76,16 @@ impl ParseForeignMod {
         self.ignored_apis.append(&mut extra_apis);
     }
 
+    fn get_cpp_visibility(item: &ForeignItemFn) -> CppVisibility {
+        if Self::has_attr(&item, "bindgen_visibility_private") {
+            CppVisibility::Private
+        } else if Self::has_attr(&item, "bindgen_visibility_protected") {
+            CppVisibility::Protected
+        } else {
+            CppVisibility::Public
+        }
+    }
+
     fn parse_foreign_item(
         &mut self,
         i: ForeignItem,
@@ -83,7 +93,7 @@ impl ParseForeignMod {
     ) -> Result<(), ConvertErrorWithContext> {
         match i {
             ForeignItem::Fn(item) => {
-                let is_private = Self::has_attr(&item, "bindgen_visibility_private");
+                let cpp_vis = Self::get_cpp_visibility(&item);
                 let is_pure_virtual = Self::has_attr(&item, "bindgen_pure_virtual");
                 let unused_template_param =
                     Self::has_attr(&item, "bindgen_unused_template_param_in_arg_or_return");
@@ -101,7 +111,7 @@ impl ParseForeignMod {
                     output: item.sig.output,
                     vis: item.vis,
                     is_pure_virtual,
-                    is_private,
+                    cpp_vis,
                     is_move_constructor,
                     unused_template_param,
                     return_type_is_reference,
