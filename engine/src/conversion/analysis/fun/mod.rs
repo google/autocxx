@@ -24,7 +24,7 @@ use crate::{
             fun::function_wrapper::CppFunctionKind,
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::{ApiName, FuncToConvert, SubclassName},
+        api::{ApiName, CppVisibility, FuncToConvert, SubclassName},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::{convert_apis, report_any_error},
@@ -545,9 +545,9 @@ impl<'a> FnAnalyzer<'a> {
             )
         };
 
-        // Skip private methods; but if we've a private constructor, keep
+        // Skip private & protected methods; but if we've a private constructor, keep
         // a note of it.
-        if fun.is_private {
+        if fun.cpp_vis != CppVisibility::Public {
             if let FnKind::Method(self_ty, MethodKind::Constructor) = &kind {
                 self.has_unrepresentable_constructors
                     .insert(self_ty.clone());
@@ -1020,7 +1020,7 @@ impl<'a> FnAnalyzer<'a> {
                         output: ReturnType::Default,
                         vis: parse_quote! { pub },
                         is_pure_virtual: false,
-                        is_private: false,
+                        cpp_vis: CppVisibility::Public,
                         is_move_constructor: false,
                         unused_template_param: false,
                         return_type_is_reference: false,
