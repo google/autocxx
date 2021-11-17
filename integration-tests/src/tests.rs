@@ -7042,10 +7042,11 @@ fn test_abstract_up() {
 #[test]
 fn test_class_having_protected_method() {
     let hdr = indoc! {"
-        class A {
-        protected:
-            uint32_t protected_method();
-        };
+    #include <cstdint>
+    class A {
+    protected:
+        inline uint32_t protected_method() { return 0; }
+    };
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &[], &["A"]);
@@ -7054,10 +7055,11 @@ fn test_class_having_protected_method() {
 #[test]
 fn test_class_having_private_method() {
     let hdr = indoc! {"
-        class A {
-        private:
-            uint32_t private_method();
-        };
+    #include <cstdint>
+    class A {
+    private:
+        inline uint32_t private_method() { return 0; }
+    };
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &[], &["A"]);
