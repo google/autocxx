@@ -115,6 +115,46 @@ fn test_take_i32() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/681
+#[cfg(target_pointer_width = "64")]
+fn test_return_big_ints() {
+    let cxx = indoc! {"
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        inline uint32_t give_u32() {
+            return 5;
+        }
+        inline uint64_t give_u64() {
+            return 5;
+        }
+        inline int32_t give_i32() {
+            return 5;
+        }
+        inline int64_t give_i64() {
+            return 5;
+        }
+        inline __int128 give_i128() {
+            return 5;
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_u32(), 5);
+        assert_eq!(ffi::give_u64(), 5);
+        assert_eq!(ffi::give_i32(), 5);
+        assert_eq!(ffi::give_i64(), 5);
+        assert_eq!(ffi::give_i128(), 5);
+    };
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &["give_u32", "give_u64", "give_i32", "give_i64", "give_i128"],
+        &[],
+    );
+}
+
+#[test]
 #[ignore] // because cxx doesn't support unique_ptrs to primitives.
 fn test_give_up_int() {
     let cxx = indoc! {"
