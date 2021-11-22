@@ -39,7 +39,7 @@ You will need:
 * [LLVM to be installed](https://rust-lang.github.io/rust-bindgen/requirements.html).
 * Some patience. This is not a magic solution. C++/Rust interop is hard. Avoid it if you can!
 
-The rest of this 'getting started' section assumes Cargo - if you're using something else, see the [`include_cpp`] documentation.
+The rest of this 'getting started' section assumes Cargo - if you're using something else, see the [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html) documentation.
 
 First, add `autocxx` to your `dependencies` and `autocxx-build` to your `build-dependencies` in your `Cargo.toml`.
 
@@ -53,7 +53,7 @@ autocxx-build = "0.13.1"
 
 Now, add a `build.rs`. This is where you need your include path:
 
-```nocompile
+```rust,ignore
 fn main() {
     let path = std::path::PathBuf::from("src"); // include path
     let mut b = autocxx_build::Builder::new("src/main.rs", &[&path]).expect_build();
@@ -64,9 +64,9 @@ fn main() {
 }
 ```
 
-Finally, in your `main.rs` you can use the [`include_cpp`] macro which is the heart of `autocxx`:
+Finally, in your `main.rs` you can use the [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html) macro which is the heart of `autocxx`:
 
-```nocompile
+```rust,ignore
 autocxx::include_cpp! {
     #include "my_header.h" // your header file name
     safety!(unsafe) // see details of unsafety policies described in include_cpp
@@ -76,7 +76,7 @@ autocxx::include_cpp! {
 
 You should then find you can call the function by referring to an `ffi` namespace:
 
-```nocompile
+```rust,ignore
 fn main() {
     println!("Hello, world! - answer from C++ is {}", ffi::MyAPIFunction(4));
 }
@@ -86,10 +86,10 @@ C++ types such as `std::string` and `std::unique_ptr` are represented using the 
 
 Some caveats:
 
-* Not all C++ features are supported. You _will_ come across APIs - possibly many APIs - where autocxx doesn't work. It should emit reasonable diagnostics explaining the problem. See the section on "dealing with failure" in the [`include_cpp`] documentation.
+* Not all C++ features are supported. You _will_ come across APIs - possibly many APIs - where autocxx doesn't work. It should emit reasonable diagnostics explaining the problem. See the section on "dealing with failure" in the [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html) documentation.
 * `autocxx` can be frustrating when you run up against its limitations. It's designed to allow importing of APIs from complex existing codebases. It's often a better choice to use [cxx](https://cxx.rs) directly.
 
-A full user manual can be found in the documentation for [`include_cpp`]. See [demo/src/main.rs](demo/src/main.rs) for a basic example, and the [examples](examples/) directory for more.
+A full user manual can be found in the documentation for [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html). See [demo/src/main.rs](demo/src/main.rs) for a basic example, and the [examples](examples/) directory for more.
 
 # On safety
 
@@ -107,7 +107,7 @@ See [safety!] in the documentation for more details.
 
 # Building without cargo
 
-See instructions in the documentation for [`include_cpp`]. This interop inevitably involves lots of fiddly small functions. It's likely to perform far better if you can achieve cross-language LTO. [This issue](https://github.com/dtolnay/cxx/issues/371) may give some useful hints - see also all the build-related help in [the cxx manual](https://cxx.rs/) which all applies here too.
+See instructions in the documentation for [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html). This interop inevitably involves lots of fiddly small functions. It's likely to perform far better if you can achieve cross-language LTO. [This issue](https://github.com/dtolnay/cxx/issues/371) may give some useful hints - see also all the build-related help in [the cxx manual](https://cxx.rs/) which all applies here too.
 
 # Directory structure
 
