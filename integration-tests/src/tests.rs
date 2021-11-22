@@ -3827,6 +3827,26 @@ fn test_typedef_in_pod_struct() {
 }
 
 #[test]
+fn test_cint_in_pod_struct() {
+    let hdr = indoc! {"
+        #include <string>
+        struct A {
+            int a;
+        };
+        inline uint32_t take_a(A a) {
+            return a.a;
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::A {
+            a: 32,
+        };
+        assert_eq!(ffi::take_a(a), 32);
+    };
+    run_test("", hdr, rs, &["take_a"], &["A"]);
+}
+
+#[test]
 fn test_typedef_to_std_in_struct() {
     let hdr = indoc! {"
         #include <string>
@@ -7035,6 +7055,32 @@ fn test_abstract_up() {
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["A", "get_a"], &[]);
+}
+
+#[test]
+fn test_class_having_protected_method() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    class A {
+    protected:
+        inline uint32_t protected_method() { return 0; }
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &[], &["A"]);
+}
+
+#[test]
+fn test_class_having_private_method() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    class A {
+    private:
+        inline uint32_t private_method() { return 0; }
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &[], &["A"]);
 }
 
 // Yet to test:

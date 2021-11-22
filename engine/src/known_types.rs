@@ -183,24 +183,30 @@ impl TypeDatabase {
 
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
-    pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (&QualifiedName, bool)> {
-        self.by_rs_name.iter().map(|(tn, td)| {
-            (
-                tn,
-                match td.behavior {
-                    Behavior::CxxContainerByValueSafe
-                    | Behavior::RustStr
-                    | Behavior::RustString
-                    | Behavior::RustByValue
-                    | Behavior::CByValue
-                    | Behavior::CVariableLengthByValue
-                    | Behavior::RustContainerByValueSafe => true,
-                    Behavior::CxxString
-                    | Behavior::CxxContainerNotByValueSafe
-                    | Behavior::CVoid => false,
-                },
-            )
-        })
+    pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (QualifiedName, bool)> {
+        let pod_safety = self
+            .canonical_names
+            .keys()
+            .chain(self.by_rs_name.keys())
+            .map(|tn| {
+                (
+                    tn.clone(),
+                    match self.get(tn).unwrap().behavior {
+                        Behavior::CxxContainerByValueSafe
+                        | Behavior::RustStr
+                        | Behavior::RustString
+                        | Behavior::RustByValue
+                        | Behavior::CByValue
+                        | Behavior::CVariableLengthByValue
+                        | Behavior::RustContainerByValueSafe => true,
+                        Behavior::CxxString
+                        | Behavior::CxxContainerNotByValueSafe
+                        | Behavior::CVoid => false,
+                    },
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        pod_safety.into_iter()
     }
 
     /// Whether this TypePath should be treated as a value in C++
