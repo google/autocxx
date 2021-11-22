@@ -51,3 +51,6 @@ strum_macros = "0.20.1"
 version = "1.0.39"
 features = [ "full" ]
 #features = [ "full", "extra-traits" ]
+
+[package.metadata.docs.rs]
+features = ["build"]
