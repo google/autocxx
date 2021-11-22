@@ -25,68 +25,71 @@ fn main() {
 }
 ```
 
-How to start: read the documentation for `include_cpp`. See [demo/src/main.rs](demo/src/main.rs) for a basic example, and the [examples](examples/) directory for more.
+# Getting started
 
-The existing cxx facilities are used to allow safe ownership of C++ types from Rust; specifically things like `std::unique_ptr` and `std::string` - so the Rust code should not typically require use of unsafe code, unlike with normal `bindgen` bindings.
+If you're here, you want to call some C++ from Rust, right?
 
-# How it works
+You will need:
 
-Before building the Rust code, you must run a code generator (typically run in a `build.rs` for a Cargo setup.)
+* Some C++ header files (.h files)
+* The C++ "include path". That is, the set of directories containing those headers. (That's not necessarily the directory in which each header _file_ lives; C++ might contain `#include "foo/bar.h"` and so your include path would need to include the directory containing the `foo` directory).
+* A list of the APIs (types and functions) from those header files which you wish to make available in Rust.
+* Either a Cargo or non-Cargo build system.
+* To know how to link the C++ libraries into your Cargo project. This is beyond the scope of what `autocxx` helps with, but one solution is to emit a print from your [build script](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib).
+* [LLVM to be installed](https://rust-lang.github.io/rust-bindgen/requirements.html).
+* Some patience. This is not a magic solution. C++/Rust interop is hard. Avoid it if you can!
 
-This:
+The rest of this 'getting started' section assumes Cargo - if you're using something else, see the [`include_cpp`] documentation.
 
-* First, runs `bindgen` to generate some bindings (with all the usual `unsafe`, `#[repr(C)]` etc.)
-* Second, interprets and converts them to bindings suitable for `cxx::bridge`.
-* Thirdly, runs `cxx::bridge` to create the C++ bindings.
-* Fourthly, writes out a `.rs` file with the Rust bindings.
+First, add `autocxx` to your `dependencies` and `autocxx-build` to your `build-dependencies` in your `Cargo.toml`.
 
-When building your Rust code, the procedural macro boils down to an `include!` macro that pulls in the
-generated Rust code.
+```toml
+[dependencies]
+autocxx = "0.13.1"
 
-# Current state of affairs
+[build-dependencies]
+autocxx-build = "0.13.1"
+```
 
-There is an example of this macro working within the `demo` directory.
+Now, add a `build.rs`. This is where you need your include path:
 
-The project also contains test code which does this end-to-end, for all sorts of C++ types and constructs which we eventually would like to support.
+```nocompile
+fn main() {
+    let path = std::path::PathBuf::from("src"); // include path
+    let mut b = autocxx_build::Builder::new("src/main.rs", &[&path]).expect_build();
+        // This assumes all your C++ bindings are in main.rs
+    b.flag_if_supported("-std=c++14").compile("autocxx-demo");
+    println!("cargo:rerun-if-changed=src/main.rs");
+    // Add instructions to link to any C++ libraries you need.
+}
+```
 
-| Type | Status |
-| ---- | ------ |
-| Primitives (u8, etc.) | Works |
-| Plain-old-data structs | Works |
-| std::unique_ptr of POD | Works |
-| std::unique_ptr of std::string | Works |
-| std::unique_ptr of opaque types | Works |
-| Reference to POD | Works |
-| Reference to std::string | Works |
-| Classes | Works, [except on Windows](https://github.com/google/autocxx/issues/54) |
-| Methods | Works |
-| Int #defines | Works |
-| String #defines | Works |
-| Primitive constants | Works |
-| Enums | Works, though more thought needed |
-| #ifdef, #if etc. | - |
-| Typedefs | Works but there are always more permutations |
-| Structs containing UniquePtr | Works |
-| Structs containing strings | Works (opaque only) |
-| Passing opaque structs (owned by UniquePtr) into C++ functions which take them by value | Works |
-| Passing opaque structs (owned by UniquePtr) into C++ methods which take them by value | Works |
-| Constructors/make_unique | Works |
-| Destructors | Works via cxx `UniquePtr` already |
-| Inline functions | Works |
-| Construction of std::unique_ptr<std::string> in Rust | Works |
-| Namespaces | Works |
-| std::vector | Works |
-| Field access to opaque objects via UniquePtr | - |
-| Plain-old-data structs containing opaque fields | Impossible by design, but may not be ergonomic so may need more thought |
-| Reference counting, std::shared_ptr | Works, but mutable references not allowed |
-| std::optional | - |
-| Function pointers | - |
-| Unique ptrs to primitives | - |
-| Inheritance from pure virtual classes | Works, subject to various limitations |
-| Generic (templated) types | Works but no field access or methods |
-| Arrays | - |
+Finally, in your `main.rs` you can use the [`include_cpp`] macro which is the heart of `autocxx`:
 
-It's now at the point where it works for some use-cases. If you choose to use `autocxx` you should expect to encounter a selection of problems, but _some_ of your APIs will be usable. For others (e.g. those using arrays) you'll need to write manual bindings.
+```nocompile
+autocxx::include_cpp! {
+    #include "my_header.h" // your header file name
+    safety!(unsafe) // see details of unsafety policies described in include_cpp
+    generate!("MyAPIFunction") // add this line for each function or type you wish to generate
+}
+```
+
+You should then find you can call the function by referring to an `ffi` namespace:
+
+```nocompile
+fn main() {
+    println!("Hello, world! - answer from C++ is {}", ffi::MyAPIFunction(4));
+}
+```
+
+C++ types such as `std::string` and `std::unique_ptr` are represented using the types provided by the marvellous [cxx](https://cxx.rs) library. This provides good ergonomics and safety norms, so unlike with normal `bindgen` bindings, you won't _normally_ need to write `unsafe` code for every function call.
+
+Some caveats:
+
+* Not all C++ features are supported. You _will_ come across APIs - possibly many APIs - where autocxx doesn't work. It should emit reasonable diagnostics explaining the problem. See the section on "dealing with failure" in the [`include_cpp`] documentation.
+* `autocxx` can be frustrating when you run up against its limitations. It's designed to allow importing of APIs from complex existing codebases. It's often a better choice to use [cxx](https://cxx.rs) directly.
+
+A full user manual can be found in the documentation for [`include_cpp`]. See [demo/src/main.rs](demo/src/main.rs) for a basic example, and the [examples](examples/) directory for more.
 
 # On safety
 
@@ -102,35 +105,9 @@ If your project is 90% Rust code, with small bits of C++, don't use this crate. 
 
 See [safety!] in the documentation for more details.
 
-# Build environment
+# Building without cargo
 
-Because this uses `bindgen`, and `bindgen` may depend on the state of your system C++ headers, it is somewhat sensitive. It requires [llvm to be installed due to bindgen](https://rust-lang.github.io/rust-bindgen/requirements.html)
-
-As with `cxx`, this generates both Rust and C++ side bindings code. You'll
-need to take steps to generate the C++ code: either by using the `build.rs` integration within
-`autocxx_build`, or the command line utility within `autocxx_gen`. Either way, you'll need
-to specify the Rust file(s) which have `include_cpp` macros in place, and suitable corresponding
-C++ and Rust code will be generated.
-
-When you come to build your Rust code, it will expand to an `include!` macro which will pull
-in the generated Rust code. For this to work, you need to specify an `AUTOCXX_RS` environment
-variable such that the macro can discover the location of the .rs file which was generated.
-If you use the `build.rs` cargo integration, this happens automatically. You'll also need
-to ensure that you build and link against the C++ code. Again, if you use the Cargo integrationm
-and follow the pattern of the `demo` example, this is fairly automatic because we use
-`cc` for this. (There's also the option of `AUTOCXX_RS_FILE` if your build system needs to
-specify the precise file name used for the `.rs` file which is `include!`ed).
-
-You'll also want to ensure that the code generation (both Rust and C++ code) happens whenever
-any included header file changes. This is now handled automatically by our
-`build.rs` integration, but is not yet done for the standalone `autocxx-gen` tool.
-
-See [here](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html#configuring-the-build) for a diagram.
-
-Finally, this interop inevitably involves lots of fiddly small functions. It's likely to perform
-far better if you can achieve cross-language LTO. [This issue](https://github.com/dtolnay/cxx/issues/371)
-may give some useful hints - see also all the build-related help in [the cxx manual](https://cxx.rs/) which all
-applies here too.
+See instructions in the documentation for [`include_cpp`]. This interop inevitably involves lots of fiddly small functions. It's likely to perform far better if you can achieve cross-language LTO. [This issue](https://github.com/dtolnay/cxx/issues/371) may give some useful hints - see also all the build-related help in [the cxx manual](https://cxx.rs/) which all applies here too.
 
 # Directory structure
 
