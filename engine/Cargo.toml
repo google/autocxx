@@ -25,6 +25,7 @@ categories = ["development-tools::ffi", "api-bindings"]
 
 [features]
 build = ["cc"]
+nightly = [] # for doc generation purposes only; used by docs.rs
 
 [dependencies]
 log = "0.4"
@@ -51,3 +52,6 @@ strum_macros = "0.20.1"
 version = "1.0.39"
 features = [ "full" ]
 #features = [ "full", "extra-traits" ]
+
+[package.metadata.docs.rs]
+features = ["build", "nightly"]
