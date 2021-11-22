@@ -25,6 +25,7 @@ categories = ["development-tools::ffi", "api-bindings"]
 
 [features]
 build = ["cc"]
+nightly = [] # for doc generation purposes only; used by docs.rs
 
 [dependencies]
 log = "0.4"
@@ -53,4 +54,4 @@ features = [ "full" ]
 #features = [ "full", "extra-traits" ]
 
 [package.metadata.docs.rs]
-features = ["build"]
+features = ["build", "nightly"]

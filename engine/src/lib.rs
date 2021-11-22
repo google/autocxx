@@ -16,7 +16,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(doc_cfg)]
+// This feature=nightly could be set by build.rs, but since we only care
+// about it for docs, we ask docs.rs to set it in the Cargo.toml.
+#![cfg_attr(feature="nightly", feature(doc_cfg))]
 
 mod ast_discoverer;
 mod conversion;
