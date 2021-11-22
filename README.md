@@ -53,7 +53,7 @@ autocxx-build = "0.13.1"
 
 Now, add a `build.rs`. This is where you need your include path:
 
-```nocompile
+```rust,ignore
 fn main() {
     let path = std::path::PathBuf::from("src"); // include path
     let mut b = autocxx_build::Builder::new("src/main.rs", &[&path]).expect_build();
@@ -66,7 +66,7 @@ fn main() {
 
 Finally, in your `main.rs` you can use the [`include_cpp`] macro which is the heart of `autocxx`:
 
-```nocompile
+```rust,ignore
 autocxx::include_cpp! {
     #include "my_header.h" // your header file name
     safety!(unsafe) // see details of unsafety policies described in include_cpp
@@ -76,7 +76,7 @@ autocxx::include_cpp! {
 
 You should then find you can call the function by referring to an `ffi` namespace:
 
-```nocompile
+```rust,ignore
 fn main() {
     println!("Hello, world! - answer from C++ is {}", ffi::MyAPIFunction(4));
 }
