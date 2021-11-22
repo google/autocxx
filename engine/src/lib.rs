@@ -18,7 +18,7 @@
 
 // This feature=nightly could be set by build.rs, but since we only care
 // about it for docs, we ask docs.rs to set it in the Cargo.toml.
-#![cfg_attr(feature="nightly", feature(doc_cfg))]
+#![cfg_attr(feature = "nightly", feature(doc_cfg))]
 
 mod ast_discoverer;
 mod conversion;
