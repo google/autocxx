@@ -76,6 +76,7 @@ pub(crate) struct FuncToConvert {
     pub(crate) original_name: Option<String>,
     pub(crate) virtual_this_type: Option<QualifiedName>,
     pub(crate) self_ty: Option<QualifiedName>,
+    pub(crate) any_opaque_args_or_returns: bool,
 }
 
 /// Layers of analysis which may be applied to decorate each API.

@@ -68,6 +68,7 @@ pub(super) fn create_subclass_fn_wrapper(
         original_name: None,
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
+        any_opaque_args_or_returns: fun.any_opaque_args_or_returns,
     });
     let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
     (maybe_wrap, super_fn_name)
@@ -174,6 +175,7 @@ pub(super) fn create_subclass_constructor_wrapper(
         unused_template_param: fun.unused_template_param,
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
+        any_opaque_args_or_returns: false,
     });
     let mut subclass_constructor_name = ApiName::new_in_root_namespace(subclass_constructor_name);
     subclass_constructor_name.cpp_name = Some(sub.cpp().get_final_item().to_string());

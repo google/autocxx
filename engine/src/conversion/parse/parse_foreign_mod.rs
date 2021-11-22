@@ -98,8 +98,8 @@ impl ParseForeignMod {
                 let unused_template_param =
                     Self::has_attr(&item, "bindgen_unused_template_param_in_arg_or_return");
                 let is_move_constructor = Self::is_move_constructor(&item);
-                let (reference_args, return_type_is_reference) =
-                    Self::get_reference_parameters_and_return(&item);
+                let (reference_args, return_type_is_reference, any_opaque_args_or_returns) =
+                    Self::parse_bindgen_arg_and_return_annotations(&item);
                 let original_name = get_bindgen_original_name_annotation(&item.attrs);
                 let doc_attr = get_doc_attr(&item.attrs);
                 self.funcs_to_convert.push(FuncToConvert {
@@ -117,6 +117,7 @@ impl ParseForeignMod {
                     return_type_is_reference,
                     reference_args,
                     original_name,
+                    any_opaque_args_or_returns,
                 });
                 Ok(())
             }
@@ -156,9 +157,12 @@ impl ParseForeignMod {
         Self::get_bindgen_special_member_annotation(fun).map_or(false, |val| val == "move_ctor")
     }
 
-    fn get_reference_parameters_and_return(fun: &ForeignItemFn) -> (HashSet<Ident>, bool) {
+    fn parse_bindgen_arg_and_return_annotations(
+        fun: &ForeignItemFn,
+    ) -> (HashSet<Ident>, bool, bool) {
         let mut ref_params = HashSet::new();
         let mut ref_return = false;
+        let mut opaques = false;
         for a in &fun.attrs {
             if a.path.is_ident("bindgen_ret_type_reference") {
                 ref_return = true;
@@ -167,9 +171,13 @@ impl ParseForeignMod {
                 if let Ok(ls) = r {
                     ref_params.insert(ls);
                 }
+            } else if a.path.is_ident("bindgen_ret_type_opaque")
+                || a.path.is_ident("bindgen_arg_type_opaque")
+            {
+                opaques = true;
             }
         }
-        (ref_params, ref_return)
+        (ref_params, ref_return, opaques)
     }
 
     /// Record information from impl blocks encountered in bindgen

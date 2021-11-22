@@ -589,6 +589,13 @@ impl<'a> FnAnalyzer<'a> {
         if fun.unused_template_param {
             return Err(contextualize_error(ConvertError::UnusedTemplateParam));
         }
+        // Third, reject any which directly take or return opaque types, as declared
+        // by bindgen.
+        if fun.any_opaque_args_or_returns {
+            return Err(contextualize_error(
+                ConvertError::OpaqueParameterOrReturnType,
+            ));
+        }
 
         match kind {
             FnKind::Method(_, MethodKind::Static) => {}
@@ -1026,6 +1033,7 @@ impl<'a> FnAnalyzer<'a> {
                         return_type_is_reference: false,
                         reference_args: HashSet::new(),
                         original_name: None,
+                        any_opaque_args_or_returns: false,
                     }),
                 )
             });
