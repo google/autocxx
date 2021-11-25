@@ -577,7 +577,7 @@ impl<'a> CppCodeGenerator<'a> {
                 holder
             )),
             definition: Some(format!(
-                "void {}::{}() const {{\nconst_cast<{}*>(this)->really_remove_ownership();\n}}\n;void {}::really_remove_ownership() {{\nauto new_obs = {}(std::move(obs));\nobs = std::move(new_obs);\n}}\n",
+                "void {}::{}() const {{\nconst_cast<{}*>(this)->really_remove_ownership();\n}}\nvoid {}::really_remove_ownership() {{\nauto new_obs = {}(std::move(obs));\nobs = std::move(new_obs);\n}}\n",
                 subclass.cpp(),
                 subclass.cpp_remove_ownership().to_string(),
                 subclass.cpp(),
