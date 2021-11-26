@@ -138,6 +138,13 @@ impl ApiName {
             .map(|n| n.contains("::"))
             .unwrap_or_default()
     }
+
+    pub(crate) fn cpp_name(&self) -> String {
+        self.cpp_name
+            .as_ref()
+            .cloned()
+            .unwrap_or(self.name.get_final_item().to_string())
+    }
 }
 
 impl std::fmt::Debug for ApiName {

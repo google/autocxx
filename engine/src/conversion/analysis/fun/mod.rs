@@ -735,6 +735,10 @@ impl<'a> FnAnalyzer<'a> {
             Some(CppFunction {
                 payload,
                 wrapper_function_name: cxxbridge_name.clone(),
+                original_cpp_name: cpp_name
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_else(|| cxxbridge_name.to_string()),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
                 kind: if has_receiver {

@@ -282,6 +282,7 @@ impl<'a> CppCodeGenerator<'a> {
                 false,
                 ConversionDirection::RustCallsCpp,
                 false,
+                None,
             )?);
         Ok(())
     }
@@ -292,6 +293,7 @@ impl<'a> CppCodeGenerator<'a> {
         avoid_this: bool,
         conversion_direction: ConversionDirection,
         requires_rust_declarations: bool,
+        force_name: Option<&str>,
     ) -> Result<AdditionalFunction, ConvertError> {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
@@ -305,7 +307,10 @@ impl<'a> CppCodeGenerator<'a> {
                 details.kind,
                 CppFunctionKind::Method | CppFunctionKind::ConstMethod
             );
-        let name = &details.wrapper_function_name;
+        let name = match force_name {
+            Some(n) => n.to_string(),
+            None => details.wrapper_function_name.to_string(),
+        };
         let get_arg_name = |counter: usize| -> String {
             if is_a_method && counter == 0 {
                 // For method calls that we generate, the first
@@ -525,12 +530,12 @@ impl<'a> CppCodeGenerator<'a> {
                 true,
                 ConversionDirection::CppCallsRust,
                 true,
+                Some(&method.fun.original_cpp_name),
             )?;
             method_decls.push(fn_impl.declaration.take().unwrap());
             self.additional_functions.push(fn_impl);
             // And now the function to be called from Rust for default implementation (calls superclass in C++)
             if !method.is_pure_virtual {
-                let id = make_ident(method.fun.wrapper_function_name.to_string());
                 let mut super_method = method.fun.clone();
                 super_method.pass_obs_field = false;
                 super_method.wrapper_function_name = SubclassName::get_super_fn_name(
@@ -541,13 +546,14 @@ impl<'a> CppCodeGenerator<'a> {
                 super_method.payload = CppFunctionBody::StaticMethodCall(
                     superclass.get_namespace().clone(),
                     superclass.get_final_ident(),
-                    id,
+                    make_ident(&method.fun.original_cpp_name),
                 );
                 let mut super_fn_impl = self.generate_cpp_function_inner(
                     &super_method,
                     true,
                     ConversionDirection::CppCallsCpp,
                     false,
+                    None,
                 )?;
                 method_decls.push(super_fn_impl.declaration.take().unwrap());
                 self.additional_functions.push(super_fn_impl);
@@ -571,6 +577,7 @@ impl<'a> CppCodeGenerator<'a> {
                 false,
                 ConversionDirection::CppCallsCpp,
                 false,
+                None,
             )?;
             let decl = fn_impl.declaration.take().unwrap();
             constructor_decls.push(decl);
