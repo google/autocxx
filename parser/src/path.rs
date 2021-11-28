@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ParseResult;
 use proc_macro2::Ident;
 use quote::{quote, ToTokens, TokenStreamExt};
+use syn::parse::{Parse, ParseStream};
 
 /// A little like [`syn::Path`] but simpler - contains only identifiers,
 /// no path arguments. Guaranteed to always have at least one identifier.
@@ -46,5 +48,17 @@ impl ToTokens for RustPath {
             }
             id = next;
         }
+    }
+}
+
+impl Parse for RustPath {
+    fn parse(input: ParseStream) -> ParseResult<Self> {
+        let id: Ident = input.parse()?;
+        let mut p = RustPath::new_from_ident(id);
+        while input.parse::<Option<syn::token::Colon2>>()?.is_some() {
+            let id: Ident = input.parse()?;
+            p = p.append(id);
+        }
+        Ok(p)
     }
 }

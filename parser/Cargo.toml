@@ -27,7 +27,12 @@ categories = ["development-tools::ffi", "api-bindings"]
 log = "0.4"
 proc-macro2 = "1.0"
 quote = "1.0"
+serde = { version = "1.0", optional = true }
+serde_derive = { version = "1.0", optional = true }
 
 [dependencies.syn]
 version = "1.0.39"
 features = [ "full" ]
+
+[features]
+reproduction_case = [ "serde_derive", "serde" ]

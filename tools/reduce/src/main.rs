@@ -24,7 +24,7 @@ use std::{
 };
 
 use autocxx_engine::{get_clang_path, make_clang_args, preprocess};
-use clap::{crate_authors, crate_version, App, Arg, ArgMatches};
+use clap::{crate_authors, crate_version, App, Arg, ArgMatches, SubCommand};
 use indoc::indoc;
 use itertools::Itertools;
 use tempfile::TempDir;
@@ -44,47 +44,64 @@ fn main() {
         .author(crate_authors!())
         .about("Reduce a C++ test case")
         .long_about(LONG_HELP)
-        .arg(
-            Arg::with_name("inc")
-                .short("I")
-                .long("inc")
-                .multiple(true)
-                .number_of_values(1)
-                .value_name("INCLUDE DIRS")
-                .help("include path")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("define")
-                .short("D")
-                .long("define")
-                .multiple(true)
-                .number_of_values(1)
-                .value_name("DEFINE")
-                .help("macro definition")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("header")
-                .short("h")
-                .long("header")
-                .multiple(true)
-                .number_of_values(1)
-                .required(true)
-                .value_name("HEADER")
-                .help("header file name")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("directive")
-                .short("d")
-                .long("directive")
-                .multiple(true)
-                .number_of_values(1)
-                .value_name("DIRECTIVE")
-                .help("directives to put within include_cpp!")
-                .takes_value(true),
-        )
+        .subcommand(SubCommand::with_name("header")
+                                      .about("reduce a header")
+
+                                    .arg(
+                                        Arg::with_name("inc")
+                                            .short("I")
+                                            .long("inc")
+                                            .multiple(true)
+                                            .number_of_values(1)
+                                            .value_name("INCLUDE DIRS")
+                                            .help("include path")
+                                            .takes_value(true),
+                                    )
+                                    .arg(
+                                        Arg::with_name("define")
+                                            .short("D")
+                                            .long("define")
+                                            .multiple(true)
+                                            .number_of_values(1)
+                                            .value_name("DEFINE")
+                                            .help("macro definition")
+                                            .takes_value(true),
+                                    )
+                                    .arg(
+                                        Arg::with_name("header")
+                                            .short("h")
+                                            .long("header")
+                                            .multiple(true)
+                                            .number_of_values(1)
+                                            .required(true)
+                                            .value_name("HEADER")
+                                            .help("header file name")
+                                            .takes_value(true),
+                                    )
+
+                                .arg(
+                                    Arg::with_name("directive")
+                                        .short("d")
+                                        .long("directive")
+                                        .multiple(true)
+                                        .number_of_values(1)
+                                        .value_name("DIRECTIVE")
+                                        .help("directives to put within include_cpp!")
+                                        .takes_value(true),
+                                )
+                            )
+                            .subcommand(SubCommand::with_name("repro")
+                                                          .about("reduce a repro case JSON file")
+                                            .arg(
+                                                Arg::with_name("repro")
+                                                    .short("r")
+                                                    .long("repro")
+                                                    .required(true)
+                                                    .value_name("REPRODUCTION CASE JSON")
+                                                    .help("reproduction case JSON file name")
+                                                    .takes_value(true),
+                                            )
+                                        )
         .arg(
             Arg::with_name("problem")
                 .short("p")
@@ -161,6 +178,12 @@ fn run(matches: ArgMatches) -> Result<(), std::io::Error> {
     r
 }
 
+#[derive(serde_derive::Deserialize)]
+struct ReproCase {
+    config: String,
+    header: String,
+}
+
 fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> {
     let incs: Vec<_> = matches
         .values_of("inc")
@@ -169,24 +192,37 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         .collect();
     let defs: Vec<_> = matches.values_of("define").unwrap_or_default().collect();
     let headers: Vec<_> = matches.values_of("header").unwrap_or_default().collect();
-    let listing_path = tmp_dir.path().join("listing.h");
-    create_concatenated_header(&headers, &listing_path)?;
-    let concat_path = tmp_dir.path().join("concat.h");
-    announce_progress(&format!(
-        "Preprocessing {:?} to {:?}",
-        listing_path, concat_path
-    ));
-    preprocess(&listing_path, &concat_path, &incs, &defs)?;
+    let repro = matches.value_of("problem");
     let rs_path = tmp_dir.path().join("input.rs");
-    let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
-        .chain(
-            matches
-                .values_of("directive")
-                .unwrap_or_default()
-                .map(|s| format!("{}\n", s)),
-        )
-        .collect();
-    create_rs_file(&rs_path, &directives)?;
+    let concat_path = tmp_dir.path().join("concat.h");
+    match repro {
+        None => {
+            assert!(headers.is_empty());
+            let listing_path = tmp_dir.path().join("listing.h");
+            create_concatenated_header(&headers, &listing_path)?;
+            announce_progress(&format!(
+                "Preprocessing {:?} to {:?}",
+                listing_path, concat_path
+            ));
+            preprocess(&listing_path, &concat_path, &incs, &defs)?;
+            let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
+                .chain(
+                    matches
+                        .values_of("directive")
+                        .unwrap_or_default()
+                        .map(|s| format!("{}\n", s)),
+                )
+                .collect();
+            create_rs_file(&rs_path, &directives)?;
+        }
+        Some(repro_case) => {
+            let case: ReproCase =
+                serde_json::from_reader(File::open(PathBuf::from(repro_case))?).unwrap();
+            create_file(&rs_path, &case.config)?;
+            create_file(&concat_path, &case.header)?
+        }
+    }
+
     let extra_clang_args: Vec<_> = matches
         .values_of("clang-args")
         .unwrap_or_default()
@@ -395,5 +431,11 @@ fn create_concatenated_header(headers: &[&str], listing_path: &Path) -> Result<(
     for header in headers {
         file.write_all(format!("#include \"{}\"\n", header).as_bytes())?;
     }
+    Ok(())
+}
+
+fn create_file(path: &PathBuf, content: &str) -> Result<(), std::io::Error> {
+    let mut file = File::create(path)?;
+    write!(file, "{}", content)?;
     Ok(())
 }

@@ -15,7 +15,11 @@
 use assert_cmd::Command;
 use proc_macro2::Span;
 use quote::quote;
-use std::{fs::File, io::Write, path::Path};
+use std::{
+    fs::File,
+    io::Write,
+    path::{Path, PathBuf},
+};
 use syn::Token;
 use tempdir::TempDir;
 
@@ -35,29 +39,61 @@ static INPUT_H: &str = indoc::indoc! {"
     };
 "};
 
+enum Input {
+    Header(String),
+    ReproCase(PathBuf),
+}
+
 #[test]
-fn test_reduce_direct() -> Result<(), Box<dyn std::error::Error>> {
-    do_reduce(|header, _| Ok(header.into()))
+fn test_reduce_direct_header() -> Result<(), Box<dyn std::error::Error>> {
+    do_reduce(|header, _| Ok(Input::Header(header.into())))
+}
+
+#[test]
+fn test_reduce_direct_repro_case() -> Result<(), Box<dyn std::error::Error>> {
+    do_reduce(|header, demo_code_dir| {
+        let config = format!(
+            "#include \"{}\" generate_all!() block!(\"First\")
+            safety!(unsafe_ffi)",
+            header
+        );
+        let json = serde_json::json!({
+            "header": INPUT_H,
+            "config": config
+        });
+        let repropath = demo_code_dir.join("repro.json");
+        let f = File::create(&repropath)?;
+        serde_json::to_writer(f, &json)?;
+        Ok(Input::ReproCase(repropath))
+    })
+}
+
+#[test]
+#[ignore] // takes absolutely ages but you can run using cargo test -- --ignored
+fn test_reduce_preprocessed_repro_case() -> Result<(), Box<dyn std::error::Error>> {
+    do_reduce(|header, demo_code_dir| {
+        write_minimal_rs_code(header, demo_code_dir);
+        let repro = demo_code_dir.join("autocxx-repro.json");
+        let mut cmd = Command::cargo_bin("autocxx-gen")?;
+        cmd.arg("--inc")
+            .arg(demo_code_dir.to_str().unwrap())
+            .arg(demo_code_dir.join("main.rs"))
+            .env("AUTOCXX_REPRO_CASE", repro.to_str().unwrap())
+            .arg("--outdir")
+            .arg(demo_code_dir.to_str().unwrap())
+            .arg("--gen-cpp")
+            .arg("--suppress-system-headers")
+            .assert()
+            .success();
+        Ok(Input::ReproCase(repro))
+    })
 }
 
 #[test]
 #[ignore] // takes absolutely ages but you can run using cargo test -- --ignored
 fn test_reduce_preprocessed() -> Result<(), Box<dyn std::error::Error>> {
     do_reduce(|header, demo_code_dir| {
-        let hexathorpe = Token![#](Span::call_site());
-        write_to_file(
-            &demo_code_dir,
-            "main.rs",
-            quote! {
-                autocxx::include_cpp! {
-                    #hexathorpe include #header
-                    generate_all!()
-                    safety(unsafe_ffi)
-                }
-            }
-            .to_string()
-            .as_bytes(),
-        );
+        write_minimal_rs_code(header, demo_code_dir);
         let prepro = demo_code_dir.join("autocxx-preprocessed.h");
         let mut cmd = Command::cargo_bin("autocxx-gen")?;
         cmd.arg("--inc")
@@ -70,13 +106,31 @@ fn test_reduce_preprocessed() -> Result<(), Box<dyn std::error::Error>> {
             .arg("--suppress-system-headers")
             .assert()
             .success();
-        Ok("autocxx-preprocessed.h".into())
+        Ok(Input::Header("autocxx-preprocessed.h".into()))
     })
 }
 
-fn do_reduce<F>(get_header_name: F) -> Result<(), Box<dyn std::error::Error>>
+fn write_minimal_rs_code(header: &str, demo_code_dir: &Path) {
+    let hexathorpe = Token![#](Span::call_site());
+    write_to_file(
+        &demo_code_dir,
+        "main.rs",
+        quote! {
+            autocxx::include_cpp! {
+                #hexathorpe include #header
+                generate_all!()
+                block!("First")
+                safety!(unsafe_ffi)
+            }
+        }
+        .to_string()
+        .as_bytes(),
+    );
+}
+
+fn do_reduce<F>(get_repro_case: F) -> Result<(), Box<dyn std::error::Error>>
 where
-    F: FnOnce(&str, &Path) -> Result<String, Box<dyn std::error::Error>>,
+    F: FnOnce(&str, &Path) -> Result<Input, Box<dyn std::error::Error>>,
 {
     if creduce_is_broken() {
         return Ok(());
@@ -86,23 +140,32 @@ where
     std::fs::create_dir(&demo_code_dir).unwrap();
     write_to_file(&demo_code_dir, "input.h", INPUT_H.as_bytes());
     let output_path = tmp_dir.path().join("min.h");
-    let header_name = get_header_name("input.h", &demo_code_dir)?;
+    let repro_case = get_repro_case("input.h", &demo_code_dir)?;
     let mut cmd = Command::cargo_bin("autocxx-reduce")?;
-    let o = cmd
-        .arg("--inc")
-        .arg(demo_code_dir.to_str().unwrap())
-        .arg("-h")
-        .arg(header_name)
+    let mut cmd = cmd
         .arg("-o")
         .arg(output_path.to_str().unwrap())
-        .arg("-d")
-        .arg("generate_all!()")
-        .arg("-d")
-        .arg("block!(\"First\")")
         .arg("-p")
         .arg("type marked as blocked")
-        .arg("-k")
-        .output()?;
+        .arg("-k");
+    match repro_case {
+        Input::Header(header_name) => {
+            cmd = cmd
+                .arg("header")
+                .arg("--inc")
+                .arg(demo_code_dir.to_str().unwrap())
+                .arg("-h")
+                .arg(header_name)
+                .arg("-d")
+                .arg("generate_all!()")
+                .arg("-d")
+                .arg("block!(\"First\")");
+        }
+        Input::ReproCase(repro_case) => {
+            cmd = cmd.arg("repro").arg("-r").arg(repro_case);
+        }
+    }
+    let o = cmd.output()?;
     println!("Reduce output: {}", std::str::from_utf8(&o.stdout).unwrap());
     println!("Reduce error: {}", std::str::from_utf8(&o.stderr).unwrap());
     if !o.status.success() {

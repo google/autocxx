@@ -436,24 +436,58 @@ impl IncludeCppEngine {
         extra_clang_args: &[&str],
     ) {
         if let Ok(output_path) = std::env::var("AUTOCXX_PREPROCESS") {
-            // Include a load of system headers at the end of the preprocessed output,
-            // because we would like to be able to generate bindings from the
-            // preprocessed header, and then build those bindings. The C++ parts
-            // of those bindings might need things inside these various headers;
-            // we make sure all these definitions and declarations are inside
-            // this one header file so that the reduction process does not have
-            // to refer to local headers on the reduction machine too.
-            let suffix = ALL_KNOWN_SYSTEM_HEADERS
-                .iter()
-                .map(|hdr| format!("#include <{}>\n", hdr))
-                .join("\n");
-            let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n{}\n",
-                self.config, header, suffix, cxx_gen::HEADER);
-            let mut tf = NamedTempFile::new().unwrap();
-            write!(tf, "{}", input).unwrap();
-            let tp = tf.into_temp_path();
-            preprocess(&tp, &PathBuf::from(output_path), inc_dirs, extra_clang_args).unwrap();
+            self.make_preprocessed_file(
+                &PathBuf::from(output_path),
+                header,
+                inc_dirs,
+                extra_clang_args,
+            );
         }
+        #[cfg(feature = "reproduction_case")]
+        if let Ok(output_path) = std::env::var("AUTOCXX_REPRO_CASE") {
+            let tf = NamedTempFile::new().unwrap();
+            self.make_preprocessed_file(
+                &PathBuf::from(tf.path()),
+                header,
+                inc_dirs,
+                extra_clang_args,
+            );
+            let header = std::fs::read_to_string(tf.path()).unwrap();
+            let output_path = PathBuf::from(output_path);
+            let config = self.config.to_token_stream().to_string();
+            let json = serde_json::json!({
+                "header": header,
+                "config": config
+            });
+            let f = File::create(&output_path).unwrap();
+            serde_json::to_writer(f, &json).unwrap();
+        }
+    }
+
+    fn make_preprocessed_file(
+        &self,
+        output_path: &Path,
+        header: &str,
+        inc_dirs: &[PathBuf],
+        extra_clang_args: &[&str],
+    ) {
+        // Include a load of system headers at the end of the preprocessed output,
+        // because we would like to be able to generate bindings from the
+        // preprocessed header, and then build those bindings. The C++ parts
+        // of those bindings might need things inside these various headers;
+        // we make sure all these definitions and declarations are inside
+        // this one header file so that the reduction process does not have
+        // to refer to local headers on the reduction machine too.
+        let suffix = ALL_KNOWN_SYSTEM_HEADERS
+            .iter()
+            .map(|hdr| format!("#include <{}>\n", hdr))
+            .join("\n");
+        let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n{}\n",
+            self.config, header, suffix, cxx_gen::HEADER);
+        let mut tf = NamedTempFile::new().unwrap();
+        write!(tf, "{}", input).unwrap();
+        let tp = tf.into_temp_path();
+        preprocess(&tp, &PathBuf::from(output_path), inc_dirs, extra_clang_args).unwrap();
     }
 }
 
