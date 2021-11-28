@@ -151,7 +151,7 @@ where
     match repro_case {
         Input::Header(header_name) => {
             cmd = cmd
-                .arg("header")
+                .arg("file")
                 .arg("--inc")
                 .arg(demo_code_dir.to_str().unwrap())
                 .arg("-h")
@@ -165,6 +165,7 @@ where
             cmd = cmd.arg("repro").arg("-r").arg(repro_case);
         }
     }
+    eprintln!("Running {:?}", cmd);
     let o = cmd.output()?;
     println!("Reduce output: {}", std::str::from_utf8(&o.stdout).unwrap());
     println!("Reduce error: {}", std::str::from_utf8(&o.stderr).unwrap());
