@@ -6728,7 +6728,9 @@ fn test_pv_subclass_types() {
     let hdr = indoc! {"
     #include <cstdint>
     #include <string>
+    #include <vector>
 
+    struct Fwd;
     struct Pod {
         uint32_t a;
     };
@@ -6741,6 +6743,10 @@ fn test_pv_subclass_types() {
         virtual std::string s(std::string p) const { return p; }
         virtual Pod p(Pod p) const { return p; }
         virtual NonPod n(NonPod p) const { return p; }
+        virtual void f(const Fwd&) const { }
+        virtual std::vector<NonPod> v(std::vector<NonPod> v) const { return v; }
+        virtual const std::vector<NonPod>& vr(const std::vector<NonPod>& vr) const { return vr; }
+        virtual const std::vector<Fwd>& vfr(const std::vector<Fwd>& vfr) const { return vfr; }
         virtual ~TestObserver() {}
     };
 
