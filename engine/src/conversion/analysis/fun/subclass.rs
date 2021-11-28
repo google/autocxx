@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 
-use crate::conversion::analysis::fun::ReceiverMutability;
+use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability};
 use crate::conversion::analysis::pod::PodPhase;
 use crate::conversion::api::{CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassName};
 use crate::{
@@ -49,11 +49,11 @@ pub(super) fn subclasses_by_superclass(
 
 pub(super) fn create_subclass_fn_wrapper(
     sub: SubclassName,
-    super_fn_name: QualifiedName,
+    super_fn_name: &QualifiedName,
     fun: &FuncToConvert,
-) -> (Box<FuncToConvert>, ApiName) {
+) -> Box<FuncToConvert> {
     let self_ty = Some(sub.cpp());
-    let maybe_wrap = Box::new(FuncToConvert {
+    Box::new(FuncToConvert {
         virtual_this_type: self_ty.clone(),
         self_ty,
         ident: super_fn_name.get_final_ident(),
@@ -68,9 +68,7 @@ pub(super) fn create_subclass_fn_wrapper(
         original_name: None,
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
-    });
-    let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
-    (maybe_wrap, super_fn_name)
+    })
 }
 
 pub(super) fn create_subclass_function(
@@ -79,7 +77,7 @@ pub(super) fn create_subclass_function(
     name: &ApiName,
     receiver_mutability: &ReceiverMutability,
     superclass: &QualifiedName,
-    dependency: &QualifiedName,
+    dependency: Option<&QualifiedName>,
 ) -> Api<FnPhase> {
     let cpp = sub.cpp();
     let holder_name = sub.holder();
@@ -121,8 +119,12 @@ pub(super) fn create_subclass_function(
             },
             superclass: superclass.clone(),
             receiver_mutability: receiver_mutability.clone(),
-            dependency: dependency.clone(),
+            dependency: dependency.cloned(),
             requires_unsafe: analysis.param_details.iter().any(|pd| pd.requires_unsafe),
+            is_pure_virtual: matches!(
+                analysis.kind,
+                FnKind::Method(_, MethodKind::PureVirtual(..))
+            ),
         }),
     };
     subclass_function

@@ -130,6 +130,7 @@ struct SuperclassMethod {
     ret_type: ReturnType,
     receiver_mutability: ReceiverMutability,
     requires_unsafe: bool,
+    is_pure_virtual: bool,
 }
 
 /// Type which handles generation of Rust code.
@@ -294,6 +295,7 @@ impl<'a> RsCodeGenerator<'a> {
                                 param_names,
                                 receiver_mutability: receiver_mutability.clone(),
                                 requires_unsafe: param_details.iter().any(|pd| pd.requires_unsafe),
+                                is_pure_virtual: matches!(method_kind, MethodKind::PureVirtual(..)),
                             })
                         }
                     }
@@ -634,11 +636,13 @@ impl<'a> RsCodeGenerator<'a> {
             let supers = SubclassName::get_supers_trait_name(superclass).to_type_path();
             let methods_impls: Vec<ImplItem> = methods
                 .iter()
+                .filter(|m| !m.is_pure_virtual)
                 .map(|m| {
-                    let supern = make_ident(format!("{}_super", m.name.to_string()));
+                    let cpp_super_method_name =
+                        SubclassName::get_super_fn_name(&Namespace::new(), &m.name.to_string())
+                            .get_final_ident();
                     let mut params = m.params.clone();
                     let ret = &m.ret_type.clone();
-                    let cpp_method_name = make_ident(format!("{}_super", m.name.to_string()));
                     let (peer_fn, first_param) = match m.receiver_mutability {
                         ReceiverMutability::Const => ("peer", parse_quote!(&self)),
                         ReceiverMutability::Mutable => ("peer_mut", parse_quote!(&mut self)),
@@ -648,19 +652,21 @@ impl<'a> RsCodeGenerator<'a> {
                     let param_names = m.param_names.iter().skip(1);
                     let unsafe_token = get_unsafe_token(m.requires_unsafe);
                     parse_quote! {
-                        #unsafe_token fn #supern(#params) #ret {
+                        #unsafe_token fn #cpp_super_method_name(#params) #ret {
                             use autocxx::subclass::CppSubclass;
-                            self.#peer_fn().#cpp_method_name(#(#param_names),*)
+                            self.#peer_fn().#cpp_super_method_name(#(#param_names),*)
                         }
                     }
                 })
                 .collect();
-            bindgen_mod_items.push(parse_quote! {
-                #[allow(non_snake_case)]
-                impl #supers for super::super::super::#id {
-                    #(#methods_impls)*
-                }
-            });
+            if !methods_impls.is_empty() {
+                bindgen_mod_items.push(parse_quote! {
+                    #[allow(non_snake_case)]
+                    impl #supers for super::super::super::#id {
+                        #(#methods_impls)*
+                    }
+                });
+            }
         }
         if generate_peer_constructor {
             bindgen_mod_items.push(parse_quote! {
@@ -873,7 +879,9 @@ impl<'a> RsCodeGenerator<'a> {
                 .iter()
                 .map(|method| {
                     let id = &method.name;
-                    let super_id = make_ident(format!("{}_super", id.to_string()));
+                    let super_id =
+                        SubclassName::get_super_fn_name(&Namespace::new(), &id.to_string())
+                            .get_final_ident();
                     let param_names: Punctuated<Expr, Comma> =
                         Self::args_from_sig(&method.params).collect();
                     let mut params = method.params.clone();
@@ -883,35 +891,52 @@ impl<'a> RsCodeGenerator<'a> {
                     };
                     let ret_type = &method.ret_type;
                     let unsafe_token = get_unsafe_token(method.requires_unsafe);
-                    let a: TraitItem = parse_quote!(
-                        #unsafe_token fn #super_id(#params) #ret_type;
-                    );
-                    let b: TraitItem = parse_quote!(
-                        #unsafe_token fn #id(#params) #ret_type {
-                            self.#super_id(#param_names)
-                        }
-                    );
-                    (a, b)
+                    if method.is_pure_virtual {
+                        (
+                            None,
+                            parse_quote!(
+                                #unsafe_token fn #id(#params) #ret_type;
+                            ),
+                        )
+                    } else {
+                        let a: Option<TraitItem> = Some(parse_quote!(
+                            #unsafe_token fn #super_id(#params) #ret_type;
+                        ));
+                        let b: TraitItem = parse_quote!(
+                            #unsafe_token fn #id(#params) #ret_type {
+                                self.#super_id(#param_names)
+                            }
+                        );
+                        (a, b)
+                    }
                 })
                 .unzip();
+            let supers: Vec<_> = supers.into_iter().flatten().collect();
             let supers_name = SubclassName::get_supers_trait_name(name).get_final_ident();
             let methods_name = SubclassName::get_methods_trait_name(name).get_final_ident();
-            bindgen_mod_items.push(parse_quote! {
-                #[allow(non_snake_case)]
-                pub trait #supers_name {
-                    #(#supers)*
-                }
-            });
-            bindgen_mod_items.push(parse_quote! {
-                #[allow(non_snake_case)]
-                pub trait #methods_name : #supers_name {
-                    #(#mains)*
-                }
-            });
-            materializations.extend([
-                Use::SpecificNameFromBindgen(methods_name),
-                Use::SpecificNameFromBindgen(supers_name),
-            ]);
+            if !supers.is_empty() {
+                bindgen_mod_items.push(parse_quote! {
+                    #[allow(non_snake_case)]
+                    pub trait #supers_name {
+                        #(#supers)*
+                    }
+                });
+                bindgen_mod_items.push(parse_quote! {
+                    #[allow(non_snake_case)]
+                    pub trait #methods_name : #supers_name {
+                        #(#mains)*
+                    }
+                });
+                materializations.push(Use::SpecificNameFromBindgen(supers_name));
+            } else {
+                bindgen_mod_items.push(parse_quote! {
+                    #[allow(non_snake_case)]
+                    pub trait #methods_name {
+                        #(#mains)*
+                    }
+                });
+            }
+            materializations.push(Use::SpecificNameFromBindgen(methods_name));
         }
     }
 

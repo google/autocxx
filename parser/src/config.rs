@@ -99,6 +99,7 @@ impl Allowlist {
     }
 }
 
+#[allow(clippy::derivable_impls)] // nightly-only
 impl Default for Allowlist {
     fn default() -> Self {
         Allowlist::Unspecified(Vec::new())

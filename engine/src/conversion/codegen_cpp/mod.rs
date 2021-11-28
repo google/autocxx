@@ -93,6 +93,11 @@ pub(crate) struct CppCodeGenerator<'a> {
     suppress_system_headers: bool,
 }
 
+struct SubclassFunction<'a> {
+    fun: &'a CppFunction,
+    is_pure_virtual: bool,
+}
+
 impl<'a> CppCodeGenerator<'a> {
     pub(crate) fn generate_cpp_code(
         inclusions: String,
@@ -133,7 +138,7 @@ impl<'a> CppCodeGenerator<'a> {
         apis: impl Iterator<Item = &'a Api<FnPhase>>,
     ) -> Result<(), ConvertError> {
         let mut constructors_by_subclass: HashMap<SubclassName, Vec<&CppFunction>> = HashMap::new();
-        let mut methods_by_subclass: HashMap<SubclassName, Vec<&CppFunction>> = HashMap::new();
+        let mut methods_by_subclass: HashMap<SubclassName, Vec<SubclassFunction>> = HashMap::new();
         let mut deferred_apis = Vec::new();
         for api in apis {
             match &api {
@@ -158,7 +163,10 @@ impl<'a> CppCodeGenerator<'a> {
                     methods_by_subclass
                         .entry(subclass.clone())
                         .or_default()
-                        .push(&details.cpp_impl);
+                        .push(SubclassFunction {
+                            fun: &details.cpp_impl,
+                            is_pure_virtual: details.is_pure_virtual,
+                        });
                 }
                 Api::RustSubclassConstructor {
                     cpp_impl, subclass, ..
@@ -499,7 +507,7 @@ impl<'a> CppCodeGenerator<'a> {
         superclass: &QualifiedName,
         subclass: &SubclassName,
         constructors: Vec<&CppFunction>,
-        methods: Vec<&CppFunction>,
+        methods: Vec<SubclassFunction>,
     ) -> Result<(), ConvertError> {
         let holder = subclass.holder();
         self.additional_functions.push(AdditionalFunction {
@@ -513,7 +521,7 @@ impl<'a> CppCodeGenerator<'a> {
         for method in methods {
             // First the method which calls from C++ to Rust
             let mut fn_impl = self.generate_cpp_function_inner(
-                method,
+                method.fun,
                 true,
                 ConversionDirection::CppCallsRust,
                 true,
@@ -521,27 +529,29 @@ impl<'a> CppCodeGenerator<'a> {
             method_decls.push(fn_impl.declaration.take().unwrap());
             self.additional_functions.push(fn_impl);
             // And now the function to be called from Rust for default implementation (calls superclass in C++)
-            let id = make_ident(method.wrapper_function_name.to_string());
-            let mut super_method = method.clone();
-            super_method.pass_obs_field = false;
-            super_method.wrapper_function_name = SubclassName::get_super_fn_name(
-                superclass.get_namespace(),
-                &method.wrapper_function_name.to_string(),
-            )
-            .get_final_ident();
-            super_method.payload = CppFunctionBody::StaticMethodCall(
-                superclass.get_namespace().clone(),
-                superclass.get_final_ident(),
-                id,
-            );
-            let mut super_fn_impl = self.generate_cpp_function_inner(
-                &super_method,
-                true,
-                ConversionDirection::CppCallsCpp,
-                false,
-            )?;
-            method_decls.push(super_fn_impl.declaration.take().unwrap());
-            self.additional_functions.push(super_fn_impl);
+            if !method.is_pure_virtual {
+                let id = make_ident(method.fun.wrapper_function_name.to_string());
+                let mut super_method = method.fun.clone();
+                super_method.pass_obs_field = false;
+                super_method.wrapper_function_name = SubclassName::get_super_fn_name(
+                    superclass.get_namespace(),
+                    &method.fun.wrapper_function_name.to_string(),
+                )
+                .get_final_ident();
+                super_method.payload = CppFunctionBody::StaticMethodCall(
+                    superclass.get_namespace().clone(),
+                    superclass.get_final_ident(),
+                    id,
+                );
+                let mut super_fn_impl = self.generate_cpp_function_inner(
+                    &super_method,
+                    true,
+                    ConversionDirection::CppCallsCpp,
+                    false,
+                )?;
+                method_decls.push(super_fn_impl.declaration.take().unwrap());
+                self.additional_functions.push(super_fn_impl);
+            }
         }
         // In future, for each superclass..
         let super_name = superclass.get_final_item();

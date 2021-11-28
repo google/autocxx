@@ -77,9 +77,9 @@ impl ParseForeignMod {
     }
 
     fn get_cpp_visibility(item: &ForeignItemFn) -> CppVisibility {
-        if Self::has_attr(&item, "bindgen_visibility_private") {
+        if Self::has_attr(item, "bindgen_visibility_private") {
             CppVisibility::Private
-        } else if Self::has_attr(&item, "bindgen_visibility_protected") {
+        } else if Self::has_attr(item, "bindgen_visibility_protected") {
             CppVisibility::Protected
         } else {
             CppVisibility::Public
