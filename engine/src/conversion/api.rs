@@ -310,8 +310,9 @@ pub(crate) struct RustSubclassFnDetails {
     pub(crate) method_name: Ident,
     pub(crate) superclass: QualifiedName,
     pub(crate) receiver_mutability: ReceiverMutability,
-    pub(crate) dependency: QualifiedName,
+    pub(crate) dependency: Option<QualifiedName>,
     pub(crate) requires_unsafe: bool,
+    pub(crate) is_pure_virtual: bool,
 }
 
 impl<T: AnalysisPhase> Api<T> {

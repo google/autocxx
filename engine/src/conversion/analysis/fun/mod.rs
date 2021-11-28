@@ -325,6 +325,10 @@ impl<'a> FnAnalyzer<'a> {
                     // What we're generating here is entirely about the subclass, so the
                     // superclass's namespace is irrelevant. We generate
                     // all subclasses in the root namespace.
+                    let is_pure_virtual = matches!(
+                        &analysis.kind,
+                        FnKind::Method(_, MethodKind::PureVirtual(..))
+                    );
                     let super_fn_name =
                         SubclassName::get_super_fn_name(&Namespace::new(), &analysis.rust_name);
 
@@ -334,19 +338,26 @@ impl<'a> FnAnalyzer<'a> {
                         &name,
                         receiver_mutability,
                         sup,
-                        &super_fn_name,
+                        if is_pure_virtual {
+                            None
+                        } else {
+                            Some(&super_fn_name)
+                        },
                     ));
 
-                    let (maybe_wrap, super_fn_name) =
-                        create_subclass_fn_wrapper(sub, super_fn_name, &fun);
-                    let maybe_another_api = self.analyze_foreign_fn(super_fn_name, maybe_wrap)?;
-                    if let Some((analysis, name)) = maybe_another_api {
-                        results.push(Api::Function {
-                            fun: fun.clone(),
-                            analysis,
-                            name,
-                            name_for_gc: None,
-                        });
+                    if !is_pure_virtual {
+                        let maybe_wrap = create_subclass_fn_wrapper(sub, &super_fn_name, &fun);
+                        let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
+                        let maybe_another_api =
+                            self.analyze_foreign_fn(super_fn_name, maybe_wrap)?;
+                        if let Some((analysis, name)) = maybe_another_api {
+                            results.push(Api::Function {
+                                fun: fun.clone(),
+                                analysis,
+                                name,
+                                name_for_gc: None,
+                            });
+                        }
                     }
                 }
             }
@@ -1106,7 +1117,7 @@ impl Api<FnPhase> {
                 name: _,
                 superclass,
             } => Box::new(std::iter::once(superclass)),
-            Api::RustSubclassFn { details, .. } => Box::new(std::iter::once(&details.dependency)),
+            Api::RustSubclassFn { details, .. } => Box::new(details.dependency.iter()),
             _ => Box::new(std::iter::empty()),
         }
     }
