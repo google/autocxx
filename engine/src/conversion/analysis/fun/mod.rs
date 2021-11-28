@@ -211,7 +211,7 @@ impl<'a> FnAnalyzer<'a> {
                     .filter_map(
                         |(tn, is_pod_safe)| {
                             if is_pod_safe {
-                                Some(tn.clone())
+                                Some(tn)
                             } else {
                                 None
                             }
