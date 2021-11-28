@@ -28,8 +28,8 @@ use autocxx_parser::IncludeCppConfig;
 use clap::{crate_authors, crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use indoc::indoc;
 use itertools::Itertools;
-use tempfile::TempDir;
 use quote::ToTokens;
+use tempfile::TempDir;
 
 static LONG_HELP: &str = indoc! {"
 Command line utility to minimize autocxx bug cases.
@@ -226,7 +226,13 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
             // Replace the headers in the config
             let mut config: IncludeCppConfig = syn::parse_str(&case.config).unwrap();
             config.replace_included_headers("concat.h");
-            create_file(&rs_path, &format!("autocxx::include_cpp!({});", config.to_token_stream().to_string()))?;
+            create_file(
+                &rs_path,
+                &format!(
+                    "autocxx::include_cpp!({});",
+                    config.to_token_stream().to_string()
+                ),
+            )?;
             create_file(&concat_path, &case.header)?
         }
     }
