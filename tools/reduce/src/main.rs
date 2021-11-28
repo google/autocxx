@@ -24,10 +24,12 @@ use std::{
 };
 
 use autocxx_engine::{get_clang_path, make_clang_args, preprocess};
+use autocxx_parser::IncludeCppConfig;
 use clap::{crate_authors, crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use indoc::indoc;
 use itertools::Itertools;
 use tempfile::TempDir;
+use quote::ToTokens;
 
 static LONG_HELP: &str = indoc! {"
 Command line utility to minimize autocxx bug cases.
@@ -221,7 +223,10 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
                 submatches.value_of("repro").unwrap(),
             ))?)
             .unwrap();
-            create_file(&rs_path, &case.config)?;
+            // Replace the headers in the config
+            let mut config: IncludeCppConfig = syn::parse_str(&case.config).unwrap();
+            config.replace_included_headers("concat.h");
+            create_file(&rs_path, &format!("autocxx::include_cpp!({});", config.to_token_stream().to_string()))?;
             create_file(&concat_path, &case.header)?
         }
     }

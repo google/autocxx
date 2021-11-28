@@ -65,7 +65,7 @@ impl Parse for UnsafePolicy {
 impl ToTokens for UnsafePolicy {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         if *self == UnsafePolicy::AllFunctionsSafe {
-            tokens.extend(quote! { unsafe!() })
+            tokens.extend(quote! { unsafe })
         }
     }
 }
@@ -451,6 +451,13 @@ impl IncludeCppConfig {
             Ok(())
         }
     }
+
+    /// Used in reduction to substitute all included headers with a single
+    /// preprocessed replacement.
+    pub fn replace_included_headers(&mut self, replacement: &str) {
+        self.inclusions.clear();
+        self.inclusions.push(replacement.to_string());
+    }
 }
 
 #[cfg(feature = "reproduction_case")]
@@ -464,7 +471,7 @@ impl ToTokens for IncludeCppConfig {
         }
         let unsafety = &self.unsafe_policy;
         tokens.extend(quote! {
-            unsafety!(#unsafety)
+            safety!(#unsafety)
         });
         if self.exclude_impls {
             tokens.extend(quote! { exclude_impls!() });
@@ -476,12 +483,10 @@ impl ToTokens for IncludeCppConfig {
             tokens.extend(quote! { exclude_utilities!() });
         }
         for i in &self.pod_requests {
-            let id = make_ident(i);
-            tokens.extend(quote! { generate!(#id) });
+            tokens.extend(quote! { pod!(#i) });
         }
         for i in &self.blocklist {
-            let id = make_ident(i);
-            tokens.extend(quote! { block!(#id) });
+            tokens.extend(quote! { block!(#i) });
         }
         for path in &self.rust_types {
             tokens.extend(quote! { rust_type!(#path) });
@@ -490,8 +495,7 @@ impl ToTokens for IncludeCppConfig {
             Allowlist::All => tokens.extend(quote! { generate_all!() }),
             Allowlist::Specific(items) => {
                 for i in items {
-                    let id = make_ident(i);
-                    tokens.extend(quote! { pod!(#id) });
+                    tokens.extend(quote! { generate!(#i) });
                 }
             }
             Allowlist::Unspecified(_) => panic!("Allowlist mode not yet determined"),
@@ -510,11 +514,6 @@ impl ToTokens for IncludeCppConfig {
             tokens.extend(quote! { subclass!(#superclass,#subclass) });
         }
     }
-}
-
-#[cfg(feature = "reproduction_case")]
-fn make_ident(id: &str) -> Ident {
-    proc_macro2::Ident::new(id, proc_macro2::Span::call_site())
 }
 
 #[cfg(test)]
