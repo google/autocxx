@@ -106,6 +106,7 @@ pub(super) fn create_subclass_function(
             cpp_impl: CppFunction {
                 payload: CppFunctionBody::FunctionCall(Namespace::new(), rust_call_name),
                 wrapper_function_name: name.name.get_final_ident(),
+                original_cpp_name: name.cpp_name(),
                 return_conversion: analysis.ret_conversion.clone(),
                 argument_conversion: analysis
                     .param_details
@@ -207,6 +208,7 @@ pub(super) fn create_subclass_constructor(
         kind: CppFunctionKind::Constructor,
         pass_obs_field: false,
         qualification: Some(cpp.clone()),
+        original_cpp_name: cpp.to_cpp_name(),
     };
     Api::RustSubclassConstructor {
         name: ApiName::new_from_qualified_name(cpp),

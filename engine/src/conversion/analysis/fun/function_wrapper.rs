@@ -161,6 +161,7 @@ pub(crate) enum CppFunctionKind {
 pub(crate) struct CppFunction {
     pub(crate) payload: CppFunctionBody,
     pub(crate) wrapper_function_name: Ident,
+    pub(crate) original_cpp_name: String,
     pub(crate) return_conversion: Option<TypeConversionPolicy>,
     pub(crate) argument_conversion: Vec<TypeConversionPolicy>,
     pub(crate) kind: CppFunctionKind,

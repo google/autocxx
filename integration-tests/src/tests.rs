@@ -6964,6 +6964,118 @@ fn test_pv_subclass_fancy_constructor() {
 }
 
 #[test]
+fn test_non_pv_subclass_overrides() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <string>
+
+    class TestObserver {
+    public:
+        TestObserver() {}
+        virtual void call(uint8_t) const {}
+        virtual void call(std::string) const {}
+        virtual ~TestObserver() {}
+    };
+
+    extern TestObserver* obs;
+
+    inline void register_observer(TestObserver& a) {
+        obs = &a;
+    }
+    inline void do_a_thing() {
+        return obs->call(8);
+    }
+    "};
+    run_test_ex(
+        "TestObserver* obs;",
+        hdr,
+        quote! {
+            let obs = MyTestObserver::new_rust_owned(
+                MyTestObserver::default()
+            );
+            ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
+            ffi::do_a_thing();
+        },
+        quote! {
+            generate!("register_observer")
+            generate!("do_a_thing")
+            subclass!("TestObserver",MyTestObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::prelude::*;
+            #[subclass]
+            #[derive(Default)]
+            pub struct MyTestObserver;
+            impl ffi::TestObserver_methods for MyTestObserver {
+                fn call(&self, a: u8) {
+                    self.peer().call_super(a)
+                }
+                fn call1(&self, a: cxx::UniquePtr<cxx::CxxString>) {
+                    self.peer().call1_super(a)
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_overrides() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <string>
+
+    class TestObserver {
+    public:
+        TestObserver() {}
+        virtual void call(uint8_t) const = 0;
+        virtual void call(std::string) const = 0;
+        virtual ~TestObserver() {}
+    };
+
+    extern TestObserver* obs;
+
+    inline void register_observer(TestObserver& a) {
+        obs = &a;
+    }
+    inline void do_a_thing() {
+        return obs->call(8);
+    }
+    "};
+    run_test_ex(
+        "TestObserver* obs;",
+        hdr,
+        quote! {
+            let obs = MyTestObserver::new_rust_owned(
+                MyTestObserver::default()
+            );
+            ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
+            ffi::do_a_thing();
+        },
+        quote! {
+            generate!("register_observer")
+            generate!("do_a_thing")
+            subclass!("TestObserver",MyTestObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::prelude::*;
+            #[subclass]
+            #[derive(Default)]
+            pub struct MyTestObserver;
+            impl ffi::TestObserver_methods for MyTestObserver {
+                fn call(&self, _a: u8) {
+                }
+                fn call1(&self, _a: cxx::UniquePtr<cxx::CxxString>) {
+                }
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_pv_subclass_namespaced_superclass() {
     let hdr = indoc! {"
     #include <cstdint>
