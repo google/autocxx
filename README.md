@@ -161,7 +161,7 @@ order of preference here's how we would like to hear about your problem:
 * Raise a pull request adding a new failing integration test to
   `engine/src/integration_tests.rs`.
 * Minimize the test using `tools/reduce`, something like this:
-  `target/debug/autocxx-reduce -d "safety!(unsafe_ffi)" -d
+  `target/debug/autocxx-reduce file -d "safety!(unsafe_ffi)" -d
   'generate_pod!("A")' -I ~/my-include-dir -h my-header.h -p
   problem-error-message -- --remove-pass pass_line_markers`
   This is a wrapper for the amazing `creduce` which will take thousands of lines
@@ -169,7 +169,7 @@ order of preference here's how we would like to hear about your problem:
   reproduce the same problem.
 * Use the C++ preprocessor to give a single complete C++ file which demonstrates
   the problem, along with the `include_cpp!` directive you use.
-  Alternatively, run your build using `AUTOCXX_PREPROCESS=output.h` which should
+  Alternatively, run your build using `AUTOCXX_REPRO_CASE=repro.json` which should
   put everything we need into `output.h`. If necessary, you can use the `CLANG_PATH`
   or `CXX` environment variables to specify the path to the Clang compiler to use.
 * Failing all else, build using
