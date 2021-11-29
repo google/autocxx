@@ -116,6 +116,11 @@ pub(crate) struct FnAnalysis {
     pub(crate) vis: Visibility,
     pub(crate) cpp_wrapper: Option<CppFunction>,
     pub(crate) deps: HashSet<QualifiedName>,
+    /// Protected methods still need to be recorded because we want
+    /// to (a) generate the ability to call superclasses, (b) create
+    /// subclass entries for them. But we do not want to have them
+    /// be externally callable.
+    pub(crate) generate_code: bool,
 }
 
 #[derive(Clone)]
@@ -556,15 +561,21 @@ impl<'a> FnAnalyzer<'a> {
             )
         };
 
-        // Skip private & protected methods; but if we've a private constructor, keep
-        // a note of it.
-        if fun.cpp_vis != CppVisibility::Public {
-            if let FnKind::Method(self_ty, MethodKind::Constructor) = &kind {
-                self.has_unrepresentable_constructors
-                    .insert(self_ty.clone());
+        // Skip private methods; but if we've a private constructor, keep
+        // a note of it. We continue to process protected methods since,
+        // though they may not be callable elsewhere, we my be subclassing
+        // the class and need to handle them that way.
+        let generate_code = match fun.cpp_vis {
+            CppVisibility::Private => {
+                if let FnKind::Method(self_ty, MethodKind::Constructor) = &kind {
+                    self.has_unrepresentable_constructors
+                        .insert(self_ty.clone());
+                }
+                return Ok(None);
             }
-            return Ok(None);
-        }
+            CppVisibility::Protected => false,
+            CppVisibility::Public => true,
+        };
 
         // The name we use within the cxx::bridge mod may be different
         // from both the C++ name and the Rust name, because it's a flat
@@ -793,6 +804,7 @@ impl<'a> FnAnalyzer<'a> {
             vis,
             cpp_wrapper,
             deps,
+            generate_code,
         };
         let name = ApiName {
             cpp_name,
@@ -1084,8 +1096,16 @@ impl Api<FnPhase> {
     /// And we can't answer the question _prior_ to this function analysis phase.
     pub(crate) fn needs_cpp_codegen(&self) -> bool {
         match &self {
-            Api::Function { analysis, .. } => analysis.cpp_wrapper.is_some(),
-            Api::StringConstructor { .. }
+            Api::Function {
+                analysis:
+                    FnAnalysis {
+                        cpp_wrapper: Some(..),
+                        generate_code: true,
+                        ..
+                    },
+                ..
+            }
+            | Api::StringConstructor { .. }
             | Api::ConcreteType { .. }
             | Api::CType { .. }
             | Api::RustSubclassConstructor { .. }

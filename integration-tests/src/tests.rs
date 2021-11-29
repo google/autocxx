@@ -6343,10 +6343,10 @@ fn test_pv_protected_method() {
             }
             impl Observer_methods for MyObserver {
                 fn baz(&self) {
-
                 }
 
                 fn foo(&self) {
+                    use ffi::Observer_supers;
                     self.baz_super()
                 }
             }
