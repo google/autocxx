@@ -188,16 +188,16 @@ struct ReproCase {
 }
 
 fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> {
-    let incs: Vec<_> = matches
-        .values_of("inc")
-        .unwrap_or_default()
-        .map(PathBuf::from)
-        .collect();
     let rs_path = tmp_dir.path().join("input.rs");
     let concat_path = tmp_dir.path().join("concat.h");
     match matches.subcommand_matches("repro") {
         None => {
             let submatches = matches.subcommand_matches("file").unwrap();
+            let incs: Vec<_> = submatches
+                .values_of("inc")
+                .unwrap_or_default()
+                .map(PathBuf::from)
+                .collect();
             let defs: Vec<_> = submatches.values_of("define").unwrap_or_default().collect();
             let headers: Vec<_> = submatches.values_of("header").unwrap_or_default().collect();
             assert!(!headers.is_empty());
