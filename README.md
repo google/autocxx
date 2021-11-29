@@ -45,10 +45,10 @@ First, add `autocxx` to your `dependencies` and `autocxx-build` to your `build-d
 
 ```toml
 [dependencies]
-autocxx = "0.13.2"
+autocxx = "0.14.0"
 
 [build-dependencies]
-autocxx-build = "0.13.2"
+autocxx-build = "0.14.0"
 ```
 
 Now, add a `build.rs`. This is where you need your include path:
