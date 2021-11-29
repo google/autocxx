@@ -44,6 +44,9 @@ pub(super) fn gen_function(
     analysis: FnAnalysis,
     cpp_call_name: String,
 ) -> RsCodegenResult {
+    if !analysis.generate_code {
+        return RsCodegenResult::default();
+    }
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = analysis.rust_name;
     let ret_type = analysis.ret_type;

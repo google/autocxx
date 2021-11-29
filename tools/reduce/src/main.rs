@@ -448,7 +448,7 @@ fn create_concatenated_header(headers: &[&str], listing_path: &Path) -> Result<(
     Ok(())
 }
 
-fn create_file(path: &PathBuf, content: &str) -> Result<(), std::io::Error> {
+fn create_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
     let mut file = File::create(path)?;
     write!(file, "{}", content)?;
     Ok(())

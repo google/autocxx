@@ -6267,6 +6267,94 @@ fn test_non_pv_subclass() {
 }
 
 #[test]
+fn test_pv_protected_constructor() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    protected:
+        Observer() {}
+    public:
+        virtual void foo() const {}
+        virtual ~Observer() {}
+    };
+    inline void bar() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+        },
+        quote! {
+            generate!("bar")
+            subclass!("Observer",MyObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_protected_method() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo() const {}
+        virtual ~Observer() {}
+    protected:
+        virtual void baz() const {}
+    };
+    inline void bar() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+        },
+        quote! {
+            generate!("bar")
+            subclass!("Observer",MyObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                fn baz(&self) {
+                }
+
+                fn foo(&self) {
+                    use ffi::Observer_supers;
+                    self.baz_super()
+                }
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_pv_subclass_allocation_not_self_owned() {
     let hdr = indoc! {"
     #include <cstdint>

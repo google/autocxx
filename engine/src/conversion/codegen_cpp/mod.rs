@@ -147,6 +147,7 @@ impl<'a> CppCodeGenerator<'a> {
                     analysis:
                         FnAnalysis {
                             cpp_wrapper: Some(cpp_wrapper),
+                            generate_code: true,
                             ..
                         },
                     ..
