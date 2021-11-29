@@ -171,7 +171,7 @@ pub(super) fn create_subclass_constructor_wrapper(
         output: fun.output.clone(),
         vis: fun.vis.clone(),
         is_pure_virtual: false,
-        cpp_vis: fun.cpp_vis,
+        cpp_vis: CppVisibility::Public,
         is_move_constructor: false,
         original_name: None,
         unused_template_param: fun.unused_template_param,
