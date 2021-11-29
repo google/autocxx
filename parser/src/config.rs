@@ -27,6 +27,9 @@ use crate::{
     RustPath,
 };
 
+#[cfg(feature = "reproduction_case")]
+use quote::quote;
+
 #[derive(PartialEq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
     AllFunctionsSafe,
@@ -55,6 +58,15 @@ impl Parse for UnsafePolicy {
             ));
         }
         r
+    }
+}
+
+#[cfg(feature = "reproduction_case")]
+impl ToTokens for UnsafePolicy {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        if *self == UnsafePolicy::AllFunctionsSafe {
+            tokens.extend(quote! { unsafe })
+        }
     }
 }
 
@@ -160,6 +172,7 @@ impl Parse for IncludeCppConfig {
         let mut exclude_utilities = false;
         let mut mod_name = None;
         let mut subclasses = Vec::new();
+        let mut extern_rust_funs = Vec::new();
 
         while !input.is_empty() {
             let has_hexathorpe = input.parse::<Option<syn::token::Pound>>()?.is_some();
@@ -229,6 +242,13 @@ impl Parse for IncludeCppConfig {
                     let args;
                     syn::parenthesized!(args in input);
                     unsafe_policy = args.parse()?;
+                } else if ident == "extern_rust_fun" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let path: RustPath = args.parse()?;
+                    args.parse::<syn::token::Comma>()?;
+                    let sig: syn::Signature = args.parse()?;
+                    extern_rust_funs.push(RustFun { path, sig });
                 } else {
                     return Err(syn::Error::new(
                         ident.span(),
@@ -253,7 +273,7 @@ impl Parse for IncludeCppConfig {
             exclude_utilities,
             mod_name,
             subclasses,
-            extern_rust_funs: Vec::new(),
+            extern_rust_funs,
         })
     }
 }
@@ -429,6 +449,69 @@ impl IncludeCppConfig {
             }
         } else {
             Ok(())
+        }
+    }
+
+    /// Used in reduction to substitute all included headers with a single
+    /// preprocessed replacement.
+    pub fn replace_included_headers(&mut self, replacement: &str) {
+        self.inclusions.clear();
+        self.inclusions.push(replacement.to_string());
+    }
+}
+
+#[cfg(feature = "reproduction_case")]
+impl ToTokens for IncludeCppConfig {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        for inc in &self.inclusions {
+            let hexathorpe = syn::token::Pound(Span::call_site());
+            tokens.extend(quote! {
+                #hexathorpe include #inc
+            })
+        }
+        let unsafety = &self.unsafe_policy;
+        tokens.extend(quote! {
+            safety!(#unsafety)
+        });
+        if self.exclude_impls {
+            tokens.extend(quote! { exclude_impls!() });
+        }
+        if self.parse_only {
+            tokens.extend(quote! { parse_only!() });
+        }
+        if self.exclude_utilities {
+            tokens.extend(quote! { exclude_utilities!() });
+        }
+        for i in &self.pod_requests {
+            tokens.extend(quote! { pod!(#i) });
+        }
+        for i in &self.blocklist {
+            tokens.extend(quote! { block!(#i) });
+        }
+        for path in &self.rust_types {
+            tokens.extend(quote! { rust_type!(#path) });
+        }
+        match &self.allowlist {
+            Allowlist::All => tokens.extend(quote! { generate_all!() }),
+            Allowlist::Specific(items) => {
+                for i in items {
+                    tokens.extend(quote! { generate!(#i) });
+                }
+            }
+            Allowlist::Unspecified(_) => panic!("Allowlist mode not yet determined"),
+        }
+        if let Some(mod_name) = &self.mod_name {
+            tokens.extend(quote! { mod_name!(#mod_name) });
+        }
+        for i in &self.extern_rust_funs {
+            let p = &i.path;
+            let s = &i.sig;
+            tokens.extend(quote! { extern_rust_fun!(#p,#s) });
+        }
+        for i in &self.subclasses {
+            let superclass = &i.superclass;
+            let subclass = &i.subclass;
+            tokens.extend(quote! { subclass!(#superclass,#subclass) });
         }
     }
 }
