@@ -143,7 +143,7 @@ impl ApiName {
         self.cpp_name
             .as_ref()
             .cloned()
-            .unwrap_or(self.name.get_final_item().to_string())
+            .unwrap_or_else(|| self.name.get_final_item().to_string())
     }
 }
 

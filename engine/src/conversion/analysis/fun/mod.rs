@@ -1095,24 +1095,22 @@ impl Api<FnPhase> {
     /// more C++ is needed (so it can add #includes in the cxx mod).
     /// And we can't answer the question _prior_ to this function analysis phase.
     pub(crate) fn needs_cpp_codegen(&self) -> bool {
-        match &self {
+        matches!(
+            &self,
             Api::Function {
-                analysis:
-                    FnAnalysis {
-                        cpp_wrapper: Some(..),
-                        generate_code: true,
-                        ..
-                    },
+                analysis: FnAnalysis {
+                    cpp_wrapper: Some(..),
+                    generate_code: true,
+                    ..
+                },
                 ..
-            }
-            | Api::StringConstructor { .. }
-            | Api::ConcreteType { .. }
-            | Api::CType { .. }
-            | Api::RustSubclassConstructor { .. }
-            | Api::RustSubclassFn { .. }
-            | Api::Subclass { .. } => true,
-            _ => false,
-        }
+            } | Api::StringConstructor { .. }
+                | Api::ConcreteType { .. }
+                | Api::CType { .. }
+                | Api::RustSubclassConstructor { .. }
+                | Api::RustSubclassFn { .. }
+                | Api::Subclass { .. }
+        )
     }
 
     pub(crate) fn cxxbridge_name(&self) -> Option<Ident> {
