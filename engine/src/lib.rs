@@ -522,8 +522,10 @@ static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
 pub fn do_cxx_cpp_generation(
     rs: TokenStream2,
     suppress_system_headers: bool,
+    cxx_impl_annotations: Option<String>,
 ) -> Result<CppFilePair, cxx_gen::Error> {
-    let opt = cxx_gen::Opt::default();
+    let mut opt = cxx_gen::Opt::default();
+    opt.cxx_impl_annotations = cxx_impl_annotations;
     let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
     Ok(CppFilePair {
         header: strip_system_headers(cxx_generated.header, suppress_system_headers),
@@ -554,6 +556,7 @@ impl CppBuildable for IncludeCppEngine {
     fn generate_h_and_cxx(
         &self,
         suppress_system_headers: bool,
+        cxx_impl_annotations: Option<String>,
     ) -> Result<GeneratedCpp, cxx_gen::Error> {
         let mut files = Vec::new();
         match &self.state {
@@ -561,7 +564,11 @@ impl CppBuildable for IncludeCppEngine {
             State::NotGenerated => panic!("Call generate() first"),
             State::Generated(gen_results) => {
                 let rs = gen_results.item_mod.to_token_stream();
-                files.push(do_cxx_cpp_generation(rs, suppress_system_headers)?);
+                files.push(do_cxx_cpp_generation(
+                    rs,
+                    suppress_system_headers,
+                    cxx_impl_annotations,
+                )?);
                 if let Some(cpp_file_pair) = &gen_results.cpp {
                     files.push(cpp_file_pair.clone());
                 }

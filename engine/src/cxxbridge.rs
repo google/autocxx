@@ -43,8 +43,13 @@ impl CppBuildable for CxxBridge {
     fn generate_h_and_cxx(
         &self,
         suppress_system_headers: bool,
+        cxx_impl_annotations: Option<String>,
     ) -> Result<GeneratedCpp, cxx_gen::Error> {
-        let fp = do_cxx_cpp_generation(self.tokens.clone(), suppress_system_headers)?;
+        let fp = do_cxx_cpp_generation(
+            self.tokens.clone(),
+            suppress_system_headers,
+            cxx_impl_annotations,
+        )?;
         Ok(GeneratedCpp(vec![fp]))
     }
 }

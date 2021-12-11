@@ -91,6 +91,7 @@ pub struct Builder<BuilderContext> {
     custom_gendir: Option<PathBuf>,
     auto_allowlist: bool,
     suppress_system_headers: bool,
+    cxx_impl_annotations: Option<String>,
     // This member is to ensure that this type is parameterized
     // by a BuilderContext. The goal is to balance three needs:
     // (1) have most of the functionality over in autocxx_engine,
@@ -119,6 +120,7 @@ impl<CTX: BuilderContext> Builder<CTX> {
             custom_gendir: None,
             auto_allowlist: false,
             suppress_system_headers: false,
+            cxx_impl_annotations: None,
             ctx: PhantomData,
         }
     }
@@ -160,6 +162,11 @@ impl<CTX: BuilderContext> Builder<CTX> {
     /// that the bindings could ever need.
     pub fn suppress_system_headers(mut self, do_it: bool) -> Self {
         self.suppress_system_headers = do_it;
+        self
+    }
+
+    pub fn cxx_impl_annotations(mut self, cxx_impl_annotations: Option<String>) -> Self {
+        self.cxx_impl_annotations = cxx_impl_annotations;
         self
     }
 
@@ -220,7 +227,10 @@ impl<CTX: BuilderContext> Builder<CTX> {
         builder.includes(parsed_file.include_dirs());
         for include_cpp in parsed_file.get_cpp_buildables() {
             let generated_code = include_cpp
-                .generate_h_and_cxx(self.suppress_system_headers)
+                .generate_h_and_cxx(
+                    self.suppress_system_headers,
+                    self.cxx_impl_annotations.clone(),
+                )
                 .map_err(BuilderError::InvalidCxx)?;
             for filepair in generated_code.0 {
                 let fname = format!("gen{}.cxx", counter);
