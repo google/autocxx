@@ -162,6 +162,13 @@ fn main() {
                 .help("Do not refer to any system headers from generated code. May be useful for minimization.")
         )
         .arg(
+            Arg::with_name("cxx-impl-annotations")
+                .long("cxx-impl-annotations")
+                .value_name("ANNOTATION")
+                .help("prefix for symbols to be exported from C++ bindings, e.g. __attribute__ ((visibility (\"default\")))")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("clang-args")
                 .last(true)
                 .multiple(true)
@@ -185,6 +192,9 @@ fn main() {
         .unwrap_or_default()
         .collect();
     let suppress_system_headers = matches.is_present("suppress-system-headers");
+    let cxx_impl_annotations = matches
+        .value_of("cxx-impl-annotations")
+        .map(|s| s.to_string());
     // In future, we should provide an option to write a .d file here
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56
@@ -200,7 +210,7 @@ fn main() {
         let mut counter = 0usize;
         for include_cxx in parsed_file.get_cpp_buildables() {
             let generations = include_cxx
-                .generate_h_and_cxx(suppress_system_headers)
+                .generate_h_and_cxx(suppress_system_headers, cxx_impl_annotations.clone())
                 .expect("Unable to generate header and C++ code");
             for pair in generations.0 {
                 let cppname = format!("gen{}.{}", counter, cpp);

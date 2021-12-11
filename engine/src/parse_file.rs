@@ -215,6 +215,7 @@ pub trait CppBuildable {
     fn generate_h_and_cxx(
         &self,
         suppress_system_headers: bool,
+        cxx_impl_annotations: Option<String>,
     ) -> Result<GeneratedCpp, cxx_gen::Error>;
 }
 
