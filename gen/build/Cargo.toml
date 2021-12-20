@@ -23,6 +23,9 @@ repository = "https://github.com/google/autocxx"
 keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
 
+[features]
+byvalue = [ "autocxx-engine/byvalue" ]
+
 [dependencies]
 autocxx-engine = { version="=0.14.0", path="../../engine", features = ["build"] }
 env_logger = "0.9.0"
