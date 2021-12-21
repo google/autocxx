@@ -17,3 +17,7 @@ mod tests;
 
 #[cfg(test)]
 mod test_utils;
+
+//#[cfg(all(feature="byvalue",test))]
+#[cfg(test)]
+mod byvalue_tests;
