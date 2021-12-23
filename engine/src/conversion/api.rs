@@ -49,11 +49,17 @@ pub(crate) struct ImplBlockDetails {
 }
 
 /// C++ visibility.
-#[derive(Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub(crate) enum CppVisibility {
     Public,
     Protected,
     Private,
+}
+
+/// Details about a C++ struct.
+pub(crate) struct StructDetails {
+    pub(crate) vis: CppVisibility,
+    pub(crate) item: ItemStruct,
 }
 
 /// A C++ function for which we need to generate bindings, but haven't
@@ -265,7 +271,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// `bindgen` output.
     Struct {
         name: ApiName,
-        item: ItemStruct,
+        details: Box<StructDetails>,
         analysis: T::StructAnalysis,
     },
     /// A variable-length C integer type (e.g. int, unsigned long).
@@ -409,7 +415,7 @@ impl<T: AnalysisPhase> Api<T> {
 
     pub(crate) fn struct_unchanged(
         name: ApiName,
-        item: ItemStruct,
+        details: Box<StructDetails>,
         analysis: T::StructAnalysis,
     ) -> Result<Box<dyn Iterator<Item = Api<T>>>, ConvertErrorWithContext>
     where
@@ -417,7 +423,7 @@ impl<T: AnalysisPhase> Api<T> {
     {
         Ok(Box::new(std::iter::once(Api::Struct {
             name,
-            item,
+            details,
             analysis,
         })))
     }

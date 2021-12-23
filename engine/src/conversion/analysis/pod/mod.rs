@@ -23,7 +23,7 @@ use syn::{ItemEnum, ItemStruct, Type};
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, ApiName, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, CppVisibility, StructDetails, TypeKind, UnanalyzedApi},
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
         ConvertError,
@@ -68,13 +68,13 @@ pub(crate) fn analyze_pod_apis(
         apis,
         &mut results,
         Api::fun_unchanged,
-        |name, item, _| {
+        |name, details, _| {
             analyze_struct(
                 &byvalue_checker,
                 &mut type_converter,
                 &mut extra_apis,
                 name,
-                item,
+                details,
             )
         },
         analyze_enum,
@@ -88,13 +88,13 @@ pub(crate) fn analyze_pod_apis(
         extra_apis,
         &mut results,
         Api::fun_unchanged,
-        |name, item, _| {
+        |name, details, _| {
             analyze_struct(
                 &byvalue_checker,
                 &mut type_converter,
                 &mut more_extra_apis,
                 name,
-                item,
+                details,
             )
         },
         analyze_enum,
@@ -117,18 +117,24 @@ fn analyze_struct(
     type_converter: &mut TypeConverter,
     extra_apis: &mut Vec<UnanalyzedApi>,
     name: ApiName,
-    mut item: ItemStruct,
+    mut details: Box<StructDetails>,
 ) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
     let id = name.name.get_final_ident();
-    super::remove_bindgen_attrs(&mut item.attrs, id.clone())?;
-    let bases = get_bases(&item);
+    if details.vis != CppVisibility::Public {
+        return Err(ConvertErrorWithContext(
+            ConvertError::NonPublicNestedType,
+            Some(ErrorContext::Item(id.clone())),
+        ));
+    }
+    super::remove_bindgen_attrs(&mut details.item.attrs, id.clone())?;
+    let bases = get_bases(&details.item);
     let mut field_deps = HashSet::new();
     let type_kind = if byvalue_checker.is_pod(&name.name) {
         // It's POD so let's mark dependencies on things in its field
         get_struct_field_types(
             type_converter,
             name.name.get_namespace(),
-            &item,
+            &details.item,
             &mut field_deps,
             extra_apis,
         )
@@ -141,7 +147,7 @@ fn analyze_struct(
     };
     Ok(Box::new(std::iter::once(Api::Struct {
         name,
-        item,
+        details,
         analysis: PodAnalysis {
             kind: type_kind,
             bases,

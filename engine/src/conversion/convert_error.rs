@@ -53,6 +53,7 @@ pub enum ConvertError {
     BoxContainingNonRustType(QualifiedName),
     RustTypeWithAPath(QualifiedName),
     AbstractNestedType,
+    NonPublicNestedType,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -98,6 +99,7 @@ impl Display for ConvertError {
             ConvertError::BoxContainingNonRustType(ty) => write!(f, "A rust::Box<T> was encountered where T was not known to be a Rust type. Use rust_type!(T): {}", ty.to_cpp_name())?,
             ConvertError::RustTypeWithAPath(ty) => write!(f, "A qualified Rust type was found (i.e. one containing ::): {}. Rust types must always be a simple identifier.", ty.to_cpp_name())?,
             ConvertError::AbstractNestedType => write!(f, "This type is nested within another struct/class, yet is abstract (or is not on the allowlist so we can't be sure). This is not yet supported by autocxx. If you don't believe this type is abstract, add it to the allowlist.")?,
+            ConvertError::NonPublicNestedType => write!(f, "This type is nested within another struct/class with protected or private visibility.")?,
         }
         Ok(())
     }
