@@ -158,6 +158,10 @@ fn get_struct_field_types(
     extra_apis: &mut Vec<UnanalyzedApi>,
 ) -> Result<(), ConvertError> {
     for f in &s.fields {
+        log::info!("Field name is {}", f.ident.as_ref().unwrap());
+        if f.ident.as_ref().unwrap() == "_bindgen_opaque_blob" {
+            continue;
+        }
         let annotated =
             type_converter.convert_type(f.ty.clone(), ns, &TypeConversionContext::CxxInnerType)?;
         extra_apis.extend(annotated.extra_apis);

@@ -15,7 +15,7 @@
 use crate::conversion::doc_attr::get_doc_attr;
 use crate::types::make_ident;
 use proc_macro2::Ident;
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::parse::Parser;
 use syn::{parse_quote, Field, GenericParam, ItemStruct};
 
@@ -38,11 +38,12 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct) {
     // by Rust code
     // (see https://doc.rust-lang.org/1.47.0/reference/behavior-considered-undefined.html).
     // Rustc can use least-significant bits of the reference for other storage.
-    let attrs = get_doc_attr(&s.attrs)
-        .into_iter()
-        .chain(std::iter::once(parse_quote!(
-            #[repr(C, packed)]
-        )));
+    log::info!("Before: {}", s.to_token_stream());
+
+    let attrs = s.attrs
+        .iter()
+        .filter(|a| a.path.get_ident().iter().any(|p| *p == "repr" || *p == "doc"))
+        .cloned();
     s.attrs = attrs.collect();
     // Now fill in fields. Usually, we just want a single field
     // but if this is a generic type we need to faff a bit.
@@ -65,8 +66,14 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct) {
         });
     // See cxx's opaque::Opaque for rationale for this type... in
     // short, it's to avoid being Send/Sync.
+    let bindgen_opaque_blob = if let syn::Fields::Named(fieldlist) = &s.fields {
+        fieldlist.named.iter().filter(|f| f.ident.as_ref().unwrap().to_string() == "_bindgen_opaque_blob").next()
+    } else {
+        None
+    };
     s.fields = syn::Fields::Named(parse_quote! {
         {
+            #bindgen_opaque_blob
             do_not_attempt_to_allocate_nonpod_types: [*const u8; 0],
             _pinned: core::marker::PhantomData<core::marker::PhantomPinned>,
             #(#generic_type_fields),*

@@ -824,11 +824,11 @@ impl<'a> RsCodeGenerator<'a> {
         );
         let orig_item = item_creator();
         match type_kind {
-            TypeKind::Pod | TypeKind::NonPodNested => {
+            TypeKind::Pod | TypeKind::NonPodNested | TypeKind::NonPod => {
                 let mut item = orig_item
                     .expect("Instantiable types must provide instance")
                     .0;
-                if matches!(type_kind, TypeKind::NonPodNested) {
+                if !matches!(type_kind, TypeKind::Pod) {
                     // We have to use 'type A = super::bindgen::A::B'
                     // because if we use simply 'type A', there is no combination
                     // of cxx-acceptable attributes which will inform cxx that
@@ -852,7 +852,7 @@ impl<'a> RsCodeGenerator<'a> {
                     extern_rust_mod_items: Vec::new(),
                 }
             }
-            TypeKind::NonPod | TypeKind::Abstract => {
+             | TypeKind::Abstract => {
                 bindgen_mod_items.push(Item::Use(parse_quote! { pub use cxxbridge::#id; }));
                 let doc_attr = orig_item.map(|maybe_item| maybe_item.1).flatten();
                 RsCodegenResult {
