@@ -824,11 +824,11 @@ impl<'a> RsCodeGenerator<'a> {
         );
         let orig_item = item_creator();
         match type_kind {
-            TypeKind::Pod | TypeKind::NonPodNested => {
+            TypeKind::Pod | TypeKind::NonPodNested | TypeKind::NonPod => {
                 let mut item = orig_item
                     .expect("Instantiable types must provide instance")
                     .0;
-                if matches!(type_kind, TypeKind::NonPodNested) {
+                if !matches!(type_kind, TypeKind::Pod) {
                     // We have to use 'type A = super::bindgen::A::B'
                     // because if we use simply 'type A', there is no combination
                     // of cxx-acceptable attributes which will inform cxx that
@@ -842,8 +842,11 @@ impl<'a> RsCodeGenerator<'a> {
                     }
                 }
                 bindgen_mod_items.push(item);
+                bindgen_mod_items.push(
+                    self.generate_maybe_uninit(name));
                 RsCodegenResult {
-                    global_items: self.generate_extern_type_impl(type_kind, name),
+                    global_items: vec![self.generate_extern_type_impl(type_kind, name),
+                    ],
                     impl_entry: None,
                     bridge_items: create_impl_items(&id, self.config),
                     extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, None)],
@@ -852,7 +855,7 @@ impl<'a> RsCodeGenerator<'a> {
                     extern_rust_mod_items: Vec::new(),
                 }
             }
-            TypeKind::NonPod | TypeKind::Abstract => {
+            TypeKind::Abstract => {
                 bindgen_mod_items.push(Item::Use(parse_quote! { pub use cxxbridge::#id; }));
                 let doc_attr = orig_item.map(|maybe_item| maybe_item.1).flatten();
                 RsCodegenResult {
@@ -1035,7 +1038,7 @@ impl<'a> RsCodeGenerator<'a> {
         })
     }
 
-    fn generate_extern_type_impl(&self, type_kind: TypeKind, tyname: &QualifiedName) -> Vec<Item> {
+    fn generate_extern_type_impl(&self, type_kind: TypeKind, tyname: &QualifiedName) -> Item {
         let tynamestring = namespaced_name_using_original_name_map(tyname, &self.original_name_map);
         let fulltypath = tyname.get_bindgen_path_idents();
         let kind_item = match type_kind {
@@ -1043,12 +1046,20 @@ impl<'a> RsCodeGenerator<'a> {
             _ => "Opaque",
         };
         let kind_item = make_ident(kind_item);
-        vec![Item::Impl(parse_quote! {
+        Item::Impl(parse_quote! {
             unsafe impl cxx::ExternType for #(#fulltypath)::* {
                 type Id = cxx::type_id!(#tynamestring);
                 type Kind = cxx::kind::#kind_item;
             }
-        })]
+        })
+    }
+
+    fn generate_maybe_uninit(&self, tyname: &QualifiedName) -> Item {
+        let maybe_uninit_name = make_ident(format!("{}_MaybeUninit", tyname.get_final_item()));
+        let id = tyname.get_final_ident();
+        Item::Type(parse_quote! {
+            type #maybe_uninit_name<'a> = std::pin::Pin<&'a mut std::mem::MaybeUninit<#id>>;
+        })
     }
 
     fn generate_cxxbridge_type(
