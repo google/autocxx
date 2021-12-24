@@ -86,8 +86,13 @@ impl LinkableTryBuilder {
                 &generated_rs.file_name().unwrap().to_str().unwrap(),
             );
         }
+        let linker_details = if std::env::consts::OS == "linux" {
+            ["-Clinker=clang", "-Clink-arg=-fuse-ld=lld"].join(" ")
+        } else {
+            "".to_string()
+        };
         let temp_path = self.temp_dir.path().to_str().unwrap();
-        std::env::set_var("RUSTFLAGS", format!("-L {}", temp_path));
+        std::env::set_var("RUSTFLAGS", format!("-L {} {}", temp_path, linker_details));
         std::env::set_var("AUTOCXX_RS", temp_path);
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();

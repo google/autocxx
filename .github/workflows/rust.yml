@@ -20,5 +20,7 @@ jobs:
       run: cargo build --all --verbose
     - name: Install creduce
       run: sudo apt-get install creduce
+    - name: Install clang
+      run: sudo apt-get install build-essential clang
     - name: Run tests
       run: cargo test --all --verbose
