@@ -16,7 +16,9 @@ use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{Api, ApiName, SubclassName, TypedefKind, UnanalyzedApi},
+        api::{
+            Api, ApiName, CppVisibility, StructDetails, SubclassName, TypedefKind, UnanalyzedApi,
+        },
         ConvertError,
     },
     types::Namespace,
@@ -83,6 +85,20 @@ pub(super) fn get_bindgen_original_name_annotation(attrs: &[Attribute]) -> Optio
             }
         })
         .next()
+}
+
+pub(super) fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
+    attrs.iter().any(|a| a.path.is_ident(attr_name))
+}
+
+pub(super) fn get_cpp_visibility(attrs: &[Attribute]) -> CppVisibility {
+    if has_attr(&attrs, "bindgen_visibility_private") {
+        CppVisibility::Private
+    } else if has_attr(&attrs, "bindgen_visibility_protected") {
+        CppVisibility::Protected
+    } else {
+        CppVisibility::Public
+    }
 }
 
 impl<'a> ParseBindgen<'a> {
@@ -198,7 +214,10 @@ impl<'a> ParseBindgen<'a> {
                 } else {
                     Some(UnanalyzedApi::Struct {
                         name,
-                        item: s,
+                        details: Box::new(StructDetails {
+                            vis: get_cpp_visibility(&s.attrs),
+                            item: s,
+                        }),
                         analysis: (),
                     })
                 };

@@ -515,13 +515,15 @@ impl<'a> RsCodeGenerator<'a> {
                 materializations: vec![Use::UsedFromBindgen],
                 extern_rust_mod_items: Vec::new(),
             },
-            Api::Struct { item, analysis, .. } => {
-                let doc_attr = get_doc_attr(&item.attrs);
+            Api::Struct {
+                details, analysis, ..
+            } => {
+                let doc_attr = get_doc_attr(&details.item.attrs);
                 self.generate_type(
                     &name,
                     id,
                     analysis.kind,
-                    || Some((Item::Struct(item), doc_attr)),
+                    || Some((Item::Struct(details.item), doc_attr)),
                     associated_methods,
                 )
             }

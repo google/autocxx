@@ -112,8 +112,8 @@ impl ByValueChecker {
                         None => byvalue_checker.ingest_nonpod_type(name.clone()),
                     }
                 }
-                Api::Struct { item, .. } => {
-                    byvalue_checker.ingest_struct(item, api.name().get_namespace())
+                Api::Struct { details, .. } => {
+                    byvalue_checker.ingest_struct(&details.item, api.name().get_namespace())
                 }
                 Api::Enum { .. } => {
                     byvalue_checker

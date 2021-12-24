@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use syn::{ItemEnum, ItemStruct};
+use syn::ItemEnum;
 
 use super::{
-    api::{AnalysisPhase, Api, ApiName, FuncToConvert, TypedefKind},
+    api::{AnalysisPhase, Api, ApiName, FuncToConvert, StructDetails, TypedefKind},
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
@@ -67,7 +67,7 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
     ) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext>,
     SF: FnMut(
         ApiName,
-        ItemStruct,
+        Box<StructDetails>,
         A::StructAnalysis,
     ) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext>,
     EF: FnMut(
@@ -165,9 +165,9 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                         } => func_conversion(name, fun, analysis, name_for_gc),
                         Api::Struct {
                             name,
-                            item,
+                            details,
                             analysis,
-                        } => struct_conversion(name, item, analysis),
+                        } => struct_conversion(name, details, analysis),
                     };
                 api_or_error(tn, result)
             })

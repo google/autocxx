@@ -7341,6 +7341,31 @@ fn test_class_having_protected_method() {
 }
 
 #[test]
+fn test_protected_inner_class() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    inline uint32_t DoMath(uint32_t a)  {
+        return a * 3;
+    }
+
+    class A {
+    protected:
+        inline uint32_t protected_method() { return 0; }
+
+        struct B {
+            int x;
+        };
+
+        inline B protected_method_2() {
+            return { .x = 0 };
+        }
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_private_inner_class() {
     let hdr = indoc! {"
     #include <cstdint>

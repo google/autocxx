@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::api::{ApiName, CppVisibility};
+use crate::conversion::api::ApiName;
 use crate::conversion::doc_attr::get_doc_attr;
 use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
@@ -30,7 +30,7 @@ use syn::{
     Type,
 };
 
-use super::parse_bindgen::get_bindgen_original_name_annotation;
+use super::parse_bindgen::{get_bindgen_original_name_annotation, get_cpp_visibility, has_attr};
 
 /// Parses a given bindgen-generated 'mod' into suitable
 /// [Api]s. In bindgen output, a given mod concerns
@@ -76,16 +76,6 @@ impl ParseForeignMod {
         self.ignored_apis.append(&mut extra_apis);
     }
 
-    fn get_cpp_visibility(item: &ForeignItemFn) -> CppVisibility {
-        if Self::has_attr(item, "bindgen_visibility_private") {
-            CppVisibility::Private
-        } else if Self::has_attr(item, "bindgen_visibility_protected") {
-            CppVisibility::Protected
-        } else {
-            CppVisibility::Public
-        }
-    }
-
     fn parse_foreign_item(
         &mut self,
         i: ForeignItem,
@@ -93,10 +83,12 @@ impl ParseForeignMod {
     ) -> Result<(), ConvertErrorWithContext> {
         match i {
             ForeignItem::Fn(item) => {
-                let cpp_vis = Self::get_cpp_visibility(&item);
-                let is_pure_virtual = Self::has_attr(&item, "bindgen_pure_virtual");
-                let unused_template_param =
-                    Self::has_attr(&item, "bindgen_unused_template_param_in_arg_or_return");
+                let cpp_vis = get_cpp_visibility(&item.attrs);
+                let is_pure_virtual = has_attr(&item.attrs, "bindgen_pure_virtual");
+                let unused_template_param = has_attr(
+                    &item.attrs,
+                    "bindgen_unused_template_param_in_arg_or_return",
+                );
                 let is_move_constructor = Self::is_move_constructor(&item);
                 let (reference_args, return_type_is_reference) =
                     Self::get_reference_parameters_and_return(&item);
@@ -129,10 +121,6 @@ impl ParseForeignMod {
                 None,
             )),
         }
-    }
-
-    fn has_attr(fun: &ForeignItemFn, attr_name: &str) -> bool {
-        fun.attrs.iter().any(|a| a.path.is_ident(attr_name))
     }
 
     fn get_bindgen_special_member_annotation(fun: &ForeignItemFn) -> Option<String> {
