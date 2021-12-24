@@ -842,6 +842,7 @@ impl<'a> RsCodeGenerator<'a> {
                     }
                 }
                 bindgen_mod_items.push(item);
+                let maybe_uninit_name = get_maybe_uninit_name(name);
                 RsCodegenResult {
                     global_items: vec![self.generate_extern_type_impl(type_kind, name),
                     self.generate_maybe_uninit(name)
@@ -852,7 +853,9 @@ impl<'a> RsCodeGenerator<'a> {
                     bindgen_mod_items,
                     materializations,
                     extern_rust_mod_items: vec! [
-
+                        parse_quote! {
+                            type #maybe_uninit_name<'a>;
+                        }
                     ],
                 }
             }
@@ -1056,10 +1059,11 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn generate_maybe_uninit(&self, tyname: &QualifiedName) -> Item {
-        let maybe_uninit_name = make_ident(format!("{}_MaybeUninit", tyname.get_final_item()));
+        let maybe_uninit_name = get_maybe_uninit_name(tyname);
         let path = tyname.get_bindgen_path_idents();
-        Item::Type(parse_quote! {
-            type #maybe_uninit_name<'a> = std::pin::Pin<&'a mut std::mem::MaybeUninit<#(#path)::*>>;
+        Item::Struct(parse_quote! {
+            #[repr(transparent)]
+            struct #maybe_uninit_name<'a>(std::pin::Pin<&'a mut std::mem::MaybeUninit<#(#path)::*>>);
         })
     }
 
@@ -1125,6 +1129,11 @@ impl<'a> RsCodeGenerator<'a> {
     fn find_output_mod_root(ns: &Namespace) -> impl Iterator<Item = Ident> {
         std::iter::repeat(make_ident("super")).take(ns.depth())
     }
+}
+
+fn get_maybe_uninit_name(tyname: &QualifiedName) -> Ident {
+    let maybe_uninit_name = make_ident(format!("{}_MaybeUninit", tyname.get_final_item()));
+    maybe_uninit_name
 }
 
 fn get_unsafe_token(requires_unsafe: bool) -> TokenStream {
