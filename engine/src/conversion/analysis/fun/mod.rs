@@ -521,18 +521,8 @@ impl<'a> FnAnalyzer<'a> {
                     // If there are multiple constructors, bindgen generates
                     // new, new1, new2 etc. and we'll keep those suffixes.
                     rust_name = format!("new{}", constructor_suffix);
-                    // Convert the 'this' argument into a maybeuninit
-                    // TODO
-                    //params = params.into_iter().skip(1).collect();
-                    //param_details.remove(0);
-                    let maybeuninit = make_ident(format!("{}_MaybeUninit", type_ident.to_string()));
-                    let maybeuninit: Type = parse_quote! {
-                        std::pin::Pin<&mut #maybeuninit>
-                    };
-                    params = std::iter::once(parse_quote! {
-                        arg0: #maybeuninit
-                    }).chain(params.into_iter().skip(1)).collect();
-                    param_details[0].conversion = TypeConversionPolicy::placement_new(maybeuninit);
+                    let typ = self_ty.to_type_path();
+                    param_details[0].conversion = TypeConversionPolicy::placement_new(parse_quote! { &mut #typ });
                     MethodKind::Constructor
                 } else if is_static_method {
                     MethodKind::Static

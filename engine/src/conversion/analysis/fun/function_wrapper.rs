@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{
-    conversion::{api::SubclassName, analysis::type_converter::TypeConversionContext},
+    conversion::{api::SubclassName},
     types::{Namespace, QualifiedName},
 };
 use syn::{parse_quote, Ident, Type};

@@ -375,6 +375,7 @@ impl<'a> CppCodeGenerator<'a> {
             "{} {}{}({}){}",
             ret_type, qualification, name, args, constness
         );
+
         let arg_list: Result<Vec<_>, _> = details
             .argument_conversion
             .iter()
@@ -393,6 +394,10 @@ impl<'a> CppCodeGenerator<'a> {
             .collect();
         let mut arg_list = arg_list?.into_iter();
         let receiver = if is_a_method { arg_list.next() } else { None };
+        let placement_new_param = match &details.payload {
+            CppFunctionBody::Constructor => Some(arg_list.next().unwrap()),
+            _ => None
+        };
         if matches!(&details.payload, CppFunctionBody::ConstructSuperclass(_)) {
             arg_list.next();
         }
@@ -404,7 +409,11 @@ impl<'a> CppCodeGenerator<'a> {
             arg_list.join(", ")
         };
         let (mut underlying_function_call, field_assignments) = match &details.payload {
-            CppFunctionBody::Constructor => (arg_list, "".to_string()),
+            CppFunctionBody::Constructor => (format!("new (&{}) {}({})",
+                placement_new_param.unwrap(),
+                "ThingyType", // TODO!!
+                arg_list
+        ), "".to_string()),
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
                 Some(receiver) => (
                     format!("{}.{}({})", receiver, id.to_string(), arg_list),

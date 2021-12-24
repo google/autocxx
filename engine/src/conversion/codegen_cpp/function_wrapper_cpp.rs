@@ -56,7 +56,7 @@ impl TypeConversionPolicy {
         use_rvo: bool,
     ) -> Result<String, ConvertError> {
         Ok(match self.cpp_conversion {
-            CppConversionType::None => {
+            CppConversionType::None | CppConversionType::PlacementNew => {
                 if type_lacks_copy_constructor(&self.unwrapped_type) && !use_rvo {
                     format!("std::move({})", var_name)
                 } else {
@@ -68,10 +68,6 @@ impl TypeConversionPolicy {
                 "std::make_unique<{}>({})",
                 self.unconverted_type(cpp_name_map)?,
                 var_name
-            ),
-            CppConversionType::PlacementNew => format!("new (&arg0) {}({})",
-                self.unconverted_type(cpp_name_map)?,
-                var_name,
             ),
         })
     }
