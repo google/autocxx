@@ -1063,7 +1063,7 @@ impl<'a> RsCodeGenerator<'a> {
         let path = tyname.get_bindgen_path_idents();
         Item::Struct(parse_quote! {
             #[repr(transparent)]
-            struct #maybe_uninit_name<'a>(std::pin::Pin<&'a mut std::mem::MaybeUninit<#(#path)::*>>);
+            struct #maybe_uninit_name(std::mem::MaybeUninit<#(#path)::*>);
         })
     }
 

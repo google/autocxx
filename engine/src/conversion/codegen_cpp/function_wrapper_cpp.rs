@@ -69,7 +69,7 @@ impl TypeConversionPolicy {
                 self.unconverted_type(cpp_name_map)?,
                 var_name
             ),
-            CppConversionType::PlacementNew => format!("new (autocxx_gen_this) {}({})",
+            CppConversionType::PlacementNew => format!("new (&arg0) {}({})",
                 self.unconverted_type(cpp_name_map)?,
                 var_name,
             ),

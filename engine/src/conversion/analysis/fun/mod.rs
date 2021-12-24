@@ -525,6 +525,14 @@ impl<'a> FnAnalyzer<'a> {
                     // TODO
                     //params = params.into_iter().skip(1).collect();
                     //param_details.remove(0);
+                    let maybeuninit = make_ident(format!("{}_MaybeUninit", type_ident.to_string()));
+                    let maybeuninit: Type = parse_quote! {
+                        std::pin::Pin<&mut #maybeuninit>
+                    };
+                    params = std::iter::once(parse_quote! {
+                        arg0: #maybeuninit
+                    }).chain(params.into_iter().skip(1)).collect();
+                    param_details[0].conversion = TypeConversionPolicy::placement_new(maybeuninit);
                     MethodKind::Constructor
                 } else if is_static_method {
                     MethodKind::Static
