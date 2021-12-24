@@ -852,7 +852,7 @@ impl<'a> RsCodeGenerator<'a> {
                     extern_rust_mod_items: Vec::new(),
                 }
             }
-             | TypeKind::Abstract => {
+            TypeKind::Abstract => {
                 bindgen_mod_items.push(Item::Use(parse_quote! { pub use cxxbridge::#id; }));
                 let doc_attr = orig_item.map(|maybe_item| maybe_item.1).flatten();
                 RsCodegenResult {

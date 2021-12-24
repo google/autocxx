@@ -312,7 +312,7 @@ impl IncludeCppEngine {
                     .allowlist_var(&a);
             }
         }
-        
+
         // TODO un-opaque things based on generate_pod
         builder = builder.opaque_type(".*");
 

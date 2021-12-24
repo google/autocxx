@@ -40,9 +40,15 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct) {
     // Rustc can use least-significant bits of the reference for other storage.
     log::info!("Before: {}", s.to_token_stream());
 
-    let attrs = s.attrs
+    let attrs = s
+        .attrs
         .iter()
-        .filter(|a| a.path.get_ident().iter().any(|p| *p == "repr" || *p == "doc"))
+        .filter(|a| {
+            a.path
+                .get_ident()
+                .iter()
+                .any(|p| *p == "repr" || *p == "doc")
+        })
         .cloned();
     s.attrs = attrs.collect();
     // Now fill in fields. Usually, we just want a single field
@@ -67,7 +73,11 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct) {
     // See cxx's opaque::Opaque for rationale for this type... in
     // short, it's to avoid being Send/Sync.
     let bindgen_opaque_blob = if let syn::Fields::Named(fieldlist) = &s.fields {
-        fieldlist.named.iter().filter(|f| f.ident.as_ref().unwrap().to_string() == "_bindgen_opaque_blob").next()
+        fieldlist
+            .named
+            .iter()
+            .filter(|f| f.ident.as_ref().unwrap().to_string() == "_bindgen_opaque_blob")
+            .next()
     } else {
         None
     };
