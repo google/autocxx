@@ -169,12 +169,16 @@ impl QualifiedName {
     }
 
     pub(crate) fn get_bindgen_path_idents(&self) -> Vec<Ident> {
+        self.get_bindgen_mod_idents()
+            .chain(std::iter::once(self.get_final_ident()))
+            .collect()
+    }
+
+    pub(crate) fn get_bindgen_mod_idents(&self) -> impl Iterator<Item=Ident> + '_ {
         ["bindgen", "root"]
             .iter()
             .map(make_ident)
             .chain(self.ns_segment_iter().map(make_ident))
-            .chain(std::iter::once(self.get_final_ident()))
-            .collect()
     }
 
     /// Output the fully-qualified C++ name of this type.
