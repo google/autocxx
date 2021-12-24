@@ -32,6 +32,7 @@ impl TypeConversionPolicy {
                 }
             }
             RustConversionType::FromStr => parse_quote! { impl ToCppString },
+            RustConversionType::ToMoveItNew => self.converted_rust_type(), // TODO
         }
     }
 
@@ -45,6 +46,7 @@ impl TypeConversionPolicy {
                     Box::new(#holder_type(#var))
                 }
             }
+            RustConversionType::ToMoveItNew => quote! { #var }, // TODO
         }
     }
 }

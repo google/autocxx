@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{
-    conversion::api::SubclassName,
+    conversion::{api::SubclassName, analysis::type_converter::TypeConversionContext},
     types::{Namespace, QualifiedName},
 };
 use syn::{parse_quote, Ident, Type};
@@ -23,6 +23,7 @@ pub(crate) enum CppConversionType {
     None,
     FromUniquePtrToValue,
     FromValueToUniquePtr,
+    PlacementNew,
 }
 
 impl CppConversionType {
@@ -31,6 +32,7 @@ impl CppConversionType {
             CppConversionType::None => CppConversionType::None,
             CppConversionType::FromUniquePtrToValue => CppConversionType::FromValueToUniquePtr,
             CppConversionType::FromValueToUniquePtr => CppConversionType::FromUniquePtrToValue,
+            CppConversionType::PlacementNew => panic!("asked for inverse of something nonsensical"),
         }
     }
 }
@@ -40,6 +42,7 @@ pub(crate) enum RustConversionType {
     None,
     FromStr,
     ToBoxedUpHolder(SubclassName),
+    ToMoveItNew,
 }
 
 /// A policy for converting types. Conversion may occur on both the Rust and
@@ -66,6 +69,14 @@ impl TypeConversionPolicy {
             unwrapped_type: ty,
             cpp_conversion: CppConversionType::None,
             rust_conversion: RustConversionType::None,
+        }
+    }
+
+    pub(crate) fn placement_new(ty: Type) -> Self {
+        TypeConversionPolicy {
+            unwrapped_type: ty,
+            cpp_conversion: CppConversionType::PlacementNew,
+            rust_conversion: RustConversionType::ToMoveItNew,
         }
     }
 

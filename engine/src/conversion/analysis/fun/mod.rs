@@ -520,10 +520,11 @@ impl<'a> FnAnalyzer<'a> {
                     // fn make_unique(...args) -> UniquePtr<Type>
                     // If there are multiple constructors, bindgen generates
                     // new, new1, new2 etc. and we'll keep those suffixes.
-                    rust_name = format!("make_unique{}", constructor_suffix);
-                    // Strip off the 'this' arg.
-                    params = params.into_iter().skip(1).collect();
-                    param_details.remove(0);
+                    rust_name = format!("new{}", constructor_suffix);
+                    // Convert the 'this' argument into a maybeuninit
+                    // TODO
+                    //params = params.into_iter().skip(1).collect();
+                    //param_details.remove(0);
                     MethodKind::Constructor
                 } else if is_static_method {
                     MethodKind::Static
@@ -632,23 +633,10 @@ impl<'a> FnAnalyzer<'a> {
 
         // Analyze the return type, just as we previously did for the
         // parameters.
-        let mut return_analysis = if let FnKind::Method(ref self_ty, MethodKind::Constructor) = kind
-        {
-            let constructed_type = self_ty.to_type_path();
-            ReturnTypeAnalysis {
-                rt: parse_quote! {
-                    -> #constructed_type
-                },
-                conversion: Some(TypeConversionPolicy::new_to_unique_ptr(parse_quote! {
-                    #constructed_type
-                })),
-                was_reference: false,
-                deps: std::iter::once(self_ty).cloned().collect(),
-            }
-        } else {
+        let mut return_analysis = 
             self.convert_return_type(&fun.output, ns, fun.return_type_is_reference)
                 .map_err(contextualize_error)?
-        };
+        ;
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
 
