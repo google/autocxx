@@ -5298,6 +5298,18 @@ fn test_ignore_move_constructor() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/712
+fn test_ignore_function_with_rvalue_ref() {
+    let hdr = indoc! {"
+        #include <string>
+
+        void moveme(std::string &&);
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["moveme"], &[]);
+}
+
+#[test]
 fn test_overloaded_ignored_function() {
     // When overloaded functions are ignored during import, the placeholder
     // functions generated for them should have unique names, just as they
