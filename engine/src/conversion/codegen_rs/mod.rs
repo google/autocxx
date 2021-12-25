@@ -51,7 +51,7 @@ use self::{
 
 use super::{
     analysis::fun::{FnAnalysis, FnKind},
-    api::RustSubclassFnDetails,
+    api::{Layout, RustSubclassFnDetails},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
@@ -519,12 +519,14 @@ impl<'a> RsCodeGenerator<'a> {
                 details, analysis, ..
             } => {
                 let doc_attr = get_doc_attr(&details.item.attrs);
+                let layout = details.layout.clone();
                 self.generate_type(
                     &name,
                     id,
                     analysis.kind,
                     || Some((Item::Struct(details.item), doc_attr)),
                     associated_methods,
+                    layout,
                 )
             }
             Api::Enum { item, .. } => {
@@ -535,11 +537,17 @@ impl<'a> RsCodeGenerator<'a> {
                     TypeKind::Pod,
                     || Some((Item::Enum(item), doc_attr)),
                     associated_methods,
+                    None,
                 )
             }
-            Api::ForwardDeclaration { .. } | Api::ConcreteType { .. } => {
-                self.generate_type(&name, id, TypeKind::Abstract, || None, associated_methods)
-            }
+            Api::ForwardDeclaration { .. } | Api::ConcreteType { .. } => self.generate_type(
+                &name,
+                id,
+                TypeKind::Abstract,
+                || None,
+                associated_methods,
+                None,
+            ),
             Api::CType { .. } => RsCodegenResult {
                 global_items: Vec::new(),
                 impl_entry: None,
@@ -812,6 +820,7 @@ impl<'a> RsCodeGenerator<'a> {
         type_kind: TypeKind,
         item_creator: F,
         associated_methods: &HashMap<QualifiedName, Vec<SuperclassMethod>>,
+        layout: Option<Layout>,
     ) -> RsCodegenResult
     where
         F: FnOnce() -> Option<(Item, Option<Attribute>)>,
@@ -825,19 +834,28 @@ impl<'a> RsCodeGenerator<'a> {
             associated_methods.get(name),
         );
         let orig_item = item_creator();
+        // We have a choice here to either:
+        // a) tell cxx to generate an opaque type using 'type A;'
+        // b) generate a concrete type definition, e.g. by using bindgen's
+        //    or doing our own, and then telling cxx 'type A = bindgen::A';'
         match type_kind {
-            TypeKind::Pod | TypeKind::NonPodNested => {
+            TypeKind::Pod | TypeKind::NonPod => {
+                // Feed cxx "type T = root::bindgen::T"
+                // For non-POD types, there might be the option of simply giving
+                // cxx a "type T;" as we do for abstract types below. There's
+                // two reasons we don't:
+                // a) we want to specify size and alignment for the sake of
+                //    moveit;
+                // b) for nested types such as 'A::B', there is no combination
+                //    of cxx-acceptable attributes which will inform cxx that
+                //    A is a class rather than a namespace.
                 let mut item = orig_item
                     .expect("Instantiable types must provide instance")
                     .0;
-                if matches!(type_kind, TypeKind::NonPodNested) {
-                    // We have to use 'type A = super::bindgen::A::B'
-                    // because if we use simply 'type A', there is no combination
-                    // of cxx-acceptable attributes which will inform cxx that
-                    // A is a class rather than a namespace.
+                if matches!(type_kind, TypeKind::NonPod) {
                     if let Item::Struct(ref mut s) = item {
                         // Retain generics and doc attrs.
-                        make_non_pod(s);
+                        make_non_pod(s, layout);
                     } else {
                         // enum
                         item = Item::Struct(new_non_pod_struct(id.clone()));
@@ -854,7 +872,10 @@ impl<'a> RsCodeGenerator<'a> {
                     extern_rust_mod_items: Vec::new(),
                 }
             }
-            TypeKind::NonPod | TypeKind::Abstract => {
+            TypeKind::Abstract => {
+                // Feed cxx "type T;"
+                // We MUST do this because otherwise cxx assumes this can be
+                // instantiated using UniquePtr etc.
                 bindgen_mod_items.push(Item::Use(parse_quote! { pub use cxxbridge::#id; }));
                 let doc_attr = orig_item.map(|maybe_item| maybe_item.1).flatten();
                 RsCodegenResult {

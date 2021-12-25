@@ -18,7 +18,7 @@ use crate::RebuildDependencyRecorder;
 use autocxx_bindgen::callbacks::ParseCallbacks;
 
 #[derive(Debug)]
-pub(crate) struct AutocxxParseCallbacks(pub Box<dyn RebuildDependencyRecorder>);
+pub(crate) struct AutocxxParseCallbacks(pub(crate) Box<dyn RebuildDependencyRecorder>);
 
 impl UnwindSafe for AutocxxParseCallbacks {}
 

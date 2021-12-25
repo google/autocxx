@@ -18,6 +18,7 @@ use crate::test_utils::{
     CppMatcher, EnableAutodiscover, NoSystemHeadersChecker, SetSuppressSystemHeaders,
 };
 use indoc::indoc;
+use itertools::Itertools;
 use proc_macro2::Span;
 use quote::quote;
 use syn::Token;
@@ -1116,6 +1117,29 @@ fn test_pod_method() {
         assert_eq!(a.get_bob(), 12);
     };
     run_test(cxx, hdr, rs, &[], &["Bob"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/723
+fn test_constructors_for_specialized_types() {
+    // bindgen sometimes makes such opaque types as type Bob = u32[2];
+    let hdr = indoc! {"
+        #include <cstdint>
+        template<typename T>
+        class A {
+            uint32_t foo() { return 12; };
+        private:
+            T a[2];
+        };
+
+        typedef A<uint32_t> B;
+        typedef B C;
+    "};
+    let rs = quote! {
+        let a = ffi::C::make_unique();
+        assert_eq!(a.foo(), 12);
+    };
+    run_test("", hdr, rs, &["C"], &[]);
 }
 
 #[test]
@@ -7437,6 +7461,83 @@ fn test_class_having_private_method() {
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &[], &["A"]);
+}
+
+fn size_and_alignment_test(pod: bool) {
+    static TYPES: [(&'static str, &'static str); 6] = [
+        ("A", "struct A { uint8_t a; };"),
+        ("B", "struct B { uint32_t a; };"),
+        ("C", "struct C { uint64_t a; };"),
+        ("D", "enum D { Z, X };"),
+        ("E", "struct E { uint8_t a; uint32_t b; };"),
+        ("F", "struct F { uint32_t a; uint8_t b; };"),
+    ];
+    let type_definitions = TYPES.iter().map(|(_, def)| *def).join("\n");
+    let function_definitions = TYPES.iter().map(|(name, _)| format!("inline size_t get_sizeof_{}() {{ return sizeof({}); }}\ninline size_t get_alignof_{}() {{ return alignof({}); }}\n",
+    name, name, name, name)).join("\n");
+    let hdr = format!(
+        indoc! {"
+        #include <cstdint>
+        #include <cstddef>
+        {}
+        {}
+    "},
+        type_definitions, function_definitions
+    );
+    let allowlist_fns: Vec<String> = TYPES
+        .iter()
+        .flat_map(|(name, _)| {
+            [
+                format!("get_sizeof_{}", name),
+                format!("get_alignof_{}", name),
+            ]
+            .to_vec()
+            .into_iter()
+        })
+        .collect_vec();
+    let allowlist_types: Vec<String> = TYPES.iter().map(|(name, _)| name.to_string()).collect_vec();
+    let allowlist_both = allowlist_types
+        .iter()
+        .cloned()
+        .chain(allowlist_fns.iter().cloned())
+        .collect_vec();
+    let allowlist_types: Vec<&str> = allowlist_types.iter().map(AsRef::as_ref).collect_vec();
+    let allowlist_fns: Vec<&str> = allowlist_fns.iter().map(AsRef::as_ref).collect_vec();
+    let allowlist_both: Vec<&str> = allowlist_both.iter().map(AsRef::as_ref).collect_vec();
+    let rs = TYPES.iter().fold(
+        quote! {
+            use std::convert::TryInto;
+        },
+        |mut accumulator, (name, _)| {
+            let get_align_symbol =
+                proc_macro2::Ident::new(&format!("get_alignof_{}", name), Span::call_site());
+            let get_size_symbol =
+                proc_macro2::Ident::new(&format!("get_sizeof_{}", name), Span::call_site());
+            let type_symbol = proc_macro2::Ident::new(name, Span::call_site());
+            accumulator.extend(quote! {
+                let c_size: usize = ffi::#get_size_symbol().0.try_into().unwrap();
+                let c_align: usize = ffi::#get_align_symbol().0.try_into().unwrap();
+                assert_eq!(std::mem::size_of::<ffi::#type_symbol>(), c_size);
+                assert_eq!(std::mem::align_of::<ffi::#type_symbol>(), c_align);
+            });
+            accumulator
+        },
+    );
+    if pod {
+        run_test("", &hdr, rs.clone(), &allowlist_fns, &allowlist_types);
+    } else {
+        run_test("", &hdr, rs, &allowlist_both, &[]);
+    }
+}
+
+#[test]
+fn test_sizes_and_alignment_nonpod() {
+    size_and_alignment_test(false)
+}
+
+#[test]
+fn test_sizes_and_alignment_pod() {
+    size_and_alignment_test(true)
 }
 
 // Yet to test:

@@ -140,8 +140,6 @@ fn analyze_struct(
         )
         .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))?;
         TypeKind::Pod
-    } else if name.is_nested_struct_or_class() {
-        TypeKind::NonPodNested
     } else {
         TypeKind::NonPod
     };

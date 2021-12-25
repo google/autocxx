@@ -17,7 +17,8 @@ use std::collections::HashSet;
 use crate::{
     conversion::{
         api::{
-            Api, ApiName, CppVisibility, StructDetails, SubclassName, TypedefKind, UnanalyzedApi,
+            Api, ApiName, CppVisibility, Layout, StructDetails, SubclassName, TypedefKind,
+            UnanalyzedApi,
         },
         ConvertError,
     },
@@ -99,6 +100,15 @@ pub(super) fn get_cpp_visibility(attrs: &[Attribute]) -> CppVisibility {
     } else {
         CppVisibility::Public
     }
+}
+
+fn parse_layout(attrs: &[Attribute]) -> Option<Layout> {
+    for a in attrs {
+        if a.path.is_ident("bindgen_layout") {
+            return Some(a.parse_args().unwrap());
+        }
+    }
+    None
 }
 
 impl<'a> ParseBindgen<'a> {
@@ -216,6 +226,7 @@ impl<'a> ParseBindgen<'a> {
                         name,
                         details: Box::new(StructDetails {
                             vis: get_cpp_visibility(&s.attrs),
+                            layout: parse_layout(&s.attrs),
                             item: s,
                         }),
                         analysis: (),

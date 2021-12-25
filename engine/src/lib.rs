@@ -384,6 +384,7 @@ impl IncludeCppEngine {
         let header_contents = self.build_header();
         self.dump_header_if_so_configured(&header_contents, &inc_dirs, extra_clang_args);
         let header_and_prelude = format!("{}\n\n{}", known_types().get_prelude(), header_contents);
+        log::info!("Header and prelude for bindgen:\n{}", header_and_prelude);
         builder = builder.header_contents("example.hpp", &header_and_prelude);
 
         let bindings = builder.generate().map_err(Error::Bindgen)?;

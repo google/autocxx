@@ -17,8 +17,9 @@ use std::collections::HashSet;
 use crate::types::{make_ident, Namespace, QualifiedName};
 use autocxx_parser::RustPath;
 use syn::{
-    punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ImplItem, ItemConst, ItemEnum,
-    ItemStruct, ItemType, ItemUse, ReturnType, Signature, Type, Visibility,
+    parse::Parse, punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ImplItem,
+    ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt, ReturnType, Signature,
+    Type, Visibility,
 };
 
 use super::{
@@ -29,17 +30,13 @@ use super::{
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TypeKind {
-    Pod,          // trivial. Can be moved and copied in Rust.
-    NonPod,       // has destructor or non-trivial move constructors. Can only hold by UniquePtr
-    NonPodNested, // same, but nested inside another C++ struct/class.
-    // We have to do different codegen here because cxx can't cope with
-    // nested classes declared as 'type X;' so we instead have to do
-    // 'type X = super::bindgen::X;'
+    Pod,    // trivial. Can be moved and copied in Rust.
+    NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
     Abstract, // has pure virtual members - can't even generate UniquePtr.
-              // It's possible that the type itself isn't pure virtual, but it inherits from
-              // some other type which is pure virtual. Alternatively, maybe we just don't
-              // know if the base class is pure virtual because it wasn't on the allowlist,
-              // in which case we'll err on the side of caution.
+            // It's possible that the type itself isn't pure virtual, but it inherits from
+            // some other type which is pure virtual. Alternatively, maybe we just don't
+            // know if the base class is pure virtual because it wasn't on the allowlist,
+            // in which case we'll err on the side of caution.
 }
 
 /// An entry which needs to go into an `impl` block for a given type.
@@ -60,6 +57,33 @@ pub(crate) enum CppVisibility {
 pub(crate) struct StructDetails {
     pub(crate) vis: CppVisibility,
     pub(crate) item: ItemStruct,
+    pub(crate) layout: Option<Layout>,
+}
+
+/// Layout of a type, equivalent to the same type in ir/layout.rs in bindgen
+#[derive(Clone)]
+pub(crate) struct Layout {
+    /// The size (in bytes) of this layout.
+    pub(crate) size: usize,
+    /// The alignment (in bytes) of this layout.
+    pub(crate) align: usize,
+    /// Whether this layout's members are packed or not.
+    pub(crate) packed: bool,
+}
+
+impl Parse for Layout {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let size: LitInt = input.parse()?;
+        input.parse::<syn::token::Comma>()?;
+        let align: LitInt = input.parse()?;
+        input.parse::<syn::token::Comma>()?;
+        let packed: LitBool = input.parse()?;
+        Ok(Layout {
+            size: size.base10_parse().unwrap(),
+            align: align.base10_parse().unwrap(),
+            packed: packed.value(),
+        })
+    }
 }
 
 /// A C++ function for which we need to generate bindings, but haven't
@@ -136,13 +160,6 @@ impl ApiName {
 
     pub(crate) fn new_in_root_namespace(id: Ident) -> Self {
         Self::new(&Namespace::new(), id)
-    }
-
-    pub(crate) fn is_nested_struct_or_class(&self) -> bool {
-        self.cpp_name
-            .as_ref()
-            .map(|n| n.contains("::"))
-            .unwrap_or_default()
     }
 
     pub(crate) fn cpp_name(&self) -> String {
