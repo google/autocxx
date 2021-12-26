@@ -1049,6 +1049,29 @@ fn test_enum_no_funcs() {
     run_test(cxx, hdr, rs, &["Bob"], &[]);
 }
 
+#[test]
+fn test_enum_with_funcs_as_pod() {
+    let cxx = indoc! {"
+        Bob give_bob() {
+            return Bob::BOB_VALUE_2;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        enum Bob {
+            BOB_VALUE_1,
+            BOB_VALUE_2,
+        };
+        Bob give_bob();
+    "};
+    let rs = quote! {
+        let a = ffi::Bob::BOB_VALUE_2;
+        let b = ffi::give_bob();
+        assert!(a == b);
+    };
+    run_test(cxx, hdr, rs, &["give_bob"], &["Bob"]);
+}
+
 #[test] // works, but causes compile warnings
 fn test_take_pod_class_by_value() {
     let cxx = indoc! {"
