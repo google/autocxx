@@ -27,6 +27,7 @@ impl RustPath {
         Self(vec![id])
     }
 
+    #[must_use]
     pub fn append(&self, id: Ident) -> Self {
         Self(self.0.iter().cloned().chain(std::iter::once(id)).collect())
     }

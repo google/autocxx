@@ -123,7 +123,7 @@ fn analyze_struct(
     if details.vis != CppVisibility::Public {
         return Err(ConvertErrorWithContext(
             ConvertError::NonPublicNestedType,
-            Some(ErrorContext::Item(id.clone())),
+            Some(ErrorContext::Item(id)),
         ));
     }
     super::remove_bindgen_attrs(&mut details.item.attrs, id.clone())?;
@@ -140,8 +140,6 @@ fn analyze_struct(
         )
         .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))?;
         TypeKind::Pod
-    } else if name.is_nested_struct_or_class() {
-        TypeKind::NonPodNested
     } else {
         TypeKind::NonPod
     };

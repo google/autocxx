@@ -239,8 +239,7 @@ impl<'a> CppCodeGenerator<'a> {
         let cpp_headers: HashSet<_> = self
             .additional_functions
             .iter()
-            .map(|x| filter(x).iter())
-            .flatten()
+            .flat_map(|x| filter(x).iter())
             .filter(|x| !self.suppress_system_headers || !x.is_system())
             .collect(); // uniqify
         cpp_headers.iter().map(|x| x.include_stmt()).join("\n")
@@ -253,8 +252,7 @@ impl<'a> CppCodeGenerator<'a> {
         let mut s = self
             .additional_functions
             .iter()
-            .map(field_access)
-            .flatten()
+            .flat_map(field_access)
             .join("\n");
         s.push('\n');
         s
@@ -406,10 +404,7 @@ impl<'a> CppCodeGenerator<'a> {
         let (mut underlying_function_call, field_assignments) = match &details.payload {
             CppFunctionBody::Constructor => (arg_list, "".to_string()),
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
-                Some(receiver) => (
-                    format!("{}.{}({})", receiver, id.to_string(), arg_list),
-                    "".to_string(),
-                ),
+                Some(receiver) => (format!("{}.{}({})", receiver, id, arg_list), "".to_string()),
                 None => {
                     let underlying_function_call = ns
                         .into_iter()
@@ -517,7 +512,7 @@ impl<'a> CppCodeGenerator<'a> {
     ) -> Result<(), ConvertError> {
         let holder = subclass.holder();
         self.additional_functions.push(AdditionalFunction {
-            type_definition: Some(format!("struct {};", holder.to_string())),
+            type_definition: Some(format!("struct {};", holder)),
             declaration: None,
             definition: None,
             headers: Vec::new(),
@@ -597,10 +592,10 @@ impl<'a> CppCodeGenerator<'a> {
             definition: Some(format!(
                 "void {}::{}() const {{\nconst_cast<{}*>(this)->really_remove_ownership();\n}}\nvoid {}::really_remove_ownership() {{\nauto new_obs = {}(std::move(obs));\nobs = std::move(new_obs);\n}}\n",
                 subclass.cpp(),
-                subclass.cpp_remove_ownership().to_string(),
+                subclass.cpp_remove_ownership(),
                 subclass.cpp(),
                 subclass.cpp(),
-                subclass.remove_ownership().to_string()
+                subclass.remove_ownership()
             )),
             declaration: None,
             headers: Vec::new(),

@@ -21,6 +21,7 @@ tempfile = "3.1"
 indoc = "1.0"
 log = "0.4"
 cxx = "1.0.54"
+itertools = "0.10"
 
 [dependencies.syn]
 version = "1.0.39"
