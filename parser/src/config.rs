@@ -416,13 +416,13 @@ impl IncludeCppConfig {
     pub fn is_subclass_holder(&self, id: &str) -> bool {
         self.subclasses
             .iter()
-            .any(|sc| format!("{}Holder", sc.subclass.to_string()) == id)
+            .any(|sc| format!("{}Holder", sc.subclass) == id)
     }
 
     fn is_subclass_cpp(&self, id: &str) -> bool {
         self.subclasses
             .iter()
-            .any(|sc| format!("{}Cpp", sc.subclass.to_string()) == id)
+            .any(|sc| format!("{}Cpp", sc.subclass) == id)
     }
 
     /// Return the filename to which generated .rs should be written.
