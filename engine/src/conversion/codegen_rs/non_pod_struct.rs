@@ -30,23 +30,42 @@ pub(crate) fn new_non_pod_struct(id: Ident) -> ItemStruct {
 }
 
 pub(crate) fn make_non_pod(s: &mut ItemStruct, layout: Option<Layout>) {
-    // Keep only doc attrs, plus add a #[repr(C,packed)].
-    // Thanks to dtolnay@ for this explanation of why the following
-    // is needed:
-    // If the real alignment of the C++ type is smaller and a reference
+    // Make an opaque struct. If we have layout information, we pass
+    // that through to Rust. We keep only doc attrs, plus add a #[repr(C)]
+    // if necessary.
+    // Constraints here (thanks to dtolnay@ for this explanation of why the
+    // following is needed:)
+    // (1) If the real alignment of the C++ type is smaller and a reference
     // is returned from C++ to Rust, mere existence of an insufficiently
     // aligned reference in Rust causes UB even if never dereferenced
     // by Rust code
     // (see https://doc.rust-lang.org/1.47.0/reference/behavior-considered-undefined.html).
     // Rustc can use least-significant bits of the reference for other storage.
-    let attrs = s
+    // (if we have layout information from bindgen we use that instead)
+    // (2) We want to ensure the type is !Unpin
+    // (3) We want to ensure it's not Send or Sync
+    //
+    // For opaque types, the Rusty opaque structure could in fact be generated
+    // by three different things:
+    // a) bindgen, using its --opaque-type command line argument or the library
+    //    equivalent;
+    // b) us (autocxx), which is what this code does
+    // c) cxx, using "type B;" in an "extern "C++"" section
+    // We never use (a) because bindgen requires an allowlist of opaque types.
+    // Furthermore, it sometimes then discards struct definitions entirely
+    // and says "type A = [u8;2];" or something else which makes our life
+    // much more difficult.
+    // We use (c) for abstract types. For everything else, we do it ourselves
+    // for maximal control. See codegen_rs/mod.rs generate_type for more notes.
+    // First work out attributes.
+    let doc_attr = s
         .attrs
         .iter()
         .filter(|a| a.path.get_ident().iter().any(|p| *p == "doc"))
         .cloned();
     let repr_attr = if let Some(layout) = &layout {
         let align = make_lit_int(layout.align);
-        Some(if layout.packed {
+        if layout.packed {
             parse_quote! {
                 #[repr(C,align(#align),packed)]
             }
@@ -54,12 +73,13 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct, layout: Option<Layout>) {
             parse_quote! {
                 #[repr(C,align(#align))]
             }
-        })
+        }
     } else {
-        None
-    }
-    .into_iter();
-    let attrs = attrs.chain(repr_attr);
+        parse_quote! {
+            #[repr(C, packed)]
+        }
+    };
+    let attrs = doc_attr.chain(std::iter::once(repr_attr));
     s.attrs = attrs.collect();
     // Now fill in fields. Usually, we just want a single field
     // but if this is a generic type we need to faff a bit.
