@@ -123,7 +123,7 @@ fn analyze_struct(
     if details.vis != CppVisibility::Public {
         return Err(ConvertErrorWithContext(
             ConvertError::NonPublicNestedType,
-            Some(ErrorContext::Item(id.clone())),
+            Some(ErrorContext::Item(id)),
         ));
     }
     super::remove_bindgen_attrs(&mut details.item.attrs, id.clone())?;

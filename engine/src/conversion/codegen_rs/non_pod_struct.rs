@@ -134,6 +134,5 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct, layout: Option<Layout>) {
 }
 
 fn make_lit_int(val: usize) -> LitInt {
-    let size = LitInt::new(&val.to_string(), Span::call_site());
-    size
+    LitInt::new(&val.to_string(), Span::call_site())
 }

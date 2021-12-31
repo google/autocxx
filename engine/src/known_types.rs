@@ -362,16 +362,12 @@ fn create_type_database() -> TypeDatabase {
         Behavior::CByValue,
         Some("std::os::raw::c_uchar".into()),
     ));
-    for (cpp_type, rust_type) in (4..7)
-        .map(|x| 2i32.pow(x))
-        .map(|x| {
-            vec![
-                (format!("uint{}_t", x), format!("u{}", x)),
-                (format!("int{}_t", x), format!("i{}", x)),
-            ]
-        })
-        .flatten()
-    {
+    for (cpp_type, rust_type) in (4..7).map(|x| 2i32.pow(x)).flat_map(|x| {
+        vec![
+            (format!("uint{}_t", x), format!("u{}", x)),
+            (format!("int{}_t", x), format!("i{}", x)),
+        ]
+    }) {
         db.insert(TypeDetails::new(
             rust_type,
             cpp_type,
@@ -389,7 +385,7 @@ fn create_type_database() -> TypeDatabase {
     ));
 
     let mut insert_ctype = |cname: &str| {
-        let concatenated_name = cname.replace(" ", "");
+        let concatenated_name = cname.replace(' ', "");
         db.insert(TypeDetails::new(
             format!("autocxx::c_{}", concatenated_name),
             cname,

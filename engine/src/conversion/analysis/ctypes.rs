@@ -27,8 +27,7 @@ use super::fun::FnPhase;
 pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnPhase>>) {
     let ctypes: HashMap<Ident, QualifiedName> = apis
         .iter()
-        .map(|api| api.deps())
-        .flatten()
+        .flat_map(|api| api.deps())
         .filter(|ty| known_types().is_ctype(ty))
         .map(|ty| (ty.get_final_ident(), ty.clone()))
         .collect();

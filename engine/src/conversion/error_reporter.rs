@@ -39,7 +39,7 @@ where
             None
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
-            eprintln!("Ignored item {}: {}", ctx.to_string(), err);
+            eprintln!("Ignored item {}: {}", ctx, err);
             apis.push(ignored_item(ns, ctx, err));
             None
         }
@@ -81,98 +81,90 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
         A::TypedefAnalysis,
     ) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext>,
 {
-    out_apis.extend(
-        &mut in_apis
-            .into_iter()
-            .map(|api| {
-                let tn = api.name().clone();
-                let result: Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext> =
-                    match api {
-                        // No changes to any of these...
-                        Api::ConcreteType {
-                            name,
-                            rs_definition,
-                            cpp_definition,
-                        } => Ok(Box::new(std::iter::once(Api::ConcreteType {
-                            name,
-                            rs_definition,
-                            cpp_definition,
-                        }))),
-                        Api::ForwardDeclaration { name } => {
-                            Ok(Box::new(std::iter::once(Api::ForwardDeclaration { name })))
-                        }
-                        Api::StringConstructor { name } => {
-                            Ok(Box::new(std::iter::once(Api::StringConstructor { name })))
-                        }
-                        Api::Const { name, const_item } => {
-                            Ok(Box::new(std::iter::once(Api::Const { name, const_item })))
-                        }
-                        Api::CType { name, typename } => {
-                            Ok(Box::new(std::iter::once(Api::CType { name, typename })))
-                        }
-                        Api::RustType { name, path } => {
-                            Ok(Box::new(std::iter::once(Api::RustType { name, path })))
-                        }
-                        Api::RustFn { name, sig, path } => {
-                            Ok(Box::new(std::iter::once(Api::RustFn { name, sig, path })))
-                        }
-                        Api::RustSubclassFn {
-                            name,
-                            subclass,
-                            details,
-                        } => Ok(Box::new(std::iter::once(Api::RustSubclassFn {
-                            name,
-                            subclass,
-                            details,
-                        }))),
-                        Api::RustSubclassConstructor {
-                            name,
-                            subclass,
-                            cpp_impl,
-                            is_trivial,
-                        } => Ok(Box::new(std::iter::once(Api::RustSubclassConstructor {
-                            name,
-                            subclass,
-                            cpp_impl,
-                            is_trivial,
-                        }))),
-                        Api::Subclass { name, superclass } => {
-                            Ok(Box::new(std::iter::once(Api::Subclass {
-                                name,
-                                superclass,
-                            })))
-                        }
-                        Api::IgnoredItem { name, err, ctx } => {
-                            Ok(Box::new(std::iter::once(Api::IgnoredItem {
-                                name,
-                                err,
-                                ctx,
-                            })))
-                        }
-                        // Apply a mapping to the following
-                        Api::Enum { name, item } => enum_conversion(name, item),
-                        Api::Typedef {
-                            name,
-                            item,
-                            old_tyname,
-                            analysis,
-                        } => typedef_conversion(name, item, old_tyname, analysis),
-                        Api::Function {
-                            name,
-                            fun,
-                            analysis,
-                            name_for_gc,
-                        } => func_conversion(name, fun, analysis, name_for_gc),
-                        Api::Struct {
-                            name,
-                            details,
-                            analysis,
-                        } => struct_conversion(name, details, analysis),
-                    };
-                api_or_error(tn, result)
-            })
-            .flatten(),
-    )
+    out_apis.extend(&mut in_apis.into_iter().flat_map(|api| {
+        let tn = api.name().clone();
+        let result: Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext> = match api {
+            // No changes to any of these...
+            Api::ConcreteType {
+                name,
+                rs_definition,
+                cpp_definition,
+            } => Ok(Box::new(std::iter::once(Api::ConcreteType {
+                name,
+                rs_definition,
+                cpp_definition,
+            }))),
+            Api::ForwardDeclaration { name } => {
+                Ok(Box::new(std::iter::once(Api::ForwardDeclaration { name })))
+            }
+            Api::StringConstructor { name } => {
+                Ok(Box::new(std::iter::once(Api::StringConstructor { name })))
+            }
+            Api::Const { name, const_item } => {
+                Ok(Box::new(std::iter::once(Api::Const { name, const_item })))
+            }
+            Api::CType { name, typename } => {
+                Ok(Box::new(std::iter::once(Api::CType { name, typename })))
+            }
+            Api::RustType { name, path } => {
+                Ok(Box::new(std::iter::once(Api::RustType { name, path })))
+            }
+            Api::RustFn { name, sig, path } => {
+                Ok(Box::new(std::iter::once(Api::RustFn { name, sig, path })))
+            }
+            Api::RustSubclassFn {
+                name,
+                subclass,
+                details,
+            } => Ok(Box::new(std::iter::once(Api::RustSubclassFn {
+                name,
+                subclass,
+                details,
+            }))),
+            Api::RustSubclassConstructor {
+                name,
+                subclass,
+                cpp_impl,
+                is_trivial,
+            } => Ok(Box::new(std::iter::once(Api::RustSubclassConstructor {
+                name,
+                subclass,
+                cpp_impl,
+                is_trivial,
+            }))),
+            Api::Subclass { name, superclass } => Ok(Box::new(std::iter::once(Api::Subclass {
+                name,
+                superclass,
+            }))),
+            Api::IgnoredItem { name, err, ctx } => {
+                Ok(Box::new(std::iter::once(Api::IgnoredItem {
+                    name,
+                    err,
+                    ctx,
+                })))
+            }
+            // Apply a mapping to the following
+            Api::Enum { name, item } => enum_conversion(name, item),
+            Api::Typedef {
+                name,
+                item,
+                old_tyname,
+                analysis,
+            } => typedef_conversion(name, item, old_tyname, analysis),
+            Api::Function {
+                name,
+                fun,
+                analysis,
+                name_for_gc,
+            } => func_conversion(name, fun, analysis, name_for_gc),
+            Api::Struct {
+                name,
+                details,
+                analysis,
+            } => struct_conversion(name, details, analysis),
+        };
+        api_or_error(tn, result)
+    }))
 }
 
 fn api_or_error<T: AnalysisPhase + 'static>(
@@ -182,11 +174,11 @@ fn api_or_error<T: AnalysisPhase + 'static>(
     match api_or_error {
         Ok(opt) => opt,
         Err(ConvertErrorWithContext(err, None)) => {
-            eprintln!("Ignored {}: {}", name.to_string(), err);
+            eprintln!("Ignored {}: {}", name, err);
             Box::new(std::iter::empty())
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
-            eprintln!("Ignored {}: {}", name.to_string(), err);
+            eprintln!("Ignored {}: {}", name, err);
             Box::new(std::iter::once(ignored_item(
                 name.get_namespace(),
                 ctx,
@@ -209,18 +201,13 @@ pub(crate) fn convert_item_apis<F, A, B: 'static>(
     A: AnalysisPhase,
     B: AnalysisPhase,
 {
-    out_apis.extend(
-        in_apis
-            .into_iter()
-            .map(|api| {
-                let tn = api.name().clone();
-                let result = fun(api).map_err(|e| {
-                    ConvertErrorWithContext(e, Some(ErrorContext::Item(tn.get_final_ident())))
-                });
-                api_or_error(tn, result)
-            })
-            .flatten(),
-    )
+    out_apis.extend(in_apis.into_iter().flat_map(|api| {
+        let tn = api.name().clone();
+        let result = fun(api).map_err(|e| {
+            ConvertErrorWithContext(e, Some(ErrorContext::Item(tn.get_final_ident())))
+        });
+        api_or_error(tn, result)
+    }))
 }
 
 fn ignored_item<A: AnalysisPhase>(ns: &Namespace, ctx: ErrorContext, err: ConvertError) -> Api<A> {

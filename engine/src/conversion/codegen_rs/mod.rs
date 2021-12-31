@@ -316,10 +316,7 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn build_include_foreign_items(&self, has_additional_cpp_needs: bool) -> Vec<ForeignItem> {
         let extra_inclusion = if has_additional_cpp_needs {
-            Some(format!(
-                "autocxxgen_{}.h",
-                self.config.get_mod_name().to_string()
-            ))
+            Some(format!("autocxxgen_{}.h", self.config.get_mod_name()))
         } else {
             None
         };
@@ -800,17 +797,13 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn args_from_sig(params: &Punctuated<FnArg, Comma>) -> impl Iterator<Item = Expr> + '_ {
-        params
-            .iter()
-            .skip(1)
-            .map(|fnarg| match fnarg {
-                syn::FnArg::Receiver(_) => None,
-                syn::FnArg::Typed(fnarg) => match &*fnarg.pat {
-                    syn::Pat::Ident(id) => Some(Self::id_to_expr(&id.ident)),
-                    _ => None,
-                },
-            })
-            .flatten()
+        params.iter().skip(1).filter_map(|fnarg| match fnarg {
+            syn::FnArg::Receiver(_) => None,
+            syn::FnArg::Typed(fnarg) => match &*fnarg.pat {
+                syn::Pat::Ident(id) => Some(Self::id_to_expr(&id.ident)),
+                _ => None,
+            },
+        })
     }
 
     fn generate_type<F>(
@@ -877,7 +870,7 @@ impl<'a> RsCodeGenerator<'a> {
                 // We MUST do this because otherwise cxx assumes this can be
                 // instantiated using UniquePtr etc.
                 bindgen_mod_items.push(Item::Use(parse_quote! { pub use cxxbridge::#id; }));
-                let doc_attr = orig_item.map(|maybe_item| maybe_item.1).flatten();
+                let doc_attr = orig_item.and_then(|maybe_item| maybe_item.1);
                 RsCodegenResult {
                     extern_c_mod_items: vec![self.generate_cxxbridge_type(name, false, doc_attr)],
                     extern_rust_mod_items: Vec::new(),
@@ -1000,11 +993,7 @@ impl<'a> RsCodeGenerator<'a> {
             }
             ErrorContext::Method { self_ty, method } => {
                 // If the type can't be represented (e.g. u8) this would get fiddly.
-                let id = make_ident(format!(
-                    "{}_method_{}",
-                    self_ty.to_string(),
-                    method.to_string()
-                ));
+                let id = make_ident(format!("{}_method_{}", self_ty, method));
                 (
                     None,
                     Some(Use::Custom(Box::new(parse_quote! {
@@ -1149,7 +1138,7 @@ fn get_unsafe_token(requires_unsafe: bool) -> TokenStream {
 fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
     let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
-        .map(|api| match api {
+        .filter_map(|api| match api {
             Api::RustSubclassConstructor {
                 subclass,
                 is_trivial,
@@ -1157,7 +1146,6 @@ fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<Quali
             } => Some((&subclass.0.name, is_trivial)),
             _ => None,
         })
-        .flatten()
         .partition(|(_, trivial)| **trivial);
     let simple_constructors: HashSet<_> =
         simple_constructors.into_iter().map(|(qn, _)| qn).collect();

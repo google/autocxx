@@ -93,9 +93,9 @@ pub(super) fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
 }
 
 pub(super) fn get_cpp_visibility(attrs: &[Attribute]) -> CppVisibility {
-    if has_attr(&attrs, "bindgen_visibility_private") {
+    if has_attr(attrs, "bindgen_visibility_private") {
         CppVisibility::Private
-    } else if has_attr(&attrs, "bindgen_visibility_protected") {
+    } else if has_attr(attrs, "bindgen_visibility_protected") {
         CppVisibility::Protected
     } else {
         CppVisibility::Public

@@ -433,8 +433,7 @@ impl<'a> FnAnalyzer<'a> {
 
         let params_deps: HashSet<_> = param_details
             .iter()
-            .map(|p| p.deps.iter().cloned())
-            .flatten()
+            .flat_map(|p| p.deps.iter().cloned())
             .collect();
         let self_ty = param_details
             .iter()

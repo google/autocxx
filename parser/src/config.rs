@@ -329,18 +329,13 @@ impl IncludeCppConfig {
                     .chain(self.pod_requests.iter())
                     .cloned()
                     .chain(self.active_utilities())
-                    .chain(
-                        self.subclasses
-                            .iter()
-                            .map(|sc| {
-                                [
-                                    format!("{}Cpp", sc.subclass),
-                                    sc.subclass.to_string(), // TODO may not be necessary
-                                    sc.superclass.clone(),
-                                ]
-                            })
-                            .flatten(),
-                    ),
+                    .chain(self.subclasses.iter().flat_map(|sc| {
+                        [
+                            format!("{}Cpp", sc.subclass),
+                            sc.subclass.to_string(), // TODO may not be necessary
+                            sc.superclass.clone(),
+                        ]
+                    })),
             )),
             Allowlist::Unspecified(_) => unreachable!(),
         }
