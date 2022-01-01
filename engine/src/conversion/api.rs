@@ -106,6 +106,9 @@ pub(crate) struct FuncToConvert {
     pub(crate) original_name: Option<String>,
     pub(crate) virtual_this_type: Option<QualifiedName>,
     pub(crate) self_ty: Option<QualifiedName>,
+    /// Whether we actually should make this into a make_unique function
+    /// instead of, by default, a plain constructor ("new")
+    pub(crate) synthesize_make_unique: bool,
 }
 
 /// Layers of analysis which may be applied to decorate each API.

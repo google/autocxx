@@ -68,6 +68,7 @@ pub(super) fn create_subclass_fn_wrapper(
         original_name: None,
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
+        synthesize_make_unique: fun.synthesize_make_unique,
     })
 }
 
@@ -177,6 +178,7 @@ pub(super) fn create_subclass_constructor_wrapper(
         unused_template_param: fun.unused_template_param,
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
+        synthesize_make_unique: fun.synthesize_make_unique,
     });
     let mut subclass_constructor_name = ApiName::new_in_root_namespace(subclass_constructor_name);
     subclass_constructor_name.cpp_name = Some(sub.cpp().get_final_item().to_string());
@@ -201,11 +203,11 @@ pub(super) fn create_subclass_constructor(
             .map(|aa| aa.conversion.clone()),
     );
     let cpp_impl = CppFunction {
-        payload: CppFunctionBody::ConstructSuperclass(superclass.to_cpp_name()),
+        payload: CppFunctionBody::MakeUniqueSuperclass(superclass.to_cpp_name()),
         wrapper_function_name,
         return_conversion: None,
         argument_conversion: args.collect(),
-        kind: CppFunctionKind::Constructor,
+        kind: CppFunctionKind::SynthesizedConstructor,
         pass_obs_field: false,
         qualification: Some(cpp.clone()),
         original_cpp_name: cpp.to_cpp_name(),

@@ -144,8 +144,9 @@ impl TypeConversionPolicy {
 pub(crate) enum CppFunctionBody {
     FunctionCall(Namespace, Ident),
     StaticMethodCall(Namespace, Ident, Ident),
-    Constructor,
-    ConstructSuperclass(String),
+    PlacementNew(Namespace, Ident),
+    MakeUnique,
+    MakeUniqueSuperclass(String),
 }
 
 #[derive(Clone)]
@@ -153,8 +154,9 @@ pub(crate) enum CppFunctionBody {
 pub(crate) enum CppFunctionKind {
     Function,
     Method,
-    ConstMethod,
     Constructor,
+    ConstMethod,
+    SynthesizedConstructor,
 }
 
 #[derive(Clone)]

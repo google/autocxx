@@ -775,3 +775,13 @@ pub trait PinMut<T>: AsRef<T> {
     /// Return a pinned mutable reference to a type.
     fn pin_mut(&mut self) -> std::pin::Pin<&mut T>;
 }
+
+/// Imports which you're likely to want to use.
+pub mod prelude {
+    pub use crate::include_cpp;
+    pub use moveit::moveit;
+    pub use moveit::new::New;
+}
+
+/// Re-export moveit for ease of consumers.
+pub use moveit;

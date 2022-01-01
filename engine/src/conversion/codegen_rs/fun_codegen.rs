@@ -28,7 +28,9 @@ use super::{
 };
 use crate::{
     conversion::{
-        analysis::fun::{ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy},
+        analysis::fun::{
+            ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy, UnsafetyNeeded,
+        },
         api::ImplBlockDetails,
     },
     types::{Namespace, QualifiedName},
@@ -37,6 +39,22 @@ use crate::{
     conversion::{api::FuncToConvert, codegen_rs::lifetime::add_explicit_lifetime_if_necessary},
     types::make_ident,
 };
+
+impl UnsafetyNeeded {
+    fn bridge_token(&self) -> Option<Unsafe> {
+        match self {
+            UnsafetyNeeded::None => None,
+            _ => Some(parse_quote! { unsafe }),
+        }
+    }
+
+    fn wrapper_token(&self) -> Option<Unsafe> {
+        match self {
+            UnsafetyNeeded::Always => Some(parse_quote! { unsafe }),
+            _ => None,
+        }
+    }
+}
 
 pub(super) fn gen_function(
     ns: &Namespace,
@@ -59,11 +77,6 @@ pub(super) fn gen_function(
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
-    let unsafety: Option<Unsafe> = if analysis.requires_unsafe {
-        Some(parse_quote!(unsafe))
-    } else {
-        None
-    };
     let rust_name_attr: Vec<_> = match &analysis.rust_rename_strategy {
         RustRenameStrategy::RenameUsingRustAttr => Attribute::parse_outer
             .parse2(quote!(
@@ -86,28 +99,46 @@ pub(super) fn gen_function(
         .any(|pd| pd.conversion.rust_work_needed());
     let rust_wrapper_needed = any_param_needs_rust_conversion
         || (cxxbridge_name != rust_name && matches!(kind, FnKind::Method(..)));
+    let wrapper_unsafety = analysis.requires_unsafe.wrapper_token();
     if rust_wrapper_needed {
-        if let FnKind::Method(ref type_name, ref method_kind) = kind {
-            // Method, or static method.
-            impl_entry = Some(generate_method_impl(
-                &param_details,
-                matches!(method_kind, MethodKind::Constructor),
-                type_name,
-                &cxxbridge_name,
-                &rust_name,
-                &ret_type,
-                &unsafety,
-                &doc_attr,
-            ));
-        } else {
-            // Generate plain old function
-            materialization = Some(Use::Custom(generate_function_impl(
-                &param_details,
-                &rust_name,
-                &ret_type,
-                &unsafety,
-                &doc_attr,
-            )));
+        match kind {
+            FnKind::Method(ref type_name, MethodKind::Constructor) => {
+                // Constructor.
+                impl_entry = Some(generate_constructor_impl(
+                    &param_details,
+                    type_name,
+                    &cxxbridge_name,
+                    &rust_name,
+                    &wrapper_unsafety,
+                    &doc_attr,
+                ));
+            }
+            FnKind::Method(ref type_name, ref method_kind) => {
+                // Method, or static method.
+                impl_entry = Some(generate_method_impl(
+                    &param_details,
+                    matches!(
+                        method_kind,
+                        MethodKind::MakeUnique | MethodKind::Constructor
+                    ),
+                    type_name,
+                    &cxxbridge_name,
+                    &rust_name,
+                    &ret_type,
+                    &wrapper_unsafety,
+                    &doc_attr,
+                ));
+            }
+            _ => {
+                // Generate plain old function
+                materialization = Some(Use::Custom(generate_function_impl(
+                    &param_details,
+                    &rust_name,
+                    &ret_type,
+                    &wrapper_unsafety,
+                    &doc_attr,
+                )));
+            }
         }
     }
     if cxxbridge_name != cpp_call_name && !wrapper_function_needed {
@@ -144,12 +175,13 @@ pub(super) fn gen_function(
             .unwrap()
     };
     // At last, actually generate the cxx::bridge entry.
+    let bridge_unsafety = analysis.requires_unsafe.bridge_token();
     let extern_c_mod_item = ForeignItem::Fn(parse_quote!(
         #(#namespace_attr)*
         #(#rust_name_attr)*
         #(#cpp_name_attr)*
         #doc_attr
-        #vis #unsafety fn #cxxbridge_name #lifetime_tokens ( #params ) #ret_type;
+        #vis #bridge_unsafety fn #cxxbridge_name #lifetime_tokens ( #params ) #ret_type;
     ));
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
@@ -164,14 +196,14 @@ pub(super) fn gen_function(
 
 fn generate_arg_lists(
     param_details: &[ArgumentAnalysis],
-    is_constructor: bool,
+    avoid_self: bool,
 ) -> (Punctuated<FnArg, Comma>, Vec<TokenStream>) {
     let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
     let mut arg_list = Vec::new();
 
     for pd in param_details {
         let type_name = pd.conversion.rust_wrapper_unconverted_type();
-        let wrapper_arg_name = if pd.self_type.is_some() && !is_constructor {
+        let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
             parse_quote!(self)
         } else {
             pd.name.clone()
@@ -188,7 +220,7 @@ fn generate_arg_lists(
 #[allow(clippy::too_many_arguments)] // it's true, but probably best for now
 fn generate_method_impl(
     param_details: &[ArgumentAnalysis],
-    is_constructor: bool,
+    avoid_self: bool,
     impl_block_type_name: &QualifiedName,
     cxxbridge_name: &Ident,
     rust_name: &str,
@@ -196,7 +228,7 @@ fn generate_method_impl(
     unsafety: &Option<Unsafe>,
     doc_attr: &Option<Attribute>,
 ) -> Box<ImplBlockDetails> {
-    let (wrapper_params, arg_list) = generate_arg_lists(param_details, is_constructor);
+    let (wrapper_params, arg_list) = generate_arg_lists(param_details, avoid_self);
     let (lifetime_tokens, wrapper_params, ret_type) =
         add_explicit_lifetime_if_necessary(param_details, wrapper_params, ret_type);
     let rust_name = make_ident(&rust_name);
@@ -205,6 +237,36 @@ fn generate_method_impl(
             #doc_attr
             pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                 cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+            }
+        }),
+        ty: impl_block_type_name.get_final_ident(),
+    })
+}
+
+/// Generate a 'impl Type { methods-go-here }' item which is a constructor
+/// for use with moveit traits.
+fn generate_constructor_impl(
+    param_details: &[ArgumentAnalysis],
+    impl_block_type_name: &QualifiedName,
+    cxxbridge_name: &Ident,
+    rust_name: &str,
+    unsafety: &Option<Unsafe>,
+    doc_attr: &Option<Attribute>,
+) -> Box<ImplBlockDetails> {
+    let (wrapper_params, arg_list) = generate_arg_lists(param_details, true);
+    let wrapper_params: Punctuated<FnArg, Comma> = wrapper_params.into_iter().skip(1).collect();
+    let ptr_arg_name = &arg_list[0];
+    let rust_name = make_ident(&rust_name);
+    Box::new(ImplBlockDetails {
+        item: ImplItem::Method(parse_quote! {
+            #doc_attr
+            pub #unsafety fn #rust_name ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> {
+                unsafe {
+                    autocxx::moveit::new::by_raw(|#ptr_arg_name| {
+                        let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
+                        cxxbridge::#cxxbridge_name(#(#arg_list),* )
+                    })
+                }
             }
         }),
         ty: impl_block_type_name.get_final_ident(),
