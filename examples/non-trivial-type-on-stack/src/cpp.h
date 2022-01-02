@@ -19,11 +19,11 @@ class MessageBuffer {
 public:
   // std::string is not a trivial type because in some STL implementations
   // it may contain a self-referential pointer.
-  void add_blurb(const std::string& blurb) {
+  void add_blurb(std::string blurb) {
     message += blurb;
   }
   std::string get() const {
-    return blurb;
+    return message;
   }
 private:
   std::string message;

@@ -38,7 +38,7 @@ moveit = { git = "https://github.com/google/moveit", rev="refs/pull/25/head" }
 
 [workspace]
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce", "integration-tests"]
-exclude = ["examples/s2", "examples/steam-mini", "examples/subclass", "examples/chromium-fake-render-frame-host", "examples/pod"]
+exclude = ["examples/s2", "examples/steam-mini", "examples/subclass", "examples/chromium-fake-render-frame-host", "examples/pod", "examples/non-trivial-type-on-stack"]
 
 #[patch.crates-io]
 #cxx = { path="../cxx" }

@@ -21,16 +21,17 @@ include_cpp! {
     generate!("MessageBuffer")
 }
 
-use ffi::{Point, Rect};
-
 // A simple example dealing with plain-old-data types.
 
 fn main() {
     moveit! {
-        let mut msg = ffi::MsgBuffer::new();
+        let mut msg = ffi::MessageBuffer::new();
     }
     msg.as_mut().add_blurb("Hello");
     msg.as_mut().add_blurb(" world!");
 
-    assert_eq!(msg.get().unwrap().to_str_lossy(), "Hello world!");
+    assert_eq!(
+        msg.get().as_ref().unwrap().to_string_lossy(),
+        "Hello world!"
+    );
 }
