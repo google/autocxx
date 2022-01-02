@@ -89,12 +89,32 @@ fn add_lifetime_to_pinned_reference(segments: &mut Punctuated<PathSegment, syn::
             match &mut seg.arguments {
                 syn::PathArguments::AngleBracketed(aba) => match aba.args.iter_mut().next() {
                     Some(GenericArgument::Type(Type::Reference(tyr))) => {
-                        tyr.lifetime = Some(parse_quote! { 'a })
+                        add_lifetime_to_reference(tyr);
                     }
                     _ => panic!("Expected generic args with a reference"),
                 },
                 _ => panic!("Expected angle bracketed args"),
             }
+        }
+    }
+}
+
+fn add_lifetime_to_reference(tyr: &mut syn::TypeReference) {
+    tyr.lifetime = Some(parse_quote! { 'a })
+}
+
+pub(crate) fn add_lifetime_to_all_params(params: &mut Punctuated<FnArg, Comma>) {
+    for mut param in params.iter_mut() {
+        match &mut param {
+            FnArg::Typed(PatType { ty, .. }) => match ty.as_mut() {
+                Type::Path(TypePath {
+                    path: Path { segments, .. },
+                    ..
+                }) => add_lifetime_to_pinned_reference(segments),
+                Type::Reference(tyr) => add_lifetime_to_reference(tyr),
+                _ => {}
+            },
+            _ => panic!("Unexpected fnarg"),
         }
     }
 }

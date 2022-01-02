@@ -32,6 +32,7 @@ use crate::{
             ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy, UnsafetyNeeded,
         },
         api::ImplBlockDetails,
+        codegen_rs::lifetime::add_lifetime_to_all_params,
     },
     types::{Namespace, QualifiedName},
 };
@@ -254,19 +255,20 @@ fn generate_constructor_impl(
     doc_attr: &Option<Attribute>,
 ) -> Box<ImplBlockDetails> {
     let (wrapper_params, arg_list) = generate_arg_lists(param_details, true);
-    let wrapper_params: Punctuated<FnArg, Comma> = wrapper_params.into_iter().skip(1).collect();
+    let mut wrapper_params: Punctuated<FnArg, Comma> = wrapper_params.into_iter().skip(1).collect();
     let ptr_arg_name = &arg_list[0];
     let rust_name = make_ident(&rust_name);
     let any_references = param_details.iter().any(|pd| pd.was_reference);
-    let lifetime_param = if any_references {
-        quote! { + '_ }
+    let (lifetime_param, lifetime_addition) = if any_references {
+        add_lifetime_to_all_params(&mut wrapper_params);
+        (quote! { <'a> }, quote! { + 'a })
     } else {
-        quote! {}
+        (quote! {}, quote! {})
     };
     Box::new(ImplBlockDetails {
         item: ImplItem::Method(parse_quote! {
             #doc_attr
-            pub #unsafety fn #rust_name ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> #lifetime_param {
+            pub #unsafety fn #rust_name #lifetime_param ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> #lifetime_addition {
                 unsafe {
                     autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
                         let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();

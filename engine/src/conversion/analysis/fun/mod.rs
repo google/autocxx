@@ -745,16 +745,6 @@ impl<'a> FnAnalyzer<'a> {
                 rust_name,
             )));
         }
-        if matches!(kind, FnKind::Method(_, MethodKind::Constructor)) && num_input_references > 1 {
-            // moveit-style constructors return a closure, and at this stage we haven't
-            // figured out how to describe which of the input parameters have
-            // the controlling lifetime. We probably need to assign a named
-            // lifetime to every input parameter, so this is probably easily
-            // solved, we just haven't done it yet.
-            return Err(contextualize_error(
-                ConvertError::ConstructorWithMultipleInputReferences(rust_name),
-            ));
-        }
         let mut ret_type = return_analysis.rt;
         let ret_type_conversion = return_analysis.conversion;
 
