@@ -473,7 +473,7 @@ impl<'a> FnAnalyzer<'a> {
 
         // Now let's analyze all the parameters.
         // See if any have annotations which our fork of bindgen has craftily inserted...
-        let original_first_argument = fun.inputs.first().clone();
+        let original_first_argument = fun.inputs.first();
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .inputs
             .iter()
@@ -482,7 +482,7 @@ impl<'a> FnAnalyzer<'a> {
                     i,
                     ns,
                     diagnostic_display_name,
-                    &virtual_this,
+                    virtual_this,
                     &fun.reference_args,
                     true,
                 )
@@ -640,7 +640,7 @@ impl<'a> FnAnalyzer<'a> {
             // take 'self' as a reference.
             let (arg0, analysis0) = self
                 .convert_fn_arg(
-                    &original_first_argument.unwrap(),
+                    original_first_argument.unwrap(),
                     ns,
                     &rust_name,
                     virtual_this,
