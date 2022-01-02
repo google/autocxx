@@ -285,8 +285,9 @@ impl<'a> FnAnalyzer<'a> {
         self.config.is_on_allowlist(&type_name.to_cpp_name())
     }
 
+    #[allow(clippy::if_same_then_else)] // clippy bug doesn't notice the two
+                                        // closures below are different.
     fn should_be_unsafe(&self, param_details: &[ArgumentAnalysis]) -> UnsafetyNeeded {
-        // || param_details.iter().any(|pd| pd.requires_unsafe);
         if self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe {
             UnsafetyNeeded::Always
         } else if param_details
