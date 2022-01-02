@@ -308,6 +308,7 @@ impl<'a> FnAnalyzer<'a> {
         name: ApiName,
         fun: Box<FuncToConvert>,
     ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
+        let initial_name = name.clone();
         let maybe_analysis_and_name = self.analyze_foreign_fn(name, &fun)?;
 
         let (analysis, name) = match maybe_analysis_and_name {
@@ -321,12 +322,8 @@ impl<'a> FnAnalyzer<'a> {
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 // Create a make_unique too
-                let (make_unique_func, make_unique_name) = self.create_make_unique(&fun, &name);
-                self.analyze_and_add_if_necessary(
-                    make_unique_name,
-                    make_unique_func,
-                    &mut results,
-                )?;
+                let make_unique_func = self.create_make_unique(&fun);
+                self.analyze_and_add_if_necessary(initial_name, make_unique_func, &mut results)?;
 
                 for sub in self.subclasses_by_superclass(sup) {
                     // Add a constructor to the actual subclass definition in pure C++
@@ -341,10 +338,9 @@ impl<'a> FnAnalyzer<'a> {
                         &mut results,
                     )?;
                     // and its corresponding make_unique
-                    let (make_unique_func, make_unique_name) = self
-                        .create_make_unique(&subclass_constructor_func, &subclass_constructor_name);
+                    let make_unique_func = self.create_make_unique(&subclass_constructor_func);
                     self.analyze_and_add_if_necessary(
-                        make_unique_name,
+                        subclass_constructor_name,
                         make_unique_func,
                         &mut results,
                     )?;
@@ -421,12 +417,8 @@ impl<'a> FnAnalyzer<'a> {
 
     /// Take a constructor e.g. pub fn A_A(this: *mut root::A);
     /// and synthesize a make_unique e.g. pub fn make_unique() -> cxx::UniquePtr<A>
-    fn create_make_unique(
-        &mut self,
-        fun: &FuncToConvert,
-        name: &ApiName,
-    ) -> (Box<FuncToConvert>, ApiName) {
-        let new_fun = Box::new(FuncToConvert {
+    fn create_make_unique(&mut self, fun: &FuncToConvert) -> Box<FuncToConvert> {
+        Box::new(FuncToConvert {
             virtual_this_type: fun.virtual_this_type.clone(),
             self_ty: fun.self_ty.clone(),
             ident: fun.ident.clone(),
@@ -442,13 +434,7 @@ impl<'a> FnAnalyzer<'a> {
             return_type_is_reference: fun.return_type_is_reference,
             reference_args: fun.reference_args.clone(),
             synthesize_make_unique: true,
-        });
-        let make_unique_name = name.name.get_final_item().strip_prefix("new").unwrap();
-        let make_unique_name = make_ident(format!("make_unique{}", make_unique_name));
-        let cpp_name = name.cpp_name_if_present().cloned();
-        let make_unique_name =
-            ApiName::new_with_cpp_name(name.name.get_namespace(), make_unique_name, cpp_name);
-        (new_fun, make_unique_name)
+        })
     }
 
     /// Determine how to materialize a function.
