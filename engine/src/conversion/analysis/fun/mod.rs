@@ -444,7 +444,7 @@ impl<'a> FnAnalyzer<'a> {
         fun: &FuncToConvert,
     ) -> Result<Option<(FnAnalysis, ApiName)>, ConvertErrorWithContext> {
         let virtual_this = &fun.virtual_this_type;
-        let cpp_name = name.cpp_name_if_present().cloned();
+        let mut cpp_name = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
         // Let's gather some pre-wisdom about the name of the function.
@@ -668,6 +668,9 @@ impl<'a> FnAnalyzer<'a> {
             &rust_name,
             ns,
         );
+        if cxxbridge_name != rust_name && cpp_name.is_none() {
+            cpp_name = Some(rust_name.clone());
+        }
         let mut cxxbridge_name = make_ident(&cxxbridge_name);
 
         // Now we can add context to the error, check for a couple of error
