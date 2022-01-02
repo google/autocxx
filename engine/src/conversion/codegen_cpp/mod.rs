@@ -393,7 +393,7 @@ impl<'a> CppCodeGenerator<'a> {
             .collect();
         let mut arg_list = arg_list?.into_iter();
         let receiver = if is_a_method { arg_list.next() } else { None };
-        if matches!(&details.payload, CppFunctionBody::MakeUniqueSuperclass(_)) {
+        if matches!(&details.payload, CppFunctionBody::ConstructSuperclass(_)) {
             arg_list.next();
         }
         let arg_list = if details.pass_obs_field {
@@ -441,7 +441,7 @@ impl<'a> CppCodeGenerator<'a> {
                     "".to_string(),
                 )
             }
-            CppFunctionBody::MakeUniqueSuperclass(_) => ("".to_string(), arg_list),
+            CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list),
         };
         if let Some(ret) = &details.return_conversion {
             underlying_function_call = format!(
@@ -465,7 +465,7 @@ impl<'a> CppCodeGenerator<'a> {
             underlying_function_call = format!("{};", underlying_function_call);
         }
         let field_assignments =
-            if let CppFunctionBody::MakeUniqueSuperclass(superclass_name) = &details.payload {
+            if let CppFunctionBody::ConstructSuperclass(superclass_name) = &details.payload {
                 let superclass_assignments = if field_assignments.is_empty() {
                     "".to_string()
                 } else {

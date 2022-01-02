@@ -203,10 +203,11 @@ pub(super) fn create_subclass_constructor(
         analysis
             .param_details
             .iter()
+            .skip(1) // skip placement new destination
             .map(|aa| aa.conversion.clone()),
     );
     let cpp_impl = CppFunction {
-        payload: CppFunctionBody::MakeUniqueSuperclass(superclass.to_cpp_name()),
+        payload: CppFunctionBody::ConstructSuperclass(superclass.to_cpp_name()),
         wrapper_function_name,
         return_conversion: None,
         argument_conversion: args.collect(),

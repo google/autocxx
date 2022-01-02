@@ -146,7 +146,7 @@ pub(crate) enum CppFunctionBody {
     StaticMethodCall(Namespace, Ident, Ident),
     PlacementNew(Namespace, Ident),
     MakeUnique,
-    MakeUniqueSuperclass(String),
+    ConstructSuperclass(String),
 }
 
 #[derive(Clone)]
