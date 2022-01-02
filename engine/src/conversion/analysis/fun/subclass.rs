@@ -220,6 +220,7 @@ pub(super) fn create_subclass_constructor(
         name: ApiName::new_from_qualified_name(cpp),
         subclass: sub.clone(),
         cpp_impl: Box::new(cpp_impl),
-        is_trivial: analysis.param_details.is_empty(),
+        is_trivial: analysis.param_details.len() == 1, // just placement new
+                                                       // destination, no other parameters
     }
 }
