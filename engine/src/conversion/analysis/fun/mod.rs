@@ -737,15 +737,23 @@ impl<'a> FnAnalyzer<'a> {
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
 
-        if return_analysis.was_reference {
+        let num_input_references = param_details.iter().filter(|pd| pd.was_reference).count();
+        if num_input_references != 1 && return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
             // one reference as a parameter. Let's see...
-            let num_input_references = param_details.iter().filter(|pd| pd.was_reference).count();
-            if num_input_references != 1 {
-                return Err(contextualize_error(ConvertError::NotOneInputReference(
-                    rust_name,
-                )));
-            }
+            return Err(contextualize_error(ConvertError::NotOneInputReference(
+                rust_name,
+            )));
+        }
+        if matches!(kind, FnKind::Method(_, MethodKind::Constructor)) && num_input_references > 1 {
+            // moveit-style constructors return a closure, and at this stage we haven't
+            // figured out how to describe which of the input parameters have
+            // the controlling lifetime. We probably need to assign a named
+            // lifetime to every input parameter, so this is probably easily
+            // solved, we just haven't done it yet.
+            return Err(contextualize_error(
+                ConvertError::ConstructorWithMultipleInputReferences(rust_name),
+            ));
         }
         let mut ret_type = return_analysis.rt;
         let ret_type_conversion = return_analysis.conversion;

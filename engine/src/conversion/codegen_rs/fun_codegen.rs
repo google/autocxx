@@ -257,10 +257,16 @@ fn generate_constructor_impl(
     let wrapper_params: Punctuated<FnArg, Comma> = wrapper_params.into_iter().skip(1).collect();
     let ptr_arg_name = &arg_list[0];
     let rust_name = make_ident(&rust_name);
+    let any_references = param_details.iter().any(|pd| pd.was_reference);
+    let lifetime_param = if any_references {
+        quote! { + '_ }
+    } else {
+        quote! {}
+    };
     Box::new(ImplBlockDetails {
         item: ImplItem::Method(parse_quote! {
             #doc_attr
-            pub #unsafety fn #rust_name ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> {
+            pub #unsafety fn #rust_name ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> #lifetime_param {
                 unsafe {
                     autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
                         let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();

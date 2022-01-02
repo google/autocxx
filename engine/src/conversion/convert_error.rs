@@ -32,6 +32,7 @@ pub enum ConvertError {
     ConflictingTemplatedArgsWithTypedef(QualifiedName),
     UnacceptableParam(String),
     NotOneInputReference(String),
+    ConstructorWithMultipleInputReferences(String),
     UnsupportedType(String),
     UnknownType(String),
     StaticData(String),
@@ -100,6 +101,7 @@ impl Display for ConvertError {
             ConvertError::RustTypeWithAPath(ty) => write!(f, "A qualified Rust type was found (i.e. one containing ::): {}. Rust types must always be a simple identifier.", ty.to_cpp_name())?,
             ConvertError::AbstractNestedType => write!(f, "This type is nested within another struct/class, yet is abstract (or is not on the allowlist so we can't be sure). This is not yet supported by autocxx. If you don't believe this type is abstract, add it to the allowlist.")?,
             ConvertError::NonPublicNestedType => write!(f, "This type is nested within another struct/class with protected or private visibility.")?,
+            ConvertError::ConstructorWithMultipleInputReferences(fn_name) => write!(f, "Cannot (yet) create a stack allocation constructor which takes more than one reference ({}). Use make_unique instead.", fn_name)?,
         }
         Ok(())
     }
