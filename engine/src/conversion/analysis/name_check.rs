@@ -44,7 +44,7 @@ pub(crate) fn check_names(apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
         | Api::Enum { ref name, .. }
         | Api::Struct { ref name, .. } => {
             validate_all_segments_ok_for_cxx(name.name.segment_iter())?;
-            if let Some(ref cpp_name) = name.cpp_name {
+            if let Some(ref cpp_name) = name.cpp_name_if_present() {
                 // The C++ name might itself be outer_type::inner_type and thus may
                 // have multiple segments.
                 validate_all_segments_ok_for_cxx(

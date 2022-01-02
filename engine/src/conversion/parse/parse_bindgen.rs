@@ -51,10 +51,7 @@ pub(crate) struct ParseBindgen<'a> {
 }
 
 fn api_name(ns: &Namespace, id: Ident, attrs: &[Attribute]) -> ApiName {
-    ApiName {
-        name: QualifiedName::new(ns, id),
-        cpp_name: get_bindgen_original_name_annotation(attrs),
-    }
+    ApiName::new_with_cpp_name(ns, id, get_bindgen_original_name_annotation(attrs))
 }
 
 pub(crate) fn api_name_qualified(

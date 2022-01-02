@@ -139,7 +139,7 @@ pub(crate) enum TypedefKind {
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ApiName {
     pub(crate) name: QualifiedName,
-    pub(crate) cpp_name: Option<String>,
+    cpp_name: Option<String>,
 }
 
 impl ApiName {
@@ -170,6 +170,10 @@ impl ApiName {
             .as_ref()
             .cloned()
             .unwrap_or_else(|| self.name.get_final_item().to_string())
+    }
+
+    pub(crate) fn cpp_name_if_present(&self) -> Option<&String> {
+        self.cpp_name.as_ref()
     }
 }
 
@@ -349,7 +353,7 @@ pub(crate) struct RustSubclassFnDetails {
 }
 
 impl<T: AnalysisPhase> Api<T> {
-    fn name_info(&self) -> &ApiName {
+    pub(crate) fn name_info(&self) -> &ApiName {
         match self {
             Api::ForwardDeclaration { name } => name,
             Api::ConcreteType { name, .. } => name,

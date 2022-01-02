@@ -241,9 +241,9 @@ impl<'a> FnAnalyzer<'a> {
             .filter_map(|api| match api {
                 Api::Struct { name, .. } | Api::Enum { name, .. } => {
                     let cpp_name = name
-                        .cpp_name
-                        .as_deref()
-                        .unwrap_or_else(|| name.name.get_final_item());
+                        .cpp_name_if_present()
+                        .cloned()
+                        .unwrap_or_else(|| name.name.get_final_item().to_string());
                     cpp_name
                         .rsplit_once("::")
                         .map(|(_, suffix)| (name.name.clone(), suffix.to_string()))
@@ -445,11 +445,9 @@ impl<'a> FnAnalyzer<'a> {
         });
         let make_unique_name = name.name.get_final_item().strip_prefix("new").unwrap();
         let make_unique_name = make_ident(format!("make_unique{}", make_unique_name));
-        let make_unique_name = ApiName::new_with_cpp_name(
-            name.name.get_namespace(),
-            make_unique_name,
-            name.cpp_name.clone(),
-        );
+        let cpp_name = name.cpp_name_if_present().cloned();
+        let make_unique_name =
+            ApiName::new_with_cpp_name(name.name.get_namespace(), make_unique_name, cpp_name);
         (new_fun, make_unique_name)
     }
 
@@ -474,7 +472,7 @@ impl<'a> FnAnalyzer<'a> {
         fun: &FuncToConvert,
     ) -> Result<Option<(FnAnalysis, ApiName)>, ConvertErrorWithContext> {
         let virtual_this = &fun.virtual_this_type;
-        let mut cpp_name = name.cpp_name.clone();
+        let cpp_name = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
         // Let's gather some pre-wisdom about the name of the function.
@@ -575,7 +573,6 @@ impl<'a> FnAnalyzer<'a> {
             // with the original name, but we currently discard that impl section.
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
-            let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
             let mut rust_name = ideal_rust_name;
             let nested_type_ident = self
                 .nested_type_name_map
@@ -622,6 +619,7 @@ impl<'a> FnAnalyzer<'a> {
                 }
             };
             // Disambiguate overloads.
+            let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
             let rust_name = overload_tracker.get_method_real_name(type_ident, rust_name);
             let error_context = ErrorContext::Method {
                 self_ty: self_ty.get_final_ident(),
@@ -698,9 +696,6 @@ impl<'a> FnAnalyzer<'a> {
             &rust_name,
             ns,
         );
-        if cxxbridge_name != rust_name && cpp_name.is_none() {
-            cpp_name = Some(rust_name.clone());
-        }
         let mut cxxbridge_name = make_ident(&cxxbridge_name);
 
         // Now we can add context to the error, check for a couple of error
@@ -913,10 +908,7 @@ impl<'a> FnAnalyzer<'a> {
             deps,
             generate_code,
         };
-        let name = ApiName {
-            cpp_name,
-            name: QualifiedName::new(ns, id),
-        };
+        let name = ApiName::new_with_cpp_name(ns, id, cpp_name);
         Ok(Some((analysis, name)))
     }
 

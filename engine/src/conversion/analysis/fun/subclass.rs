@@ -180,8 +180,11 @@ pub(super) fn create_subclass_constructor_wrapper(
         reference_args: fun.reference_args.clone(),
         synthesize_make_unique: fun.synthesize_make_unique,
     });
-    let mut subclass_constructor_name = ApiName::new_in_root_namespace(subclass_constructor_name);
-    subclass_constructor_name.cpp_name = Some(sub.cpp().get_final_item().to_string());
+    let subclass_constructor_name = ApiName::new_with_cpp_name(
+        &Namespace::new(),
+        subclass_constructor_name,
+        Some(sub.cpp().get_final_item().to_string()),
+    );
     (maybe_wrap, subclass_constructor_name)
 }
 
