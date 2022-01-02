@@ -25,6 +25,8 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
+use self::type_to_cpp::namespaced_name_using_original_name_map;
+
 use super::{
     analysis::fun::{
         function_wrapper::{CppFunction, CppFunctionBody},
@@ -406,11 +408,9 @@ impl<'a> CppCodeGenerator<'a> {
         let (mut underlying_function_call, field_assignments) = match &details.payload {
             CppFunctionBody::MakeUnique => (arg_list, "".to_string()),
             CppFunctionBody::PlacementNew(ns, id) => {
-                let ty_id = ns
-                    .into_iter()
-                    .cloned()
-                    .chain(std::iter::once(id.to_string()))
-                    .join("::");
+                let ty_id = QualifiedName::new(ns, id.clone());
+                let ty_id =
+                    namespaced_name_using_original_name_map(&ty_id, &self.original_name_map);
                 (
                     format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
                     "".to_string(),
