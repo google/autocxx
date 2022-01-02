@@ -418,23 +418,9 @@ impl<'a> FnAnalyzer<'a> {
     /// Take a constructor e.g. pub fn A_A(this: *mut root::A);
     /// and synthesize a make_unique e.g. pub fn make_unique() -> cxx::UniquePtr<A>
     fn create_make_unique(&mut self, fun: &FuncToConvert) -> Box<FuncToConvert> {
-        Box::new(FuncToConvert {
-            virtual_this_type: fun.virtual_this_type.clone(),
-            self_ty: fun.self_ty.clone(),
-            ident: fun.ident.clone(),
-            doc_attr: fun.doc_attr.clone(),
-            inputs: fun.inputs.clone(),
-            output: fun.output.clone(),
-            vis: fun.vis.clone(),
-            is_pure_virtual: false,
-            cpp_vis: CppVisibility::Public,
-            is_move_constructor: false,
-            original_name: None,
-            unused_template_param: fun.unused_template_param,
-            return_type_is_reference: fun.return_type_is_reference,
-            reference_args: fun.reference_args.clone(),
-            synthesize_make_unique: true,
-        })
+        let mut new_fun = fun.clone();
+        new_fun.synthesize_make_unique = true;
+        Box::new(new_fun)
     }
 
     /// Determine how to materialize a function.
