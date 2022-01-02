@@ -262,7 +262,7 @@ fn generate_constructor_impl(
             #doc_attr
             pub #unsafety fn #rust_name ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> {
                 unsafe {
-                    autocxx::moveit::new::by_raw(|#ptr_arg_name| {
+                    autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
                         let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
                         cxxbridge::#cxxbridge_name(#(#arg_list),* )
                     })
