@@ -4992,6 +4992,24 @@ fn test_issue_506() {
 }
 
 #[test]
+fn test_private_inheritance() {
+    let hdr = indoc! {"
+        class A {
+        public:
+            void foo() {}
+            int a;
+        };
+        class B : A {
+        public:
+            void bar() {}
+            int b;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
 fn test_error_generated_for_static_data() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -7611,7 +7629,7 @@ fn test_call_superclass() {
     "};
     let rs = quote! {
         let b = ffi::get_b();
-        b.foo();
+        b.as_ref().unwrap().as_ref().foo();
     };
     run_test("", hdr, rs, &["A", "B", "get_b"], &[]);
 }
@@ -7630,15 +7648,14 @@ fn test_pass_superclass() {
         void bar() const {}
     };
     inline std::unique_ptr<B> get_b() { return std::make_unique<B>(); }
-    inline void takes_a(const A&) {}
+    inline void take_a(const A&) {}
     "};
     let rs = quote! {
         let b = ffi::get_b();
-        ffi::take_a(&b);
+        ffi::take_a(b.as_ref().unwrap().as_ref());
     };
     run_test("", hdr, rs, &["A", "B", "get_b", "take_a"], &[]);
 }
-
 
 // Yet to test:
 // - Ifdef

@@ -46,17 +46,14 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: Vec<Api<FnPhase>>) -> 
         apis = apis
             .into_iter()
             .map(|api| {
-                if api.deps().any(|dep| ignored_items.contains(dep)) {
+                if api.deps().any(|dep| ignored_items.contains(&dep)) {
                     iterate_again = true;
                     ignored_items.insert(api.name().clone());
                     create_ignore_item(api, ConvertError::IgnoredDependent)
                 } else {
-                    let mut missing_deps = api
-                        .deps()
-                        .filter(|dep| {
-                            !valid_types.contains(dep) && !known_types().is_known_type(dep)
-                        })
-                        .cloned();
+                    let mut missing_deps = api.deps().filter(|dep| {
+                        !valid_types.contains(dep) && !known_types().is_known_type(dep)
+                    });
                     let first = missing_deps.next();
                     std::mem::drop(missing_deps);
                     if let Some(missing_dep) = first {

@@ -13,7 +13,7 @@
 // limitations under the License.
 use crate::conversion::analysis::fun::{ArgumentAnalysis, ReceiverMutability};
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 use std::borrow::Cow;
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, GenericArgument, PatType, Path,
@@ -50,6 +50,12 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                     Box::new(Type::Reference(new_rtr)),
                 ))
             }
+            Type::Path(typ) => {
+                let mut new_path = typ.clone();
+                add_lifetime_to_pinned_reference(&mut new_path.path.segments)
+                    .ok()
+                    .map(|_| ReturnType::Type(*rarrow, Box::new(Type::Path(new_path))))
+            }
             _ => None,
         },
         _ => None,
@@ -64,7 +70,7 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                         Type::Path(TypePath {
                             path: Path { segments, .. },
                             ..
-                        }) => add_lifetime_to_pinned_reference(segments),
+                        }) => add_lifetime_to_pinned_reference(segments).unwrap(),
                         _ => panic!("Expected Pin<T>"),
                     },
                     _ => panic!("Unexpected fnarg"),
@@ -76,7 +82,14 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     }
 }
 
-fn add_lifetime_to_pinned_reference(segments: &mut Punctuated<PathSegment, syn::token::Colon2>) {
+#[derive(Debug)]
+enum AddLifetimeError {
+    WasNotPin,
+}
+
+fn add_lifetime_to_pinned_reference(
+    segments: &mut Punctuated<PathSegment, syn::token::Colon2>,
+) -> Result<(), AddLifetimeError> {
     static EXPECTED_SEGMENTS: &[(&str, bool)] = &[
         ("std", false),
         ("pin", false),
@@ -84,7 +97,9 @@ fn add_lifetime_to_pinned_reference(segments: &mut Punctuated<PathSegment, syn::
     ];
 
     for (seg, (expected_name, act)) in segments.iter_mut().zip(EXPECTED_SEGMENTS.iter()) {
-        assert!(seg.ident == expected_name);
+        if seg.ident != expected_name {
+            return Err(AddLifetimeError::WasNotPin);
+        }
         if *act {
             match &mut seg.arguments {
                 syn::PathArguments::AngleBracketed(aba) => match aba.args.iter_mut().next() {
@@ -97,6 +112,7 @@ fn add_lifetime_to_pinned_reference(segments: &mut Punctuated<PathSegment, syn::
             }
         }
     }
+    Ok(())
 }
 
 fn add_lifetime_to_reference(tyr: &mut syn::TypeReference) {
@@ -110,7 +126,7 @@ pub(crate) fn add_lifetime_to_all_params(params: &mut Punctuated<FnArg, Comma>) 
                 Type::Path(TypePath {
                     path: Path { segments, .. },
                     ..
-                }) => add_lifetime_to_pinned_reference(segments),
+                }) => add_lifetime_to_pinned_reference(segments).unwrap(),
                 Type::Reference(tyr) => add_lifetime_to_reference(tyr),
                 _ => {}
             },

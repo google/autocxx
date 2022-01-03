@@ -63,7 +63,7 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
             continue;
         }
         if let Some(mut these_apis) = by_typename.remove(&todo) {
-            todos.extend(these_apis.iter().flat_map(|api| api.deps().cloned()));
+            todos.extend(these_apis.iter().flat_map(|api| api.deps()));
             output.append(&mut these_apis);
         } // otherwise, probably an intrinsic e.g. uint32_t.
         done.insert(todo);

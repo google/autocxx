@@ -147,6 +147,7 @@ pub(crate) enum CppFunctionBody {
     PlacementNew(Namespace, Ident),
     MakeUnique,
     ConstructSuperclass(String),
+    Cast,
 }
 
 #[derive(Clone)]

@@ -35,7 +35,7 @@ use crate::{CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
-        abstract_types::mark_types_abstract, check_names, fun::FnPhase,
+        abstract_types::mark_types_abstract, casts::add_casts, check_names, fun::FnPhase,
         gc::filter_apis_by_following_edges_from_allowlist, pod::analyze_pod_apis,
         remove_ignored::filter_apis_by_ignored_dependents, tdef::convert_typedef_targets,
     },
@@ -134,6 +134,7 @@ impl<'a> BridgeConverter<'a> {
                 // the analysis results. It also returns an object which can be used
                 // by subsequent phases to work out which objects are POD.
                 let analyzed_apis = analyze_pod_apis(apis, self.config)?;
+                let analyzed_apis = add_casts(analyzed_apis);
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions. This is probably the most complex
