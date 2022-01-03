@@ -43,11 +43,6 @@ use super::parse_foreign_mod::ParseForeignMod;
 pub(crate) struct ParseBindgen<'a> {
     config: &'a IncludeCppConfig,
     apis: Vec<UnanalyzedApi>,
-    /// Here we track the last struct which bindgen told us about.
-    /// Any subsequent "extern 'C'" blocks are methods belonging to that type,
-    /// even if the 'this' is actually recorded as void in the
-    /// function signature.
-    latest_virtual_this_type: Option<QualifiedName>,
 }
 
 fn api_name(ns: &Namespace, id: Ident, attrs: &[Attribute]) -> ApiName {
@@ -88,6 +83,25 @@ pub(super) fn get_bindgen_original_name_annotation(attrs: &[Attribute]) -> Optio
         .next()
 }
 
+pub(super) fn get_bindgen_virtual_this_type_annotation(
+    attrs: &[Attribute],
+) -> Option<QualifiedName> {
+    attrs
+        .iter()
+        .filter_map(|a| {
+            if a.path.is_ident("bindgen_virtual_this_type") {
+                let r: Result<LitStr, syn::Error> = a.parse_args();
+                match r {
+                    Ok(ls) => Some(QualifiedName::new_from_cpp_name(&ls.value())),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            }
+        })
+        .next()
+}
+
 pub(super) fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
     attrs.iter().any(|a| a.path.is_ident(attr_name))
 }
@@ -116,7 +130,6 @@ impl<'a> ParseBindgen<'a> {
         ParseBindgen {
             config,
             apis: Vec::new(),
-            latest_virtual_this_type: None,
         }
     }
 
@@ -205,8 +218,7 @@ impl<'a> ParseBindgen<'a> {
     ) -> Result<(), ConvertErrorWithContext> {
         match item {
             Item::ForeignMod(fm) => {
-                mod_converter
-                    .convert_foreign_mod_items(fm.items, self.latest_virtual_this_type.clone());
+                mod_converter.convert_foreign_mod_items(fm.items);
                 Ok(())
             }
             Item::Struct(s) => {
@@ -233,7 +245,6 @@ impl<'a> ParseBindgen<'a> {
                     })
                 };
                 if let Some(api) = api {
-                    self.latest_virtual_this_type = Some(api.name().clone());
                     if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
                         self.apis.push(api);
                     }
