@@ -16,7 +16,7 @@
 name = "autocxx-non-trivial-type-on-stack-example"
 version = "0.1.0"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 cxx = "1.0.54"
