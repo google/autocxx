@@ -17,7 +17,7 @@
 mod billy;
 mod uwu;
 
-use autocxx::include_cpp;
+use autocxx::prelude::*;
 use autocxx::subclass::prelude::*;
 use cxx::CxxString;
 use std::cell::RefCell;
