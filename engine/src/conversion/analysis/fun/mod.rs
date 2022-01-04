@@ -467,7 +467,7 @@ impl<'a> FnAnalyzer<'a> {
                     i,
                     ns,
                     diagnostic_display_name,
-                    &fun.virtual_this_type,
+                    &fun.synthesized_this_type,
                     &fun.reference_args,
                     true,
                 )
@@ -624,7 +624,7 @@ impl<'a> FnAnalyzer<'a> {
                     original_first_argument.unwrap(),
                     ns,
                     &rust_name,
-                    &fun.virtual_this_type,
+                    &fun.synthesized_this_type,
                     &fun.reference_args,
                     false,
                 )
@@ -1116,7 +1116,7 @@ impl<'a> FnAnalyzer<'a> {
                         return_type_is_reference: false,
                         reference_args: HashSet::new(),
                         original_name: None,
-                        virtual_this_type: None,
+                        synthesized_this_type: None,
                         synthesize_make_unique: false,
                     }),
                 )

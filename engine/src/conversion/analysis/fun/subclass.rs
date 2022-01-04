@@ -56,7 +56,7 @@ pub(super) fn create_subclass_fn_wrapper(
 ) -> Box<FuncToConvert> {
     let self_ty = Some(sub.cpp());
     Box::new(FuncToConvert {
-        virtual_this_type: self_ty.clone(),
+        synthesized_this_type: self_ty.clone(),
         self_ty,
         ident: super_fn_name.get_final_ident(),
         doc_attr: fun.doc_attr.clone(),
@@ -178,7 +178,7 @@ pub(super) fn create_subclass_constructor_wrapper(
         unused_template_param: fun.unused_template_param,
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
-        virtual_this_type: self_ty.clone(),
+        synthesized_this_type: self_ty.clone(),
         self_ty,
         synthesize_make_unique: fun.synthesize_make_unique,
     });
