@@ -37,7 +37,6 @@ use std::collections::{HashMap, HashSet};
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
 use itertools::Itertools;
-use proc_macro2::Span;
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
     TypePtr, Visibility,
@@ -399,7 +398,6 @@ impl<'a> FnAnalyzer<'a> {
         name: ApiName,
         fun: Box<FuncToConvert>,
     ) -> Result<Option<(FnAnalysis, ApiName)>, ConvertErrorWithContext> {
-        let virtual_this = &fun.virtual_this_type;
         let mut cpp_name = name.cpp_name.clone();
         let ns = name.name.get_namespace();
 
@@ -418,15 +416,7 @@ impl<'a> FnAnalyzer<'a> {
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .inputs
             .iter()
-            .map(|i| {
-                self.convert_fn_arg(
-                    i,
-                    ns,
-                    diagnostic_display_name,
-                    virtual_this.clone(),
-                    &fun.reference_args,
-                )
-            })
+            .map(|i| self.convert_fn_arg(i, ns, diagnostic_display_name, &fun.reference_args))
             .partition(Result::is_ok);
         let (mut params, mut param_details): (Punctuated<_, Comma>, Vec<_>) =
             param_details.into_iter().map(Result::unwrap).unzip();
@@ -824,7 +814,6 @@ impl<'a> FnAnalyzer<'a> {
         arg: &FnArg,
         ns: &Namespace,
         fn_name: &str,
-        virtual_this: Option<QualifiedName>,
         reference_args: &HashSet<Ident>,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
@@ -846,24 +835,12 @@ impl<'a> FnAnalyzer<'a> {
                                     } else {
                                         ReceiverMutability::Const
                                     };
-                                    let mut this_type = QualifiedName::from_type_path(typ);
+                                    let this_type = QualifiedName::from_type_path(typ);
                                     if this_type.is_cvoid() && pp.ident == "this" {
-                                        is_virtual = true;
-                                        this_type = virtual_this.ok_or_else(|| {
-                                            ConvertError::VirtualThisType(
-                                                ns.clone(),
-                                                fn_name.into(),
-                                            )
-                                        })?;
-                                        let this_type_path = this_type.to_type_path();
-                                        let const_token = if mutability.is_some() {
-                                            None
-                                        } else {
-                                            Some(syn::Token![const](Span::call_site()))
-                                        };
-                                        pt.ty = Box::new(parse_quote! {
-                                            * #mutability #const_token #this_type_path
-                                        });
+                                        return Err(ConvertError::VirtualThisType(
+                                            ns.clone(),
+                                            fn_name.into(),
+                                        ));
                                     }
                                     Ok((this_type, receiver_mutability))
                                 }
@@ -1038,7 +1015,6 @@ impl<'a> FnAnalyzer<'a> {
                 self.analyze_foreign_fn_and_subclasses(
                     fake_api_name,
                     Box::new(FuncToConvert {
-                        virtual_this_type: Some(self_ty.clone()),
                         self_ty: Some(self_ty),
                         ident,
                         doc_attr: None,

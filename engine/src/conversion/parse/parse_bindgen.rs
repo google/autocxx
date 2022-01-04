@@ -83,25 +83,6 @@ pub(super) fn get_bindgen_original_name_annotation(attrs: &[Attribute]) -> Optio
         .next()
 }
 
-pub(super) fn get_bindgen_virtual_this_type_annotation(
-    attrs: &[Attribute],
-) -> Option<QualifiedName> {
-    attrs
-        .iter()
-        .filter_map(|a| {
-            if a.path.is_ident("bindgen_virtual_this_type") {
-                let r: Result<LitStr, syn::Error> = a.parse_args();
-                match r {
-                    Ok(ls) => Some(QualifiedName::new_from_cpp_name(&ls.value())),
-                    Err(_) => None,
-                }
-            } else {
-                None
-            }
-        })
-        .next()
-}
-
 pub(super) fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
     attrs.iter().any(|a| a.path.is_ident(attr_name))
 }

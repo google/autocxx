@@ -30,10 +30,7 @@ use syn::{
     Type,
 };
 
-use super::parse_bindgen::{
-    get_bindgen_original_name_annotation, get_bindgen_virtual_this_type_annotation,
-    get_cpp_visibility, has_attr,
-};
+use super::parse_bindgen::{get_bindgen_original_name_annotation, get_cpp_visibility, has_attr};
 
 /// Parses a given bindgen-generated 'mod' into suitable
 /// [Api]s. In bindgen output, a given mod concerns
@@ -88,10 +85,8 @@ impl ParseForeignMod {
                 let (reference_args, return_type_is_reference) =
                     Self::get_reference_parameters_and_return(&item);
                 let original_name = get_bindgen_original_name_annotation(&item.attrs);
-                let virtual_this_type = get_bindgen_virtual_this_type_annotation(&item.attrs);
                 let doc_attr = get_doc_attr(&item.attrs);
                 self.funcs_to_convert.push(FuncToConvert {
-                    virtual_this_type,
                     self_ty: None,
                     ident: item.sig.ident,
                     doc_attr,
