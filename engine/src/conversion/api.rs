@@ -106,6 +106,9 @@ pub(crate) struct FuncToConvert {
     pub(crate) original_name: Option<String>,
     pub(crate) virtual_this_type: Option<QualifiedName>,
     pub(crate) self_ty: Option<QualifiedName>,
+    /// Whether we actually should make this into a make_unique function
+    /// instead of, by default, a plain constructor ("new")
+    pub(crate) synthesize_make_unique: bool,
 }
 
 /// Layers of analysis which may be applied to decorate each API.
@@ -136,7 +139,7 @@ pub(crate) enum TypedefKind {
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ApiName {
     pub(crate) name: QualifiedName,
-    pub(crate) cpp_name: Option<String>,
+    cpp_name: Option<String>,
 }
 
 impl ApiName {
@@ -167,6 +170,10 @@ impl ApiName {
             .as_ref()
             .cloned()
             .unwrap_or_else(|| self.name.get_final_item().to_string())
+    }
+
+    pub(crate) fn cpp_name_if_present(&self) -> Option<&String> {
+        self.cpp_name.as_ref()
     }
 }
 
@@ -346,7 +353,7 @@ pub(crate) struct RustSubclassFnDetails {
 }
 
 impl<T: AnalysisPhase> Api<T> {
-    fn name_info(&self) -> &ApiName {
+    pub(crate) fn name_info(&self) -> &ApiName {
         match self {
             Api::ForwardDeclaration { name } => name,
             Api::ConcreteType { name, .. } => name,

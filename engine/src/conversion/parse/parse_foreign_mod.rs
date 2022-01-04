@@ -109,6 +109,7 @@ impl ParseForeignMod {
                     return_type_is_reference,
                     reference_args,
                     original_name,
+                    synthesize_make_unique: false,
                 });
                 Ok(())
             }

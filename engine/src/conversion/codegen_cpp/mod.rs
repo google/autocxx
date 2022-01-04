@@ -25,6 +25,8 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
+use self::type_to_cpp::namespaced_name_using_original_name_map;
+
 use super::{
     analysis::fun::{
         function_wrapper::{CppFunction, CppFunctionBody},
@@ -304,7 +306,9 @@ impl<'a> CppCodeGenerator<'a> {
         let is_a_method = !avoid_this
             && matches!(
                 details.kind,
-                CppFunctionKind::Method | CppFunctionKind::ConstMethod
+                CppFunctionKind::Method
+                    | CppFunctionKind::ConstMethod
+                    | CppFunctionKind::Constructor
             );
         let name = match force_name {
             Some(n) => n.to_string(),
@@ -345,7 +349,7 @@ impl<'a> CppCodeGenerator<'a> {
             .collect();
         let args = args?.join(", ");
         let default_return = match details.kind {
-            CppFunctionKind::Constructor => "",
+            CppFunctionKind::SynthesizedConstructor => "",
             _ => "void",
         };
         let ret_type = details
@@ -402,7 +406,16 @@ impl<'a> CppCodeGenerator<'a> {
             arg_list.join(", ")
         };
         let (mut underlying_function_call, field_assignments) = match &details.payload {
-            CppFunctionBody::Constructor => (arg_list, "".to_string()),
+            CppFunctionBody::MakeUnique => (arg_list, "".to_string()),
+            CppFunctionBody::PlacementNew(ns, id) => {
+                let ty_id = QualifiedName::new(ns, id.clone());
+                let ty_id =
+                    namespaced_name_using_original_name_map(&ty_id, &self.original_name_map);
+                (
+                    format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
+                    "".to_string(),
+                )
+            }
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
                 Some(receiver) => (format!("{}.{}({})", receiver, id, arg_list), "".to_string()),
                 None => {

@@ -15,7 +15,6 @@
 use std::collections::HashSet;
 
 use super::fun::{FnAnalysis, FnKind, FnPhase};
-use crate::conversion::api::ApiName;
 use crate::conversion::{convert_error::ErrorContext, ConvertError};
 use crate::{conversion::api::Api, known_types};
 
@@ -76,10 +75,7 @@ fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Api<FnPhase> {
     let id = api.name().get_final_ident();
     log::info!("Marking as ignored: {} because {}", id.to_string(), err);
     Api::IgnoredItem {
-        name: ApiName {
-            name: api.name().clone(),
-            cpp_name: api.cpp_name().clone(),
-        },
+        name: api.name_info().clone(),
         err,
         ctx: match api {
             Api::Function {
