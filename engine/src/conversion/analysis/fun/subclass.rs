@@ -56,6 +56,7 @@ pub(super) fn create_subclass_fn_wrapper(
 ) -> Box<FuncToConvert> {
     let self_ty = Some(sub.cpp());
     Box::new(FuncToConvert {
+        virtual_this_type: self_ty.clone(),
         self_ty,
         ident: super_fn_name.get_final_ident(),
         doc_attr: fun.doc_attr.clone(),
@@ -164,7 +165,6 @@ pub(super) fn create_subclass_constructor_wrapper(
         .collect();
     let self_ty = Some(sub.cpp());
     let maybe_wrap = Box::new(FuncToConvert {
-        self_ty,
         ident: subclass_constructor_name.clone(),
         doc_attr: fun.doc_attr.clone(),
         inputs,
@@ -177,6 +177,8 @@ pub(super) fn create_subclass_constructor_wrapper(
         unused_template_param: fun.unused_template_param,
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
+        virtual_this_type: self_ty.clone(),
+        self_ty,
     });
     let mut subclass_constructor_name = ApiName::new_in_root_namespace(subclass_constructor_name);
     subclass_constructor_name.cpp_name = Some(sub.cpp().get_final_item().to_string());

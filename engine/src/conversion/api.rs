@@ -111,6 +111,7 @@ pub(crate) struct FuncToConvert {
     pub(crate) return_type_is_reference: bool,
     pub(crate) reference_args: HashSet<Ident>,
     pub(crate) original_name: Option<String>,
+    pub(crate) virtual_this_type: Option<QualifiedName>,
     pub(crate) self_ty: Option<QualifiedName>,
 }
 

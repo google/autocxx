@@ -102,6 +102,7 @@ impl ParseForeignMod {
                     return_type_is_reference,
                     reference_args,
                     original_name,
+                    virtual_this_type: None,
                 });
                 Ok(())
             }

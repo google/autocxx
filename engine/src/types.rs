@@ -212,10 +212,6 @@ impl QualifiedName {
             .cloned()
             .chain(std::iter::once(self.get_final_item().to_string()))
     }
-
-    pub(crate) fn is_cvoid(&self) -> bool {
-        self.to_cpp_name() == "void"
-    }
 }
 
 impl Display for QualifiedName {

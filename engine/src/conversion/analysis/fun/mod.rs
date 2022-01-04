@@ -37,6 +37,7 @@ use std::collections::{HashMap, HashSet};
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
 use itertools::Itertools;
+use proc_macro2::Span;
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
     TypePtr, Visibility,
@@ -415,7 +416,15 @@ impl<'a> FnAnalyzer<'a> {
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .inputs
             .iter()
-            .map(|i| self.convert_fn_arg(i, ns, diagnostic_display_name, &fun.reference_args))
+            .map(|i| {
+                self.convert_fn_arg(
+                    i,
+                    ns,
+                    diagnostic_display_name,
+                    &fun.virtual_this_type,
+                    &fun.reference_args,
+                )
+            })
             .partition(Result::is_ok);
         let (mut params, mut param_details): (Punctuated<_, Comma>, Vec<_>) =
             param_details.into_iter().map(Result::unwrap).unzip();
@@ -809,6 +818,7 @@ impl<'a> FnAnalyzer<'a> {
         arg: &FnArg,
         ns: &Namespace,
         fn_name: &str,
+        virtual_this: &Option<QualifiedName>,
         reference_args: &HashSet<Ident>,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
@@ -829,13 +839,21 @@ impl<'a> FnAnalyzer<'a> {
                                     } else {
                                         ReceiverMutability::Const
                                     };
-                                    let this_type = QualifiedName::from_type_path(typ);
-                                    if this_type.is_cvoid() && pp.ident == "this" {
-                                        return Err(ConvertError::VirtualThisType(
-                                            ns.clone(),
-                                            fn_name.into(),
-                                        ));
-                                    }
+
+                                    let this_type = if let Some(virtual_this) = virtual_this {
+                                        let this_type_path = virtual_this.to_type_path();
+                                        let const_token = if mutability.is_some() {
+                                            None
+                                        } else {
+                                            Some(syn::Token![const](Span::call_site()))
+                                        };
+                                        pt.ty = Box::new(parse_quote! {
+                                            * #mutability #const_token #this_type_path
+                                        });
+                                        virtual_this.clone()
+                                    } else {
+                                        QualifiedName::from_type_path(typ)
+                                    };
                                     Ok((this_type, receiver_mutability))
                                 }
                                 _ => Err(ConvertError::UnexpectedThisType(
@@ -1021,6 +1039,7 @@ impl<'a> FnAnalyzer<'a> {
                         return_type_is_reference: false,
                         reference_args: HashSet::new(),
                         original_name: None,
+                        virtual_this_type: None,
                     }),
                 )
             });
