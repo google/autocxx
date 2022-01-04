@@ -18,7 +18,9 @@ use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 
 use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability};
 use crate::conversion::analysis::pod::PodPhase;
-use crate::conversion::api::{CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassName};
+use crate::conversion::api::{
+    CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassName, Virtualness,
+};
 use crate::{
     conversion::{
         analysis::fun::function_wrapper::{
@@ -60,7 +62,7 @@ pub(super) fn create_subclass_fn_wrapper(
         inputs: fun.inputs.clone(),
         output: fun.output.clone(),
         vis: fun.vis.clone(),
-        is_pure_virtual: false,
+        virtualness: Virtualness::None,
         cpp_vis: CppVisibility::Public,
         is_move_constructor: false,
         unused_template_param: fun.unused_template_param,
@@ -168,7 +170,7 @@ pub(super) fn create_subclass_constructor_wrapper(
         inputs,
         output: fun.output.clone(),
         vis: fun.vis.clone(),
-        is_pure_virtual: false,
+        virtualness: Virtualness::None,
         cpp_vis: CppVisibility::Public,
         is_move_constructor: false,
         original_name: None,

@@ -86,6 +86,13 @@ impl Parse for Layout {
     }
 }
 
+#[derive(Clone)]
+pub(crate) enum Virtualness {
+    None,
+    Virtual,
+    PureVirtual,
+}
+
 /// A C++ function for which we need to generate bindings, but haven't
 /// yet analyzed in depth. This is little more than a `ForeignItemFn`
 /// broken down into its constituent parts, plus some metadata from the
@@ -97,7 +104,7 @@ pub(crate) struct FuncToConvert {
     pub(crate) inputs: Punctuated<FnArg, Comma>,
     pub(crate) output: ReturnType,
     pub(crate) vis: Visibility,
-    pub(crate) is_pure_virtual: bool,
+    pub(crate) virtualness: Virtualness,
     pub(crate) cpp_vis: CppVisibility,
     pub(crate) is_move_constructor: bool,
     pub(crate) unused_template_param: bool,

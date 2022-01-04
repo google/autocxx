@@ -24,7 +24,7 @@ use crate::{
             fun::function_wrapper::CppFunctionKind,
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::{ApiName, CppVisibility, FuncToConvert, SubclassName},
+        api::{ApiName, CppVisibility, FuncToConvert, SubclassName, Virtualness},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::{convert_apis, report_any_error},
@@ -129,7 +129,6 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) self_type: Option<(QualifiedName, ReceiverMutability)>,
     pub(crate) was_reference: bool,
     pub(crate) deps: HashSet<QualifiedName>,
-    pub(crate) is_virtual: bool,
     pub(crate) requires_unsafe: bool,
 }
 
@@ -519,14 +518,10 @@ impl<'a> FnAnalyzer<'a> {
                 } else {
                     let receiver_mutability =
                         receiver_mutability.expect("Failed to find receiver details");
-                    if param_details.iter().any(|pd| pd.is_virtual) {
-                        if fun.is_pure_virtual {
-                            MethodKind::PureVirtual(receiver_mutability)
-                        } else {
-                            MethodKind::Virtual(receiver_mutability)
-                        }
-                    } else {
-                        MethodKind::Normal(receiver_mutability)
+                    match fun.virtualness {
+                        Virtualness::None => MethodKind::Normal(receiver_mutability),
+                        Virtualness::Virtual => MethodKind::Virtual(receiver_mutability),
+                        Virtualness::PureVirtual => MethodKind::PureVirtual(receiver_mutability),
                     }
                 };
             let error_context = ErrorContext::Method {
@@ -821,7 +816,6 @@ impl<'a> FnAnalyzer<'a> {
                 let mut pt = pt.clone();
                 let mut self_type = None;
                 let old_pat = *pt.pat;
-                let mut is_virtual = false;
                 let mut treat_as_reference = false;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
@@ -885,7 +879,6 @@ impl<'a> FnAnalyzer<'a> {
                                 | type_converter::TypeKind::MutableReference
                         ),
                         deps: annotated_type.types_encountered,
-                        is_virtual,
                         requires_unsafe: matches!(
                             annotated_type.kind,
                             type_converter::TypeKind::Pointer
@@ -1021,7 +1014,7 @@ impl<'a> FnAnalyzer<'a> {
                         inputs: parse_quote! { this: *mut #path },
                         output: ReturnType::Default,
                         vis: parse_quote! { pub },
-                        is_pure_virtual: false,
+                        virtualness: Virtualness::None,
                         cpp_vis: CppVisibility::Public,
                         is_move_constructor: false,
                         unused_template_param: false,

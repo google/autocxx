@@ -18,7 +18,7 @@ use crate::{
     conversion::{
         api::{
             Api, ApiName, CppVisibility, Layout, StructDetails, SubclassName, TypedefKind,
-            UnanalyzedApi,
+            UnanalyzedApi, Virtualness,
         },
         ConvertError,
     },
@@ -94,6 +94,16 @@ pub(super) fn get_cpp_visibility(attrs: &[Attribute]) -> CppVisibility {
         CppVisibility::Protected
     } else {
         CppVisibility::Public
+    }
+}
+
+pub(super) fn get_virtualness(attrs: &[Attribute]) -> Virtualness {
+    if has_attr(attrs, "bindgen_pure_virtual") {
+        Virtualness::PureVirtual
+    } else if has_attr(attrs, "bindgen_virtual") {
+        Virtualness::Virtual
+    } else {
+        Virtualness::None
     }
 }
 

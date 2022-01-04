@@ -30,7 +30,9 @@ use syn::{
     Type,
 };
 
-use super::parse_bindgen::{get_bindgen_original_name_annotation, get_cpp_visibility, has_attr};
+use super::parse_bindgen::{
+    get_bindgen_original_name_annotation, get_cpp_visibility, get_virtualness, has_attr,
+};
 
 /// Parses a given bindgen-generated 'mod' into suitable
 /// [Api]s. In bindgen output, a given mod concerns
@@ -76,7 +78,7 @@ impl ParseForeignMod {
         match i {
             ForeignItem::Fn(item) => {
                 let cpp_vis = get_cpp_visibility(&item.attrs);
-                let is_pure_virtual = has_attr(&item.attrs, "bindgen_pure_virtual");
+                let virtualness = get_virtualness(&item.attrs);
                 let unused_template_param = has_attr(
                     &item.attrs,
                     "bindgen_unused_template_param_in_arg_or_return",
@@ -93,7 +95,7 @@ impl ParseForeignMod {
                     inputs: item.sig.inputs,
                     output: item.sig.output,
                     vis: item.vis,
-                    is_pure_virtual,
+                    virtualness,
                     cpp_vis,
                     is_move_constructor,
                     unused_template_param,
