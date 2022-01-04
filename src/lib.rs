@@ -686,6 +686,18 @@ macro_rules! ctype_wrapper {
             type Id = autocxx_engine::cxx::type_id!($c);
             type Kind = autocxx_engine::cxx::kind::Trivial;
         }
+
+        impl From<::std::os::raw::$r> for $r {
+            fn from(val: ::std::os::raw::$r) -> Self {
+                Self(val)
+            }
+        }
+
+        impl From<$r> for ::std::os::raw::$r {
+            fn from(val: $r) -> Self {
+                val.0
+            }
+        }
     };
 }
 
