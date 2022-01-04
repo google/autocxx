@@ -6,7 +6,7 @@
 
 This project is a tool for calling C++ from Rust in a heavily automated, but safe, fashion.
 
-The intention is that it has all the fluent safety from [cxx](https://github.com/dtolnay/cxx) whilst generating interfaces automatically from existing C++ headers using a variant of [bindgen](https://docs.rs/bindgen/0.54.1/bindgen/). Think of autocxx as glue which plugs bindgen into cxx.
+The intention is that it has all the fluent safety from [cxx](https://cxx.rs) whilst generating interfaces automatically from existing C++ headers using a variant of [bindgen](https://docs.rs/bindgen/latest/bindgen/). Think of autocxx as glue which plugs bindgen into cxx.
 
 # Overview
 
@@ -31,7 +31,7 @@ If you're here, you want to call some C++ from Rust, right?
 
 You will need:
 
-* Some C++ header files (.h files)
+* Some C++ header files (`.h` files)
 * The C++ "include path". That is, the set of directories containing those headers. (That's not necessarily the directory in which each header _file_ lives; C++ might contain `#include "foo/bar.h"` and so your include path would need to include the directory containing the `foo` directory).
 * A list of the APIs (types and functions) from those header files which you wish to make available in Rust.
 * Either a Cargo or non-Cargo build system.
@@ -67,7 +67,9 @@ fn main() {
 Finally, in your `main.rs` you can use the [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html) macro which is the heart of `autocxx`:
 
 ```rust,ignore
-autocxx::include_cpp! {
+use autocxx::prelude::*;
+
+include_cpp! {
     #include "my_header.h" // your header file name
     safety!(unsafe) // see details of unsafety policies described in include_cpp
     generate!("MyAPIFunction") // add this line for each function or type you wish to generate

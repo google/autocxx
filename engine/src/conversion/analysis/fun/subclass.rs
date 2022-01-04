@@ -70,6 +70,7 @@ pub(super) fn create_subclass_fn_wrapper(
         original_name: None,
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
+        synthesize_make_unique: fun.synthesize_make_unique,
     })
 }
 
@@ -179,9 +180,13 @@ pub(super) fn create_subclass_constructor_wrapper(
         reference_args: fun.reference_args.clone(),
         virtual_this_type: self_ty.clone(),
         self_ty,
+        synthesize_make_unique: fun.synthesize_make_unique,
     });
-    let mut subclass_constructor_name = ApiName::new_in_root_namespace(subclass_constructor_name);
-    subclass_constructor_name.cpp_name = Some(sub.cpp().get_final_item().to_string());
+    let subclass_constructor_name = ApiName::new_with_cpp_name(
+        &Namespace::new(),
+        subclass_constructor_name,
+        Some(sub.cpp().get_final_item().to_string()),
+    );
     (maybe_wrap, subclass_constructor_name)
 }
 
@@ -200,6 +205,7 @@ pub(super) fn create_subclass_constructor(
         analysis
             .param_details
             .iter()
+            .skip(1) // skip placement new destination
             .map(|aa| aa.conversion.clone()),
     );
     let cpp_impl = CppFunction {
@@ -207,7 +213,7 @@ pub(super) fn create_subclass_constructor(
         wrapper_function_name,
         return_conversion: None,
         argument_conversion: args.collect(),
-        kind: CppFunctionKind::Constructor,
+        kind: CppFunctionKind::SynthesizedConstructor,
         pass_obs_field: false,
         qualification: Some(cpp.clone()),
         original_cpp_name: cpp.to_cpp_name(),
@@ -216,6 +222,7 @@ pub(super) fn create_subclass_constructor(
         name: ApiName::new_from_qualified_name(cpp),
         subclass: sub.clone(),
         cpp_impl: Box::new(cpp_impl),
-        is_trivial: analysis.param_details.is_empty(),
+        is_trivial: analysis.param_details.len() == 1, // just placement new
+                                                       // destination, no other parameters
     }
 }

@@ -224,7 +224,7 @@ use autocxx_engine::IncludeCppEngine;
 /// * By `std::shared_ptr`
 /// * By `std::weak_ptr`
 ///
-/// (all of this is because the underlying [cxx] crate has such versatility).
+/// (all of this is because the underlying [`cxx`] crate has such versatility).
 /// Some of these have some quirks in the way they're exposed in Rust, described below.
 ///
 /// ### Passing between C++ and Rust by value
@@ -266,6 +266,17 @@ use autocxx_engine::IncludeCppEngine;
 /// If there's a C++ function which takes a struct by value, but that struct
 /// is not declared as POD-safe, then we'll generate wrapper functions to move
 /// that type into and out of [`cxx::UniquePtr`]s.
+///
+/// There is one other option under construction. The `moveit` crate replicates
+/// C++ value move and copying semantics in Rust. There is limited early support
+/// for `moveit` within autocxx; specifically, you can call C++ constructors
+/// to emplace even non-trivial objects on the Rust stack using `moveit`, and
+/// then call methods on them or use references to them in other function calls.
+/// At present, you can't copy or move such objects - once they're created,
+/// that's it, until it's dropped. At present therefore such objects can't be
+/// passed into C++ functions which take non-POD types by value. This facility
+/// is therefore best avoided for now until it's more complete - but see
+/// `examples/non-trivial-type-on-stack` if you want to see how to use it.
 ///
 /// ### References and pointers
 ///
@@ -686,6 +697,18 @@ macro_rules! ctype_wrapper {
             type Id = autocxx_engine::cxx::type_id!($c);
             type Kind = autocxx_engine::cxx::kind::Trivial;
         }
+
+        impl From<::std::os::raw::$r> for $r {
+            fn from(val: ::std::os::raw::$r) -> Self {
+                Self(val)
+            }
+        }
+
+        impl From<$r> for ::std::os::raw::$r {
+            fn from(val: $r) -> Self {
+                val.0
+            }
+        }
     };
 }
 
@@ -775,3 +798,24 @@ pub trait PinMut<T>: AsRef<T> {
     /// Return a pinned mutable reference to a type.
     fn pin_mut(&mut self) -> std::pin::Pin<&mut T>;
 }
+
+/// Imports which you're likely to want to use.
+pub mod prelude {
+    pub use crate::c_int;
+    pub use crate::c_long;
+    pub use crate::c_longlong;
+    pub use crate::c_short;
+    pub use crate::c_uchar;
+    pub use crate::c_uint;
+    pub use crate::c_ulong;
+    pub use crate::c_ulonglong;
+    pub use crate::c_ushort;
+    pub use crate::c_void;
+    pub use crate::include_cpp;
+    pub use crate::PinMut;
+    pub use moveit::moveit;
+    pub use moveit::new::New;
+}
+
+/// Re-export moveit for ease of consumers.
+pub use moveit;

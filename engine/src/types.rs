@@ -238,10 +238,10 @@ pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), ConvertError> {
     }
 }
 
-pub fn validate_ident_ok_for_rust(id: &str) -> Result<(), ConvertError> {
-    let id = make_ident(id);
+pub fn validate_ident_ok_for_rust(label: &str) -> Result<(), ConvertError> {
+    let id = make_ident(label);
     syn::parse2::<syn::Ident>(id.into_token_stream())
-        .map_err(|_| ConvertError::ReservedName)
+        .map_err(|_| ConvertError::ReservedName(label.to_string()))
         .map(|_| ())
 }
 

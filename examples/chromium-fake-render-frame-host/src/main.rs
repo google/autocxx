@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx::include_cpp;
+use autocxx::prelude::*;
 mod render_frame_host;
-use autocxx::{c_int, PinMut};
 use render_frame_host::RenderFrameHostForWebContents;
 use render_frame_host::RenderFrameHostHandle;
 

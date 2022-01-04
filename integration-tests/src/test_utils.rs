@@ -266,7 +266,7 @@ fn do_run_test(
     let hexathorpe = Token![#](Span::call_site());
     let unexpanded_rust = |hdr: &str| {
         quote! {
-            use autocxx::include_cpp;
+            use autocxx::prelude::*;
 
             include_cpp!(
                 #hexathorpe include #hdr
