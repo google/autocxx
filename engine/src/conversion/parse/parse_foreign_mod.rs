@@ -30,7 +30,9 @@ use syn::{
     Type,
 };
 
-use super::parse_bindgen::{get_bindgen_original_name_annotation, get_cpp_visibility, has_attr};
+use super::parse_bindgen::{
+    get_bindgen_original_name_annotation, get_cpp_visibility, get_virtualness, has_attr,
+};
 
 /// Parses a given bindgen-generated 'mod' into suitable
 /// [Api]s. In bindgen output, a given mod concerns
@@ -62,29 +64,21 @@ impl ParseForeignMod {
 
     /// Record information from foreign mod items encountered
     /// in bindgen output.
-    pub(crate) fn convert_foreign_mod_items(
-        &mut self,
-        foreign_mod_items: Vec<ForeignItem>,
-        virtual_this_type: Option<QualifiedName>,
-    ) {
+    pub(crate) fn convert_foreign_mod_items(&mut self, foreign_mod_items: Vec<ForeignItem>) {
         let mut extra_apis = Vec::new();
         for i in foreign_mod_items {
             report_any_error(&self.ns.clone(), &mut extra_apis, || {
-                self.parse_foreign_item(i, &virtual_this_type)
+                self.parse_foreign_item(i)
             });
         }
         self.ignored_apis.append(&mut extra_apis);
     }
 
-    fn parse_foreign_item(
-        &mut self,
-        i: ForeignItem,
-        virtual_this_type: &Option<QualifiedName>,
-    ) -> Result<(), ConvertErrorWithContext> {
+    fn parse_foreign_item(&mut self, i: ForeignItem) -> Result<(), ConvertErrorWithContext> {
         match i {
             ForeignItem::Fn(item) => {
                 let cpp_vis = get_cpp_visibility(&item.attrs);
-                let is_pure_virtual = has_attr(&item.attrs, "bindgen_pure_virtual");
+                let virtualness = get_virtualness(&item.attrs);
                 let unused_template_param = has_attr(
                     &item.attrs,
                     "bindgen_unused_template_param_in_arg_or_return",
@@ -95,20 +89,20 @@ impl ParseForeignMod {
                 let original_name = get_bindgen_original_name_annotation(&item.attrs);
                 let doc_attr = get_doc_attr(&item.attrs);
                 self.funcs_to_convert.push(FuncToConvert {
-                    virtual_this_type: virtual_this_type.clone(),
                     self_ty: None,
                     ident: item.sig.ident,
                     doc_attr,
                     inputs: item.sig.inputs,
                     output: item.sig.output,
                     vis: item.vis,
-                    is_pure_virtual,
+                    virtualness,
                     cpp_vis,
                     is_move_constructor,
                     unused_template_param,
                     return_type_is_reference,
                     reference_args,
                     original_name,
+                    synthesized_this_type: None,
                     synthesize_make_unique: false,
                 });
                 Ok(())

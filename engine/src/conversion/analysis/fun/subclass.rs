@@ -18,7 +18,9 @@ use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 
 use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability};
 use crate::conversion::analysis::pod::PodPhase;
-use crate::conversion::api::{CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassName};
+use crate::conversion::api::{
+    CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassName, Virtualness,
+};
 use crate::{
     conversion::{
         analysis::fun::function_wrapper::{
@@ -54,14 +56,14 @@ pub(super) fn create_subclass_fn_wrapper(
 ) -> Box<FuncToConvert> {
     let self_ty = Some(sub.cpp());
     Box::new(FuncToConvert {
-        virtual_this_type: self_ty.clone(),
+        synthesized_this_type: self_ty.clone(),
         self_ty,
         ident: super_fn_name.get_final_ident(),
         doc_attr: fun.doc_attr.clone(),
         inputs: fun.inputs.clone(),
         output: fun.output.clone(),
         vis: fun.vis.clone(),
-        is_pure_virtual: false,
+        virtualness: Virtualness::None,
         cpp_vis: CppVisibility::Public,
         is_move_constructor: false,
         unused_template_param: fun.unused_template_param,
@@ -164,20 +166,20 @@ pub(super) fn create_subclass_constructor_wrapper(
         .collect();
     let self_ty = Some(sub.cpp());
     let maybe_wrap = Box::new(FuncToConvert {
-        virtual_this_type: self_ty.clone(),
-        self_ty,
         ident: subclass_constructor_name.clone(),
         doc_attr: fun.doc_attr.clone(),
         inputs,
         output: fun.output.clone(),
         vis: fun.vis.clone(),
-        is_pure_virtual: false,
+        virtualness: Virtualness::None,
         cpp_vis: CppVisibility::Public,
         is_move_constructor: false,
         original_name: None,
         unused_template_param: fun.unused_template_param,
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
+        synthesized_this_type: self_ty.clone(),
+        self_ty,
         synthesize_make_unique: fun.synthesize_make_unique,
     });
     let subclass_constructor_name = ApiName::new_with_cpp_name(

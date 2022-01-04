@@ -86,10 +86,23 @@ impl Parse for Layout {
     }
 }
 
+#[derive(Clone)]
+pub(crate) enum Virtualness {
+    None,
+    Virtual,
+    PureVirtual,
+}
+
 /// A C++ function for which we need to generate bindings, but haven't
 /// yet analyzed in depth. This is little more than a `ForeignItemFn`
 /// broken down into its constituent parts, plus some metadata from the
 /// surrounding bindgen parsing context.
+///
+/// Some parts of the code synthesize additional functions and then
+/// pass them through the same pipeline _as if_ they were discovered
+/// during normal bindgen parsing. If that happens, they'll create one
+/// of these structures, and typically fill in some of the
+/// `synthesized_*` members which are not filled in from bindgen.
 #[derive(Clone)]
 pub(crate) struct FuncToConvert {
     pub(crate) ident: Ident,
@@ -97,15 +110,20 @@ pub(crate) struct FuncToConvert {
     pub(crate) inputs: Punctuated<FnArg, Comma>,
     pub(crate) output: ReturnType,
     pub(crate) vis: Visibility,
-    pub(crate) is_pure_virtual: bool,
+    pub(crate) virtualness: Virtualness,
     pub(crate) cpp_vis: CppVisibility,
     pub(crate) is_move_constructor: bool,
     pub(crate) unused_template_param: bool,
     pub(crate) return_type_is_reference: bool,
     pub(crate) reference_args: HashSet<Ident>,
     pub(crate) original_name: Option<String>,
-    pub(crate) virtual_this_type: Option<QualifiedName>,
+    /// Used for static functions only. For all other functons,
+    /// this is figured out from the receiver type in the inputs.
     pub(crate) self_ty: Option<QualifiedName>,
+    /// If we wish to use a different 'this' type than the original
+    /// method receiver, e.g. because we're making a subclass
+    /// constructor, fill it in here.
+    pub(crate) synthesized_this_type: Option<QualifiedName>,
     /// Whether we actually should make this into a make_unique function
     /// instead of, by default, a plain constructor ("new")
     pub(crate) synthesize_make_unique: bool,

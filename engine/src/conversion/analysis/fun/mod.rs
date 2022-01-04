@@ -24,7 +24,7 @@ use crate::{
             fun::function_wrapper::CppFunctionKind,
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::{ApiName, CppVisibility, FuncToConvert, SubclassName},
+        api::{ApiName, CppVisibility, FuncToConvert, SubclassName, Virtualness},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::{convert_apis, report_any_error},
@@ -138,7 +138,6 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) self_type: Option<(QualifiedName, ReceiverMutability)>,
     pub(crate) was_reference: bool,
     pub(crate) deps: HashSet<QualifiedName>,
-    pub(crate) is_virtual: bool,
     pub(crate) requires_unsafe: bool,
 }
 
@@ -444,7 +443,6 @@ impl<'a> FnAnalyzer<'a> {
         name: ApiName,
         fun: &FuncToConvert,
     ) -> Result<Option<(FnAnalysis, ApiName)>, ConvertErrorWithContext> {
-        let virtual_this = &fun.virtual_this_type;
         let mut cpp_name = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
@@ -469,7 +467,7 @@ impl<'a> FnAnalyzer<'a> {
                     i,
                     ns,
                     diagnostic_display_name,
-                    virtual_this,
+                    &fun.synthesized_this_type,
                     &fun.reference_args,
                     true,
                 )
@@ -581,14 +579,10 @@ impl<'a> FnAnalyzer<'a> {
             } else {
                 let receiver_mutability =
                     receiver_mutability.expect("Failed to find receiver details");
-                if param_details.iter().any(|pd| pd.is_virtual) {
-                    if fun.is_pure_virtual {
-                        MethodKind::PureVirtual(receiver_mutability)
-                    } else {
-                        MethodKind::Virtual(receiver_mutability)
-                    }
-                } else {
-                    MethodKind::Normal(receiver_mutability)
+                match fun.virtualness {
+                    Virtualness::None => MethodKind::Normal(receiver_mutability),
+                    Virtualness::Virtual => MethodKind::Virtual(receiver_mutability),
+                    Virtualness::PureVirtual => MethodKind::PureVirtual(receiver_mutability),
                 }
             };
             // Disambiguate overloads.
@@ -630,7 +624,7 @@ impl<'a> FnAnalyzer<'a> {
                     original_first_argument.unwrap(),
                     ns,
                     &rust_name,
-                    virtual_this,
+                    &fun.synthesized_this_type,
                     &fun.reference_args,
                     false,
                 )
@@ -907,7 +901,6 @@ impl<'a> FnAnalyzer<'a> {
                 let mut pt = pt.clone();
                 let mut self_type = None;
                 let old_pat = *pt.pat;
-                let mut is_virtual = false;
                 let mut treat_as_reference = false;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
@@ -921,16 +914,9 @@ impl<'a> FnAnalyzer<'a> {
                                     } else {
                                         ReceiverMutability::Const
                                     };
-                                    let mut this_type = QualifiedName::from_type_path(typ);
-                                    if this_type.is_cvoid() && pp.ident == "this" {
-                                        is_virtual = true;
-                                        this_type = virtual_this.clone().ok_or_else(|| {
-                                            ConvertError::VirtualThisType(
-                                                ns.clone(),
-                                                fn_name.into(),
-                                            )
-                                        })?;
-                                        let this_type_path = this_type.to_type_path();
+
+                                    let this_type = if let Some(virtual_this) = virtual_this {
+                                        let this_type_path = virtual_this.to_type_path();
                                         let const_token = if mutability.is_some() {
                                             None
                                         } else {
@@ -939,7 +925,10 @@ impl<'a> FnAnalyzer<'a> {
                                         pt.ty = Box::new(parse_quote! {
                                             * #mutability #const_token #this_type_path
                                         });
-                                    }
+                                        virtual_this.clone()
+                                    } else {
+                                        QualifiedName::from_type_path(typ)
+                                    };
                                     Ok((this_type, receiver_mutability))
                                 }
                                 _ => Err(ConvertError::UnexpectedThisType(
@@ -985,7 +974,6 @@ impl<'a> FnAnalyzer<'a> {
                                 | type_converter::TypeKind::MutableReference
                         ),
                         deps: annotated_type.types_encountered,
-                        is_virtual,
                         requires_unsafe: matches!(
                             annotated_type.kind,
                             type_converter::TypeKind::Pointer
@@ -1115,20 +1103,20 @@ impl<'a> FnAnalyzer<'a> {
                 self.analyze_foreign_fn_and_subclasses(
                     fake_api_name,
                     Box::new(FuncToConvert {
-                        virtual_this_type: Some(self_ty.clone()),
                         self_ty: Some(self_ty),
                         ident,
                         doc_attr: None,
                         inputs: parse_quote! { this: *mut #path },
                         output: ReturnType::Default,
                         vis: parse_quote! { pub },
-                        is_pure_virtual: false,
+                        virtualness: Virtualness::None,
                         cpp_vis: CppVisibility::Public,
                         is_move_constructor: false,
                         unused_template_param: false,
                         return_type_is_reference: false,
                         reference_args: HashSet::new(),
                         original_name: None,
+                        synthesized_this_type: None,
                         synthesize_make_unique: false,
                     }),
                 )
