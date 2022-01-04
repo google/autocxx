@@ -789,20 +789,20 @@ pub trait PinMut<T>: AsRef<T> {
 
 /// Imports which you're likely to want to use.
 pub mod prelude {
-    pub use crate::include_cpp;
-    pub use moveit::moveit;
-    pub use moveit::new::New;
-    pub use crate::PinMut;
     pub use crate::c_int;
     pub use crate::c_long;
     pub use crate::c_longlong;
     pub use crate::c_short;
-    pub use crate::c_uint;
     pub use crate::c_uchar;
+    pub use crate::c_uint;
     pub use crate::c_ulong;
     pub use crate::c_ulonglong;
     pub use crate::c_ushort;
     pub use crate::c_void;
+    pub use crate::include_cpp;
+    pub use crate::PinMut;
+    pub use moveit::moveit;
+    pub use moveit::new::New;
 }
 
 /// Re-export moveit for ease of consumers.
