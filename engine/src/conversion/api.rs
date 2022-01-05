@@ -425,6 +425,7 @@ impl<T: AnalysisPhase> Api<T> {
                 vec![
                     self.name().clone(),
                     QualifiedName::new(&Namespace::new(), name.holder()),
+                    name.cpp(),
                 ]
                 .into_iter(),
             ),
