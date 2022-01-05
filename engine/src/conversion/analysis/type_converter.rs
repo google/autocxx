@@ -508,7 +508,7 @@ impl<'a> TypeConverter<'a> {
                 | Api::Const { .. }
                 | Api::CType { .. }
                 | Api::RustSubclassFn { .. }
-                | Api::RustSubclassConstructor { .. }
+                | Api::SynthesizedCppFunction { .. }
                 | Api::IgnoredItem { .. }
                 | Api::RustFn { .. } => None,
             })

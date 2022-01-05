@@ -103,7 +103,7 @@ impl ParseForeignMod {
                     reference_args,
                     original_name,
                     synthesized_this_type: None,
-                    synthesize_make_unique: false,
+                    synthesis: None,
                 });
                 Ok(())
             }

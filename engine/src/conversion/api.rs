@@ -93,6 +93,13 @@ pub(crate) enum Virtualness {
     PureVirtual,
 }
 
+/// Indicates that this function didn't exist originally in the C++
+/// but we've created it afresh.
+#[derive(Clone)]
+pub(crate) enum Synthesis {
+    MakeUnique,
+}
+
 /// A C++ function for which we need to generate bindings, but haven't
 /// yet analyzed in depth. This is little more than a `ForeignItemFn`
 /// broken down into its constituent parts, plus some metadata from the
@@ -124,9 +131,9 @@ pub(crate) struct FuncToConvert {
     /// method receiver, e.g. because we're making a subclass
     /// constructor, fill it in here.
     pub(crate) synthesized_this_type: Option<QualifiedName>,
-    /// Whether we actually should make this into a make_unique function
-    /// instead of, by default, a plain constructor ("new")
-    pub(crate) synthesize_make_unique: bool,
+    /// If Some, this function didn't really exist in the original
+    /// C++ and instead we're synthesizing it.
+    pub(crate) synthesis: Option<Synthesis>,
 }
 
 /// Layers of analysis which may be applied to decorate each API.
@@ -344,8 +351,9 @@ pub(crate) enum Api<T: AnalysisPhase> {
         subclass: SubclassName,
         details: Box<RustSubclassFnDetails>,
     },
-    // A constructor for a subclass.
-    RustSubclassConstructor {
+    /// Some pure C++ function which didn't previously exist in the
+    /// C++ but we want to create.
+    SynthesizedCppFunction {
         name: ApiName,
         subclass: SubclassName,
         cpp_impl: Box<CppFunction>,
@@ -386,7 +394,7 @@ impl<T: AnalysisPhase> Api<T> {
             Api::RustType { name, .. } => name,
             Api::RustFn { name, .. } => name,
             Api::RustSubclassFn { name, .. } => name,
-            Api::RustSubclassConstructor { name, .. } => name,
+            Api::SynthesizedCppFunction { name, .. } => name,
             Api::Subclass { name, .. } => &name.0,
         }
     }

@@ -171,7 +171,7 @@ impl<'a> CppCodeGenerator<'a> {
                             is_pure_virtual: details.is_pure_virtual,
                         });
                 }
-                Api::RustSubclassConstructor {
+                Api::SynthesizedCppFunction {
                     cpp_impl, subclass, ..
                 } => {
                     constructors_by_subclass

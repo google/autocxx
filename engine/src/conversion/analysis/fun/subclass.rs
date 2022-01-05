@@ -70,7 +70,7 @@ pub(super) fn create_subclass_fn_wrapper(
         original_name: None,
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
-        synthesize_make_unique: fun.synthesize_make_unique,
+        synthesis: fun.synthesis.clone(),
     })
 }
 
@@ -180,7 +180,7 @@ pub(super) fn create_subclass_constructor_wrapper(
         reference_args: fun.reference_args.clone(),
         synthesized_this_type: self_ty.clone(),
         self_ty,
-        synthesize_make_unique: fun.synthesize_make_unique,
+        synthesis: fun.synthesis.clone(),
     });
     let subclass_constructor_name = ApiName::new_with_cpp_name(
         &Namespace::new(),
@@ -218,7 +218,7 @@ pub(super) fn create_subclass_constructor(
         qualification: Some(cpp.clone()),
         original_cpp_name: cpp.to_cpp_name(),
     };
-    Api::RustSubclassConstructor {
+    Api::SynthesizedCppFunction {
         name: ApiName::new_from_qualified_name(cpp),
         subclass: sub.clone(),
         cpp_impl: Box::new(cpp_impl),

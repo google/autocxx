@@ -121,12 +121,12 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                 subclass,
                 details,
             }))),
-            Api::RustSubclassConstructor {
+            Api::SynthesizedCppFunction {
                 name,
                 subclass,
                 cpp_impl,
                 is_trivial,
-            } => Ok(Box::new(std::iter::once(Api::RustSubclassConstructor {
+            } => Ok(Box::new(std::iter::once(Api::SynthesizedCppFunction {
                 name,
                 subclass,
                 cpp_impl,

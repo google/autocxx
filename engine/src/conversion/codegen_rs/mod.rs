@@ -593,7 +593,7 @@ impl<'a> RsCodeGenerator<'a> {
                     subclasses_with_a_single_trivial_constructor.contains(&name.0.name);
                 self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
             }
-            Api::RustSubclassConstructor { .. } => RsCodegenResult::default(),
+            Api::SynthesizedCppFunction { .. } => RsCodegenResult::default(),
             Api::IgnoredItem { err, ctx, .. } => Self::generate_error_entry(err, ctx),
         }
     }
@@ -1139,7 +1139,7 @@ fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<Quali
     let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .filter_map(|api| match api {
-            Api::RustSubclassConstructor {
+            Api::SynthesizedCppFunction {
                 subclass,
                 is_trivial,
                 ..
