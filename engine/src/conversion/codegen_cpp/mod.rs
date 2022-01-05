@@ -32,7 +32,7 @@ use super::{
         function_wrapper::{CppFunction, CppFunctionBody},
         FnPhase,
     },
-    api::{Api, SubclassName},
+    api::{Api, SubclassName, Synthesis},
     ConvertError,
 };
 
@@ -152,8 +152,20 @@ impl<'a> CppCodeGenerator<'a> {
                             generate_code: true,
                             ..
                         },
+                    fun,
                     ..
-                } => self.generate_cpp_function(cpp_wrapper)?,
+                } => {
+                    if let Some(Synthesis::SubclassConstructor {
+                        subclass, cpp_impl, ..
+                    }) = &fun.synthesis
+                    {
+                        constructors_by_subclass
+                            .entry(subclass.clone())
+                            .or_default()
+                            .push(cpp_impl);
+                    }
+                    self.generate_cpp_function(cpp_wrapper)?
+                }
                 Api::ConcreteType { rs_definition, .. } => self.generate_typedef(
                     api.name(),
                     type_to_cpp(rs_definition, &self.original_name_map)?,
@@ -170,14 +182,6 @@ impl<'a> CppCodeGenerator<'a> {
                             fun: &details.cpp_impl,
                             is_pure_virtual: details.is_pure_virtual,
                         });
-                }
-                Api::SynthesizedCppFunction {
-                    cpp_impl, subclass, ..
-                } => {
-                    constructors_by_subclass
-                        .entry(subclass.clone())
-                        .or_default()
-                        .push(cpp_impl);
                 }
                 _ => panic!("Should have filtered on needs_cpp_codegen"),
             }

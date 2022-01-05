@@ -19,7 +19,7 @@ use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability};
 use crate::conversion::analysis::pod::PodPhase;
 use crate::conversion::api::{
-    CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassName, Virtualness,
+    CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassName, Synthesis, Virtualness,
 };
 use crate::{
     conversion::{
@@ -31,7 +31,7 @@ use crate::{
     types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::FnPhase;
+use super::{FnAnalysis, FnPhase};
 
 pub(super) fn subclasses_by_superclass(
     apis: &[Api<PodPhase>],
@@ -136,8 +136,12 @@ pub(super) fn create_subclass_function(
 
 pub(super) fn create_subclass_constructor_wrapper(
     sub: SubclassName,
+    analysis: &FnAnalysis,
+    sup: &QualifiedName,
     fun: &FuncToConvert,
 ) -> (Box<FuncToConvert>, ApiName) {
+    let synthesis = Some(create_subclass_constructor(&sub, analysis, sup));
+
     let subclass_constructor_name = make_ident(format!(
         "{}_{}",
         sub.cpp().get_final_item(),
@@ -180,7 +184,7 @@ pub(super) fn create_subclass_constructor_wrapper(
         reference_args: fun.reference_args.clone(),
         synthesized_this_type: self_ty.clone(),
         self_ty,
-        synthesis: fun.synthesis.clone(),
+        synthesis,
     });
     let subclass_constructor_name = ApiName::new_with_cpp_name(
         &Namespace::new(),
@@ -190,11 +194,11 @@ pub(super) fn create_subclass_constructor_wrapper(
     (maybe_wrap, subclass_constructor_name)
 }
 
-pub(super) fn create_subclass_constructor(
+fn create_subclass_constructor(
     sub: &SubclassName,
     analysis: &super::FnAnalysis,
     superclass: &QualifiedName,
-) -> Api<FnPhase> {
+) -> Synthesis {
     let holder_name = sub.holder();
     let cpp = sub.cpp();
     let wrapper_function_name = cpp.get_final_ident();
@@ -218,8 +222,7 @@ pub(super) fn create_subclass_constructor(
         qualification: Some(cpp.clone()),
         original_cpp_name: cpp.to_cpp_name(),
     };
-    Api::SynthesizedCppFunction {
-        name: ApiName::new_from_qualified_name(cpp),
+    Synthesis::SubclassConstructor {
         subclass: sub.clone(),
         cpp_impl: Box::new(cpp_impl),
         is_trivial: analysis.param_details.len() == 1, // just placement new

@@ -56,8 +56,7 @@ use self::{
     overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
     subclass::{
-        create_subclass_constructor, create_subclass_constructor_wrapper,
-        create_subclass_fn_wrapper, create_subclass_function,
+        create_subclass_constructor_wrapper, create_subclass_fn_wrapper, create_subclass_function,
     },
 };
 
@@ -326,12 +325,10 @@ impl<'a> FnAnalyzer<'a> {
                 self.analyze_and_add_if_necessary(initial_name, make_unique_func, &mut results)?;
 
                 for sub in self.subclasses_by_superclass(sup) {
-                    // Add a constructor to the actual subclass definition in pure C++
-                    results.push(create_subclass_constructor(&sub, &analysis, sup));
-                    // And consider adding an API (in Rust/cxx/maybe C++) such that we
-                    // can call this from Rust.
+                    // Create a subclass constructor. This is a synthesized function
+                    // which didn't exist in the original C++.
                     let (subclass_constructor_func, subclass_constructor_name) =
-                        create_subclass_constructor_wrapper(sub, &fun);
+                        create_subclass_constructor_wrapper(sub, &analysis, sup, &fun);
                     self.analyze_and_add_if_necessary(
                         subclass_constructor_name.clone(),
                         subclass_constructor_func.clone(),
@@ -1148,9 +1145,7 @@ impl Api<FnPhase> {
                     QualifiedName::new(self.name().get_namespace(), make_ident(&analysis.rust_name))
                 }
             },
-            Api::RustSubclassFn { subclass, .. } | Api::SynthesizedCppFunction { subclass, .. } => {
-                subclass.0.name.clone()
-            }
+            Api::RustSubclassFn { subclass, .. } => subclass.0.name.clone(),
             _ => self.name().clone(),
         }
     }
@@ -1173,7 +1168,6 @@ impl Api<FnPhase> {
             } | Api::StringConstructor { .. }
                 | Api::ConcreteType { .. }
                 | Api::CType { .. }
-                | Api::SynthesizedCppFunction { .. }
                 | Api::RustSubclassFn { .. }
                 | Api::Subclass { .. }
         )
@@ -1185,7 +1179,6 @@ impl Api<FnPhase> {
             Api::StringConstructor { .. }
             | Api::Const { .. }
             | Api::IgnoredItem { .. }
-            | Api::SynthesizedCppFunction { .. }
             | Api::RustSubclassFn { .. } => None,
             _ => Some(self.name().get_final_ident()),
         }

@@ -51,7 +51,7 @@ use self::{
 
 use super::{
     analysis::fun::{FnAnalysis, FnKind},
-    api::{Layout, RustSubclassFnDetails},
+    api::{Layout, RustSubclassFnDetails, Synthesis},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
@@ -593,7 +593,6 @@ impl<'a> RsCodeGenerator<'a> {
                     subclasses_with_a_single_trivial_constructor.contains(&name.0.name);
                 self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
             }
-            Api::SynthesizedCppFunction { .. } => RsCodegenResult::default(),
             Api::IgnoredItem { err, ctx, .. } => Self::generate_error_entry(err, ctx),
         }
     }
@@ -1139,11 +1138,14 @@ fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<Quali
     let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .filter_map(|api| match api {
-            Api::SynthesizedCppFunction {
-                subclass,
-                is_trivial,
-                ..
-            } => Some((&subclass.0.name, is_trivial)),
+            Api::Function { fun, .. } => match &fun.synthesis {
+                Some(Synthesis::SubclassConstructor {
+                    subclass,
+                    is_trivial,
+                    ..
+                }) => Some((&subclass.0.name, is_trivial)),
+                _ => None,
+            },
             _ => None,
         })
         .partition(|(_, trivial)| **trivial);

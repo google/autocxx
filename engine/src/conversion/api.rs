@@ -98,6 +98,11 @@ pub(crate) enum Virtualness {
 #[derive(Clone)]
 pub(crate) enum Synthesis {
     MakeUnique,
+    SubclassConstructor {
+        subclass: SubclassName,
+        cpp_impl: Box<CppFunction>,
+        is_trivial: bool,
+    },
 }
 
 /// A C++ function for which we need to generate bindings, but haven't
@@ -351,14 +356,6 @@ pub(crate) enum Api<T: AnalysisPhase> {
         subclass: SubclassName,
         details: Box<RustSubclassFnDetails>,
     },
-    /// Some pure C++ function which didn't previously exist in the
-    /// C++ but we want to create.
-    SynthesizedCppFunction {
-        name: ApiName,
-        subclass: SubclassName,
-        cpp_impl: Box<CppFunction>,
-        is_trivial: bool,
-    },
     /// A Rust subclass of a C++ class.
     Subclass {
         name: SubclassName,
@@ -394,7 +391,6 @@ impl<T: AnalysisPhase> Api<T> {
             Api::RustType { name, .. } => name,
             Api::RustFn { name, .. } => name,
             Api::RustSubclassFn { name, .. } => name,
-            Api::SynthesizedCppFunction { name, .. } => name,
             Api::Subclass { name, .. } => &name.0,
         }
     }
