@@ -24,7 +24,7 @@ use crate::{
             fun::function_wrapper::CppFunctionKind,
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::{ApiName, CppVisibility, FuncToConvert, SubclassName, Virtualness},
+        api::{ApiName, CppVisibility, FuncToConvert, SubclassName, Synthesis, Virtualness},
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::{convert_apis, report_any_error},
@@ -55,10 +55,7 @@ use self::{
     bridge_name_tracker::BridgeNameTracker,
     overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
-    subclass::{
-        create_subclass_constructor, create_subclass_constructor_wrapper,
-        create_subclass_fn_wrapper, create_subclass_function,
-    },
+    subclass::{create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function},
 };
 
 use super::{
@@ -326,12 +323,10 @@ impl<'a> FnAnalyzer<'a> {
                 self.analyze_and_add_if_necessary(initial_name, make_unique_func, &mut results)?;
 
                 for sub in self.subclasses_by_superclass(sup) {
-                    // Add a constructor to the actual subclass definition in pure C++
-                    results.push(create_subclass_constructor(&sub, &analysis, sup));
-                    // And consider adding an API (in Rust/cxx/maybe C++) such that we
-                    // can call this from Rust.
+                    // Create a subclass constructor. This is a synthesized function
+                    // which didn't exist in the original C++.
                     let (subclass_constructor_func, subclass_constructor_name) =
-                        create_subclass_constructor_wrapper(sub, &fun);
+                        create_subclass_constructor(sub, &analysis, sup, &fun);
                     self.analyze_and_add_if_necessary(
                         subclass_constructor_name.clone(),
                         subclass_constructor_func.clone(),
@@ -419,7 +414,7 @@ impl<'a> FnAnalyzer<'a> {
     /// and synthesize a make_unique e.g. pub fn make_unique() -> cxx::UniquePtr<A>
     fn create_make_unique(&mut self, fun: &FuncToConvert) -> Box<FuncToConvert> {
         let mut new_fun = fun.clone();
-        new_fun.synthesize_make_unique = true;
+        new_fun.synthesis = Some(Synthesis::MakeUnique);
         Box::new(new_fun)
     }
 
@@ -550,7 +545,7 @@ impl<'a> FnAnalyzer<'a> {
                 .get(&self_ty)
                 .map(|s| s.as_str())
                 .unwrap_or_else(|| self_ty.get_final_item());
-            let method_kind = if fun.synthesize_make_unique {
+            let method_kind = if matches!(fun.synthesis, Some(Synthesis::MakeUnique)) {
                 // We're re-running this routine for a function we already analyzed.
                 // Previously we made a placement "new" (MethodKind::Constructor).
                 // This time we've asked ourselves to synthesize a make_unique.
@@ -1117,7 +1112,7 @@ impl<'a> FnAnalyzer<'a> {
                         reference_args: HashSet::new(),
                         original_name: None,
                         synthesized_this_type: None,
-                        synthesize_make_unique: false,
+                        synthesis: None,
                     }),
                 )
             });
@@ -1148,8 +1143,7 @@ impl Api<FnPhase> {
                     QualifiedName::new(self.name().get_namespace(), make_ident(&analysis.rust_name))
                 }
             },
-            Api::RustSubclassFn { subclass, .. }
-            | Api::RustSubclassConstructor { subclass, .. } => subclass.0.name.clone(),
+            Api::RustSubclassFn { subclass, .. } => subclass.0.name.clone(),
             _ => self.name().clone(),
         }
     }
@@ -1172,7 +1166,6 @@ impl Api<FnPhase> {
             } | Api::StringConstructor { .. }
                 | Api::ConcreteType { .. }
                 | Api::CType { .. }
-                | Api::RustSubclassConstructor { .. }
                 | Api::RustSubclassFn { .. }
                 | Api::Subclass { .. }
         )
@@ -1184,7 +1177,6 @@ impl Api<FnPhase> {
             Api::StringConstructor { .. }
             | Api::Const { .. }
             | Api::IgnoredItem { .. }
-            | Api::RustSubclassConstructor { .. }
             | Api::RustSubclassFn { .. } => None,
             _ => Some(self.name().get_final_ident()),
         }
