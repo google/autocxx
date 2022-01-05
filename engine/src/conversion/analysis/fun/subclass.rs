@@ -140,7 +140,38 @@ pub(super) fn create_subclass_constructor_wrapper(
     sup: &QualifiedName,
     fun: &FuncToConvert,
 ) -> (Box<FuncToConvert>, ApiName) {
-    let synthesis = Some(create_subclass_constructor(&sub, analysis, sup));
+    let synthesis = Some({
+        let sub = &sub;
+        let holder_name = sub.holder();
+        let cpp = sub.cpp();
+        let wrapper_function_name = cpp.get_final_ident();
+        let initial_arg = TypeConversionPolicy::new_unconverted(parse_quote! {
+            rust::Box< #holder_name >
+        });
+        let args = std::iter::once(initial_arg).chain(
+            analysis
+                .param_details
+                .iter()
+                .skip(1) // skip placement new destination
+                .map(|aa| aa.conversion.clone()),
+        );
+        let cpp_impl = CppFunction {
+            payload: CppFunctionBody::ConstructSuperclass(sup.to_cpp_name()),
+            wrapper_function_name,
+            return_conversion: None,
+            argument_conversion: args.collect(),
+            kind: CppFunctionKind::SynthesizedConstructor,
+            pass_obs_field: false,
+            qualification: Some(cpp.clone()),
+            original_cpp_name: cpp.to_cpp_name(),
+        };
+        Synthesis::SubclassConstructor {
+            subclass: sub.clone(),
+            cpp_impl: Box::new(cpp_impl),
+            is_trivial: analysis.param_details.len() == 1, // just placement new
+                                                           // destination, no other parameters
+        }
+    });
 
     let subclass_constructor_name = make_ident(format!(
         "{}_{}",
@@ -192,40 +223,4 @@ pub(super) fn create_subclass_constructor_wrapper(
         Some(sub.cpp().get_final_item().to_string()),
     );
     (maybe_wrap, subclass_constructor_name)
-}
-
-fn create_subclass_constructor(
-    sub: &SubclassName,
-    analysis: &super::FnAnalysis,
-    superclass: &QualifiedName,
-) -> Synthesis {
-    let holder_name = sub.holder();
-    let cpp = sub.cpp();
-    let wrapper_function_name = cpp.get_final_ident();
-    let initial_arg = TypeConversionPolicy::new_unconverted(parse_quote! {
-        rust::Box< #holder_name >
-    });
-    let args = std::iter::once(initial_arg).chain(
-        analysis
-            .param_details
-            .iter()
-            .skip(1) // skip placement new destination
-            .map(|aa| aa.conversion.clone()),
-    );
-    let cpp_impl = CppFunction {
-        payload: CppFunctionBody::ConstructSuperclass(superclass.to_cpp_name()),
-        wrapper_function_name,
-        return_conversion: None,
-        argument_conversion: args.collect(),
-        kind: CppFunctionKind::SynthesizedConstructor,
-        pass_obs_field: false,
-        qualification: Some(cpp.clone()),
-        original_cpp_name: cpp.to_cpp_name(),
-    };
-    Synthesis::SubclassConstructor {
-        subclass: sub.clone(),
-        cpp_impl: Box::new(cpp_impl),
-        is_trivial: analysis.param_details.len() == 1, // just placement new
-                                                       // destination, no other parameters
-    }
 }
