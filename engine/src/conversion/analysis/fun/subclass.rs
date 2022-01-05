@@ -134,7 +134,7 @@ pub(super) fn create_subclass_function(
     subclass_function
 }
 
-pub(super) fn create_subclass_constructor_wrapper(
+pub(super) fn create_subclass_constructor(
     sub: SubclassName,
     analysis: &FnAnalysis,
     sup: &QualifiedName,

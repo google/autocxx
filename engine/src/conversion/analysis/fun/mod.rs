@@ -55,9 +55,7 @@ use self::{
     bridge_name_tracker::BridgeNameTracker,
     overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
-    subclass::{
-        create_subclass_constructor_wrapper, create_subclass_fn_wrapper, create_subclass_function,
-    },
+    subclass::{create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function},
 };
 
 use super::{
@@ -328,7 +326,7 @@ impl<'a> FnAnalyzer<'a> {
                     // Create a subclass constructor. This is a synthesized function
                     // which didn't exist in the original C++.
                     let (subclass_constructor_func, subclass_constructor_name) =
-                        create_subclass_constructor_wrapper(sub, &analysis, sup, &fun);
+                        create_subclass_constructor(sub, &analysis, sup, &fun);
                     self.analyze_and_add_if_necessary(
                         subclass_constructor_name.clone(),
                         subclass_constructor_func.clone(),
