@@ -265,16 +265,25 @@ fn generate_constructor_impl(
     } else {
         (quote! {}, quote! {})
     };
+    let body = quote! {
+        autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
+            let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
+            cxxbridge::#cxxbridge_name(#(#arg_list),* )
+        })
+    };
+    let body = if unsafety.is_some() {
+        // No need for `unsafe` inside the function
+        body
+    } else {
+        quote! {
+            unsafe { #body }
+        }
+    };
     Box::new(ImplBlockDetails {
         item: ImplItem::Method(parse_quote! {
             #doc_attr
             pub #unsafety fn #rust_name #lifetime_param ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> #lifetime_addition {
-                unsafe {
-                    autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
-                        let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
-                        cxxbridge::#cxxbridge_name(#(#arg_list),* )
-                    })
-                }
+                #body
             }
         }),
         ty: impl_block_type_name.get_final_ident(),
