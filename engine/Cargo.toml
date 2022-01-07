@@ -28,6 +28,8 @@ default = [ "reproduction_case" ]
 build = ["cc"]
 nightly = [] # for doc generation purposes only; used by docs.rs
 reproduction_case = [ "serde_json", "autocxx-parser/reproduction_case" ]
+runtime = [ "autocxx-bindgen/runtime" ]
+static = [ "autocxx-bindgen/static" ]
 
 [dependencies]
 log = "0.4"
