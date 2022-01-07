@@ -89,7 +89,6 @@ impl TypeDetails {
                     {}class {} {{
                         {};
                     }};
-
                     "},
                     self.cpp_name, templating, cxx_name, payload
                 ))
@@ -177,7 +176,7 @@ impl TypeDatabase {
             self.by_rs_name
                 .values()
                 .filter_map(|t| t.get_prelude_entry()),
-            "\n",
+            "",
         )
     }
 
