@@ -19,6 +19,7 @@ use crate::conversion::convert_error::ErrorContext;
 use super::{convert_error::ConvertErrorWithContext, ConvertError};
 
 pub(crate) mod abstract_types;
+pub(crate) mod casts;
 pub(crate) mod ctypes;
 pub(crate) mod fun;
 pub(crate) mod gc;

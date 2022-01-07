@@ -410,7 +410,7 @@ impl<'a> CppCodeGenerator<'a> {
             arg_list.join(", ")
         };
         let (mut underlying_function_call, field_assignments) = match &details.payload {
-            CppFunctionBody::MakeUnique => (arg_list, "".to_string()),
+            CppFunctionBody::MakeUnique | CppFunctionBody::Cast => (arg_list, "".to_string()),
             CppFunctionBody::PlacementNew(ns, id) => {
                 let ty_id = QualifiedName::new(ns, id.clone());
                 let ty_id =

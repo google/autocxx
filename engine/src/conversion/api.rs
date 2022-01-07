@@ -93,6 +93,13 @@ pub(crate) enum Virtualness {
     PureVirtual,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum CastMutability {
+    ConstToConst,
+    MutToConst,
+    MutToMut,
+}
+
 /// Indicates that this function didn't exist originally in the C++
 /// but we've created it afresh.
 #[derive(Clone)]
@@ -102,6 +109,10 @@ pub(crate) enum Synthesis {
         subclass: SubclassName,
         cpp_impl: Box<CppFunction>,
         is_trivial: bool,
+    },
+    Cast {
+        to_type: QualifiedName,
+        mutable: CastMutability,
     },
 }
 

@@ -24,7 +24,10 @@ use crate::{
             fun::function_wrapper::CppFunctionKind,
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
-        api::{ApiName, CppVisibility, FuncToConvert, SubclassName, Synthesis, Virtualness},
+        api::{
+            ApiName, CastMutability, CppVisibility, FuncToConvert, SubclassName, Synthesis,
+            Virtualness,
+        },
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::{convert_apis, report_any_error},
@@ -37,7 +40,8 @@ use std::collections::{HashMap, HashSet};
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
 use itertools::Itertools;
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
+use quote::{quote, ToTokens};
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
     TypePtr, Visibility,
@@ -59,6 +63,7 @@ use self::{
 };
 
 use super::{
+    casts::all_cast_names,
     pod::{PodAnalysis, PodPhase},
     tdef::TypedefAnalysis,
     type_converter::Annotated,
@@ -84,6 +89,16 @@ pub(crate) enum MethodKind {
 pub(crate) enum FnKind {
     Function,
     Method(QualifiedName, MethodKind),
+    TraitMethod {
+        /// The name of the type T for which we're implementing a trait,
+        /// though we may be actually implementing the trait for &mut T or
+        /// similar....
+        impl_for: QualifiedName,
+        /// ... so we also store the tokenstream of the type.
+        impl_for_specifics: TokenStream,
+        trait_signature: TokenStream,
+        method_name: Ident,
+    },
 }
 
 /// Strategy for ensuring that the final, callable, Rust name
@@ -509,6 +524,7 @@ impl<'a> FnAnalyzer<'a> {
 
         // Let's spend some time figuring out the kind of this function (i.e. method,
         // virtual function, etc.)
+        // Part one, work out if this is a static method.
         let (is_static_method, self_ty, receiver_mutability) = match self_ty {
             None => {
                 // Even if we can't find a 'self' parameter this could conceivably
@@ -521,7 +537,17 @@ impl<'a> FnAnalyzer<'a> {
             }
         };
 
-        let (kind, error_context, rust_name) = if let Some(self_ty) = self_ty {
+        // Part two, work out if this is a function, or method, or whatever.
+        // First determine if this is actually a trait implementation.
+        let trait_details = self.trait_creation_details_for_synthetic_function(
+            &fun.synthesis,
+            ns,
+            &ideal_rust_name,
+            &self_ty,
+        );
+        let (kind, error_context, rust_name) = if let Some(trait_details) = trait_details {
+            trait_details
+        } else if let Some(self_ty) = self_ty {
             // Some kind of method.
             if !self.is_on_allowlist(&self_ty) {
                 // Bindgen will output methods for types which have been encountered
@@ -595,8 +621,7 @@ impl<'a> FnAnalyzer<'a> {
         } else {
             // Not a method.
             // What shall we call this function? It may be overloaded.
-            let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
-            let rust_name = overload_tracker.get_function_real_name(ideal_rust_name);
+            let rust_name = self.get_function_overload_name(ns, ideal_rust_name);
             (
                 FnKind::Function,
                 ErrorContext::Item(make_ident(&rust_name)),
@@ -654,6 +679,7 @@ impl<'a> FnAnalyzer<'a> {
             match kind {
                 FnKind::Method(ref self_ty, ..) => Some(self_ty.get_final_item()),
                 FnKind::Function => None,
+                FnKind::TraitMethod { ref impl_for, .. } => Some(impl_for.get_final_item()),
             },
             &rust_name,
             ns,
@@ -736,6 +762,7 @@ impl<'a> FnAnalyzer<'a> {
         let effective_cpp_name = cpp_name.as_ref().unwrap_or(&rust_name);
         let cpp_name_incompatible_with_cxx =
             validate_ident_ok_for_rust(effective_cpp_name).is_err();
+        let synthetic_cpp_function_contents = synthesic_cpp_need(&fun);
         // If possible, we'll put knowledge of the C++ API directly into the cxx::bridge
         // mod. However, there are various circumstances where cxx can't work with the existing
         // C++ API and we need to create a C++ wrapper function which is more cxx-compliant.
@@ -750,6 +777,7 @@ impl<'a> FnAnalyzer<'a> {
             _ if param_conversion_needed => true,
             _ if ret_type_conversion_needed => true,
             _ if cpp_name_incompatible_with_cxx => true,
+            _ if synthetic_cpp_function_contents.is_some() => true,
             _ => false,
         };
 
@@ -763,30 +791,33 @@ impl<'a> FnAnalyzer<'a> {
                 "_"
             };
             cxxbridge_name = make_ident(&format!("{}{}autocxx_wrapper", cxxbridge_name, joiner));
-            let (payload, cpp_function_kind) = match kind {
-                FnKind::Method(_, MethodKind::MakeUnique) => {
-                    (CppFunctionBody::MakeUnique, CppFunctionKind::Function)
-                }
-                FnKind::Method(ref self_ty, MethodKind::Constructor) => (
-                    CppFunctionBody::PlacementNew(ns.clone(), self_ty.get_final_ident()),
-                    CppFunctionKind::Constructor,
-                ),
-                FnKind::Method(ref self_ty, MethodKind::Static) => (
-                    CppFunctionBody::StaticMethodCall(
-                        ns.clone(),
-                        self_ty.get_final_ident(),
-                        cpp_construction_ident,
+            let (payload, cpp_function_kind) = match synthetic_cpp_function_contents {
+                Some((payload, cpp_function_kind)) => (payload, cpp_function_kind),
+                None => match kind {
+                    FnKind::Method(_, MethodKind::MakeUnique) => {
+                        (CppFunctionBody::MakeUnique, CppFunctionKind::Function)
+                    }
+                    FnKind::Method(ref self_ty, MethodKind::Constructor) => (
+                        CppFunctionBody::PlacementNew(ns.clone(), self_ty.get_final_ident()),
+                        CppFunctionKind::Constructor,
                     ),
-                    CppFunctionKind::Function,
-                ),
-                FnKind::Method(..) => (
-                    CppFunctionBody::FunctionCall(ns.clone(), cpp_construction_ident),
-                    CppFunctionKind::Method,
-                ),
-                _ => (
-                    CppFunctionBody::FunctionCall(ns.clone(), cpp_construction_ident),
-                    CppFunctionKind::Function,
-                ),
+                    FnKind::Method(ref self_ty, MethodKind::Static) => (
+                        CppFunctionBody::StaticMethodCall(
+                            ns.clone(),
+                            self_ty.get_final_ident(),
+                            cpp_construction_ident,
+                        ),
+                        CppFunctionKind::Function,
+                    ),
+                    FnKind::Method(..) => (
+                        CppFunctionBody::FunctionCall(ns.clone(), cpp_construction_ident),
+                        CppFunctionKind::Method,
+                    ),
+                    _ => (
+                        CppFunctionBody::FunctionCall(ns.clone(), cpp_construction_ident),
+                        CppFunctionKind::Function,
+                    ),
+                },
             };
             // Now modify the cxx::bridge entry we're going to make.
             if let Some(ref conversion) = ret_type_conversion {
@@ -836,7 +867,9 @@ impl<'a> FnAnalyzer<'a> {
         validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).map_err(contextualize_error)?;
         let rust_name_ident = make_ident(&rust_name);
         let (id, rust_rename_strategy) = match kind {
-            FnKind::Method(..) => (rust_name_ident, RustRenameStrategy::None),
+            FnKind::Method(..) | FnKind::TraitMethod { .. } => {
+                (rust_name_ident, RustRenameStrategy::None)
+            }
             FnKind::Function => {
                 // Keep the original Rust name the same so callers don't
                 // need to know about all of these shenanigans.
@@ -873,6 +906,70 @@ impl<'a> FnAnalyzer<'a> {
         };
         let name = ApiName::new_with_cpp_name(ns, id, cpp_name);
         Ok(Some((analysis, name)))
+    }
+
+    /// Determine if this synthetic function should actually result in the implementation
+    /// of a trait, rather than a function/method.
+    fn trait_creation_details_for_synthetic_function(
+        &mut self,
+        synthesis: &Option<Synthesis>,
+        ns: &Namespace,
+        ideal_rust_name: &str,
+        self_ty: &Option<QualifiedName>,
+    ) -> Option<(FnKind, ErrorContext, String)> {
+        synthesis.as_ref().and_then(|synthesis| match synthesis {
+            Synthesis::Cast { to_type, mutable } => {
+                let rust_name = self.get_function_overload_name(ns, ideal_rust_name.to_string());
+                let from_type = self_ty.as_ref().unwrap();
+                let from_type_path = from_type.to_type_path();
+                let to_type = to_type.to_type_path();
+                let (trait_signature, impl_for_specifics, method_name) = match *mutable {
+                    CastMutability::ConstToConst => (
+                        quote! {
+                            AsRef < #to_type >
+                        },
+                        from_type_path.to_token_stream(),
+                        "as_ref",
+                    ),
+                    CastMutability::MutToConst => (
+                        quote! {
+                            AsRef < #to_type >
+                        },
+                        quote! {
+                            &'a mut std::pin::Pin < &'a mut #from_type_path >
+                        },
+                        "as_ref",
+                    ),
+                    CastMutability::MutToMut => (
+                        quote! {
+                            autocxx::PinMut < #to_type >
+                        },
+                        quote! {
+                            std::pin::Pin < &'a mut #from_type_path >
+                        },
+                        "pin_mut",
+                    ),
+                };
+                let method_name = make_ident(method_name);
+                Some((
+                    FnKind::TraitMethod {
+                        impl_for: from_type.clone(),
+                        impl_for_specifics,
+                        trait_signature,
+                        method_name,
+                    },
+                    ErrorContext::Item(make_ident(&rust_name)),
+                    rust_name,
+                ))
+            }
+            _ => None,
+        })
+    }
+
+    fn get_function_overload_name(&mut self, ns: &Namespace, ideal_rust_name: String) -> String {
+        let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
+        let rust_name = overload_tracker.get_function_real_name(ideal_rust_name);
+        rust_name
     }
 
     fn subclasses_by_superclass(&self, sup: &QualifiedName) -> impl Iterator<Item = SubclassName> {
@@ -1130,6 +1227,13 @@ impl<'a> FnAnalyzer<'a> {
     }
 }
 
+fn synthesic_cpp_need(fun: &FuncToConvert) -> Option<(CppFunctionBody, CppFunctionKind)> {
+    match fun.synthesis {
+        Some(Synthesis::Cast { .. }) => Some((CppFunctionBody::Cast, CppFunctionKind::Function)),
+        _ => None,
+    }
+}
+
 impl Api<FnPhase> {
     pub(crate) fn typename_for_allowlist(&self) -> QualifiedName {
         match &self {
@@ -1139,6 +1243,7 @@ impl Api<FnPhase> {
             } => name.clone(),
             Api::Function { analysis, .. } => match analysis.kind {
                 FnKind::Method(ref self_ty, _) => self_ty.clone(),
+                FnKind::TraitMethod { ref impl_for, .. } => impl_for.clone(),
                 FnKind::Function => {
                     QualifiedName::new(self.name().get_namespace(), make_ident(&analysis.rust_name))
                 }
@@ -1183,20 +1288,27 @@ impl Api<FnPhase> {
     }
 
     /// Any dependencies on other APIs which this API has.
-    pub(crate) fn deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
+    pub(crate) fn deps(&self) -> Box<dyn Iterator<Item = QualifiedName> + '_> {
         match self {
             Api::Typedef {
                 old_tyname,
                 analysis: TypedefAnalysis { deps, .. },
                 ..
-            } => Box::new(old_tyname.iter().chain(deps.iter())),
-            Api::Struct { analysis, .. } => Box::new(analysis.field_deps.iter()),
-            Api::Function { analysis, .. } => Box::new(analysis.deps.iter()),
+            } => Box::new(old_tyname.iter().chain(deps.iter()).cloned()),
+            Api::Struct { analysis, name, .. } => Box::new(
+                analysis.field_deps.iter().cloned().chain(
+                    analysis
+                        .castable_bases
+                        .iter()
+                        .flat_map(|base| all_cast_names(&name.name, base)),
+                ),
+            ),
+            Api::Function { analysis, .. } => Box::new(analysis.deps.iter().cloned()),
             Api::Subclass {
                 name: _,
                 superclass,
-            } => Box::new(std::iter::once(superclass)),
-            Api::RustSubclassFn { details, .. } => Box::new(details.dependency.iter()),
+            } => Box::new(std::iter::once(superclass.clone())),
+            Api::RustSubclassFn { details, .. } => Box::new(details.dependency.iter().cloned()),
             _ => Box::new(std::iter::empty()),
         }
     }

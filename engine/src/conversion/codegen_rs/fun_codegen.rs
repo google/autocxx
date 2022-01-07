@@ -86,6 +86,7 @@ pub(super) fn gen_function(
             .unwrap(),
         _ => Vec::new(),
     };
+    let wrapper_unsafety = analysis.requires_unsafe.wrapper_token();
     let mut materialization = match kind {
         FnKind::Method(..) => None,
         FnKind::Function => match analysis.rust_rename_strategy {
@@ -94,13 +95,27 @@ pub(super) fn gen_function(
             }
             _ => Some(Use::UsedFromCxxBridge),
         },
+        FnKind::TraitMethod {
+            impl_for: _,
+            ref impl_for_specifics,
+            ref trait_signature,
+            ref method_name,
+        } => generate_trait_impl(
+            impl_for_specifics,
+            trait_signature,
+            &param_details,
+            method_name,
+            &ret_type,
+            &wrapper_unsafety,
+            &doc_attr,
+            &cxxbridge_name,
+        ),
     };
     let any_param_needs_rust_conversion = param_details
         .iter()
         .any(|pd| pd.conversion.rust_work_needed());
     let rust_wrapper_needed = any_param_needs_rust_conversion
         || (cxxbridge_name != rust_name && matches!(kind, FnKind::Method(..)));
-    let wrapper_unsafety = analysis.requires_unsafe.wrapper_token();
     if rust_wrapper_needed {
         match kind {
             FnKind::Method(ref type_name, MethodKind::Constructor) => {
@@ -242,6 +257,34 @@ fn generate_method_impl(
         }),
         ty: impl_block_type_name.get_final_ident(),
     })
+}
+
+/// Generate an 'impl Trait for Type { methods-go-here }' in its entrety.
+fn generate_trait_impl(
+    impl_for_specifics: &TokenStream,
+    trait_signature: &TokenStream,
+    param_details: &[ArgumentAnalysis],
+    method_name: &Ident,
+    ret_type: &ReturnType,
+    unsafety: &Option<Unsafe>,
+    doc_attr: &Option<Attribute>,
+    cxxbridge_name: &Ident,
+) -> Option<Use> {
+    let (wrapper_params, arg_list) = generate_arg_lists(param_details, false);
+    log::info!(
+        "About to test mutable receiverness for {}",
+        cxxbridge_name.to_string()
+    );
+    let (lifetime_tokens, wrapper_params, ret_type) =
+        add_explicit_lifetime_if_necessary(param_details, wrapper_params, ret_type);
+    Some(Use::Custom(Box::new(parse_quote! {
+        impl #lifetime_tokens #trait_signature for #impl_for_specifics {
+            #doc_attr
+            #unsafety fn #method_name ( #wrapper_params ) #ret_type {
+                cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+            }
+        }
+    })))
 }
 
 /// Generate a 'impl Type { methods-go-here }' item which is a constructor

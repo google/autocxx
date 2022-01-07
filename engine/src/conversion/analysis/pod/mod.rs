@@ -14,11 +14,11 @@
 
 mod byvalue_checker;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
-use syn::{ItemEnum, ItemStruct, Type};
+use syn::{ItemEnum, ItemStruct, Type, Visibility};
 
 use crate::{
     conversion::{
@@ -36,6 +36,11 @@ use super::tdef::{TypedefAnalysis, TypedefPhase};
 pub(crate) struct PodAnalysis {
     pub(crate) kind: TypeKind,
     pub(crate) bases: HashSet<QualifiedName>,
+    /// Base classes for which we should create casts.
+    /// That's just those which are on the allowlist,
+    /// because otherwise we don't know whether they're
+    /// abstract or not.
+    pub(crate) castable_bases: HashSet<QualifiedName>,
     pub(crate) field_deps: HashSet<QualifiedName>,
 }
 
@@ -75,6 +80,7 @@ pub(crate) fn analyze_pod_apis(
                 &mut extra_apis,
                 name,
                 details,
+                config,
             )
         },
         analyze_enum,
@@ -95,6 +101,7 @@ pub(crate) fn analyze_pod_apis(
                 &mut more_extra_apis,
                 name,
                 details,
+                config,
             )
         },
         analyze_enum,
@@ -118,6 +125,7 @@ fn analyze_struct(
     extra_apis: &mut Vec<UnanalyzedApi>,
     name: ApiName,
     mut details: Box<StructDetails>,
+    config: &IncludeCppConfig,
 ) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
     let id = name.name.get_final_ident();
     if details.vis != CppVisibility::Public {
@@ -143,12 +151,20 @@ fn analyze_struct(
     } else {
         TypeKind::NonPod
     };
+    let castable_bases = bases
+        .iter()
+        .filter(|(_, is_public)| **is_public)
+        .map(|(base, _)| base)
+        .filter(|base| config.is_on_allowlist(&base.to_cpp_name()))
+        .cloned()
+        .collect();
     Ok(Box::new(std::iter::once(Api::Struct {
         name,
         details,
         analysis: PodAnalysis {
             kind: type_kind,
-            bases,
+            bases: bases.into_keys().collect(),
+            castable_bases,
             field_deps,
         },
     })))
@@ -170,16 +186,20 @@ fn get_struct_field_types(
     Ok(())
 }
 
-fn get_bases(item: &ItemStruct) -> HashSet<QualifiedName> {
+/// Map to whether the bases are public.
+fn get_bases(item: &ItemStruct) -> HashMap<QualifiedName, bool> {
     item.fields
         .iter()
-        .filter_map(|f| match &f.ty {
-            Type::Path(typ) => f
-                .ident
-                .as_ref()
-                .filter(|id| id.to_string().starts_with("_base"))
-                .map(|_| QualifiedName::from_type_path(typ)),
-            _ => None,
+        .filter_map(|f| {
+            let is_public = matches!(f.vis, Visibility::Public(_));
+            match &f.ty {
+                Type::Path(typ) => f
+                    .ident
+                    .as_ref()
+                    .filter(|id| id.to_string().starts_with("_base"))
+                    .map(|_| (QualifiedName::from_type_path(typ), is_public)),
+                _ => None,
+            }
         })
         .collect()
 }
