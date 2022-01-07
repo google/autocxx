@@ -701,13 +701,6 @@ impl<'a> FnAnalyzer<'a> {
         if fun.unused_template_param {
             return Err(contextualize_error(ConvertError::UnusedTemplateParam));
         }
-        if fun.references.rvalue_ref_return {
-            return Err(contextualize_error(ConvertError::RValueReturn));
-        }
-        if !fun.references.rvalue_ref_params.is_empty() {
-            return Err(contextualize_error(ConvertError::RValueParam));
-        }
-
         match kind {
             FnKind::Method(_, MethodKind::Static) => {}
             FnKind::Method(ref self_ty, _) => {
@@ -725,6 +718,13 @@ impl<'a> FnAnalyzer<'a> {
             }
             _ => {}
         };
+        if fun.references.rvalue_ref_return {
+            return Err(contextualize_error(ConvertError::RValueReturn));
+        }
+        // Ensure we do this _after_ recording the presence of move constructors.
+        if !fun.references.rvalue_ref_params.is_empty() {
+            return Err(contextualize_error(ConvertError::RValueParam));
+        }
 
         // Analyze the return type, just as we previously did for the
         // parameters.
