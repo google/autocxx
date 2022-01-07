@@ -13,7 +13,7 @@
 // limitations under the License.
 use crate::conversion::analysis::fun::{ArgumentAnalysis, ReceiverMutability};
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use quote::quote;
 use std::borrow::Cow;
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, GenericArgument, PatType, Path,
