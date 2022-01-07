@@ -762,7 +762,7 @@ impl<'a> FnAnalyzer<'a> {
         let effective_cpp_name = cpp_name.as_ref().unwrap_or(&rust_name);
         let cpp_name_incompatible_with_cxx =
             validate_ident_ok_for_rust(effective_cpp_name).is_err();
-        let synthetic_cpp_function_contents = synthesic_cpp_need(&fun);
+        let synthetic_cpp_function_contents = synthesic_cpp_need(fun);
         // If possible, we'll put knowledge of the C++ API directly into the cxx::bridge
         // mod. However, there are various circumstances where cxx can't work with the existing
         // C++ API and we need to create a C++ wrapper function which is more cxx-compliant.
@@ -968,8 +968,7 @@ impl<'a> FnAnalyzer<'a> {
 
     fn get_function_overload_name(&mut self, ns: &Namespace, ideal_rust_name: String) -> String {
         let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
-        let rust_name = overload_tracker.get_function_real_name(ideal_rust_name);
-        rust_name
+        overload_tracker.get_function_real_name(ideal_rust_name)
     }
 
     fn subclasses_by_superclass(&self, sup: &QualifiedName) -> impl Iterator<Item = SubclassName> {
