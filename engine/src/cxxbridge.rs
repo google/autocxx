@@ -16,7 +16,7 @@ use proc_macro2::TokenStream;
 use quote::{ToTokens, TokenStreamExt};
 use syn::ItemMod;
 
-use crate::{do_cxx_cpp_generation, parse_file::CppBuildable, GeneratedCpp};
+use crate::{do_cxx_cpp_generation, parse_file::CppBuildable, CppCodegenOptions, GeneratedCpp};
 
 /// A struct to represent a cxx::bridge (i.e. some manual bindings)
 /// found in a file. autocxx knows about them so that we can generate C++
@@ -42,14 +42,9 @@ impl ToTokens for CxxBridge {
 impl CppBuildable for CxxBridge {
     fn generate_h_and_cxx(
         &self,
-        suppress_system_headers: bool,
-        cxx_impl_annotations: Option<String>,
+        cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<GeneratedCpp, cxx_gen::Error> {
-        let fp = do_cxx_cpp_generation(
-            self.tokens.clone(),
-            suppress_system_headers,
-            cxx_impl_annotations,
-        )?;
+        let fp = do_cxx_cpp_generation(self.tokens.clone(), cpp_codegen_options)?;
         Ok(GeneratedCpp(vec![fp]))
     }
 }

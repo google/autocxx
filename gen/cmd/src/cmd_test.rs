@@ -58,6 +58,23 @@ fn test_gen() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
+    let tmp_dir = TempDir::new("example")?;
+    base_test(&tmp_dir, |cmd| {
+        cmd.arg("--cxx-h-path")
+            .arg("foo/")
+            .arg("--cxxgen-h-path")
+            .arg("bar/")
+            .arg("--generate-exact")
+            .arg("3");
+    })?;
+    assert_contains(&tmp_dir, "autocxxgen_ffi.h", "foo/cxx.h");
+    // Currently we don't test cxxgen-h-path because we build the demo code
+    // which doesn't refer to generated cxx header code.
+    Ok(())
+}
+
+#[test]
 fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
     base_test(&tmp_dir, |cmd| {
@@ -121,4 +138,11 @@ fn assert_exists(outdir: &TempDir, fname: &str) {
     if !p.exists() {
         panic!("File {} didn't exist", p.to_string_lossy());
     }
+}
+
+fn assert_contains(outdir: &TempDir, fname: &str, pattern: &str) {
+    let p = outdir.path().join(fname);
+    let content = std::fs::read_to_string(&p).unwrap();
+    eprintln!("content = {}", content);
+    assert!(content.contains(pattern));
 }
