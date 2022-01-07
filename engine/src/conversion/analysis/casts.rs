@@ -111,7 +111,7 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
             cpp_vis: crate::conversion::api::CppVisibility::Public,
             is_move_constructor: false,
             unused_template_param: false,
-            references: References::new_with_this_as_reference(),
+            references: References::new_with_this_and_return_as_reference(),
             original_name: None,
             self_ty: Some(from.clone()),
             synthesized_this_type: None,
