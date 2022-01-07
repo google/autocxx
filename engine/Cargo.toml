@@ -58,3 +58,6 @@ features = [ "full", "printing" ]
 
 [package.metadata.docs.rs]
 features = ["build", "nightly"]
+
+[dev-dependencies]
+cc = "1.0"

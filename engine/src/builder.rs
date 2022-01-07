@@ -135,12 +135,12 @@ impl<CTX: BuilderContext> Builder<CTX> {
         self
     }
 
-    /// Where we generate C++ code which does `#include "cxx.h"` instead
-    /// generate `#include "<custom_path>cxx.h"`, where `custom_path` is the value specified
-    /// here. Panics if the path does not end with `/`
-    pub fn custom_cxx_h_path(mut self, custom_path: String) -> Self {
-        assert!(custom_path.ends_with('/'));
-        self.cpp_codegen_options.path_to_cxx_h = Some(custom_path);
+    /// Update C++ code generation options. See [`CppCodegenOptions`] for details.
+    pub fn cpp_codegen_options<F>(mut self, modifier: F) -> Self
+    where
+        F: FnOnce(&mut CppCodegenOptions),
+    {
+        modifier(&mut self.cpp_codegen_options);
         self
     }
 

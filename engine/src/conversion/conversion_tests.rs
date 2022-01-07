@@ -17,6 +17,8 @@ use autocxx_parser::UnsafePolicy;
 use syn::parse_quote;
 use syn::ItemMod;
 
+use crate::CppCodegenOptions;
+
 use super::BridgeConverter;
 
 // This mod is for tests which take bindgen output directly.
@@ -37,7 +39,7 @@ fn do_test(input: ItemMod) {
         input,
         UnsafePolicy::AllFunctionsSafe,
         inclusions,
-        CppCodegenOptions::default(),
+        &CppCodegenOptions::default(),
     )
     .unwrap();
 }

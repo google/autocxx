@@ -169,6 +169,20 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("cxx-h-path")
+                .long("cxx-h-path")
+                .value_name("PREFIX")
+                .help("prefix for path to cxx.h within #include statements. Must end in /")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("cxxgen-h-path")
+                .long("cxxgen-h-path")
+                .value_name("PREFIX")
+                .help("prefix for path to cxxgen.h within #include statements. Must end in /")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("clang-args")
                 .last(true)
                 .multiple(true)
@@ -192,12 +206,11 @@ fn main() {
         .unwrap_or_default()
         .collect();
     let suppress_system_headers = matches.is_present("suppress-system-headers");
-    let cxx_impl_annotations = matches
-        .value_of("cxx-impl-annotations")
-        .map(|s| s.to_string());
     let mut cpp_codegen_options = CppCodegenOptions::default();
     cpp_codegen_options.suppress_system_headers = suppress_system_headers;
-    cpp_codegen_options.cxx_impl_annotations = cxx_impl_annotations;
+    cpp_codegen_options.cxx_impl_annotations = get_option_string("cxx-impl-annotations", &matches);
+    cpp_codegen_options.path_to_cxx_h = get_option_string("cxx-h-path", &matches);
+    cpp_codegen_options.path_to_cxxgen_h = get_option_string("cxxgen-h-path", &matches);
     // In future, we should provide an option to write a .d file here
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56
@@ -248,6 +261,11 @@ fn main() {
         }
         write_placeholders(&outdir, counter, desired_number, "include.rs");
     }
+}
+
+fn get_option_string(option: &str, matches: &clap::ArgMatches) -> Option<String> {
+    let cxx_impl_annotations = matches.value_of(option).map(|s| s.to_string());
+    cxx_impl_annotations
 }
 
 fn write_placeholders(
