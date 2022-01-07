@@ -366,7 +366,7 @@ impl IncludeCppEngine {
         inc_dirs: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-        suppress_system_headers: bool,
+        cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -398,7 +398,7 @@ impl IncludeCppEngine {
                 bindings,
                 self.config.unsafe_policy.clone(),
                 header_contents,
-                suppress_system_headers,
+                cpp_codegen_options,
             )
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;
@@ -523,18 +523,20 @@ static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
 
 pub fn do_cxx_cpp_generation(
     rs: TokenStream2,
-    suppress_system_headers: bool,
-    cxx_impl_annotations: Option<String>,
+    cpp_codegen_options: &CppCodegenOptions,
 ) -> Result<CppFilePair, cxx_gen::Error> {
     let mut opt = cxx_gen::Opt::default();
-    opt.cxx_impl_annotations = cxx_impl_annotations;
+    opt.cxx_impl_annotations = cpp_codegen_options.cxx_impl_annotations.clone();
     let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
     Ok(CppFilePair {
-        header: strip_system_headers(cxx_generated.header, suppress_system_headers),
+        header: strip_system_headers(
+            cxx_generated.header,
+            cpp_codegen_options.suppress_system_headers,
+        ),
         header_name: "cxxgen.h".into(),
         implementation: Some(strip_system_headers(
             cxx_generated.implementation,
-            suppress_system_headers,
+            cpp_codegen_options.suppress_system_headers,
         )),
     })
 }
@@ -557,8 +559,7 @@ impl CppBuildable for IncludeCppEngine {
     /// Generate C++-side bindings for these APIs. Call `generate` first.
     fn generate_h_and_cxx(
         &self,
-        suppress_system_headers: bool,
-        cxx_impl_annotations: Option<String>,
+        cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<GeneratedCpp, cxx_gen::Error> {
         let mut files = Vec::new();
         match &self.state {
@@ -566,11 +567,7 @@ impl CppBuildable for IncludeCppEngine {
             State::NotGenerated => panic!("Call generate() first"),
             State::Generated(gen_results) => {
                 let rs = gen_results.item_mod.to_token_stream();
-                files.push(do_cxx_cpp_generation(
-                    rs,
-                    suppress_system_headers,
-                    cxx_impl_annotations,
-                )?);
+                files.push(do_cxx_cpp_generation(rs, cpp_codegen_options)?);
                 if let Some(cpp_file_pair) = &gen_results.cpp {
                     files.push(cpp_file_pair.clone());
                 }
@@ -626,4 +623,20 @@ pub fn get_clang_path() -> String {
     std::env::var("CLANG_PATH")
         .or_else(|_| std::env::var("CXX"))
         .unwrap_or_else(|_| "clang++".to_string())
+}
+
+/// Options for C++ codegen
+#[derive(Default)]
+pub struct CppCodegenOptions {
+    /// Whether to avoid generating `#include <some-system-header>`.
+    /// You may wish to do this to make a hermetic test case with no
+    /// external dependencies.
+    pub suppress_system_headers: bool,
+    /// Optionally, a prefix to go at `#include "<here>cxx.h"
+    pub path_to_cxx_h: Option<String>,
+    /// Optionally, a prefix to go at `#include "<here>cxxgen.h"
+    pub path_to_cxxgen_h: Option<String>,
+    /// An annotation optionally to include on each C++ function.
+    /// For example to export the symbol from a library.
+    pub cxx_impl_annotations: Option<String>,
 }

@@ -31,7 +31,7 @@ pub(crate) use convert_error::ConvertError;
 use itertools::Itertools;
 use syn::{Item, ItemMod};
 
-use crate::{CppFilePair, UnsafePolicy};
+use crate::{CppCodegenOptions, CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
@@ -110,7 +110,7 @@ impl<'a> BridgeConverter<'a> {
         mut bindgen_mod: ItemMod,
         unsafe_policy: UnsafePolicy,
         inclusions: String,
-        suppress_system_headers: bool,
+        cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<CodegenResults, ConvertError> {
         match &mut bindgen_mod.content {
             None => Err(ConvertError::NoContent),
@@ -167,7 +167,7 @@ impl<'a> BridgeConverter<'a> {
                     inclusions,
                     &analyzed_apis,
                     self.config,
-                    suppress_system_headers,
+                    cpp_codegen_options,
                 )?;
                 let rs = RsCodeGenerator::generate_rs_code(
                     analyzed_apis,

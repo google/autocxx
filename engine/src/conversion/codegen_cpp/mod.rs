@@ -18,7 +18,7 @@ pub(crate) mod type_to_cpp;
 use crate::{
     conversion::analysis::fun::{function_wrapper::CppFunctionKind, FnAnalysis},
     types::{make_ident, QualifiedName},
-    CppFilePair,
+    CppCodegenOptions, CppFilePair,
 };
 use autocxx_parser::IncludeCppConfig;
 use itertools::Itertools;
@@ -37,33 +37,36 @@ use super::{
 };
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
-struct Header {
-    name: &'static str,
-    system: bool,
+enum Header {
+    System(&'static str),
+    CxxH,
+    CxxgenH,
 }
 
 impl Header {
-    fn system(name: &'static str) -> Self {
-        Header { name, system: true }
-    }
-
-    fn user(name: &'static str) -> Self {
-        Header {
-            name,
-            system: false,
-        }
-    }
-
-    fn include_stmt(&self) -> String {
-        if self.system {
-            format!("#include <{}>", self.name)
-        } else {
-            format!("#include \"{}\"", self.name)
-        }
+    fn include_stmt(&self, cpp_codegen_options: &CppCodegenOptions) -> String {
+        let blank = "".to_string();
+        format!(
+            "#include {}",
+            match self {
+                Self::System(name) => format!("<{}>", name),
+                Self::CxxH => {
+                    let prefix = cpp_codegen_options.path_to_cxx_h.as_ref().unwrap_or(&blank);
+                    format!("\"{}cxx.h\"", prefix)
+                }
+                Self::CxxgenH => {
+                    let prefix = cpp_codegen_options
+                        .path_to_cxxgen_h
+                        .as_ref()
+                        .unwrap_or(&blank);
+                    format!("\"{}cxxgen.h\"", prefix)
+                }
+            }
+        )
     }
 
     fn is_system(&self) -> bool {
-        self.system
+        matches!(self, Header::System(_))
     }
 }
 
@@ -92,7 +95,7 @@ pub(crate) struct CppCodeGenerator<'a> {
     inclusions: String,
     original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
-    suppress_system_headers: bool,
+    cpp_codegen_options: &'a CppCodegenOptions,
 }
 
 struct SubclassFunction<'a> {
@@ -105,13 +108,13 @@ impl<'a> CppCodeGenerator<'a> {
         inclusions: String,
         apis: &[Api<FnPhase>],
         config: &'a IncludeCppConfig,
-        suppress_system_headers: bool,
+        cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<Option<CppFilePair>, ConvertError> {
         let mut gen = CppCodeGenerator::new(
             inclusions,
             original_name_map_from_apis(apis),
             config,
-            suppress_system_headers,
+            cpp_codegen_options,
         );
         // The 'filter' on the following line is designed to ensure we don't accidentally
         // end up out of sync with needs_cpp_codegen
@@ -123,14 +126,14 @@ impl<'a> CppCodeGenerator<'a> {
         inclusions: String,
         original_name_map: CppNameMap,
         config: &'a IncludeCppConfig,
-        suppress_system_headers: bool,
+        cpp_codegen_options: &'a CppCodegenOptions,
     ) -> Self {
         CppCodeGenerator {
             additional_functions: Vec::new(),
             inclusions,
             original_name_map,
             config,
-            suppress_system_headers,
+            cpp_codegen_options,
         }
     }
 
@@ -246,9 +249,12 @@ impl<'a> CppCodeGenerator<'a> {
             .additional_functions
             .iter()
             .flat_map(|x| filter(x).iter())
-            .filter(|x| !self.suppress_system_headers || !x.is_system())
+            .filter(|x| !self.cpp_codegen_options.suppress_system_headers || !x.is_system())
             .collect(); // uniqify
-        cpp_headers.iter().map(|x| x.include_stmt()).join("\n")
+        cpp_headers
+            .iter()
+            .map(|x| x.include_stmt(&self.cpp_codegen_options))
+            .join("\n")
     }
 
     fn concat_additional_items<F>(&self, field_access: F) -> String
@@ -272,9 +278,9 @@ impl<'a> CppCodeGenerator<'a> {
             declaration,
             definition: None,
             headers: vec![
-                Header::system("memory"),
-                Header::system("string"),
-                Header::user("cxx.h"),
+                Header::System("memory"),
+                Header::System("string"),
+                Header::CxxH,
             ],
             cpp_headers: Vec::new(),
         })
@@ -499,7 +505,7 @@ impl<'a> CppCodeGenerator<'a> {
             type_definition: None,
             declaration,
             definition,
-            headers: vec![Header::system("memory")],
+            headers: vec![Header::System("memory")],
             cpp_headers: Vec::new(),
         })
     }
@@ -616,7 +622,7 @@ impl<'a> CppCodeGenerator<'a> {
             )),
             declaration: None,
             headers: Vec::new(),
-            cpp_headers: vec![Header::user("cxxgen.h")],
+            cpp_headers: vec![Header::CxxgenH],
         });
         Ok(())
     }
