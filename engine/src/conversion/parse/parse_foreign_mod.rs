@@ -152,7 +152,7 @@ impl ParseForeignMod {
             } else if a.path.is_ident("bindgen_arg_type_rvalue_reference") {
                 let r: Result<Ident, syn::Error> = a.parse_args();
                 if let Ok(ls) = r {
-                    results.ref_params.insert(ls);
+                    results.rvalue_ref_params.insert(ls);
                 }
             }
         }
