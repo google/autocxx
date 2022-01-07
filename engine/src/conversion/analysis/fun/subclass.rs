@@ -208,7 +208,7 @@ pub(super) fn create_subclass_constructor(
         return_type_is_reference: fun.return_type_is_reference,
         reference_args: fun.reference_args.clone(),
         synthesized_this_type: Some(cpp.clone()),
-        self_ty: Some(cpp.clone()),
+        self_ty: Some(cpp),
         synthesis,
     });
     let subclass_constructor_name = ApiName::new_with_cpp_name(

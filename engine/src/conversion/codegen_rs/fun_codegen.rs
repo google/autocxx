@@ -87,6 +87,13 @@ pub(super) fn gen_function(
         _ => Vec::new(),
     };
     let wrapper_unsafety = analysis.requires_unsafe.wrapper_token();
+    let gen_params = FnGenParams {
+        param_details: &param_details,
+        cxxbridge_name: &cxxbridge_name,
+        rust_name: &rust_name,
+        unsafety: &wrapper_unsafety,
+        doc_attr: &doc_attr,
+    };
     let mut materialization = match kind {
         FnKind::Method(..) => None,
         FnKind::Function => match analysis.rust_rename_strategy {
@@ -101,14 +108,11 @@ pub(super) fn gen_function(
             ref trait_signature,
             ref method_name,
         } => generate_trait_impl(
+            gen_params.clone(),
             impl_for_specifics,
             trait_signature,
-            &param_details,
             method_name,
             &ret_type,
-            &wrapper_unsafety,
-            &doc_attr,
-            &cxxbridge_name,
         ),
     };
     let any_param_needs_rust_conversion = param_details
@@ -120,40 +124,23 @@ pub(super) fn gen_function(
         match kind {
             FnKind::Method(ref type_name, MethodKind::Constructor) => {
                 // Constructor.
-                impl_entry = Some(generate_constructor_impl(
-                    &param_details,
-                    type_name,
-                    &cxxbridge_name,
-                    &rust_name,
-                    &wrapper_unsafety,
-                    &doc_attr,
-                ));
+                impl_entry = Some(generate_constructor_impl(gen_params, type_name));
             }
             FnKind::Method(ref type_name, ref method_kind) => {
                 // Method, or static method.
                 impl_entry = Some(generate_method_impl(
-                    &param_details,
+                    gen_params,
                     matches!(
                         method_kind,
                         MethodKind::MakeUnique | MethodKind::Constructor
                     ),
                     type_name,
-                    &cxxbridge_name,
-                    &rust_name,
                     &ret_type,
-                    &wrapper_unsafety,
-                    &doc_attr,
                 ));
             }
             _ => {
                 // Generate plain old function
-                materialization = Some(Use::Custom(generate_function_impl(
-                    &param_details,
-                    &rust_name,
-                    &ret_type,
-                    &wrapper_unsafety,
-                    &doc_attr,
-                )));
+                materialization = Some(Use::Custom(generate_function_impl(gen_params, &ret_type)));
             }
         }
     }
@@ -233,21 +220,19 @@ fn generate_arg_lists(
 }
 
 /// Generate an 'impl Type { methods-go-here }' item
-#[allow(clippy::too_many_arguments)] // it's true, but probably best for now
 fn generate_method_impl(
-    param_details: &[ArgumentAnalysis],
+    gen_params: FnGenParams,
     avoid_self: bool,
     impl_block_type_name: &QualifiedName,
-    cxxbridge_name: &Ident,
-    rust_name: &str,
     ret_type: &ReturnType,
-    unsafety: &Option<Unsafe>,
-    doc_attr: &Option<Attribute>,
 ) -> Box<ImplBlockDetails> {
-    let (wrapper_params, arg_list) = generate_arg_lists(param_details, avoid_self);
+    let (wrapper_params, arg_list) = generate_arg_lists(gen_params.param_details, avoid_self);
     let (lifetime_tokens, wrapper_params, ret_type) =
-        add_explicit_lifetime_if_necessary(param_details, wrapper_params, ret_type);
-    let rust_name = make_ident(&rust_name);
+        add_explicit_lifetime_if_necessary(gen_params.param_details, wrapper_params, ret_type);
+    let rust_name = make_ident(gen_params.rust_name);
+    let unsafety = gen_params.unsafety;
+    let doc_attr = gen_params.doc_attr;
+    let cxxbridge_name = gen_params.cxxbridge_name;
     Box::new(ImplBlockDetails {
         item: ImplItem::Method(parse_quote! {
             #doc_attr
@@ -261,22 +246,18 @@ fn generate_method_impl(
 
 /// Generate an 'impl Trait for Type { methods-go-here }' in its entrety.
 fn generate_trait_impl(
+    gen_params: FnGenParams,
     impl_for_specifics: &TokenStream,
     trait_signature: &TokenStream,
-    param_details: &[ArgumentAnalysis],
     method_name: &Ident,
     ret_type: &ReturnType,
-    unsafety: &Option<Unsafe>,
-    doc_attr: &Option<Attribute>,
-    cxxbridge_name: &Ident,
 ) -> Option<Use> {
-    let (wrapper_params, arg_list) = generate_arg_lists(param_details, false);
-    log::info!(
-        "About to test mutable receiverness for {}",
-        cxxbridge_name.to_string()
-    );
+    let (wrapper_params, arg_list) = generate_arg_lists(gen_params.param_details, false);
     let (lifetime_tokens, wrapper_params, ret_type) =
-        add_explicit_lifetime_if_necessary(param_details, wrapper_params, ret_type);
+        add_explicit_lifetime_if_necessary(gen_params.param_details, wrapper_params, ret_type);
+    let doc_attr = gen_params.doc_attr;
+    let unsafety = gen_params.unsafety;
+    let cxxbridge_name = gen_params.cxxbridge_name;
     Some(Use::Custom(Box::new(parse_quote! {
         impl #lifetime_tokens #trait_signature for #impl_for_specifics {
             #doc_attr
@@ -287,34 +268,41 @@ fn generate_trait_impl(
     })))
 }
 
+/// Parameters common to all function generatiom.
+#[derive(Clone)]
+struct FnGenParams<'a> {
+    param_details: &'a [ArgumentAnalysis],
+    cxxbridge_name: &'a Ident,
+    rust_name: &'a str,
+    unsafety: &'a Option<Unsafe>,
+    doc_attr: &'a Option<Attribute>,
+}
+
 /// Generate a 'impl Type { methods-go-here }' item which is a constructor
 /// for use with moveit traits.
 fn generate_constructor_impl(
-    param_details: &[ArgumentAnalysis],
+    gen_params: FnGenParams,
     impl_block_type_name: &QualifiedName,
-    cxxbridge_name: &Ident,
-    rust_name: &str,
-    unsafety: &Option<Unsafe>,
-    doc_attr: &Option<Attribute>,
 ) -> Box<ImplBlockDetails> {
-    let (wrapper_params, arg_list) = generate_arg_lists(param_details, true);
+    let (wrapper_params, arg_list) = generate_arg_lists(gen_params.param_details, true);
     let mut wrapper_params: Punctuated<FnArg, Comma> = wrapper_params.into_iter().skip(1).collect();
     let ptr_arg_name = &arg_list[0];
-    let rust_name = make_ident(&rust_name);
-    let any_references = param_details.iter().any(|pd| pd.was_reference);
+    let rust_name = make_ident(&gen_params.rust_name);
+    let any_references = gen_params.param_details.iter().any(|pd| pd.was_reference);
     let (lifetime_param, lifetime_addition) = if any_references {
         add_lifetime_to_all_params(&mut wrapper_params);
         (quote! { <'a> }, quote! { + 'a })
     } else {
         (quote! {}, quote! {})
     };
+    let cxxbridge_name = &gen_params.cxxbridge_name;
     let body = quote! {
         autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
             let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
             cxxbridge::#cxxbridge_name(#(#arg_list),* )
         })
     };
-    let body = if unsafety.is_some() {
+    let body = if gen_params.unsafety.is_some() {
         // No need for `unsafe` inside the function
         body
     } else {
@@ -322,6 +310,8 @@ fn generate_constructor_impl(
             unsafe { #body }
         }
     };
+    let doc_attr = &gen_params.doc_attr;
+    let unsafety = &gen_params.unsafety;
     Box::new(ImplBlockDetails {
         item: ImplItem::Method(parse_quote! {
             #doc_attr
@@ -334,15 +324,11 @@ fn generate_constructor_impl(
 }
 
 /// Generate a function call wrapper
-fn generate_function_impl(
-    param_details: &[ArgumentAnalysis],
-    rust_name: &str,
-    ret_type: &ReturnType,
-    unsafety: &Option<Unsafe>,
-    doc_attr: &Option<Attribute>,
-) -> Box<Item> {
-    let (wrapper_params, arg_list) = generate_arg_lists(param_details, false);
-    let rust_name = make_ident(&rust_name);
+fn generate_function_impl(gen_params: FnGenParams, ret_type: &ReturnType) -> Box<Item> {
+    let (wrapper_params, arg_list) = generate_arg_lists(gen_params.param_details, false);
+    let rust_name = make_ident(&gen_params.rust_name);
+    let doc_attr = gen_params.doc_attr;
+    let unsafety = gen_params.unsafety;
     Box::new(Item::Fn(parse_quote! {
         #doc_attr
         pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {

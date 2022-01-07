@@ -38,7 +38,7 @@ pub(crate) fn add_casts(apis: Vec<Api<PodPhase>>) -> Vec<Api<PodPhase>> {
                     ref name,
                     details: _,
                     ref analysis,
-                } => create_casts(&name.name, &analysis).collect_vec(),
+                } => create_casts(&name.name, analysis).collect_vec(),
                 _ => Vec::new(),
             };
             resultant_apis.push(api);
