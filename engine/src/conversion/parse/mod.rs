@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod bindgen_semantic_attributes;
 mod parse_bindgen;
 mod parse_foreign_mod;
 
+pub(crate) use bindgen_semantic_attributes::BindgenSemanticAttributes;
 pub(crate) use parse_bindgen::ParseBindgen;

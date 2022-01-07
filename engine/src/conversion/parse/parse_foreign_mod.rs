@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::api::{ApiName, References};
+use crate::conversion::api::ApiName;
 use crate::conversion::doc_attr::get_doc_attr;
 use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
@@ -25,14 +25,9 @@ use crate::{
     types::{Namespace, QualifiedName},
 };
 use std::collections::HashMap;
-use syn::{
-    Block, Expr, ExprCall, ForeignItem, ForeignItemFn, Ident, ImplItem, ItemImpl, LitStr, Stmt,
-    Type,
-};
+use syn::{Block, Expr, ExprCall, ForeignItem, Ident, ImplItem, ItemImpl, Stmt, Type};
 
-use super::parse_bindgen::{
-    get_bindgen_original_name_annotation, get_cpp_visibility, get_virtualness, has_attr,
-};
+use super::bindgen_semantic_attributes::BindgenSemanticAttributes;
 
 /// Parses a given bindgen-generated 'mod' into suitable
 /// [Api]s. In bindgen output, a given mod concerns
@@ -77,15 +72,7 @@ impl ParseForeignMod {
     fn parse_foreign_item(&mut self, i: ForeignItem) -> Result<(), ConvertErrorWithContext> {
         match i {
             ForeignItem::Fn(item) => {
-                let cpp_vis = get_cpp_visibility(&item.attrs);
-                let virtualness = get_virtualness(&item.attrs);
-                let unused_template_param = has_attr(
-                    &item.attrs,
-                    "bindgen_unused_template_param_in_arg_or_return",
-                );
-                let is_move_constructor = Self::is_move_constructor(&item);
-                let references = Self::get_reference_parameters_and_return(&item);
-                let original_name = get_bindgen_original_name_annotation(&item.attrs);
+                let annotations = BindgenSemanticAttributes::new(&item.attrs);
                 let doc_attr = get_doc_attr(&item.attrs);
                 self.funcs_to_convert.push(FuncToConvert {
                     self_ty: None,
@@ -94,12 +81,13 @@ impl ParseForeignMod {
                     inputs: item.sig.inputs,
                     output: item.sig.output,
                     vis: item.vis,
-                    virtualness,
-                    cpp_vis,
-                    is_move_constructor,
-                    unused_template_param,
-                    references,
-                    original_name,
+                    virtualness: annotations.get_virtualness(),
+                    cpp_vis: annotations.get_cpp_visibility(),
+                    is_move_constructor: annotations.is_move_constructor(),
+                    unused_template_param: annotations
+                        .has_attr("unused_template_param_in_arg_or_return"),
+                    references: annotations.get_reference_parameters_and_return(),
+                    original_name: annotations.get_original_name(),
                     synthesized_this_type: None,
                     synthesis: None,
                 });
@@ -114,49 +102,6 @@ impl ParseForeignMod {
                 None,
             )),
         }
-    }
-
-    fn get_bindgen_special_member_annotation(fun: &ForeignItemFn) -> Option<String> {
-        fun.attrs
-            .iter()
-            .filter_map(|a| {
-                if a.path.is_ident("bindgen_special_member") {
-                    let r: Result<LitStr, syn::Error> = a.parse_args();
-                    match r {
-                        Ok(ls) => Some(ls.value()),
-                        Err(_) => None,
-                    }
-                } else {
-                    None
-                }
-            })
-            .next()
-    }
-
-    fn is_move_constructor(fun: &ForeignItemFn) -> bool {
-        Self::get_bindgen_special_member_annotation(fun).map_or(false, |val| val == "move_ctor")
-    }
-
-    fn get_reference_parameters_and_return(fun: &ForeignItemFn) -> References {
-        let mut results = References::default();
-        for a in &fun.attrs {
-            if a.path.is_ident("bindgen_ret_type_reference") {
-                results.ref_return = true;
-            } else if a.path.is_ident("bindgen_arg_type_reference") {
-                let r: Result<Ident, syn::Error> = a.parse_args();
-                if let Ok(ls) = r {
-                    results.ref_params.insert(ls);
-                }
-            } else if a.path.is_ident("bindgen_ret_type_rvalue_reference") {
-                results.rvalue_ref_return = true;
-            } else if a.path.is_ident("bindgen_arg_type_rvalue_reference") {
-                let r: Result<Ident, syn::Error> = a.parse_args();
-                if let Ok(ls) = r {
-                    results.rvalue_ref_params.insert(ls);
-                }
-            }
-        }
-        results
     }
 
     /// Record information from impl blocks encountered in bindgen

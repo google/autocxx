@@ -16,10 +16,7 @@ use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{
-            Api, ApiName, CppVisibility, Layout, StructDetails, SubclassName, TypedefKind,
-            UnanalyzedApi, Virtualness,
-        },
+        api::{Api, ApiName, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
         ConvertError,
     },
     types::Namespace,
@@ -33,9 +30,11 @@ use crate::{
     types::validate_ident_ok_for_cxx,
 };
 use autocxx_parser::IncludeCppConfig;
-use syn::{parse_quote, Attribute, Fields, Ident, Item, LitStr, TypePath, UseTree};
+use syn::{parse_quote, Fields, Ident, Item, TypePath, UseTree};
 
-use super::super::utilities::generate_utilities;
+use super::{
+    super::utilities::generate_utilities, bindgen_semantic_attributes::BindgenSemanticAttributes,
+};
 
 use super::parse_foreign_mod::ParseForeignMod;
 
@@ -45,14 +44,14 @@ pub(crate) struct ParseBindgen<'a> {
     apis: Vec<UnanalyzedApi>,
 }
 
-fn api_name(ns: &Namespace, id: Ident, attrs: &[Attribute]) -> ApiName {
-    ApiName::new_with_cpp_name(ns, id, get_bindgen_original_name_annotation(attrs))
+fn api_name(ns: &Namespace, id: Ident, attrs: &BindgenSemanticAttributes) -> ApiName {
+    ApiName::new_with_cpp_name(ns, id, attrs.get_original_name())
 }
 
 pub(crate) fn api_name_qualified(
     ns: &Namespace,
     id: Ident,
-    attrs: &[Attribute],
+    attrs: &BindgenSemanticAttributes,
 ) -> Result<ApiName, ConvertErrorWithContext> {
     match validate_ident_ok_for_cxx(&id.to_string()) {
         Err(e) => {
@@ -61,56 +60,6 @@ pub(crate) fn api_name_qualified(
         }
         Ok(..) => Ok(api_name(ns, id, attrs)),
     }
-}
-
-pub(super) fn get_bindgen_original_name_annotation(attrs: &[Attribute]) -> Option<String> {
-    attrs
-        .iter()
-        .filter_map(|a| {
-            if a.path.is_ident("bindgen_original_name") {
-                let r: Result<LitStr, syn::Error> = a.parse_args();
-                match r {
-                    Ok(ls) => Some(ls.value()),
-                    Err(_) => None,
-                }
-            } else {
-                None
-            }
-        })
-        .next()
-}
-
-pub(super) fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
-    attrs.iter().any(|a| a.path.is_ident(attr_name))
-}
-
-pub(super) fn get_cpp_visibility(attrs: &[Attribute]) -> CppVisibility {
-    if has_attr(attrs, "bindgen_visibility_private") {
-        CppVisibility::Private
-    } else if has_attr(attrs, "bindgen_visibility_protected") {
-        CppVisibility::Protected
-    } else {
-        CppVisibility::Public
-    }
-}
-
-pub(super) fn get_virtualness(attrs: &[Attribute]) -> Virtualness {
-    if has_attr(attrs, "bindgen_pure_virtual") {
-        Virtualness::PureVirtual
-    } else if has_attr(attrs, "bindgen_virtual") {
-        Virtualness::Virtual
-    } else {
-        Virtualness::None
-    }
-}
-
-fn parse_layout(attrs: &[Attribute]) -> Option<Layout> {
-    for a in attrs {
-        if a.path.is_ident("bindgen_layout") {
-            return Some(a.parse_args().unwrap());
-        }
-    }
-    None
 }
 
 impl<'a> ParseBindgen<'a> {
@@ -214,9 +163,10 @@ impl<'a> ParseBindgen<'a> {
                     return Ok(());
                 }
                 let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
+                let annotations = BindgenSemanticAttributes::new(&s.attrs);
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
-                let name = api_name_qualified(ns, s.ident.clone(), &s.attrs)?;
+                let name = api_name_qualified(ns, s.ident.clone(), &annotations)?;
                 let api = if ns.is_empty() && self.config.is_rust_type(&s.ident) {
                     None
                 } else if is_forward_declaration {
@@ -225,8 +175,8 @@ impl<'a> ParseBindgen<'a> {
                     Some(UnanalyzedApi::Struct {
                         name,
                         details: Box::new(StructDetails {
-                            vis: get_cpp_visibility(&s.attrs),
-                            layout: parse_layout(&s.attrs),
+                            vis: annotations.get_cpp_visibility(),
+                            layout: annotations.get_layout(),
                             item: s,
                         }),
                         analysis: (),
@@ -240,8 +190,9 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Enum(e) => {
+                let annotations = BindgenSemanticAttributes::new(&e.attrs);
                 let api = UnanalyzedApi::Enum {
-                    name: api_name_qualified(ns, e.ident.clone(), &e.attrs)?,
+                    name: api_name_qualified(ns, e.ident.clone(), &annotations)?,
                     item: e,
                 };
                 if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
@@ -301,8 +252,9 @@ impl<'a> ParseBindgen<'a> {
                                     Some(ErrorContext::Item(new_id.clone())),
                                 ));
                             }
+                            let annotations = BindgenSemanticAttributes::new(&use_item.attrs);
                             self.apis.push(UnanalyzedApi::Typedef {
-                                name: api_name(ns, new_id.clone(), &use_item.attrs),
+                                name: api_name(ns, new_id.clone(), &annotations),
                                 item: TypedefKind::Use(parse_quote! {
                                     pub use #old_path as #new_id;
                                 }),
@@ -322,15 +274,17 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Const(const_item) => {
+                let annotations = BindgenSemanticAttributes::new(&const_item.attrs);
                 self.apis.push(UnanalyzedApi::Const {
-                    name: api_name(ns, const_item.ident.clone(), &const_item.attrs),
+                    name: api_name(ns, const_item.ident.clone(), &annotations),
                     const_item,
                 });
                 Ok(())
             }
             Item::Type(ity) => {
+                let annotations = BindgenSemanticAttributes::new(&ity.attrs);
                 self.apis.push(UnanalyzedApi::Typedef {
-                    name: api_name(ns, ity.ident.clone(), &ity.attrs),
+                    name: api_name(ns, ity.ident.clone(), &annotations),
                     item: TypedefKind::Type(ity),
                     old_tyname: None,
                     analysis: (),
