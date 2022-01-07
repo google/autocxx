@@ -5363,7 +5363,6 @@ fn test_ignore_move_constructor() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/712
 fn test_ignore_function_with_rvalue_ref() {
     let hdr = indoc! {"
         #include <string>

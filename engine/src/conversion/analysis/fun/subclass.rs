@@ -68,8 +68,7 @@ pub(super) fn create_subclass_fn_wrapper(
         is_move_constructor: false,
         unused_template_param: fun.unused_template_param,
         original_name: None,
-        return_type_is_reference: fun.return_type_is_reference,
-        reference_args: fun.reference_args.clone(),
+        references: fun.references.clone(),
         synthesis: fun.synthesis.clone(),
     })
 }
@@ -205,8 +204,7 @@ pub(super) fn create_subclass_constructor(
         is_move_constructor: false,
         original_name: None,
         unused_template_param: fun.unused_template_param,
-        return_type_is_reference: fun.return_type_is_reference,
-        reference_args: fun.reference_args.clone(),
+        references: fun.references.clone(),
         synthesized_this_type: Some(cpp.clone()),
         self_ty: Some(cpp),
         synthesis,

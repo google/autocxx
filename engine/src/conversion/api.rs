@@ -116,6 +116,25 @@ pub(crate) enum Synthesis {
     },
 }
 
+/// Information about references (as opposed to pointers) to be found
+/// within the function signature. This is derived from bindgen annotations
+/// which is why it's not within `FuncToConvert::inputs`
+#[derive(Default, Clone)]
+pub(crate) struct References {
+    pub(crate) rvalue_ref_params: HashSet<Ident>,
+    pub(crate) ref_params: HashSet<Ident>,
+    pub(crate) ref_return: bool,
+    pub(crate) rvalue_ref_return: bool,
+}
+
+impl References {
+    pub(crate) fn new_with_this_as_reference() -> Self {
+        let mut results = Self::default();
+        results.ref_params.insert(make_ident("this"));
+        results
+    }
+}
+
 /// A C++ function for which we need to generate bindings, but haven't
 /// yet analyzed in depth. This is little more than a `ForeignItemFn`
 /// broken down into its constituent parts, plus some metadata from the
@@ -137,8 +156,7 @@ pub(crate) struct FuncToConvert {
     pub(crate) cpp_vis: CppVisibility,
     pub(crate) is_move_constructor: bool,
     pub(crate) unused_template_param: bool,
-    pub(crate) return_type_is_reference: bool,
-    pub(crate) reference_args: HashSet<Ident>,
+    pub(crate) references: References,
     pub(crate) original_name: Option<String>,
     /// Used for static functions only. For all other functons,
     /// this is figured out from the receiver type in the inputs.
