@@ -41,11 +41,12 @@ You will need:
 
 The rest of this 'getting started' section assumes Cargo - if you're using something else, see the [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html) documentation.
 
-First, add `autocxx` to your `dependencies` and `autocxx-build` to your `build-dependencies` in your `Cargo.toml`.
+First, add `autocxx` and `cxx` to your `dependencies` and `autocxx-build` to your `build-dependencies` in your `Cargo.toml`.
 
 ```toml
 [dependencies]
 autocxx = "0.15.0"
+cxx = "1.0"
 
 [build-dependencies]
 autocxx-build = "0.15.0"
