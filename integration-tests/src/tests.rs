@@ -22,7 +22,7 @@ use itertools::Itertools;
 use proc_macro2::Span;
 use quote::quote;
 use syn::Token;
-use test_env_log::test;
+use test_log::test;
 
 #[test]
 fn test_return_void() {
