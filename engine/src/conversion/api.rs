@@ -136,6 +136,14 @@ impl References {
     }
 }
 
+#[derive(Clone)]
+pub(crate) enum SpecialMemberKind {
+    DefaultConstructor,
+    CopyConstructor,
+    MoveConstructor,
+    Destructor,
+}
+
 /// A C++ function for which we need to generate bindings, but haven't
 /// yet analyzed in depth. This is little more than a `ForeignItemFn`
 /// broken down into its constituent parts, plus some metadata from the
@@ -155,7 +163,7 @@ pub(crate) struct FuncToConvert {
     pub(crate) vis: Visibility,
     pub(crate) virtualness: Virtualness,
     pub(crate) cpp_vis: CppVisibility,
-    pub(crate) is_move_constructor: bool,
+    pub(crate) special_member: Option<SpecialMemberKind>,
     pub(crate) unused_template_param: bool,
     pub(crate) references: References,
     pub(crate) original_name: Option<String>,
@@ -169,6 +177,7 @@ pub(crate) struct FuncToConvert {
     /// If Some, this function didn't really exist in the original
     /// C++ and instead we're synthesizing it.
     pub(crate) synthesis: Option<Synthesis>,
+    pub(crate) is_deleted: bool,
 }
 
 /// Layers of analysis which may be applied to decorate each API.

@@ -20,7 +20,7 @@ use syn::{
 };
 
 use crate::conversion::{
-    api::{CppVisibility, Layout, References, Virtualness},
+    api::{CppVisibility, Layout, References, SpecialMemberKind, Virtualness},
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
@@ -121,14 +121,16 @@ impl BindgenSemanticAttributes {
         self.string_if_present("original_name")
     }
 
-    fn get_bindgen_special_member_annotation(&self) -> Option<String> {
+    /// Whether this is a move constructor or other special member.
+    pub(super) fn special_member_kind(&self) -> Option<SpecialMemberKind> {
         self.string_if_present("special_member")
-    }
-
-    /// Whether this is a move constructor.
-    pub(super) fn is_move_constructor(&self) -> bool {
-        self.get_bindgen_special_member_annotation()
-            .map_or(false, |val| val == "move_ctor")
+            .map(|kind| match kind.as_str() {
+                "default_ctor" => SpecialMemberKind::DefaultConstructor,
+                "copy_ctor" => SpecialMemberKind::CopyConstructor,
+                "move_ctor" => SpecialMemberKind::MoveConstructor,
+                "dtor" => SpecialMemberKind::Destructor,
+                _ => panic!("unexpected special_member_kind"),
+            })
     }
 
     /// Any reference parameters or return values.

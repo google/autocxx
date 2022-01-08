@@ -65,11 +65,12 @@ pub(super) fn create_subclass_fn_wrapper(
         vis: fun.vis.clone(),
         virtualness: Virtualness::None,
         cpp_vis: CppVisibility::Public,
-        is_move_constructor: false,
+        special_member: None,
         unused_template_param: fun.unused_template_param,
         original_name: None,
         references: fun.references.clone(),
         synthesis: fun.synthesis.clone(),
+        is_deleted: fun.is_deleted,
     })
 }
 
@@ -201,13 +202,14 @@ pub(super) fn create_subclass_constructor(
         vis: fun.vis.clone(),
         virtualness: Virtualness::None,
         cpp_vis: CppVisibility::Public,
-        is_move_constructor: false,
+        special_member: fun.special_member.clone(),
         original_name: None,
         unused_template_param: fun.unused_template_param,
         references: fun.references.clone(),
         synthesized_this_type: Some(cpp.clone()),
         self_ty: Some(cpp),
         synthesis,
+        is_deleted: fun.is_deleted,
     });
     let subclass_constructor_name = ApiName::new_with_cpp_name(
         &Namespace::new(),
