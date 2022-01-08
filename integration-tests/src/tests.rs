@@ -7657,23 +7657,29 @@ fn test_pass_superclass() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/486
 fn test_issue486_multi_types() {
     let hdr = indoc! {"
         namespace a {
             namespace spanner {
-                inline void Key() {}
+                struct Key {};
             }
         } // namespace a
         namespace b {
             namespace spanner {
                 typedef int Key;
             }
-        } // namespace a
+        } // namespace b
+        namespace c {
+            namespace spanner {
+                enum Key { A, B };
+            }
+        } // namespace c
         namespace spanner {
             class Key {
                 public:
-                    bool b(a::spanner::Key &);
+                    bool a(a::spanner::Key &);
+                    bool b(b::spanner::Key &);
+                    bool c(c::spanner::Key &);
             };
         } // namespace spanner
     "};
