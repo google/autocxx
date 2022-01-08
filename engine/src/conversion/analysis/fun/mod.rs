@@ -25,8 +25,8 @@ use crate::{
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{
-            ApiName, CastMutability, CppVisibility, FuncToConvert, SubclassName, Synthesis,
-            Virtualness,
+            ApiName, CastMutability, CppVisibility, FuncToConvert, References, SubclassName,
+            Synthesis, Virtualness,
         },
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
@@ -478,7 +478,7 @@ impl<'a> FnAnalyzer<'a> {
                     ns,
                     diagnostic_display_name,
                     &fun.synthesized_this_type,
-                    &fun.reference_args,
+                    &fun.references,
                     true,
                 )
             })
@@ -645,7 +645,7 @@ impl<'a> FnAnalyzer<'a> {
                     ns,
                     &rust_name,
                     &fun.synthesized_this_type,
-                    &fun.reference_args,
+                    &fun.references,
                     false,
                 )
                 .map_err(contextualize_error)?;
@@ -701,7 +701,6 @@ impl<'a> FnAnalyzer<'a> {
         if fun.unused_template_param {
             return Err(contextualize_error(ConvertError::UnusedTemplateParam));
         }
-
         match kind {
             FnKind::Method(_, MethodKind::Static) => {}
             FnKind::Method(ref self_ty, _) => {
@@ -719,6 +718,13 @@ impl<'a> FnAnalyzer<'a> {
             }
             _ => {}
         };
+        if fun.references.rvalue_ref_return {
+            return Err(contextualize_error(ConvertError::RValueReturn));
+        }
+        // Ensure we do this _after_ recording the presence of move constructors.
+        if !fun.references.rvalue_ref_params.is_empty() {
+            return Err(contextualize_error(ConvertError::RValueParam));
+        }
 
         // Analyze the return type, just as we previously did for the
         // parameters.
@@ -736,7 +742,7 @@ impl<'a> FnAnalyzer<'a> {
                 deps: std::iter::once(self_ty).cloned().collect(),
             }
         } else {
-            self.convert_return_type(&fun.output, ns, fun.return_type_is_reference)
+            self.convert_return_type(&fun.output, ns, &fun.references)
                 .map_err(contextualize_error)?
         };
         let mut deps = params_deps;
@@ -984,7 +990,7 @@ impl<'a> FnAnalyzer<'a> {
         ns: &Namespace,
         fn_name: &str,
         virtual_this: &Option<QualifiedName>,
-        reference_args: &HashSet<Ident>,
+        references: &References,
         treat_this_as_reference: bool,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
@@ -1038,7 +1044,7 @@ impl<'a> FnAnalyzer<'a> {
                     }
                     syn::Pat::Ident(pp) => {
                         validate_ident_ok_for_cxx(&pp.ident.to_string())?;
-                        treat_as_reference = reference_args.contains(&pp.ident);
+                        treat_as_reference = references.ref_params.contains(&pp.ident);
                         syn::Pat::Ident(pp)
                     }
                     _ => old_pat,
@@ -1125,7 +1131,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         rt: &ReturnType,
         ns: &Namespace,
-        convert_ptr_to_reference: bool,
+        references: &References,
     ) -> Result<ReturnTypeAnalysis, ConvertError> {
         let result = match rt {
             ReturnType::Default => ReturnTypeAnalysis {
@@ -1137,7 +1143,7 @@ impl<'a> FnAnalyzer<'a> {
             ReturnType::Type(rarrow, boxed_type) => {
                 // TODO remove the below clone
                 let annotated_type =
-                    self.convert_boxed_type(boxed_type.clone(), ns, convert_ptr_to_reference)?;
+                    self.convert_boxed_type(boxed_type.clone(), ns, references.ref_return)?;
                 let boxed_type = annotated_type.ty;
                 let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
                 let conversion = self.return_type_conversion_details(boxed_type.as_ref());
@@ -1204,8 +1210,7 @@ impl<'a> FnAnalyzer<'a> {
                         cpp_vis: CppVisibility::Public,
                         is_move_constructor: false,
                         unused_template_param: false,
-                        return_type_is_reference: false,
-                        reference_args: HashSet::new(),
+                        references: References::default(),
                         original_name: None,
                         synthesized_this_type: None,
                         synthesis: None,

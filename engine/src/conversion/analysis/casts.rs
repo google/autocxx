@@ -17,7 +17,7 @@ use quote::quote;
 use syn::{parse_quote, FnArg};
 
 use crate::{
-    conversion::api::{Api, ApiName, CastMutability, Synthesis},
+    conversion::api::{Api, ApiName, CastMutability, References, Synthesis},
     types::{make_ident, QualifiedName},
 };
 
@@ -111,8 +111,7 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
             cpp_vis: crate::conversion::api::CppVisibility::Public,
             is_move_constructor: false,
             unused_template_param: false,
-            return_type_is_reference: true,
-            reference_args: [make_ident("this")].into_iter().collect(),
+            references: References::new_with_this_and_return_as_reference(),
             original_name: None,
             self_ty: Some(from.clone()),
             synthesized_this_type: None,

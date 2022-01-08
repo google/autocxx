@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::api::ApiName;
+use crate::conversion::api::{ApiName, References};
 use crate::conversion::doc_attr::get_doc_attr;
 use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
@@ -24,7 +24,7 @@ use crate::{
     conversion::ConvertError,
     types::{Namespace, QualifiedName},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use syn::{
     Block, Expr, ExprCall, ForeignItem, ForeignItemFn, Ident, ImplItem, ItemImpl, LitStr, Stmt,
     Type,
@@ -84,8 +84,7 @@ impl ParseForeignMod {
                     "bindgen_unused_template_param_in_arg_or_return",
                 );
                 let is_move_constructor = Self::is_move_constructor(&item);
-                let (reference_args, return_type_is_reference) =
-                    Self::get_reference_parameters_and_return(&item);
+                let references = Self::get_reference_parameters_and_return(&item);
                 let original_name = get_bindgen_original_name_annotation(&item.attrs);
                 let doc_attr = get_doc_attr(&item.attrs);
                 self.funcs_to_convert.push(FuncToConvert {
@@ -99,8 +98,7 @@ impl ParseForeignMod {
                     cpp_vis,
                     is_move_constructor,
                     unused_template_param,
-                    return_type_is_reference,
-                    reference_args,
+                    references,
                     original_name,
                     synthesized_this_type: None,
                     synthesis: None,
@@ -139,20 +137,26 @@ impl ParseForeignMod {
         Self::get_bindgen_special_member_annotation(fun).map_or(false, |val| val == "move_ctor")
     }
 
-    fn get_reference_parameters_and_return(fun: &ForeignItemFn) -> (HashSet<Ident>, bool) {
-        let mut ref_params = HashSet::new();
-        let mut ref_return = false;
+    fn get_reference_parameters_and_return(fun: &ForeignItemFn) -> References {
+        let mut results = References::default();
         for a in &fun.attrs {
             if a.path.is_ident("bindgen_ret_type_reference") {
-                ref_return = true;
+                results.ref_return = true;
             } else if a.path.is_ident("bindgen_arg_type_reference") {
                 let r: Result<Ident, syn::Error> = a.parse_args();
                 if let Ok(ls) = r {
-                    ref_params.insert(ls);
+                    results.ref_params.insert(ls);
+                }
+            } else if a.path.is_ident("bindgen_ret_type_rvalue_reference") {
+                results.rvalue_ref_return = true;
+            } else if a.path.is_ident("bindgen_arg_type_rvalue_reference") {
+                let r: Result<Ident, syn::Error> = a.parse_args();
+                if let Ok(ls) = r {
+                    results.rvalue_ref_params.insert(ls);
                 }
             }
         }
-        (ref_params, ref_return)
+        results
     }
 
     /// Record information from impl blocks encountered in bindgen
