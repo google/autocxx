@@ -118,3 +118,18 @@ pub fn extern_rust_function(attr: TokenStream, input: TokenStream) -> TokenStrea
     }
     input
 }
+
+/// Attribute which should never be encountered in real life.
+/// This is something which features in the Rust source code generated
+/// by autocxx-bindgen and passed to autocxx-engine, which should never
+/// normally be compiled by rustc before it undergoes further processing.
+#[proc_macro_error]
+#[proc_macro_attribute]
+pub fn cpp_semantics(_attr: TokenStream, _input: TokenStream) -> TokenStream {
+    abort!(
+        Span::call_site(),
+        "Please do not attempt to compile this code. \n\
+        This code is the output from the autocxx-specific version of bindgen, \n\
+        and should be interpreted by autocxx-engine before further usage."
+    );
+}

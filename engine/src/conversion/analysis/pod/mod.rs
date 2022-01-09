@@ -26,6 +26,7 @@ use crate::{
         api::{AnalysisPhase, Api, ApiName, CppVisibility, StructDetails, TypeKind, UnanalyzedApi},
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
+        parse::BindgenSemanticAttributes,
         ConvertError,
     },
     types::{Namespace, QualifiedName},
@@ -115,7 +116,8 @@ fn analyze_enum(
     name: ApiName,
     mut item: ItemEnum,
 ) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
-    super::remove_bindgen_attrs(&mut item.attrs, name.name.get_final_ident())?;
+    let metadata = BindgenSemanticAttributes::new_retaining_others(&mut item.attrs);
+    metadata.check_for_fatal_attrs(&name.name.get_final_ident())?;
     Ok(Box::new(std::iter::once(Api::Enum { name, item })))
 }
 
@@ -134,7 +136,8 @@ fn analyze_struct(
             Some(ErrorContext::Item(id)),
         ));
     }
-    super::remove_bindgen_attrs(&mut details.item.attrs, id.clone())?;
+    let metadata = BindgenSemanticAttributes::new_retaining_others(&mut details.item.attrs);
+    metadata.check_for_fatal_attrs(&id)?;
     let bases = get_bases(&details.item);
     let mut field_deps = HashSet::new();
     let type_kind = if byvalue_checker.is_pod(&name.name) {
