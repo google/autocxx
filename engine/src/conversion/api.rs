@@ -129,10 +129,11 @@ pub(crate) struct References {
 
 impl References {
     pub(crate) fn new_with_this_and_return_as_reference() -> Self {
-        let mut results = Self::default();
-        results.ref_return = true;
-        results.ref_params.insert(make_ident("this"));
-        results
+        Self {
+            ref_return: true,
+            ref_params: [make_ident("this")].into_iter().collect(),
+            ..Default::default()
+        }
     }
 }
 

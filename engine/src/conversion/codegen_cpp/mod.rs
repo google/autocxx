@@ -253,7 +253,7 @@ impl<'a> CppCodeGenerator<'a> {
             .collect(); // uniqify
         cpp_headers
             .iter()
-            .map(|x| x.include_stmt(&self.cpp_codegen_options))
+            .map(|x| x.include_stmt(self.cpp_codegen_options))
             .join("\n")
     }
 
