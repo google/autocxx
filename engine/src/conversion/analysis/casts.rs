@@ -109,7 +109,7 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
             vis: parse_quote! { pub },
             virtualness: crate::conversion::api::Virtualness::None,
             cpp_vis: crate::conversion::api::CppVisibility::Public,
-            is_move_constructor: false,
+            special_member: None,
             unused_template_param: false,
             references: References::new_with_this_and_return_as_reference(),
             original_name: None,
@@ -119,6 +119,7 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
                 to_type: to.clone(),
                 mutable,
             }),
+            is_deleted: false,
         }),
         analysis: (),
     }

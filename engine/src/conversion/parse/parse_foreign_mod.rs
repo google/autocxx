@@ -83,13 +83,14 @@ impl ParseForeignMod {
                     vis: item.vis,
                     virtualness: annotations.get_virtualness(),
                     cpp_vis: annotations.get_cpp_visibility(),
-                    is_move_constructor: annotations.is_move_constructor(),
+                    special_member: annotations.special_member_kind(),
                     unused_template_param: annotations
                         .has_attr("unused_template_param_in_arg_or_return"),
                     references: annotations.get_reference_parameters_and_return(),
                     original_name: annotations.get_original_name(),
                     synthesized_this_type: None,
                     synthesis: None,
+                    is_deleted: annotations.has_attr("deleted"),
                 });
                 Ok(())
             }
@@ -113,13 +114,9 @@ impl ParseForeignMod {
         };
         for i in imp.items {
             if let ImplItem::Method(itm) = i {
-                let effective_fun_name = if itm.sig.ident == "new" {
-                    ty_id.clone()
-                } else {
-                    match get_called_function(&itm.block) {
-                        Some(id) => id.clone(),
-                        None => itm.sig.ident,
-                    }
+                let effective_fun_name = match get_called_function(&itm.block) {
+                    Some(id) => id.clone(),
+                    None => itm.sig.ident,
                 };
                 self.method_receivers.insert(
                     effective_fun_name,

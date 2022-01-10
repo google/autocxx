@@ -25,8 +25,8 @@ use crate::{
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{
-            ApiName, CastMutability, CppVisibility, FuncToConvert, References, SubclassName,
-            Synthesis, Virtualness,
+            ApiName, CastMutability, CppVisibility, FuncToConvert, References, SpecialMemberKind,
+            SubclassName, Synthesis, Virtualness,
         },
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
@@ -456,6 +456,13 @@ impl<'a> FnAnalyzer<'a> {
         let mut cpp_name = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
+        // Disregard any deleted functions. We cared about them previously
+        // because they influence our behavior in whether types can be used in
+        // vectors, but that was all recorded in the POD analysis phase.
+        if fun.is_deleted {
+            return Ok(None);
+        }
+
         // Let's gather some pre-wisdom about the name of the function.
         // We're shortly going to plunge into analyzing the parameters,
         // and it would be nice to have some idea of the function name
@@ -705,7 +712,7 @@ impl<'a> FnAnalyzer<'a> {
             FnKind::Method(_, MethodKind::Static) => {}
             FnKind::Method(ref self_ty, _) => {
                 // Reject move constructors.
-                if fun.is_move_constructor {
+                if matches!(fun.special_member, Some(SpecialMemberKind::MoveConstructor)) {
                     self.has_unrepresentable_constructors
                         .insert(self_ty.clone());
                     return Err(contextualize_error(
@@ -1208,12 +1215,13 @@ impl<'a> FnAnalyzer<'a> {
                         vis: parse_quote! { pub },
                         virtualness: Virtualness::None,
                         cpp_vis: CppVisibility::Public,
-                        is_move_constructor: false,
+                        special_member: None,
                         unused_template_param: false,
                         references: References::default(),
                         original_name: None,
                         synthesized_this_type: None,
                         synthesis: None,
+                        is_deleted: false,
                     }),
                 )
             });

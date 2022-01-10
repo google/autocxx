@@ -18,12 +18,17 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
-use syn::{ItemEnum, ItemStruct, Type, Visibility};
+use syn::{FnArg, ItemEnum, ItemStruct, Type, TypePtr, Visibility};
+
+use itertools::{Either, Itertools};
 
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, ApiName, CppVisibility, StructDetails, TypeKind, UnanalyzedApi},
+        api::{
+            AnalysisPhase, Api, ApiName, CppVisibility, FuncToConvert, SpecialMemberKind,
+            StructDetails, TypeKind, UnanalyzedApi,
+        },
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
         parse::BindgenSemanticAttributes,
@@ -43,6 +48,7 @@ pub(crate) struct PodAnalysis {
     /// abstract or not.
     pub(crate) castable_bases: HashSet<QualifiedName>,
     pub(crate) field_deps: HashSet<QualifiedName>,
+    pub(crate) movable: bool,
 }
 
 pub(crate) struct PodPhase;
@@ -67,6 +73,8 @@ pub(crate) fn analyze_pod_apis(
     // a type contains a std::string or some other type which can't be
     // held safely by value in Rust.
     let byvalue_checker = ByValueChecker::new_from_apis(&apis, config)?;
+    // We'll also note which types have deleted move constructors.
+    let (deleted_move_constructors, apis) = find_deleted_move_and_copy_constructors(apis);
     let mut extra_apis = Vec::new();
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut results = Vec::new();
@@ -82,6 +90,7 @@ pub(crate) fn analyze_pod_apis(
                 name,
                 details,
                 config,
+                &deleted_move_constructors,
             )
         },
         analyze_enum,
@@ -103,6 +112,7 @@ pub(crate) fn analyze_pod_apis(
                 name,
                 details,
                 config,
+                &deleted_move_constructors,
             )
         },
         analyze_enum,
@@ -128,7 +138,9 @@ fn analyze_struct(
     name: ApiName,
     mut details: Box<StructDetails>,
     config: &IncludeCppConfig,
+    deleted_move_constructors: &HashSet<QualifiedName>,
 ) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
+    let movable = !deleted_move_constructors.contains(&name.name);
     let id = name.name.get_final_ident();
     if details.vis != CppVisibility::Public {
         return Err(ConvertErrorWithContext(
@@ -169,6 +181,7 @@ fn analyze_struct(
             bases: bases.into_keys().collect(),
             castable_bases,
             field_deps,
+            movable,
         },
     })))
 }
@@ -205,4 +218,44 @@ fn get_bases(item: &ItemStruct) -> HashMap<QualifiedName, bool> {
             }
         })
         .collect()
+}
+
+fn find_deleted_move_and_copy_constructors(
+    apis: Vec<Api<TypedefPhase>>,
+) -> (HashSet<QualifiedName>, Vec<Api<TypedefPhase>>) {
+    // Remove any deleted move + copy constructors from the API list and list the types
+    // that they construct.
+    apis.into_iter().partition_map(|api| match api {
+        Api::Function { ref fun, .. } => match &**fun {
+            FuncToConvert {
+                special_member:
+                    Some(SpecialMemberKind::MoveConstructor | SpecialMemberKind::CopyConstructor),
+                is_deleted: true,
+                inputs,
+                ..
+             } => match is_a_pointer_arg(inputs.iter().next()) {
+                    Some(ty) => Either::Left(ty),
+                    _ => panic!("found special constructor member with something other than a pointer first arg"),
+                },
+            _ => Either::Right(api),
+        },
+        _ => Either::Right(api),
+    })
+}
+
+/// Determine if a function argument is a pointer, and if so, to what.
+/// It's unfortunate that we need to do this during the POD analysis but
+/// for now, it's the best way to identify special constructor members.
+fn is_a_pointer_arg(arg: Option<&FnArg>) -> Option<QualifiedName> {
+    arg.map(|arg| match arg {
+        FnArg::Receiver(..) => None,
+        FnArg::Typed(pt) => match &*pt.ty {
+            Type::Ptr(TypePtr { elem, .. }) => match &**elem {
+                Type::Path(typ) => Some(QualifiedName::from_type_path(typ)),
+                _ => None,
+            },
+            _ => None,
+        },
+    })
+    .flatten()
 }

@@ -4897,7 +4897,6 @@ fn test_issue_490() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/489
 fn test_immovable_object() {
     let hdr = indoc! {"
         class A {
@@ -4914,6 +4913,27 @@ fn test_immovable_object() {
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
+fn test_immovable_nested_object() {
+    let hdr = indoc! {"
+        struct C {
+            class A {
+            public:
+                A();
+                A(A&&) = delete;
+            };
+
+            class B{
+            public:
+                B();
+                B(const B&) = delete;
+            };
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["C_A", "C_B"], &[]);
 }
 
 #[test]

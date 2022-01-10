@@ -15,11 +15,11 @@
 use autocxx_parser::IncludeCppConfig;
 use syn::{parse_quote, Ident, Item};
 
-pub(crate) fn create_impl_items(id: &Ident, config: &IncludeCppConfig) -> Vec<Item> {
+pub(crate) fn create_impl_items(id: &Ident, movable: bool, config: &IncludeCppConfig) -> Vec<Item> {
     if config.exclude_impls {
         return vec![];
     }
-    vec![
+    let mut results = vec![
         Item::Impl(parse_quote! {
             impl UniquePtr<#id> {}
         }),
@@ -29,8 +29,11 @@ pub(crate) fn create_impl_items(id: &Ident, config: &IncludeCppConfig) -> Vec<It
         Item::Impl(parse_quote! {
             impl WeakPtr<#id> {}
         }),
-        Item::Impl(parse_quote! {
+    ];
+    if movable {
+        results.push(Item::Impl(parse_quote! {
             impl CxxVector<#id> {}
-        }),
-    ]
+        }))
+    }
+    results
 }
