@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub(crate) mod abstract_types;
+pub(crate) mod allocators;
 pub(crate) mod casts;
 pub(crate) mod ctypes;
 pub(crate) mod fun;

@@ -19,19 +19,18 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
-    Attribute, FnArg, ForeignItem, Ident, ImplItem, Item, ReturnType,
+    Attribute, FnArg, ForeignItem, Ident, ImplItem, Item, ReturnType, Type,
 };
 
 use super::{
     unqualify::{unqualify_params, unqualify_ret_type},
-    RsCodegenResult, Use,
+    ImplBlockDetails, RsCodegenResult, TraitDetails, TraitImplBlockDetails, Use,
 };
 use crate::{
     conversion::{
         analysis::fun::{
             ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy, UnsafetyNeeded,
         },
-        api::ImplBlockDetails,
         codegen_rs::lifetime::add_lifetime_to_all_params,
     },
     types::{Namespace, QualifiedName},
@@ -78,6 +77,7 @@ pub(super) fn gen_function(
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
+    let mut trait_impl_entry = None;
     let rust_name_attr: Vec<_> = match &analysis.rust_rename_strategy {
         RustRenameStrategy::RenameUsingRustAttr => Attribute::parse_outer
             .parse2(quote!(
@@ -95,30 +95,23 @@ pub(super) fn gen_function(
         doc_attr: &doc_attr,
     };
     let mut materialization = match kind {
-        FnKind::Method(..) => None,
+        FnKind::Method(..) | FnKind::TraitMethod { .. } => None,
         FnKind::Function => match analysis.rust_rename_strategy {
             RustRenameStrategy::RenameInOutputMod(alias) => {
                 Some(Use::UsedFromCxxBridgeWithAlias(alias))
             }
             _ => Some(Use::UsedFromCxxBridge),
         },
-        FnKind::TraitMethod {
-            impl_for: _,
-            ref impl_for_specifics,
-            ref trait_signature,
-            ref method_name,
-        } => fn_generator.generate_trait_impl(
-            impl_for_specifics,
-            trait_signature,
-            method_name,
-            &ret_type,
-        ),
     };
+    // In rare occasions, we might need to give an explicit lifetime.
+    let (lifetime_tokens, params, ret_type) =
+        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type);
     let any_param_needs_rust_conversion = param_details
         .iter()
         .any(|pd| pd.conversion.rust_work_needed());
     let rust_wrapper_needed = any_param_needs_rust_conversion
-        || (cxxbridge_name != rust_name && matches!(kind, FnKind::Method(..)));
+        || (cxxbridge_name != rust_name
+            && matches!(kind, FnKind::Method(..) | FnKind::TraitMethod { .. }));
     if rust_wrapper_needed {
         match kind {
             FnKind::Method(ref type_name, MethodKind::Constructor) => {
@@ -128,12 +121,24 @@ pub(super) fn gen_function(
             FnKind::Method(ref type_name, ref method_kind) => {
                 // Method, or static method.
                 impl_entry = Some(fn_generator.generate_method_impl(
-                    matches!(
-                        method_kind,
-                        MethodKind::MakeUnique | MethodKind::Constructor
-                    ),
+                    matches!(method_kind, MethodKind::Constructor),
                     type_name,
                     &ret_type,
+                ));
+            }
+            FnKind::TraitMethod {
+                impl_for: _,
+                impl_for_specifics,
+                trait_signature,
+                method_name,
+                trait_unsafety,
+            } => {
+                trait_impl_entry = Some(fn_generator.generate_trait_impl(
+                    impl_for_specifics,
+                    trait_signature,
+                    method_name,
+                    &ret_type,
+                    trait_unsafety,
                 ));
             }
             _ => {
@@ -149,9 +154,6 @@ pub(super) fn gen_function(
             ))
             .unwrap();
     }
-    // In very rare occasions, we might need to give an explicit lifetime.
-    let (lifetime_tokens, params, ret_type) =
-        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type);
 
     // Finally - namespace support. All the Types in everything
     // above this point are fully qualified. We need to unqualify them.
@@ -186,12 +188,10 @@ pub(super) fn gen_function(
     ));
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
-        bridge_items: Vec::new(),
-        global_items: Vec::new(),
-        bindgen_mod_items: Vec::new(),
         impl_entry,
+        trait_impl_entry,
         materializations: materialization.into_iter().collect(),
-        extern_rust_mod_items: Vec::new(),
+        ..Default::default()
     }
 }
 
@@ -253,25 +253,32 @@ impl<'a> FnGenerator<'a> {
     /// Generate an 'impl Trait for Type { methods-go-here }' in its entrety.
     fn generate_trait_impl(
         &self,
-        impl_for_specifics: &TokenStream,
-        trait_signature: &TokenStream,
-        method_name: &Ident,
+        impl_for_specifics: Type,
+        trait_signature: Type,
+        method_name: Ident,
         ret_type: &ReturnType,
-    ) -> Option<Use> {
+        trait_unsafety: Option<Unsafe>,
+    ) -> Box<TraitImplBlockDetails> {
         let (wrapper_params, arg_list) = self.generate_arg_lists(false);
         let (lifetime_tokens, wrapper_params, ret_type) =
-            add_explicit_lifetime_if_necessary(self.param_details, wrapper_params, ret_type);
+            add_explicit_lifetime_if_necessary(self.param_details, wrapper_params, &ret_type);
         let doc_attr = self.doc_attr;
         let unsafety = self.unsafety;
         let cxxbridge_name = self.cxxbridge_name;
-        Some(Use::Custom(Box::new(parse_quote! {
-            impl #lifetime_tokens #trait_signature for #impl_for_specifics {
+        Box::new(TraitImplBlockDetails {
+            item: parse_quote! {
                 #doc_attr
                 #unsafety fn #method_name ( #wrapper_params ) #ret_type {
                     cxxbridge::#cxxbridge_name ( #(#arg_list),* )
                 }
-            }
-        })))
+            },
+            key: TraitDetails {
+                ty: impl_for_specifics,
+                trt: trait_signature,
+                unsafety: trait_unsafety,
+                lifetime_tokens,
+            },
+        })
     }
 
     /// Generate a 'impl Type { methods-go-here }' item which is a constructor
@@ -312,6 +319,7 @@ impl<'a> FnGenerator<'a> {
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
                 #doc_attr
+                #[autocxx::derive_make_unique]
                 pub #unsafety fn #rust_name #lifetime_param ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> #lifetime_addition {
                     #body
                 }

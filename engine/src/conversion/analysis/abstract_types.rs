@@ -84,7 +84,7 @@ pub(crate) fn mark_types_abstract(
         Api::Function {
             analysis:
                 FnAnalysis {
-                    kind: FnKind::Method(self_ty, MethodKind::MakeUnique | MethodKind::Constructor),
+                    kind: FnKind::Method(self_ty, MethodKind::Constructor),
                     ..
                 },
                 ..

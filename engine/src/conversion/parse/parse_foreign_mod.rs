@@ -89,8 +89,9 @@ impl ParseForeignMod {
                     references: annotations.get_reference_parameters_and_return(),
                     original_name: annotations.get_original_name(),
                     synthesized_this_type: None,
-                    synthesis: None,
+                    add_to_trait: None,
                     is_deleted: annotations.has_attr("deleted"),
+                    synthetic_cpp: None,
                 });
                 Ok(())
             }

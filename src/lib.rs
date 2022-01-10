@@ -688,6 +688,9 @@ pub use autocxx_macro::include_cpp_impl;
 #[doc(hidden)]
 pub use autocxx_macro::cpp_semantics;
 
+#[doc(hidden)]
+pub use autocxx_macro::derive_make_unique;
+
 macro_rules! ctype_wrapper {
     ($r:ident, $c:expr, $d:expr) => {
         #[doc=$d]
@@ -823,3 +826,6 @@ pub mod prelude {
 
 /// Re-export moveit for ease of consumers.
 pub use moveit;
+
+/// And cxx too...
+pub use cxx;

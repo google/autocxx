@@ -26,8 +26,11 @@ use autocxx_parser::IncludeCppConfig;
 
 use proc_macro2::{Span, TokenStream};
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Pat, ReturnType, TraitItem,
+    parse_quote,
+    punctuated::Punctuated,
+    token::{Comma, Unsafe},
+    Attribute, Expr, FnArg, ForeignItem, ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod,
+    ItemMod, Pat, ReturnType, TraitItem, Type,
 };
 
 use crate::{
@@ -51,19 +54,74 @@ use self::{
 
 use super::{
     analysis::fun::{FnAnalysis, FnKind},
-    api::{Layout, RustSubclassFnDetails, Synthesis},
+    api::{Layout, RustSubclassFnDetails, TraitSynthesis},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
 };
 use super::{
     analysis::fun::{FnPhase, ReceiverMutability},
-    api::{AnalysisPhase, Api, ImplBlockDetails, SubclassName, TypeKind, TypedefKind},
+    api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind},
 };
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::{quote, ToTokens};
 
 unzip_n::unzip_n!(pub 4);
+
+/// An entry which needs to go into an `impl` block for a given type.
+struct ImplBlockDetails {
+    item: ImplItem,
+    ty: Ident,
+}
+
+#[derive(Clone)]
+struct TraitDetails {
+    ty: Type,
+    trt: Type,
+    unsafety: Option<Unsafe>,
+    lifetime_tokens: Option<TokenStream>,
+}
+
+impl Eq for TraitDetails {}
+
+impl PartialEq for TraitDetails {
+    fn eq(&self, other: &Self) -> bool {
+        let unsafety_a = &self.unsafety;
+        let unsafety_b = &other.unsafety;
+        self.ty.to_token_stream().to_string() == other.ty.to_token_stream().to_string()
+            && self.trt.to_token_stream().to_string() == other.trt.to_token_stream().to_string()
+            && quote! { #unsafety_a }.to_string() == quote! { #unsafety_b }.to_string()
+            && self
+                .lifetime_tokens
+                .as_ref()
+                .unwrap_or(&TokenStream::new())
+                .to_string()
+                == other
+                    .lifetime_tokens
+                    .as_ref()
+                    .unwrap_or(&TokenStream::new())
+                    .to_string()
+    }
+}
+
+impl std::hash::Hash for TraitDetails {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.ty.to_token_stream().to_string().hash(state);
+        self.trt.to_token_stream().to_string().hash(state);
+        let unsafety = &self.unsafety;
+        quote! { #unsafety }.to_string().hash(state);
+        self.lifetime_tokens
+            .as_ref()
+            .unwrap_or(&TokenStream::new())
+            .to_string()
+            .hash(state);
+    }
+}
+
+struct TraitImplBlockDetails {
+    item: TraitItem,
+    key: TraitDetails,
+}
 
 /// Whether and how this item should be exposed in the mods constructed
 /// for actual end-user use.
@@ -412,6 +470,7 @@ impl<'a> RsCodeGenerator<'a> {
         ns: &Namespace,
     ) {
         let mut impl_entries_by_type: HashMap<_, Vec<_>> = HashMap::new();
+        let mut trait_impl_entries_by_trait_and_ty: HashMap<_, Vec<_>> = HashMap::new();
         for item in ns_entries.entries() {
             output_items.extend(item.1.bindgen_mod_items.iter().cloned());
             if let Some(impl_entry) = &item.1.impl_entry {
@@ -420,10 +479,27 @@ impl<'a> RsCodeGenerator<'a> {
                     .or_default()
                     .push(&impl_entry.item);
             }
+            if let Some(trait_impl_entry) = &item.1.trait_impl_entry {
+                trait_impl_entries_by_trait_and_ty
+                    .entry(trait_impl_entry.key.clone())
+                    .or_default()
+                    .push(&trait_impl_entry.item);
+            }
         }
         for (ty, entries) in impl_entries_by_type.into_iter() {
             output_items.push(Item::Impl(parse_quote! {
                 impl #ty {
+                    #(#entries)*
+                }
+            }))
+        }
+        for (key, entries) in trait_impl_entries_by_trait_and_ty.into_iter() {
+            let unsafety = key.unsafety;
+            let ty = key.ty;
+            let trt = key.trt;
+            let lifetime_tokens = key.lifetime_tokens;
+            output_items.push(Item::Impl(parse_quote! {
+                #unsafety impl #lifetime_tokens #trt for #ty {
                     #(#entries)*
                 }
             }))
@@ -478,39 +554,28 @@ impl<'a> RsCodeGenerator<'a> {
                     extern_c_mod_items: vec![ForeignItem::Fn(parse_quote!(
                         fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;
                     ))],
-                    bridge_items: Vec::new(),
                     global_items: get_string_items(),
-                    bindgen_mod_items: Vec::new(),
-                    impl_entry: None,
                     materializations: vec![Use::UsedFromCxxBridgeWithAlias(make_ident(
                         "make_string",
                     ))],
-                    extern_rust_mod_items: Vec::new(),
+                    ..Default::default()
                 }
             }
             Api::Function { fun, analysis, .. } => {
                 gen_function(name.get_namespace(), *fun, analysis, cpp_call_name)
             }
             Api::Const { const_item, .. } => RsCodegenResult {
-                global_items: Vec::new(),
-                impl_entry: None,
-                bridge_items: Vec::new(),
-                extern_c_mod_items: Vec::new(),
                 bindgen_mod_items: vec![Item::Const(const_item)],
                 materializations: vec![Use::UsedFromBindgen],
-                extern_rust_mod_items: Vec::new(),
+                ..Default::default()
             },
             Api::Typedef { analysis, .. } => RsCodegenResult {
-                extern_c_mod_items: Vec::new(),
-                bridge_items: Vec::new(),
-                global_items: Vec::new(),
                 bindgen_mod_items: vec![match analysis.kind {
                     TypedefKind::Type(type_item) => Item::Type(type_item),
                     TypedefKind::Use(use_item) => Item::Use(use_item),
                 }],
-                impl_entry: None,
                 materializations: vec![Use::UsedFromBindgen],
-                extern_rust_mod_items: Vec::new(),
+                ..Default::default()
             },
             Api::Struct {
                 details, analysis, ..
@@ -549,41 +614,28 @@ impl<'a> RsCodeGenerator<'a> {
                 None,
             ),
             Api::CType { .. } => RsCodegenResult {
-                global_items: Vec::new(),
-                impl_entry: None,
-                bridge_items: Vec::new(),
                 extern_c_mod_items: vec![ForeignItem::Verbatim(quote! {
                     type #id = autocxx::#id;
                 })],
-                bindgen_mod_items: Vec::new(),
-                materializations: Vec::new(),
-                extern_rust_mod_items: Vec::new(),
+                ..Default::default()
             },
             Api::RustType { path, .. } => RsCodegenResult {
-                extern_c_mod_items: Vec::new(),
-                bridge_items: Vec::new(),
-                bindgen_mod_items: Vec::new(),
-                materializations: Vec::new(),
                 global_items: vec![parse_quote! {
                     use super::#path;
                 }],
-                impl_entry: None,
                 extern_rust_mod_items: vec![parse_quote! {
                     type #id;
                 }],
+                ..Default::default()
             },
             Api::RustFn { sig, path, .. } => RsCodegenResult {
-                extern_c_mod_items: Vec::new(),
-                bridge_items: Vec::new(),
-                bindgen_mod_items: Vec::new(),
-                materializations: Vec::new(),
                 global_items: vec![parse_quote! {
                     use super::#path;
                 }],
-                impl_entry: None,
                 extern_rust_mod_items: vec![parse_quote! {
                     #sig;
                 }],
+                ..Default::default()
             },
             Api::RustSubclassFn {
                 details, subclass, ..
@@ -730,7 +782,6 @@ impl<'a> RsCodeGenerator<'a> {
                 pub use cxxbridge::#cpp_id;
             }))],
             global_items,
-            impl_entry: None,
             extern_rust_mod_items: vec![
                 parse_quote! {
                     pub type #holder;
@@ -739,6 +790,7 @@ impl<'a> RsCodeGenerator<'a> {
                     fn #remove_ownership(me: Box<#holder>) -> Box<#holder>;
                 },
             ],
+            ..Default::default()
         }
     }
 
@@ -776,10 +828,6 @@ impl<'a> RsCodeGenerator<'a> {
         let destroy_panic_msg = format!("Rust subclass API (method {} of subclass {} of superclass {}) called after subclass destroyed", method_name, subclass.0.name, superclass_id);
         let reentrancy_panic_msg = format!("Rust subclass API (method {} of subclass {} of superclass {}) called whilst subclass already borrowed - likely a re-entrant call",  method_name, subclass.0.name, superclass_id);
         RsCodegenResult {
-            extern_c_mod_items: Vec::new(),
-            bridge_items: Vec::new(),
-            bindgen_mod_items: Vec::new(),
-            materializations: Vec::new(),
             global_items: vec![parse_quote! {
                 #global_def {
                     let rc = me.0
@@ -795,8 +843,8 @@ impl<'a> RsCodeGenerator<'a> {
                         #args)
                 }
             }],
-            impl_entry: None,
             extern_rust_mod_items: vec![ForeignItem::Fn(cxxbridge_decl)],
+            ..Default::default()
         }
     }
 
@@ -862,12 +910,11 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_items.push(item);
                 RsCodegenResult {
                     global_items: self.generate_extern_type_impl(type_kind, name),
-                    impl_entry: None,
                     bridge_items: create_impl_items(&id, movable, self.config),
                     extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, None)],
                     bindgen_mod_items,
                     materializations,
-                    extern_rust_mod_items: Vec::new(),
+                    ..Default::default()
                 }
             }
             TypeKind::Abstract => {
@@ -878,12 +925,9 @@ impl<'a> RsCodeGenerator<'a> {
                 let doc_attr = orig_item.and_then(|maybe_item| maybe_item.1);
                 RsCodegenResult {
                     extern_c_mod_items: vec![self.generate_cxxbridge_type(name, false, doc_attr)],
-                    extern_rust_mod_items: Vec::new(),
-                    bridge_items: Vec::new(),
-                    global_items: Vec::new(),
                     bindgen_mod_items,
-                    impl_entry: None,
                     materializations,
+                    ..Default::default()
                 }
             }
         }
@@ -1009,13 +1053,9 @@ impl<'a> RsCodeGenerator<'a> {
             }
         };
         RsCodegenResult {
-            global_items: Vec::new(),
             impl_entry,
-            bridge_items: Vec::new(),
-            extern_c_mod_items: Vec::new(),
-            bindgen_mod_items: Vec::new(),
             materializations: materialization.into_iter().collect(),
-            extern_rust_mod_items: Vec::new(),
+            ..Default::default()
         }
     }
 
@@ -1144,8 +1184,8 @@ fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<Quali
     let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .filter_map(|api| match api {
-            Api::Function { fun, .. } => match &fun.synthesis {
-                Some(Synthesis::SubclassConstructor {
+            Api::Function { fun, .. } => match &fun.add_to_trait {
+                Some(TraitSynthesis::SubclassConstructor {
                     subclass,
                     is_trivial,
                     ..
@@ -1187,5 +1227,6 @@ struct RsCodegenResult {
     global_items: Vec<Item>,
     bindgen_mod_items: Vec<Item>,
     impl_entry: Option<Box<ImplBlockDetails>>,
+    trait_impl_entry: Option<Box<TraitImplBlockDetails>>,
     materializations: Vec<Use>,
 }

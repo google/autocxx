@@ -19,7 +19,7 @@ use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability};
 use crate::conversion::analysis::pod::PodPhase;
 use crate::conversion::api::{
-    CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassName, Synthesis, Virtualness,
+    CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassName, TraitSynthesis, Virtualness,
 };
 use crate::{
     conversion::{
@@ -69,8 +69,9 @@ pub(super) fn create_subclass_fn_wrapper(
         unused_template_param: fun.unused_template_param,
         original_name: None,
         references: fun.references.clone(),
-        synthesis: fun.synthesis.clone(),
+        add_to_trait: fun.add_to_trait.clone(),
         is_deleted: fun.is_deleted,
+        synthetic_cpp: None,
     })
 }
 
@@ -164,7 +165,7 @@ pub(super) fn create_subclass_constructor(
             qualification: Some(cpp.clone()),
             original_cpp_name: cpp.to_cpp_name(),
         };
-        Synthesis::SubclassConstructor {
+        TraitSynthesis::SubclassConstructor {
             subclass: sub.clone(),
             cpp_impl: Box::new(cpp_impl),
             is_trivial: analysis.param_details.len() == 1, // just placement new
@@ -208,8 +209,9 @@ pub(super) fn create_subclass_constructor(
         references: fun.references.clone(),
         synthesized_this_type: Some(cpp.clone()),
         self_ty: Some(cpp),
-        synthesis,
+        add_to_trait: synthesis,
         is_deleted: fun.is_deleted,
+        synthetic_cpp: fun.synthetic_cpp.clone(),
     });
     let subclass_constructor_name = ApiName::new_with_cpp_name(
         &Namespace::new(),

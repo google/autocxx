@@ -17,13 +17,16 @@ use std::collections::HashSet;
 use crate::types::{make_ident, Namespace, QualifiedName};
 use autocxx_parser::RustPath;
 use syn::{
-    parse::Parse, punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ImplItem,
-    ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt, ReturnType, Signature,
-    Type, Visibility,
+    parse::Parse, punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ItemConst,
+    ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt, ReturnType, Signature, Type,
+    Visibility,
 };
 
 use super::{
-    analysis::fun::{function_wrapper::CppFunction, ReceiverMutability},
+    analysis::fun::{
+        function_wrapper::{CppFunction, CppFunctionBody, CppFunctionKind},
+        ReceiverMutability,
+    },
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
@@ -37,12 +40,6 @@ pub(crate) enum TypeKind {
             // some other type which is pure virtual. Alternatively, maybe we just don't
             // know if the base class is pure virtual because it wasn't on the allowlist,
             // in which case we'll err on the side of caution.
-}
-
-/// An entry which needs to go into an `impl` block for a given type.
-pub(crate) struct ImplBlockDetails {
-    pub(crate) item: ImplItem,
-    pub(crate) ty: Ident,
 }
 
 /// C++ visibility.
@@ -100,11 +97,10 @@ pub(crate) enum CastMutability {
     MutToMut,
 }
 
-/// Indicates that this function didn't exist originally in the C++
-/// but we've created it afresh.
+/// Indicates that this function (which is synthetic) should
+/// be a trait implementation rather than a method or free function.
 #[derive(Clone)]
-pub(crate) enum Synthesis {
-    MakeUnique,
+pub(crate) enum TraitSynthesis {
     SubclassConstructor {
         subclass: SubclassName,
         cpp_impl: Box<CppFunction>,
@@ -114,6 +110,8 @@ pub(crate) enum Synthesis {
         to_type: QualifiedName,
         mutable: CastMutability,
     },
+    AllocUninitialized(QualifiedName),
+    FreeUninitialized(QualifiedName),
 }
 
 /// Information about references (as opposed to pointers) to be found
@@ -175,9 +173,11 @@ pub(crate) struct FuncToConvert {
     /// method receiver, e.g. because we're making a subclass
     /// constructor, fill it in here.
     pub(crate) synthesized_this_type: Option<QualifiedName>,
+    /// If this function should actually belong to a trait.
+    pub(crate) add_to_trait: Option<TraitSynthesis>,
     /// If Some, this function didn't really exist in the original
     /// C++ and instead we're synthesizing it.
-    pub(crate) synthesis: Option<Synthesis>,
+    pub(crate) synthetic_cpp: Option<(CppFunctionBody, CppFunctionKind)>,
     pub(crate) is_deleted: bool,
 }
 

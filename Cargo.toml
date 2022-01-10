@@ -34,7 +34,8 @@ autocxx-engine = { path="engine", version="0.15.0" } # so that
   # we can refer to autocxx_engine::cxx. But even that isn't sufficient...
 cxx = "1.0.54" # ... also needed because expansion of type_id refers to ::cxx
 aquamarine = "0.1" # docs
-moveit = "0.3"
+#moveit = "0.3"
+moveit = { git = "https://github.com/adetaylor/moveit", branch = "cxx-support", features=["cxx"] }
 
 [workspace]
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce", "integration-tests"]
@@ -44,3 +45,4 @@ exclude = ["examples/s2", "examples/steam-mini", "examples/subclass", "examples/
 #cxx = { path="../cxx" }
 #cxx-gen = { path="../cxx/gen/lib" }
 #autocxx-bindgen = { path="../bindgen" }
+#moveit = { path="../moveit" }

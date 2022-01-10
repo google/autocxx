@@ -32,7 +32,7 @@ use super::{
         function_wrapper::{CppFunction, CppFunctionBody},
         FnPhase,
     },
-    api::{Api, SubclassName, Synthesis},
+    api::{Api, SubclassName, TraitSynthesis},
     ConvertError,
 };
 
@@ -158,9 +158,9 @@ impl<'a> CppCodeGenerator<'a> {
                     fun,
                     ..
                 } => {
-                    if let Some(Synthesis::SubclassConstructor {
+                    if let Some(TraitSynthesis::SubclassConstructor {
                         subclass, cpp_impl, ..
-                    }) = &fun.synthesis
+                    }) = &fun.add_to_trait
                     {
                         constructors_by_subclass
                             .entry(subclass.clone())
@@ -416,7 +416,7 @@ impl<'a> CppCodeGenerator<'a> {
             arg_list.join(", ")
         };
         let (mut underlying_function_call, field_assignments) = match &details.payload {
-            CppFunctionBody::MakeUnique | CppFunctionBody::Cast => (arg_list, "".to_string()),
+            CppFunctionBody::Cast => (arg_list, "".to_string()),
             CppFunctionBody::PlacementNew(ns, id) => {
                 let ty_id = QualifiedName::new(ns, id.clone());
                 let ty_id =
@@ -452,6 +452,14 @@ impl<'a> CppCodeGenerator<'a> {
                 )
             }
             CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list),
+            CppFunctionBody::AllocUninitialized(ty) => (
+                format!("std::allocator<{}>().allocate(1)", ty),
+                "".to_string(),
+            ),
+            CppFunctionBody::FreeUninitialized(ty) => (
+                format!("std::allocator<{}>().deallocate(arg0, 1)", ty),
+                "".to_string(),
+            ),
         };
         if let Some(ret) = &details.return_conversion {
             underlying_function_call = format!(
