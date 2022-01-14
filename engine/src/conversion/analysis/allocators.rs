@@ -14,7 +14,6 @@
 
 //! Code to create functions to alloc and free while unitialized.
 
-use itertools::Itertools;
 use syn::{parse_quote, punctuated::Punctuated, token::Comma, FnArg, ReturnType};
 
 use crate::{
@@ -29,16 +28,16 @@ use super::{
 
 pub(crate) fn create_alloc_and_frees(apis: Vec<Api<PodPhase>>) -> Vec<Api<PodPhase>> {
     apis.into_iter()
-        .flat_map(|api| match &api {
-            Api::Struct { name, .. } => create_alloc_and_free(name.name.clone())
-                .chain(std::iter::once(api))
-                .collect_vec()
-                .into_iter(),
-            Api::Subclass { name, .. } => create_alloc_and_free(name.cpp())
-                .chain(std::iter::once(api))
-                .collect_vec()
-                .into_iter(),
-            _ => vec![api].into_iter(),
+        .flat_map(|api| -> Box<dyn Iterator<Item = Api<PodPhase>>> {
+            match &api {
+                Api::Struct { name, .. } => {
+                    Box::new(create_alloc_and_free(name.name.clone()).chain(std::iter::once(api)))
+                }
+                Api::Subclass { name, .. } => {
+                    Box::new(create_alloc_and_free(name.cpp()).chain(std::iter::once(api)))
+                }
+                _ => Box::new(std::iter::once(api)),
+            }
         })
         .collect()
 }
