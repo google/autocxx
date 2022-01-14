@@ -86,35 +86,32 @@ impl Eq for TraitDetails {}
 
 impl PartialEq for TraitDetails {
     fn eq(&self, other: &Self) -> bool {
-        let unsafety_a = &self.unsafety;
-        let unsafety_b = &other.unsafety;
-        self.ty.to_token_stream().to_string() == other.ty.to_token_stream().to_string()
-            && self.trt.to_token_stream().to_string() == other.trt.to_token_stream().to_string()
-            && quote! { #unsafety_a }.to_string() == quote! { #unsafety_b }.to_string()
-            && self
-                .lifetime_tokens
-                .as_ref()
-                .unwrap_or(&TokenStream::new())
-                .to_string()
-                == other
-                    .lifetime_tokens
-                    .as_ref()
-                    .unwrap_or(&TokenStream::new())
-                    .to_string()
+        totokens_equal(&self.unsafety, &other.unsafety)
+            && totokens_equal(&self.ty, &other.ty)
+            && totokens_equal(&self.trt, &other.trt)
+            && totokens_equal(&self.lifetime_tokens, &other.lifetime_tokens)
     }
+}
+
+fn totokens_to_string<T: ToTokens>(a: &T) -> String {
+    a.to_token_stream().to_string()
+}
+
+fn totokens_equal<T: ToTokens>(a: &T, b: &T) -> bool {
+    totokens_to_string(a) == totokens_to_string(b)
+}
+
+fn hash_totokens<T: ToTokens, H: std::hash::Hasher>(a: &T, state: &mut H) {
+    use std::hash::Hash;
+    totokens_to_string(a).hash(state)
 }
 
 impl std::hash::Hash for TraitDetails {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.ty.to_token_stream().to_string().hash(state);
-        self.trt.to_token_stream().to_string().hash(state);
-        let unsafety = &self.unsafety;
-        quote! { #unsafety }.to_string().hash(state);
-        self.lifetime_tokens
-            .as_ref()
-            .unwrap_or(&TokenStream::new())
-            .to_string()
-            .hash(state);
+        hash_totokens(&self.ty, state);
+        hash_totokens(&self.trt, state);
+        hash_totokens(&self.unsafety, state);
+        hash_totokens(&self.lifetime_tokens, state);
     }
 }
 
