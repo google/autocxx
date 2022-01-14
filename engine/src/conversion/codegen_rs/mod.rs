@@ -51,7 +51,7 @@ use self::{
 
 use super::{
     analysis::fun::{FnAnalysis, FnKind},
-    api::{Layout, RustSubclassFnDetails, TraitDetails, TraitSynthesis},
+    api::{Layout, RustSubclassFnDetails, SubclassConstructorDetails, TraitDetails},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
@@ -1136,8 +1136,8 @@ fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<Quali
     let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .filter_map(|api| match api {
-            Api::Function { fun, .. } => match &fun.add_to_trait {
-                Some(TraitSynthesis::SubclassConstructor {
+            Api::Function { fun, .. } => match &fun.is_subclass_constructor {
+                Some(SubclassConstructorDetails {
                     subclass,
                     is_trivial,
                     ..

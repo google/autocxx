@@ -949,7 +949,6 @@ impl<'a> FnAnalyzer<'a> {
                 "free_uninitialized_cpp_storage",
                 false,
             ),
-            _ => None,
         })
     }
 
@@ -1223,6 +1222,7 @@ impl<'a> FnAnalyzer<'a> {
                         add_to_trait: None,
                         is_deleted: false,
                         synthetic_cpp: None,
+                        is_subclass_constructor: None,
                     }),
                 )
             });

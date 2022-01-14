@@ -32,7 +32,7 @@ use super::{
         function_wrapper::{CppFunction, CppFunctionBody},
         FnPhase,
     },
-    api::{Api, SubclassName, TraitSynthesis},
+    api::{Api, SubclassConstructorDetails, SubclassName},
     ConvertError,
 };
 
@@ -158,9 +158,9 @@ impl<'a> CppCodeGenerator<'a> {
                     fun,
                     ..
                 } => {
-                    if let Some(TraitSynthesis::SubclassConstructor {
+                    if let Some(SubclassConstructorDetails {
                         subclass, cpp_impl, ..
-                    }) = &fun.add_to_trait
+                    }) = &fun.is_subclass_constructor
                     {
                         constructors_by_subclass
                             .entry(subclass.clone())

@@ -76,7 +76,7 @@ fn create_alloc_and_free(ty_name: QualifiedName) -> impl Iterator<Item = Api<Pod
                 name_for_gc: None,
                 fun: Box::new(FuncToConvert {
                     ident,
-                    doc_attr: None, // TODO consider filling in
+                    doc_attr: None,
                     inputs,
                     output,
                     vis: parse_quote! { pub },
@@ -91,6 +91,7 @@ fn create_alloc_and_free(ty_name: QualifiedName) -> impl Iterator<Item = Api<Pod
                     synthetic_cpp: Some((cpp_function_body, CppFunctionKind::Function)),
                     add_to_trait: Some(synthesis),
                     is_deleted: false,
+                    is_subclass_constructor: None,
                 }),
                 analysis: (),
             }

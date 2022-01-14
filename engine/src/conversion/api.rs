@@ -104,17 +104,23 @@ pub(crate) enum CastMutability {
 /// be a trait implementation rather than a method or free function.
 #[derive(Clone)]
 pub(crate) enum TraitSynthesis {
-    SubclassConstructor {
-        subclass: SubclassName,
-        cpp_impl: Box<CppFunction>,
-        is_trivial: bool,
-    },
     Cast {
         to_type: QualifiedName,
         mutable: CastMutability,
     },
     AllocUninitialized(QualifiedName),
     FreeUninitialized(QualifiedName),
+}
+
+/// Details of a subclass constructor.
+/// TODO: zap this; replace with an extra API.
+#[derive(Clone)]
+pub(crate) struct SubclassConstructorDetails {
+    pub(crate) subclass: SubclassName,
+    pub(crate) is_trivial: bool,
+    /// Implementation of the constructor _itself_ as distinct
+    /// from any wrapper function we create to call it.
+    pub(crate) cpp_impl: CppFunction,
 }
 
 /// Information about references (as opposed to pointers) to be found
@@ -220,6 +226,7 @@ pub(crate) struct FuncToConvert {
     /// C++ and instead we're synthesizing it.
     pub(crate) synthetic_cpp: Option<(CppFunctionBody, CppFunctionKind)>,
     pub(crate) is_deleted: bool,
+    pub(crate) is_subclass_constructor: Option<SubclassConstructorDetails>,
 }
 
 /// Layers of analysis which may be applied to decorate each API.
