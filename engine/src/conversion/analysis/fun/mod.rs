@@ -26,7 +26,7 @@ use crate::{
         },
         api::{
             ApiName, CastMutability, CppVisibility, FuncToConvert, References, SpecialMemberKind,
-            SubclassName, TraitSynthesis, Virtualness,
+            SubclassName, TraitDetails, TraitSynthesis, Virtualness,
         },
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
@@ -42,10 +42,8 @@ use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
 use itertools::Itertools;
 use proc_macro2::Span;
 use syn::{
-    parse_quote,
-    punctuated::Punctuated,
-    token::{Comma, Unsafe},
-    FnArg, Ident, Pat, ReturnType, Type, TypePtr, Visibility,
+    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
+    TypePtr, Visibility,
 };
 
 use crate::{
@@ -95,11 +93,10 @@ pub(crate) enum FnKind {
         /// though we may be actually implementing the trait for &mut T or
         /// similar....
         impl_for: QualifiedName,
-        /// ... so we also store the tokenstream of the type.
-        impl_for_specifics: Type,
-        trait_signature: Type,
+        /// ... so we also store the full syn::Type of the type and various
+        /// other details.
+        trait_details: TraitDetails,
         method_name: Ident,
-        trait_unsafety: Option<Unsafe>,
     },
 }
 
@@ -897,7 +894,7 @@ impl<'a> FnAnalyzer<'a> {
                 let from_type = self_ty.as_ref().unwrap();
                 let from_type_path = from_type.to_type_path();
                 let to_type = to_type.to_type_path();
-                let (trait_signature, impl_for_specifics, method_name) = match *mutable {
+                let (trait_signature, ty, method_name) = match *mutable {
                     CastMutability::ConstToConst => (
                         parse_quote! {
                             AsRef < #to_type >
@@ -928,10 +925,12 @@ impl<'a> FnAnalyzer<'a> {
                 Some((
                     FnKind::TraitMethod {
                         impl_for: from_type.clone(),
-                        impl_for_specifics,
-                        trait_signature,
                         method_name,
-                        trait_unsafety: None,
+                        trait_details: TraitDetails {
+                            ty,
+                            trait_signature,
+                            unsafety: None,
+                        },
                     },
                     ErrorContext::Item(make_ident(&rust_name)),
                     rust_name,
@@ -967,10 +966,12 @@ impl<'a> FnAnalyzer<'a> {
         Some((
             FnKind::TraitMethod {
                 impl_for: ty.clone(),
-                impl_for_specifics: Type::Path(typ),
-                trait_signature: parse_quote! { autocxx::moveit::MakeCppStorage },
                 method_name: make_ident(method_name),
-                trait_unsafety: Some(parse_quote! { unsafe }),
+                trait_details: TraitDetails {
+                    ty: Type::Path(typ),
+                    trait_signature: parse_quote! { autocxx::moveit::MakeCppStorage },
+                    unsafety: Some(parse_quote! { unsafe }),
+                },
             },
             ErrorContext::Item(make_ident(&rust_name)),
             rust_name,

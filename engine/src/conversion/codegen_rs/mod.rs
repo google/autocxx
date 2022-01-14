@@ -26,11 +26,8 @@ use autocxx_parser::IncludeCppConfig;
 
 use proc_macro2::{Span, TokenStream};
 use syn::{
-    parse_quote,
-    punctuated::Punctuated,
-    token::{Comma, Unsafe},
-    Attribute, Expr, FnArg, ForeignItem, ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod,
-    ItemMod, Pat, ReturnType, TraitItem, Type,
+    parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
+    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Pat, ReturnType, TraitItem,
 };
 
 use crate::{
@@ -54,7 +51,7 @@ use self::{
 
 use super::{
     analysis::fun::{FnAnalysis, FnKind},
-    api::{Layout, RustSubclassFnDetails, TraitSynthesis},
+    api::{Layout, RustSubclassFnDetails, TraitDetails, TraitSynthesis},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
@@ -72,47 +69,6 @@ unzip_n::unzip_n!(pub 4);
 struct ImplBlockDetails {
     item: ImplItem,
     ty: Ident,
-}
-
-#[derive(Clone)]
-struct TraitDetails {
-    ty: Type,
-    trt: Type,
-    unsafety: Option<Unsafe>,
-    lifetime_tokens: Option<TokenStream>,
-}
-
-impl Eq for TraitDetails {}
-
-impl PartialEq for TraitDetails {
-    fn eq(&self, other: &Self) -> bool {
-        totokens_equal(&self.unsafety, &other.unsafety)
-            && totokens_equal(&self.ty, &other.ty)
-            && totokens_equal(&self.trt, &other.trt)
-            && totokens_equal(&self.lifetime_tokens, &other.lifetime_tokens)
-    }
-}
-
-fn totokens_to_string<T: ToTokens>(a: &T) -> String {
-    a.to_token_stream().to_string()
-}
-
-fn totokens_equal<T: ToTokens>(a: &T, b: &T) -> bool {
-    totokens_to_string(a) == totokens_to_string(b)
-}
-
-fn hash_totokens<T: ToTokens, H: std::hash::Hasher>(a: &T, state: &mut H) {
-    use std::hash::Hash;
-    totokens_to_string(a).hash(state)
-}
-
-impl std::hash::Hash for TraitDetails {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        hash_totokens(&self.ty, state);
-        hash_totokens(&self.trt, state);
-        hash_totokens(&self.unsafety, state);
-        hash_totokens(&self.lifetime_tokens, state);
-    }
 }
 
 struct TraitImplBlockDetails {
@@ -493,10 +449,9 @@ impl<'a> RsCodeGenerator<'a> {
         for (key, entries) in trait_impl_entries_by_trait_and_ty.into_iter() {
             let unsafety = key.unsafety;
             let ty = key.ty;
-            let trt = key.trt;
-            let lifetime_tokens = key.lifetime_tokens;
+            let trt = key.trait_signature;
             output_items.push(Item::Impl(parse_quote! {
-                #unsafety impl #lifetime_tokens #trt for #ty {
+                #unsafety impl #trt for #ty {
                     #(#entries)*
                 }
             }))

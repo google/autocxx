@@ -19,7 +19,7 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
-    Attribute, FnArg, ForeignItem, Ident, ImplItem, Item, ReturnType, Type,
+    Attribute, FnArg, ForeignItem, Ident, ImplItem, Item, ReturnType,
 };
 
 use super::{
@@ -128,18 +128,11 @@ pub(super) fn gen_function(
             }
             FnKind::TraitMethod {
                 impl_for: _,
-                impl_for_specifics,
-                trait_signature,
                 method_name,
-                trait_unsafety,
+                trait_details,
             } => {
-                trait_impl_entry = Some(fn_generator.generate_trait_impl(
-                    impl_for_specifics,
-                    trait_signature,
-                    method_name,
-                    &ret_type,
-                    trait_unsafety,
-                ));
+                trait_impl_entry =
+                    Some(fn_generator.generate_trait_impl(trait_details, method_name, &ret_type));
             }
             _ => {
                 // Generate plain old function
@@ -253,11 +246,9 @@ impl<'a> FnGenerator<'a> {
     /// Generate an 'impl Trait for Type { methods-go-here }' in its entrety.
     fn generate_trait_impl(
         &self,
-        impl_for_specifics: Type,
-        trait_signature: Type,
+        trait_details: TraitDetails,
         method_name: Ident,
         ret_type: &ReturnType,
-        trait_unsafety: Option<Unsafe>,
     ) -> Box<TraitImplBlockDetails> {
         let (wrapper_params, arg_list) = self.generate_arg_lists(false);
         let (lifetime_tokens, wrapper_params, ret_type) =
@@ -268,16 +259,11 @@ impl<'a> FnGenerator<'a> {
         Box::new(TraitImplBlockDetails {
             item: parse_quote! {
                 #doc_attr
-                #unsafety fn #method_name ( #wrapper_params ) #ret_type {
+                #unsafety fn #method_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                     cxxbridge::#cxxbridge_name ( #(#arg_list),* )
                 }
             },
-            key: TraitDetails {
-                ty: impl_for_specifics,
-                trt: trait_signature,
-                unsafety: trait_unsafety,
-                lifetime_tokens,
-            },
+            key: trait_details,
         })
     }
 

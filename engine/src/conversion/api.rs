@@ -16,10 +16,13 @@ use std::collections::HashSet;
 
 use crate::types::{make_ident, Namespace, QualifiedName};
 use autocxx_parser::RustPath;
+use quote::ToTokens;
 use syn::{
-    parse::Parse, punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ItemConst,
-    ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt, ReturnType, Signature, Type,
-    Visibility,
+    parse::Parse,
+    punctuated::Punctuated,
+    token::{Comma, Unsafe},
+    Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
+    ReturnType, Signature, Type, Visibility,
 };
 
 use super::{
@@ -132,6 +135,44 @@ impl References {
             ref_params: [make_ident("this")].into_iter().collect(),
             ..Default::default()
         }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct TraitDetails {
+    pub(crate) ty: Type,
+    pub(crate) trait_signature: Type,
+    pub(crate) unsafety: Option<Unsafe>,
+}
+
+impl Eq for TraitDetails {}
+
+impl PartialEq for TraitDetails {
+    fn eq(&self, other: &Self) -> bool {
+        totokens_equal(&self.unsafety, &other.unsafety)
+            && totokens_equal(&self.ty, &other.ty)
+            && totokens_equal(&self.trait_signature, &other.trait_signature)
+    }
+}
+
+fn totokens_to_string<T: ToTokens>(a: &T) -> String {
+    a.to_token_stream().to_string()
+}
+
+fn totokens_equal<T: ToTokens>(a: &T, b: &T) -> bool {
+    totokens_to_string(a) == totokens_to_string(b)
+}
+
+fn hash_totokens<T: ToTokens, H: std::hash::Hasher>(a: &T, state: &mut H) {
+    use std::hash::Hash;
+    totokens_to_string(a).hash(state)
+}
+
+impl std::hash::Hash for TraitDetails {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        hash_totokens(&self.ty, state);
+        hash_totokens(&self.trait_signature, state);
+        hash_totokens(&self.unsafety, state);
     }
 }
 
