@@ -34,6 +34,10 @@ pub(crate) fn create_alloc_and_frees(apis: Vec<Api<PodPhase>>) -> Vec<Api<PodPha
                 .chain(std::iter::once(api))
                 .collect_vec()
                 .into_iter(),
+            Api::Subclass { name, .. } => create_alloc_and_free(name.cpp())
+                .chain(std::iter::once(api))
+                .collect_vec()
+                .into_iter(),
             _ => vec![api].into_iter(),
         })
         .collect()
