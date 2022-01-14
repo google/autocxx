@@ -146,8 +146,8 @@ pub(crate) enum CppFunctionBody {
     PlacementNew(Namespace, Ident),
     ConstructSuperclass(String),
     Cast,
-    AllocUninitialized(String),
-    FreeUninitialized(String),
+    AllocUninitialized(QualifiedName),
+    FreeUninitialized(QualifiedName),
 }
 
 #[derive(Clone)]

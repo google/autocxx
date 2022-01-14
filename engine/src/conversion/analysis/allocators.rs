@@ -53,14 +53,14 @@ fn create_alloc_and_free(ty_name: QualifiedName) -> impl Iterator<Item = Api<Pod
             get_alloc_name(&ty_name),
             Punctuated::new(),
             alloc_return,
-            CppFunctionBody::AllocUninitialized(ty_name.to_cpp_name()),
+            CppFunctionBody::AllocUninitialized(ty_name.clone()),
         ),
         (
             TraitSynthesis::FreeUninitialized(ty_name.clone()),
             get_free_name(&ty_name),
             free_inputs,
             ReturnType::Default,
-            CppFunctionBody::FreeUninitialized(ty_name.to_cpp_name()),
+            CppFunctionBody::FreeUninitialized(ty_name.clone()),
         ),
     ]
     .into_iter()
