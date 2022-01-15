@@ -168,6 +168,7 @@ pub(super) fn create_subclass_constructor(
     let mut actual_constructor = fun.clone();
     actual_constructor.inputs = existing_params.clone();
     actual_constructor.ident = sub.cpp().get_final_ident();
+    actual_constructor.synthesized_this_type = Some(sub.cpp());
     actual_constructor.self_ty = Some(sub.cpp());
     actual_constructor.synthetic_cpp = Some((
         CppFunctionBody::ConstructSuperclass(sup.to_cpp_name()),
