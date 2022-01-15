@@ -294,7 +294,6 @@ impl<'a> CppCodeGenerator<'a> {
                 false,
                 ConversionDirection::RustCallsCpp,
                 false,
-                None,
             )?);
         Ok(())
     }
@@ -305,7 +304,6 @@ impl<'a> CppCodeGenerator<'a> {
         avoid_this: bool,
         conversion_direction: ConversionDirection,
         requires_rust_declarations: bool,
-        force_name: Option<&str>,
     ) -> Result<AdditionalFunction, ConvertError> {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
@@ -321,9 +319,13 @@ impl<'a> CppCodeGenerator<'a> {
                     | CppFunctionKind::ConstMethod
                     | CppFunctionKind::Constructor
             );
-        let name = match force_name {
-            Some(n) => n.to_string(),
-            None => details.wrapper_function_name.to_string(),
+        let force_original_cpp_name =
+            matches!(conversion_direction, ConversionDirection::CppCallsRust)
+                || matches!(details.payload, CppFunctionBody::ConstructSuperclass(_));
+        let name = if force_original_cpp_name {
+            details.original_cpp_name.clone()
+        } else {
+            details.wrapper_function_name.to_string()
         };
         let get_arg_name = |counter: usize| -> String {
             if is_a_method && counter == 0 {
@@ -564,7 +566,6 @@ impl<'a> CppCodeGenerator<'a> {
                 true,
                 ConversionDirection::CppCallsRust,
                 true,
-                Some(&method.fun.original_cpp_name),
             )?;
             method_decls.push(fn_impl.declaration.take().unwrap());
             self.additional_functions.push(fn_impl);
@@ -587,7 +588,6 @@ impl<'a> CppCodeGenerator<'a> {
                     true,
                     ConversionDirection::CppCallsCpp,
                     false,
-                    None,
                 )?;
                 method_decls.push(super_fn_impl.declaration.take().unwrap());
                 self.additional_functions.push(super_fn_impl);
@@ -611,7 +611,6 @@ impl<'a> CppCodeGenerator<'a> {
                 false,
                 ConversionDirection::CppCallsCpp,
                 false,
-                None,
             )?;
             let decl = fn_impl.declaration.take().unwrap();
             constructor_decls.push(decl);

@@ -23,15 +23,13 @@ use crate::conversion::api::{
 };
 use crate::{
     conversion::{
-        analysis::fun::function_wrapper::{
-            CppFunction, CppFunctionBody, CppFunctionKind,
-        },
+        analysis::fun::function_wrapper::{CppFunction, CppFunctionBody, CppFunctionKind},
         api::{Api, ApiName},
     },
     types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::{FnPhase};
+use super::FnPhase;
 
 pub(super) fn subclasses_by_superclass(
     apis: &[Api<PodPhase>],
