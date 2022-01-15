@@ -32,7 +32,7 @@ use super::{
         function_wrapper::{CppFunction, CppFunctionBody},
         FnPhase,
     },
-    api::{Api, SubclassConstructorDetails, SubclassName},
+    api::{Api, SubclassName},
     ConvertError,
 };
 
@@ -142,7 +142,8 @@ impl<'a> CppCodeGenerator<'a> {
         &mut self,
         apis: impl Iterator<Item = &'a Api<FnPhase>>,
     ) -> Result<(), ConvertError> {
-        let mut constructors_by_subclass: HashMap<SubclassName, Vec<&CppFunction>> = HashMap::new();
+        let mut constructors_by_subclass: HashMap<QualifiedName, Vec<&CppFunction>> =
+            HashMap::new();
         let mut methods_by_subclass: HashMap<SubclassName, Vec<SubclassFunction>> = HashMap::new();
         let mut deferred_apis = Vec::new();
         for api in apis {
@@ -158,16 +159,14 @@ impl<'a> CppCodeGenerator<'a> {
                     fun,
                     ..
                 } => {
-                    if let Some(SubclassConstructorDetails {
-                        subclass, cpp_impl, ..
-                    }) = &fun.is_subclass_constructor
-                    {
+                    if let Some((CppFunctionBody::ConstructSuperclass(_), _)) = fun.synthetic_cpp {
                         constructors_by_subclass
-                            .entry(subclass.clone())
+                            .entry(fun.self_ty.as_ref().unwrap().clone())
                             .or_default()
-                            .push(cpp_impl);
+                            .push(cpp_wrapper);
+                    } else {
+                        self.generate_cpp_function(cpp_wrapper)?
                     }
-                    self.generate_cpp_function(cpp_wrapper)?
                 }
                 Api::ConcreteType { rs_definition, .. } => self.generate_typedef(
                     api.name(),
@@ -195,7 +194,9 @@ impl<'a> CppCodeGenerator<'a> {
                 Api::Subclass { name, superclass } => self.generate_subclass(
                     superclass,
                     name,
-                    constructors_by_subclass.remove(name).unwrap_or_default(),
+                    constructors_by_subclass
+                        .remove(&name.cpp())
+                        .unwrap_or_default(),
                     methods_by_subclass.remove(name).unwrap_or_default(),
                 )?,
                 _ => panic!("Unexpected deferred API"),

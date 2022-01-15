@@ -335,11 +335,12 @@ impl<'a> FnAnalyzer<'a> {
         // Consider whether we need to synthesize subclass items.
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
-                for sub in self.subclasses_by_superclass(sup) {
+                for (subclass_constructor_func, subclass_constructor_name) in self
+                    .subclasses_by_superclass(sup)
+                    .flat_map(|sub| create_subclass_constructor(sub, sup, &fun))
+                {
                     // Create a subclass constructor. This is a synthesized function
                     // which didn't exist in the original C++.
-                    let (subclass_constructor_func, subclass_constructor_name) =
-                        create_subclass_constructor(sub, &analysis, sup, &fun);
                     self.analyze_and_add_if_necessary(
                         subclass_constructor_name.clone(),
                         subclass_constructor_func.clone(),
@@ -1222,7 +1223,6 @@ impl<'a> FnAnalyzer<'a> {
                         add_to_trait: None,
                         is_deleted: false,
                         synthetic_cpp: None,
-                        is_subclass_constructor: None,
                     }),
                 )
             });

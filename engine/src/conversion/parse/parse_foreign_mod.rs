@@ -92,7 +92,6 @@ impl ParseForeignMod {
                     add_to_trait: None,
                     is_deleted: annotations.has_attr("deleted"),
                     synthetic_cpp: None,
-                    is_subclass_constructor: None,
                 });
                 Ok(())
             }

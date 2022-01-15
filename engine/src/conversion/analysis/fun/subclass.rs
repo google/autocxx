@@ -19,20 +19,19 @@ use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability};
 use crate::conversion::analysis::pod::PodPhase;
 use crate::conversion::api::{
-    CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassConstructorDetails, SubclassName,
-    Virtualness,
+    CppVisibility, FuncToConvert, RustSubclassFnDetails, SubclassName, Virtualness,
 };
 use crate::{
     conversion::{
         analysis::fun::function_wrapper::{
-            CppFunction, CppFunctionBody, CppFunctionKind, TypeConversionPolicy,
+            CppFunction, CppFunctionBody, CppFunctionKind,
         },
         api::{Api, ApiName},
     },
     types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::{FnAnalysis, FnPhase};
+use super::{FnPhase};
 
 pub(super) fn subclasses_by_superclass(
     apis: &[Api<PodPhase>],
@@ -73,7 +72,6 @@ pub(super) fn create_subclass_fn_wrapper(
         add_to_trait: fun.add_to_trait.clone(),
         is_deleted: fun.is_deleted,
         synthetic_cpp: None,
-        is_subclass_constructor: None,
     })
 }
 
@@ -139,41 +137,12 @@ pub(super) fn create_subclass_function(
 
 pub(super) fn create_subclass_constructor(
     sub: SubclassName,
-    analysis: &FnAnalysis,
     sup: &QualifiedName,
     fun: &FuncToConvert,
-) -> (Box<FuncToConvert>, ApiName) {
+) -> impl Iterator<Item = (Box<FuncToConvert>, ApiName)> {
     let holder = sub.holder();
     let cpp = sub.cpp();
-    let wrapper_function_name = cpp.get_final_ident();
-    let initial_arg = TypeConversionPolicy::new_unconverted(parse_quote! {
-        rust::Box< #holder >
-    });
-    let args = std::iter::once(initial_arg).chain(
-        analysis
-            .param_details
-            .iter()
-            .skip(1) // skip placement new destination
-            .map(|aa| aa.conversion.clone()),
-    );
-    let cpp_impl = CppFunction {
-        payload: CppFunctionBody::ConstructSuperclass(sup.to_cpp_name()),
-        wrapper_function_name,
-        return_conversion: None,
-        argument_conversion: args.collect(),
-        kind: CppFunctionKind::SynthesizedConstructor,
-        pass_obs_field: false,
-        qualification: Some(cpp.clone()),
-        original_cpp_name: cpp.to_cpp_name(),
-    };
-    let is_subclass_constructor = Some(SubclassConstructorDetails {
-        subclass: sub.clone(),
-        is_trivial: analysis.param_details.len() == 1, // just placement new
-        // destination, no other parameters
-        cpp_impl,
-    });
-    let subclass_constructor_name =
-        make_ident(format!("{}_{}", cpp.get_final_item(), cpp.get_final_item()));
+
     let mut existing_params = fun.inputs.clone();
     if let Some(FnArg::Typed(PatType { ty, .. })) = existing_params.first_mut() {
         if let Type::Ptr(TypePtr { elem, .. }) = &mut **ty {
@@ -184,6 +153,33 @@ pub(super) fn create_subclass_constructor(
     } else {
         panic!("Unexpected self type parameter when creating subclass constructor");
     }
+
+    // First, the actual constructor which we're adding to the C++ class.
+    // This is pure C++ which does not have any appearance in the cxx::bridge
+    // or otherwise make its presence felt in Rust.
+
+    let subclass_constructor_name = sub.synthesized_constructor();
+
+    let actual_constructor_api_name = ApiName::new_with_cpp_name(
+        subclass_constructor_name.get_namespace(),
+        subclass_constructor_name.get_final_ident(),
+        Some(sub.cpp().get_final_item().to_string()),
+    );
+    let mut actual_constructor = fun.clone();
+    actual_constructor.inputs = existing_params.clone();
+    actual_constructor.ident = sub.cpp().get_final_ident();
+    actual_constructor.self_ty = Some(sub.cpp());
+    actual_constructor.synthetic_cpp = Some((
+        CppFunctionBody::ConstructSuperclass(sup.to_cpp_name()),
+        CppFunctionKind::SynthesizedConstructor,
+    ));
+    actual_constructor.original_name = Some(cpp.get_final_item().to_string());
+
+    // Second, the API which bridges Rust and C++ to call this constructor.
+
+    let subclass_constructor_name =
+        make_ident(format!("{}_{}", cpp.get_final_item(), cpp.get_final_item()));
+
     let mut existing_params = existing_params.into_iter();
     let self_param = existing_params.next();
     let boxed_holder_param: FnArg = parse_quote! {
@@ -194,7 +190,7 @@ pub(super) fn create_subclass_constructor(
         .chain(std::iter::once(boxed_holder_param))
         .chain(existing_params)
         .collect();
-    let maybe_wrap = Box::new(FuncToConvert {
+    let wrapper = Box::new(FuncToConvert {
         ident: subclass_constructor_name.clone(),
         doc_attr: fun.doc_attr.clone(),
         inputs,
@@ -211,12 +207,15 @@ pub(super) fn create_subclass_constructor(
         add_to_trait: None,
         is_deleted: fun.is_deleted,
         synthetic_cpp: None,
-        is_subclass_constructor,
     });
-    let subclass_constructor_name = ApiName::new_with_cpp_name(
+    let wrapper_name = ApiName::new_with_cpp_name(
         &Namespace::new(),
         subclass_constructor_name,
         Some(sub.cpp().get_final_item().to_string()),
     );
-    (maybe_wrap, subclass_constructor_name)
+    [
+        (Box::new(actual_constructor), actual_constructor_api_name),
+        (wrapper, wrapper_name),
+    ]
+    .into_iter()
 }

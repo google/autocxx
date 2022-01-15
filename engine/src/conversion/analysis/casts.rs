@@ -124,7 +124,6 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
             }),
             synthetic_cpp: Some((CppFunctionBody::Cast, CppFunctionKind::Function)),
             is_deleted: false,
-            is_subclass_constructor: None,
         }),
         analysis: (),
     }

@@ -51,7 +51,7 @@ use self::{
 
 use super::{
     analysis::fun::{FnAnalysis, FnKind},
-    api::{Layout, RustSubclassFnDetails, SubclassConstructorDetails, TraitDetails},
+    api::{Layout, RustSubclassFnDetails, TraitDetails},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
@@ -176,8 +176,8 @@ impl<'a> RsCodeGenerator<'a> {
         // First off, when we generate structs we may need to add some methods
         // if they're superclasses.
         let methods_by_superclass = self.accumulate_superclass_methods(&all_apis);
-        let subclasses_with_a_single_trivial_constructor =
-            find_trivially_constructed_subclasses(&all_apis);
+        let types_with_a_single_trivial_constructor =
+            find_types_with_single_trivial_constructor(&all_apis);
         // Now let's generate the Rust code.
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
@@ -187,7 +187,7 @@ impl<'a> RsCodeGenerator<'a> {
                 let gen = self.generate_rs_for_api(
                     api,
                     &methods_by_superclass,
-                    &subclasses_with_a_single_trivial_constructor,
+                    &types_with_a_single_trivial_constructor,
                 );
                 ((name, gen), more_cpp_needed)
             })
@@ -494,7 +494,7 @@ impl<'a> RsCodeGenerator<'a> {
         &self,
         api: Api<FnPhase>,
         associated_methods: &HashMap<QualifiedName, Vec<SuperclassMethod>>,
-        subclasses_with_a_single_trivial_constructor: &HashSet<QualifiedName>,
+        types_with_a_single_trivial_constructor: &HashSet<QualifiedName>,
     ) -> RsCodegenResult {
         let name = api.name().clone();
         let id = name.get_final_ident();
@@ -597,7 +597,7 @@ impl<'a> RsCodeGenerator<'a> {
             } => {
                 let methods = associated_methods.get(&superclass);
                 let generate_peer_constructor =
-                    subclasses_with_a_single_trivial_constructor.contains(&name.0.name);
+                    types_with_a_single_trivial_constructor.contains(&name.0.name);
                 self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
             }
             Api::IgnoredItem { err, ctx, .. } => Self::generate_error_entry(err, ctx),
@@ -1132,21 +1132,25 @@ fn get_unsafe_token(requires_unsafe: bool) -> TokenStream {
     }
 }
 
-fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
+fn find_types_with_single_trivial_constructor(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
     let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .filter_map(|api| match api {
-            Api::Function { fun, .. } => match &fun.is_subclass_constructor {
-                Some(SubclassConstructorDetails {
-                    subclass,
-                    is_trivial,
-                    ..
-                }) => Some((&subclass.0.name, is_trivial)),
-                _ => None,
-            },
+            Api::Function {
+                analysis:
+                    FnAnalysis {
+                        kind: FnKind::Method(self_ty, MethodKind::Constructor),
+                        params,
+                        ..
+                    },
+                ..
+            } => {
+                let is_trivial = params.len() == 1;
+                Some((self_ty, is_trivial))
+            }
             _ => None,
         })
-        .partition(|(_, trivial)| **trivial);
+        .partition(|(_, trivial)| *trivial);
     let simple_constructors: HashSet<_> =
         simple_constructors.into_iter().map(|(qn, _)| qn).collect();
     let complex_constructors: HashSet<_> =

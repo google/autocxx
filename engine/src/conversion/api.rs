@@ -112,17 +112,6 @@ pub(crate) enum TraitSynthesis {
     FreeUninitialized(QualifiedName),
 }
 
-/// Details of a subclass constructor.
-/// TODO: zap this; replace with an extra API.
-#[derive(Clone)]
-pub(crate) struct SubclassConstructorDetails {
-    pub(crate) subclass: SubclassName,
-    pub(crate) is_trivial: bool,
-    /// Implementation of the constructor _itself_ as distinct
-    /// from any wrapper function we create to call it.
-    pub(crate) cpp_impl: CppFunction,
-}
-
 /// Information about references (as opposed to pointers) to be found
 /// within the function signature. This is derived from bindgen annotations
 /// which is why it's not within `FuncToConvert::inputs`
@@ -226,7 +215,6 @@ pub(crate) struct FuncToConvert {
     /// C++ and instead we're synthesizing it.
     pub(crate) synthetic_cpp: Option<(CppFunctionBody, CppFunctionKind)>,
     pub(crate) is_deleted: bool,
-    pub(crate) is_subclass_constructor: Option<SubclassConstructorDetails>,
 }
 
 /// Layers of analysis which may be applied to decorate each API.
@@ -329,6 +317,12 @@ impl SubclassName {
     /// Generate the name for the 'Cpp' type
     pub(crate) fn cpp(&self) -> QualifiedName {
         let id = self.with_suffix("Cpp");
+        QualifiedName::new(self.0.name.get_namespace(), id)
+    }
+    /// Generate the name for the function representing the
+    /// synthesized constructor
+    pub(crate) fn synthesized_constructor(&self) -> QualifiedName {
+        let id = self.with_suffix("Cpp_synthesized_constructor");
         QualifiedName::new(self.0.name.get_namespace(), id)
     }
     pub(crate) fn cpp_remove_ownership(&self) -> Ident {
