@@ -24,6 +24,7 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::IncludeCppConfig;
 
+use itertools::{Either, Itertools};
 use proc_macro2::{Span, TokenStream};
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
@@ -50,7 +51,7 @@ use self::{
 };
 
 use super::{
-    analysis::fun::{FnAnalysis, FnKind},
+    analysis::fun::{function_wrapper::CppFunctionBody, FnAnalysis, FnKind},
     api::{Layout, RustSubclassFnDetails, TraitDetails},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
@@ -597,7 +598,7 @@ impl<'a> RsCodeGenerator<'a> {
             } => {
                 let methods = associated_methods.get(&superclass);
                 let generate_peer_constructor =
-                    types_with_a_single_trivial_constructor.contains(&name.0.name);
+                    types_with_a_single_trivial_constructor.contains(&name.cpp());
                 self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
             }
             Api::IgnoredItem { err, ctx, .. } => Self::generate_error_entry(err, ctx),
@@ -1133,7 +1134,7 @@ fn get_unsafe_token(requires_unsafe: bool) -> TokenStream {
 }
 
 fn find_types_with_single_trivial_constructor(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
-    let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
+    let (simple_constructors, complex_constructors): (HashSet<_>, HashSet<_>) = apis
         .iter()
         .filter_map(|api| match api {
             Api::Function {
@@ -1143,18 +1144,28 @@ fn find_types_with_single_trivial_constructor(apis: &[Api<FnPhase>]) -> HashSet<
                         params,
                         ..
                     },
+                fun,
                 ..
-            } => {
+            } if matches!(
+                fun.synthetic_cpp,
+                Some((CppFunctionBody::ConstructSuperclass(_), _))
+            ) =>
+            {
+                // For now we are only looking for subclass constructors, and they currently
+                // take two parameters at minimum: the placement new destination and
+                // a 'holder' parameter.
                 let is_trivial = params.len() == 1;
                 Some((self_ty, is_trivial))
             }
             _ => None,
         })
-        .partition(|(_, trivial)| *trivial);
-    let simple_constructors: HashSet<_> =
-        simple_constructors.into_iter().map(|(qn, _)| qn).collect();
-    let complex_constructors: HashSet<_> =
-        complex_constructors.into_iter().map(|(qn, _)| qn).collect();
+        .partition_map(|(qn, trivial)| {
+            if trivial {
+                Either::Left(qn)
+            } else {
+                Either::Right(qn)
+            }
+        });
     (&simple_constructors - &complex_constructors)
         .into_iter()
         .cloned()
