@@ -14,6 +14,8 @@
 
 use std::collections::HashMap;
 
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
 use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 
 use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability};
@@ -151,6 +153,18 @@ pub(super) fn create_subclass_constructor(
     } else {
         panic!("Unexpected self type parameter when creating subclass constructor");
     }
+    let mut existing_params = existing_params.into_iter();
+    let self_param = existing_params.next();
+    let boxed_holder_param: FnArg = parse_quote! {
+        peer: rust::Box<#holder>
+    };
+    let constructor_inputs: Punctuated<FnArg, Comma> = std::iter::once(boxed_holder_param)
+        .chain(existing_params)
+        .collect();
+    let wrapper_inputs: Punctuated<FnArg, Comma> = self_param
+        .into_iter()
+        .chain(constructor_inputs.iter().cloned())
+        .collect();
 
     // First, the actual constructor which we're adding to the C++ class.
     // This is pure C++ which does not have any appearance in the cxx::bridge
@@ -164,7 +178,7 @@ pub(super) fn create_subclass_constructor(
         Some(sub.cpp().get_final_item().to_string()),
     );
     let mut actual_constructor = fun.clone();
-    actual_constructor.inputs = existing_params.clone();
+    actual_constructor.inputs = constructor_inputs;
     actual_constructor.ident = sub.cpp().get_final_ident();
     actual_constructor.synthesized_this_type = Some(sub.cpp());
     actual_constructor.self_ty = Some(sub.cpp());
@@ -179,20 +193,10 @@ pub(super) fn create_subclass_constructor(
     let subclass_constructor_name =
         make_ident(format!("{}_{}", cpp.get_final_item(), cpp.get_final_item()));
 
-    let mut existing_params = existing_params.into_iter();
-    let self_param = existing_params.next();
-    let boxed_holder_param: FnArg = parse_quote! {
-        peer: rust::Box<#holder>
-    };
-    let inputs = self_param
-        .into_iter()
-        .chain(std::iter::once(boxed_holder_param))
-        .chain(existing_params)
-        .collect();
     let wrapper = Box::new(FuncToConvert {
         ident: subclass_constructor_name.clone(),
         doc_attr: fun.doc_attr.clone(),
-        inputs,
+        inputs: wrapper_inputs,
         output: fun.output.clone(),
         vis: fun.vis.clone(),
         virtualness: Virtualness::None,
