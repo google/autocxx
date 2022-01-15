@@ -1223,6 +1223,7 @@ impl<'a> FnAnalyzer<'a> {
                         add_to_trait: None,
                         is_deleted: false,
                         synthetic_cpp: None,
+                        cpp_only: false,
                     }),
                 )
             });

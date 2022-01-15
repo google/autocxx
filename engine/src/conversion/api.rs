@@ -215,6 +215,11 @@ pub(crate) struct FuncToConvert {
     /// C++ and instead we're synthesizing it.
     pub(crate) synthetic_cpp: Option<(CppFunctionBody, CppFunctionKind)>,
     pub(crate) is_deleted: bool,
+    /// This function is created purely in C++ and should not be mentioned
+    /// in the cxx::bridge or in the Rust code. This is sometimes needed
+    /// where a single Rust API requires instantiation of two or more C++
+    /// functions, e.g. a constructor and code to call that constructor.
+    pub(crate) cpp_only: bool,
 }
 
 /// Layers of analysis which may be applied to decorate each API.

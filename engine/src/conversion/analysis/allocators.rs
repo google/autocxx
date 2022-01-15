@@ -91,6 +91,7 @@ fn create_alloc_and_free(ty_name: QualifiedName) -> impl Iterator<Item = Api<Pod
                     synthetic_cpp: Some((cpp_function_body, CppFunctionKind::Function)),
                     add_to_trait: Some(synthesis),
                     is_deleted: false,
+                    cpp_only: false,
                 }),
                 analysis: (),
             }

@@ -72,6 +72,7 @@ pub(super) fn create_subclass_fn_wrapper(
         add_to_trait: fun.add_to_trait.clone(),
         is_deleted: fun.is_deleted,
         synthetic_cpp: None,
+        cpp_only: false,
     })
 }
 
@@ -187,6 +188,7 @@ pub(super) fn create_subclass_constructor(
         CppFunctionKind::SynthesizedConstructor,
     ));
     actual_constructor.original_name = Some(cpp.get_final_item().to_string());
+    actual_constructor.cpp_only = true;
 
     // Second, the API which bridges Rust and C++ to call this constructor.
 
@@ -210,6 +212,7 @@ pub(super) fn create_subclass_constructor(
         add_to_trait: None,
         is_deleted: fun.is_deleted,
         synthetic_cpp: None,
+        cpp_only: false,
     });
     let wrapper_name = ApiName::new_with_cpp_name(
         &Namespace::new(),
