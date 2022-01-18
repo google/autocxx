@@ -66,7 +66,7 @@ impl Header {
     }
 
     fn is_system(&self) -> bool {
-        matches!(self, Header::System(_))
+        matches!(self, Header::System(_) | Header::CxxH)
     }
 }
 

@@ -358,6 +358,7 @@ fn format_gen_cmd<'a>(
         rs_file.to_str().unwrap().to_string(),
         "--gen-rs-complete".to_string(),
         "--gen-cpp".to_string(),
+        "--suppress-system-headers".to_string(),
         "--".to_string(),
     ]
     .to_vec();
