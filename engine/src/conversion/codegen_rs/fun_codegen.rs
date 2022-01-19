@@ -63,7 +63,7 @@ pub(super) fn gen_function(
     analysis: FnAnalysis,
     cpp_call_name: String,
 ) -> RsCodegenResult {
-    if !analysis.generate_code {
+    if analysis.ignore_reason.is_err() || !analysis.externally_callable {
         return RsCodegenResult::default();
     }
     let cxxbridge_name = analysis.cxxbridge_name;

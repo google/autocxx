@@ -136,11 +136,14 @@ pub(crate) struct FnAnalysis {
     pub(crate) vis: Visibility,
     pub(crate) cpp_wrapper: Option<CppFunction>,
     pub(crate) deps: HashSet<QualifiedName>,
-    /// Protected methods still need to be recorded because we want
+    /// Some methods still need to be recorded because we want
     /// to (a) generate the ability to call superclasses, (b) create
     /// subclass entries for them. But we do not want to have them
     /// be externally callable.
-    pub(crate) generate_code: bool,
+    pub(crate) ignore_reason: Result<(), ConvertErrorWithContext>,
+    /// Whether this can be called by external code. Not so for
+    /// protected methods.
+    pub(crate) externally_callable: bool,
 }
 
 #[derive(Clone)]
@@ -158,6 +161,17 @@ struct ReturnTypeAnalysis {
     conversion: Option<TypeConversionPolicy>,
     was_reference: bool,
     deps: HashSet<QualifiedName>,
+}
+
+impl Default for ReturnTypeAnalysis {
+    fn default() -> Self {
+        Self {
+            rt: parse_quote! {},
+            conversion: Default::default(),
+            was_reference: Default::default(),
+            deps: Default::default(),
+        }
+    }
 }
 
 pub(crate) struct FnPhase;
@@ -178,7 +192,6 @@ pub(crate) struct FnAnalyzer<'a> {
     config: &'a IncludeCppConfig,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
-    has_unrepresentable_constructors: HashSet<QualifiedName>,
     nested_type_name_map: HashMap<QualifiedName, String>,
 }
 
@@ -198,7 +211,6 @@ impl<'a> FnAnalyzer<'a> {
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
-            has_unrepresentable_constructors: HashSet::new(),
             nested_type_name_map: Self::build_nested_type_map(&apis),
         };
         let mut results = Vec::new();
@@ -321,7 +333,7 @@ impl<'a> FnAnalyzer<'a> {
         fun: Box<FuncToConvert>,
     ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
         let initial_name = name.clone();
-        let maybe_analysis_and_name = self.analyze_foreign_fn(name, &fun)?;
+        let maybe_analysis_and_name = self.analyze_foreign_fn(name, &fun);
 
         let (analysis, name) = match maybe_analysis_and_name {
             None => return Ok(Box::new(std::iter::empty())),
@@ -335,7 +347,7 @@ impl<'a> FnAnalyzer<'a> {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 // Create a make_unique too
                 let make_unique_func = self.create_make_unique(&fun);
-                self.analyze_and_add_if_necessary(initial_name, make_unique_func, &mut results)?;
+                self.analyze_and_add_if_necessary(initial_name, make_unique_func, &mut results);
 
                 for sub in self.subclasses_by_superclass(sup) {
                     // Create a subclass constructor. This is a synthesized function
@@ -346,14 +358,14 @@ impl<'a> FnAnalyzer<'a> {
                         subclass_constructor_name.clone(),
                         subclass_constructor_func.clone(),
                         &mut results,
-                    )?;
+                    );
                     // and its corresponding make_unique
                     let make_unique_func = self.create_make_unique(&subclass_constructor_func);
                     self.analyze_and_add_if_necessary(
                         subclass_constructor_name,
                         make_unique_func,
                         &mut results,
-                    )?;
+                    );
                 }
             }
             FnKind::Method(
@@ -390,7 +402,7 @@ impl<'a> FnAnalyzer<'a> {
                     if !is_pure_virtual {
                         let maybe_wrap = create_subclass_fn_wrapper(sub, &super_fn_name, &fun);
                         let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
-                        self.analyze_and_add_if_necessary(super_fn_name, maybe_wrap, &mut results)?;
+                        self.analyze_and_add_if_necessary(super_fn_name, maybe_wrap, &mut results);
                     }
                 }
             }
@@ -412,8 +424,8 @@ impl<'a> FnAnalyzer<'a> {
         name: ApiName,
         new_func: Box<FuncToConvert>,
         results: &mut Vec<Api<FnPhase>>,
-    ) -> Result<(), ConvertErrorWithContext> {
-        let maybe_another_api = self.analyze_foreign_fn(name, &new_func)?;
+    ) {
+        let maybe_another_api = self.analyze_foreign_fn(name, &new_func);
         if let Some((analysis, name)) = maybe_another_api {
             results.push(Api::Function {
                 fun: new_func,
@@ -422,7 +434,6 @@ impl<'a> FnAnalyzer<'a> {
                 name_for_gc: None,
             });
         }
-        Ok(())
     }
 
     /// Take a constructor e.g. pub fn A_A(this: *mut root::A);
@@ -452,7 +463,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         fun: &FuncToConvert,
-    ) -> Result<Option<(FnAnalysis, ApiName)>, ConvertErrorWithContext> {
+    ) -> Option<(FnAnalysis, ApiName)> {
         let mut cpp_name = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
@@ -460,7 +471,7 @@ impl<'a> FnAnalyzer<'a> {
         // because they influence our behavior in whether types can be used in
         // vectors, but that was all recorded in the POD analysis phase.
         if fun.is_deleted {
-            return Ok(None);
+            return None;
         }
 
         // Let's gather some pre-wisdom about the name of the function.
@@ -469,7 +480,7 @@ impl<'a> FnAnalyzer<'a> {
         // for diagnostics whilst we do that.
         let initial_rust_name = fun.ident.to_string();
         if initial_rust_name.ends_with("_destructor") {
-            return Ok(None);
+            return None;
         }
         let diagnostic_display_name = cpp_name.as_ref().unwrap_or(&initial_rust_name);
 
@@ -561,7 +572,7 @@ impl<'a> FnAnalyzer<'a> {
                 // virally as arguments on other allowlisted types. But we don't want
                 // to generate methods unless the user has specifically asked us to.
                 // It may, for instance, be a private type.
-                return Ok(None);
+                return None;
             }
 
             // Method or static method.
@@ -640,43 +651,72 @@ impl<'a> FnAnalyzer<'a> {
         // where the error occurred such that we can put a marker in the output
         // Rust code to indicate that a problem occurred (benefiting people using
         // rust-analyzer or similar). Make a closure to make this easy.
-        let contextualize_error = |err| ConvertErrorWithContext(err, Some(error_context.clone()));
+        let mut ignore_reason = Ok(());
+        let mut set_ignore_reason =
+            |err| ignore_reason = Err(ConvertErrorWithContext(err, Some(error_context.clone())));
 
         if matches!(kind, FnKind::Method(_, MethodKind::Constructor)) {
             // Annoyingly, in this case only, we need to convert the 'this' back to a pointer.
             // We will previously have treated it as a reference because all normal methods
             // take 'self' as a reference.
-            let (arg0, analysis0) = self
-                .convert_fn_arg(
-                    original_first_argument.unwrap(),
-                    ns,
-                    &rust_name,
-                    &fun.synthesized_this_type,
-                    &fun.references,
-                    false,
-                )
-                .map_err(contextualize_error)?;
-            params = std::iter::once(arg0)
-                .chain(params.into_iter().skip(1))
-                .collect();
-            param_details[0] = analysis0;
+            let r = self.convert_fn_arg(
+                original_first_argument.unwrap(),
+                ns,
+                &rust_name,
+                &fun.synthesized_this_type,
+                &fun.references,
+                false,
+            );
+            match r {
+                Ok((arg0, analysis0)) => {
+                    params = std::iter::once(arg0)
+                        .chain(params.into_iter().skip(1))
+                        .collect();
+                    param_details[0] = analysis0;
+                }
+                Err(e) => set_ignore_reason(e),
+            }
         }
 
         let requires_unsafe = self.should_be_unsafe(&param_details);
-        // Skip private methods; but if we've a private constructor, keep
-        // a note of it. We continue to process protected methods since,
-        // though they may not be callable elsewhere, we my be subclassing
-        // the class and need to handle them that way.
-        let generate_code = match fun.cpp_vis {
+
+        // Now we can add context to the error, check for a variety of error
+        // cases. In each case, we continue to record the API, because it might
+        // influence our later decisions to generate synthetic constructors
+        // or note whether the type is abstract.
+        let externally_callable = match fun.cpp_vis {
             CppVisibility::Private => {
-                if let FnKind::Method(self_ty, MethodKind::Constructor) = &kind {
-                    self.has_unrepresentable_constructors
-                        .insert(self_ty.clone());
-                }
-                return Ok(None);
+                set_ignore_reason(ConvertError::PrivateMethod);
+                false
             }
             CppVisibility::Protected => false,
             CppVisibility::Public => true,
+        };
+        if matches!(fun.special_member, Some(SpecialMemberKind::MoveConstructor)) {
+            set_ignore_reason(ConvertError::MoveConstructorUnsupported)
+        } else if fun.references.rvalue_ref_return {
+            set_ignore_reason(ConvertError::RValueReturn)
+        } else if !fun.references.rvalue_ref_params.is_empty() {
+            set_ignore_reason(ConvertError::RValueParam)
+        } else if let Some(problem) = bads.into_iter().next() {
+            match problem {
+                Ok(_) => panic!("No error in the error"),
+                Err(problem) => set_ignore_reason(problem),
+            }
+        } else if fun.unused_template_param {
+            // This indicates that bindgen essentially flaked out because templates
+            // were too complex.
+            set_ignore_reason(ConvertError::UnusedTemplateParam)
+        } else {
+            match kind {
+                FnKind::Method(_, MethodKind::Static) => {}
+                FnKind::Method(ref self_ty, _)
+                    if !known_types().is_cxx_acceptable_receiver(self_ty) =>
+                {
+                    set_ignore_reason(ConvertError::UnsupportedReceiver)
+                }
+                _ => {}
+            }
         };
 
         // The name we use within the cxx::bridge mod may be different
@@ -696,43 +736,6 @@ impl<'a> FnAnalyzer<'a> {
         }
         let mut cxxbridge_name = make_ident(&cxxbridge_name);
 
-        // Now we can add context to the error, check for a couple of error
-        // cases. First, see if any of the parameters are trouble.
-        if let Some(problem) = bads.into_iter().next() {
-            match problem {
-                Ok(_) => panic!("No error in the error"),
-                Err(problem) => return Err(contextualize_error(problem)),
-            }
-        }
-        // Second, reject any functions handling types which we flake out on.
-        if fun.unused_template_param {
-            return Err(contextualize_error(ConvertError::UnusedTemplateParam));
-        }
-        match kind {
-            FnKind::Method(_, MethodKind::Static) => {}
-            FnKind::Method(ref self_ty, _) => {
-                // Reject move constructors.
-                if matches!(fun.special_member, Some(SpecialMemberKind::MoveConstructor)) {
-                    self.has_unrepresentable_constructors
-                        .insert(self_ty.clone());
-                    return Err(contextualize_error(
-                        ConvertError::MoveConstructorUnsupported,
-                    ));
-                }
-                if !known_types().is_cxx_acceptable_receiver(self_ty) {
-                    return Err(contextualize_error(ConvertError::UnsupportedReceiver));
-                }
-            }
-            _ => {}
-        };
-        if fun.references.rvalue_ref_return {
-            return Err(contextualize_error(ConvertError::RValueReturn));
-        }
-        // Ensure we do this _after_ recording the presence of move constructors.
-        if !fun.references.rvalue_ref_params.is_empty() {
-            return Err(contextualize_error(ConvertError::RValueParam));
-        }
-
         // Analyze the return type, just as we previously did for the
         // parameters.
         let mut return_analysis = if let FnKind::Method(ref self_ty, MethodKind::MakeUnique) = kind
@@ -750,7 +753,10 @@ impl<'a> FnAnalyzer<'a> {
             }
         } else {
             self.convert_return_type(&fun.output, ns, &fun.references)
-                .map_err(contextualize_error)?
+                .unwrap_or_else(|err| {
+                    set_ignore_reason(err);
+                    ReturnTypeAnalysis::default()
+                })
         };
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
@@ -759,9 +765,7 @@ impl<'a> FnAnalyzer<'a> {
         if num_input_references != 1 && return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
             // one reference as a parameter. Let's see...
-            return Err(contextualize_error(ConvertError::NotOneInputReference(
-                rust_name,
-            )));
+            set_ignore_reason(ConvertError::NotOneInputReference(rust_name.clone()));
         }
         let mut ret_type = return_analysis.rt;
         let ret_type_conversion = return_analysis.conversion;
@@ -877,7 +881,7 @@ impl<'a> FnAnalyzer<'a> {
 
         // Naming, part two.
         // Work out our final naming strategy.
-        validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).map_err(contextualize_error)?;
+        validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).unwrap_or_else(set_ignore_reason);
         let rust_name_ident = make_ident(&rust_name);
         let (id, rust_rename_strategy) = match kind {
             FnKind::Method(..) | FnKind::TraitMethod { .. } => {
@@ -915,10 +919,11 @@ impl<'a> FnAnalyzer<'a> {
             vis,
             cpp_wrapper,
             deps,
-            generate_code,
+            ignore_reason,
+            externally_callable,
         };
         let name = ApiName::new_with_cpp_name(ns, id, cpp_name);
-        Ok(Some((analysis, name)))
+        Some((analysis, name))
     }
 
     /// Determine if this synthetic function should actually result in the implementation
@@ -1177,12 +1182,7 @@ impl<'a> FnAnalyzer<'a> {
         if self.config.exclude_impls {
             return;
         }
-        let types_without_constructors = Self::find_all_types(apis);
-        // For types with private constructors, we won't have generated code for them,
-        // but we equally don't want to synthesize a public constructor. The same applies
-        // to other types of constructor we might skip e.g. move constructors.
-        let mut types_without_constructors =
-            &types_without_constructors - &self.has_unrepresentable_constructors;
+        let mut types_without_constructors = Self::find_all_types(apis);
         // Now subtract all the actual constructors we know of.
         for api in apis.iter() {
             if let Api::Function {
@@ -1276,7 +1276,8 @@ impl Api<FnPhase> {
             Api::Function {
                 analysis: FnAnalysis {
                     cpp_wrapper: Some(..),
-                    generate_code: true,
+                    ignore_reason: Ok(_),
+                    externally_callable: true,
                     ..
                 },
                 ..

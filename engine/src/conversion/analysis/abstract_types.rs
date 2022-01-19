@@ -18,7 +18,11 @@ use super::{
     fun::{FnAnalysis, FnKind, FnPhase, MethodKind},
     pod::PodAnalysis,
 };
-use crate::conversion::{api::TypeKind, error_reporter::convert_item_apis, ConvertError};
+use crate::conversion::{
+    api::TypeKind,
+    error_reporter::{convert_apis, convert_item_apis},
+    ConvertError,
+};
 use crate::{conversion::api::Api, types::QualifiedName};
 use std::collections::HashSet;
 
@@ -126,4 +130,28 @@ fn any_missing_from_allowlist(config: &IncludeCppConfig, bases: &HashSet<Qualifi
     bases
         .iter()
         .any(|qn| !config.is_on_allowlist(&qn.to_cpp_name()))
+}
+
+pub(crate) fn discard_ignored_functions(apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
+    // Some APIs can't be generated, e.g. because they're protected.
+    // Now we've finished analyzing abstract types and constructors, we'll
+    // convert them to IgnoredI
+    let mut apis_new = Vec::new();
+    convert_apis(
+        apis,
+        &mut apis_new,
+        |name, fun, analysis, name_for_gc| {
+            analysis.ignore_reason.clone()?;
+            Ok(Box::new(std::iter::once(Api::Function {
+                name,
+                fun,
+                analysis,
+                name_for_gc,
+            })))
+        },
+        Api::struct_unchanged,
+        Api::enum_unchanged,
+        Api::typedef_unchanged,
+    );
+    apis_new
 }
