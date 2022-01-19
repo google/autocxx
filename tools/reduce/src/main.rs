@@ -103,6 +103,16 @@ fn main() {
                                                     .help("reproduction case JSON file name")
                                                     .takes_value(true),
                                             )
+                                            .arg(
+                                        Arg::with_name("header")
+                                            .short("h")
+                                            .long("header")
+                                            .multiple(true)
+                                            .number_of_values(1)
+                                            .value_name("HEADER")
+                                            .help("header file name; specify to resume a part-completed run")
+                                            .takes_value(true),
+                                    )
                                         )
         .arg(
             Arg::with_name("problem")
@@ -239,7 +249,11 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
                     config.to_token_stream().to_string()
                 ),
             )?;
-            create_file(&concat_path, &case.header)?
+            if let Some(header) = submatches.value_of("header") {
+                std::fs::copy(PathBuf::from(header), &concat_path)?;
+            } else {
+                create_file(&concat_path, &case.header)?
+            }
         }
     }
 
