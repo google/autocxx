@@ -7340,6 +7340,40 @@ fn test_constructor_moveit() {
 }
 
 #[test]
+fn test_copy_and_move_constructor_moveit() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        A(const A& other) : a(other.a+1) {}
+        A(A&& other) : a(other.a+2) { other.a = 666; }
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut stack_obj = ffi::A::new();
+        }
+        stack_obj.as_mut().set(42);
+        moveit! {
+            let stack_obj2 = autocxx::moveit::new::copy(stack_obj);
+        }
+        assert_eq!(stack_obj2.get(), 43);
+        assert_eq!(stack_obj.get(), 42);
+        moveit! {
+            let stack_obj3 = autocxx::moveit::new::mov(stack_obj);
+        }
+        assert_eq!(stack_obj3.get(), 44);
+        assert_eq!(stack_obj.get(), 666);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_no_constructor_make_unique_ns() {
     let hdr = indoc! {"
     #include <stdint.h>
