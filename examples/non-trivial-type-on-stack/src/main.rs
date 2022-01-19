@@ -18,15 +18,14 @@ include_cpp! {
     // C++ headers we want to include.
     #include "cpp.h"
     safety!(unsafe)
+    // A non-trivial C++ type
     generate!("MessageBuffer")
 }
 
-// A simple example dealing with plain-old-data types.
-
 fn main() {
-    moveit! {
-        let mut msg = ffi::MessageBuffer::new();
-    }
+    // Put the non-trivial C++ type on the Rust stack.
+    moveit! { let mut msg = ffi::MessageBuffer::new(); }
+    // Call methods on it.
     msg.as_mut().add_blurb("Hello");
     msg.as_mut().add_blurb(" world!");
 
