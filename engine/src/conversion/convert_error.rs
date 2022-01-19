@@ -55,6 +55,7 @@ pub enum ConvertError {
     NonPublicNestedType,
     RValueParam,
     RValueReturn,
+    PrivateMethod,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -102,6 +103,7 @@ impl Display for ConvertError {
             ConvertError::NonPublicNestedType => write!(f, "This type is nested within another struct/class with protected or private visibility.")?,
             ConvertError::RValueParam => write!(f, "This function takes an rvalue reference parameter (&&) which is not yet supported.")?,
             ConvertError::RValueReturn => write!(f, "This function returns an rvalue reference (&&) which is not yet supported.")?,
+            ConvertError::PrivateMethod => write!(f, "This method is private")?,
         }
         Ok(())
     }
@@ -132,6 +134,7 @@ impl std::fmt::Display for ErrorContext {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct ConvertErrorWithContext(pub(crate) ConvertError, pub(crate) Option<ErrorContext>);
 
 impl std::fmt::Debug for ConvertErrorWithContext {
