@@ -40,6 +40,7 @@ pub(crate) enum RustConversionType {
     None,
     FromStr,
     ToBoxedUpHolder(SubclassName),
+    FromPinMaybeUninitToPtr,
 }
 
 /// A policy for converting types. Conversion may occur on both the Rust and
@@ -93,11 +94,11 @@ impl TypeConversionPolicy {
         }
     }
 
-    pub(crate) fn box_up_subclass_holder(ty: Type, subclass: SubclassName) -> Self {
+    pub(crate) fn new_with_rust_conversion(ty: Type, rust_conversion: RustConversionType) -> Self {
         TypeConversionPolicy {
             unwrapped_type: ty,
             cpp_conversion: CppConversionType::None,
-            rust_conversion: RustConversionType::ToBoxedUpHolder(subclass),
+            rust_conversion,
         }
     }
 

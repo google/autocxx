@@ -29,7 +29,8 @@ use super::{
 use crate::{
     conversion::{
         analysis::fun::{
-            ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy, UnsafetyNeeded,
+            ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy,
+            TraitMethodDetails, UnsafetyNeeded,
         },
         api::ImplBlockDetails,
         codegen_rs::lifetime::add_lifetime_to_all_params,
@@ -94,32 +95,24 @@ pub(super) fn gen_function(
         unsafety: &wrapper_unsafety,
         doc_attr: &doc_attr,
     };
-    let mut materialization = match kind {
-        FnKind::Method(..) => None,
+    let (mut materialization, is_a_trait) = match kind {
+        FnKind::Method(..) => (None, false),
         FnKind::Function => match analysis.rust_rename_strategy {
             RustRenameStrategy::RenameInOutputMod(alias) => {
-                Some(Use::UsedFromCxxBridgeWithAlias(alias))
+                (Some(Use::UsedFromCxxBridgeWithAlias(alias)), false)
             }
-            _ => Some(Use::UsedFromCxxBridge),
+            _ => (Some(Use::UsedFromCxxBridge), false),
         },
-        FnKind::TraitMethod {
-            impl_for: _,
-            ref impl_for_specifics,
-            ref trait_signature,
-            ref method_name,
-        } => fn_generator.generate_trait_impl(
-            impl_for_specifics,
-            trait_signature,
-            method_name,
-            &ret_type,
-        ),
+        FnKind::TraitMethod { ref details, .. } => {
+            (fn_generator.generate_trait_impl(details, &ret_type), true)
+        }
     };
     let any_param_needs_rust_conversion = param_details
         .iter()
         .any(|pd| pd.conversion.rust_work_needed());
     let rust_wrapper_needed = any_param_needs_rust_conversion
         || (cxxbridge_name != rust_name && matches!(kind, FnKind::Method(..)));
-    if rust_wrapper_needed {
+    if rust_wrapper_needed && !is_a_trait {
         match kind {
             FnKind::Method(ref type_name, MethodKind::Constructor) => {
                 // Constructor.
@@ -253,19 +246,24 @@ impl<'a> FnGenerator<'a> {
     /// Generate an 'impl Trait for Type { methods-go-here }' in its entrety.
     fn generate_trait_impl(
         &self,
-        impl_for_specifics: &TokenStream,
-        trait_signature: &TokenStream,
-        method_name: &Ident,
+        details: &TraitMethodDetails,
         ret_type: &ReturnType,
     ) -> Option<Use> {
-        let (wrapper_params, arg_list) = self.generate_arg_lists(false);
+        let (mut wrapper_params, arg_list) = self.generate_arg_lists(details.avoid_self);
+        if let Some(parameter_reordering) = &details.parameter_reordering {
+            wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
+        }
         let (lifetime_tokens, wrapper_params, ret_type) =
             add_explicit_lifetime_if_necessary(self.param_details, wrapper_params, ret_type);
         let doc_attr = self.doc_attr;
         let unsafety = self.unsafety;
         let cxxbridge_name = self.cxxbridge_name;
+        let trait_signature = &details.trait_signature;
+        let trait_unsafety = &details.trait_unsafety;
+        let impl_for_specifics = &details.impl_for_specifics;
+        let method_name = &details.method_name;
         Some(Use::Custom(Box::new(parse_quote! {
-            impl #lifetime_tokens #trait_signature for #impl_for_specifics {
+            #trait_unsafety impl #lifetime_tokens #trait_signature for #impl_for_specifics {
                 #doc_attr
                 #unsafety fn #method_name ( #wrapper_params ) #ret_type {
                     cxxbridge::#cxxbridge_name ( #(#arg_list),* )
@@ -332,5 +330,16 @@ impl<'a> FnGenerator<'a> {
                 cxxbridge::#rust_name ( #(#arg_list),* )
             }
         }))
+    }
+
+    fn reorder_parameters(
+        params: Punctuated<FnArg, Comma>,
+        parameter_ordering: &Vec<usize>,
+    ) -> Punctuated<FnArg, Comma> {
+        let old_params = params.into_iter().collect::<Vec<_>>();
+        parameter_ordering
+            .iter()
+            .map(|n| old_params.get(*n).unwrap().clone())
+            .collect()
     }
 }

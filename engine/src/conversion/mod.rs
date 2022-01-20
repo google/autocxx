@@ -35,9 +35,14 @@ use crate::{CppCodegenOptions, CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
-        abstract_types::{mark_types_abstract, discard_ignored_functions}, casts::add_casts, check_names, fun::FnPhase,
-        gc::filter_apis_by_following_edges_from_allowlist, pod::analyze_pod_apis,
-        remove_ignored::filter_apis_by_ignored_dependents, tdef::convert_typedef_targets,
+        abstract_types::{discard_ignored_functions, mark_types_abstract},
+        casts::add_casts,
+        check_names,
+        fun::FnPhase,
+        gc::filter_apis_by_following_edges_from_allowlist,
+        pod::analyze_pod_apis,
+        remove_ignored::filter_apis_by_ignored_dependents,
+        tdef::convert_typedef_targets,
     },
     api::{AnalysisPhase, Api},
     codegen_rs::RsCodeGenerator,
