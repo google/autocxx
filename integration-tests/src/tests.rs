@@ -7364,11 +7364,11 @@ fn test_copy_and_move_constructor_moveit() {
         }
         assert_eq!(stack_obj2.get(), 43);
         assert_eq!(stack_obj.get(), 42);
-        // moveit! {
-        //     let stack_obj3 = autocxx::moveit::new::mov(stack_obj);
-        // }
-        // assert_eq!(stack_obj3.get(), 44);
-        // assert_eq!(stack_obj.get(), 666);
+        moveit! {
+            let stack_obj3 = autocxx::moveit::new::mov(stack_obj);
+        }
+        assert_eq!(stack_obj3.get(), 44);
+        assert_eq!(stack_obj.get(), 666);
     };
     run_test("", hdr, rs, &["A"], &[]);
 }
