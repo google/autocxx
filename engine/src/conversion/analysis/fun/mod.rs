@@ -1118,7 +1118,7 @@ impl<'a> FnAnalyzer<'a> {
                 {
                     TypeConversionPolicy::new_from_str(ty.clone())
                 } else {
-                    TypeConversionPolicy::new_from_unique_ptr(ty.clone())
+                    TypeConversionPolicy::new_from_reference_to_value(ty.clone())
                 }
             }
             _ => TypeConversionPolicy::new_unconverted(ty.clone()),

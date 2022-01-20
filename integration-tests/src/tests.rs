@@ -269,7 +269,7 @@ fn test_cycle_string() {
     "};
     let rs = quote! {
         let s = ffi::give_str();
-        assert_eq!(ffi::take_str(s), 3);
+        assert_eq!(ffi::take_str(&s), 3);
     };
     let generate = &["give_str", "take_str"];
     run_test(cxx, hdr, rs, generate, &[]);
@@ -641,7 +641,7 @@ fn test_take_nonpod_by_value() {
     "};
     let rs = quote! {
         let a = ffi::Bob::make_unique(12, 13);
-        assert_eq!(ffi::take_bob(a), 12);
+        assert_eq!(ffi::take_bob(&a), 12);
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob"], &[]);
 }
@@ -1433,7 +1433,7 @@ fn test_method_pass_nonpod_by_value() {
     let rs = quote! {
         let a = ffi::give_anna();
         let b = ffi::Bob { a: 12, b: 13 };
-        assert_eq!(b.get_bob(a), 12);
+        assert_eq!(b.get_bob(&a), 12);
     };
     run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
 }
@@ -1472,7 +1472,7 @@ fn test_method_pass_nonpod_by_value_with_up() {
         let a = ffi::give_anna();
         let a2 = ffi::give_anna();
         let b = ffi::Bob { a: 12, b: 13 };
-        assert_eq!(b.get_bob(a, a2), 12);
+        assert_eq!(b.get_bob(&a, a2), 12);
     };
     run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
 }
@@ -1633,7 +1633,7 @@ fn test_pass_string_by_value() {
     "};
     let rs = quote! {
         let a = ffi::get_msg();
-        let c = ffi::measure_string(a);
+        let c = ffi::measure_string(&a);
         assert_eq!(c, 5);
     };
     run_test(cxx, hdr, rs, &["measure_string", "get_msg"], &[]);
@@ -1682,7 +1682,7 @@ fn test_method_pass_string_by_value() {
     let rs = quote! {
         let a = ffi::get_msg();
         let b = ffi::Bob { a: 12, b: 13 };
-        let c = b.measure_string(a);
+        let c = b.measure_string(&a);
         assert_eq!(c, 5);
     };
     run_test(cxx, hdr, rs, &["Bob", "get_msg"], &["Bob"]);
@@ -2006,11 +2006,11 @@ fn test_overload_functions() {
         use ffi::ToCppString;
         ffi::daft(32);
         ffi::daft1(8);
-        ffi::daft2("hello".into_cpp());
+        ffi::daft2(&"hello".into_cpp());
         let b = ffi::Fred { a: 3 };
         ffi::daft3(b);
         let c = ffi::Norma::make_unique();
-        ffi::daft4(c);
+        ffi::daft4(&c);
     };
     run_test(
         cxx,
@@ -2101,11 +2101,11 @@ fn test_overload_methods() {
         let a = ffi::Bob { a: 12 };
         a.daft(32);
         a.daft1(8);
-        a.daft2("hello".into_cpp());
+        a.daft2(&"hello".into_cpp());
         let b = ffi::Fred { a: 3 };
         a.daft3(b);
         let c = ffi::Norma::make_unique();
-        a.daft4(c);
+        a.daft4(&c);
     };
     run_test(cxx, hdr, rs, &["Norma"], &["Fred", "Bob"]);
 }
@@ -2158,7 +2158,7 @@ fn test_ns_up_direct() {
         uint32_t give_bob(A::Bob bob);
     "};
     let rs = quote! {
-        assert_eq!(ffi::give_bob(ffi::A::get_bob()), 2);
+        assert_eq!(ffi::give_bob(&ffi::A::get_bob()), 2);
     };
     run_test(cxx, hdr, rs, &["give_bob", "A::get_bob"], &[]);
 }
@@ -2188,7 +2188,7 @@ fn test_ns_up_wrappers() {
         uint32_t give_bob(A::Bob bob);
     "};
     let rs = quote! {
-        assert_eq!(ffi::give_bob(ffi::get_bob()), 2);
+        assert_eq!(ffi::give_bob(&ffi::get_bob()), 2);
     };
     run_test(cxx, hdr, rs, &["give_bob", "get_bob"], &[]);
 }
@@ -2218,7 +2218,7 @@ fn test_ns_up_wrappers_in_up() {
         uint32_t give_bob(A::Bob bob);
     "};
     let rs = quote! {
-        assert_eq!(ffi::give_bob(ffi::A::get_bob()), 2);
+        assert_eq!(ffi::give_bob(&ffi::A::get_bob()), 2);
     };
     run_test(cxx, hdr, rs, &["give_bob", "A::get_bob"], &[]);
 }
@@ -2320,7 +2320,7 @@ fn test_static_func_wrapper() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        ffi::A::CreateA("a".into_cpp(), "b".into_cpp());
+        ffi::A::CreateA(&"a".into_cpp(), &"b".into_cpp());
     };
     run_test("", hdr, rs, &["A"], &[]);
 }
@@ -2480,8 +2480,8 @@ fn test_conflicting_ns_up_functions() {
     let rs = quote! {
         let c = ffi::C::make_unique();
         let c2 = ffi::C::make_unique();
-        assert_eq!(ffi::A::create(c), 3);
-        assert_eq!(ffi::B::create(c2), 4);
+        assert_eq!(ffi::A::create(&c), 3);
+        assert_eq!(ffi::B::create(&c2), 4);
     };
     run_test(cxx, hdr, rs, &["A::create", "B::create", "C"], &[]);
 }
@@ -3040,7 +3040,7 @@ fn test_foreign_ns_func_arg_nonpod() {
     "};
     let rs = quote! {
         let a = ffi::A::Bob::make_unique(12);
-        assert_eq!(ffi::B::daft(a), 12);
+        assert_eq!(ffi::B::daft(&a), 12);
     };
     run_test("", hdr, rs, &["B::daft", "A::Bob"], &[]);
 }
@@ -3091,7 +3091,7 @@ fn test_foreign_ns_meth_arg_nonpod() {
     let rs = quote! {
         let a = ffi::A::Bob::make_unique(12);
         let b = ffi::B::C { a: 12 };
-        assert_eq!(b.daft(a), 12);
+        assert_eq!(b.daft(&a), 12);
     };
     run_test("", hdr, rs, &["A::Bob"], &["B::C"]);
 }
@@ -3269,7 +3269,7 @@ fn test_root_ns_func_arg_nonpod() {
     "};
     let rs = quote! {
         let a = ffi::Bob::make_unique(12);
-        assert_eq!(ffi::B::daft(a), 12);
+        assert_eq!(ffi::B::daft(&a), 12);
     };
     run_test("", hdr, rs, &["B::daft", "Bob"], &[]);
 }
@@ -3316,7 +3316,7 @@ fn test_root_ns_meth_arg_nonpod() {
     let rs = quote! {
         let a = ffi::Bob::make_unique(12);
         let b = ffi::B::C { a: 12 };
-        assert_eq!(b.daft(a), 12);
+        assert_eq!(b.daft(&a), 12);
     };
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
 }
@@ -3700,7 +3700,7 @@ fn test_generic_type() {
     let rs = quote! {
         use ffi::ToCppString;
         let item = ffi::Secondary::make_unique();
-        assert_eq!(item.take_c("hello".into_cpp()), 15)
+        assert_eq!(item.take_c(&"hello".into_cpp()), 15)
     };
     run_test("", hdr, rs, &["Secondary"], &[]);
 }
@@ -3724,7 +3724,7 @@ fn test_cycle_generic_type() {
         }
     "};
     let rs = quote! {
-        assert_eq!(ffi::take_thingy(ffi::make_thingy()), 'a' as u32)
+        assert_eq!(ffi::take_thingy(&ffi::make_thingy()), 'a' as u32)
     };
     run_test("", hdr, rs, &["take_thingy", "make_thingy"], &[]);
 }

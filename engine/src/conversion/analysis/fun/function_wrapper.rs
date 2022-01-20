@@ -21,7 +21,7 @@ use syn::{parse_quote, Ident, Type};
 #[derive(Clone, Debug)]
 pub(crate) enum CppConversionType {
     None,
-    FromUniquePtrToValue,
+    FromReferenceToValue,
     FromValueToUniquePtr,
 }
 
@@ -29,8 +29,8 @@ impl CppConversionType {
     fn inverse(&self) -> Self {
         match self {
             CppConversionType::None => CppConversionType::None,
-            CppConversionType::FromUniquePtrToValue => CppConversionType::FromValueToUniquePtr,
-            CppConversionType::FromValueToUniquePtr => CppConversionType::FromUniquePtrToValue,
+            CppConversionType::FromReferenceToValue => CppConversionType::FromValueToUniquePtr,
+            CppConversionType::FromValueToUniquePtr => CppConversionType::FromReferenceToValue,
         }
     }
 }
@@ -77,10 +77,10 @@ impl TypeConversionPolicy {
         }
     }
 
-    pub(crate) fn new_from_unique_ptr(ty: Type) -> Self {
+    pub(crate) fn new_from_reference_to_value(ty: Type) -> Self {
         TypeConversionPolicy {
             unwrapped_type: ty,
-            cpp_conversion: CppConversionType::FromUniquePtrToValue,
+            cpp_conversion: CppConversionType::FromReferenceToValue,
             rust_conversion: RustConversionType::None,
         }
     }
@@ -88,7 +88,7 @@ impl TypeConversionPolicy {
     pub(crate) fn new_from_str(ty: Type) -> Self {
         TypeConversionPolicy {
             unwrapped_type: ty,
-            cpp_conversion: CppConversionType::FromUniquePtrToValue,
+            cpp_conversion: CppConversionType::FromReferenceToValue,
             rust_conversion: RustConversionType::FromStr,
         }
     }
@@ -114,7 +114,7 @@ impl TypeConversionPolicy {
 
     pub(crate) fn converted_rust_type(&self) -> Type {
         match self.cpp_conversion {
-            CppConversionType::FromUniquePtrToValue => self.make_unique_ptr_type(),
+            CppConversionType::FromReferenceToValue => self.make_reference_type(),
             _ => self.unwrapped_type.clone(),
         }
     }
@@ -123,6 +123,13 @@ impl TypeConversionPolicy {
         let innerty = &self.unwrapped_type;
         parse_quote! {
             cxx::UniquePtr < #innerty >
+        }
+    }
+
+    fn make_reference_type(&self) -> Type {
+        let innerty = &self.unwrapped_type;
+        parse_quote! {
+            & #innerty
         }
     }
 

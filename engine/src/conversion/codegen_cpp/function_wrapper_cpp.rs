@@ -26,27 +26,34 @@ impl TypeConversionPolicy {
         cpp_name_map: &CppNameMap,
     ) -> Result<String, ConvertError> {
         match self.cpp_conversion {
-            CppConversionType::FromUniquePtrToValue => self.wrapped_type(cpp_name_map),
+            CppConversionType::FromReferenceToValue => {
+                let ref this = self;
+                let original_name_map = cpp_name_map;
+                Ok(format!(
+                    "const {}&",
+                    this.unwrapped_type_as_string(original_name_map)?
+                ))
+            }
             _ => self.unwrapped_type_as_string(cpp_name_map),
         }
     }
 
     pub(super) fn converted_type(&self, cpp_name_map: &CppNameMap) -> Result<String, ConvertError> {
         match self.cpp_conversion {
-            CppConversionType::FromValueToUniquePtr => self.wrapped_type(cpp_name_map),
+            CppConversionType::FromValueToUniquePtr => {
+                let ref this = self;
+                let original_name_map = cpp_name_map;
+                Ok(format!(
+                    "std::unique_ptr<{}>",
+                    this.unwrapped_type_as_string(original_name_map)?
+                ))
+            }
             _ => self.unwrapped_type_as_string(cpp_name_map),
         }
     }
 
     fn unwrapped_type_as_string(&self, cpp_name_map: &CppNameMap) -> Result<String, ConvertError> {
         type_to_cpp(&self.unwrapped_type, cpp_name_map)
-    }
-
-    fn wrapped_type(&self, original_name_map: &CppNameMap) -> Result<String, ConvertError> {
-        Ok(format!(
-            "std::unique_ptr<{}>",
-            self.unwrapped_type_as_string(original_name_map)?
-        ))
     }
 
     pub(super) fn cpp_conversion(
@@ -63,7 +70,7 @@ impl TypeConversionPolicy {
                     var_name.to_string()
                 }
             }
-            CppConversionType::FromUniquePtrToValue => format!("std::move(*{})", var_name),
+            CppConversionType::FromReferenceToValue => format!("{}", var_name),
             CppConversionType::FromValueToUniquePtr => format!(
                 "std::make_unique<{}>({})",
                 self.unconverted_type(cpp_name_map)?,
