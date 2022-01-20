@@ -43,8 +43,10 @@ use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
-    TypePtr, Visibility,
+    parse_quote,
+    punctuated::Punctuated,
+    token::{Comma, Unsafe},
+    FnArg, Ident, Pat, ReturnType, Type, TypePtr, Visibility,
 };
 
 use crate::{
@@ -57,6 +59,7 @@ use crate::{
 
 use self::{
     bridge_name_tracker::BridgeNameTracker,
+    function_wrapper::RustConversionType,
     overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
     subclass::{create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function},
@@ -86,18 +89,36 @@ pub(crate) enum MethodKind {
 }
 
 #[derive(Clone)]
+pub(crate) enum TraitMethodKind {
+    CopyConstructor,
+    Cast,
+}
+
+#[derive(Clone)]
+pub(crate) struct TraitMethodDetails {
+    pub(crate) impl_for_specifics: TokenStream,
+    pub(crate) trait_signature: TokenStream,
+    pub(crate) trait_unsafety: Option<Unsafe>,
+    pub(crate) avoid_self: bool,
+    pub(crate) method_name: Ident,
+    /// For traits, where we're trying to implement a specific existing
+    /// interface, we may need to reorder the parameters to fit that
+    /// interface.
+    pub(crate) parameter_reordering: Option<Vec<usize>>,
+}
+
+#[derive(Clone)]
 pub(crate) enum FnKind {
     Function,
     Method(QualifiedName, MethodKind),
     TraitMethod {
+        kind: TraitMethodKind,
         /// The name of the type T for which we're implementing a trait,
         /// though we may be actually implementing the trait for &mut T or
         /// similar....
         impl_for: QualifiedName,
         /// ... so we also store the tokenstream of the type.
-        impl_for_specifics: TokenStream,
-        trait_signature: TokenStream,
-        method_name: Ident,
+        details: TraitMethodDetails,
     },
 }
 
@@ -310,13 +331,25 @@ impl<'a> FnAnalyzer<'a> {
 
     #[allow(clippy::if_same_then_else)] // clippy bug doesn't notice the two
                                         // closures below are different.
-    fn should_be_unsafe(&self, param_details: &[ArgumentAnalysis]) -> UnsafetyNeeded {
+    fn should_be_unsafe(
+        &self,
+        param_details: &[ArgumentAnalysis],
+        kind: &FnKind,
+    ) -> UnsafetyNeeded {
         if self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe {
             UnsafetyNeeded::Always
         } else if param_details
             .iter()
             .any(|pd| pd.self_type.is_none() && pd.requires_unsafe)
         {
+            UnsafetyNeeded::Always
+        } else if matches!(
+            kind,
+            FnKind::TraitMethod {
+                kind: TraitMethodKind::CopyConstructor,
+                ..
+            }
+        ) {
             UnsafetyNeeded::Always
         } else if param_details.iter().any(|pd| pd.requires_unsafe) {
             UnsafetyNeeded::JustReceiver
@@ -498,6 +531,7 @@ impl<'a> FnAnalyzer<'a> {
                     &fun.synthesized_this_type,
                     &fun.references,
                     true,
+                    None,
                 )
             })
             .partition(Result::is_ok);
@@ -589,53 +623,76 @@ impl<'a> FnAnalyzer<'a> {
                 .get(&self_ty)
                 .map(|s| s.as_str())
                 .unwrap_or_else(|| self_ty.get_final_item());
-            let method_kind = if matches!(fun.synthesis, Some(Synthesis::MakeUnique)) {
-                // We're re-running this routine for a function we already analyzed.
-                // Previously we made a placement "new" (MethodKind::Constructor).
-                // This time we've asked ourselves to synthesize a make_unique.
-                let constructor_suffix = rust_name.strip_prefix(nested_type_ident).unwrap();
-                rust_name = format!("make_unique{}", constructor_suffix);
-                // Strip off the 'this' arg.
-                params = params.into_iter().skip(1).collect();
-                param_details.remove(0);
-                MethodKind::MakeUnique
-            } else if let Some(constructor_suffix) = rust_name.strip_prefix(nested_type_ident) {
-                // It's a constructor. bindgen generates
-                // fn Type(this: *mut Type, ...args)
-                // We want
-                // fn new(this: *mut Type, ...args)
-                // Later code will spot this and re-enter us, and we'll make
-                // a duplicate function in the above 'if' clause like this:
-                // fn make_unique(...args) -> Type
-                // which later code will convert to
-                // fn make_unique(...args) -> UniquePtr<Type>
-                // If there are multiple constructors, bindgen generates
-                // new, new1, new2 etc. and we'll keep those suffixes.
-                rust_name = format!("new{}", constructor_suffix);
-                MethodKind::Constructor
-            } else if is_static_method {
-                MethodKind::Static
-            } else {
-                let receiver_mutability =
-                    receiver_mutability.expect("Failed to find receiver details");
-                match fun.virtualness {
-                    Virtualness::None => MethodKind::Normal(receiver_mutability),
-                    Virtualness::Virtual => MethodKind::Virtual(receiver_mutability),
-                    Virtualness::PureVirtual => MethodKind::PureVirtual(receiver_mutability),
+            if matches!(fun.special_member, Some(SpecialMemberKind::CopyConstructor)) {
+                if let Some(constructor_suffix) = rust_name.strip_prefix(nested_type_ident) {
+                    rust_name = format!("new{}", constructor_suffix);
                 }
-            };
-            // Disambiguate overloads.
-            let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
-            let rust_name = overload_tracker.get_method_real_name(type_ident, rust_name);
-            let error_context = ErrorContext::Method {
-                self_ty: self_ty.get_final_ident(),
-                method: make_ident(&rust_name),
-            };
-            (
-                FnKind::Method(self_ty, method_kind),
-                error_context,
-                rust_name,
-            )
+                let rust_name = self.get_overload_name(ns, type_ident, rust_name);
+                let error_context = error_context_for_method(&self_ty, &rust_name);
+                let impl_for_specifics = Type::Path(self_ty.to_type_path()).to_token_stream();
+                (
+                    FnKind::TraitMethod {
+                        kind: TraitMethodKind::CopyConstructor,
+                        impl_for: self_ty,
+                        details: TraitMethodDetails {
+                            impl_for_specifics,
+                            trait_signature: quote! {
+                                autocxx::moveit::new::CopyNew
+                            },
+                            trait_unsafety: Some(parse_quote! { unsafe }),
+                            avoid_self: true,
+                            method_name: make_ident("copy_new"),
+                            parameter_reordering: Some(vec![1, 0]),
+                        },
+                    },
+                    error_context,
+                    rust_name,
+                )
+            } else {
+                let method_kind = if matches!(fun.synthesis, Some(Synthesis::MakeUnique)) {
+                    // We're re-running this routine for a function we already analyzed.
+                    // Previously we made a placement "new" (MethodKind::Constructor).
+                    // This time we've asked ourselves to synthesize a make_unique.
+                    let constructor_suffix = rust_name.strip_prefix(nested_type_ident).unwrap();
+                    rust_name = format!("make_unique{}", constructor_suffix);
+                    // Strip off the 'this' arg.
+                    params = params.into_iter().skip(1).collect();
+                    param_details.remove(0);
+                    MethodKind::MakeUnique
+                } else if let Some(constructor_suffix) = rust_name.strip_prefix(nested_type_ident) {
+                    // It's a constructor. bindgen generates
+                    // fn Type(this: *mut Type, ...args)
+                    // We want
+                    // fn new(this: *mut Type, ...args)
+                    // Later code will spot this and re-enter us, and we'll make
+                    // a duplicate function in the above 'if' clause like this:
+                    // fn make_unique(...args) -> Type
+                    // which later code will convert to
+                    // fn make_unique(...args) -> UniquePtr<Type>
+                    // If there are multiple constructors, bindgen generates
+                    // new, new1, new2 etc. and we'll keep those suffixes.
+                    rust_name = format!("new{}", constructor_suffix);
+                    MethodKind::Constructor
+                } else if is_static_method {
+                    MethodKind::Static
+                } else {
+                    let receiver_mutability =
+                        receiver_mutability.expect("Failed to find receiver details");
+                    match fun.virtualness {
+                        Virtualness::None => MethodKind::Normal(receiver_mutability),
+                        Virtualness::Virtual => MethodKind::Virtual(receiver_mutability),
+                        Virtualness::PureVirtual => MethodKind::PureVirtual(receiver_mutability),
+                    }
+                };
+                // Disambiguate overloads.
+                let rust_name = self.get_overload_name(ns, type_ident, rust_name);
+                let error_context = error_context_for_method(&self_ty, &rust_name);
+                (
+                    FnKind::Method(self_ty, method_kind),
+                    error_context,
+                    rust_name,
+                )
+            }
         } else {
             // Not a method.
             // What shall we call this function? It may be overloaded.
@@ -655,10 +712,28 @@ impl<'a> FnAnalyzer<'a> {
         let mut set_ignore_reason =
             |err| ignore_reason = Err(ConvertErrorWithContext(err, Some(error_context.clone())));
 
-        if matches!(kind, FnKind::Method(_, MethodKind::Constructor)) {
+        if matches!(
+            kind,
+            FnKind::Method(_, MethodKind::Constructor)
+                | FnKind::TraitMethod {
+                    kind: TraitMethodKind::CopyConstructor,
+                    ..
+                }
+        ) {
             // Annoyingly, in this case only, we need to convert the 'this' back to a pointer.
             // We will previously have treated it as a reference because all normal methods
             // take 'self' as a reference.
+            let force_rust_conversion = if matches!(
+                kind,
+                FnKind::TraitMethod {
+                    kind: TraitMethodKind::CopyConstructor,
+                    ..
+                }
+            ) {
+                Some(RustConversionType::FromPinMaybeUninitToPtr)
+            } else {
+                None
+            };
             let r = self.convert_fn_arg(
                 original_first_argument.unwrap(),
                 ns,
@@ -666,6 +741,7 @@ impl<'a> FnAnalyzer<'a> {
                 &fun.synthesized_this_type,
                 &fun.references,
                 false,
+                force_rust_conversion,
             );
             match r {
                 Ok((arg0, analysis0)) => {
@@ -678,7 +754,7 @@ impl<'a> FnAnalyzer<'a> {
             }
         }
 
-        let requires_unsafe = self.should_be_unsafe(&param_details);
+        let requires_unsafe = self.should_be_unsafe(&param_details, &kind);
 
         // Now we can add context to the error, check for a variety of error
         // cases. In each case, we continue to record the API, because it might
@@ -692,9 +768,7 @@ impl<'a> FnAnalyzer<'a> {
             CppVisibility::Protected => false,
             CppVisibility::Public => true,
         };
-        if matches!(fun.special_member, Some(SpecialMemberKind::MoveConstructor)) {
-            set_ignore_reason(ConvertError::MoveConstructorUnsupported)
-        } else if fun.references.rvalue_ref_return {
+        if fun.references.rvalue_ref_return {
             set_ignore_reason(ConvertError::RValueReturn)
         } else if !fun.references.rvalue_ref_params.is_empty() {
             set_ignore_reason(ConvertError::RValueParam)
@@ -789,7 +863,11 @@ impl<'a> FnAnalyzer<'a> {
             FnKind::Method(_, MethodKind::Static)
             | FnKind::Method(_, MethodKind::Constructor)
             | FnKind::Method(_, MethodKind::Virtual(_))
-            | FnKind::Method(_, MethodKind::PureVirtual(_)) => true,
+            | FnKind::Method(_, MethodKind::PureVirtual(_))
+            | FnKind::TraitMethod {
+                kind: TraitMethodKind::CopyConstructor,
+                ..
+            } => true,
             FnKind::Method(..) if cxxbridge_name != rust_name => true,
             _ if param_conversion_needed => true,
             _ if ret_type_conversion_needed => true,
@@ -814,7 +892,12 @@ impl<'a> FnAnalyzer<'a> {
                     FnKind::Method(_, MethodKind::MakeUnique) => {
                         (CppFunctionBody::MakeUnique, CppFunctionKind::Function)
                     }
-                    FnKind::Method(ref self_ty, MethodKind::Constructor) => (
+                    FnKind::Method(ref self_ty, MethodKind::Constructor)
+                    | FnKind::TraitMethod {
+                        kind: TraitMethodKind::CopyConstructor,
+                        impl_for: ref self_ty,
+                        ..
+                    } => (
                         CppFunctionBody::PlacementNew(ns.clone(), self_ty.get_final_ident()),
                         CppFunctionKind::Constructor,
                     ),
@@ -926,6 +1009,11 @@ impl<'a> FnAnalyzer<'a> {
         Some((analysis, name))
     }
 
+    fn get_overload_name(&mut self, ns: &Namespace, type_ident: &str, rust_name: String) -> String {
+        let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
+        overload_tracker.get_method_real_name(type_ident, rust_name)
+    }
+
     /// Determine if this synthetic function should actually result in the implementation
     /// of a trait, rather than a function/method.
     fn trait_creation_details_for_synthetic_function(
@@ -971,10 +1059,16 @@ impl<'a> FnAnalyzer<'a> {
                 let method_name = make_ident(method_name);
                 Some((
                     FnKind::TraitMethod {
+                        kind: TraitMethodKind::Cast,
                         impl_for: from_type.clone(),
-                        impl_for_specifics,
-                        trait_signature,
-                        method_name,
+                        details: TraitMethodDetails {
+                            impl_for_specifics,
+                            trait_signature,
+                            trait_unsafety: None,
+                            avoid_self: false,
+                            method_name,
+                            parameter_reordering: None,
+                        },
                     },
                     ErrorContext::Item(make_ident(&rust_name)),
                     rust_name,
@@ -1004,6 +1098,7 @@ impl<'a> FnAnalyzer<'a> {
         virtual_this: &Option<QualifiedName>,
         references: &References,
         treat_this_as_reference: bool,
+        force_rust_conversion: Option<RustConversionType>,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
             FnArg::Typed(pt) => {
@@ -1067,8 +1162,11 @@ impl<'a> FnAnalyzer<'a> {
                     type_converter::TypeKind::SubclassHolder(holder) => Some(holder),
                     _ => None,
                 };
-                let conversion =
-                    self.argument_conversion_details(&new_ty, &subclass_holder.cloned());
+                let conversion = self.argument_conversion_details(
+                    &new_ty,
+                    &subclass_holder.cloned(),
+                    force_rust_conversion,
+                );
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
                 (
@@ -1098,30 +1196,39 @@ impl<'a> FnAnalyzer<'a> {
         &self,
         ty: &Type,
         is_subclass_holder: &Option<Ident>,
+        force_rust_conversion: Option<RustConversionType>,
     ) -> TypeConversionPolicy {
         if let Some(holder_id) = is_subclass_holder {
             let subclass = SubclassName::from_holder_name(holder_id);
-            return TypeConversionPolicy::box_up_subclass_holder(
+            return TypeConversionPolicy::new_with_rust_conversion(
                 parse_quote! {
                     rust::Box<#holder_id>
                 },
-                subclass,
+                RustConversionType::ToBoxedUpHolder(subclass),
             );
         }
         match ty {
             Type::Path(p) => {
+                let ty = ty.clone();
                 let tn = QualifiedName::from_type_path(p);
                 if self.pod_safe_types.contains(&tn) {
-                    TypeConversionPolicy::new_unconverted(ty.clone())
+                    TypeConversionPolicy::new_unconverted(ty)
                 } else if known_types().convertible_from_strs(&tn)
                     && !self.config.exclude_utilities()
                 {
-                    TypeConversionPolicy::new_from_str(ty.clone())
+                    TypeConversionPolicy::new_from_str(ty)
                 } else {
-                    TypeConversionPolicy::new_from_unique_ptr(ty.clone())
+                    TypeConversionPolicy::new_from_unique_ptr(ty)
                 }
             }
-            _ => TypeConversionPolicy::new_unconverted(ty.clone()),
+            _ => {
+                let ty = ty.clone();
+                if let Some(force_rust_conversion) = force_rust_conversion {
+                    TypeConversionPolicy::new_with_rust_conversion(ty, force_rust_conversion)
+                } else {
+                    TypeConversionPolicy::new_unconverted(ty)
+                }
+            }
         }
     }
 
@@ -1236,6 +1343,13 @@ impl<'a> FnAnalyzer<'a> {
                 _ => None,
             })
             .collect::<HashSet<_>>()
+    }
+}
+
+fn error_context_for_method(self_ty: &QualifiedName, rust_name: &str) -> ErrorContext {
+    ErrorContext::Method {
+        self_ty: self_ty.get_final_ident(),
+        method: make_ident(rust_name),
     }
 }
 

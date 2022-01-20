@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use proc_macro2::TokenStream;
-use syn::{Pat, Type};
+use syn::{Pat, Type, TypePtr};
 
 use crate::conversion::analysis::fun::function_wrapper::{
     RustConversionType, TypeConversionPolicy,
@@ -32,6 +32,15 @@ impl TypeConversionPolicy {
                 }
             }
             RustConversionType::FromStr => parse_quote! { impl ToCppString },
+            RustConversionType::FromPinMaybeUninitToPtr => {
+                let ty = match &self.unwrapped_type {
+                    Type::Ptr(TypePtr { elem, .. }) => &*elem,
+                    _ => panic!("Not a ptr"),
+                };
+                parse_quote! {
+                    std::pin::Pin<&mut std::mem::MaybeUninit< #ty >>
+                }
+            }
         }
     }
 
@@ -45,6 +54,9 @@ impl TypeConversionPolicy {
                     Box::new(#holder_type(#var))
                 }
             }
+            RustConversionType::FromPinMaybeUninitToPtr => quote! {
+                #var.get_unchecked_mut().as_mut_ptr()
+            },
         }
     }
 }
