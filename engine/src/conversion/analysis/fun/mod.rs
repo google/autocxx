@@ -91,6 +91,7 @@ pub(crate) enum MethodKind {
 #[derive(Clone)]
 pub(crate) enum TraitMethodKind {
     CopyConstructor,
+    MoveConstructor,
     Cast,
 }
 
@@ -346,7 +347,7 @@ impl<'a> FnAnalyzer<'a> {
         } else if matches!(
             kind,
             FnKind::TraitMethod {
-                kind: TraitMethodKind::CopyConstructor,
+                kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                 ..
             }
         ) {
@@ -648,6 +649,31 @@ impl<'a> FnAnalyzer<'a> {
                     error_context,
                     rust_name,
                 )
+            } else if matches!(fun.special_member, Some(SpecialMemberKind::MoveConstructor)) {
+                if let Some(constructor_suffix) = rust_name.strip_prefix(nested_type_ident) {
+                    rust_name = format!("new{}", constructor_suffix);
+                }
+                let rust_name = self.get_overload_name(ns, type_ident, rust_name);
+                let error_context = error_context_for_method(&self_ty, &rust_name);
+                let impl_for_specifics = Type::Path(self_ty.to_type_path()).to_token_stream();
+                (
+                    FnKind::TraitMethod {
+                        kind: TraitMethodKind::MoveConstructor,
+                        impl_for: self_ty,
+                        details: TraitMethodDetails {
+                            impl_for_specifics,
+                            trait_signature: quote! {
+                                autocxx::moveit::new::MoveNew
+                            },
+                            trait_unsafety: Some(parse_quote! { unsafe }),
+                            avoid_self: true,
+                            method_name: make_ident("move_new"),
+                            parameter_reordering: Some(vec![1, 0]),
+                        },
+                    },
+                    error_context,
+                    rust_name,
+                )
             } else {
                 let method_kind = if matches!(fun.synthesis, Some(Synthesis::MakeUnique)) {
                     // We're re-running this routine for a function we already analyzed.
@@ -716,7 +742,7 @@ impl<'a> FnAnalyzer<'a> {
             kind,
             FnKind::Method(_, MethodKind::Constructor)
                 | FnKind::TraitMethod {
-                    kind: TraitMethodKind::CopyConstructor,
+                    kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                     ..
                 }
         ) {
@@ -726,7 +752,7 @@ impl<'a> FnAnalyzer<'a> {
             let force_rust_conversion = if matches!(
                 kind,
                 FnKind::TraitMethod {
-                    kind: TraitMethodKind::CopyConstructor,
+                    kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                     ..
                 }
             ) {
@@ -770,7 +796,15 @@ impl<'a> FnAnalyzer<'a> {
         };
         if fun.references.rvalue_ref_return {
             set_ignore_reason(ConvertError::RValueReturn)
-        } else if !fun.references.rvalue_ref_params.is_empty() {
+        } else if !fun.references.rvalue_ref_params.is_empty()
+            && !matches!(
+                kind,
+                FnKind::TraitMethod {
+                    kind: TraitMethodKind::MoveConstructor,
+                    ..
+                }
+            )
+        {
             set_ignore_reason(ConvertError::RValueParam)
         } else if let Some(problem) = bads.into_iter().next() {
             match problem {
@@ -865,7 +899,7 @@ impl<'a> FnAnalyzer<'a> {
             | FnKind::Method(_, MethodKind::Virtual(_))
             | FnKind::Method(_, MethodKind::PureVirtual(_))
             | FnKind::TraitMethod {
-                kind: TraitMethodKind::CopyConstructor,
+                kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                 ..
             } => true,
             FnKind::Method(..) if cxxbridge_name != rust_name => true,
@@ -894,7 +928,7 @@ impl<'a> FnAnalyzer<'a> {
                     }
                     FnKind::Method(ref self_ty, MethodKind::Constructor)
                     | FnKind::TraitMethod {
-                        kind: TraitMethodKind::CopyConstructor,
+                        kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                         impl_for: ref self_ty,
                         ..
                     } => (
