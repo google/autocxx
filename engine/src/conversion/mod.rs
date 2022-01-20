@@ -35,9 +35,14 @@ use crate::{CppCodegenOptions, CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
-        abstract_types::mark_types_abstract, casts::add_casts, check_names, fun::FnPhase,
-        gc::filter_apis_by_following_edges_from_allowlist, pod::analyze_pod_apis,
-        remove_ignored::filter_apis_by_ignored_dependents, tdef::convert_typedef_targets,
+        abstract_types::{discard_ignored_functions, mark_types_abstract},
+        casts::add_casts,
+        check_names,
+        fun::FnPhase,
+        gc::filter_apis_by_following_edges_from_allowlist,
+        pod::analyze_pod_apis,
+        remove_ignored::filter_apis_by_ignored_dependents,
+        tdef::convert_typedef_targets,
     },
     api::{AnalysisPhase, Api},
     codegen_rs::RsCodeGenerator,
@@ -148,6 +153,8 @@ impl<'a> BridgeConverter<'a> {
                 Self::dump_apis_with_deps("analyze fns", &analyzed_apis);
                 let analyzed_apis = mark_types_abstract(self.config, analyzed_apis);
                 Self::dump_apis_with_deps("marking abstract", &analyzed_apis);
+                let analyzed_apis = discard_ignored_functions(analyzed_apis);
+                Self::dump_apis_with_deps("ignoring ignorable fns", &analyzed_apis);
                 // Remove any APIs whose names are not compatible with cxx.
                 let analyzed_apis = check_names(analyzed_apis);
                 // During parsing or subsequent processing we might have encountered
@@ -156,6 +163,7 @@ impl<'a> BridgeConverter<'a> {
                 // too.
                 let analyzed_apis = filter_apis_by_ignored_dependents(analyzed_apis);
                 Self::dump_apis_with_deps("removing ignored dependents", &analyzed_apis);
+
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis =
                     filter_apis_by_following_edges_from_allowlist(analyzed_apis, self.config);

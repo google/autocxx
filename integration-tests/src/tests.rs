@@ -7450,6 +7450,20 @@ fn test_abstract_up() {
 }
 
 #[test]
+fn test_abstract_private() {
+    let hdr = indoc! {"
+    #include <memory>
+    class A {
+        virtual void foo() const = 0;
+    public:
+        virtual ~A() {}
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_class_having_protected_method() {
     let hdr = indoc! {"
     #include <cstdint>
