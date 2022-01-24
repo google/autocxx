@@ -810,6 +810,7 @@ impl<'a> RsCodeGenerator<'a> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)] // currently the least unclear way
     fn generate_type<F>(
         &self,
         name: &QualifiedName,

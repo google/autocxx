@@ -1090,6 +1090,7 @@ impl<'a> FnAnalyzer<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // currently reasonably clear
     fn convert_fn_arg(
         &mut self,
         arg: &FnArg,

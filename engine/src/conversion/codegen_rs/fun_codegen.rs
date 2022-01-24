@@ -334,7 +334,7 @@ impl<'a> FnGenerator<'a> {
 
     fn reorder_parameters(
         params: Punctuated<FnArg, Comma>,
-        parameter_ordering: &Vec<usize>,
+        parameter_ordering: &[usize],
     ) -> Punctuated<FnArg, Comma> {
         let old_params = params.into_iter().collect::<Vec<_>>();
         parameter_ordering
