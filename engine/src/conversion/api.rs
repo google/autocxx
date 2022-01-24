@@ -143,6 +143,7 @@ pub(crate) enum SpecialMemberKind {
     CopyConstructor,
     MoveConstructor,
     Destructor,
+    AssignmentOperator,
 }
 
 /// A C++ function for which we need to generate bindings, but haven't

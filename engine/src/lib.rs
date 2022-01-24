@@ -299,6 +299,7 @@ impl IncludeCppEngine {
             .respect_cxx_access_specs(true)
             .use_specific_virtual_function_receiver(true)
             .cpp_semantic_attributes(true)
+            .represent_cxx_operators(true)
             .layout_tests(false); // TODO revisit later
         for item in known_types().get_initial_blocklist() {
             builder = builder.blocklist_item(item);
