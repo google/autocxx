@@ -41,6 +41,15 @@ impl TypeConversionPolicy {
                     std::pin::Pin<&mut std::mem::MaybeUninit< #ty >>
                 }
             }
+            RustConversionType::FromPinMoveRefToPtr => {
+                let ty = match &self.unwrapped_type {
+                    Type::Ptr(TypePtr { elem, .. }) => &*elem,
+                    _ => panic!("Not a ptr"),
+                };
+                parse_quote! {
+                    std::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
+                }
+            }
         }
     }
 
@@ -56,6 +65,11 @@ impl TypeConversionPolicy {
             }
             RustConversionType::FromPinMaybeUninitToPtr => quote! {
                 #var.get_unchecked_mut().as_mut_ptr()
+            },
+            RustConversionType::FromPinMoveRefToPtr => quote! {
+                { let r: &mut _ = std::pin::Pin::into_inner_unchecked(#var.as_mut());
+                r
+                }
             },
         }
     }

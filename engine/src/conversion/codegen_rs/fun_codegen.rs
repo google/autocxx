@@ -210,8 +210,9 @@ impl<'a> FnGenerator<'a> {
             } else {
                 pd.name.clone()
             };
+            let param_mutability = pd.conversion.rust_conversion.requires_mutability();
             wrapper_params.push(parse_quote!(
-                #wrapper_arg_name: #type_name
+                #param_mutability #wrapper_arg_name: #type_name
             ));
             arg_list.push(pd.conversion.rust_conversion(wrapper_arg_name));
         }
