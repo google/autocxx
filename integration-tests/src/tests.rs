@@ -7419,9 +7419,7 @@ fn test_explicit_everything() {
         std::string so_we_are_non_trivial;
     };
     "};
-    let rs = quote! {
-       
-    };
+    let rs = quote! {};
     run_test("", hdr, rs, &["A"], &[]);
 }
 

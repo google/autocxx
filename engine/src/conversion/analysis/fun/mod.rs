@@ -849,7 +849,14 @@ impl<'a> FnAnalyzer<'a> {
             CppVisibility::Protected => false,
             CppVisibility::Public => true,
         };
-        if fun.references.rvalue_ref_return {
+        if matches!(
+            fun.special_member,
+            Some(SpecialMemberKind::AssignmentOperator)
+        ) {
+            set_ignore_reason(ConvertError::AssignmentOperator)
+        } else if matches!(fun.special_member, Some(SpecialMemberKind::Destructor)) {
+            set_ignore_reason(ConvertError::Destructor)
+        } else if fun.references.rvalue_ref_return {
             set_ignore_reason(ConvertError::RValueReturn)
         } else if !fun.references.rvalue_ref_params.is_empty()
             && !matches!(

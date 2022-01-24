@@ -55,6 +55,7 @@ pub enum ConvertError {
     RValueParam,
     RValueReturn,
     PrivateMethod,
+    AssignmentOperator,
     Destructor,
 }
 
@@ -103,6 +104,7 @@ impl Display for ConvertError {
             ConvertError::RValueParam => write!(f, "This function takes an rvalue reference parameter (&&) which is not yet supported.")?,
             ConvertError::RValueReturn => write!(f, "This function returns an rvalue reference (&&) which is not yet supported.")?,
             ConvertError::PrivateMethod => write!(f, "This method is private")?,
+            ConvertError::AssignmentOperator => write!(f, "autocxx does not know how to generate bindings to operator=")?,
             ConvertError::Destructor => write!(f, "autocxx does not yet generate bindings to destructors")?, // TODO must do for moveit!
         }
         Ok(())
