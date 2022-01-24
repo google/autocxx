@@ -7402,6 +7402,30 @@ fn test_copy_and_move_constructor_moveit() {
 }
 
 #[test]
+fn test_explicit_everything() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {} // default constructor
+        A(A&&) {} // move constructor
+        A(const A&) {} // copy constructor
+        A& operator=(const A&) { return *this; } // copy assignment operator
+        A& operator=(A&&) { return *this; } // move assignment operator
+        ~A() {} // destructor
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+       
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_no_constructor_make_unique_ns() {
     let hdr = indoc! {"
     #include <stdint.h>
