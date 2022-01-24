@@ -23,6 +23,7 @@ pub(crate) enum CppConversionType {
     None,
     FromUniquePtrToValue,
     FromValueToUniquePtr,
+    FromPtrToMove,
 }
 
 impl CppConversionType {
@@ -31,6 +32,7 @@ impl CppConversionType {
             CppConversionType::None => CppConversionType::None,
             CppConversionType::FromUniquePtrToValue => CppConversionType::FromValueToUniquePtr,
             CppConversionType::FromValueToUniquePtr => CppConversionType::FromUniquePtrToValue,
+            CppConversionType::FromPtrToMove => panic!("Did not expect to have to invert move"),
         }
     }
 }
@@ -41,6 +43,16 @@ pub(crate) enum RustConversionType {
     FromStr,
     ToBoxedUpHolder(SubclassName),
     FromPinMaybeUninitToPtr,
+    FromPinMoveRefToPtr,
+}
+
+impl RustConversionType {
+    pub(crate) fn requires_mutability(&self) -> Option<syn::token::Mut> {
+        match self {
+            Self::FromPinMoveRefToPtr => Some(parse_quote! { mut }),
+            _ => None,
+        }
+    }
 }
 
 /// A policy for converting types. Conversion may occur on both the Rust and
@@ -75,30 +87,6 @@ impl TypeConversionPolicy {
             unwrapped_type: ty,
             cpp_conversion: CppConversionType::FromValueToUniquePtr,
             rust_conversion: RustConversionType::None,
-        }
-    }
-
-    pub(crate) fn new_from_unique_ptr(ty: Type) -> Self {
-        TypeConversionPolicy {
-            unwrapped_type: ty,
-            cpp_conversion: CppConversionType::FromUniquePtrToValue,
-            rust_conversion: RustConversionType::None,
-        }
-    }
-
-    pub(crate) fn new_from_str(ty: Type) -> Self {
-        TypeConversionPolicy {
-            unwrapped_type: ty,
-            cpp_conversion: CppConversionType::FromUniquePtrToValue,
-            rust_conversion: RustConversionType::FromStr,
-        }
-    }
-
-    pub(crate) fn new_with_rust_conversion(ty: Type, rust_conversion: RustConversionType) -> Self {
-        TypeConversionPolicy {
-            unwrapped_type: ty,
-            cpp_conversion: CppConversionType::None,
-            rust_conversion,
         }
     }
 

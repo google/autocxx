@@ -63,7 +63,9 @@ impl TypeConversionPolicy {
                     var_name.to_string()
                 }
             }
-            CppConversionType::FromUniquePtrToValue => format!("std::move(*{})", var_name),
+            CppConversionType::FromUniquePtrToValue | CppConversionType::FromPtrToMove => {
+                format!("std::move(*{})", var_name)
+            }
             CppConversionType::FromValueToUniquePtr => format!(
                 "std::make_unique<{}>({})",
                 self.unconverted_type(cpp_name_map)?,

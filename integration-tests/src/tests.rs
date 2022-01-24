@@ -481,6 +481,7 @@ fn test_take_as_pod_with_is_relocatable() {
         struct Bob {
             uint32_t a;
             uint32_t b;
+            inline Bob() {}
             inline ~Bob() {}
             inline Bob(Bob&& other_bob) { a = other_bob.a; b = other_bob.b; }
             using IsRelocatable = std::true_type;
@@ -5361,21 +5362,12 @@ fn test_deleted_function() {
 
 #[test]
 fn test_ignore_move_constructor() {
-    // Test that we don't generate bindings for move constructors and,
-    // specifically, don't erroneously import them as copy constructors.
-    // We used to do this because bindgen creates the same Rust signature for
-    // move constructors and for copy constructors.
-    // The way this tests works is a bit subtle.  Declaring a move constructor
-    // causes the copy constructor to be implicitly deleted (unless it is]
-    // explicitly declared). If we erroneously tried to create a binding for the
-    // move constructor (because the signature led us to believe it is a copy
-    // constructor), the generated C++ code would therefore try to call the
-    // deleted copy constructor, which would result in a compile error.
-    // The test is therefore successful if the bindings compile.
+    // Test that move constructors do not cause a proble,
     let hdr = indoc! {"
         class A {
         public:
-            A(A&&);
+            A() {}
+            A(A&&) {};
         };
     "};
     let rs = quote! {};
@@ -7364,10 +7356,12 @@ fn test_copy_and_move_constructor_moveit() {
         }
         assert_eq!(stack_obj2.get(), 43);
         assert_eq!(stack_obj.get(), 42);
-        // moveit! {
-        //     let stack_obj3 = autocxx::moveit::new::mov(stack_obj);
-        // }
-        // assert_eq!(stack_obj3.get(), 44);
+        moveit! {
+            let stack_obj3 = autocxx::moveit::new::mov(stack_obj);
+        }
+        assert_eq!(stack_obj3.get(), 44);
+        // Following line prevented by moveit, even though it would
+        // be possible in C++.
         // assert_eq!(stack_obj.get(), 666);
     };
     run_test("", hdr, rs, &["A"], &[]);

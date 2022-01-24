@@ -21,7 +21,7 @@ mod subclass;
 use crate::{
     conversion::{
         analysis::{
-            fun::function_wrapper::CppFunctionKind,
+            fun::function_wrapper::{CppConversionType, CppFunctionKind},
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{
@@ -91,6 +91,7 @@ pub(crate) enum MethodKind {
 #[derive(Clone)]
 pub(crate) enum TraitMethodKind {
     CopyConstructor,
+    MoveConstructor,
     Cast,
 }
 
@@ -346,7 +347,7 @@ impl<'a> FnAnalyzer<'a> {
         } else if matches!(
             kind,
             FnKind::TraitMethod {
-                kind: TraitMethodKind::CopyConstructor,
+                kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                 ..
             }
         ) {
@@ -519,7 +520,6 @@ impl<'a> FnAnalyzer<'a> {
 
         // Now let's analyze all the parameters.
         // See if any have annotations which our fork of bindgen has craftily inserted...
-        let original_first_argument = fun.inputs.first();
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .inputs
             .iter()
@@ -623,25 +623,43 @@ impl<'a> FnAnalyzer<'a> {
                 .get(&self_ty)
                 .map(|s| s.as_str())
                 .unwrap_or_else(|| self_ty.get_final_item());
-            if matches!(fun.special_member, Some(SpecialMemberKind::CopyConstructor)) {
+            if matches!(
+                fun.special_member,
+                Some(SpecialMemberKind::CopyConstructor | SpecialMemberKind::MoveConstructor)
+            ) {
+                let is_move =
+                    matches!(fun.special_member, Some(SpecialMemberKind::MoveConstructor));
+                let (kind, method_name, trait_id) = if is_move {
+                    (
+                        TraitMethodKind::MoveConstructor,
+                        "move_new",
+                        quote! { MoveNew },
+                    )
+                } else {
+                    (
+                        TraitMethodKind::CopyConstructor,
+                        "copy_new",
+                        quote! { CopyNew },
+                    )
+                };
                 if let Some(constructor_suffix) = rust_name.strip_prefix(nested_type_ident) {
                     rust_name = format!("new{}", constructor_suffix);
                 }
-                let rust_name = self.get_overload_name(ns, type_ident, rust_name);
+                rust_name = self.get_overload_name(ns, type_ident, rust_name);
                 let error_context = error_context_for_method(&self_ty, &rust_name);
                 let impl_for_specifics = Type::Path(self_ty.to_type_path()).to_token_stream();
                 (
                     FnKind::TraitMethod {
-                        kind: TraitMethodKind::CopyConstructor,
+                        kind,
                         impl_for: self_ty,
                         details: TraitMethodDetails {
                             impl_for_specifics,
                             trait_signature: quote! {
-                                autocxx::moveit::new::CopyNew
+                                autocxx::moveit::new:: #trait_id
                             },
                             trait_unsafety: Some(parse_quote! { unsafe }),
                             avoid_self: true,
-                            method_name: make_ident("copy_new"),
+                            method_name: make_ident(method_name),
                             parameter_reordering: Some(vec![1, 0]),
                         },
                     },
@@ -712,46 +730,67 @@ impl<'a> FnAnalyzer<'a> {
         let mut set_ignore_reason =
             |err| ignore_reason = Err(ConvertErrorWithContext(err, Some(error_context.clone())));
 
-        if matches!(
-            kind,
-            FnKind::Method(_, MethodKind::Constructor)
-                | FnKind::TraitMethod {
-                    kind: TraitMethodKind::CopyConstructor,
-                    ..
-                }
-        ) {
-            // Annoyingly, in this case only, we need to convert the 'this' back to a pointer.
-            // We will previously have treated it as a reference because all normal methods
-            // take 'self' as a reference.
-            let force_rust_conversion = if matches!(
-                kind,
-                FnKind::TraitMethod {
-                    kind: TraitMethodKind::CopyConstructor,
-                    ..
-                }
-            ) {
-                Some(RustConversionType::FromPinMaybeUninitToPtr)
-            } else {
-                None
-            };
-            let r = self.convert_fn_arg(
-                original_first_argument.unwrap(),
-                ns,
-                &rust_name,
-                &fun.synthesized_this_type,
-                &fun.references,
-                false,
-                force_rust_conversion,
-            );
-            match r {
-                Ok((arg0, analysis0)) => {
-                    params = std::iter::once(arg0)
-                        .chain(params.into_iter().skip(1))
-                        .collect();
-                    param_details[0] = analysis0;
-                }
-                Err(e) => set_ignore_reason(e),
+        // Now we have figured out the type of function (from its parameters)
+        // we might have determined that we have a constructor. If so,
+        // annoyingly, we need to go back and fiddle with the parameters in a
+        // different way. This is because we want the first parameter to be a
+        // pointer not a reference. For copy + move constructors, we also
+        // enforce Rust-side conversions to comply with moveit traits.
+        match kind {
+            FnKind::Method(_, MethodKind::Constructor) => {
+                self.reanalyze_parameter(
+                    0,
+                    fun,
+                    ns,
+                    &rust_name,
+                    &mut params,
+                    &mut param_details,
+                    None,
+                )
+                .unwrap_or_else(|e| set_ignore_reason(e));
             }
+            FnKind::TraitMethod {
+                kind: TraitMethodKind::CopyConstructor,
+                ..
+            } => {
+                self.reanalyze_parameter(
+                    0,
+                    fun,
+                    ns,
+                    &rust_name,
+                    &mut params,
+                    &mut param_details,
+                    Some(RustConversionType::FromPinMaybeUninitToPtr),
+                )
+                .unwrap_or_else(|e| set_ignore_reason(e));
+            }
+
+            FnKind::TraitMethod {
+                kind: TraitMethodKind::MoveConstructor,
+                ..
+            } => {
+                self.reanalyze_parameter(
+                    0,
+                    fun,
+                    ns,
+                    &rust_name,
+                    &mut params,
+                    &mut param_details,
+                    Some(RustConversionType::FromPinMaybeUninitToPtr),
+                )
+                .unwrap_or_else(|e| set_ignore_reason(e));
+                self.reanalyze_parameter(
+                    1,
+                    fun,
+                    ns,
+                    &rust_name,
+                    &mut params,
+                    &mut param_details,
+                    Some(RustConversionType::FromPinMoveRefToPtr),
+                )
+                .unwrap_or_else(|e| set_ignore_reason(e));
+            }
+            _ => {}
         }
 
         let requires_unsafe = self.should_be_unsafe(&param_details, &kind);
@@ -770,7 +809,15 @@ impl<'a> FnAnalyzer<'a> {
         };
         if fun.references.rvalue_ref_return {
             set_ignore_reason(ConvertError::RValueReturn)
-        } else if !fun.references.rvalue_ref_params.is_empty() {
+        } else if !fun.references.rvalue_ref_params.is_empty()
+            && !matches!(
+                kind,
+                FnKind::TraitMethod {
+                    kind: TraitMethodKind::MoveConstructor,
+                    ..
+                }
+            )
+        {
             set_ignore_reason(ConvertError::RValueParam)
         } else if let Some(problem) = bads.into_iter().next() {
             match problem {
@@ -865,7 +912,7 @@ impl<'a> FnAnalyzer<'a> {
             | FnKind::Method(_, MethodKind::Virtual(_))
             | FnKind::Method(_, MethodKind::PureVirtual(_))
             | FnKind::TraitMethod {
-                kind: TraitMethodKind::CopyConstructor,
+                kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                 ..
             } => true,
             FnKind::Method(..) if cxxbridge_name != rust_name => true,
@@ -894,7 +941,7 @@ impl<'a> FnAnalyzer<'a> {
                     }
                     FnKind::Method(ref self_ty, MethodKind::Constructor)
                     | FnKind::TraitMethod {
-                        kind: TraitMethodKind::CopyConstructor,
+                        kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                         impl_for: ref self_ty,
                         ..
                     } => (
@@ -1009,6 +1056,43 @@ impl<'a> FnAnalyzer<'a> {
         Some((analysis, name))
     }
 
+    /// Applies a specific `force_rust_conversion` to the parameter at index
+    /// `param_idx`. Modifies `param_details` and `params` in place.
+    fn reanalyze_parameter(
+        &mut self,
+        param_idx: usize,
+        fun: &FuncToConvert,
+        ns: &Namespace,
+        rust_name: &str,
+        params: &mut Punctuated<FnArg, Comma>,
+        param_details: &mut Vec<ArgumentAnalysis>,
+        force_rust_conversion: Option<RustConversionType>,
+    ) -> Result<(), ConvertError> {
+        self.convert_fn_arg(
+            fun.inputs.iter().nth(param_idx).unwrap(),
+            ns,
+            rust_name,
+            &fun.synthesized_this_type,
+            &fun.references,
+            false,
+            force_rust_conversion,
+        )
+        .map(|(new_arg, new_analysis)| {
+            param_details[param_idx] = new_analysis;
+            let mut params_before = params.clone().into_iter();
+            let prefix = params_before
+                .by_ref()
+                .take(param_idx)
+                .collect_vec()
+                .into_iter();
+            let suffix = params_before.skip(1);
+            *params = prefix
+                .chain(std::iter::once(new_arg))
+                .chain(suffix)
+                .collect()
+        })
+    }
+
     fn get_overload_name(&mut self, ns: &Namespace, type_ident: &str, rust_name: String) -> String {
         let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
         overload_tracker.get_method_real_name(type_ident, rust_name)
@@ -1107,6 +1191,7 @@ impl<'a> FnAnalyzer<'a> {
                 let mut self_type = None;
                 let old_pat = *pt.pat;
                 let mut treat_as_reference = false;
+                let mut treat_as_rvalue_reference = false;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
                         let this_type = match pt.ty.as_ref() {
@@ -1153,6 +1238,8 @@ impl<'a> FnAnalyzer<'a> {
                     syn::Pat::Ident(pp) => {
                         validate_ident_ok_for_cxx(&pp.ident.to_string())?;
                         treat_as_reference = references.ref_params.contains(&pp.ident);
+                        treat_as_rvalue_reference =
+                            references.rvalue_ref_params.contains(&pp.ident);
                         syn::Pat::Ident(pp)
                     }
                     _ => old_pat,
@@ -1166,6 +1253,7 @@ impl<'a> FnAnalyzer<'a> {
                 let conversion = self.argument_conversion_details(
                     &new_ty,
                     &subclass_holder.cloned(),
+                    treat_as_rvalue_reference,
                     force_rust_conversion,
                 );
                 pt.pat = Box::new(new_pat.clone());
@@ -1197,16 +1285,21 @@ impl<'a> FnAnalyzer<'a> {
         &self,
         ty: &Type,
         is_subclass_holder: &Option<Ident>,
+        is_rvalue_ref: bool,
         force_rust_conversion: Option<RustConversionType>,
     ) -> TypeConversionPolicy {
         if let Some(holder_id) = is_subclass_holder {
             let subclass = SubclassName::from_holder_name(holder_id);
-            return TypeConversionPolicy::new_with_rust_conversion(
-                parse_quote! {
+            return {
+                let ty = parse_quote! {
                     rust::Box<#holder_id>
-                },
-                RustConversionType::ToBoxedUpHolder(subclass),
-            );
+                };
+                TypeConversionPolicy {
+                    unwrapped_type: ty,
+                    cpp_conversion: CppConversionType::None,
+                    rust_conversion: RustConversionType::ToBoxedUpHolder(subclass),
+                }
+            };
         }
         match ty {
             Type::Path(p) => {
@@ -1217,17 +1310,30 @@ impl<'a> FnAnalyzer<'a> {
                 } else if known_types().convertible_from_strs(&tn)
                     && !self.config.exclude_utilities()
                 {
-                    TypeConversionPolicy::new_from_str(ty)
+                    TypeConversionPolicy {
+                        unwrapped_type: ty,
+                        cpp_conversion: CppConversionType::FromUniquePtrToValue,
+                        rust_conversion: RustConversionType::FromStr,
+                    }
                 } else {
-                    TypeConversionPolicy::new_from_unique_ptr(ty)
+                    TypeConversionPolicy {
+                        unwrapped_type: ty,
+                        cpp_conversion: CppConversionType::FromUniquePtrToValue,
+                        rust_conversion: RustConversionType::None,
+                    }
                 }
             }
             _ => {
-                let ty = ty.clone();
-                if let Some(force_rust_conversion) = force_rust_conversion {
-                    TypeConversionPolicy::new_with_rust_conversion(ty, force_rust_conversion)
+                let cpp_conversion = if is_rvalue_ref {
+                    CppConversionType::FromPtrToMove
                 } else {
-                    TypeConversionPolicy::new_unconverted(ty)
+                    CppConversionType::None
+                };
+                let rust_conversion = force_rust_conversion.unwrap_or(RustConversionType::None);
+                TypeConversionPolicy {
+                    unwrapped_type: ty.clone(),
+                    cpp_conversion,
+                    rust_conversion,
                 }
             }
         }
