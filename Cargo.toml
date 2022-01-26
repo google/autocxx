@@ -34,7 +34,7 @@ autocxx-engine = { path="engine", version="0.15.0" } # so that
   # we can refer to autocxx_engine::cxx. But even that isn't sufficient...
 cxx = "1.0.54" # ... also needed because expansion of type_id refers to ::cxx
 aquamarine = "0.1" # docs
-moveit = "0.3"
+moveit = { version = "0.4", features = [ "cxx" ] }
 
 [workspace]
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce", "integration-tests"]
