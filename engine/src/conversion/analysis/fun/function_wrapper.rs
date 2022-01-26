@@ -44,6 +44,7 @@ pub(crate) enum RustConversionType {
     ToBoxedUpHolder(SubclassName),
     FromPinMaybeUninitToPtr,
     FromPinMoveRefToPtr,
+    FromTypeToPtr,
 }
 
 impl RustConversionType {
@@ -137,6 +138,7 @@ pub(crate) enum CppFunctionBody {
     MakeUnique,
     ConstructSuperclass(String),
     Cast,
+    Destructor(Namespace, Ident),
 }
 
 #[derive(Clone)]

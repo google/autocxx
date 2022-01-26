@@ -7332,6 +7332,40 @@ fn test_constructor_moveit() {
 }
 
 #[test]
+fn test_destructor_moveit() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    extern bool gConstructed;
+    struct A {
+        A() { gConstructed = true; }
+        ~A() { gConstructed = false; }
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    inline bool is_constructed() { return gConstructed; }
+    "};
+    let cpp = indoc! {"
+        bool gConstructed = false;
+    "};
+    let rs = quote! {
+        assert!(!ffi::is_constructed());
+        {
+            moveit! {
+                let mut stack_obj = ffi::A::new();
+            }
+            assert!(ffi::is_constructed());
+            stack_obj.as_mut().set(42);
+            assert_eq!(stack_obj.get(), 42);
+        }
+        assert!(!ffi::is_constructed());
+    };
+    run_test(cpp, hdr, rs, &["A", "is_constructed"], &[]);
+}
+
+#[test]
 fn test_copy_and_move_constructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>

@@ -263,11 +263,23 @@ impl<'a> FnGenerator<'a> {
         let trait_unsafety = &details.trait_unsafety;
         let impl_for_specifics = &details.impl_for_specifics;
         let method_name = &details.method_name;
+        let call_body = quote! {
+            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+        };
+        let call_body = if details.trait_call_is_unsafe {
+            quote! {
+                unsafe {
+                    #call_body
+                }
+            }
+        } else {
+            call_body
+        };
         Some(Use::Custom(Box::new(parse_quote! {
             #trait_unsafety impl #lifetime_tokens #trait_signature for #impl_for_specifics {
                 #doc_attr
                 #unsafety fn #method_name ( #wrapper_params ) #ret_type {
-                    cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+                    #call_body
                 }
             }
         })))

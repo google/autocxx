@@ -93,12 +93,14 @@ pub(crate) enum TraitMethodKind {
     CopyConstructor,
     MoveConstructor,
     Cast,
+    Destructor,
 }
 
 #[derive(Clone)]
 pub(crate) struct TraitMethodDetails {
     pub(crate) impl_for_specifics: TokenStream,
     pub(crate) trait_signature: TokenStream,
+    /// The trait is 'unsafe' itself
     pub(crate) trait_unsafety: Option<Unsafe>,
     pub(crate) avoid_self: bool,
     pub(crate) method_name: Ident,
@@ -106,6 +108,9 @@ pub(crate) struct TraitMethodDetails {
     /// interface, we may need to reorder the parameters to fit that
     /// interface.
     pub(crate) parameter_reordering: Option<Vec<usize>>,
+    /// The function we're calling from the trait requires unsafe even
+    /// though the trait isn't.
+    pub(crate) trait_call_is_unsafe: bool,
 }
 
 #[derive(Clone)]
@@ -513,9 +518,6 @@ impl<'a> FnAnalyzer<'a> {
         // and it would be nice to have some idea of the function name
         // for diagnostics whilst we do that.
         let initial_rust_name = fun.ident.to_string();
-        if initial_rust_name.ends_with("_destructor") {
-            return None;
-        }
         let diagnostic_display_name = cpp_name.as_ref().unwrap_or(&initial_rust_name);
 
         // Now let's analyze all the parameters.
@@ -661,6 +663,30 @@ impl<'a> FnAnalyzer<'a> {
                             avoid_self: true,
                             method_name: make_ident(method_name),
                             parameter_reordering: Some(vec![1, 0]),
+                            trait_call_is_unsafe: false,
+                        },
+                    },
+                    error_context,
+                    rust_name,
+                )
+            } else if matches!(fun.special_member, Some(SpecialMemberKind::Destructor)) {
+                rust_name = self.get_overload_name(ns, type_ident, rust_name);
+                let error_context = error_context_for_method(&self_ty, &rust_name);
+                let impl_for_specifics = Type::Path(self_ty.to_type_path()).to_token_stream();
+                (
+                    FnKind::TraitMethod {
+                        kind: TraitMethodKind::Destructor,
+                        impl_for: self_ty,
+                        details: TraitMethodDetails {
+                            impl_for_specifics,
+                            trait_signature: quote! {
+                                Drop
+                            },
+                            trait_unsafety: None,
+                            avoid_self: false,
+                            method_name: make_ident("drop"),
+                            parameter_reordering: None,
+                            trait_call_is_unsafe: true,
                         },
                     },
                     error_context,
@@ -746,6 +772,22 @@ impl<'a> FnAnalyzer<'a> {
                     &mut params,
                     &mut param_details,
                     None,
+                )
+                .unwrap_or_else(|e| set_ignore_reason(e));
+            }
+
+            FnKind::TraitMethod {
+                kind: TraitMethodKind::Destructor,
+                ..
+            } => {
+                self.reanalyze_parameter(
+                    0,
+                    fun,
+                    ns,
+                    &rust_name,
+                    &mut params,
+                    &mut param_details,
+                    Some(RustConversionType::FromTypeToPtr),
                 )
                 .unwrap_or_else(|e| set_ignore_reason(e));
             }
@@ -912,7 +954,10 @@ impl<'a> FnAnalyzer<'a> {
             | FnKind::Method(_, MethodKind::Virtual(_))
             | FnKind::Method(_, MethodKind::PureVirtual(_))
             | FnKind::TraitMethod {
-                kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
+                kind:
+                    TraitMethodKind::CopyConstructor
+                    | TraitMethodKind::MoveConstructor
+                    | TraitMethodKind::Destructor,
                 ..
             } => true,
             FnKind::Method(..) if cxxbridge_name != rust_name => true,
@@ -947,6 +992,14 @@ impl<'a> FnAnalyzer<'a> {
                     } => (
                         CppFunctionBody::PlacementNew(ns.clone(), self_ty.get_final_ident()),
                         CppFunctionKind::Constructor,
+                    ),
+                    FnKind::TraitMethod {
+                        kind: TraitMethodKind::Destructor,
+                        ref impl_for,
+                        ..
+                    } => (
+                        CppFunctionBody::Destructor(ns.clone(), impl_for.get_final_ident()),
+                        CppFunctionKind::Function,
                     ),
                     FnKind::Method(ref self_ty, MethodKind::Static) => (
                         CppFunctionBody::StaticMethodCall(
@@ -1152,6 +1205,7 @@ impl<'a> FnAnalyzer<'a> {
                             avoid_self: false,
                             method_name,
                             parameter_reordering: None,
+                            trait_call_is_unsafe: false,
                         },
                     },
                     ErrorContext::Item(make_ident(&rust_name)),

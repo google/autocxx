@@ -186,6 +186,14 @@ impl QualifiedName {
         }
     }
 
+    pub(crate) fn get_final_cpp_item(&self) -> String {
+        let special_cpp_name = known_types().special_cpp_name(self);
+        match special_cpp_name {
+            Some(name) => name,
+            None => self.1.to_string(),
+        }
+    }
+
     pub(crate) fn to_type_path(&self) -> TypePath {
         if let Some(known_type_path) = known_types().known_type_type_path(self) {
             known_type_path
