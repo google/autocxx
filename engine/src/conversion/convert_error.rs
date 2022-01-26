@@ -56,7 +56,6 @@ pub enum ConvertError {
     RValueReturn,
     PrivateMethod,
     AssignmentOperator,
-    Destructor,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -105,7 +104,6 @@ impl Display for ConvertError {
             ConvertError::RValueReturn => write!(f, "This function returns an rvalue reference (&&) which is not yet supported.")?,
             ConvertError::PrivateMethod => write!(f, "This method is private")?,
             ConvertError::AssignmentOperator => write!(f, "autocxx does not know how to generate bindings to operator=")?,
-            ConvertError::Destructor => write!(f, "autocxx does not yet generate bindings to destructors")?, // TODO must do for moveit!
         }
         Ok(())
     }
