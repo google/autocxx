@@ -16,37 +16,21 @@
 
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub(super) struct ImplicitConstructorsNeeded {
-    default_constructor: bool,
-    copy_constructor_taking_t: bool,
-    copy_constructor_taking_const_t: bool,
-    move_constructor: bool,
+    pub(super) default_constructor: bool,
+    pub(super) copy_constructor_taking_t: bool,
+    pub(super) copy_constructor_taking_const_t: bool,
+    pub(super) move_constructor: bool,
 }
 
+#[derive(Default)]
 pub(super) struct ExplicitItemsFound {
-    move_constructor: bool,
-    copy_constructor: bool,
-    any_other_constructor: bool,
-    all_bases_have_const_copy_constructors: bool,
-    all_fields_have_const_copy_constructors: bool,
-    destructor: bool,
-    copy_assignment_operator: bool,
-    move_assignment_operator: bool,
-}
-
-#[cfg(test)]
-impl Default for ExplicitItemsFound {
-    fn default() -> Self {
-        Self {
-            move_constructor: false,
-            copy_constructor: false,
-            any_other_constructor: false,
-            all_bases_have_const_copy_constructors: true,
-            all_fields_have_const_copy_constructors: true,
-            destructor: false,
-            copy_assignment_operator: false,
-            move_assignment_operator: false,
-        }
-    }
+    pub(super) move_constructor: bool,
+    pub(super) copy_constructor: bool,
+    pub(super) any_other_constructor: bool,
+    pub(super) any_bases_or_fields_lack_const_copy_constructors: bool,
+    pub(super) destructor: bool,
+    pub(super) copy_assignment_operator: bool,
+    pub(super) move_assignment_operator: bool,
 }
 
 pub(super) fn determine_implicit_constructors(
@@ -54,19 +38,22 @@ pub(super) fn determine_implicit_constructors(
 ) -> ImplicitConstructorsNeeded {
     let any_constructor =
         explicits.copy_constructor || explicits.move_constructor || explicits.any_other_constructor;
-    // If no user-declared constructors of any kind are provided for a class type (struct, class, or union), the compiler will always declare a default constructor as an inline public member of its class.
+    // If no user-declared constructors of any kind are provided for a class type (struct, class, or union),
+    // the compiler will always declare a default constructor as an inline public member of its class.
     let default_constructor = !any_constructor;
 
-    // If no user-defined copy constructors are provided for a class type (struct, class, or union), the compiler will always declare a copy constructor as a non-explicit inline public member of its class
+    // If no user-defined copy constructors are provided for a class type (struct, class, or union),
+    // the compiler will always declare a copy constructor as a non-explicit inline public member of its class.
+    // This implicitly-declared copy constructor has the form T::T(const T&) if all of the following are true:
+    //  each direct and virtual base B of T has a copy constructor whose parameters are const B& or const volatile B&;
+    //  each non-static data member M of T of class type or array of class type has a copy constructor whose parameters are const M& or const volatile M&.
     let (copy_constructor_taking_const_t, copy_constructor_taking_t) = if explicits.copy_constructor
     {
         (false, false)
-    } else if explicits.all_bases_have_const_copy_constructors
-        && explicits.all_fields_have_const_copy_constructors
-    {
-        (true, false)
-    } else {
+    } else if explicits.any_bases_or_fields_lack_const_copy_constructors {
         (false, true)
+    } else {
+        (true, false)
     };
 
     // If no user-defined move constructors are provided for a class type (struct, class, or union), and all of the following is true:
@@ -121,7 +108,7 @@ mod tests {
     #[test]
     fn test_with_pesky_base() {
         let inputs = ExplicitItemsFound {
-            all_bases_have_const_copy_constructors: false,
+            any_bases_or_fields_lack_const_copy_constructors: true,
             ..Default::default()
         };
         let outputs = determine_implicit_constructors(inputs);

@@ -15,6 +15,7 @@
 mod bridge_name_tracker;
 pub(crate) mod function_wrapper;
 mod implicit_constructor_rules;
+mod implicit_constructors;
 mod overload_tracker;
 mod rust_name_tracker;
 mod subclass;

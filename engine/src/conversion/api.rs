@@ -137,7 +137,7 @@ impl References {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 pub(crate) enum SpecialMemberKind {
     DefaultConstructor,
     CopyConstructor,

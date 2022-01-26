@@ -47,6 +47,8 @@ pub(crate) struct PodAnalysis {
     /// because otherwise we don't know whether they're
     /// abstract or not.
     pub(crate) castable_bases: HashSet<QualifiedName>,
+    // TODO remove unnecessary storage duplication.
+    pub(crate) field_types: HashSet<QualifiedName>,
     pub(crate) field_deps: HashSet<QualifiedName>,
     pub(crate) movable: bool,
 }
@@ -151,20 +153,28 @@ fn analyze_struct(
     let metadata = BindgenSemanticAttributes::new_retaining_others(&mut details.item.attrs);
     metadata.check_for_fatal_attrs(&id)?;
     let bases = get_bases(&details.item);
-    let mut field_deps = HashSet::new();
-    let type_kind = if byvalue_checker.is_pod(&name.name) {
+    let mut field_types = HashSet::new();
+    get_struct_field_types(
+        type_converter,
+        name.name.get_namespace(),
+        &details.item,
+        &mut field_types,
+        extra_apis,
+    )
+    .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id.clone()))))?;
+    let (type_kind, field_deps) = if byvalue_checker.is_pod(&name.name) {
         // It's POD so let's mark dependencies on things in its field
         get_struct_field_types(
             type_converter,
             name.name.get_namespace(),
             &details.item,
-            &mut field_deps,
+            &mut field_types,
             extra_apis,
         )
         .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))?;
-        TypeKind::Pod
+        (TypeKind::Pod, field_types.clone())
     } else {
-        TypeKind::NonPod
+        (TypeKind::NonPod, HashSet::new())
     };
     let castable_bases = bases
         .iter()
@@ -181,6 +191,7 @@ fn analyze_struct(
             bases: bases.into_keys().collect(),
             castable_bases,
             field_deps,
+            field_types,
             movable,
         },
     })))
