@@ -172,12 +172,16 @@ impl<'a> ParseBindgen<'a> {
                 } else if is_forward_declaration {
                     Some(UnanalyzedApi::ForwardDeclaration { name })
                 } else {
+                    let has_rvalue_reference_fields = s.fields.iter().any(|f| {
+                        BindgenSemanticAttributes::new(&f.attrs).has_attr("rvalue_reference")
+                    });
                     Some(UnanalyzedApi::Struct {
                         name,
                         details: Box::new(StructDetails {
                             vis: annotations.get_cpp_visibility(),
                             layout: annotations.get_layout(),
                             item: s,
+                            has_rvalue_reference_fields,
                         }),
                         analysis: (),
                     })

@@ -58,6 +58,7 @@ pub(crate) struct StructDetails {
     pub(crate) vis: CppVisibility,
     pub(crate) item: ItemStruct,
     pub(crate) layout: Option<Layout>,
+    pub(crate) has_rvalue_reference_fields: bool,
 }
 
 /// Layout of a type, equivalent to the same type in ir/layout.rs in bindgen

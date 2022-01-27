@@ -159,6 +159,13 @@ fn analyze_struct(
     );
     let type_kind = if byvalue_checker.is_pod(&name.name) {
         // It's POD so any errors encountered parsing its fields are important.
+        // Let's not allow anything to be POD if it's got rvalue reference fields.
+        if details.has_rvalue_reference_fields {
+            return Err(ConvertErrorWithContext(
+                ConvertError::RValueReferenceField,
+                Some(ErrorContext::Item(id)),
+            ));
+        }
         if let Some(err) = field_conversion_errors.into_iter().next() {
             return Err(ConvertErrorWithContext(
                 err,

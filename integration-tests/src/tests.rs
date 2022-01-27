@@ -4917,6 +4917,40 @@ fn test_immovable_object() {
 }
 
 #[test]
+fn test_struct_with_reference() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <utility>
+        struct A {
+            uint32_t a;
+        };
+        struct B {
+            B(const A& param) : a(param) {}
+            const A& a;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
+fn test_struct_with_rvalue() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <utility>
+        struct A {
+            uint32_t a;
+        };
+        struct B {
+            B(A&& param) : a(std::move(param)) {}
+            A&& a;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
 fn test_immovable_nested_object() {
     let hdr = indoc! {"
         struct C {

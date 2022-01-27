@@ -33,6 +33,7 @@ pub(super) struct ExplicitItemsFound {
     pub(super) any_bases_have_deleted_or_inaccessible_destructors: bool,
     pub(super) copy_assignment_operator: bool,
     pub(super) move_assignment_operator: bool,
+    pub(super) has_rvalue_reference_fields: bool,
 }
 
 pub(super) fn determine_implicit_constructors(
@@ -56,11 +57,12 @@ pub(super) fn determine_implicit_constructors(
     // T has non-static data members that cannot be copied (have deleted, inaccessible, or ambiguous copy constructors);
     // T has direct or virtual base class that cannot be copied (has deleted, inaccessible, or ambiguous copy constructors);
     // T has direct or virtual base class with a deleted or inaccessible destructor;
-    // T has a data member of rvalue reference type; // TODO
+    // T has a data member of rvalue reference type;
     let copy_constructor_is_deleted = explicits.move_constructor
         || explicits.move_assignment_operator
         || explicits.any_bases_or_fields_have_deleted_or_inaccessible_copy_constructors
-        || explicits.any_bases_have_deleted_or_inaccessible_destructors;
+        || explicits.any_bases_have_deleted_or_inaccessible_destructors
+        || explicits.has_rvalue_reference_fields;
 
     let (copy_constructor_taking_const_t, copy_constructor_taking_t) =
         if explicits.copy_constructor || copy_constructor_is_deleted {

@@ -67,6 +67,7 @@ pub(super) fn find_missing_constructors(
             analysis: PodAnalysis {
                 bases, field_types, ..
             },
+            details,
             ..
         } = api
         {
@@ -115,6 +116,7 @@ pub(super) fn find_missing_constructors(
                     || find(ExplicitKind::DeletedOrInaccessibleDestructor),
                 copy_assignment_operator: find(ExplicitKind::CopyAssignmentOperator),
                 move_assignment_operator: find(ExplicitKind::MoveAssignmentOperator),
+                has_rvalue_reference_fields: details.has_rvalue_reference_fields,
             };
             let implicits = determine_implicit_constructors(explicit_items_found);
             implicit_constructors_needed.insert(name.clone(), implicits);
