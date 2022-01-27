@@ -508,13 +508,6 @@ impl<'a> FnAnalyzer<'a> {
         let mut cpp_name = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
-        // Disregard any deleted functions. We cared about them previously
-        // because they influence our behavior in whether types can be used in
-        // vectors, but that was all recorded in the POD analysis phase.
-        if fun.is_deleted {
-            return None;
-        }
-
         // Let's gather some pre-wisdom about the name of the function.
         // We're shortly going to plunge into analyzing the parameters,
         // and it would be nice to have some idea of the function name
@@ -858,6 +851,8 @@ impl<'a> FnAnalyzer<'a> {
             set_ignore_reason(ConvertError::AssignmentOperator)
         } else if fun.references.rvalue_ref_return {
             set_ignore_reason(ConvertError::RValueReturn)
+        } else if fun.is_deleted {
+            set_ignore_reason(ConvertError::Deleted)
         } else if !fun.references.rvalue_ref_params.is_empty()
             && !matches!(
                 kind,

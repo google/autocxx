@@ -20,8 +20,6 @@ use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
 use syn::{FnArg, ItemEnum, ItemStruct, Type, TypePtr, Visibility};
 
-use itertools::{Either, Itertools};
-
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
@@ -74,7 +72,7 @@ pub(crate) fn analyze_pod_apis(
     // held safely by value in Rust.
     let byvalue_checker = ByValueChecker::new_from_apis(&apis, config)?;
     // We'll also note which types have deleted move constructors.
-    let (deleted_move_constructors, apis) = find_deleted_move_and_copy_constructors(apis);
+    let deleted_move_constructors = find_deleted_move_and_copy_constructors(&apis);
     let mut extra_apis = Vec::new();
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut results = Vec::new();
@@ -231,12 +229,10 @@ fn get_bases(item: &ItemStruct) -> HashMap<QualifiedName, bool> {
         .collect()
 }
 
-fn find_deleted_move_and_copy_constructors(
-    apis: Vec<Api<TypedefPhase>>,
-) -> (HashSet<QualifiedName>, Vec<Api<TypedefPhase>>) {
+fn find_deleted_move_and_copy_constructors(apis: &[Api<TypedefPhase>]) -> HashSet<QualifiedName> {
     // Remove any deleted move + copy constructors from the API list and list the types
     // that they construct.
-    apis.into_iter().partition_map(|api| match api {
+    apis.iter().filter_map(|api| match api {
         Api::Function { ref fun, .. } => match &**fun {
             FuncToConvert {
                 special_member:
@@ -245,13 +241,13 @@ fn find_deleted_move_and_copy_constructors(
                 inputs,
                 ..
              } => match is_a_pointer_arg(inputs.iter().next()) {
-                    Some(ty) => Either::Left(ty),
+                    Some(ty) => Some(ty),
                     _ => panic!("found special constructor member with something other than a pointer first arg"),
                 },
-            _ => Either::Right(api),
+            _ => None
         },
-        _ => Either::Right(api),
-    })
+        _ => None,
+    }).collect()
 }
 
 /// Determine if a function argument is a pointer, and if so, to what.
