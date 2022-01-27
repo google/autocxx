@@ -167,10 +167,7 @@ fn analyze_struct(
             ));
         }
         if let Some(err) = field_conversion_errors.into_iter().next() {
-            return Err(ConvertErrorWithContext(
-                err,
-                Some(ErrorContext::Item(id.clone())),
-            ));
+            return Err(ConvertErrorWithContext(err, Some(ErrorContext::Item(id))));
         }
         TypeKind::Pod
     } else {

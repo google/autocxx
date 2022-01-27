@@ -768,7 +768,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     None,
                 )
-                .unwrap_or_else(|e| set_ignore_reason(e));
+                .unwrap_or_else(&mut set_ignore_reason);
             }
 
             FnKind::TraitMethod {
@@ -784,7 +784,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromTypeToPtr),
                 )
-                .unwrap_or_else(|e| set_ignore_reason(e));
+                .unwrap_or_else(&mut set_ignore_reason);
             }
             FnKind::TraitMethod {
                 kind: TraitMethodKind::CopyConstructor,
@@ -799,7 +799,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromPinMaybeUninitToPtr),
                 )
-                .unwrap_or_else(|e| set_ignore_reason(e));
+                .unwrap_or_else(&mut set_ignore_reason);
             }
 
             FnKind::TraitMethod {
@@ -815,7 +815,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromPinMaybeUninitToPtr),
                 )
-                .unwrap_or_else(|e| set_ignore_reason(e));
+                .unwrap_or_else(&mut set_ignore_reason);
                 self.reanalyze_parameter(
                     1,
                     fun,
@@ -825,7 +825,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromPinMoveRefToPtr),
                 )
-                .unwrap_or_else(|e| set_ignore_reason(e));
+                .unwrap_or_else(&mut set_ignore_reason);
             }
             _ => {}
         }
@@ -1113,6 +1113,7 @@ impl<'a> FnAnalyzer<'a> {
 
     /// Applies a specific `force_rust_conversion` to the parameter at index
     /// `param_idx`. Modifies `param_details` and `params` in place.
+    #[allow(clippy::too_many_arguments)] // it's true, but sticking with it for now
     fn reanalyze_parameter(
         &mut self,
         param_idx: usize,
@@ -1453,7 +1454,7 @@ impl<'a> FnAnalyzer<'a> {
         if self.config.exclude_impls {
             return;
         }
-        let implicit_constructors_needed = find_missing_constructors(&apis);
+        let implicit_constructors_needed = find_missing_constructors(apis);
         for (self_ty, implicit_constructors_needed) in implicit_constructors_needed {
             if self
                 .config
