@@ -1464,7 +1464,7 @@ impl<'a> FnAnalyzer<'a> {
             if implicit_constructors_needed.default_constructor {
                 self.synthesize_constructor(
                     self_ty.clone(),
-                    "default",
+                    None,
                     apis,
                     SpecialMemberKind::DefaultConstructor,
                     parse_quote! { this: *mut #path },
@@ -1474,7 +1474,7 @@ impl<'a> FnAnalyzer<'a> {
             if implicit_constructors_needed.move_constructor {
                 self.synthesize_constructor(
                     self_ty.clone(),
-                    "move",
+                    Some("move"),
                     apis,
                     SpecialMemberKind::MoveConstructor,
                     parse_quote! { this: *mut #path, other: *mut #path },
@@ -1484,26 +1484,17 @@ impl<'a> FnAnalyzer<'a> {
                     },
                 )
             }
-            if implicit_constructors_needed.copy_constructor_taking_const_t {
+            // C++ synthesizes two different implicit copy constructors, but moveit
+            // supports only one, so we'll always synthesize that one.
+            if implicit_constructors_needed.copy_constructor_taking_const_t
+                || implicit_constructors_needed.copy_constructor_taking_t
+            {
                 self.synthesize_constructor(
                     self_ty.clone(),
-                    "const_copy",
+                    Some("const_copy"),
                     apis,
                     SpecialMemberKind::CopyConstructor,
                     parse_quote! { this: *mut #path, other: *const #path },
-                    References {
-                        ref_params: [make_ident("other")].into_iter().collect(),
-                        ..Default::default()
-                    },
-                )
-            }
-            if implicit_constructors_needed.copy_constructor_taking_t {
-                self.synthesize_constructor(
-                    self_ty,
-                    "copy",
-                    apis,
-                    SpecialMemberKind::CopyConstructor,
-                    parse_quote! { this: *mut #path, other: *mut #path },
                     References {
                         ref_params: [make_ident("other")].into_iter().collect(),
                         ..Default::default()
@@ -1516,17 +1507,20 @@ impl<'a> FnAnalyzer<'a> {
     fn synthesize_constructor(
         &mut self,
         self_ty: QualifiedName,
-        label: &str,
+        label: Option<&str>,
         apis: &mut Vec<Api<FnPhase>>,
         special_member: SpecialMemberKind,
         inputs: Punctuated<FnArg, Comma>,
         references: References,
     ) {
-        let ident = make_ident(format!(
-            "{}_synthetic_{}_ctor",
-            self_ty.get_final_item(),
-            label
-        ));
+        let ident = match label {
+            Some(label) => make_ident(format!(
+                "{}_synthetic_{}_ctor",
+                self_ty.get_final_item(),
+                label
+            )),
+            None => self_ty.get_final_ident(),
+        };
         let fake_api_name = ApiName::new(self_ty.get_namespace(), ident.clone());
         let ns = self_ty.get_namespace().clone();
         let items = report_any_error(&ns, apis, || {
