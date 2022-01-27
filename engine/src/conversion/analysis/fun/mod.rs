@@ -1634,7 +1634,6 @@ impl Api<FnPhase> {
                     },
                 ..
             } => Box::new(field_types.iter().cloned()),
-            Api::Struct { .. } => Box::new(std::iter::empty()),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter().cloned()),
             Api::Subclass {
                 name: _,
