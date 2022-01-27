@@ -64,7 +64,7 @@ pub(super) fn find_missing_constructors(
             Api::Struct {
                 name,
                 analysis: PodAnalysis {
-                    bases, field_deps, ..
+                    bases, field_types, ..
                 },
                 ..
             } => {
@@ -76,7 +76,7 @@ pub(super) fn find_missing_constructors(
                     })
                 };
                 let any_bases_or_fields_lack_const_copy_constructors =
-                    bases.iter().chain(field_deps.iter()).any(|qn| {
+                    bases.iter().chain(field_types.iter()).any(|qn| {
                         let has_explicit = explicits.contains(&ExplicitFound {
                             ty: qn.clone(),
                             kind: ExplicitKind::ConstCopyConstructor,

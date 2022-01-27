@@ -1463,7 +1463,7 @@ impl<'a> FnAnalyzer<'a> {
             let path = self_ty.to_type_path();
             if implicit_constructors_needed.default_constructor {
                 self.synthesize_constructor(
-                    self_ty,
+                    self_ty.clone(),
                     "default",
                     apis,
                     SpecialMemberKind::DefaultConstructor,
@@ -1473,7 +1473,7 @@ impl<'a> FnAnalyzer<'a> {
             }
             if implicit_constructors_needed.move_constructor {
                 self.synthesize_constructor(
-                    self_ty,
+                    self_ty.clone(),
                     "move",
                     apis,
                     SpecialMemberKind::MoveConstructor,
@@ -1486,7 +1486,7 @@ impl<'a> FnAnalyzer<'a> {
             }
             if implicit_constructors_needed.copy_constructor_taking_const_t {
                 self.synthesize_constructor(
-                    self_ty,
+                    self_ty.clone(),
                     "const_copy",
                     apis,
                     SpecialMemberKind::CopyConstructor,
