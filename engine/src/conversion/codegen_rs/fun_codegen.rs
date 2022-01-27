@@ -109,7 +109,8 @@ pub(super) fn gen_function(
         .iter()
         .any(|pd| pd.conversion.rust_work_needed());
     let rust_wrapper_needed = any_param_needs_rust_conversion
-        || (cxxbridge_name != rust_name && matches!(kind, FnKind::Method(..)));
+        || (cxxbridge_name != rust_name && matches!(kind, FnKind::Method(..)))
+        || matches!(kind, FnKind::TraitMethod { .. });
     if rust_wrapper_needed {
         match kind {
             FnKind::Method(ref type_name, MethodKind::Constructor) => {
