@@ -47,9 +47,7 @@ pub(crate) struct PodAnalysis {
     /// because otherwise we don't know whether they're
     /// abstract or not.
     pub(crate) castable_bases: HashSet<QualifiedName>,
-    // TODO remove unnecessary storage duplication.
     pub(crate) field_types: HashSet<QualifiedName>,
-    pub(crate) field_deps: HashSet<QualifiedName>,
     pub(crate) movable: bool,
 }
 
@@ -154,27 +152,24 @@ fn analyze_struct(
     metadata.check_for_fatal_attrs(&id)?;
     let bases = get_bases(&details.item);
     let mut field_types = HashSet::new();
-    get_struct_field_types(
+    let field_conversion_errors = get_struct_field_types(
         type_converter,
         name.name.get_namespace(),
         &details.item,
         &mut field_types,
         extra_apis,
-    )
-    .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id.clone()))))?;
-    let (type_kind, field_deps) = if byvalue_checker.is_pod(&name.name) {
-        // It's POD so let's mark dependencies on things in its field
-        get_struct_field_types(
-            type_converter,
-            name.name.get_namespace(),
-            &details.item,
-            &mut field_types,
-            extra_apis,
-        )
-        .map_err(|e| ConvertErrorWithContext(e, Some(ErrorContext::Item(id))))?;
-        (TypeKind::Pod, field_types.clone())
+    );
+    let type_kind = if byvalue_checker.is_pod(&name.name) {
+        // It's POD so any errors encountered parsing its fields are important.
+        if let Some(err) = field_conversion_errors.into_iter().next() {
+            return Err(ConvertErrorWithContext(
+                err,
+                Some(ErrorContext::Item(id.clone())),
+            ));
+        }
+        TypeKind::Pod
     } else {
-        (TypeKind::NonPod, HashSet::new())
+        TypeKind::NonPod
     };
     let castable_bases = bases
         .iter()
@@ -190,7 +185,6 @@ fn analyze_struct(
             kind: type_kind,
             bases: bases.into_keys().collect(),
             castable_bases,
-            field_deps,
             field_types,
             movable,
         },
@@ -203,14 +197,20 @@ fn get_struct_field_types(
     s: &ItemStruct,
     deps: &mut HashSet<QualifiedName>,
     extra_apis: &mut Vec<UnanalyzedApi>,
-) -> Result<(), ConvertError> {
+) -> Vec<ConvertError> {
+    let mut convert_errors = Vec::new();
     for f in &s.fields {
         let annotated =
-            type_converter.convert_type(f.ty.clone(), ns, &TypeConversionContext::CxxInnerType)?;
-        extra_apis.extend(annotated.extra_apis);
-        deps.extend(annotated.types_encountered);
+            type_converter.convert_type(f.ty.clone(), ns, &TypeConversionContext::CxxInnerType);
+        match annotated {
+            Ok(r) => {
+                extra_apis.extend(r.extra_apis);
+                deps.extend(r.types_encountered);
+            }
+            Err(e) => convert_errors.push(e),
+        };
     }
-    Ok(())
+    convert_errors
 }
 
 /// Map to whether the bases are public.

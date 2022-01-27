@@ -1631,7 +1631,20 @@ impl Api<FnPhase> {
                 analysis: TypedefAnalysis { deps, .. },
                 ..
             } => Box::new(old_tyname.iter().chain(deps.iter()).cloned()),
-            Api::Struct { analysis, .. } => Box::new(analysis.field_deps.iter().cloned()),
+            Api::Struct {
+                analysis:
+                    PodAnalysis {
+                        kind: TypeKind::Pod,
+                        field_types,
+                        ..
+                    },
+                ..
+            } => Box::new(
+                field_types.iter().cloned(),
+            ),
+            Api::Struct {
+                ..
+            } => Box::new(std::iter::empty()),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter().cloned()),
             Api::Subclass {
                 name: _,
