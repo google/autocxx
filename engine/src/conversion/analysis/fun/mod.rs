@@ -66,7 +66,6 @@ use self::{
 };
 
 use super::{
-    casts::all_cast_names,
     pod::{PodAnalysis, PodPhase},
     tdef::TypedefAnalysis,
     type_converter::Annotated,
@@ -1583,14 +1582,7 @@ impl Api<FnPhase> {
                 analysis: TypedefAnalysis { deps, .. },
                 ..
             } => Box::new(old_tyname.iter().chain(deps.iter()).cloned()),
-            Api::Struct { analysis, name, .. } => Box::new(
-                analysis.field_deps.iter().cloned().chain(
-                    analysis
-                        .castable_bases
-                        .iter()
-                        .flat_map(|base| all_cast_names(&name.name, base)),
-                ),
-            ),
+            Api::Struct { analysis, .. } => Box::new(analysis.field_deps.iter().cloned()),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter().cloned()),
             Api::Subclass {
                 name: _,

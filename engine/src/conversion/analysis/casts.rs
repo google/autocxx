@@ -73,13 +73,6 @@ fn cast_types() -> impl Iterator<Item = CastMutability> {
     }
 }
 
-pub(crate) fn all_cast_names<'a>(
-    from: &'a QualifiedName,
-    to: &'a QualifiedName,
-) -> impl Iterator<Item = QualifiedName> + 'a {
-    cast_types().map(|mutable| name_for_cast(from, to, mutable))
-}
-
 fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability) -> Api<PodPhase> {
     let name = name_for_cast(from, to, mutable);
     let ident = name.get_final_ident();
