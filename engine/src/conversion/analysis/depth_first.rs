@@ -15,6 +15,8 @@
 use std::collections::{HashSet, VecDeque};
 use std::fmt::Debug;
 
+use itertools::Itertools;
+
 use crate::{conversion::api::Api, types::QualifiedName};
 
 use super::fun::FnPhase;
@@ -53,7 +55,13 @@ impl<'a, T: HasDependencies + Debug> Iterator for DepthFirstIter<'a, T> {
             }
             self.queue.push_back(candidate);
             if self.queue.get(0).map(|api| api.name()) == first_candidate {
-                panic!("Failed to find a candidate; there must be a circular dependency. Queue is {:?}", self.queue);
+                panic!(
+                    "Failed to find a candidate; there must be a circular dependency. Queue is {}",
+                    self.queue
+                        .iter()
+                        .map(|item| format!("{}: {}", item.name(), item.deps().join(",")))
+                        .join("\n")
+                );
             }
         }
         None
