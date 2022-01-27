@@ -7332,6 +7332,28 @@ fn test_constructor_moveit() {
 }
 
 #[test]
+fn test_implicit_constructor_moveit() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut stack_obj = ffi::A::new();
+        }
+        stack_obj.as_mut().set(42);
+        assert_eq!(stack_obj.get(), 42);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_destructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
