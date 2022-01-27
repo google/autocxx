@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     conversion::{
         analysis::{depth_first::depth_first, pod::PodAnalysis},
-        api::{Api, SpecialMemberKind},
+        api::{Api, CppVisibility, FuncToConvert, SpecialMemberKind},
     },
     types::QualifiedName,
 };
@@ -38,6 +38,8 @@ enum ExplicitKind {
     Destructor,
     CopyAssignmentOperator,
     MoveAssignmentOperator,
+    DeletedOrInaccessibleCopyConstructor,
+    DeletedOrInaccessibleDestructor,
 }
 
 #[derive(Hash, Eq, PartialEq)]
@@ -87,12 +89,27 @@ pub(super) fn find_missing_constructors(
                         .unwrap_or_default();
                     !has_explicit && !has_implicit
                 });
+            let any_bases_or_fields_have_deleted_or_inaccessible_copy_constructors =
+                bases.iter().chain(field_types.iter()).any(|qn| {
+                    explicits.contains(&ExplicitFound {
+                        ty: qn.clone(),
+                        kind: ExplicitKind::DeletedOrInaccessibleCopyConstructor,
+                    })
+                });
+            let any_bases_have_deleted_or_inaccessible_destructors = bases.iter().any(|qn| {
+                explicits.contains(&ExplicitFound {
+                    ty: qn.clone(),
+                    kind: ExplicitKind::DeletedOrInaccessibleDestructor,
+                })
+            });
             let explicit_items_found = ExplicitItemsFound {
                 move_constructor: find(ExplicitKind::MoveConstructor),
                 copy_constructor: find(ExplicitKind::ConstCopyConstructor)
                     || find(ExplicitKind::NonConstCopyConstructor),
                 any_other_constructor: find(ExplicitKind::OtherConstructor),
                 any_bases_or_fields_lack_const_copy_constructors,
+                any_bases_or_fields_have_deleted_or_inaccessible_copy_constructors,
+                any_bases_have_deleted_or_inaccessible_destructors,
                 destructor: find(ExplicitKind::Destructor),
                 copy_assignment_operator: find(ExplicitKind::CopyAssignmentOperator),
                 move_assignment_operator: find(ExplicitKind::MoveAssignmentOperator),
@@ -134,7 +151,23 @@ fn find_explicit_items(apis: &[Api<FnPhase>]) -> HashSet<ExplicitFound> {
                 ty: impl_for.clone(),
                 kind: ExplicitKind::MoveConstructor,
             }),
-
+            Api::Function {
+                analysis:
+                    FnAnalysis {
+                        kind:
+                            FnKind::TraitMethod {
+                                kind: TraitMethodKind::Destructor,
+                                impl_for,
+                                ..
+                            },
+                        ..
+                    },
+                fun,
+                ..
+            } if is_deleted_or_inaccessible(fun) => Some(ExplicitFound {
+                ty: impl_for.clone(),
+                kind: ExplicitKind::DeletedOrInaccessibleDestructor,
+            }),
             Api::Function {
                 analysis:
                     FnAnalysis {
@@ -150,6 +183,23 @@ fn find_explicit_items(apis: &[Api<FnPhase>]) -> HashSet<ExplicitFound> {
             } => Some(ExplicitFound {
                 ty: impl_for.clone(),
                 kind: ExplicitKind::Destructor,
+            }),
+            Api::Function {
+                analysis:
+                    FnAnalysis {
+                        kind:
+                            FnKind::TraitMethod {
+                                kind: TraitMethodKind::CopyConstructor,
+                                impl_for,
+                                ..
+                            },
+                        ..
+                    },
+                fun,
+                ..
+            } if is_deleted_or_inaccessible(fun) => Some(ExplicitFound {
+                ty: impl_for.clone(),
+                kind: ExplicitKind::DeletedOrInaccessibleCopyConstructor,
             }),
             Api::Function {
                 analysis:
@@ -208,4 +258,8 @@ fn find_explicit_items(apis: &[Api<FnPhase>]) -> HashSet<ExplicitFound> {
             _ => None,
         })
         .collect()
+}
+
+fn is_deleted_or_inaccessible(fun: &FuncToConvert) -> bool {
+    fun.cpp_vis == CppVisibility::Private || fun.is_deleted
 }

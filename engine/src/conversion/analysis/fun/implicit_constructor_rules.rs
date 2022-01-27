@@ -28,7 +28,9 @@ pub(super) struct ExplicitItemsFound {
     pub(super) copy_constructor: bool,
     pub(super) any_other_constructor: bool,
     pub(super) any_bases_or_fields_lack_const_copy_constructors: bool,
+    pub(super) any_bases_or_fields_have_deleted_or_inaccessible_copy_constructors: bool,
     pub(super) destructor: bool,
+    pub(super) any_bases_have_deleted_or_inaccessible_destructors: bool,
     pub(super) copy_assignment_operator: bool,
     pub(super) move_assignment_operator: bool,
 }
@@ -51,12 +53,14 @@ pub(super) fn determine_implicit_constructors(
     // The implicitly-declared or defaulted copy constructor for class T is defined as deleted if any of the following conditions are true:
     // T is a union-like class and has a variant member with non-trivial copy constructor; // we don't support unions anyway
     // T has a user-defined move constructor or move assignment operator (this condition only causes the implicitly-declared, not the defaulted, copy constructor to be deleted).
-    // T has non-static data members that cannot be copied (have deleted, inaccessible, or ambiguous copy constructors); // TODO
-    // T has direct or virtual base class that cannot be copied (has deleted, inaccessible, or ambiguous copy constructors); // TODO
-    // T has direct or virtual base class with a deleted or inaccessible destructor; // TODO
+    // T has non-static data members that cannot be copied (have deleted, inaccessible, or ambiguous copy constructors);
+    // T has direct or virtual base class that cannot be copied (has deleted, inaccessible, or ambiguous copy constructors);
+    // T has direct or virtual base class with a deleted or inaccessible destructor;
     // T has a data member of rvalue reference type; // TODO
-    let copy_constructor_is_deleted =
-        explicits.move_constructor || explicits.move_assignment_operator;
+    let copy_constructor_is_deleted = explicits.move_constructor
+        || explicits.move_assignment_operator
+        || explicits.any_bases_or_fields_have_deleted_or_inaccessible_copy_constructors
+        || explicits.any_bases_have_deleted_or_inaccessible_destructors;
 
     let (copy_constructor_taking_const_t, copy_constructor_taking_t) =
         if explicits.copy_constructor || copy_constructor_is_deleted {
