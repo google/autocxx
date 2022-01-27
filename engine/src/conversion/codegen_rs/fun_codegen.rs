@@ -108,9 +108,11 @@ pub(super) fn gen_function(
     let any_param_needs_rust_conversion = param_details
         .iter()
         .any(|pd| pd.conversion.rust_work_needed());
-    let rust_wrapper_needed = any_param_needs_rust_conversion
-        || (cxxbridge_name != rust_name && matches!(kind, FnKind::Method(..)))
-        || matches!(kind, FnKind::TraitMethod { .. });
+    let rust_wrapper_needed = match kind {
+        FnKind::TraitMethod { .. } => true,
+        FnKind::Method(..) => any_param_needs_rust_conversion || cxxbridge_name != rust_name,
+        _ => any_param_needs_rust_conversion,
+    };
     if rust_wrapper_needed {
         match kind {
             FnKind::Method(ref type_name, MethodKind::Constructor) => {
