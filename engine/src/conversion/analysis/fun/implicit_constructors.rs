@@ -60,49 +60,45 @@ pub(super) fn find_missing_constructors(
     let explicits = find_explicit_items(apis);
     let mut implicit_constructors_needed = HashMap::new();
     for api in depth_first(apis) {
-        match api {
-            Api::Struct {
-                name,
-                analysis: PodAnalysis {
-                    bases, field_types, ..
-                },
-                ..
-            } => {
-                let name = &name.name;
-                let find = |kind: ExplicitKind| -> bool {
-                    explicits.contains(&ExplicitFound {
-                        ty: name.clone(),
-                        kind,
-                    })
-                };
-                let any_bases_or_fields_lack_const_copy_constructors =
-                    bases.iter().chain(field_types.iter()).any(|qn| {
-                        let has_explicit = explicits.contains(&ExplicitFound {
-                            ty: qn.clone(),
-                            kind: ExplicitKind::ConstCopyConstructor,
-                        });
-                        let has_implicit = implicit_constructors_needed
-                            .get(qn)
-                            .map(|imp: &ImplicitConstructorsNeeded| {
-                                imp.copy_constructor_taking_const_t
-                            })
-                            .unwrap_or_default();
-                        !has_explicit && !has_implicit
+        if let Api::Struct {
+            name,
+            analysis: PodAnalysis {
+                bases, field_types, ..
+            },
+            ..
+        } = api
+        {
+            let name = &name.name;
+            let find = |kind: ExplicitKind| -> bool {
+                explicits.contains(&ExplicitFound {
+                    ty: name.clone(),
+                    kind,
+                })
+            };
+            let any_bases_or_fields_lack_const_copy_constructors =
+                bases.iter().chain(field_types.iter()).any(|qn| {
+                    let has_explicit = explicits.contains(&ExplicitFound {
+                        ty: qn.clone(),
+                        kind: ExplicitKind::ConstCopyConstructor,
                     });
-                let explicit_items_found = ExplicitItemsFound {
-                    move_constructor: find(ExplicitKind::MoveConstructor),
-                    copy_constructor: find(ExplicitKind::ConstCopyConstructor)
-                        || find(ExplicitKind::NonConstCopyConstructor),
-                    any_other_constructor: find(ExplicitKind::OtherConstructor),
-                    any_bases_or_fields_lack_const_copy_constructors,
-                    destructor: find(ExplicitKind::Destructor),
-                    copy_assignment_operator: find(ExplicitKind::CopyAssignmentOperator),
-                    move_assignment_operator: find(ExplicitKind::MoveAssignmentOperator),
-                };
-                let implicits = determine_implicit_constructors(explicit_items_found);
-                implicit_constructors_needed.insert(name.clone(), implicits);
-            }
-            _ => {}
+                    let has_implicit = implicit_constructors_needed
+                        .get(qn)
+                        .map(|imp: &ImplicitConstructorsNeeded| imp.copy_constructor_taking_const_t)
+                        .unwrap_or_default();
+                    !has_explicit && !has_implicit
+                });
+            let explicit_items_found = ExplicitItemsFound {
+                move_constructor: find(ExplicitKind::MoveConstructor),
+                copy_constructor: find(ExplicitKind::ConstCopyConstructor)
+                    || find(ExplicitKind::NonConstCopyConstructor),
+                any_other_constructor: find(ExplicitKind::OtherConstructor),
+                any_bases_or_fields_lack_const_copy_constructors,
+                destructor: find(ExplicitKind::Destructor),
+                copy_assignment_operator: find(ExplicitKind::CopyAssignmentOperator),
+                move_assignment_operator: find(ExplicitKind::MoveAssignmentOperator),
+            };
+            let implicits = determine_implicit_constructors(explicit_items_found);
+            implicit_constructors_needed.insert(name.clone(), implicits);
         }
     }
     implicit_constructors_needed
