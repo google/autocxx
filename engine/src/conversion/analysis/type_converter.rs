@@ -249,7 +249,7 @@ impl<'a> TypeConverter<'a> {
         // Now convert this type itself.
         deps.insert(original_tn.clone());
         // First let's see if this is a typedef.
-        let (typ, tn) = match self.resolve_typedef(&original_tn) {
+        let (typ, tn) = match self.resolve_typedef(&original_tn)? {
             None => (typ, original_tn),
             Some(Type::Path(resolved_tp)) => {
                 let resolved_tn = QualifiedName::from_type_path(resolved_tp);
@@ -363,14 +363,23 @@ impl<'a> TypeConverter<'a> {
         ))
     }
 
-    fn resolve_typedef<'b>(&'b self, tn: &QualifiedName) -> Option<&'b Type> {
-        self.typedefs.get(tn).map(|resolution| match resolution {
-            Type::Path(typ) => {
-                let tn = QualifiedName::from_type_path(typ);
-                self.resolve_typedef(&tn).unwrap_or(resolution)
+    fn resolve_typedef<'b>(&'b self, tn: &QualifiedName) -> Result<Option<&'b Type>, ConvertError> {
+        let mut encountered = HashSet::new();
+        let mut tn = tn.clone();
+        loop {
+            let r = self.typedefs.get(&tn);
+            match r {
+                Some(Type::Path(typ)) => {
+                    let new_tn = QualifiedName::from_type_path(typ);
+                    if encountered.contains(&new_tn) {
+                        return Err(ConvertError::InfinitelyRecursiveTypedef(tn.clone()));
+                    }
+                    encountered.insert(new_tn.clone());
+                    tn = new_tn;
+                }
+                _ => return Ok(r),
             }
-            _ => resolution,
-        })
+        }
     }
 
     fn convert_ptr_to_reference(
