@@ -105,12 +105,14 @@ pub(super) fn find_missing_constructors(
             let explicit_items_found = ExplicitItemsFound {
                 move_constructor: find(ExplicitKind::MoveConstructor),
                 copy_constructor: find(ExplicitKind::ConstCopyConstructor)
-                    || find(ExplicitKind::NonConstCopyConstructor),
+                    || find(ExplicitKind::NonConstCopyConstructor)
+                    || find(ExplicitKind::DeletedOrInaccessibleCopyConstructor),
                 any_other_constructor: find(ExplicitKind::OtherConstructor),
                 any_bases_or_fields_lack_const_copy_constructors,
                 any_bases_or_fields_have_deleted_or_inaccessible_copy_constructors,
                 any_bases_have_deleted_or_inaccessible_destructors,
-                destructor: find(ExplicitKind::Destructor),
+                destructor: find(ExplicitKind::Destructor)
+                    || find(ExplicitKind::DeletedOrInaccessibleDestructor),
                 copy_assignment_operator: find(ExplicitKind::CopyAssignmentOperator),
                 move_assignment_operator: find(ExplicitKind::MoveAssignmentOperator),
             };
