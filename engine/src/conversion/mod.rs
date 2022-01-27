@@ -131,6 +131,7 @@ impl<'a> BridgeConverter<'a> {
                 // "Convert" means replacing bindgen-style type targets
                 // (e.g. root::std::unique_ptr) with cxx-style targets (e.g. UniquePtr).
                 let apis = convert_typedef_targets(self.config, apis);
+                Self::dump_apis("typedefs", &apis);
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
                 // Specifically, let's confirm that the items requested by the user to be
@@ -139,12 +140,14 @@ impl<'a> BridgeConverter<'a> {
                 // the analysis results. It also returns an object which can be used
                 // by subsequent phases to work out which objects are POD.
                 let analyzed_apis = analyze_pod_apis(apis, self.config)?;
+                Self::dump_apis("pod analysis", &analyzed_apis);
                 let analyzed_apis = add_casts(analyzed_apis);
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions. This is probably the most complex
                 // part of `autocxx`. Again, this returns a new set of `Api`s, but
                 // parameterized by a richer set of metadata.
+                Self::dump_apis("adding casts", &analyzed_apis);
                 let analyzed_apis =
                     FnAnalyzer::analyze_functions(analyzed_apis, unsafe_policy, self.config);
                 // If any of those functions turned out to be pure virtual, don't attempt
