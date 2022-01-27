@@ -52,6 +52,16 @@ pub(crate) fn namespaced_name_using_original_name_map(
     }
 }
 
+pub(crate) fn identifier_using_original_name_map(
+    qual_name: &QualifiedName,
+    original_name_map: &CppNameMap,
+) -> String {
+    original_name_map
+        .get(qual_name)
+        .cloned()
+        .unwrap_or_else(|| qual_name.get_final_cpp_item())
+}
+
 pub(crate) fn type_to_cpp(ty: &Type, cpp_name_map: &CppNameMap) -> Result<String, ConvertError> {
     match ty {
         Type::Path(typ) => {

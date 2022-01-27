@@ -25,7 +25,9 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
-use self::type_to_cpp::namespaced_name_using_original_name_map;
+use self::type_to_cpp::{
+    identifier_using_original_name_map, namespaced_name_using_original_name_map,
+};
 
 use super::{
     analysis::fun::{
@@ -426,6 +428,11 @@ impl<'a> CppCodeGenerator<'a> {
                     format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
                     "".to_string(),
                 )
+            }
+            CppFunctionBody::Destructor(ns, id) => {
+                let ty_id = QualifiedName::new(ns, id.clone());
+                let ty_id = identifier_using_original_name_map(&ty_id, &self.original_name_map);
+                (format!("{}->~{}()", arg_list, ty_id), "".to_string())
             }
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
                 Some(receiver) => (format!("{}.{}({})", receiver, id, arg_list), "".to_string()),

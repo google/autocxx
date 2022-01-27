@@ -478,39 +478,28 @@ impl<'a> RsCodeGenerator<'a> {
                     extern_c_mod_items: vec![ForeignItem::Fn(parse_quote!(
                         fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;
                     ))],
-                    bridge_items: Vec::new(),
                     global_items: get_string_items(),
-                    bindgen_mod_items: Vec::new(),
-                    impl_entry: None,
                     materializations: vec![Use::UsedFromCxxBridgeWithAlias(make_ident(
                         "make_string",
                     ))],
-                    extern_rust_mod_items: Vec::new(),
+                    ..Default::default()
                 }
             }
             Api::Function { fun, analysis, .. } => {
                 gen_function(name.get_namespace(), *fun, analysis, cpp_call_name)
             }
             Api::Const { const_item, .. } => RsCodegenResult {
-                global_items: Vec::new(),
-                impl_entry: None,
-                bridge_items: Vec::new(),
-                extern_c_mod_items: Vec::new(),
                 bindgen_mod_items: vec![Item::Const(const_item)],
                 materializations: vec![Use::UsedFromBindgen],
-                extern_rust_mod_items: Vec::new(),
+                ..Default::default()
             },
             Api::Typedef { analysis, .. } => RsCodegenResult {
-                extern_c_mod_items: Vec::new(),
-                bridge_items: Vec::new(),
-                global_items: Vec::new(),
                 bindgen_mod_items: vec![match analysis.kind {
                     TypedefKind::Type(type_item) => Item::Type(type_item),
                     TypedefKind::Use(use_item) => Item::Use(use_item),
                 }],
-                impl_entry: None,
                 materializations: vec![Use::UsedFromBindgen],
-                extern_rust_mod_items: Vec::new(),
+                ..Default::default()
             },
             Api::Struct {
                 details, analysis, ..
@@ -549,41 +538,28 @@ impl<'a> RsCodeGenerator<'a> {
                 None,
             ),
             Api::CType { .. } => RsCodegenResult {
-                global_items: Vec::new(),
-                impl_entry: None,
-                bridge_items: Vec::new(),
                 extern_c_mod_items: vec![ForeignItem::Verbatim(quote! {
                     type #id = autocxx::#id;
                 })],
-                bindgen_mod_items: Vec::new(),
-                materializations: Vec::new(),
-                extern_rust_mod_items: Vec::new(),
+                ..Default::default()
             },
             Api::RustType { path, .. } => RsCodegenResult {
-                extern_c_mod_items: Vec::new(),
-                bridge_items: Vec::new(),
-                bindgen_mod_items: Vec::new(),
-                materializations: Vec::new(),
                 global_items: vec![parse_quote! {
                     use super::#path;
                 }],
-                impl_entry: None,
                 extern_rust_mod_items: vec![parse_quote! {
                     type #id;
                 }],
+                ..Default::default()
             },
             Api::RustFn { sig, path, .. } => RsCodegenResult {
-                extern_c_mod_items: Vec::new(),
-                bridge_items: Vec::new(),
-                bindgen_mod_items: Vec::new(),
-                materializations: Vec::new(),
                 global_items: vec![parse_quote! {
                     use super::#path;
                 }],
-                impl_entry: None,
                 extern_rust_mod_items: vec![parse_quote! {
                     #sig;
                 }],
+                ..Default::default()
             },
             Api::RustSubclassFn {
                 details, subclass, ..
@@ -730,7 +706,6 @@ impl<'a> RsCodeGenerator<'a> {
                 pub use cxxbridge::#cpp_id;
             }))],
             global_items,
-            impl_entry: None,
             extern_rust_mod_items: vec![
                 parse_quote! {
                     pub type #holder;
@@ -739,6 +714,7 @@ impl<'a> RsCodeGenerator<'a> {
                     fn #remove_ownership(me: Box<#holder>) -> Box<#holder>;
                 },
             ],
+            ..Default::default()
         }
     }
 
@@ -776,10 +752,6 @@ impl<'a> RsCodeGenerator<'a> {
         let destroy_panic_msg = format!("Rust subclass API (method {} of subclass {} of superclass {}) called after subclass destroyed", method_name, subclass.0.name, superclass_id);
         let reentrancy_panic_msg = format!("Rust subclass API (method {} of subclass {} of superclass {}) called whilst subclass already borrowed - likely a re-entrant call",  method_name, subclass.0.name, superclass_id);
         RsCodegenResult {
-            extern_c_mod_items: Vec::new(),
-            bridge_items: Vec::new(),
-            bindgen_mod_items: Vec::new(),
-            materializations: Vec::new(),
             global_items: vec![parse_quote! {
                 #global_def {
                     let rc = me.0
@@ -795,8 +767,8 @@ impl<'a> RsCodeGenerator<'a> {
                         #args)
                 }
             }],
-            impl_entry: None,
             extern_rust_mod_items: vec![ForeignItem::Fn(cxxbridge_decl)],
+            ..Default::default()
         }
     }
 
@@ -863,12 +835,11 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_items.push(item);
                 RsCodegenResult {
                     global_items: self.generate_extern_type_impl(type_kind, name),
-                    impl_entry: None,
                     bridge_items: create_impl_items(&id, movable, self.config),
                     extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, None)],
                     bindgen_mod_items,
                     materializations,
-                    extern_rust_mod_items: Vec::new(),
+                    ..Default::default()
                 }
             }
             TypeKind::Abstract => {
@@ -879,12 +850,9 @@ impl<'a> RsCodeGenerator<'a> {
                 let doc_attr = orig_item.and_then(|maybe_item| maybe_item.1);
                 RsCodegenResult {
                     extern_c_mod_items: vec![self.generate_cxxbridge_type(name, false, doc_attr)],
-                    extern_rust_mod_items: Vec::new(),
-                    bridge_items: Vec::new(),
-                    global_items: Vec::new(),
                     bindgen_mod_items,
-                    impl_entry: None,
                     materializations,
+                    ..Default::default()
                 }
             }
         }
