@@ -15,7 +15,7 @@
 use autocxx_parser::IncludeCppConfig;
 
 use super::{
-    fun::{FnAnalysis, FnKind, FnPhase, MethodKind},
+    fun::{FnAnalysis, FnKind, FnPhase, MethodKind, TraitMethodKind},
     pod::PodAnalysis,
 };
 use crate::conversion::{
@@ -88,7 +88,8 @@ pub(crate) fn mark_types_abstract(
         Api::Function {
             analysis:
                 FnAnalysis {
-                    kind: FnKind::Method(self_ty, MethodKind::MakeUnique | MethodKind::Constructor),
+                    kind: FnKind::Method(self_ty, MethodKind::MakeUnique | MethodKind::Constructor)
+                        | FnKind::TraitMethod{ kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor, impl_for: self_ty, ..},
                     ..
                 },
                 ..
