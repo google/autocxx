@@ -366,10 +366,12 @@ impl<'a> TypeConverter<'a> {
     fn resolve_typedef<'b>(&'b self, tn: &QualifiedName) -> Result<Option<&'b Type>, ConvertError> {
         let mut encountered = HashSet::new();
         let mut tn = tn.clone();
+        let mut previous_typ = None;
         loop {
             let r = self.typedefs.get(&tn);
             match r {
                 Some(Type::Path(typ)) => {
+                    previous_typ = r;
                     let new_tn = QualifiedName::from_type_path(typ);
                     if encountered.contains(&new_tn) {
                         return Err(ConvertError::InfinitelyRecursiveTypedef(tn.clone()));
@@ -377,6 +379,7 @@ impl<'a> TypeConverter<'a> {
                     encountered.insert(new_tn.clone());
                     tn = new_tn;
                 }
+                None => return Ok(previous_typ),
                 _ => return Ok(r),
             }
         }
