@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::{HashSet, VecDeque};
+use std::fmt::Debug;
 
 use crate::{conversion::api::Api, types::QualifiedName};
 
@@ -23,10 +24,10 @@ pub(super) fn depth_first(apis: &[Api<FnPhase>]) -> impl Iterator<Item = &Api<Fn
     depth_first_impl(apis)
 }
 
-fn depth_first_impl<T: HasDependencies>(items: &[T]) -> impl Iterator<Item = &T> {
+fn depth_first_impl<T: HasDependencies + Debug>(items: &[T]) -> impl Iterator<Item = &T> {
     DepthFirstIter {
         queue: items.iter().collect(),
-        done: HashSet::new(),
+        yet_to_do: items.iter().map(|api| api.name()).collect(),
     }
 }
 
@@ -35,21 +36,25 @@ trait HasDependencies {
     fn deps(&self) -> Box<dyn Iterator<Item = QualifiedName> + '_>;
 }
 
-struct DepthFirstIter<'a, T: HasDependencies> {
+struct DepthFirstIter<'a, T: HasDependencies + Debug> {
     queue: VecDeque<&'a T>,
-    done: HashSet<QualifiedName>,
+    yet_to_do: HashSet<&'a QualifiedName>,
 }
 
-impl<'a, T: HasDependencies> Iterator for DepthFirstIter<'a, T> {
+impl<'a, T: HasDependencies + Debug> Iterator for DepthFirstIter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
+        let first_candidate = self.queue.get(0).map(|api| api.name());
         while let Some(candidate) = self.queue.pop_front() {
-            if candidate.deps().all(|d| self.done.contains(&d)) {
-                self.done.insert(candidate.name().clone());
+            if !candidate.deps().any(|d| self.yet_to_do.contains(&d)) {
+                self.yet_to_do.remove(candidate.name());
                 return Some(candidate);
             }
             self.queue.push_back(candidate);
+            if self.queue.get(0).map(|api| api.name()) == first_candidate {
+                panic!("Failed to find a candidate; there must be a circular dependency. Queue is {:?}", self.queue);
+            }
         }
         None
     }
@@ -71,6 +76,7 @@ mod test {
 
     use super::{depth_first_impl, HasDependencies};
 
+    #[derive(Debug)]
     struct Thing(QualifiedName, Vec<QualifiedName>);
 
     impl HasDependencies for Thing {
