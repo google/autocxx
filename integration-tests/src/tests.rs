@@ -5362,7 +5362,6 @@ fn test_deleted_function() {
 
 #[test]
 fn test_ignore_move_constructor() {
-    // Test that move constructors do not cause a proble,
     let hdr = indoc! {"
         class A {
         public:

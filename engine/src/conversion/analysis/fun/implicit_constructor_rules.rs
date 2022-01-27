@@ -47,14 +47,25 @@ pub(super) fn determine_implicit_constructors(
     // This implicitly-declared copy constructor has the form T::T(const T&) if all of the following are true:
     //  each direct and virtual base B of T has a copy constructor whose parameters are const B& or const volatile B&;
     //  each non-static data member M of T of class type or array of class type has a copy constructor whose parameters are const M& or const volatile M&.
-    let (copy_constructor_taking_const_t, copy_constructor_taking_t) = if explicits.copy_constructor
-    {
-        (false, false)
-    } else if explicits.any_bases_or_fields_lack_const_copy_constructors {
-        (false, true)
-    } else {
-        (true, false)
-    };
+
+    // The implicitly-declared or defaulted copy constructor for class T is defined as deleted if any of the following conditions are true:
+    // T is a union-like class and has a variant member with non-trivial copy constructor; // we don't support unions anyway
+    // T has a user-defined move constructor or move assignment operator (this condition only causes the implicitly-declared, not the defaulted, copy constructor to be deleted).
+    // T has non-static data members that cannot be copied (have deleted, inaccessible, or ambiguous copy constructors); // TODO
+    // T has direct or virtual base class that cannot be copied (has deleted, inaccessible, or ambiguous copy constructors); // TODO
+    // T has direct or virtual base class with a deleted or inaccessible destructor; // TODO
+    // T has a data member of rvalue reference type; // TODO
+    let copy_constructor_is_deleted =
+        explicits.move_constructor || explicits.move_assignment_operator;
+
+    let (copy_constructor_taking_const_t, copy_constructor_taking_t) =
+        if explicits.copy_constructor || copy_constructor_is_deleted {
+            (false, false)
+        } else if explicits.any_bases_or_fields_lack_const_copy_constructors {
+            (false, true)
+        } else {
+            (true, false)
+        };
 
     // If no user-defined move constructors are provided for a class type (struct, class, or union), and all of the following is true:
     // there are no user-declared copy constructors;
@@ -126,7 +137,7 @@ mod tests {
         };
         let outputs = determine_implicit_constructors(inputs);
         assert_eq!(false, outputs.default_constructor);
-        assert_eq!(true, outputs.copy_constructor_taking_const_t);
+        assert_eq!(false, outputs.copy_constructor_taking_const_t);
         assert_eq!(false, outputs.copy_constructor_taking_t);
         assert_eq!(false, outputs.move_constructor);
     }
