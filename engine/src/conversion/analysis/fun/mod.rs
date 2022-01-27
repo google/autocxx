@@ -1181,7 +1181,7 @@ impl<'a> FnAnalyzer<'a> {
                             AsRef < #to_type >
                         },
                         quote! {
-                            &'a mut std::pin::Pin < &'a mut #from_type_path >
+                            &'a mut ::std::pin::Pin < &'a mut #from_type_path >
                         },
                         "as_ref",
                     ),
@@ -1190,7 +1190,7 @@ impl<'a> FnAnalyzer<'a> {
                             autocxx::PinMut < #to_type >
                         },
                         quote! {
-                            std::pin::Pin < &'a mut #from_type_path >
+                            ::std::pin::Pin < &'a mut #from_type_path >
                         },
                         "pin_mut",
                     ),
