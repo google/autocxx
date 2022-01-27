@@ -79,6 +79,7 @@ pub(super) fn gen_function(
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
+    let mut trait_impl_entry = None;
     let rust_name_attr: Vec<_> = match &analysis.rust_rename_strategy {
         RustRenameStrategy::RenameUsingRustAttr => Attribute::parse_outer
             .parse2(quote!(
@@ -95,24 +96,21 @@ pub(super) fn gen_function(
         unsafety: &wrapper_unsafety,
         doc_attr: &doc_attr,
     };
-    let (mut materialization, is_a_trait) = match kind {
-        FnKind::Method(..) => (None, false),
+    let mut materialization = match kind {
+        FnKind::Method(..) | FnKind::TraitMethod { .. } => None,
         FnKind::Function => match analysis.rust_rename_strategy {
             RustRenameStrategy::RenameInOutputMod(alias) => {
-                (Some(Use::UsedFromCxxBridgeWithAlias(alias)), false)
+                Some(Use::UsedFromCxxBridgeWithAlias(alias))
             }
-            _ => (Some(Use::UsedFromCxxBridge), false),
+            _ => Some(Use::UsedFromCxxBridge),
         },
-        FnKind::TraitMethod { ref details, .. } => {
-            (fn_generator.generate_trait_impl(details, &ret_type), true)
-        }
     };
     let any_param_needs_rust_conversion = param_details
         .iter()
         .any(|pd| pd.conversion.rust_work_needed());
     let rust_wrapper_needed = any_param_needs_rust_conversion
         || (cxxbridge_name != rust_name && matches!(kind, FnKind::Method(..)));
-    if rust_wrapper_needed && !is_a_trait {
+    if rust_wrapper_needed {
         match kind {
             FnKind::Method(ref type_name, MethodKind::Constructor) => {
                 // Constructor.
@@ -128,6 +126,9 @@ pub(super) fn gen_function(
                     type_name,
                     &ret_type,
                 ));
+            }
+            FnKind::TraitMethod { ref details, .. } => {
+                trait_impl_entry = Some(fn_generator.generate_trait_impl(details, &ret_type));
             }
             _ => {
                 // Generate plain old function
@@ -180,7 +181,7 @@ pub(super) fn gen_function(
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
         bridge_items: Vec::new(),
-        global_items: Vec::new(),
+        global_items: trait_impl_entry.into_iter().collect(),
         bindgen_mod_items: Vec::new(),
         impl_entry,
         materializations: materialization.into_iter().collect(),
@@ -245,11 +246,7 @@ impl<'a> FnGenerator<'a> {
     }
 
     /// Generate an 'impl Trait for Type { methods-go-here }' in its entrety.
-    fn generate_trait_impl(
-        &self,
-        details: &TraitMethodDetails,
-        ret_type: &ReturnType,
-    ) -> Option<Use> {
+    fn generate_trait_impl(&self, details: &TraitMethodDetails, ret_type: &ReturnType) -> Item {
         let (mut wrapper_params, arg_list) = self.generate_arg_lists(details.avoid_self);
         if let Some(parameter_reordering) = &details.parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
@@ -275,14 +272,14 @@ impl<'a> FnGenerator<'a> {
         } else {
             call_body
         };
-        Some(Use::Custom(Box::new(parse_quote! {
+        parse_quote! {
             #trait_unsafety impl #lifetime_tokens #trait_signature for #impl_for_specifics {
                 #doc_attr
                 #unsafety fn #method_name ( #wrapper_params ) #ret_type {
                     #call_body
                 }
             }
-        })))
+        }
     }
 
     /// Generate a 'impl Type { methods-go-here }' item which is a constructor
