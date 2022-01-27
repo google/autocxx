@@ -1460,6 +1460,12 @@ impl<'a> FnAnalyzer<'a> {
         }
         let implicit_constructors_needed = find_missing_constructors(&apis);
         for (self_ty, implicit_constructors_needed) in implicit_constructors_needed {
+            if self
+                .config
+                .is_on_constructor_blocklist(&self_ty.to_cpp_name())
+            {
+                continue;
+            }
             let path = self_ty.to_type_path();
             if implicit_constructors_needed.default_constructor {
                 self.synthesize_constructor(

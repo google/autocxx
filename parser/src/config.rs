@@ -147,6 +147,7 @@ pub struct IncludeCppConfig {
     pod_requests: Vec<String>,
     pub allowlist: Allowlist,
     blocklist: Vec<String>,
+    constructor_blocklist: Vec<String>,
     exclude_utilities: bool,
     mod_name: Option<Ident>,
     pub rust_types: Vec<RustPath>,
@@ -167,6 +168,7 @@ impl Parse for IncludeCppConfig {
         let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
         let mut allowlist = Allowlist::default();
         let mut blocklist = Vec::new();
+        let mut constructor_blocklist = Vec::new();
         let mut pod_requests = Vec::new();
         let mut rust_types = Vec::new();
         let mut exclude_utilities = false;
@@ -206,6 +208,11 @@ impl Parse for IncludeCppConfig {
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
                     blocklist.push(generate.value());
+                } else if ident == "block_constructors" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let generate: syn::LitStr = args.parse()?;
+                    constructor_blocklist.push(generate.value());
                 } else if ident == "rust_type" || ident == EXTERN_RUST_TYPE {
                     let args;
                     syn::parenthesized!(args in input);
@@ -270,6 +277,7 @@ impl Parse for IncludeCppConfig {
             rust_types,
             allowlist,
             blocklist,
+            constructor_blocklist,
             exclude_utilities,
             mod_name,
             subclasses,
@@ -372,6 +380,10 @@ impl IncludeCppConfig {
 
     pub fn is_on_blocklist(&self, cpp_name: &str) -> bool {
         self.blocklist.contains(&cpp_name.to_string())
+    }
+
+    pub fn is_on_constructor_blocklist(&self, cpp_name: &str) -> bool {
+        self.constructor_blocklist.contains(&cpp_name.to_string())
     }
 
     pub fn get_blocklist(&self) -> impl Iterator<Item = &String> {
@@ -482,6 +494,9 @@ impl ToTokens for IncludeCppConfig {
         }
         for i in &self.blocklist {
             tokens.extend(quote! { block!(#i) });
+        }
+        for i in &self.constructor_blocklist {
+            tokens.extend(quote! { block_constructors!(#i) });
         }
         for path in &self.rust_types {
             tokens.extend(quote! { rust_type!(#path) });
