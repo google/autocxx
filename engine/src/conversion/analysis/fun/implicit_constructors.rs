@@ -169,7 +169,14 @@ fn find_explicit_items(apis: &[Api<FnPhase>]) -> HashSet<ExplicitFound> {
                     },
                 ..
             } => {
-                let receiver_mutability = &param_details.iter().next().unwrap().self_type.as_ref().unwrap().1;
+                let receiver_mutability = &param_details
+                    .iter()
+                    .next()
+                    .unwrap()
+                    .self_type
+                    .as_ref()
+                    .unwrap()
+                    .1;
                 let kind = match receiver_mutability {
                     ReceiverMutability::Const => ExplicitKind::ConstCopyConstructor,
                     ReceiverMutability::Mutable => ExplicitKind::NonConstCopyConstructor,

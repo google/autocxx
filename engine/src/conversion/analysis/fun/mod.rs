@@ -62,6 +62,7 @@ use crate::{
 use self::{
     bridge_name_tracker::BridgeNameTracker,
     function_wrapper::RustConversionType,
+    implicit_constructors::find_missing_constructors,
     overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
     subclass::{create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function},
@@ -1446,7 +1447,8 @@ impl<'a> FnAnalyzer<'a> {
 
     /// If a type has explicit constructors, bindgen will generate corresponding
     /// constructor functions, which we'll have already converted to make_unique methods.
-    /// For types with no constructors, we synthesize one here.
+    /// C++ mandates the synthesis of certain implicit constructors, to which we
+    /// need ro create bindings too. We do that here.
     /// It is tempting to make this a separate analysis phase, to be run later than
     /// the function analysis; but that would make the code much more complex as it
     /// would need to output a `FnAnalysisBody`. By running it as part of this phase
@@ -1456,60 +1458,100 @@ impl<'a> FnAnalyzer<'a> {
         if self.config.exclude_impls {
             return;
         }
-        let mut types_without_constructors = Self::find_all_types(apis);
-        // Now subtract all the actual constructors we know of.
-        for api in apis.iter() {
-            if let Api::Function {
-                analysis:
-                    FnAnalysis {
-                        kind: FnKind::Method(self_ty, MethodKind::Constructor),
-                        ..
-                    },
-                ..
-            } = api
-            {
-                types_without_constructors.remove(self_ty);
-            }
-        }
-        // We are left with those types where we should synthesize a constructor.
-        for self_ty in types_without_constructors {
-            let ident = self_ty.get_final_ident();
-            let fake_api_name = ApiName::new(self_ty.get_namespace(), ident.clone());
-            let ns = self_ty.get_namespace().clone();
+        let implicit_constructors_needed = find_missing_constructors(&apis);
+        for (self_ty, implicit_constructors_needed) in implicit_constructors_needed {
             let path = self_ty.to_type_path();
-            let items = report_any_error(&ns, apis, || {
-                self.analyze_foreign_fn_and_subclasses(
-                    fake_api_name,
-                    Box::new(FuncToConvert {
-                        self_ty: Some(self_ty),
-                        ident,
-                        doc_attr: None,
-                        inputs: parse_quote! { this: *mut #path },
-                        output: ReturnType::Default,
-                        vis: parse_quote! { pub },
-                        virtualness: Virtualness::None,
-                        cpp_vis: CppVisibility::Public,
-                        special_member: None,
-                        unused_template_param: false,
-                        references: References::default(),
-                        original_name: None,
-                        synthesized_this_type: None,
-                        synthesis: None,
-                        is_deleted: false,
-                    }),
+            if implicit_constructors_needed.default_constructor {
+                self.synthesize_constructor(
+                    self_ty,
+                    "default",
+                    apis,
+                    SpecialMemberKind::DefaultConstructor,
+                    parse_quote! { this: *mut #path },
+                    References::default(),
+                );
+            }
+            if implicit_constructors_needed.move_constructor {
+                self.synthesize_constructor(
+                    self_ty,
+                    "move",
+                    apis,
+                    SpecialMemberKind::MoveConstructor,
+                    parse_quote! { this: *mut #path, other: *mut #path },
+                    References {
+                        rvalue_ref_params: [make_ident("other")].into_iter().collect(),
+                        ..Default::default()
+                    },
                 )
-            });
-            apis.extend(items.into_iter().flatten());
+            }
+            if implicit_constructors_needed.copy_constructor_taking_const_t {
+                self.synthesize_constructor(
+                    self_ty,
+                    "const_copy",
+                    apis,
+                    SpecialMemberKind::CopyConstructor,
+                    parse_quote! { this: *mut #path, other: *const #path },
+                    References {
+                        ref_params: [make_ident("other")].into_iter().collect(),
+                        ..Default::default()
+                    },
+                )
+            }
+            if implicit_constructors_needed.copy_constructor_taking_t {
+                self.synthesize_constructor(
+                    self_ty,
+                    "copy",
+                    apis,
+                    SpecialMemberKind::CopyConstructor,
+                    parse_quote! { this: *mut #path, other: *mut #path },
+                    References {
+                        ref_params: [make_ident("other")].into_iter().collect(),
+                        ..Default::default()
+                    },
+                )
+            }
         }
     }
 
-    fn find_all_types(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
-        apis.iter()
-            .filter_map(|api| match api {
-                Api::Struct { .. } => Some(api.name().clone()),
-                _ => None,
-            })
-            .collect::<HashSet<_>>()
+    fn synthesize_constructor(
+        &mut self,
+        self_ty: QualifiedName,
+        label: &str,
+        apis: &mut Vec<Api<FnPhase>>,
+        special_member: SpecialMemberKind,
+        inputs: Punctuated<FnArg, Comma>,
+        references: References,
+    ) {
+        let ident = make_ident(format!(
+            "{}_synthetic_{}_ctor",
+            self_ty.get_final_item(),
+            label
+        ));
+        let fake_api_name = ApiName::new(self_ty.get_namespace(), ident.clone());
+        let ns = self_ty.get_namespace().clone();
+        let items = report_any_error(&ns, apis, || {
+            self.analyze_foreign_fn_and_subclasses(
+                fake_api_name,
+                Box::new(FuncToConvert {
+                    self_ty: Some(self_ty),
+                    ident,
+                    doc_attr: None,
+                    inputs,
+                    output: ReturnType::Default,
+                    vis: parse_quote! { pub },
+                    virtualness: Virtualness::None,
+                    cpp_vis: CppVisibility::Public,
+                    special_member: Some(special_member),
+                    unused_template_param: false,
+                    references,
+                    original_name: None,
+                    synthesized_this_type: None,
+                    synthesis: None,
+                    is_deleted: false,
+                }),
+            )
+        });
+        apis.extend(items.into_iter().flatten());
     }
 }
 
