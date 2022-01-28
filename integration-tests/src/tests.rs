@@ -7679,6 +7679,34 @@ fn test_uniqueptr_moveit() {
 }
 
 #[test]
+fn test_various_emplacement() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        use autocxx::moveit::EmplaceUnpinned;
+        use autocxx::moveit::Emplace;
+        let mut up_obj = cxx::UniquePtr::emplace(ffi::A::new());
+        up_obj.pin_mut().set(666);
+        // Can't current move out of a UniquePtr
+        let mut box_obj = Box::emplace(ffi::A::new());
+        box_obj.as_mut().set(667);
+        let box_obj2 = Box::emplace(autocxx::moveit::new::mov(box_obj));
+        moveit! { let back_on_stack = autocxx::moveit::new::mov(box_obj2); }
+        assert_eq!(back_on_stack.get(), 667);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_explicit_everything() {
     let hdr = indoc! {"
     #include <stdint.h>
