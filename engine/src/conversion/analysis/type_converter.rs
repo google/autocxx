@@ -425,11 +425,21 @@ impl<'a> TypeConverter<'a> {
         match e {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
+                let synthetic_ident = format!(
+                    "AutocxxConcrete{}",
+                    cpp_definition.replace(|c: char| c.is_ascii_alphanumeric() || c == '_', "")
+                );
+                let synthetic_ident = match self
+                    .concrete_templates
+                    .values()
+                    .map(|n| n.get_final_item())
+                    .find(|s| s == &synthetic_ident)
+                {
+                    None => synthetic_ident,
+                    Some(_) => format!("AutocxxConcrete{}", count),
+                };
                 let api = UnanalyzedApi::ConcreteType {
-                    name: ApiName::new_in_root_namespace(make_ident(&format!(
-                        "AutocxxConcrete{}",
-                        count
-                    ))),
+                    name: ApiName::new_in_root_namespace(make_ident(&synthetic_ident)),
                     rs_definition: Box::new(rs_definition.clone()),
                     cpp_definition: cpp_definition.clone(),
                 };
