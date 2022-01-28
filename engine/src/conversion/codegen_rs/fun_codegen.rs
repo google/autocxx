@@ -24,7 +24,7 @@ use syn::{
 
 use super::{
     unqualify::{unqualify_params, unqualify_ret_type},
-    RsCodegenResult, Use,
+    ImplBlockDetails, RsCodegenResult, TraitImplBlockDetails, Use,
 };
 use crate::{
     conversion::{
@@ -32,7 +32,6 @@ use crate::{
             ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy,
             TraitMethodDetails, UnsafetyNeeded,
         },
-        api::ImplBlockDetails,
         codegen_rs::lifetime::add_lifetime_to_all_params,
     },
     types::{Namespace, QualifiedName},
@@ -97,6 +96,9 @@ pub(super) fn gen_function(
             _ => Some(Use::UsedFromCxxBridge),
         },
     };
+    // In rare occasions, we might need to give an explicit lifetime.
+    let (lifetime_tokens, params, ret_type) =
+        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type);
     let any_param_needs_rust_conversion = param_details
         .iter()
         .any(|pd| pd.conversion.rust_work_needed());
@@ -142,9 +144,6 @@ pub(super) fn gen_function(
             ))
             .unwrap();
     }
-    // In very rare occasions, we might need to give an explicit lifetime.
-    let (lifetime_tokens, params, ret_type) =
-        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type);
 
     // Finally - namespace support. All the Types in everything
     // above this point are fully qualified. We need to unqualify them.
@@ -178,12 +177,10 @@ pub(super) fn gen_function(
     ));
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
-        bridge_items: Vec::new(),
-        global_items: trait_impl_entry.into_iter().collect(),
-        bindgen_mod_items: Vec::new(),
         impl_entry,
+        trait_impl_entry,
         materializations: materialization.into_iter().collect(),
-        extern_rust_mod_items: Vec::new(),
+        ..Default::default()
     }
 }
 
@@ -244,7 +241,11 @@ impl<'a> FnGenerator<'a> {
     }
 
     /// Generate an 'impl Trait for Type { methods-go-here }' in its entrety.
-    fn generate_trait_impl(&self, details: &TraitMethodDetails, ret_type: &ReturnType) -> Item {
+    fn generate_trait_impl(
+        &self,
+        details: &TraitMethodDetails,
+        ret_type: &ReturnType,
+    ) -> Box<TraitImplBlockDetails> {
         let (mut wrapper_params, arg_list) = self.generate_arg_lists(details.avoid_self);
         if let Some(parameter_reordering) = &details.parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
@@ -254,9 +255,7 @@ impl<'a> FnGenerator<'a> {
         let doc_attr = self.doc_attr;
         let unsafety = self.unsafety;
         let cxxbridge_name = self.cxxbridge_name;
-        let trait_signature = &details.trait_signature;
-        let trait_unsafety = &details.trait_unsafety;
-        let impl_for_specifics = &details.impl_for_specifics;
+        let key = details.trt.clone();
         let method_name = &details.method_name;
         let call_body = quote! {
             cxxbridge::#cxxbridge_name ( #(#arg_list),* )
@@ -270,14 +269,13 @@ impl<'a> FnGenerator<'a> {
         } else {
             call_body
         };
-        parse_quote! {
-            #trait_unsafety impl #lifetime_tokens #trait_signature for #impl_for_specifics {
-                #doc_attr
-                #unsafety fn #method_name ( #wrapper_params ) #ret_type {
-                    #call_body
-                }
+        let item = parse_quote! {
+            #doc_attr
+            #unsafety fn #method_name #lifetime_tokens ( #wrapper_params ) #ret_type {
+                #call_body
             }
-        }
+        };
+        Box::new(TraitImplBlockDetails { item, key })
     }
 
     /// Generate a 'impl Type { methods-go-here }' item which is a constructor

@@ -7657,6 +7657,28 @@ fn test_copy_and_move_constructor_moveit() {
 }
 
 #[test]
+fn test_uniqueptr_moveit() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        use autocxx::moveit::EmplaceUnpinned;
+        let mut up_obj = cxx::UniquePtr::emplace(ffi::A::new());
+        up_obj.as_mut().unwrap().set(42);
+        assert_eq!(up_obj.get(), 42);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_explicit_everything() {
     let hdr = indoc! {"
     #include <stdint.h>

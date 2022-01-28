@@ -34,7 +34,7 @@ use super::{
         function_wrapper::{CppFunction, CppFunctionBody},
         FnPhase,
     },
-    api::{Api, SubclassName, Synthesis},
+    api::{Api, Provenance, SubclassName},
     ConvertError,
 };
 
@@ -161,14 +161,11 @@ impl<'a> CppCodeGenerator<'a> {
                     fun,
                     ..
                 } => {
-                    if let Some(Synthesis::SubclassConstructor {
-                        subclass, cpp_impl, ..
-                    }) = &fun.synthesis
-                    {
+                    if let Provenance::SynthesizedSubclassConstructor(details) = &fun.provenance {
                         constructors_by_subclass
-                            .entry(subclass.clone())
+                            .entry(details.subclass.clone())
                             .or_default()
-                            .push(cpp_impl);
+                            .push(&details.cpp_impl);
                     }
                     self.generate_cpp_function(cpp_wrapper)?
                 }
@@ -422,8 +419,7 @@ impl<'a> CppCodeGenerator<'a> {
             CppFunctionBody::MakeUnique | CppFunctionBody::Cast => (arg_list, "".to_string()),
             CppFunctionBody::PlacementNew(ns, id) => {
                 let ty_id = QualifiedName::new(ns, id.clone());
-                let ty_id =
-                    namespaced_name_using_original_name_map(&ty_id, &self.original_name_map);
+                let ty_id = self.namespaced_name(&ty_id);
                 (
                     format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
                     "".to_string(),
@@ -460,6 +456,17 @@ impl<'a> CppCodeGenerator<'a> {
                 )
             }
             CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list),
+            CppFunctionBody::AllocUninitialized(ty) => (
+                format!("std::allocator<{}>().allocate(1)", self.namespaced_name(ty)),
+                "".to_string(),
+            ),
+            CppFunctionBody::FreeUninitialized(ty) => (
+                format!(
+                    "std::allocator<{}>().deallocate(arg0, 1)",
+                    self.namespaced_name(ty)
+                ),
+                "".to_string(),
+            ),
         };
         if let Some(ret) = &details.return_conversion {
             underlying_function_call = format!(
@@ -516,6 +523,10 @@ impl<'a> CppCodeGenerator<'a> {
             headers: vec![Header::System("memory")],
             cpp_headers: Vec::new(),
         })
+    }
+
+    fn namespaced_name(&self, name: &QualifiedName) -> String {
+        namespaced_name_using_original_name_map(name, &self.original_name_map)
     }
 
     fn generate_ctype_typedef(&mut self, tn: &QualifiedName) {
