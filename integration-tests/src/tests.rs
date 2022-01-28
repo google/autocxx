@@ -7387,6 +7387,28 @@ fn test_implicit_constructor_moveit() {
 }
 
 #[test]
+fn test_pass_by_value_moveit() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        void set(uint32_t val) { a = val; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    inline void take_a(A a) {}
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut stack_obj = ffi::A::new();
+        }
+        stack_obj.as_mut().set(42);
+        ffi::take_a(stack_obj);
+    };
+    run_test("", hdr, rs, &["A", "take_a"], &[]);
+}
+
+#[test]
 fn test_destructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
