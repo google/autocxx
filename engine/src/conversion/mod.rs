@@ -31,7 +31,9 @@ pub(crate) use convert_error::ConvertError;
 use itertools::Itertools;
 use syn::{Item, ItemMod};
 
-use crate::{CppCodegenOptions, CppFilePair, UnsafePolicy};
+use crate::{
+    conversion::analysis::deps::HasDependencies, CppCodegenOptions, CppFilePair, UnsafePolicy,
+};
 
 use self::{
     analysis::{
@@ -39,6 +41,7 @@ use self::{
         allocators::create_alloc_and_frees,
         casts::add_casts,
         check_names,
+        constructor_deps::decorate_types_with_constructor_deps,
         fun::FnPhase,
         gc::filter_apis_by_following_edges_from_allowlist,
         pod::analyze_pod_apis,
@@ -155,9 +158,13 @@ impl<'a> BridgeConverter<'a> {
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
-                Self::dump_apis_with_deps("analyze fns", &analyzed_apis);
+                Self::dump_apis("analyze fns", &analyzed_apis);
                 let analyzed_apis = mark_types_abstract(analyzed_apis);
-                Self::dump_apis_with_deps("marking abstract", &analyzed_apis);
+                Self::dump_apis("marking abstract", &analyzed_apis);
+                // Annotate structs with a note of any copy/move constructors which
+                // we may want to retain to avoid garbage collecting them later.
+                let analyzed_apis = decorate_types_with_constructor_deps(analyzed_apis);
+                Self::dump_apis_with_deps("adding constructor deps", &analyzed_apis);
                 let analyzed_apis = discard_ignored_functions(analyzed_apis);
                 Self::dump_apis_with_deps("ignoring ignorable fns", &analyzed_apis);
                 // Remove any APIs whose names are not compatible with cxx.

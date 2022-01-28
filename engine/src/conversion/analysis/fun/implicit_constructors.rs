@@ -27,7 +27,7 @@ use super::{
     implicit_constructor_rules::{
         determine_implicit_constructors, ExplicitItemsFound, ImplicitConstructorsNeeded,
     },
-    FnAnalysis, FnKind, FnPhase, MethodKind, ReceiverMutability, TraitMethodKind,
+    FnAnalysis, FnKind, FnPrePhase, MethodKind, ReceiverMutability, TraitMethodKind,
 };
 
 #[derive(Hash, Eq, PartialEq)]
@@ -58,13 +58,16 @@ struct ExplicitFound {
 /// we can simply generate the sort of thing bindgen generates, then ask
 /// the existing code in this phase to figure out what to do with it.
 pub(super) fn find_missing_constructors(
-    apis: &[Api<FnPhase>],
+    apis: &[Api<FnPrePhase>],
 ) -> HashMap<QualifiedName, ImplicitConstructorsNeeded> {
     let mut all_known_types = find_types(apis);
     all_known_types.extend(known_types().all_names().cloned());
     let explicits = find_explicit_items(apis);
     let mut implicit_constructors_needed = HashMap::new();
-    for api in depth_first(apis) {
+    // Important only to ask for a depth-first analysis of structs, because
+    // when all APIs are considered there may be reference loops and that would
+    // panic.
+    for api in depth_first(apis.iter().filter(|api| matches!(api, Api::Struct { .. }))) {
         if let Api::Struct {
             name,
             analysis: PodAnalysis {
@@ -139,10 +142,14 @@ pub(super) fn find_missing_constructors(
             implicit_constructors_needed.insert(name.clone(), implicits);
         }
     }
+    log::info!(
+        "Implicit constructors needed: {:?}",
+        implicit_constructors_needed
+    );
     implicit_constructors_needed
 }
 
-fn find_explicit_items(apis: &[Api<FnPhase>]) -> HashSet<ExplicitFound> {
+fn find_explicit_items(apis: &[Api<FnPrePhase>]) -> HashSet<ExplicitFound> {
     apis.iter()
         .filter_map(|api| match api {
             Api::Function {

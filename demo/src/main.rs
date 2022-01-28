@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx::include_cpp;
+use autocxx::prelude::*;
 
 include_cpp! {
     #include "input.h"
