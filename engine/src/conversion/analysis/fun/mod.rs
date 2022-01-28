@@ -14,6 +14,8 @@
 
 mod bridge_name_tracker;
 pub(crate) mod function_wrapper;
+mod implicit_constructor_rules;
+mod implicit_constructors;
 mod overload_tracker;
 mod rust_name_tracker;
 mod subclass;
@@ -60,6 +62,7 @@ use crate::{
 use self::{
     bridge_name_tracker::BridgeNameTracker,
     function_wrapper::RustConversionType,
+    implicit_constructors::find_missing_constructors,
     overload_tracker::OverloadTracker,
     rust_name_tracker::RustNameTracker,
     subclass::{create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function},
@@ -505,13 +508,6 @@ impl<'a> FnAnalyzer<'a> {
         let mut cpp_name = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
-        // Disregard any deleted functions. We cared about them previously
-        // because they influence our behavior in whether types can be used in
-        // vectors, but that was all recorded in the POD analysis phase.
-        if fun.is_deleted {
-            return None;
-        }
-
         // Let's gather some pre-wisdom about the name of the function.
         // We're shortly going to plunge into analyzing the parameters,
         // and it would be nice to have some idea of the function name
@@ -772,7 +768,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     None,
                 )
-                .unwrap_or_else(|e| set_ignore_reason(e));
+                .unwrap_or_else(&mut set_ignore_reason);
             }
 
             FnKind::TraitMethod {
@@ -788,7 +784,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromTypeToPtr),
                 )
-                .unwrap_or_else(|e| set_ignore_reason(e));
+                .unwrap_or_else(&mut set_ignore_reason);
             }
             FnKind::TraitMethod {
                 kind: TraitMethodKind::CopyConstructor,
@@ -803,7 +799,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromPinMaybeUninitToPtr),
                 )
-                .unwrap_or_else(|e| set_ignore_reason(e));
+                .unwrap_or_else(&mut set_ignore_reason);
             }
 
             FnKind::TraitMethod {
@@ -819,7 +815,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromPinMaybeUninitToPtr),
                 )
-                .unwrap_or_else(|e| set_ignore_reason(e));
+                .unwrap_or_else(&mut set_ignore_reason);
                 self.reanalyze_parameter(
                     1,
                     fun,
@@ -829,7 +825,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromPinMoveRefToPtr),
                 )
-                .unwrap_or_else(|e| set_ignore_reason(e));
+                .unwrap_or_else(&mut set_ignore_reason);
             }
             _ => {}
         }
@@ -848,8 +844,15 @@ impl<'a> FnAnalyzer<'a> {
             CppVisibility::Protected => false,
             CppVisibility::Public => true,
         };
-        if fun.references.rvalue_ref_return {
+        if matches!(
+            fun.special_member,
+            Some(SpecialMemberKind::AssignmentOperator)
+        ) {
+            set_ignore_reason(ConvertError::AssignmentOperator)
+        } else if fun.references.rvalue_ref_return {
             set_ignore_reason(ConvertError::RValueReturn)
+        } else if fun.is_deleted {
+            set_ignore_reason(ConvertError::Deleted)
         } else if !fun.references.rvalue_ref_params.is_empty()
             && !matches!(
                 kind,
@@ -1110,6 +1113,7 @@ impl<'a> FnAnalyzer<'a> {
 
     /// Applies a specific `force_rust_conversion` to the parameter at index
     /// `param_idx`. Modifies `param_details` and `params` in place.
+    #[allow(clippy::too_many_arguments)] // it's true, but sticking with it for now
     fn reanalyze_parameter(
         &mut self,
         param_idx: usize,
@@ -1178,7 +1182,7 @@ impl<'a> FnAnalyzer<'a> {
                             AsRef < #to_type >
                         },
                         quote! {
-                            &'a mut std::pin::Pin < &'a mut #from_type_path >
+                            &'a mut ::std::pin::Pin < &'a mut #from_type_path >
                         },
                         "as_ref",
                     ),
@@ -1187,7 +1191,7 @@ impl<'a> FnAnalyzer<'a> {
                             autocxx::PinMut < #to_type >
                         },
                         quote! {
-                            std::pin::Pin < &'a mut #from_type_path >
+                            ::std::pin::Pin < &'a mut #from_type_path >
                         },
                         "pin_mut",
                     ),
@@ -1439,7 +1443,8 @@ impl<'a> FnAnalyzer<'a> {
 
     /// If a type has explicit constructors, bindgen will generate corresponding
     /// constructor functions, which we'll have already converted to make_unique methods.
-    /// For types with no constructors, we synthesize one here.
+    /// C++ mandates the synthesis of certain implicit constructors, to which we
+    /// need ro create bindings too. We do that here.
     /// It is tempting to make this a separate analysis phase, to be run later than
     /// the function analysis; but that would make the code much more complex as it
     /// would need to output a `FnAnalysisBody`. By running it as part of this phase
@@ -1449,60 +1454,100 @@ impl<'a> FnAnalyzer<'a> {
         if self.config.exclude_impls {
             return;
         }
-        let mut types_without_constructors = Self::find_all_types(apis);
-        // Now subtract all the actual constructors we know of.
-        for api in apis.iter() {
-            if let Api::Function {
-                analysis:
-                    FnAnalysis {
-                        kind: FnKind::Method(self_ty, MethodKind::Constructor),
-                        ..
-                    },
-                ..
-            } = api
+        let implicit_constructors_needed = find_missing_constructors(apis);
+        for (self_ty, implicit_constructors_needed) in implicit_constructors_needed {
+            if self
+                .config
+                .is_on_constructor_blocklist(&self_ty.to_cpp_name())
             {
-                types_without_constructors.remove(self_ty);
+                continue;
             }
-        }
-        // We are left with those types where we should synthesize a constructor.
-        for self_ty in types_without_constructors {
-            let ident = self_ty.get_final_ident();
-            let fake_api_name = ApiName::new(self_ty.get_namespace(), ident.clone());
-            let ns = self_ty.get_namespace().clone();
             let path = self_ty.to_type_path();
-            let items = report_any_error(&ns, apis, || {
-                self.analyze_foreign_fn_and_subclasses(
-                    fake_api_name,
-                    Box::new(FuncToConvert {
-                        self_ty: Some(self_ty),
-                        ident,
-                        doc_attr: None,
-                        inputs: parse_quote! { this: *mut #path },
-                        output: ReturnType::Default,
-                        vis: parse_quote! { pub },
-                        virtualness: Virtualness::None,
-                        cpp_vis: CppVisibility::Public,
-                        special_member: None,
-                        unused_template_param: false,
-                        references: References::default(),
-                        original_name: None,
-                        synthesized_this_type: None,
-                        synthesis: None,
-                        is_deleted: false,
-                    }),
+            if implicit_constructors_needed.default_constructor {
+                self.synthesize_constructor(
+                    self_ty.clone(),
+                    None,
+                    apis,
+                    SpecialMemberKind::DefaultConstructor,
+                    parse_quote! { this: *mut #path },
+                    References::default(),
+                );
+            }
+            if implicit_constructors_needed.move_constructor {
+                self.synthesize_constructor(
+                    self_ty.clone(),
+                    Some("move"),
+                    apis,
+                    SpecialMemberKind::MoveConstructor,
+                    parse_quote! { this: *mut #path, other: *mut #path },
+                    References {
+                        rvalue_ref_params: [make_ident("other")].into_iter().collect(),
+                        ..Default::default()
+                    },
                 )
-            });
-            apis.extend(items.into_iter().flatten());
+            }
+            // C++ synthesizes two different implicit copy constructors, but moveit
+            // supports only one, so we'll always synthesize that one.
+            if implicit_constructors_needed.copy_constructor_taking_const_t
+                || implicit_constructors_needed.copy_constructor_taking_t
+            {
+                self.synthesize_constructor(
+                    self_ty.clone(),
+                    Some("const_copy"),
+                    apis,
+                    SpecialMemberKind::CopyConstructor,
+                    parse_quote! { this: *mut #path, other: *const #path },
+                    References {
+                        ref_params: [make_ident("other")].into_iter().collect(),
+                        ..Default::default()
+                    },
+                )
+            }
         }
     }
 
-    fn find_all_types(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
-        apis.iter()
-            .filter_map(|api| match api {
-                Api::Struct { .. } => Some(api.name().clone()),
-                _ => None,
-            })
-            .collect::<HashSet<_>>()
+    fn synthesize_constructor(
+        &mut self,
+        self_ty: QualifiedName,
+        label: Option<&str>,
+        apis: &mut Vec<Api<FnPhase>>,
+        special_member: SpecialMemberKind,
+        inputs: Punctuated<FnArg, Comma>,
+        references: References,
+    ) {
+        let ident = match label {
+            Some(label) => make_ident(format!(
+                "{}_synthetic_{}_ctor",
+                self_ty.get_final_item(),
+                label
+            )),
+            None => self_ty.get_final_ident(),
+        };
+        let fake_api_name = ApiName::new(self_ty.get_namespace(), ident.clone());
+        let ns = self_ty.get_namespace().clone();
+        let items = report_any_error(&ns, apis, || {
+            self.analyze_foreign_fn_and_subclasses(
+                fake_api_name,
+                Box::new(FuncToConvert {
+                    self_ty: Some(self_ty),
+                    ident,
+                    doc_attr: None,
+                    inputs,
+                    output: ReturnType::Default,
+                    vis: parse_quote! { pub },
+                    virtualness: Virtualness::None,
+                    cpp_vis: CppVisibility::Public,
+                    special_member: Some(special_member),
+                    unused_template_param: false,
+                    references,
+                    original_name: None,
+                    synthesized_this_type: None,
+                    synthesis: None,
+                    is_deleted: false,
+                }),
+            )
+        });
+        apis.extend(items.into_iter().flatten());
     }
 }
 
@@ -1582,7 +1627,15 @@ impl Api<FnPhase> {
                 analysis: TypedefAnalysis { deps, .. },
                 ..
             } => Box::new(old_tyname.iter().chain(deps.iter()).cloned()),
-            Api::Struct { analysis, .. } => Box::new(analysis.field_deps.iter().cloned()),
+            Api::Struct {
+                analysis:
+                    PodAnalysis {
+                        kind: TypeKind::Pod,
+                        field_types,
+                        ..
+                    },
+                ..
+            } => Box::new(field_types.iter().cloned()),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter().cloned()),
             Api::Subclass {
                 name: _,

@@ -683,7 +683,7 @@ impl<'a> RsCodeGenerator<'a> {
         // TODO it would be nice to impl AsMut here but pin prevents us
         bindgen_mod_items.push(parse_quote! {
             impl super::super::super::#id {
-                pub fn pin_mut(&mut self) -> std::pin::Pin<&mut cxxbridge::#super_cxxxbridge_id> {
+                pub fn pin_mut(&mut self) -> ::std::pin::Pin<&mut cxxbridge::#super_cxxxbridge_id> {
                     use autocxx::subclass::CppSubclass;
                     self.peer_mut().#as_mut_id()
                 }

@@ -4917,6 +4917,40 @@ fn test_immovable_object() {
 }
 
 #[test]
+fn test_struct_with_reference() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <utility>
+        struct A {
+            uint32_t a;
+        };
+        struct B {
+            B(const A& param) : a(param) {}
+            const A& a;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
+fn test_struct_with_rvalue() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <utility>
+        struct A {
+            uint32_t a;
+        };
+        struct B {
+            B(A&& param) : a(std::move(param)) {}
+            A&& a;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
 fn test_immovable_nested_object() {
     let hdr = indoc! {"
         struct C {
@@ -5362,7 +5396,6 @@ fn test_deleted_function() {
 
 #[test]
 fn test_ignore_move_constructor() {
-    // Test that move constructors do not cause a proble,
     let hdr = indoc! {"
         class A {
         public:
@@ -7332,6 +7365,28 @@ fn test_constructor_moveit() {
 }
 
 #[test]
+fn test_implicit_constructor_moveit() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut stack_obj = ffi::A::new();
+        }
+        stack_obj.as_mut().set(42);
+        assert_eq!(stack_obj.get(), 42);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_destructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
@@ -7398,6 +7453,28 @@ fn test_copy_and_move_constructor_moveit() {
         // be possible in C++.
         // assert_eq!(stack_obj.get(), 666);
     };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_explicit_everything() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {} // default constructor
+        A(A&&) {} // move constructor
+        A(const A&) {} // copy constructor
+        A& operator=(const A&) { return *this; } // copy assignment operator
+        A& operator=(A&&) { return *this; } // move assignment operator
+        ~A() {} // destructor
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {};
     run_test("", hdr, rs, &["A"], &[]);
 }
 

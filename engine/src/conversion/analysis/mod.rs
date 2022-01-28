@@ -15,6 +15,7 @@
 pub(crate) mod abstract_types;
 pub(crate) mod casts;
 pub(crate) mod ctypes;
+mod depth_first;
 pub(crate) mod fun;
 pub(crate) mod gc;
 mod name_check;

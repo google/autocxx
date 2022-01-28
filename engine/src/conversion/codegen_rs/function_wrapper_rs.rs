@@ -38,7 +38,7 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a ptr"),
                 };
                 parse_quote! {
-                    std::pin::Pin<&mut std::mem::MaybeUninit< #ty >>
+                    ::std::pin::Pin<&mut ::std::mem::MaybeUninit< #ty >>
                 }
             }
             RustConversionType::FromPinMoveRefToPtr => {
@@ -47,7 +47,7 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a ptr"),
                 };
                 parse_quote! {
-                    std::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
+                    ::std::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
                 }
             }
             RustConversionType::FromTypeToPtr => {
@@ -74,7 +74,7 @@ impl TypeConversionPolicy {
                 #var.get_unchecked_mut().as_mut_ptr()
             },
             RustConversionType::FromPinMoveRefToPtr => quote! {
-                { let r: &mut _ = std::pin::Pin::into_inner_unchecked(#var.as_mut());
+                { let r: &mut _ = ::std::pin::Pin::into_inner_unchecked(#var.as_mut());
                 r
                 }
             },

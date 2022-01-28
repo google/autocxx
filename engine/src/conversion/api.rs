@@ -58,6 +58,7 @@ pub(crate) struct StructDetails {
     pub(crate) vis: CppVisibility,
     pub(crate) item: ItemStruct,
     pub(crate) layout: Option<Layout>,
+    pub(crate) has_rvalue_reference_fields: bool,
 }
 
 /// Layout of a type, equivalent to the same type in ir/layout.rs in bindgen
@@ -137,12 +138,13 @@ impl References {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 pub(crate) enum SpecialMemberKind {
     DefaultConstructor,
     CopyConstructor,
     MoveConstructor,
     Destructor,
+    AssignmentOperator,
 }
 
 /// A C++ function for which we need to generate bindings, but haven't

@@ -55,7 +55,9 @@ pub enum ConvertError {
     RValueParam,
     RValueReturn,
     PrivateMethod,
-    Destructor,
+    AssignmentOperator,
+    Deleted,
+    RValueReferenceField,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -103,7 +105,9 @@ impl Display for ConvertError {
             ConvertError::RValueParam => write!(f, "This function takes an rvalue reference parameter (&&) which is not yet supported.")?,
             ConvertError::RValueReturn => write!(f, "This function returns an rvalue reference (&&) which is not yet supported.")?,
             ConvertError::PrivateMethod => write!(f, "This method is private")?,
-            ConvertError::Destructor => write!(f, "autocxx does not yet generate bindings to destructors")?, // TODO must do for moveit!
+            ConvertError::AssignmentOperator => write!(f, "autocxx does not know how to generate bindings to operator=")?,
+            ConvertError::Deleted => write!(f, "This function was marked =delete")?,
+            ConvertError::RValueReferenceField => write!(f, "This structure has an rvalue reference field (&&) which is not yet supported.")?,
         }
         Ok(())
     }

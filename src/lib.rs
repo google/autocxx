@@ -589,6 +589,18 @@ macro_rules! block {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// Avoid generating implicit constructors for this type.
+/// The rules for when to generate C++ implicit constructors
+/// are complex, and if autocxx gets it wrong, you can block
+/// such constructors using this.
+///
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+#[macro_export]
+macro_rules! block_constructors {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 /// The name of the mod to be generated with the FFI code.
 /// The default is `ffi`.
 ///

@@ -129,6 +129,7 @@ impl BindgenSemanticAttributes {
                 "copy_ctor" => SpecialMemberKind::CopyConstructor,
                 "move_ctor" => SpecialMemberKind::MoveConstructor,
                 "dtor" => SpecialMemberKind::Destructor,
+                "assignment_operator" => SpecialMemberKind::AssignmentOperator,
                 _ => panic!("unexpected special_member_kind"),
             })
     }
