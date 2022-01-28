@@ -387,8 +387,7 @@ impl<'a> FnAnalyzer<'a> {
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 // Create a make_unique too
-                let make_unique_func = self.create_make_unique(&fun);
-                self.analyze_and_add_if_necessary(initial_name, make_unique_func, &mut results);
+                self.create_make_unique(&fun, initial_name, &mut results);
 
                 for sub in self.subclasses_by_superclass(sup) {
                     // Create a subclass constructor. This is a synthesized function
@@ -401,10 +400,9 @@ impl<'a> FnAnalyzer<'a> {
                         &mut results,
                     );
                     // and its corresponding make_unique
-                    let make_unique_func = self.create_make_unique(&subclass_constructor_func);
-                    self.analyze_and_add_if_necessary(
+                    self.create_make_unique(
+                        &subclass_constructor_func,
                         subclass_constructor_name,
-                        make_unique_func,
                         &mut results,
                     );
                 }
@@ -479,10 +477,16 @@ impl<'a> FnAnalyzer<'a> {
 
     /// Take a constructor e.g. pub fn A_A(this: *mut root::A);
     /// and synthesize a make_unique e.g. pub fn make_unique() -> cxx::UniquePtr<A>
-    fn create_make_unique(&mut self, fun: &FuncToConvert) -> Box<FuncToConvert> {
+    fn create_make_unique(
+        &mut self,
+        fun: &FuncToConvert,
+        initial_name: ApiName,
+        results: &mut Vec<Api<FnPhase>>,
+    ) {
         let mut new_fun = fun.clone();
         new_fun.synthesis = Some(Synthesis::MakeUnique);
-        Box::new(new_fun)
+        let make_unique_func = Box::new(new_fun);
+        self.analyze_and_add_if_necessary(initial_name, make_unique_func, results);
     }
 
     /// Determine how to materialize a function.
