@@ -416,7 +416,7 @@ impl IncludeCppEngine {
         new_bindings.content.as_mut().unwrap().1.append(&mut items);
         info!(
             "New bindings:\n{}",
-            rust_pretty_printer::pretty_print(&new_bindings.to_token_stream())
+            rust_pretty_printer::pretty_print(&new_bindings)
         );
         self.state = State::Generated(Box::new(GenerationResults {
             item_mod: new_bindings,

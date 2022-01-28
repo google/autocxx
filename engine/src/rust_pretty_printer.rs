@@ -12,35 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use proc_macro2::TokenStream;
-use std::io::Write;
-use std::process::{Command, Stdio};
+use syn::{parse_quote, ItemMod};
 
-enum Error {
-    Run(std::io::Error),
-    Write(std::io::Error),
-    Utf8(std::string::FromUtf8Error),
-    Wait(std::io::Error),
-}
-
-pub(crate) fn pretty_print(ts: &TokenStream) -> String {
-    reformat_or_else(ts.to_string())
-}
-
-fn reformat_or_else(text: impl std::fmt::Display) -> String {
-    match reformat(&text) {
-        Ok(s) => s,
-        Err(_) => text.to_string(),
-    }
-}
-
-fn reformat(text: impl std::fmt::Display) -> Result<String, Error> {
-    let mut rustfmt = Command::new("rustfmt")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .map_err(Error::Run)?;
-    write!(rustfmt.stdin.take().unwrap(), "{}", text).map_err(Error::Write)?;
-    let output = rustfmt.wait_with_output().map_err(Error::Wait)?;
-    String::from_utf8(output.stdout).map_err(Error::Utf8)
+pub(crate) fn pretty_print(itm: &ItemMod) -> String {
+    let f: syn::File = parse_quote! {
+        #itm
+    };
+    prettyplease::unparse(&f)
 }
