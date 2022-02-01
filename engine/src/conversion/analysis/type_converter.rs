@@ -432,7 +432,10 @@ impl<'a> TypeConverter<'a> {
                 );
                 // Remove runs of multiple _s. Trying to avoid a dependency on
                 // regex.
-                let synthetic_ident = synthetic_ident.split("_").filter(|s| s.len() > 0).join("_");
+                let synthetic_ident = synthetic_ident
+                    .split('_')
+                    .filter(|s| !s.is_empty())
+                    .join("_");
                 // Ensure we're not duplicating some existing concrete template name.
                 // If so, we'll invent a name which is guaranteed to be unique.
                 let synthetic_ident = match self
