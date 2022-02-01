@@ -22,6 +22,7 @@ use crate::{
     types::{make_ident, Namespace, QualifiedName},
 };
 use autocxx_parser::IncludeCppConfig;
+use itertools::Itertools;
 use proc_macro2::Ident;
 use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
@@ -426,9 +427,14 @@ impl<'a> TypeConverter<'a> {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
                 let synthetic_ident = format!(
-                    "AutocxxConcrete{}",
-                    cpp_definition.replace(|c: char| c.is_ascii_alphanumeric() || c == '_', "")
+                    "{}_AutocxxConcrete",
+                    cpp_definition.replace(|c: char| !(c.is_ascii_alphanumeric() || c == '_'), "_")
                 );
+                // Remove runs of multiple _s. Trying to avoid a dependency on
+                // regex.
+                let synthetic_ident = synthetic_ident.split("_").filter(|s| s.len() > 0).join("_");
+                // Ensure we're not duplicating some existing concrete template name.
+                // If so, we'll invent a name which is guaranteed to be unique.
                 let synthetic_ident = match self
                     .concrete_templates
                     .values()
