@@ -258,7 +258,7 @@ fn find_deleted_move_and_copy_constructors(apis: &[Api<TypedefPhase>]) -> HashSe
 /// It's unfortunate that we need to do this during the POD analysis but
 /// for now, it's the best way to identify special constructor members.
 fn is_a_pointer_arg(arg: Option<&FnArg>) -> Option<QualifiedName> {
-    arg.map(|arg| match arg {
+    arg.and_then(|arg| match arg {
         FnArg::Receiver(..) => None,
         FnArg::Typed(pt) => match &*pt.ty {
             Type::Ptr(TypePtr { elem, .. }) => match &**elem {
@@ -268,5 +268,4 @@ fn is_a_pointer_arg(arg: Option<&FnArg>) -> Option<QualifiedName> {
             _ => None,
         },
     })
-    .flatten()
 }

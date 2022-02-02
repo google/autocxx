@@ -22,6 +22,7 @@ use crate::{
     types::{make_ident, Namespace, QualifiedName},
 };
 use autocxx_parser::IncludeCppConfig;
+use itertools::Itertools;
 use proc_macro2::Ident;
 use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
@@ -425,11 +426,29 @@ impl<'a> TypeConverter<'a> {
         match e {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
+                let synthetic_ident = format!(
+                    "{}_AutocxxConcrete",
+                    cpp_definition.replace(|c: char| !(c.is_ascii_alphanumeric() || c == '_'), "_")
+                );
+                // Remove runs of multiple _s. Trying to avoid a dependency on
+                // regex.
+                let synthetic_ident = synthetic_ident
+                    .split('_')
+                    .filter(|s| !s.is_empty())
+                    .join("_");
+                // Ensure we're not duplicating some existing concrete template name.
+                // If so, we'll invent a name which is guaranteed to be unique.
+                let synthetic_ident = match self
+                    .concrete_templates
+                    .values()
+                    .map(|n| n.get_final_item())
+                    .find(|s| s == &synthetic_ident)
+                {
+                    None => synthetic_ident,
+                    Some(_) => format!("AutocxxConcrete{}", count),
+                };
                 let api = UnanalyzedApi::ConcreteType {
-                    name: ApiName::new_in_root_namespace(make_ident(&format!(
-                        "AutocxxConcrete{}",
-                        count
-                    ))),
+                    name: ApiName::new_in_root_namespace(make_ident(&synthetic_ident)),
                     rs_definition: Box::new(rs_definition.clone()),
                     cpp_definition: cpp_definition.clone(),
                 };
