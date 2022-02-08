@@ -222,6 +222,7 @@ pub(crate) struct FnAnalyzer<'a> {
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
     nested_type_name_map: HashMap<QualifiedName, String>,
+    generic_types: HashSet<QualifiedName>,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -241,6 +242,7 @@ impl<'a> FnAnalyzer<'a> {
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
             nested_type_name_map: Self::build_nested_type_map(&apis),
+            generic_types: Self::build_generic_type_set(&apis),
         };
         let mut results = Vec::new();
         convert_apis(
@@ -283,6 +285,21 @@ impl<'a> FnAnalyzer<'a> {
                         },
                     ),
             )
+            .collect()
+    }
+
+    fn build_generic_type_set(apis: &[Api<PodPhase>]) -> HashSet<QualifiedName> {
+        apis.iter()
+            .filter_map(|api| match api {
+                Api::Struct {
+                    analysis:
+                        PodAnalysis {
+                            is_generic: true, ..
+                        },
+                    ..
+                } => Some(api.name().clone()),
+                _ => None,
+            })
             .collect()
     }
 
@@ -335,6 +352,10 @@ impl<'a> FnAnalyzer<'a> {
 
     fn is_on_allowlist(&self, type_name: &QualifiedName) -> bool {
         self.config.is_on_allowlist(&type_name.to_cpp_name())
+    }
+
+    fn is_generic_type(&self, type_name: &QualifiedName) -> bool {
+        self.generic_types.contains(type_name)
     }
 
     #[allow(clippy::if_same_then_else)] // clippy bug doesn't notice the two
@@ -857,14 +878,25 @@ impl<'a> FnAnalyzer<'a> {
                     | MethodKind::PureVirtual(..)
                     | MethodKind::Virtual(..),
                 ) if !known_types().is_cxx_acceptable_receiver(self_ty) => {
-                    set_ignore_reason(ConvertError::UnsupportedReceiver)
+                    set_ignore_reason(ConvertError::UnsupportedReceiver);
                 }
-                FnKind::Method(ref self_ty, _) if !self.is_on_allowlist(self_ty) => {
+                FnKind::Method(ref self_ty, _)
+                | FnKind::TraitMethod {
+                    impl_for: ref self_ty,
+                    ..
+                } if !self.is_on_allowlist(self_ty) => {
                     // Bindgen will output methods for types which have been encountered
                     // virally as arguments on other allowlisted types. But we don't want
                     // to generate methods unless the user has specifically asked us to.
                     // It may, for instance, be a private type.
                     set_ignore_reason(ConvertError::MethodOfNonAllowlistedType);
+                }
+                FnKind::Method(ref self_ty, _)
+                | FnKind::TraitMethod {
+                    impl_for: ref self_ty,
+                    ..
+                } if self.is_generic_type(self_ty) => {
+                    set_ignore_reason(ConvertError::MethodOfGenericType);
                 }
                 _ => {}
             }
