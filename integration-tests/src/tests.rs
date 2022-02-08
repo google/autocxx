@@ -7866,6 +7866,40 @@ fn test_issue486_multi_types() {
     );
 }
 
+#[test]
+fn test_virtual_methods() {
+    let hdr = indoc! {"
+        #pragma once
+
+        class A {
+        public:
+          A() {}
+          ~A() {}
+          // the following line makes Test2 Opaque, and deprives it of a make_unique()
+          // comment next line, uncomment the one after to obtain a make_unique() for Test2
+          virtual int b() = 0;
+          // int b() { return 2; }
+        };
+ 
+        class B: public A {
+        public:
+          B() {}
+          ~B() {}
+          int b() { return 3; }
+        };
+    "};
+    let rs = quote! {
+        let b = cxx::B::make_unique();
+    };
+    run_test(
+        "",
+        hdr,
+        rs,
+        &["B"],
+        &[],
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
