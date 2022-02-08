@@ -382,25 +382,21 @@ impl<'a> FnAnalyzer<'a> {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 // Create a make_unique too
                 let make_unique_func = self.create_make_unique(&fun);
-                self.analyze_and_add_if_necessary(initial_name, make_unique_func, &mut results);
+                self.analyze_and_add(initial_name, make_unique_func, &mut results);
 
                 for sub in self.subclasses_by_superclass(sup) {
                     // Create a subclass constructor. This is a synthesized function
                     // which didn't exist in the original C++.
                     let (subclass_constructor_func, subclass_constructor_name) =
                         create_subclass_constructor(sub, &analysis, sup, &fun);
-                    self.analyze_and_add_if_necessary(
+                    self.analyze_and_add(
                         subclass_constructor_name.clone(),
                         subclass_constructor_func.clone(),
                         &mut results,
                     );
                     // and its corresponding make_unique
                     let make_unique_func = self.create_make_unique(&subclass_constructor_func);
-                    self.analyze_and_add_if_necessary(
-                        subclass_constructor_name,
-                        make_unique_func,
-                        &mut results,
-                    );
+                    self.analyze_and_add(subclass_constructor_name, make_unique_func, &mut results);
                 }
             }
             FnKind::Method(
@@ -437,7 +433,7 @@ impl<'a> FnAnalyzer<'a> {
                     if !is_pure_virtual {
                         let maybe_wrap = create_subclass_fn_wrapper(sub, &super_fn_name, &fun);
                         let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
-                        self.analyze_and_add_if_necessary(super_fn_name, maybe_wrap, &mut results);
+                        self.analyze_and_add(super_fn_name, maybe_wrap, &mut results);
                     }
                 }
             }
@@ -454,7 +450,7 @@ impl<'a> FnAnalyzer<'a> {
         Ok(Box::new(results.into_iter()))
     }
 
-    fn analyze_and_add_if_necessary(
+    fn analyze_and_add(
         &mut self,
         name: ApiName,
         new_func: Box<FuncToConvert>,
