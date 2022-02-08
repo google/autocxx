@@ -597,16 +597,7 @@ impl<'a> FnAnalyzer<'a> {
         let (kind, error_context, rust_name) = if let Some(trait_details) = trait_details {
             trait_details
         } else if let Some(self_ty) = self_ty {
-            // Some kind of method.
-            if !self.is_on_allowlist(&self_ty) {
-                // Bindgen will output methods for types which have been encountered
-                // virally as arguments on other allowlisted types. But we don't want
-                // to generate methods unless the user has specifically asked us to.
-                // It may, for instance, be a private type.
-                return None;
-            }
-
-            // Method or static method.
+            // Some kind of method or static method.
             let type_ident = self_ty.get_final_item();
             // bindgen generates methods with the name:
             // {class}_{method name}
@@ -874,11 +865,22 @@ impl<'a> FnAnalyzer<'a> {
             set_ignore_reason(ConvertError::UnusedTemplateParam)
         } else {
             match kind {
-                FnKind::Method(_, MethodKind::Static) => {}
-                FnKind::Method(ref self_ty, _)
-                    if !known_types().is_cxx_acceptable_receiver(self_ty) =>
-                {
+                FnKind::Method(
+                    ref self_ty,
+                    MethodKind::Constructor
+                    | MethodKind::MakeUnique
+                    | MethodKind::Normal(..)
+                    | MethodKind::PureVirtual(..)
+                    | MethodKind::Virtual(..),
+                ) if !known_types().is_cxx_acceptable_receiver(self_ty) => {
                     set_ignore_reason(ConvertError::UnsupportedReceiver)
+                }
+                FnKind::Method(ref self_ty, _) if !self.is_on_allowlist(self_ty) => {
+                    // Bindgen will output methods for types which have been encountered
+                    // virally as arguments on other allowlisted types. But we don't want
+                    // to generate methods unless the user has specifically asked us to.
+                    // It may, for instance, be a private type.
+                    set_ignore_reason(ConvertError::MethodOfNonAllowlistedType);
                 }
                 _ => {}
             }
