@@ -374,13 +374,7 @@ impl<'a> FnAnalyzer<'a> {
         fun: Box<FuncToConvert>,
     ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
         let initial_name = name.clone();
-        let maybe_analysis_and_name = self.analyze_foreign_fn(name, &fun);
-
-        let (analysis, name) = match maybe_analysis_and_name {
-            None => return Ok(Box::new(std::iter::empty())),
-            Some((analysis, name)) => (analysis, name),
-        };
-
+        let (analysis, name) = self.analyze_foreign_fn(name, &fun);
         let mut results = Vec::new();
 
         // Consider whether we need to synthesize subclass items.
@@ -466,15 +460,13 @@ impl<'a> FnAnalyzer<'a> {
         new_func: Box<FuncToConvert>,
         results: &mut Vec<Api<FnPhase>>,
     ) {
-        let maybe_another_api = self.analyze_foreign_fn(name, &new_func);
-        if let Some((analysis, name)) = maybe_another_api {
-            results.push(Api::Function {
-                fun: new_func,
-                analysis,
-                name,
-                name_for_gc: None,
-            });
-        }
+        let (analysis, name) = self.analyze_foreign_fn(name, &new_func);
+        results.push(Api::Function {
+            fun: new_func,
+            analysis,
+            name,
+            name_for_gc: None,
+        });
     }
 
     /// Take a constructor e.g. pub fn A_A(this: *mut root::A);
@@ -500,11 +492,7 @@ impl<'a> FnAnalyzer<'a> {
     /// The other major thing we do here is figure out naming for the function.
     /// This depends on overloads, and what other functions are floating around.
     /// The output of this analysis phase is used by both Rust and C++ codegen.
-    fn analyze_foreign_fn(
-        &mut self,
-        name: ApiName,
-        fun: &FuncToConvert,
-    ) -> Option<(FnAnalysis, ApiName)> {
+    fn analyze_foreign_fn(&mut self, name: ApiName, fun: &FuncToConvert) -> (FnAnalysis, ApiName) {
         let mut cpp_name = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
@@ -1110,7 +1098,7 @@ impl<'a> FnAnalyzer<'a> {
             externally_callable,
         };
         let name = ApiName::new_with_cpp_name(ns, id, cpp_name);
-        Some((analysis, name))
+        (analysis, name)
     }
 
     /// Applies a specific `force_rust_conversion` to the parameter at index
