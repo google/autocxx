@@ -154,7 +154,7 @@ impl<'a> BridgeConverter<'a> {
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
                 Self::dump_apis_with_deps("analyze fns", &analyzed_apis);
-                let analyzed_apis = mark_types_abstract(self.config, analyzed_apis);
+                let analyzed_apis = mark_types_abstract(analyzed_apis);
                 Self::dump_apis_with_deps("marking abstract", &analyzed_apis);
                 let analyzed_apis = discard_ignored_functions(analyzed_apis);
                 Self::dump_apis_with_deps("ignoring ignorable fns", &analyzed_apis);
