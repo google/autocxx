@@ -1121,7 +1121,7 @@ impl<'a> FnAnalyzer<'a> {
         ns: &Namespace,
         rust_name: &str,
         params: &mut Punctuated<FnArg, Comma>,
-        param_details: &mut Vec<ArgumentAnalysis>,
+        param_details: &mut [ArgumentAnalysis],
         force_rust_conversion: Option<RustConversionType>,
     ) -> Result<(), ConvertError> {
         self.convert_fn_arg(
