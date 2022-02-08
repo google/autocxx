@@ -12,25 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use autocxx_parser::IncludeCppConfig;
-
 use super::{
     fun::{FnAnalysis, FnKind, FnPhase, MethodKind, TraitMethodKind},
     pod::PodAnalysis,
 };
+use crate::conversion::api::Api;
 use crate::conversion::{
     api::TypeKind,
     error_reporter::{convert_apis, convert_item_apis},
     ConvertError,
 };
-use crate::{conversion::api::Api, types::QualifiedName};
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
-pub(crate) fn mark_types_abstract(
-    config: &IncludeCppConfig,
-    mut apis: Vec<Api<FnPhase>>,
-) -> Vec<Api<FnPhase>> {
+pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
     let mut abstract_types: HashSet<_> = apis
         .iter()
         .filter_map(|api| match &api {
@@ -67,10 +62,7 @@ pub(crate) fn mark_types_abstract(
                 Api::Struct {
                     analysis: PodAnalysis { bases, kind, .. },
                     ..
-                } if *kind != TypeKind::Abstract
-                    && (!abstract_types.is_disjoint(bases)
-                        || any_missing_from_allowlist(config, bases)) =>
-                {
+                } if *kind != TypeKind::Abstract && (!abstract_types.is_disjoint(bases)) => {
                     *kind = TypeKind::Abstract;
                     abstract_types.insert(api.name().clone());
                     // Recurse in case there are further dependent types
@@ -125,12 +117,6 @@ pub(crate) fn mark_types_abstract(
         _ => Ok(Box::new(std::iter::once(api))),
     });
     results
-}
-
-fn any_missing_from_allowlist(config: &IncludeCppConfig, bases: &HashSet<QualifiedName>) -> bool {
-    bases
-        .iter()
-        .any(|qn| !config.is_on_allowlist(&qn.to_cpp_name()))
 }
 
 pub(crate) fn discard_ignored_functions(apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {

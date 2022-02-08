@@ -58,6 +58,8 @@ pub enum ConvertError {
     AssignmentOperator,
     Deleted,
     RValueReferenceField,
+    MethodOfNonAllowlistedType,
+    MethodOfGenericType,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -108,6 +110,8 @@ impl Display for ConvertError {
             ConvertError::AssignmentOperator => write!(f, "autocxx does not know how to generate bindings to operator=")?,
             ConvertError::Deleted => write!(f, "This function was marked =delete")?,
             ConvertError::RValueReferenceField => write!(f, "This structure has an rvalue reference field (&&) which is not yet supported.")?,
+            ConvertError::MethodOfNonAllowlistedType => write!(f, "This type was not on the allowlist, so we are not generating methods for it.")?,
+            ConvertError::MethodOfGenericType => write!(f, "This type is templated, so we can't generate bindings. We will instead generate bindings for each instantiation.")?,
         }
         Ok(())
     }

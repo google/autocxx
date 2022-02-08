@@ -47,6 +47,7 @@ pub(crate) struct PodAnalysis {
     pub(crate) castable_bases: HashSet<QualifiedName>,
     pub(crate) field_types: HashSet<QualifiedName>,
     pub(crate) movable: bool,
+    pub(crate) is_generic: bool,
 }
 
 pub(crate) struct PodPhase;
@@ -180,6 +181,7 @@ fn analyze_struct(
         .filter(|base| config.is_on_allowlist(&base.to_cpp_name()))
         .cloned()
         .collect();
+    let is_generic = !details.item.generics.params.is_empty();
     Ok(Box::new(std::iter::once(Api::Struct {
         name,
         details,
@@ -189,6 +191,7 @@ fn analyze_struct(
             castable_bases,
             field_types,
             movable,
+            is_generic,
         },
     })))
 }

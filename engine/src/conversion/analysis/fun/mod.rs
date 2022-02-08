@@ -222,6 +222,7 @@ pub(crate) struct FnAnalyzer<'a> {
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
     nested_type_name_map: HashMap<QualifiedName, String>,
+    generic_types: HashSet<QualifiedName>,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -241,6 +242,7 @@ impl<'a> FnAnalyzer<'a> {
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
             nested_type_name_map: Self::build_nested_type_map(&apis),
+            generic_types: Self::build_generic_type_set(&apis),
         };
         let mut results = Vec::new();
         convert_apis(
@@ -283,6 +285,21 @@ impl<'a> FnAnalyzer<'a> {
                         },
                     ),
             )
+            .collect()
+    }
+
+    fn build_generic_type_set(apis: &[Api<PodPhase>]) -> HashSet<QualifiedName> {
+        apis.iter()
+            .filter_map(|api| match api {
+                Api::Struct {
+                    analysis:
+                        PodAnalysis {
+                            is_generic: true, ..
+                        },
+                    ..
+                } => Some(api.name().clone()),
+                _ => None,
+            })
             .collect()
     }
 
@@ -337,6 +354,10 @@ impl<'a> FnAnalyzer<'a> {
         self.config.is_on_allowlist(&type_name.to_cpp_name())
     }
 
+    fn is_generic_type(&self, type_name: &QualifiedName) -> bool {
+        self.generic_types.contains(type_name)
+    }
+
     #[allow(clippy::if_same_then_else)] // clippy bug doesn't notice the two
                                         // closures below are different.
     fn should_be_unsafe(
@@ -374,13 +395,7 @@ impl<'a> FnAnalyzer<'a> {
         fun: Box<FuncToConvert>,
     ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
         let initial_name = name.clone();
-        let maybe_analysis_and_name = self.analyze_foreign_fn(name, &fun);
-
-        let (analysis, name) = match maybe_analysis_and_name {
-            None => return Ok(Box::new(std::iter::empty())),
-            Some((analysis, name)) => (analysis, name),
-        };
-
+        let (analysis, name) = self.analyze_foreign_fn(name, &fun);
         let mut results = Vec::new();
 
         // Consider whether we need to synthesize subclass items.
@@ -388,25 +403,21 @@ impl<'a> FnAnalyzer<'a> {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 // Create a make_unique too
                 let make_unique_func = self.create_make_unique(&fun);
-                self.analyze_and_add_if_necessary(initial_name, make_unique_func, &mut results);
+                self.analyze_and_add(initial_name, make_unique_func, &mut results);
 
                 for sub in self.subclasses_by_superclass(sup) {
                     // Create a subclass constructor. This is a synthesized function
                     // which didn't exist in the original C++.
                     let (subclass_constructor_func, subclass_constructor_name) =
                         create_subclass_constructor(sub, &analysis, sup, &fun);
-                    self.analyze_and_add_if_necessary(
+                    self.analyze_and_add(
                         subclass_constructor_name.clone(),
                         subclass_constructor_func.clone(),
                         &mut results,
                     );
                     // and its corresponding make_unique
                     let make_unique_func = self.create_make_unique(&subclass_constructor_func);
-                    self.analyze_and_add_if_necessary(
-                        subclass_constructor_name,
-                        make_unique_func,
-                        &mut results,
-                    );
+                    self.analyze_and_add(subclass_constructor_name, make_unique_func, &mut results);
                 }
             }
             FnKind::Method(
@@ -443,7 +454,7 @@ impl<'a> FnAnalyzer<'a> {
                     if !is_pure_virtual {
                         let maybe_wrap = create_subclass_fn_wrapper(sub, &super_fn_name, &fun);
                         let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
-                        self.analyze_and_add_if_necessary(super_fn_name, maybe_wrap, &mut results);
+                        self.analyze_and_add(super_fn_name, maybe_wrap, &mut results);
                     }
                 }
             }
@@ -460,21 +471,19 @@ impl<'a> FnAnalyzer<'a> {
         Ok(Box::new(results.into_iter()))
     }
 
-    fn analyze_and_add_if_necessary(
+    fn analyze_and_add(
         &mut self,
         name: ApiName,
         new_func: Box<FuncToConvert>,
         results: &mut Vec<Api<FnPhase>>,
     ) {
-        let maybe_another_api = self.analyze_foreign_fn(name, &new_func);
-        if let Some((analysis, name)) = maybe_another_api {
-            results.push(Api::Function {
-                fun: new_func,
-                analysis,
-                name,
-                name_for_gc: None,
-            });
-        }
+        let (analysis, name) = self.analyze_foreign_fn(name, &new_func);
+        results.push(Api::Function {
+            fun: new_func,
+            analysis,
+            name,
+            name_for_gc: None,
+        });
     }
 
     /// Take a constructor e.g. pub fn A_A(this: *mut root::A);
@@ -500,11 +509,7 @@ impl<'a> FnAnalyzer<'a> {
     /// The other major thing we do here is figure out naming for the function.
     /// This depends on overloads, and what other functions are floating around.
     /// The output of this analysis phase is used by both Rust and C++ codegen.
-    fn analyze_foreign_fn(
-        &mut self,
-        name: ApiName,
-        fun: &FuncToConvert,
-    ) -> Option<(FnAnalysis, ApiName)> {
+    fn analyze_foreign_fn(&mut self, name: ApiName, fun: &FuncToConvert) -> (FnAnalysis, ApiName) {
         let mut cpp_name = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
@@ -597,16 +602,7 @@ impl<'a> FnAnalyzer<'a> {
         let (kind, error_context, rust_name) = if let Some(trait_details) = trait_details {
             trait_details
         } else if let Some(self_ty) = self_ty {
-            // Some kind of method.
-            if !self.is_on_allowlist(&self_ty) {
-                // Bindgen will output methods for types which have been encountered
-                // virally as arguments on other allowlisted types. But we don't want
-                // to generate methods unless the user has specifically asked us to.
-                // It may, for instance, be a private type.
-                return None;
-            }
-
-            // Method or static method.
+            // Some kind of method or static method.
             let type_ident = self_ty.get_final_item();
             // bindgen generates methods with the name:
             // {class}_{method name}
@@ -874,11 +870,33 @@ impl<'a> FnAnalyzer<'a> {
             set_ignore_reason(ConvertError::UnusedTemplateParam)
         } else {
             match kind {
-                FnKind::Method(_, MethodKind::Static) => {}
+                FnKind::Method(
+                    ref self_ty,
+                    MethodKind::Constructor
+                    | MethodKind::MakeUnique
+                    | MethodKind::Normal(..)
+                    | MethodKind::PureVirtual(..)
+                    | MethodKind::Virtual(..),
+                ) if !known_types().is_cxx_acceptable_receiver(self_ty) => {
+                    set_ignore_reason(ConvertError::UnsupportedReceiver);
+                }
                 FnKind::Method(ref self_ty, _)
-                    if !known_types().is_cxx_acceptable_receiver(self_ty) =>
-                {
-                    set_ignore_reason(ConvertError::UnsupportedReceiver)
+                | FnKind::TraitMethod {
+                    impl_for: ref self_ty,
+                    ..
+                } if !self.is_on_allowlist(self_ty) => {
+                    // Bindgen will output methods for types which have been encountered
+                    // virally as arguments on other allowlisted types. But we don't want
+                    // to generate methods unless the user has specifically asked us to.
+                    // It may, for instance, be a private type.
+                    set_ignore_reason(ConvertError::MethodOfNonAllowlistedType);
+                }
+                FnKind::Method(ref self_ty, _)
+                | FnKind::TraitMethod {
+                    impl_for: ref self_ty,
+                    ..
+                } if self.is_generic_type(self_ty) => {
+                    set_ignore_reason(ConvertError::MethodOfGenericType);
                 }
                 _ => {}
             }
@@ -1108,7 +1126,7 @@ impl<'a> FnAnalyzer<'a> {
             externally_callable,
         };
         let name = ApiName::new_with_cpp_name(ns, id, cpp_name);
-        Some((analysis, name))
+        (analysis, name)
     }
 
     /// Applies a specific `force_rust_conversion` to the parameter at index
