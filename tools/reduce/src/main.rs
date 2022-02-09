@@ -269,6 +269,9 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         .unwrap()
         .to_string();
     let gen_cmd = matches.value_of("gen-cmd").unwrap_or(&default_gen_cmd);
+    if Path::new(gen_cmd).exists() == false {
+        panic!("autocxx-gen not found in {}. hint: autocxx-reduce --gen-cmd /path/to/autocxx-gen", gen_cmd);
+    }
     run_sample_gen_cmd(gen_cmd, &rs_path, tmp_dir.path(), &extra_clang_args)?;
     let interestingness_test = tmp_dir.path().join("test.sh");
     create_interestingness_test(
