@@ -415,7 +415,7 @@ fn create_interestingness_test(
         mv concat.h concat-body.h
         echo Codegen
         (echo \"#ifndef __CONCAT_H__\"; echo \"#define __CONCAT_H__\"; echo '#include \"concat-body.h\"'; echo \"#endif\") > concat.h
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h ; {} 2>&1 ) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h && {} 2>&1 ) | grep \"{}\"  >/dev/null 2>&1
         echo Remove
         rm concat.h
         echo Swap back
