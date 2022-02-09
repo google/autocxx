@@ -315,11 +315,13 @@ const REMOVE_PASS_LINE_MARKERS: &[&str] = &["--remove-pass", "pass_line_markers"
 const SKIP_INITIAL_PASSES: &[&str] = &["--skip-initial-passes"];
 
 fn creduce_supports_remove_pass(creduce_cmd: &str) -> bool {
-    let msg = Command::new(creduce_cmd)
+    let cmd = Command::new(creduce_cmd)
         .arg("--help")
-        .output()
-        .unwrap()
-        .stdout;
+        .output();
+    let msg = match cmd {
+        Err(error) => panic!("failed to run creduce. creduce_cmd = {}. hint: autocxx-reduce --creduce /path/to/creduce. error = {}", creduce_cmd, error),
+        Ok(result) => result.stdout
+    };
     let msg = std::str::from_utf8(&msg).unwrap();
     msg.contains("--remove-pass")
 }
