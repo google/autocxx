@@ -330,12 +330,13 @@ impl<'a> FnGenerator<'a> {
     fn generate_function_impl(&self, ret_type: &ReturnType) -> Box<Item> {
         let (wrapper_params, arg_list) = self.generate_arg_lists(false);
         let rust_name = make_ident(self.rust_name);
+        let cxxbridge_name = self.cxxbridge_name;
         let doc_attr = self.doc_attr;
         let unsafety = self.unsafety;
         Box::new(Item::Fn(parse_quote! {
             #doc_attr
             pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
-                cxxbridge::#rust_name ( #(#arg_list),* )
+                cxxbridge::#cxxbridge_name ( #(#arg_list),* )
             }
         }))
     }
