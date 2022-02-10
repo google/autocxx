@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub(crate) mod abstract_types;
+mod bridge_name_mangler;
 pub(crate) mod casts;
 pub(crate) mod ctypes;
 mod depth_first;

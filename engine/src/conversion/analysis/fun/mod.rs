@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod bridge_name_tracker;
 pub(crate) mod function_wrapper;
 mod implicit_constructor_rules;
 mod implicit_constructors;
@@ -59,7 +58,6 @@ use crate::{
 };
 
 use self::{
-    bridge_name_tracker::BridgeNameTracker,
     function_wrapper::RustConversionType,
     implicit_constructors::find_missing_constructors,
     overload_tracker::OverloadTracker,
@@ -67,6 +65,7 @@ use self::{
 };
 
 use super::{
+    bridge_name_mangler::mangle_for_cxx_bridge,
     pod::{PodAnalysis, PodPhase},
     tdef::TypedefAnalysis,
     type_converter::Annotated,
@@ -211,7 +210,6 @@ pub(crate) struct FnAnalyzer<'a> {
     unsafe_policy: UnsafePolicy,
     extra_apis: Vec<UnanalyzedApi>,
     type_converter: TypeConverter<'a>,
-    bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
     config: &'a IncludeCppConfig,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
@@ -230,7 +228,6 @@ impl<'a> FnAnalyzer<'a> {
             unsafe_policy,
             extra_apis: Vec::new(),
             type_converter: TypeConverter::new(config, &apis),
-            bridge_name_tracker: BridgeNameTracker::new(),
             config,
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
@@ -328,16 +325,6 @@ impl<'a> FnAnalyzer<'a> {
         let mut annotated = self.type_converter.convert_boxed_type(ty, ns, &ctx)?;
         self.extra_apis.append(&mut annotated.extra_apis);
         Ok(annotated)
-    }
-
-    fn get_cxx_bridge_name(
-        &mut self,
-        type_name: Option<&str>,
-        found_name: &str,
-        ns: &Namespace,
-    ) -> String {
-        self.bridge_name_tracker
-            .get_unique_cxx_bridge_name(type_name, found_name, ns)
     }
 
     fn is_on_allowlist(&self, type_name: &QualifiedName) -> bool {
@@ -500,7 +487,7 @@ impl<'a> FnAnalyzer<'a> {
     /// This depends on overloads, and what other functions are floating around.
     /// The output of this analysis phase is used by both Rust and C++ codegen.
     fn analyze_foreign_fn(&mut self, name: ApiName, fun: &FuncToConvert) -> (FnAnalysis, ApiName) {
-        let mut cpp_name = name.cpp_name_if_present().cloned();
+        let mut cpp_name_if_present = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
         // Let's gather some pre-wisdom about the name of the function.
@@ -508,7 +495,7 @@ impl<'a> FnAnalyzer<'a> {
         // and it would be nice to have some idea of the function name
         // for diagnostics whilst we do that.
         let initial_rust_name = fun.ident.to_string();
-        let diagnostic_display_name = cpp_name.as_ref().unwrap_or(&initial_rust_name);
+        let diagnostic_display_name = cpp_name_if_present.as_ref().unwrap_or(&initial_rust_name);
 
         // Now let's analyze all the parameters.
         // See if any have annotations which our fork of bindgen has craftily inserted...
@@ -553,7 +540,7 @@ impl<'a> FnAnalyzer<'a> {
         //   method,   IRN=A_foo,  CN=foo                       output: foo    case 4
         //   method,   IRN=A_move, CN=move   (keyword problem)  output: move_  case 5
         //   method,   IRN=A_foo1, CN=foo    (overload)         output: foo    case 6
-        let ideal_rust_name = match &cpp_name {
+        let ideal_rust_name = match &cpp_name_if_present {
             None => initial_rust_name, // case 1
             Some(cpp_name) => {
                 if initial_rust_name.ends_with('_') {
@@ -895,19 +882,23 @@ impl<'a> FnAnalyzer<'a> {
         // The name we use within the cxx::bridge mod may be different
         // from both the C++ name and the Rust name, because it's a flat
         // namespace so we might need to prepend some stuff to make it unique.
-        let cxxbridge_name = self.get_cxx_bridge_name(
+        let qn = QualifiedName::new(ns, make_ident(rust_name));
+        let (mut cxxbridge_name, cxxbridge_name_mangled) = mangle_for_cxx_bridge(
             match kind {
                 FnKind::Method(ref self_ty, ..) => Some(self_ty.get_final_item()),
                 FnKind::Function => None,
                 FnKind::TraitMethod { ref impl_for, .. } => Some(impl_for.get_final_item()),
             },
-            &rust_name,
-            ns,
+            qn,
         );
-        if cxxbridge_name != rust_name && cpp_name.is_none() {
-            cpp_name = Some(rust_name.clone());
-        }
-        let mut cxxbridge_name = make_ident(&cxxbridge_name);
+        let original_cpp_name = cpp_name_if_present.as_ref().unwrap_or(&rust_name);
+        let cpp_name_attr = cpp_name_if_present.or_else(|| {
+            if cxxbridge_name_mangled {
+                Some(rust_name.clone())
+            } else {
+                None
+            }
+        });
 
         // Analyze the return type, just as we previously did for the
         // parameters.
@@ -949,7 +940,7 @@ impl<'a> FnAnalyzer<'a> {
             .as_ref()
             .map_or(false, |x| x.cpp_work_needed());
         // See https://github.com/dtolnay/cxx/issues/878 for the reason for this next line.
-        let effective_cpp_name = cpp_name.as_ref().unwrap_or(&rust_name);
+        let effective_cpp_name = cpp_name_if_present.as_ref().unwrap_or(&rust_name);
         let cpp_name_incompatible_with_cxx =
             validate_ident_ok_for_rust(effective_cpp_name).is_err();
         let synthetic_cpp_function_contents = synthesic_cpp_need(fun);
@@ -970,7 +961,7 @@ impl<'a> FnAnalyzer<'a> {
                     | TraitMethodKind::Destructor,
                 ..
             } => true,
-            FnKind::Method(..) if cxxbridge_name != rust_name => true,
+            FnKind::Method(..) if cxxbridge_name_mangled => true,
             _ if param_conversion_needed => true,
             _ if ret_type_conversion_needed => true,
             _ if cpp_name_incompatible_with_cxx => true,
@@ -982,12 +973,7 @@ impl<'a> FnAnalyzer<'a> {
             // Generate a new layer of C++ code to wrap/unwrap parameters
             // and return values into/out of std::unique_ptrs.
             let cpp_construction_ident = make_ident(&effective_cpp_name);
-            let joiner = if cxxbridge_name.to_string().ends_with('_') {
-                ""
-            } else {
-                "_"
-            };
-            cxxbridge_name = make_ident(&format!("{}{}autocxx_wrapper", cxxbridge_name, joiner));
+            cxxbridge_name = cxxbridge_name.add_suffix("autocxx_wrapper");
             let (payload, cpp_function_kind) = match synthetic_cpp_function_contents {
                 Some((payload, cpp_function_kind)) => (payload, cpp_function_kind),
                 None => match kind {
@@ -1055,11 +1041,8 @@ impl<'a> FnAnalyzer<'a> {
 
             Some(CppFunction {
                 payload,
-                wrapper_function_name: cxxbridge_name.clone(),
-                original_cpp_name: cpp_name
-                    .as_ref()
-                    .cloned()
-                    .unwrap_or_else(|| cxxbridge_name.to_string()),
+                wrapper_function_name: cxxbridge_name.to_ident(),
+                original_cpp_name: original_cpp_name.clone(),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
                 kind: cpp_function_kind,
@@ -1074,18 +1057,20 @@ impl<'a> FnAnalyzer<'a> {
 
         // Naming, part two.
         // Work out our final naming strategy.
-        validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).unwrap_or_else(set_ignore_reason);
+        // TODO move into the CxxBridgeName thing itself
+        validate_ident_ok_for_cxx(&cxxbridge_name.to_ident().to_string())
+            .unwrap_or_else(set_ignore_reason);
         let rust_name_ident = make_ident(&rust_name);
         let (id, rust_rename_strategy) = match kind {
-            FnKind::Function if cxxbridge_name != rust_name => (
-                cxxbridge_name.clone(),
+            FnKind::Function if cxxbridge_name_mangled => (
+                cxxbridge_name.to_ident(),
                 RustRenameStrategy::RenameInOutputMod(rust_name_ident),
             ),
             _ => (rust_name_ident, RustRenameStrategy::None),
         };
 
         let analysis = FnAnalysis {
-            cxxbridge_name,
+            cxxbridge_name: cxxbridge_name.to_ident(), // TODO pass newtype wrapper through
             rust_name: rust_name.clone(),
             rust_rename_strategy,
             params,
@@ -1100,7 +1085,7 @@ impl<'a> FnAnalyzer<'a> {
             ignore_reason,
             externally_callable,
         };
-        let name = ApiName::new_with_cpp_name(ns, id, cpp_name);
+        let name = ApiName::new_with_cpp_name(ns, id, cpp_name_if_present);
         (analysis, name)
     }
 

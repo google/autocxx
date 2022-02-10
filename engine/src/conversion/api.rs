@@ -16,6 +16,8 @@ use std::collections::HashSet;
 
 use crate::types::{make_ident, Namespace, QualifiedName};
 use autocxx_parser::RustPath;
+use proc_macro2::TokenStream;
+use quote::ToTokens;
 use syn::{
     parse::Parse, punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ImplItem,
     ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt, ReturnType, Signature,
@@ -37,6 +39,30 @@ pub(crate) enum TypeKind {
             // some other type which is pure virtual. Alternatively, maybe we just don't
             // know if the base class is pure virtual because it wasn't on the allowlist,
             // in which case we'll err on the side of caution.
+}
+
+/// An identifier to appear in the `[cxx::bridge`] mod.
+/// Can only be constructed by mangling to ensure uniqueness.
+pub(crate) struct CxxBridgeIdent(String);
+
+impl CxxBridgeIdent {
+    pub(crate) fn new(name: String) -> Self {
+        Self(name)
+    }
+
+    pub(crate) fn add_suffix(self, suffix: &str) -> Self {
+        Self(format!("{}{}", self.0, suffix))
+    }
+
+    pub(crate) fn to_ident(&self) -> Ident {
+        make_ident(&self.0)
+    }
+}
+
+impl ToTokens for CxxBridgeIdent {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.to_ident().to_tokens(tokens)
+    }
 }
 
 /// An entry which needs to go into an `impl` block for a given type.
