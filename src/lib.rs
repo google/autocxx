@@ -455,6 +455,12 @@ use autocxx_engine::IncludeCppEngine;
 /// This is useful primarily if you want to listen out for messages broadcast
 /// using the C++ observer/listener pattern.
 ///
+/// # Nested classes
+///
+/// There is support for generating bindings of nested types, with some
+/// restrictions. Currently the C++ type `A::B` will be given the Rust name
+/// `A_B` in the same module as its enclosing namespace.
+///
 /// # Mixing manual and automated bindings
 ///
 /// `autocxx` uses [cxx] underneath, and its build process will happily spot and
