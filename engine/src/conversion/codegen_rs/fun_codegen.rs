@@ -102,7 +102,11 @@ pub(super) fn gen_function(
         .any(|pd| pd.conversion.rust_work_needed());
     let rust_wrapper_needed = match kind {
         FnKind::TraitMethod { .. } => true,
-        FnKind::Method(..) => any_param_needs_rust_conversion || cxxbridge_name != rust_name,
+        FnKind::Method(..) => {
+            any_param_needs_rust_conversion
+                || cxxbridge_name != rust_name
+                || wrapper_function_needed
+        }
         _ => any_param_needs_rust_conversion,
     };
     if rust_wrapper_needed {
