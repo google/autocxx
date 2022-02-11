@@ -2286,6 +2286,34 @@ fn test_destructor() {
     run_test(cxx, hdr, rs, &["WithDtor", "make_with_dtor"], &[]);
 }
 
+// Even without a `safety!`, we still need to generate a safe `fn drop`.
+#[test]
+fn test_destructor_no_safety() {
+    let hdr = indoc! {"
+        struct WithDtor {
+            ~WithDtor();
+        };
+    "};
+    let cxx = indoc! {"
+        WithDtor::~WithDtor() {}
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let unexpanded_rust = |hdr: &str| {
+        quote! {
+            use autocxx::prelude::*;
+
+            include_cpp!(
+                #hexathorpe include #hdr
+                generate!("WithDtor")
+            );
+
+            fn main() {}
+        }
+    };
+
+    do_run_test_manual(cxx, hdr, unexpanded_rust, None, None).unwrap();
+}
+
 #[test]
 fn test_static_func() {
     let hdr = indoc! {"
