@@ -82,6 +82,11 @@ impl BridgeNameTracker {
         found_name: &str,
         ns: &Namespace,
     ) -> String {
+        let found_name = if found_name == "new" {
+            "new_autocxx"
+        } else {
+            found_name
+        };
         let count = self
             .next_cxx_bridge_name_for_prefix
             .entry(found_name.to_string())

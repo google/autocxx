@@ -17,7 +17,6 @@ pub(crate) mod function_wrapper;
 mod implicit_constructor_rules;
 mod implicit_constructors;
 mod overload_tracker;
-mod rust_name_tracker;
 mod subclass;
 
 use crate::{
@@ -64,7 +63,6 @@ use self::{
     function_wrapper::RustConversionType,
     implicit_constructors::find_missing_constructors,
     overload_tracker::OverloadTracker,
-    rust_name_tracker::RustNameTracker,
     subclass::{create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function},
 };
 
@@ -137,8 +135,6 @@ pub(crate) enum FnKind {
 pub(crate) enum RustRenameStrategy {
     /// cxx::bridge name matches user expectations
     None,
-    /// We can rename using the #[rust_name] attribute in the cxx::bridge
-    RenameUsingRustAttr,
     /// Even the #[rust_name] attribute would cause conflicts, and we need
     /// to use a 'use XYZ as ABC'
     RenameInOutputMod(Ident),
@@ -213,7 +209,6 @@ impl AnalysisPhase for FnPhase {
 
 pub(crate) struct FnAnalyzer<'a> {
     unsafe_policy: UnsafePolicy,
-    rust_name_tracker: RustNameTracker,
     extra_apis: Vec<UnanalyzedApi>,
     type_converter: TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
@@ -233,7 +228,6 @@ impl<'a> FnAnalyzer<'a> {
     ) -> Vec<Api<FnPhase>> {
         let mut me = Self {
             unsafe_policy,
-            rust_name_tracker: RustNameTracker::new(),
             extra_apis: Vec::new(),
             type_converter: TypeConverter::new(config, &apis),
             bridge_name_tracker: BridgeNameTracker::new(),
@@ -344,10 +338,6 @@ impl<'a> FnAnalyzer<'a> {
     ) -> String {
         self.bridge_name_tracker
             .get_unique_cxx_bridge_name(type_name, found_name, ns)
-    }
-
-    fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool {
-        self.rust_name_tracker.ok_to_use_rust_name(rust_name)
     }
 
     fn is_on_allowlist(&self, type_name: &QualifiedName) -> bool {
@@ -1087,26 +1077,11 @@ impl<'a> FnAnalyzer<'a> {
         validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).unwrap_or_else(set_ignore_reason);
         let rust_name_ident = make_ident(&rust_name);
         let (id, rust_rename_strategy) = match kind {
-            FnKind::Method(..) | FnKind::TraitMethod { .. } => {
-                (rust_name_ident, RustRenameStrategy::None)
-            }
-            FnKind::Function => {
-                // Keep the original Rust name the same so callers don't
-                // need to know about all of these shenanigans.
-                // There is a global space of rust_names even if they're in
-                // different namespaces.
-                let rust_name_ok = self.ok_to_use_rust_name(&rust_name);
-                if cxxbridge_name == rust_name {
-                    (rust_name_ident, RustRenameStrategy::None)
-                } else if rust_name_ok {
-                    (rust_name_ident, RustRenameStrategy::RenameUsingRustAttr)
-                } else {
-                    (
-                        cxxbridge_name.clone(),
-                        RustRenameStrategy::RenameInOutputMod(rust_name_ident),
-                    )
-                }
-            }
+            FnKind::Function if cxxbridge_name != rust_name => (
+                cxxbridge_name.clone(),
+                RustRenameStrategy::RenameInOutputMod(rust_name_ident),
+            ),
+            _ => (rust_name_ident, RustRenameStrategy::None),
         };
 
         let analysis = FnAnalysis {

@@ -80,14 +80,6 @@ pub(super) fn gen_function(
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
     let mut trait_impl_entry = None;
-    let rust_name_attr: Vec<_> = match &analysis.rust_rename_strategy {
-        RustRenameStrategy::RenameUsingRustAttr => Attribute::parse_outer
-            .parse2(quote!(
-                #[rust_name = #rust_name]
-            ))
-            .unwrap(),
-        _ => Vec::new(),
-    };
     let wrapper_unsafety = analysis.requires_unsafe.wrapper_token();
     let fn_generator = FnGenerator {
         param_details: &param_details,
@@ -110,7 +102,11 @@ pub(super) fn gen_function(
         .any(|pd| pd.conversion.rust_work_needed());
     let rust_wrapper_needed = match kind {
         FnKind::TraitMethod { .. } => true,
-        FnKind::Method(..) => any_param_needs_rust_conversion || cxxbridge_name != rust_name,
+        FnKind::Method(..) => {
+            any_param_needs_rust_conversion
+                || cxxbridge_name != rust_name
+                || wrapper_function_needed
+        }
         _ => any_param_needs_rust_conversion,
     };
     if rust_wrapper_needed {
@@ -176,7 +172,6 @@ pub(super) fn gen_function(
     let bridge_unsafety = analysis.requires_unsafe.bridge_token();
     let extern_c_mod_item = ForeignItem::Fn(parse_quote!(
         #(#namespace_attr)*
-        #(#rust_name_attr)*
         #(#cpp_name_attr)*
         #doc_attr
         #vis #bridge_unsafety fn #cxxbridge_name #lifetime_tokens ( #params ) #ret_type;
@@ -335,12 +330,13 @@ impl<'a> FnGenerator<'a> {
     fn generate_function_impl(&self, ret_type: &ReturnType) -> Box<Item> {
         let (wrapper_params, arg_list) = self.generate_arg_lists(false);
         let rust_name = make_ident(self.rust_name);
+        let cxxbridge_name = self.cxxbridge_name;
         let doc_attr = self.doc_attr;
         let unsafety = self.unsafety;
         Box::new(Item::Fn(parse_quote! {
             #doc_attr
             pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
-                cxxbridge::#rust_name ( #(#arg_list),* )
+                cxxbridge::#cxxbridge_name ( #(#arg_list),* )
             }
         }))
     }
