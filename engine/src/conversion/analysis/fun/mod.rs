@@ -143,7 +143,7 @@ pub(crate) enum RustRenameStrategy {
 #[derive(Clone)]
 pub(crate) enum UnsafetyNeeded {
     None,
-    JustReceiver,
+    JustBridge,
     Always,
 }
 
@@ -355,25 +355,29 @@ impl<'a> FnAnalyzer<'a> {
         param_details: &[ArgumentAnalysis],
         kind: &FnKind,
     ) -> UnsafetyNeeded {
-        if self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe {
-            UnsafetyNeeded::Always
-        } else if param_details
-            .iter()
-            .any(|pd| pd.self_type.is_none() && pd.requires_unsafe)
-        {
-            UnsafetyNeeded::Always
-        } else if matches!(
-            kind,
+        let any_non_self_param_needs_unsafe = || -> bool {
+            param_details
+                .iter()
+                .any(|pd| pd.self_type.is_none() && pd.requires_unsafe)
+        };
+        let any_param_needs_unsafe =
+            || -> bool { param_details.iter().any(|pd| pd.requires_unsafe) };
+        match kind {
+            // Trait unsafety must always correspond to the norms for the
+            // trait we're implementing.
             FnKind::TraitMethod {
                 kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                 ..
+            } => UnsafetyNeeded::Always,
+            FnKind::TraitMethod { .. } if any_param_needs_unsafe() => UnsafetyNeeded::JustBridge,
+            FnKind::TraitMethod { .. } => UnsafetyNeeded::None,
+            _ if self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
+                || any_non_self_param_needs_unsafe() =>
+            {
+                UnsafetyNeeded::Always
             }
-        ) {
-            UnsafetyNeeded::Always
-        } else if param_details.iter().any(|pd| pd.requires_unsafe) {
-            UnsafetyNeeded::JustReceiver
-        } else {
-            UnsafetyNeeded::None
+            _ if any_param_needs_unsafe() => UnsafetyNeeded::JustBridge,
+            _ => UnsafetyNeeded::None,
         }
     }
 
