@@ -7679,6 +7679,23 @@ fn test_class_having_private_method() {
     run_test("", hdr, rs, &[], &["A"]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/787
+fn test_chrono_problem() {
+    let hdr = indoc! {"
+    #include <chrono>
+    struct Clock {
+      typedef std::chrono::nanoseconds duration;
+    };
+    struct Class {
+      int a() { return 42; }
+      std::chrono::time_point<Clock> b();
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &[], &["Class"]);
+}
+
 fn size_and_alignment_test(pod: bool) {
     static TYPES: [(&'static str, &'static str); 6] = [
         ("A", "struct A { uint8_t a; };"),
