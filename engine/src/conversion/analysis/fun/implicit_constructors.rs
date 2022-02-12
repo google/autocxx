@@ -19,6 +19,7 @@ use crate::{
         analysis::{depth_first::depth_first, pod::PodAnalysis, type_converter::find_types},
         api::{Api, CppVisibility, FuncToConvert, SpecialMemberKind},
     },
+    known_types::known_types,
     types::QualifiedName,
 };
 
@@ -59,7 +60,8 @@ struct ExplicitFound {
 pub(super) fn find_missing_constructors(
     apis: &[Api<FnPhase>],
 ) -> HashMap<QualifiedName, ImplicitConstructorsNeeded> {
-    let all_known_types = find_types(apis);
+    let mut all_known_types = find_types(apis);
+    all_known_types.extend(known_types().all_names().cloned());
     let explicits = find_explicit_items(apis);
     let mut implicit_constructors_needed = HashMap::new();
     for api in depth_first(apis) {
@@ -271,7 +273,25 @@ fn find_explicit_items(apis: &[Api<FnPhase>]) -> HashSet<ExplicitFound> {
             }
             _ => None,
         })
+        .chain(known_type_constructors())
         .collect()
+}
+
+fn known_type_constructors() -> impl Iterator<Item = ExplicitFound> {
+    known_types()
+        .all_types_with_move_constructors()
+        .map(|ty| ExplicitFound {
+            ty,
+            kind: ExplicitKind::MoveConstructor,
+        })
+        .chain(
+            known_types()
+                .all_types_with_const_copy_constructors()
+                .map(|ty| ExplicitFound {
+                    ty,
+                    kind: ExplicitKind::ConstCopyConstructor,
+                }),
+        )
 }
 
 fn is_deleted_or_inaccessible(fun: &FuncToConvert) -> bool {

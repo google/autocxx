@@ -186,13 +186,16 @@ impl TypeDatabase {
         )
     }
 
+    /// Returns all known types.
+    pub(crate) fn all_names(&self) -> impl Iterator<Item = &QualifiedName> {
+        self.canonical_names.keys().chain(self.by_rs_name.keys())
+    }
+
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
     pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (QualifiedName, bool)> {
         let pod_safety = self
-            .canonical_names
-            .keys()
-            .chain(self.by_rs_name.keys())
+            .all_names()
             .map(|tn| {
                 (
                     tn.clone(),
@@ -212,6 +215,22 @@ impl TypeDatabase {
             })
             .collect::<HashMap<_, _>>();
         pod_safety.into_iter()
+    }
+
+    pub(crate) fn all_types_with_move_constructors(
+        &self,
+    ) -> impl Iterator<Item = QualifiedName> + '_ {
+        self.all_names()
+            .filter(|qn| self.get(qn).unwrap().has_move_constructor)
+            .cloned()
+    }
+
+    pub(crate) fn all_types_with_const_copy_constructors(
+        &self,
+    ) -> impl Iterator<Item = QualifiedName> + '_ {
+        self.all_names()
+            .filter(|qn| self.get(qn).unwrap().has_const_copy_constructor)
+            .cloned()
     }
 
     /// Whether this TypePath should be treated as a value in C++
