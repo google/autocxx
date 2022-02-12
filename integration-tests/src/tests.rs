@@ -3964,6 +3964,30 @@ fn test_cint_in_pod_struct() {
 }
 
 #[test]
+fn test_string_in_struct() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <memory>
+        struct A {
+            std::string a;
+        };
+        inline A make_a(std::string b) {
+            A bob;
+            bob.a = b;
+            return bob;
+        }
+        inline uint32_t take_a(A a) {
+            return a.a.size();
+        }
+    "};
+    let rs = quote! {
+        use ffi::ToCppString;
+        assert_eq!(ffi::take_a(ffi::make_a("hello".into_cpp())), 5);
+    };
+    run_test("", hdr, rs, &["make_a", "take_a"], &[]);
+}
+
+#[test]
 fn test_up_in_struct() {
     let hdr = indoc! {"
         #include <string>
