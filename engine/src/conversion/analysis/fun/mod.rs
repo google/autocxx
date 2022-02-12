@@ -1513,11 +1513,11 @@ impl<'a> FnAnalyzer<'a> {
         references: References,
     ) {
         let ident = match label {
-            Some(label) => make_ident(format!(
+            Some(label) => make_ident(self.config.uniquify_name_per_mod(&format!(
                 "{}_synthetic_{}_ctor",
                 self_ty.get_final_item(),
                 label
-            )),
+            ))),
             None => self_ty.get_final_ident(),
         };
         let fake_api_name = ApiName::new(self_ty.get_namespace(), ident.clone());
