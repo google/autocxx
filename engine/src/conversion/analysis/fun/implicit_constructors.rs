@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     conversion::{
-        analysis::{depth_first::depth_first, pod::PodAnalysis},
+        analysis::{depth_first::depth_first, pod::PodAnalysis, type_converter::find_types},
         api::{Api, CppVisibility, FuncToConvert, SpecialMemberKind},
     },
     types::QualifiedName,
@@ -59,6 +59,7 @@ struct ExplicitFound {
 pub(super) fn find_missing_constructors(
     apis: &[Api<FnPhase>],
 ) -> HashMap<QualifiedName, ImplicitConstructorsNeeded> {
+    let all_known_types = find_types(apis);
     let explicits = find_explicit_items(apis);
     let mut implicit_constructors_needed = HashMap::new();
     for api in depth_first(apis) {
@@ -103,6 +104,14 @@ pub(super) fn find_missing_constructors(
                     kind: ExplicitKind::DeletedOrInaccessibleDestructor,
                 })
             });
+            // Conservatively, we will not generate implicit constructors for any struct/class
+            // where we don't fully understand all field types. We need to extend our knowledge
+            // to understand the constructor behavior of things in known_types.rs, then we'll
+            // be able to cope with types which contain strings, unique_ptrs etc.
+            let any_field_or_base_not_understood = bases
+                .iter()
+                .chain(field_types.iter())
+                .any(|qn| !all_known_types.contains(qn));
             let explicit_items_found = ExplicitItemsFound {
                 move_constructor: find(ExplicitKind::MoveConstructor),
                 copy_constructor: find(ExplicitKind::ConstCopyConstructor)
@@ -117,6 +126,7 @@ pub(super) fn find_missing_constructors(
                 copy_assignment_operator: find(ExplicitKind::CopyAssignmentOperator),
                 move_assignment_operator: find(ExplicitKind::MoveAssignmentOperator),
                 has_rvalue_reference_fields: details.has_rvalue_reference_fields,
+                any_field_or_base_not_understood,
             };
             let implicits = determine_implicit_constructors(explicit_items_found);
             implicit_constructors_needed.insert(name.clone(), implicits);
