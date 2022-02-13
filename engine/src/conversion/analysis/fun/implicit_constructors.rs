@@ -130,6 +130,11 @@ pub(super) fn find_missing_constructors(
                 has_rvalue_reference_fields: details.has_rvalue_reference_fields,
                 any_field_or_base_not_understood,
             };
+            log::info!(
+                "Explicit items found for {:?}: {:?}",
+                name,
+                explicit_items_found
+            );
             let implicits = determine_implicit_constructors(explicit_items_found);
             implicit_constructors_needed.insert(name.clone(), implicits);
         }
@@ -290,6 +295,14 @@ fn known_type_constructors() -> impl Iterator<Item = ExplicitFound> {
                 .map(|ty| ExplicitFound {
                     ty,
                     kind: ExplicitKind::ConstCopyConstructor,
+                }),
+        )
+        .chain(
+            known_types()
+                .all_types_without_copy_constructors()
+                .map(|ty| ExplicitFound {
+                    ty,
+                    kind: ExplicitKind::DeletedOrInaccessibleCopyConstructor,
                 }),
         )
 }

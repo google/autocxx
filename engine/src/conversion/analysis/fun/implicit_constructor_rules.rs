@@ -24,7 +24,7 @@ pub(super) struct ImplicitConstructorsNeeded {
 }
 
 /// Input to the C++ rules about which implicit constructors are generated.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(super) struct ExplicitItemsFound {
     pub(super) move_constructor: bool,
     pub(super) copy_constructor: bool,

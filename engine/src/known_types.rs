@@ -233,6 +233,14 @@ impl TypeDatabase {
             .cloned()
     }
 
+    pub(crate) fn all_types_without_copy_constructors(
+        &self,
+    ) -> impl Iterator<Item = QualifiedName> + '_ {
+        self.all_names()
+            .filter(|qn| !self.get(qn).unwrap().has_const_copy_constructor)
+            .cloned()
+    }
+
     /// Whether this TypePath should be treated as a value in C++
     /// but a reference in Rust. This only applies to rust::Str
     /// (C++ name) which is &str in Rust.
