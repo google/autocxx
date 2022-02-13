@@ -507,20 +507,6 @@ fn create_type_database() -> TypeDatabase {
     db
 }
 
-/// If a given type lacks a copy constructor, we should always use
-/// std::move in wrapper functions.
-pub(crate) fn type_lacks_copy_constructor(ty: &Type) -> bool {
-    // In future we may wish to look this up in KNOWN_TYPES.
-    match ty {
-        Type::Path(typ) => {
-            let tn = QualifiedName::from_type_path(typ);
-            tn.to_cpp_name().starts_with("std::unique_ptr")
-                || tn.to_cpp_name().starts_with("rust::Box")
-        }
-        _ => false,
-    }
-}
-
 pub(crate) fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertError> {
     match *ptr.elem {
         Type::Path(..) => Ok(()),
