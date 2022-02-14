@@ -133,9 +133,9 @@ fn main() {
             .arg("gen-rs-include")
         )
         .arg(
-            Arg::with_name("cxx-gen")
-                .long("cxx-gen")
-                .help("Perform C++ codegen also for #[cxx::bridge] blocks. Only applies for --gen-cpp")
+            Arg::with_name("skip-cxx-gen")
+                .long("skip-cxx-gen")
+                .help("Skip performing C++ codegen for #[cxx::bridge] blocks. Only applies for --gen-cpp")
                 .requires("gen-cpp")
         )
         .arg(
@@ -211,6 +211,7 @@ fn main() {
     cpp_codegen_options.cxx_impl_annotations = get_option_string("cxx-impl-annotations", &matches);
     cpp_codegen_options.path_to_cxx_h = get_option_string("cxx-h-path", &matches);
     cpp_codegen_options.path_to_cxxgen_h = get_option_string("cxxgen-h-path", &matches);
+    cpp_codegen_options.skip_cxx_gen = matches.is_present("skip-cxx-gen");
     // In future, we should provide an option to write a .d file here
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56

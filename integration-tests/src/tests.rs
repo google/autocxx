@@ -15,7 +15,8 @@
 use crate::test_utils::{
     directives_from_lists, do_run_test_manual, make_clang_arg_adder, make_error_finder,
     make_string_finder, run_test, run_test_ex, run_test_expect_fail, run_test_expect_fail_ex,
-    CppMatcher, EnableAutodiscover, NoSystemHeadersChecker, SetSuppressSystemHeaders,
+    CppCounter, CppMatcher, EnableAutodiscover, NoSystemHeadersChecker, SetSuppressSystemHeaders,
+    SkipCxxGen,
 };
 use indoc::indoc;
 use itertools::Itertools;
@@ -7908,6 +7909,27 @@ fn test_issue486_multi_types() {
         rs,
         &["spanner::Key", "a::spanner::Key", "b::spanner::Key"],
         &[],
+    );
+}
+
+#[test]
+fn test_skip_cxx_gen() {
+    let cxx = indoc! {"
+        void do_nothing() {
+        }
+    "};
+    let hdr = indoc! {"
+        void do_nothing();
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        directives_from_lists(&["do_nothing"], &[], None),
+        Some(Box::new(SkipCxxGen)),
+        Some(Box::new(CppCounter::new(1))),
+        None,
     );
 }
 
