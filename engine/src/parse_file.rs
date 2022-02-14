@@ -20,6 +20,7 @@ use crate::{
 };
 use autocxx_parser::directives::SUBCLASS;
 use autocxx_parser::{RustPath, Subclass, SubclassAttrs};
+use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use std::{collections::HashSet, fmt::Display, io::Read, path::PathBuf};
@@ -273,45 +274,19 @@ pub trait CppBuildable {
 impl ParsedFile {
     /// Get all the autocxxes in this parsed file.
     pub fn get_rs_buildables(&self) -> impl Iterator<Item = &IncludeCppEngine> {
-        fn do_get_rs_buildables(
-            segments: &Vec<Segment>,
-        ) -> impl Iterator<Item = &IncludeCppEngine> {
-            segments
-                .iter()
-                .flat_map(|s| -> Box<dyn Iterator<Item = &IncludeCppEngine>> {
-                    match s {
-                        Segment::Autocxx(includecpp) => Box::new(std::iter::once(includecpp)),
-                        Segment::Mod(segments, _) => Box::new(do_get_rs_buildables(segments)),
-                        _ => Box::new(std::iter::empty()),
-                    }
-                })
-        }
-
-        do_get_rs_buildables(&self.0)
+        iterate_segments_recursively(&self.0).filter_map(|s| match s {
+            Segment::Autocxx(includecpp) => Some(includecpp),
+            _ => None,
+        })
     }
 
     /// Get all items which can result in C++ code
     pub fn get_cpp_buildables(&self) -> impl Iterator<Item = &dyn CppBuildable> {
-        fn do_get_cpp_buildables(
-            segments: &Vec<Segment>,
-        ) -> impl Iterator<Item = &dyn CppBuildable> {
-            segments
-                .iter()
-                .flat_map(|s| -> Box<dyn Iterator<Item = &dyn CppBuildable>> {
-                    match s {
-                        Segment::Autocxx(includecpp) => {
-                            Box::new(std::iter::once(includecpp as &dyn CppBuildable))
-                        }
-                        Segment::Cxx(cxxbridge) => {
-                            Box::new(std::iter::once(cxxbridge as &dyn CppBuildable))
-                        }
-                        Segment::Mod(segments, _) => Box::new(do_get_cpp_buildables(segments)),
-                        _ => Box::new(std::iter::empty()),
-                    }
-                })
-        }
-
-        do_get_cpp_buildables(&self.0)
+        iterate_segments_recursively(&self.0).filter_map(|s| match s {
+            Segment::Autocxx(includecpp) => Some(includecpp as &dyn CppBuildable),
+            Segment::Cxx(cxxbridge) => Some(cxxbridge as &dyn CppBuildable),
+            _ => None,
+        })
     }
 
     fn get_autocxxes_mut(&mut self) -> impl Iterator<Item = &mut IncludeCppEngine> {
@@ -333,19 +308,12 @@ impl ParsedFile {
     }
 
     pub fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
-        fn do_get_include_dirs(segments: &Vec<Segment>) -> impl Iterator<Item = &PathBuf> {
-            segments
-                .iter()
-                .flat_map(|s| -> Box<dyn Iterator<Item = &PathBuf>> {
-                    match s {
-                        Segment::Autocxx(includecpp) => Box::new(includecpp.include_dirs()),
-                        Segment::Mod(segments, _) => Box::new(do_get_include_dirs(segments)),
-                        _ => Box::new(std::iter::empty()),
-                    }
-                })
-        }
-
-        do_get_include_dirs(&self.0)
+        iterate_segments_recursively(&self.0)
+            .filter_map(|s| match s {
+                Segment::Autocxx(includecpp) => Some(includecpp.include_dirs()),
+                _ => None,
+            })
+            .flatten()
     }
 
     pub fn resolve_all(
@@ -410,6 +378,39 @@ impl ToTokens for Segment {
                     ..itemmod.clone()
                 };
                 Item::Mod(itemmod).to_tokens(tokens)
+            }
+        }
+    }
+}
+
+struct SegmentIterator<'a>(Vec<std::vec::IntoIter<&'a Segment>>);
+
+fn iterate_segments_recursively<'a>(
+    roots: &'a Vec<Segment>,
+) -> impl Iterator<Item = &Segment> + 'a {
+    let roots = roots.iter().map(|a| &*a).collect_vec().into_iter();
+    SegmentIterator(vec![roots])
+}
+
+impl<'a> Iterator for SegmentIterator<'a> {
+    type Item = &'a Segment;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.0.last_mut() {
+                None => return None,
+                Some(most_nested) => match most_nested.next() {
+                    None => {
+                        self.0.pop();
+                        continue;
+                    }
+                    Some(Segment::Mod(inners, ..)) => {
+                        self.0
+                            .push(inners.iter().map(|a| &*a).collect_vec().into_iter());
+                        continue;
+                    }
+                    Some(segment) => return Some(segment),
+                },
             }
         }
     }
