@@ -379,24 +379,24 @@ fn create_type_database() -> TypeDatabase {
         "rust::Str",
         Behavior::RustStr,
         None,
-        false, // TODO - check
-        false, // TODO - check
+        true,
+        false,
     ));
     db.insert(TypeDetails::new(
         "String",
         "rust::String",
         Behavior::RustString,
         None,
-        false, // TODO - check
-        false, // TODO - check
+        true,
+        true,
     ));
     db.insert(TypeDetails::new(
         "std::boxed::Box",
         "rust::Box",
         Behavior::RustContainerByValueSafe,
         None,
-        false, // TODO - check
-        false, // TODO - check
+        false,
+        true,
     ));
     db.insert(TypeDetails::new(
         "i8",
