@@ -6417,6 +6417,110 @@ fn test_non_pv_subclass() {
 }
 
 #[test]
+fn test_two_subclasses() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo() const {}
+        virtual ~Observer() {}
+    };
+    inline void bar() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserverA::new_rust_owned(MyObserverA { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+            let obs = MyObserverB::new_rust_owned(MyObserverB { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+        },
+        quote! {
+            generate!("bar")
+            subclass!("Observer",MyObserverA)
+            subclass!("Observer",MyObserverB)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverA {
+                a: u32
+            }
+            impl Observer_methods for MyObserverA {
+            }
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverB {
+                a: u32
+            }
+            impl Observer_methods for MyObserverB {
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_two_superclasses_with_same_name_method() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class ObserverA {
+    public:
+        ObserverA() {}
+        virtual void foo() const {}
+        virtual ~ObserverA() {}
+    };
+
+    class ObserverB {
+        public:
+            ObserverB() {}
+            virtual void foo() const {}
+            virtual ~ObserverB() {}
+        };
+    inline void bar() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserverA::new_rust_owned(MyObserverA { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+            let obs = MyObserverB::new_rust_owned(MyObserverB { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+        },
+        quote! {
+            generate!("bar")
+            subclass!("ObserverA",MyObserverA)
+            subclass!("ObserverB",MyObserverB)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::ObserverA_methods;
+            use ffi::ObserverB_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverA {
+                a: u32
+            }
+            impl ObserverA_methods for MyObserverA {
+            }
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverB {
+                a: u32
+            }
+            impl ObserverB_methods for MyObserverB {
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_pv_protected_constructor() {
     let hdr = indoc! {"
     #include <cstdint>
