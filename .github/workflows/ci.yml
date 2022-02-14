@@ -33,6 +33,8 @@ jobs:
       RUSTFLAGS: --cfg deny_warnings -Dwarnings
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: recursive
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{matrix.rust}}
@@ -53,12 +55,24 @@ jobs:
         id: testsuite
         shell: bash
       - run: cargo test --workspace ${{steps.testsuite.outputs.exclude}}
-      - run: cargo build --workspace --manifest-path examples/s2/Cargo.toml
-      - run: cargo build --workspace --manifest-path examples/steam-mini/Cargo.toml
-      - run: cargo build --workspace --manifest-path examples/subclass/Cargo.toml
-      - run: cargo build --workspace --manifest-path examples/pod/Cargo.toml
-      - run: cargo build --workspace --manifest-path examples/chromium-fake-render-frame-host/Cargo.toml
-      - run: cargo build --workspace --manifest-path examples/non-trivial-type-on-stack/Cargo.toml
+      - name: Build s2 example
+        working-directory: ./examples/s2
+        run: cargo build --workspace
+      - name: Build steam example
+        working-directory: ./examples/steam-mini
+        run: cargo build --workspace
+      - name: Build subclass example
+        working-directory: ./examples/subclass
+        run: cargo build --workspace
+      - name: Build pod example
+        working-directory: ./examples/pod
+        run: cargo build --workspace
+      - name: Build chromium render-frame-host example
+        working-directory: ./examples/chromium-fake-render-frame-host
+        run: cargo build --workspace
+      - name: Build non-trivial-type-on-stack example
+        working-directory: ./examples/non-trivial-type-on-stack
+        run: cargo build --workspace
 
   clippy:
     name: Clippy
