@@ -113,7 +113,7 @@ fn test_reduce_preprocessed() -> Result<(), Box<dyn std::error::Error>> {
 fn write_minimal_rs_code(header: &str, demo_code_dir: &Path) {
     let hexathorpe = Token![#](Span::call_site());
     write_to_file(
-        &demo_code_dir,
+        demo_code_dir,
         "main.rs",
         quote! {
             autocxx::include_cpp! {

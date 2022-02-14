@@ -244,10 +244,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
             config.replace_included_headers("concat.h");
             create_file(
                 &rs_path,
-                &format!(
-                    "autocxx::include_cpp!({});",
-                    config.to_token_stream().to_string()
-                ),
+                &format!("autocxx::include_cpp!({});", config.to_token_stream()),
             )?;
             if let Some(header) = submatches.value_of("header") {
                 std::fs::copy(PathBuf::from(header), &concat_path)?;
