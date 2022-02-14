@@ -5786,6 +5786,7 @@ fn test_shared_ptr() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/799
 fn test_shared_ptr_const() {
     let hdr = indoc! {"
         #include <memory>
