@@ -524,8 +524,7 @@ mod tests {
         assert!(
             discoveries
                 .extern_rust_funs
-                .iter()
-                .next()
+                .get(0)
                 .unwrap()
                 .sig
                 .ident
@@ -546,8 +545,7 @@ mod tests {
         assert!(
             discoveries
                 .extern_rust_types
-                .iter()
-                .next()
+                .get(0)
                 .unwrap()
                 .get_final_ident()
                 == "Bar"
