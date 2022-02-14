@@ -132,7 +132,7 @@ mod tests {
         assert!(outputs.default_constructor);
         assert!(!outputs.copy_constructor_taking_const_t);
         assert!(outputs.copy_constructor_taking_t);
-        assert!(!outputs.move_constructor);
+        assert!(outputs.move_constructor);
     }
 
     #[test]
