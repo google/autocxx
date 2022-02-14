@@ -401,10 +401,10 @@ impl ToTokens for Segment {
             }
             Segment::Cxx(cxxbridge) => cxxbridge.to_tokens(tokens),
             Segment::Mod(segments, (brace, itemmod)) => {
-                let mut mod_items = Vec::with_capacity(segments.len());
-                for segment in segments.iter() {
-                    mod_items.push(syn::parse2::<Item>(segment.to_token_stream()).unwrap());
-                }
+                let mod_items = segments
+                    .iter()
+                    .map(|segment| syn::parse2::<Item>(segment.to_token_stream()).unwrap())
+                    .collect();
                 let itemmod = ItemMod {
                     content: Some((*brace, mod_items)),
                     ..itemmod.clone()
