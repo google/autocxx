@@ -87,7 +87,7 @@ impl LinkableTryBuilder {
         for generated_rs in generated_rs_files {
             self.move_items_into_temp_dir(
                 &generated_rs.parent().unwrap().to_path_buf(),
-                &generated_rs.file_name().unwrap().to_str().unwrap(),
+                generated_rs.file_name().unwrap().to_str().unwrap(),
             );
         }
         let temp_path = self.temp_dir.path().to_str().unwrap();
@@ -522,8 +522,7 @@ impl CodeCheckerFns for NoSystemHeadersChecker {
             let file = File::open(filename).unwrap();
             if BufReader::new(file)
                 .lines()
-                .find(|l| l.as_ref().unwrap().starts_with("#include <"))
-                .is_some()
+                .any(|l| l.as_ref().unwrap().starts_with("#include <"))
             {
                 return Err(TestError::CppCodeExaminationFail);
             }

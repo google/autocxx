@@ -116,10 +116,10 @@ mod tests {
     fn test_simple() {
         let inputs = ExplicitItemsFound::default();
         let outputs = determine_implicit_constructors(inputs);
-        assert_eq!(true, outputs.default_constructor);
-        assert_eq!(true, outputs.copy_constructor_taking_const_t);
-        assert_eq!(false, outputs.copy_constructor_taking_t);
-        assert_eq!(true, outputs.move_constructor);
+        assert!(outputs.default_constructor);
+        assert!(outputs.copy_constructor_taking_const_t);
+        assert!(!outputs.copy_constructor_taking_t);
+        assert!(outputs.move_constructor);
     }
 
     #[test]
@@ -129,10 +129,10 @@ mod tests {
             ..Default::default()
         };
         let outputs = determine_implicit_constructors(inputs);
-        assert_eq!(true, outputs.default_constructor);
-        assert_eq!(true, outputs.copy_constructor_taking_const_t);
-        assert_eq!(false, outputs.copy_constructor_taking_t);
-        assert_eq!(false, outputs.move_constructor);
+        assert!(outputs.default_constructor);
+        assert!(outputs.copy_constructor_taking_const_t);
+        assert!(!outputs.copy_constructor_taking_t);
+        assert!(!outputs.move_constructor);
     }
 
     #[test]
@@ -142,10 +142,10 @@ mod tests {
             ..Default::default()
         };
         let outputs = determine_implicit_constructors(inputs);
-        assert_eq!(true, outputs.default_constructor);
-        assert_eq!(false, outputs.copy_constructor_taking_const_t);
-        assert_eq!(true, outputs.copy_constructor_taking_t);
-        assert_eq!(true, outputs.move_constructor);
+        assert!(outputs.default_constructor);
+        assert!(!outputs.copy_constructor_taking_const_t);
+        assert!(outputs.copy_constructor_taking_t);
+        assert!(outputs.move_constructor);
     }
 
     #[test]
@@ -155,10 +155,10 @@ mod tests {
             ..Default::default()
         };
         let outputs = determine_implicit_constructors(inputs);
-        assert_eq!(false, outputs.default_constructor);
-        assert_eq!(false, outputs.copy_constructor_taking_const_t);
-        assert_eq!(false, outputs.copy_constructor_taking_t);
-        assert_eq!(false, outputs.move_constructor);
+        assert!(!outputs.default_constructor);
+        assert!(!outputs.copy_constructor_taking_const_t);
+        assert!(!outputs.copy_constructor_taking_t);
+        assert!(!outputs.move_constructor);
     }
 
     #[test]
@@ -168,9 +168,9 @@ mod tests {
             ..Default::default()
         };
         let outputs = determine_implicit_constructors(inputs);
-        assert_eq!(false, outputs.default_constructor);
-        assert_eq!(true, outputs.copy_constructor_taking_const_t);
-        assert_eq!(false, outputs.copy_constructor_taking_t);
-        assert_eq!(true, outputs.move_constructor);
+        assert!(!outputs.default_constructor);
+        assert!(outputs.copy_constructor_taking_const_t);
+        assert!(!outputs.copy_constructor_taking_t);
+        assert!(outputs.move_constructor);
     }
 }
