@@ -521,15 +521,7 @@ mod tests {
             }
         };
         discoveries.search_item(&itm);
-        assert!(
-            discoveries
-                .extern_rust_funs
-                .get(0)
-                .unwrap()
-                .sig
-                .ident
-                == "bar"
-        );
+        assert!(discoveries.extern_rust_funs.get(0).unwrap().sig.ident == "bar");
     }
 
     #[test]
