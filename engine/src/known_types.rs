@@ -47,6 +47,8 @@ struct TypeDetails {
     behavior: Behavior,
     /// Any extra non-canonical names
     extra_non_canonical_name: Option<String>,
+    has_const_copy_constructor: bool,
+    has_move_constructor: bool,
 }
 
 impl TypeDetails {
@@ -55,12 +57,16 @@ impl TypeDetails {
         cpp_name: impl Into<String>,
         behavior: Behavior,
         extra_non_canonical_name: Option<String>,
+        has_const_copy_constructor: bool,
+        has_move_constructor: bool,
     ) -> Self {
         TypeDetails {
             rs_name: rs_name.into(),
             cpp_name: cpp_name.into(),
             behavior,
             extra_non_canonical_name,
+            has_const_copy_constructor,
+            has_move_constructor,
         }
     }
 
@@ -180,13 +186,16 @@ impl TypeDatabase {
         )
     }
 
+    /// Returns all known types.
+    pub(crate) fn all_names(&self) -> impl Iterator<Item = &QualifiedName> {
+        self.canonical_names.keys().chain(self.by_rs_name.keys())
+    }
+
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
     pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (QualifiedName, bool)> {
         let pod_safety = self
-            .canonical_names
-            .keys()
-            .chain(self.by_rs_name.keys())
+            .all_names()
             .map(|tn| {
                 (
                     tn.clone(),
@@ -206,6 +215,30 @@ impl TypeDatabase {
             })
             .collect::<HashMap<_, _>>();
         pod_safety.into_iter()
+    }
+
+    pub(crate) fn all_types_with_move_constructors(
+        &self,
+    ) -> impl Iterator<Item = QualifiedName> + '_ {
+        self.all_names()
+            .filter(|qn| self.get(qn).unwrap().has_move_constructor)
+            .cloned()
+    }
+
+    pub(crate) fn all_types_with_const_copy_constructors(
+        &self,
+    ) -> impl Iterator<Item = QualifiedName> + '_ {
+        self.all_names()
+            .filter(|qn| self.get(qn).unwrap().has_const_copy_constructor)
+            .cloned()
+    }
+
+    pub(crate) fn all_types_without_copy_constructors(
+        &self,
+    ) -> impl Iterator<Item = QualifiedName> + '_ {
+        self.all_names()
+            .filter(|qn| !self.get(qn).unwrap().has_const_copy_constructor)
+            .cloned()
     }
 
     /// Whether this TypePath should be treated as a value in C++
@@ -306,60 +339,80 @@ fn create_type_database() -> TypeDatabase {
         "std::unique_ptr",
         Behavior::CxxContainerByValueSafe,
         None,
+        false,
+        true,
     ));
     db.insert(TypeDetails::new(
         "cxx::CxxVector",
         "std::vector",
         Behavior::CxxContainerNotByValueSafe,
         None,
+        false,
+        true,
     ));
     db.insert(TypeDetails::new(
         "cxx::SharedPtr",
         "std::shared_ptr",
         Behavior::CxxContainerByValueSafe,
         None,
+        true,
+        true,
     ));
     db.insert(TypeDetails::new(
         "cxx::WeakPtr",
         "std::weak_ptr",
         Behavior::CxxContainerByValueSafe,
         None,
+        true,
+        true,
     ));
     db.insert(TypeDetails::new(
         "cxx::CxxString",
         "std::string",
         Behavior::CxxString,
         None,
+        true,
+        true,
     ));
     db.insert(TypeDetails::new(
         "str",
         "rust::Str",
         Behavior::RustStr,
         None,
+        true,
+        false,
     ));
     db.insert(TypeDetails::new(
         "String",
         "rust::String",
         Behavior::RustString,
         None,
+        true,
+        true,
     ));
     db.insert(TypeDetails::new(
         "std::boxed::Box",
         "rust::Box",
         Behavior::RustContainerByValueSafe,
         None,
+        false,
+        true,
     ));
     db.insert(TypeDetails::new(
         "i8",
         "int8_t",
         Behavior::CByValue,
         Some("std::os::raw::c_schar".into()),
+        true,
+        true,
     ));
     db.insert(TypeDetails::new(
         "u8",
         "uint8_t",
         Behavior::CByValue,
         Some("std::os::raw::c_uchar".into()),
+        true,
+        true,
     ));
     for (cpp_type, rust_type) in (4..7).map(|x| 2i32.pow(x)).flat_map(|x| {
         vec![
@@ -372,15 +425,26 @@ fn create_type_database() -> TypeDatabase {
             cpp_type,
             Behavior::CByValue,
             None,
+            true,
+            true,
         ));
     }
-    db.insert(TypeDetails::new("bool", "bool", Behavior::CByValue, None));
+    db.insert(TypeDetails::new(
+        "bool",
+        "bool",
+        Behavior::CByValue,
+        None,
+        true,
+        true,
+    ));
 
     db.insert(TypeDetails::new(
         "std::pin::Pin",
         "Pin",
         Behavior::RustByValue, // because this is actually Pin<&something>
         None,
+        true,
+        false,
     ));
 
     let mut insert_ctype = |cname: &str| {
@@ -390,12 +454,16 @@ fn create_type_database() -> TypeDatabase {
             cname,
             Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_{}", concatenated_name)),
+            true,
+            true,
         ));
         db.insert(TypeDetails::new(
             format!("autocxx::c_u{}", concatenated_name),
             format!("unsigned {}", cname),
             Behavior::CVariableLengthByValue,
             Some(format!("std::os::raw::c_u{}", concatenated_name)),
+            true,
+            true,
         ));
     };
 
@@ -404,19 +472,37 @@ fn create_type_database() -> TypeDatabase {
     insert_ctype("short");
     insert_ctype("long long");
 
-    db.insert(TypeDetails::new("f32", "float", Behavior::CByValue, None));
-    db.insert(TypeDetails::new("f64", "double", Behavior::CByValue, None));
+    db.insert(TypeDetails::new(
+        "f32",
+        "float",
+        Behavior::CByValue,
+        None,
+        true,
+        true,
+    ));
+    db.insert(TypeDetails::new(
+        "f64",
+        "double",
+        Behavior::CByValue,
+        None,
+        true,
+        true,
+    ));
     db.insert(TypeDetails::new(
         "::std::os::raw::c_char",
         "char",
         Behavior::CByValue,
         None,
+        true,
+        true,
     ));
     db.insert(TypeDetails::new(
         "autocxx::c_void",
         "void",
         Behavior::CVoid,
         Some("std::os::raw::c_void".into()),
+        false,
+        false,
     ));
     db
 }

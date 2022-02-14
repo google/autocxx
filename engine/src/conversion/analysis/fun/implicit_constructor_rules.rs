@@ -14,6 +14,7 @@
 
 //! Module which understands C++ constructor synthesis rules.
 
+/// Output of the C++ rules about what implicit constructors should be generated.
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub(super) struct ImplicitConstructorsNeeded {
     pub(super) default_constructor: bool,
@@ -22,7 +23,8 @@ pub(super) struct ImplicitConstructorsNeeded {
     pub(super) move_constructor: bool,
 }
 
-#[derive(Default)]
+/// Input to the C++ rules about which implicit constructors are generated.
+#[derive(Default, Debug)]
 pub(super) struct ExplicitItemsFound {
     pub(super) move_constructor: bool,
     pub(super) copy_constructor: bool,
@@ -34,11 +36,22 @@ pub(super) struct ExplicitItemsFound {
     pub(super) copy_assignment_operator: bool,
     pub(super) move_assignment_operator: bool,
     pub(super) has_rvalue_reference_fields: bool,
+    pub(super) any_field_or_base_not_understood: bool,
 }
 
 pub(super) fn determine_implicit_constructors(
     explicits: ExplicitItemsFound,
 ) -> ImplicitConstructorsNeeded {
+    if explicits.any_field_or_base_not_understood {
+        // Don't generate anything
+        return ImplicitConstructorsNeeded {
+            default_constructor: false,
+            copy_constructor_taking_t: false,
+            copy_constructor_taking_const_t: false,
+            move_constructor: false,
+        };
+    }
+
     let any_constructor =
         explicits.copy_constructor || explicits.move_constructor || explicits.any_other_constructor;
     // If no user-declared constructors of any kind are provided for a class type (struct, class, or union),
