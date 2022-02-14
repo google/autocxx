@@ -60,7 +60,11 @@ impl LinkableTryBuilder {
                 if dest.exists() {
                     std::fs::remove_file(&dest).unwrap();
                 }
-                std::fs::rename(item.path(), dest).unwrap();
+                if KEEP_TEMPDIRS {
+                    std::fs::copy(item.path(), dest).unwrap();
+                } else {
+                    std::fs::rename(item.path(), dest).unwrap();
+                }
             }
         }
     }
@@ -387,6 +391,9 @@ where
     b.include(tdir.path())
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
+    if KEEP_TEMPDIRS {
+        println!("Generated .rs files: {:?}", generated_rs_files);
+    }
     // Step 8: use the trybuild crate to build the Rust file.
     let r = get_builder().lock().unwrap().build(
         &target_dir,
@@ -396,12 +403,12 @@ where
         &rs_path,
         generated_rs_files,
     );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tdir.into_path().to_str());
+    }
     if r.is_err() {
         return Err(TestError::RsBuild); // details of Rust panic are a bit messy to include, and
                                         // not important at the moment.
-    }
-    if KEEP_TEMPDIRS {
-        println!("Tempdir: {:?}", tdir.into_path().to_str());
     }
     Ok(())
 }
