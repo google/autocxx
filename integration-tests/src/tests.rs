@@ -1198,7 +1198,7 @@ fn test_i32_const() {
     let cxx = indoc! {"
     "};
     let hdr = indoc! {"
-        #include <cstdint>  
+        #include <cstdint>
         const uint32_t BOB = 3;
     "};
     let rs = quote! {
@@ -1213,7 +1213,7 @@ fn test_negative_rs_nonsense() {
     let cxx = indoc! {"
     "};
     let hdr = indoc! {"
-        #include <cstdint>  
+        #include <cstdint>
         const uint32_t BOB = 3;
     "};
     let rs = quote! {
@@ -1228,7 +1228,7 @@ fn test_negative_cpp_nonsense() {
     let cxx = indoc! {"
     "};
     let hdr = indoc! {"
-        #include <cstdint>  
+        #include <cstdint>
         const uint32_t BOB = CAT;
     "};
     let rs = quote! {
@@ -1780,17 +1780,17 @@ fn test_multiple_classes_with_methods() {
 
         struct TrivialStruct {
             uint32_t val = 0;
-        
+
             uint32_t get() const;
             uint32_t inc();
         };
         TrivialStruct make_trivial_struct();
-        
+
         class TrivialClass {
           public:
             uint32_t get() const;
             uint32_t inc();
-        
+
           private:
             uint32_t val_ = 1;
         };
@@ -1799,7 +1799,7 @@ fn test_multiple_classes_with_methods() {
         struct OpaqueStruct {
             // ~OpaqueStruct();
             uint32_t val = 2;
-        
+
             uint32_t get() const;
             uint32_t inc();
         };
@@ -1810,7 +1810,7 @@ fn test_multiple_classes_with_methods() {
             // ~OpaqueClass();
             uint32_t get() const;
             uint32_t inc();
-        
+
           private:
             uint32_t val_ = 3;
         };
@@ -4863,7 +4863,7 @@ fn test_issue_490() {
         typedef i bp;
         typedef typename ay<b, bp>::h bh;
         bn<bh, bp> bq;
-        
+
         public:
         unique_ptr();
         unique_ptr(bh);
@@ -5786,6 +5786,25 @@ fn test_shared_ptr() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/799
+fn test_shared_ptr_const() {
+    let hdr = indoc! {"
+        #include <memory>
+        inline std::shared_ptr<const int> make_shared_int() {
+            return std::make_shared<const int>(3);
+        }
+        inline int take_shared_int(std::shared_ptr<const int> a) {
+            return *a;
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::make_shared_int();
+        assert_eq!(ffi::take_shared_int(a.clone()), autocxx::c_int(3));
+    };
+    run_test("", hdr, rs, &["make_shared_int", "take_shared_int"], &[]);
+}
+
+#[test]
 fn test_rust_reference() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -6411,6 +6430,110 @@ fn test_non_pv_subclass() {
                 a: u32
             }
             impl Observer_methods for MyObserver {
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_two_subclasses() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo() const {}
+        virtual ~Observer() {}
+    };
+    inline void bar() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserverA::new_rust_owned(MyObserverA { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+            let obs = MyObserverB::new_rust_owned(MyObserverB { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+        },
+        quote! {
+            generate!("bar")
+            subclass!("Observer",MyObserverA)
+            subclass!("Observer",MyObserverB)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverA {
+                a: u32
+            }
+            impl Observer_methods for MyObserverA {
+            }
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverB {
+                a: u32
+            }
+            impl Observer_methods for MyObserverB {
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_two_superclasses_with_same_name_method() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class ObserverA {
+    public:
+        ObserverA() {}
+        virtual void foo() const {}
+        virtual ~ObserverA() {}
+    };
+
+    class ObserverB {
+        public:
+            ObserverB() {}
+            virtual void foo() const {}
+            virtual ~ObserverB() {}
+        };
+    inline void bar() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserverA::new_rust_owned(MyObserverA { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+            let obs = MyObserverB::new_rust_owned(MyObserverB { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+        },
+        quote! {
+            generate!("bar")
+            subclass!("ObserverA",MyObserverA)
+            subclass!("ObserverB",MyObserverB)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::ObserverA_methods;
+            use ffi::ObserverB_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverA {
+                a: u32
+            }
+            impl ObserverA_methods for MyObserverA {
+            }
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverB {
+                a: u32
+            }
+            impl ObserverB_methods for MyObserverB {
             }
         }),
     );
@@ -7726,7 +7849,7 @@ fn test_chrono_problem() {
 }
 
 fn size_and_alignment_test(pod: bool) {
-    static TYPES: [(&'static str, &'static str); 6] = [
+    static TYPES: [(&str, &str); 6] = [
         ("A", "struct A { uint8_t a; };"),
         ("B", "struct B { uint32_t a; };"),
         ("C", "struct C { uint64_t a; };"),
@@ -7786,7 +7909,7 @@ fn size_and_alignment_test(pod: bool) {
         },
     );
     if pod {
-        run_test("", &hdr, rs.clone(), &allowlist_fns, &allowlist_types);
+        run_test("", &hdr, rs, &allowlist_fns, &allowlist_types);
     } else {
         run_test("", &hdr, rs, &allowlist_both, &[]);
     }

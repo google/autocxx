@@ -32,7 +32,7 @@ where
     F: FnOnce(&mut Command),
 {
     let result = base_test_ex(tmp_dir, arg_modifier);
-    assert_contentful(&tmp_dir, "gen0.cc");
+    assert_contentful(tmp_dir, "gen0.cc");
     result
 }
 
