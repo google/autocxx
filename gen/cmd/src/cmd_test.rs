@@ -31,6 +31,15 @@ fn base_test<F>(tmp_dir: &TempDir, arg_modifier: F) -> Result<(), Box<dyn std::e
 where
     F: FnOnce(&mut Command),
 {
+    let result = base_test_ex(tmp_dir, arg_modifier);
+    assert_contentful(&tmp_dir, "gen0.cc");
+    result
+}
+
+fn base_test_ex<F>(tmp_dir: &TempDir, arg_modifier: F) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: FnOnce(&mut Command),
+{
     let demo_code_dir = tmp_dir.path().join("demo");
     std::fs::create_dir(&demo_code_dir).unwrap();
     write_to_file(&demo_code_dir, "input.h", INPUT_H.as_bytes());
@@ -47,7 +56,6 @@ where
         .arg("--gen-rs-include")
         .assert()
         .success();
-    assert_contentful(&tmp_dir, "gen0.cc");
     Ok(())
 }
 
@@ -119,6 +127,25 @@ fn test_gen_repro() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[test]
+fn test_skip_cxx_gen() -> Result<(), Box<dyn std::error::Error>> {
+    let tmp_dir = TempDir::new("example")?;
+    base_test_ex(&tmp_dir, |cmd| {
+        cmd.arg("--generate-exact")
+            .arg("3")
+            .arg("--fix-rs-include-name")
+            .arg("--skip-cxx-gen");
+    })?;
+    assert_contentful(&tmp_dir, "autocxxgen_ffi.h");
+    assert_not_contentful(&tmp_dir, "gen0.cc");
+    assert_exists(&tmp_dir, "gen1.cc");
+    assert_exists(&tmp_dir, "gen2.cc");
+    assert_contentful(&tmp_dir, "gen0.include.rs");
+    assert_exists(&tmp_dir, "gen1.include.rs");
+    assert_exists(&tmp_dir, "gen2.include.rs");
+    Ok(())
+}
+
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) {
     let path = dir.join(filename);
     let mut f = File::create(&path).expect("Unable to create file");
@@ -130,7 +157,23 @@ fn assert_contentful(outdir: &TempDir, fname: &str) {
     if !p.exists() {
         panic!("File {} didn't exist", p.to_string_lossy());
     }
-    assert!(p.metadata().unwrap().len() > super::BLANK.len().try_into().unwrap());
+    assert!(
+        p.metadata().unwrap().len() > super::BLANK.len().try_into().unwrap(),
+        "File {} is empty",
+        fname
+    );
+}
+
+fn assert_not_contentful(outdir: &TempDir, fname: &str) {
+    let p = outdir.path().join(fname);
+    if !p.exists() {
+        panic!("File {} didn't exist", p.to_string_lossy());
+    }
+    assert!(
+        p.metadata().unwrap().len() <= super::BLANK.len().try_into().unwrap(),
+        "File {} is not empty",
+        fname
+    );
 }
 
 fn assert_exists(outdir: &TempDir, fname: &str) {
