@@ -5786,6 +5786,25 @@ fn test_shared_ptr() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/799
+fn test_shared_ptr_const() {
+    let hdr = indoc! {"
+        #include <memory>
+        inline std::shared_ptr<const int> make_shared_int() {
+            return std::make_shared<const int>(3);
+        }
+        inline int take_shared_int(std::shared_ptr<const int> a) {
+            return *a;
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::make_shared_int();
+        assert_eq!(ffi::take_shared_int(a.clone()), autocxx::c_int(3));
+    };
+    run_test("", hdr, rs, &["make_shared_int", "take_shared_int"], &[]);
+}
+
+#[test]
 fn test_rust_reference() {
     let hdr = indoc! {"
     #include <cstdint>
