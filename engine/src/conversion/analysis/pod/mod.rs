@@ -37,6 +37,7 @@ use crate::{
 
 use super::tdef::{TypedefAnalysis, TypedefPhase};
 
+#[derive(Debug)]
 pub(crate) struct PodAnalysis {
     pub(crate) kind: TypeKind,
     pub(crate) bases: HashSet<QualifiedName>,
@@ -50,6 +51,7 @@ pub(crate) struct PodAnalysis {
     pub(crate) is_generic: bool,
 }
 
+#[derive(Debug)]
 pub(crate) struct PodPhase;
 
 impl AnalysisPhase for PodPhase {
