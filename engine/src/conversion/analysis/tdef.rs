@@ -29,6 +29,7 @@ use crate::{
     types::QualifiedName,
 };
 
+#[derive(Debug)]
 pub(crate) struct TypedefAnalysis {
     pub(crate) kind: TypedefKind,
     pub(crate) deps: HashSet<QualifiedName>,
@@ -36,6 +37,7 @@ pub(crate) struct TypedefAnalysis {
 
 /// Analysis phase where typedef analysis has been performed but no other
 /// analyses just yet.
+#[derive(Debug)]
 pub(crate) struct TypedefPhase;
 
 impl AnalysisPhase for TypedefPhase {

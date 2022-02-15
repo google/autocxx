@@ -78,7 +78,7 @@ pub(crate) enum ReceiverMutability {
     Mutable,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum MethodKind {
     Normal(ReceiverMutability),
     Constructor,
@@ -88,7 +88,7 @@ pub(crate) enum MethodKind {
     PureVirtual(ReceiverMutability),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum TraitMethodKind {
     CopyConstructor,
     MoveConstructor,
@@ -96,7 +96,7 @@ pub(crate) enum TraitMethodKind {
     Destructor,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct TraitMethodDetails {
     pub(crate) impl_for_specifics: TokenStream,
     pub(crate) trait_signature: TokenStream,
@@ -113,7 +113,7 @@ pub(crate) struct TraitMethodDetails {
     pub(crate) trait_call_is_unsafe: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum FnKind {
     Function,
     Method(QualifiedName, MethodKind),
@@ -130,7 +130,7 @@ pub(crate) enum FnKind {
 
 /// Strategy for ensuring that the final, callable, Rust name
 /// is what the user originally expected.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 
 pub(crate) enum RustRenameStrategy {
     /// cxx::bridge name matches user expectations
@@ -140,14 +140,14 @@ pub(crate) enum RustRenameStrategy {
     RenameInOutputMod(Ident),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum UnsafetyNeeded {
     None,
     JustBridge,
     Always,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct FnAnalysis {
     pub(crate) cxxbridge_name: Ident,
     pub(crate) rust_name: String,
@@ -171,7 +171,7 @@ pub(crate) struct FnAnalysis {
     pub(crate) externally_callable: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct ArgumentAnalysis {
     pub(crate) conversion: TypeConversionPolicy,
     pub(crate) name: Pat,
@@ -199,6 +199,7 @@ impl Default for ReturnTypeAnalysis {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct FnPhase;
 
 impl AnalysisPhase for FnPhase {

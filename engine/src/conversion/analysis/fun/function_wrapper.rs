@@ -67,7 +67,7 @@ impl RustConversionType {
 /// * Finally, the actual C++ API receives a `std::string` by value.
 /// The implementation here is distributed across this file, and
 /// `function_wrapper_rs` and `function_wrapper_cpp`.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct TypeConversionPolicy {
     pub(crate) unwrapped_type: Type,
     pub(crate) cpp_conversion: CppConversionType,
@@ -129,7 +129,7 @@ impl TypeConversionPolicy {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 
 pub(crate) enum CppFunctionBody {
     FunctionCall(Namespace, Ident),
@@ -141,7 +141,7 @@ pub(crate) enum CppFunctionBody {
     Destructor(Namespace, Ident),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 
 pub(crate) enum CppFunctionKind {
     Function,
@@ -151,7 +151,7 @@ pub(crate) enum CppFunctionKind {
     SynthesizedConstructor,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct CppFunction {
     pub(crate) payload: CppFunctionBody,
     pub(crate) wrapper_function_name: Ident,

@@ -28,7 +28,7 @@ use super::{
     ConvertError,
 };
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum TypeKind {
     Pod,    // trivial. Can be moved and copied in Rust.
     NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
@@ -54,6 +54,7 @@ pub(crate) enum CppVisibility {
 }
 
 /// Details about a C++ struct.
+#[derive(Debug)]
 pub(crate) struct StructDetails {
     pub(crate) vis: CppVisibility,
     pub(crate) item: ItemStruct,
@@ -62,7 +63,7 @@ pub(crate) struct StructDetails {
 }
 
 /// Layout of a type, equivalent to the same type in ir/layout.rs in bindgen
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Layout {
     /// The size (in bytes) of this layout.
     pub(crate) size: usize,
@@ -87,14 +88,14 @@ impl Parse for Layout {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum Virtualness {
     None,
     Virtual,
     PureVirtual,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum CastMutability {
     ConstToConst,
     MutToConst,
@@ -103,7 +104,7 @@ pub(crate) enum CastMutability {
 
 /// Indicates that this function didn't exist originally in the C++
 /// but we've created it afresh.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum Synthesis {
     MakeUnique,
     SubclassConstructor {
@@ -120,7 +121,7 @@ pub(crate) enum Synthesis {
 /// Information about references (as opposed to pointers) to be found
 /// within the function signature. This is derived from bindgen annotations
 /// which is why it's not within `FuncToConvert::inputs`
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct References {
     pub(crate) rvalue_ref_params: HashSet<Ident>,
     pub(crate) ref_params: HashSet<Ident>,
@@ -138,7 +139,7 @@ impl References {
     }
 }
 
-#[derive(Clone, Hash, Eq, PartialEq)]
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub(crate) enum SpecialMemberKind {
     DefaultConstructor,
     CopyConstructor,
@@ -157,7 +158,7 @@ pub(crate) enum SpecialMemberKind {
 /// during normal bindgen parsing. If that happens, they'll create one
 /// of these structures, and typically fill in some of the
 /// `synthesized_*` members which are not filled in from bindgen.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct FuncToConvert {
     pub(crate) ident: Ident,
     pub(crate) doc_attr: Option<Attribute>,
@@ -192,6 +193,7 @@ pub(crate) trait AnalysisPhase {
 }
 
 /// No analysis has been applied to this API.
+#[derive(Debug)]
 pub(crate) struct NullPhase;
 
 impl AnalysisPhase for NullPhase {
@@ -200,7 +202,7 @@ impl AnalysisPhase for NullPhase {
     type FunAnalysis = ();
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum TypedefKind {
     Use(ItemUse),
     Type(ItemType),
@@ -311,7 +313,6 @@ impl SubclassName {
     }
 }
 
-#[derive(strum_macros::Display)]
 /// Different types of API we might encounter.
 ///
 /// This type is parameterized over an `ApiAnalysis`. This is any additional
@@ -321,12 +322,7 @@ impl SubclassName {
 /// This is not as high-level as the equivalent types in `cxx` or `bindgen`,
 /// because sometimes we pass on the `bindgen` output directly in the
 /// Rust codegen output.
-///
-/// This derives from [strum_macros::Display] because we want to be
-/// able to debug-print the enum discriminant without worrying about
-/// the fact that their payloads may not be `Debug` or `Display`.
-/// (Specifically, allowing `syn` Types to be `Debug` requires
-/// enabling syn's `extra-traits` feature which increases compile time.)
+#[derive(Debug)]
 pub(crate) enum Api<T: AnalysisPhase> {
     /// A forward declared type for which no definition is available.
     ForwardDeclaration { name: ApiName },
@@ -405,6 +401,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     },
 }
 
+#[derive(Debug)]
 pub(crate) struct RustSubclassFnDetails {
     pub(crate) params: Punctuated<FnArg, Comma>,
     pub(crate) ret: ReturnType,
@@ -473,12 +470,6 @@ impl<T: AnalysisPhase> Api<T> {
             ),
             _ => Box::new(std::iter::once(self.name().clone())),
         }
-    }
-}
-
-impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?} (kind={})", self.name_info(), self)
     }
 }
 

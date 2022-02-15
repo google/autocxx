@@ -24,6 +24,8 @@ mod error_reporter;
 mod parse;
 mod utilities;
 
+use std::fmt::Debug;
+
 use analysis::fun::FnAnalyzer;
 use autocxx_parser::IncludeCppConfig;
 pub(crate) use codegen_cpp::CppCodeGenerator;
@@ -82,7 +84,12 @@ impl<'a> BridgeConverter<'a> {
         }
     }
 
-    fn dump_apis<T: AnalysisPhase>(label: &str, apis: &[Api<T>]) {
+    fn dump_apis<T: AnalysisPhase + Debug>(label: &str, apis: &[Api<T>])
+    where
+        T::FunAnalysis: Debug,
+        T::StructAnalysis: Debug,
+        T::TypedefAnalysis: Debug,
+    {
         if LOG_APIS {
             log::info!(
                 "APIs after {}:\n{}",
