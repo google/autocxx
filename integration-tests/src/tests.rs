@@ -7657,6 +7657,120 @@ fn test_copy_and_move_constructor_moveit() {
 }
 
 #[test]
+fn test_uniqueptr_moveit() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        use autocxx::moveit::EmplaceUnpinned;
+        let mut up_obj = cxx::UniquePtr::emplace(ffi::A::new());
+        up_obj.as_mut().unwrap().set(42);
+        assert_eq!(up_obj.get(), 42);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_various_emplacement() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        use autocxx::moveit::EmplaceUnpinned;
+        use autocxx::moveit::Emplace;
+        let mut up_obj = cxx::UniquePtr::emplace(ffi::A::new());
+        up_obj.pin_mut().set(666);
+        // Can't current move out of a UniquePtr
+        let mut box_obj = Box::emplace(ffi::A::new());
+        box_obj.as_mut().set(667);
+        let box_obj2 = Box::emplace(autocxx::moveit::new::mov(box_obj));
+        moveit! { let back_on_stack = autocxx::moveit::new::mov(box_obj2); }
+        assert_eq!(back_on_stack.get(), 667);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_emplace_uses_overridden_new_and_delete() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        void* operator new(size_t count);
+        void operator delete(void* ptr) noexcept;
+        void* operator new(size_t count, void* ptr);
+        std::string so_we_are_non_trivial;
+    };
+    void reset_flags();
+    bool was_new_called();
+    bool was_delete_called();
+    "};
+    let cxx = indoc! {"
+        bool new_called;
+        bool delete_called;
+        void reset_flags() {
+            new_called = false;
+            delete_called = false;
+        }
+        void* A::operator new(size_t count) {
+            new_called = true;
+            return ::operator new(count);
+        }
+        void* A::operator new(size_t count, void* ptr) {
+            return ::operator new(count, ptr);
+        }
+        void A::operator delete(void* ptr) noexcept {
+            delete_called = true;
+            ::operator delete(ptr);
+        }
+        bool was_new_called() {
+            return new_called;
+        }
+        bool was_delete_called() {
+            return delete_called;
+        }
+    "};
+    let rs = quote! {
+        ffi::reset_flags();
+        {
+            let _ = ffi::A::make_unique();
+            assert!(ffi::was_new_called());
+        }
+        assert!(ffi::was_delete_called());
+        ffi::reset_flags();
+        {
+            use autocxx::moveit::EmplaceUnpinned;
+            let _ = cxx::UniquePtr::emplace(ffi::A::new());
+        }
+        assert!(ffi::was_delete_called());
+    };
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &["A", "reset_flags", "was_new_called", "was_delete_called"],
+        &[],
+    );
+}
+
+#[test]
 fn test_explicit_everything() {
     let hdr = indoc! {"
     #include <stdint.h>

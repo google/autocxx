@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod function_wrapper_cpp;
+mod new_and_delete_prelude;
 pub(crate) mod type_to_cpp;
 
 use crate::{
@@ -34,7 +35,7 @@ use super::{
         function_wrapper::{CppFunction, CppFunctionBody},
         FnPhase,
     },
-    api::{Api, SubclassName, Synthesis},
+    api::{Api, Provenance, SubclassName},
     ConvertError,
 };
 
@@ -43,28 +44,27 @@ enum Header {
     System(&'static str),
     CxxH,
     CxxgenH,
+    NewDeletePrelude,
 }
 
 impl Header {
     fn include_stmt(&self, cpp_codegen_options: &CppCodegenOptions) -> String {
         let blank = "".to_string();
-        format!(
-            "#include {}",
-            match self {
-                Self::System(name) => format!("<{}>", name),
-                Self::CxxH => {
-                    let prefix = cpp_codegen_options.path_to_cxx_h.as_ref().unwrap_or(&blank);
-                    format!("\"{}cxx.h\"", prefix)
-                }
-                Self::CxxgenH => {
-                    let prefix = cpp_codegen_options
-                        .path_to_cxxgen_h
-                        .as_ref()
-                        .unwrap_or(&blank);
-                    format!("\"{}cxxgen.h\"", prefix)
-                }
+        match self {
+            Self::System(name) => format!("#include <{}>", name),
+            Self::CxxH => {
+                let prefix = cpp_codegen_options.path_to_cxx_h.as_ref().unwrap_or(&blank);
+                format!("#include \"{}cxx.h\"", prefix)
             }
-        )
+            Self::CxxgenH => {
+                let prefix = cpp_codegen_options
+                    .path_to_cxxgen_h
+                    .as_ref()
+                    .unwrap_or(&blank);
+                format!("#include \"{}cxxgen.h\"", prefix)
+            }
+            Header::NewDeletePrelude => new_and_delete_prelude::NEW_AND_DELETE_PRELUDE.to_string(),
+        }
     }
 
     fn is_system(&self) -> bool {
@@ -161,14 +161,11 @@ impl<'a> CppCodeGenerator<'a> {
                     fun,
                     ..
                 } => {
-                    if let Some(Synthesis::SubclassConstructor {
-                        subclass, cpp_impl, ..
-                    }) = &fun.synthesis
-                    {
+                    if let Provenance::SynthesizedSubclassConstructor(details) = &fun.provenance {
                         constructors_by_subclass
-                            .entry(subclass.clone())
+                            .entry(details.subclass.clone())
                             .or_default()
-                            .push(cpp_impl);
+                            .push(&details.cpp_impl);
                     }
                     self.generate_cpp_function(cpp_wrapper)?
                 }
@@ -418,49 +415,74 @@ impl<'a> CppCodeGenerator<'a> {
         } else {
             arg_list.join(", ")
         };
-        let (mut underlying_function_call, field_assignments) = match &details.payload {
-            CppFunctionBody::MakeUnique | CppFunctionBody::Cast => (arg_list, "".to_string()),
-            CppFunctionBody::PlacementNew(ns, id) => {
-                let ty_id = QualifiedName::new(ns, id.clone());
-                let ty_id =
-                    namespaced_name_using_original_name_map(&ty_id, &self.original_name_map);
-                (
-                    format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
-                    "".to_string(),
-                )
-            }
-            CppFunctionBody::Destructor(ns, id) => {
-                let ty_id = QualifiedName::new(ns, id.clone());
-                let ty_id = identifier_using_original_name_map(&ty_id, &self.original_name_map);
-                (format!("{}->~{}()", arg_list, ty_id), "".to_string())
-            }
-            CppFunctionBody::FunctionCall(ns, id) => match receiver {
-                Some(receiver) => (format!("{}.{}({})", receiver, id, arg_list), "".to_string()),
-                None => {
+        let (mut underlying_function_call, field_assignments, need_allocators) =
+            match &details.payload {
+                CppFunctionBody::MakeUnique | CppFunctionBody::Cast => {
+                    (arg_list, "".to_string(), false)
+                }
+                CppFunctionBody::PlacementNew(ns, id) => {
+                    let ty_id = QualifiedName::new(ns, id.clone());
+                    let ty_id = self.namespaced_name(&ty_id);
+                    (
+                        format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
+                        "".to_string(),
+                        false,
+                    )
+                }
+                CppFunctionBody::Destructor(ns, id) => {
+                    let ty_id = QualifiedName::new(ns, id.clone());
+                    let ty_id = identifier_using_original_name_map(&ty_id, &self.original_name_map);
+                    (format!("{}->~{}()", arg_list, ty_id), "".to_string(), false)
+                }
+                CppFunctionBody::FunctionCall(ns, id) => match receiver {
+                    Some(receiver) => (
+                        format!("{}.{}({})", receiver, id, arg_list),
+                        "".to_string(),
+                        false,
+                    ),
+                    None => {
+                        let underlying_function_call = ns
+                            .into_iter()
+                            .cloned()
+                            .chain(std::iter::once(id.to_string()))
+                            .join("::");
+                        (
+                            format!("{}({})", underlying_function_call, arg_list),
+                            "".to_string(),
+                            false,
+                        )
+                    }
+                },
+                CppFunctionBody::StaticMethodCall(ns, ty_id, fn_id) => {
                     let underlying_function_call = ns
                         .into_iter()
                         .cloned()
-                        .chain(std::iter::once(id.to_string()))
+                        .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
                         .join("::");
                     (
                         format!("{}({})", underlying_function_call, arg_list),
                         "".to_string(),
+                        false,
                     )
                 }
-            },
-            CppFunctionBody::StaticMethodCall(ns, ty_id, fn_id) => {
-                let underlying_function_call = ns
-                    .into_iter()
-                    .cloned()
-                    .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
-                    .join("::");
-                (
-                    format!("{}({})", underlying_function_call, arg_list),
+                CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list, false),
+                CppFunctionBody::AllocUninitialized(ty) => {
+                    let namespaced_ty = self.namespaced_name(ty);
+                    (
+                        format!(
+                            "new_appropriately<{}>(1, static_cast<{}*>(nullptr));",
+                            namespaced_ty, namespaced_ty
+                        ),
+                        "".to_string(),
+                        true,
+                    )
+                }
+                CppFunctionBody::FreeUninitialized(ty) => (
+                    format!("delete_appropriately<{}>(arg0);", self.namespaced_name(ty)),
                     "".to_string(),
-                )
-            }
-            CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list),
-        };
+                    true,
+                ),
+            };
         if let Some(ret) = &details.return_conversion {
             underlying_function_call = format!(
                 "return {}",
@@ -509,13 +531,21 @@ impl<'a> CppCodeGenerator<'a> {
                 None,
             )
         };
+        let mut headers = vec![Header::System("memory")];
+        if need_allocators {
+            headers.push(Header::NewDeletePrelude);
+        }
         Ok(AdditionalFunction {
             type_definition: None,
             declaration,
             definition,
-            headers: vec![Header::System("memory")],
+            headers,
             cpp_headers: Vec::new(),
         })
+    }
+
+    fn namespaced_name(&self, name: &QualifiedName) -> String {
+        namespaced_name_using_original_name_map(name, &self.original_name_map)
     }
 
     fn generate_ctype_typedef(&mut self, tn: &QualifiedName) {

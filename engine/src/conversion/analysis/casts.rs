@@ -17,7 +17,7 @@ use quote::quote;
 use syn::{parse_quote, FnArg};
 
 use crate::{
-    conversion::api::{Api, ApiName, CastMutability, References, Synthesis},
+    conversion::api::{Api, ApiName, CastMutability, Provenance, References, TraitSynthesis},
     types::{make_ident, QualifiedName},
 };
 
@@ -28,7 +28,10 @@ use crate::{
 /// But the related code may be useful in future so I'm keeping it around.
 const SUPPORT_MUTABLE_CASTS: bool = false;
 
-use super::pod::{PodAnalysis, PodPhase};
+use super::{
+    fun::function_wrapper::{CppFunctionBody, CppFunctionKind},
+    pod::{PodAnalysis, PodPhase},
+};
 
 pub(crate) fn add_casts(apis: Vec<Api<PodPhase>>) -> Vec<Api<PodPhase>> {
     apis.into_iter()
@@ -108,11 +111,13 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
             original_name: None,
             self_ty: Some(from.clone()),
             synthesized_this_type: None,
-            synthesis: Some(Synthesis::Cast {
+            add_to_trait: Some(TraitSynthesis::Cast {
                 to_type: to.clone(),
                 mutable,
             }),
+            synthetic_cpp: Some((CppFunctionBody::Cast, CppFunctionKind::Function)),
             is_deleted: false,
+            provenance: Provenance::SynthesizedOther,
         }),
         analysis: (),
     }
