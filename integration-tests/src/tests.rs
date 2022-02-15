@@ -7707,6 +7707,70 @@ fn test_various_emplacement() {
 }
 
 #[test]
+fn test_emplace_uses_overridden_new_and_delete() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        void* operator new(size_t count);
+        void operator delete(void* ptr) noexcept;
+        void* operator new(size_t count, void* ptr);
+        std::string so_we_are_non_trivial;
+    };
+    void reset_flags();
+    bool was_new_called();
+    bool was_delete_called();
+    "};
+    let cxx = indoc! {"
+        bool new_called;
+        bool delete_called;
+        void reset_flags() {
+            new_called = false;
+            delete_called = false;
+        }
+        void* A::operator new(size_t count) {
+            new_called = true;
+            return ::operator new(count);
+        }
+        void* A::operator new(size_t count, void* ptr) {
+            return ::operator new(count, ptr);
+        }
+        void A::operator delete(void* ptr) noexcept {
+            delete_called = true;
+            ::operator delete(ptr);
+        }
+        bool was_new_called() {
+            return new_called;
+        }
+        bool was_delete_called() {
+            return delete_called;
+        }
+    "};
+    let rs = quote! {
+        ffi::reset_flags();
+        {
+            let _ = ffi::A::make_unique();
+            assert!(ffi::was_new_called());
+        }
+        assert!(ffi::was_delete_called());
+        ffi::reset_flags();
+        {
+            use autocxx::moveit::EmplaceUnpinned;
+            let _ = cxx::UniquePtr::emplace(ffi::A::new());
+        }
+        assert!(ffi::was_delete_called());
+    };
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &["A", "reset_flags", "was_new_called", "was_delete_called"],
+        &[],
+    );
+}
+
+#[test]
 fn test_explicit_everything() {
     let hdr = indoc! {"
     #include <stdint.h>
