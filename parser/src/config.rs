@@ -396,7 +396,7 @@ impl IncludeCppConfig {
     pub fn uniquify_name_per_mod<'a>(&self, name: &'a str) -> Cow<'a, str> {
         match self.mod_name.as_ref() {
             None => Cow::Borrowed(name),
-            Some(md) => Cow::Owned(format!("{}_{}", name, md.to_string())),
+            Some(md) => Cow::Owned(format!("{}_{}", name, md)),
         }
     }
 
