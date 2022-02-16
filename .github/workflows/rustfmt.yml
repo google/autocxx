@@ -1,6 +1,7 @@
 name: Rustfmt
 on:
   push:
+    branches: [main]
   pull_request:
 jobs:
   format:
