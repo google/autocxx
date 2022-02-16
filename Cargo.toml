@@ -44,3 +44,4 @@ exclude = ["examples/s2", "examples/steam-mini", "examples/subclass", "examples/
 #cxx = { path="../cxx" }
 #cxx-gen = { path="../cxx/gen/lib" }
 #autocxx-bindgen = { path="../bindgen" }
+#moveit = { path="../moveit" }

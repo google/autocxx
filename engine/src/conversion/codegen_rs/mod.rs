@@ -51,19 +51,30 @@ use self::{
 
 use super::{
     analysis::fun::{FnAnalysis, FnKind},
-    api::{Layout, RustSubclassFnDetails, Synthesis},
+    api::{Layout, Provenance, RustSubclassFnDetails, TraitImplSignature},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
 };
 use super::{
     analysis::fun::{FnPhase, ReceiverMutability},
-    api::{AnalysisPhase, Api, ImplBlockDetails, SubclassName, TypeKind, TypedefKind},
+    api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind},
 };
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::{quote, ToTokens};
 
 unzip_n::unzip_n!(pub 4);
+
+/// An entry which needs to go into an `impl` block for a given type.
+struct ImplBlockDetails {
+    item: ImplItem,
+    ty: Ident,
+}
+
+struct TraitImplBlockDetails {
+    item: TraitItem,
+    key: TraitImplSignature,
+}
 
 /// Whether and how this item should be exposed in the mods constructed
 /// for actual end-user use.
@@ -412,6 +423,7 @@ impl<'a> RsCodeGenerator<'a> {
         ns: &Namespace,
     ) {
         let mut impl_entries_by_type: HashMap<_, Vec<_>> = HashMap::new();
+        let mut trait_impl_entries_by_trait_and_ty: HashMap<_, Vec<_>> = HashMap::new();
         for item in ns_entries.entries() {
             output_items.extend(item.1.bindgen_mod_items.iter().cloned());
             if let Some(impl_entry) = &item.1.impl_entry {
@@ -420,10 +432,26 @@ impl<'a> RsCodeGenerator<'a> {
                     .or_default()
                     .push(&impl_entry.item);
             }
+            if let Some(trait_impl_entry) = &item.1.trait_impl_entry {
+                trait_impl_entries_by_trait_and_ty
+                    .entry(trait_impl_entry.key.clone())
+                    .or_default()
+                    .push(&trait_impl_entry.item);
+            }
         }
         for (ty, entries) in impl_entries_by_type.into_iter() {
             output_items.push(Item::Impl(parse_quote! {
                 impl #ty {
+                    #(#entries)*
+                }
+            }))
+        }
+        for (key, entries) in trait_impl_entries_by_trait_and_ty.into_iter() {
+            let unsafety = key.unsafety;
+            let ty = key.ty;
+            let trt = key.trait_signature;
+            output_items.push(Item::Impl(parse_quote! {
+                #unsafety impl #trt for #ty {
                     #(#entries)*
                 }
             }))
@@ -978,13 +1006,9 @@ impl<'a> RsCodeGenerator<'a> {
             }
         };
         RsCodegenResult {
-            global_items: Vec::new(),
             impl_entry,
-            bridge_items: Vec::new(),
-            extern_c_mod_items: Vec::new(),
-            bindgen_mod_items: Vec::new(),
             materializations: materialization.into_iter().collect(),
-            extern_rust_mod_items: Vec::new(),
+            ..Default::default()
         }
     }
 
@@ -1113,17 +1137,15 @@ fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<Quali
     let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .filter_map(|api| match api {
-            Api::Function { fun, .. } => match &fun.synthesis {
-                Some(Synthesis::SubclassConstructor {
-                    subclass,
-                    is_trivial,
-                    ..
-                }) => Some((&subclass.0.name, is_trivial)),
+            Api::Function { fun, .. } => match &fun.provenance {
+                Provenance::SynthesizedSubclassConstructor(details) => {
+                    Some((&details.subclass.0.name, details.is_trivial))
+                }
                 _ => None,
             },
             _ => None,
         })
-        .partition(|(_, trivial)| **trivial);
+        .partition(|(_, trivial)| *trivial);
     let simple_constructors: HashSet<_> =
         simple_constructors.into_iter().map(|(qn, _)| qn).collect();
     let complex_constructors: HashSet<_> =
@@ -1156,5 +1178,6 @@ struct RsCodegenResult {
     global_items: Vec<Item>,
     bindgen_mod_items: Vec<Item>,
     impl_entry: Option<Box<ImplBlockDetails>>,
+    trait_impl_entry: Option<Box<TraitImplBlockDetails>>,
     materializations: Vec<Use>,
 }

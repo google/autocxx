@@ -36,6 +36,7 @@ use crate::{CppCodegenOptions, CppFilePair, UnsafePolicy};
 use self::{
     analysis::{
         abstract_types::{discard_ignored_functions, mark_types_abstract},
+        allocators::create_alloc_and_frees,
         casts::add_casts,
         check_names,
         fun::FnPhase,
@@ -142,6 +143,7 @@ impl<'a> BridgeConverter<'a> {
                 let analyzed_apis = analyze_pod_apis(apis, self.config)?;
                 Self::dump_apis("pod analysis", &analyzed_apis);
                 let analyzed_apis = add_casts(analyzed_apis);
+                let analyzed_apis = create_alloc_and_frees(analyzed_apis);
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions. This is probably the most complex

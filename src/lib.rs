@@ -841,3 +841,6 @@ pub mod prelude {
 
 /// Re-export moveit for ease of consumers.
 pub use moveit;
+
+/// And cxx too...
+pub use cxx;

@@ -16,14 +16,20 @@ use std::collections::HashSet;
 
 use crate::types::{make_ident, Namespace, QualifiedName};
 use autocxx_parser::RustPath;
+use quote::ToTokens;
 use syn::{
-    parse::Parse, punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ImplItem,
-    ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt, ReturnType, Signature,
-    Type, Visibility,
+    parse::Parse,
+    punctuated::Punctuated,
+    token::{Comma, Unsafe},
+    Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
+    ReturnType, Signature, Type, Visibility,
 };
 
 use super::{
-    analysis::fun::{function_wrapper::CppFunction, ReceiverMutability},
+    analysis::fun::{
+        function_wrapper::{CppFunction, CppFunctionBody, CppFunctionKind},
+        ReceiverMutability,
+    },
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
@@ -37,12 +43,6 @@ pub(crate) enum TypeKind {
             // some other type which is pure virtual. Alternatively, maybe we just don't
             // know if the base class is pure virtual because it wasn't on the allowlist,
             // in which case we'll err on the side of caution.
-}
-
-/// An entry which needs to go into an `impl` block for a given type.
-pub(crate) struct ImplBlockDetails {
-    pub(crate) item: ImplItem,
-    pub(crate) ty: Ident,
 }
 
 /// C++ visibility.
@@ -101,20 +101,27 @@ pub(crate) enum CastMutability {
     MutToMut,
 }
 
-/// Indicates that this function didn't exist originally in the C++
-/// but we've created it afresh.
+/// Indicates that this function (which is synthetic) should
+/// be a trait implementation rather than a method or free function.
 #[derive(Clone)]
-pub(crate) enum Synthesis {
-    MakeUnique,
-    SubclassConstructor {
-        subclass: SubclassName,
-        cpp_impl: Box<CppFunction>,
-        is_trivial: bool,
-    },
+pub(crate) enum TraitSynthesis {
     Cast {
         to_type: QualifiedName,
         mutable: CastMutability,
     },
+    AllocUninitialized(QualifiedName),
+    FreeUninitialized(QualifiedName),
+}
+
+/// Details of a subclass constructor.
+/// TODO: zap this; replace with an extra API.
+#[derive(Clone)]
+pub(crate) struct SubclassConstructorDetails {
+    pub(crate) subclass: SubclassName,
+    pub(crate) is_trivial: bool,
+    /// Implementation of the constructor _itself_ as distinct
+    /// from any wrapper function we create to call it.
+    pub(crate) cpp_impl: CppFunction,
 }
 
 /// Information about references (as opposed to pointers) to be found
@@ -138,13 +145,60 @@ impl References {
     }
 }
 
-#[derive(Clone, Hash, Eq, PartialEq)]
+#[derive(Clone)]
+pub(crate) struct TraitImplSignature {
+    pub(crate) ty: Type,
+    pub(crate) trait_signature: Type,
+    /// The trait is 'unsafe' itself
+    pub(crate) unsafety: Option<Unsafe>,
+}
+
+impl Eq for TraitImplSignature {}
+
+impl PartialEq for TraitImplSignature {
+    fn eq(&self, other: &Self) -> bool {
+        totokens_equal(&self.unsafety, &other.unsafety)
+            && totokens_equal(&self.ty, &other.ty)
+            && totokens_equal(&self.trait_signature, &other.trait_signature)
+    }
+}
+
+fn totokens_to_string<T: ToTokens>(a: &T) -> String {
+    a.to_token_stream().to_string()
+}
+
+fn totokens_equal<T: ToTokens>(a: &T, b: &T) -> bool {
+    totokens_to_string(a) == totokens_to_string(b)
+}
+
+fn hash_totokens<T: ToTokens, H: std::hash::Hasher>(a: &T, state: &mut H) {
+    use std::hash::Hash;
+    totokens_to_string(a).hash(state)
+}
+
+impl std::hash::Hash for TraitImplSignature {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        hash_totokens(&self.ty, state);
+        hash_totokens(&self.trait_signature, state);
+        hash_totokens(&self.unsafety, state);
+    }
+}
+
+#[derive(Clone)]
 pub(crate) enum SpecialMemberKind {
     DefaultConstructor,
     CopyConstructor,
     MoveConstructor,
     Destructor,
     AssignmentOperator,
+}
+
+#[derive(Clone)]
+pub(crate) enum Provenance {
+    Bindgen,
+    SynthesizedOther,
+    SynthesizedMakeUnique,
+    SynthesizedSubclassConstructor(Box<SubclassConstructorDetails>),
 }
 
 /// A C++ function for which we need to generate bindings, but haven't
@@ -159,6 +213,7 @@ pub(crate) enum SpecialMemberKind {
 /// `synthesized_*` members which are not filled in from bindgen.
 #[derive(Clone)]
 pub(crate) struct FuncToConvert {
+    pub(crate) provenance: Provenance,
     pub(crate) ident: Ident,
     pub(crate) doc_attr: Option<Attribute>,
     pub(crate) inputs: Punctuated<FnArg, Comma>,
@@ -177,9 +232,11 @@ pub(crate) struct FuncToConvert {
     /// method receiver, e.g. because we're making a subclass
     /// constructor, fill it in here.
     pub(crate) synthesized_this_type: Option<QualifiedName>,
+    /// If this function should actually belong to a trait.
+    pub(crate) add_to_trait: Option<TraitSynthesis>,
     /// If Some, this function didn't really exist in the original
     /// C++ and instead we're synthesizing it.
-    pub(crate) synthesis: Option<Synthesis>,
+    pub(crate) synthetic_cpp: Option<(CppFunctionBody, CppFunctionKind)>,
     pub(crate) is_deleted: bool,
 }
 
