@@ -11,10 +11,14 @@
 use autocxx_parser::{IncludeCpp, SubclassAttrs};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
-use proc_macro_error::{abort, proc_macro_error};
-use quote::quote;
+use proc_macro_error::{abort, abort_call_site, proc_macro_error};
+use quote::{quote, ToTokens};
 use syn::parse::Parser;
-use syn::{parse_macro_input, parse_quote, Fields, Item, ItemStruct, Visibility};
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
+use syn::{
+    parse_macro_input, parse_quote, Expr, Fields, FnArg, Item, ItemFn, ItemStruct, Visibility,
+};
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
@@ -128,4 +132,47 @@ pub fn cpp_semantics(_attr: TokenStream, _input: TokenStream) -> TokenStream {
         This code is the output from the autocxx-specific version of bindgen, \n\
         and should be interpreted by autocxx-engine before further usage."
     );
+}
+
+/// Derive a `make_unique` method for any constructor which implements `New`
+/// and `UniquePtrTarget`.
+#[proc_macro_error]
+#[proc_macro_attribute]
+pub fn derive_make_unique(_attr: TokenStream, input: TokenStream) -> TokenStream {
+    // Expect to parse:
+    // pub fn new() -> impl autocxx::moveit::new::New<Output = Self> {
+    // Need
+    // pub fn make_unique() -> impl autocxx::cxx::UniquePtr<Self>
+    let mut input: proc_macro2::TokenStream = input.into();
+    let mut extra_fn: ItemFn =
+        syn::parse2(input.clone()).unwrap_or_else(|_| abort_call_site!("Expected function"));
+    let orig_ident = extra_fn.sig.ident;
+    let name = orig_ident.to_string().replace("new", "make_unique");
+    extra_fn.sig.output = parse_quote! {
+        -> autocxx::cxx::UniquePtr<Self>
+    };
+    extra_fn.sig.ident = Ident::new(&name, orig_ident.span());
+    let arg_list = args_from_sig(&extra_fn.sig.inputs);
+    extra_fn.block = parse_quote! {
+        {
+            use autocxx::moveit::EmplaceUnpinned;
+            autocxx::cxx::UniquePtr::emplace(Self::#orig_ident(#(#arg_list),*))
+        }
+    };
+    extra_fn.to_tokens(&mut input);
+    input.into()
+}
+
+fn args_from_sig(params: &Punctuated<FnArg, Comma>) -> impl Iterator<Item = Expr> + '_ {
+    params.iter().filter_map(|fnarg| match fnarg {
+        syn::FnArg::Receiver(_) => None,
+        syn::FnArg::Typed(fnarg) => match &*fnarg.pat {
+            syn::Pat::Ident(id) => Some(id_to_expr(&id.ident)),
+            _ => None,
+        },
+    })
+}
+
+fn id_to_expr(id: &Ident) -> Expr {
+    parse_quote! { #id }
 }
