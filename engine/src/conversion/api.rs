@@ -21,9 +21,12 @@ use syn::{
 };
 
 use super::{
-    analysis::fun::{
-        function_wrapper::{CppFunction, CppFunctionBody, CppFunctionKind},
-        ReceiverMutability,
+    analysis::{
+        fun::{
+            function_wrapper::{CppFunction, CppFunctionBody, CppFunctionKind},
+            ReceiverMutability,
+        },
+        PointerTreatment,
     },
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
@@ -150,6 +153,24 @@ impl References {
             ref_return: true,
             ref_params: [make_ident("this")].into_iter().collect(),
             ..Default::default()
+        }
+    }
+    pub(crate) fn param_treatment(&self, param: &Ident) -> PointerTreatment {
+        if self.rvalue_ref_params.contains(param) {
+            PointerTreatment::RValueReference
+        } else if self.ref_params.contains(param) {
+            PointerTreatment::Reference
+        } else {
+            PointerTreatment::Pointer
+        }
+    }
+    pub(crate) fn return_treatment(&self) -> PointerTreatment {
+        if self.rvalue_ref_return {
+            PointerTreatment::RValueReference
+        } else if self.ref_return {
+            PointerTreatment::Reference
+        } else {
+            PointerTreatment::Pointer
         }
     }
 }

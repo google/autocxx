@@ -47,7 +47,7 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     });
 
     let any_param_is_reference = param_details.iter().any(|pd| {
-        pd.was_reference
+        pd.has_lifetime
             || matches!(
                 pd.conversion.rust_conversion,
                 RustConversionType::FromValueParamToPtr

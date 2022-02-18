@@ -35,6 +35,7 @@ pub(crate) enum TypeKind {
     Pointer,
     SubclassHolder(Ident),
     Reference,
+    RValueReference,
     MutableReference,
 }
 
@@ -72,6 +73,14 @@ impl<T> Annotated<T> {
     }
 }
 
+/// How to interpret a pointer which we encounter during type conversion.
+#[derive(Clone, Copy)]
+pub(crate) enum PointerTreatment {
+    Pointer,
+    Reference,
+    RValueReference,
+}
+
 /// Options when converting a type.
 /// It's possible we could add more policies here in future.
 /// For example, Rust in general allows type names containing
@@ -81,18 +90,15 @@ impl<T> Annotated<T> {
 /// from [TypeConverter] _might_ be used in the [cxx::bridge].
 pub(crate) enum TypeConversionContext {
     CxxInnerType,
-    CxxOuterType { convert_ptrs_to_references: bool },
+    CxxOuterType { pointer_treatment: PointerTreatment },
 }
 
 impl TypeConversionContext {
-    fn convert_ptrs_to_references(&self) -> bool {
-        matches!(
-            self,
-            TypeConversionContext::CxxOuterType {
-                convert_ptrs_to_references: true,
-                ..
-            }
-        )
+    fn pointer_treatment(&self) -> PointerTreatment {
+        match self {
+            TypeConversionContext::CxxInnerType => PointerTreatment::Pointer,
+            TypeConversionContext::CxxOuterType { pointer_treatment } => *pointer_treatment,
+        }
     }
     fn allow_instantiation_of_forward_declaration(&self) -> bool {
         matches!(self, TypeConversionContext::CxxInnerType)
@@ -185,9 +191,6 @@ impl<'a> TypeConverter<'a> {
                     TypeKind::Reference,
                 )
             }
-            Type::Ptr(ptr) if ctx.convert_ptrs_to_references() => {
-                self.convert_ptr_to_reference(ptr, ns)?
-            }
             Type::Array(mut arr) => {
                 let innerty =
                     self.convert_type(*arr.elem, ns, &TypeConversionContext::CxxInnerType)?;
@@ -199,18 +202,7 @@ impl<'a> TypeConverter<'a> {
                     TypeKind::Regular,
                 )
             }
-            Type::Ptr(mut ptr) => {
-                crate::known_types::ensure_pointee_is_valid(&ptr)?;
-                let innerty =
-                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
-                ptr.elem = innerty.ty;
-                Annotated::new(
-                    Type::Ptr(ptr),
-                    innerty.types_encountered,
-                    innerty.extra_apis,
-                    TypeKind::Pointer,
-                )
-            }
+            Type::Ptr(ptr) => self.convert_ptr(ptr, ns, ctx.pointer_treatment())?,
             _ => return Err(ConvertError::UnknownType(ty.to_token_stream().to_string())),
         };
         Ok(result)
@@ -393,31 +385,61 @@ impl<'a> TypeConverter<'a> {
         }
     }
 
-    fn convert_ptr_to_reference(
+    fn convert_ptr(
         &mut self,
-        ptr: TypePtr,
+        mut ptr: TypePtr,
         ns: &Namespace,
+        pointer_treatment: PointerTreatment,
     ) -> Result<Annotated<Type>, ConvertError> {
-        let mutability = ptr.mutability;
-        let elem = self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
-        // TODO - in the future, we should check if this is a rust::Str and throw
-        // a wobbler if not. rust::Str should only be seen _by value_ in C++
-        // headers; it manifests as &str in Rust but on the C++ side it must
-        // be a plain value. We should detect and abort.
-        let mut outer = elem.map(|elem| match mutability {
-            Some(_) => Type::Path(parse_quote! {
-                ::std::pin::Pin < & #mutability #elem >
-            }),
-            None => Type::Reference(parse_quote! {
-                & #elem
-            }),
-        });
-        outer.kind = if mutability.is_some() {
-            TypeKind::MutableReference
-        } else {
-            TypeKind::Reference
-        };
-        Ok(outer)
+        match pointer_treatment {
+            PointerTreatment::Pointer => {
+                crate::known_types::ensure_pointee_is_valid(&ptr)?;
+                let innerty =
+                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
+                ptr.elem = innerty.ty;
+                Ok(Annotated::new(
+                    Type::Ptr(ptr),
+                    innerty.types_encountered,
+                    innerty.extra_apis,
+                    TypeKind::Pointer,
+                ))
+            }
+            PointerTreatment::Reference => {
+                let mutability = ptr.mutability;
+                let elem =
+                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
+                // TODO - in the future, we should check if this is a rust::Str and throw
+                // a wobbler if not. rust::Str should only be seen _by value_ in C++
+                // headers; it manifests as &str in Rust but on the C++ side it must
+                // be a plain value. We should detect and abort.
+                let mut outer = elem.map(|elem| match mutability {
+                    Some(_) => Type::Path(parse_quote! {
+                        ::std::pin::Pin < & #mutability #elem >
+                    }),
+                    None => Type::Reference(parse_quote! {
+                        & #elem
+                    }),
+                });
+                outer.kind = if mutability.is_some() {
+                    TypeKind::MutableReference
+                } else {
+                    TypeKind::Reference
+                };
+                Ok(outer)
+            }
+            PointerTreatment::RValueReference => {
+                crate::known_types::ensure_pointee_is_valid(&ptr)?;
+                let innerty =
+                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
+                ptr.elem = innerty.ty;
+                Ok(Annotated::new(
+                    Type::Ptr(ptr),
+                    innerty.types_encountered,
+                    innerty.extra_apis,
+                    TypeKind::RValueReference,
+                ))
+            }
+        }
     }
 
     fn get_templated_typename(
