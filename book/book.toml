@@ -10,6 +10,9 @@ edition = "2018"
 build-dir = "build"
 create-missing = false
 
+[preprocessor.autocxx]
+command = "../target/debug/autocxx-mdbook-preprocessor"
+
 [output.html]
 cname = "autocxx.github.io"
 git-repository-url = "https://github.com/google/autocxx"

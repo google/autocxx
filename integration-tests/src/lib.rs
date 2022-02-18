@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::{
+    ffi::OsStr,
     fs::File,
     io::{Read, Write},
     panic::RefUnwindSafe,
@@ -29,6 +30,16 @@ use syn::Token;
 use tempfile::{tempdir, TempDir};
 
 const KEEP_TEMPDIRS: bool = false;
+
+/// API to run a documentation test. Panics if the test fails.
+/// Guarantees not to emit anything to stdout and so can be run in an mdbook context.
+pub fn doctest(cxx_code: &str, header_code: &str, rust_code: TokenStream, manifest_dir: &OsStr) {
+    let print_gag = gag::Gag::stdout().unwrap();
+    std::env::set_var("CARGO_PKG_NAME", "autocxx-integration-tests");
+    std::env::set_var("CARGO_MANIFEST_DIR", manifest_dir);
+    do_run_test_manual(cxx_code, header_code, rust_code, None, None).unwrap();
+    drop(print_gag);
+}
 
 fn get_builder() -> &'static Mutex<LinkableTryBuilder> {
     static INSTANCE: OnceCell<Mutex<LinkableTryBuilder>> = OnceCell::new();
