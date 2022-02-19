@@ -4431,6 +4431,8 @@ fn test_double_underscores_ignored() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
+// This test fails on Windows gnu but not on Windows msvc
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[test]
 fn test_double_underscore_typedef_ignored() {
     let hdr = indoc! {"
@@ -7661,6 +7663,8 @@ fn test_copy_and_move_constructor_moveit() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+// This test fails on Windows gnu but not on Windows msvc
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[test]
 fn test_uniqueptr_moveit() {
     let hdr = indoc! {"
@@ -7683,6 +7687,8 @@ fn test_uniqueptr_moveit() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+// This test fails on Windows gnu but not on Windows msvc
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[test]
 fn test_various_emplacement() {
     let hdr = indoc! {"
