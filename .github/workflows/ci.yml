@@ -41,7 +41,7 @@ jobs:
       - name: Install creduce (ubuntu)
         # Windows and macOS jobs don't have creduce available, so
         # don't apt-get install creduce on them
-        if: !matrix.os
+        if: matrix.os == ''
         run: sudo apt-get install creduce
       - name: Determine test suite subset
         # Windows and macOS jobs don't have creduce available, so exclude
