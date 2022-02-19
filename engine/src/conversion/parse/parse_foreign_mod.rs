@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::api::ApiName;
+use crate::conversion::api::{ApiName, Provenance};
 use crate::conversion::doc_attr::get_doc_attr;
 use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
@@ -75,6 +75,7 @@ impl ParseForeignMod {
                 let annotations = BindgenSemanticAttributes::new(&item.attrs);
                 let doc_attr = get_doc_attr(&item.attrs);
                 self.funcs_to_convert.push(FuncToConvert {
+                    provenance: Provenance::Bindgen,
                     self_ty: None,
                     ident: item.sig.ident,
                     doc_attr,
@@ -89,8 +90,9 @@ impl ParseForeignMod {
                     references: annotations.get_reference_parameters_and_return(),
                     original_name: annotations.get_original_name(),
                     synthesized_this_type: None,
-                    synthesis: None,
+                    add_to_trait: None,
                     is_deleted: annotations.has_attr("deleted"),
+                    synthetic_cpp: None,
                 });
                 Ok(())
             }
