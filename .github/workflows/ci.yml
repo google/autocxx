@@ -43,6 +43,11 @@ jobs:
         # don't apt-get install creduce on them
         if: matrix.os == ''
         run: sudo apt-get install creduce
+      - name: Set LIBCLANG_PATH (Windows)
+        # Windows github action doesn't set the path for lib clang, so set it
+        # See https://github.com/rust-lang/rust-bindgen/issues/1797
+        if: matrix.os == 'windows'
+        run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
       - name: Determine test suite subset
         # Windows and macOS jobs don't have creduce available, so exclude
         # autocxx-reduce from them
