@@ -86,7 +86,7 @@ impl LinkableTryBuilder {
         }
         for generated_rs in generated_rs_files {
             self.move_items_into_temp_dir(
-                &generated_rs.parent().unwrap().to_path_buf(),
+                &generated_rs.parent().unwrap(),
                 generated_rs.file_name().unwrap().to_str().unwrap(),
             );
         }
