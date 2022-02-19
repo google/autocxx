@@ -41,6 +41,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{matrix.rust}}
+          components: rustfmt
       - name: Install creduce (ubuntu)
         # Windows and macOS jobs don't have creduce available, so
         # don't apt-get install creduce on them
