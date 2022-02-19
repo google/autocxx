@@ -3478,6 +3478,7 @@ fn test_root_ns_meth_ret_nonpod() {
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
 }
 
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[test]
 fn test_forward_declaration() {
     let hdr = indoc! {"
@@ -3525,6 +3526,7 @@ fn test_ulong() {
     run_test("", hdr, rs, &["daft"], &[]);
 }
 
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[test]
 fn test_typedef_to_ulong() {
     let hdr = indoc! {"
@@ -3599,6 +3601,7 @@ fn test_reserved_name() {
     run_test("", hdr, rs, &["async_"], &[]);
 }
 
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[test]
 fn test_nested_type() {
     // Test that we can import APIs that use nested types.
@@ -5310,6 +5313,7 @@ fn test_blocklist_not_overly_broad() {
     run_test("", hdr, rs, &["rust_func", "std_func"], &[]);
 }
 
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[test]
 fn test_stringview() {
     // Test that APIs using std::string_view do not otherwise cause errors.
@@ -5380,6 +5384,7 @@ fn test_include_cpp_in_path() {
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[test]
 fn test_bitset() {
     let hdr = indoc! {"
@@ -7929,6 +7934,7 @@ fn test_class_having_protected_method() {
     run_test("", hdr, rs, &[], &["A"]);
 }
 
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[test]
 fn test_protected_inner_class() {
     let hdr = indoc! {"
@@ -7954,6 +7960,7 @@ fn test_protected_inner_class() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[test]
 fn test_private_inner_class() {
     let hdr = indoc! {"
