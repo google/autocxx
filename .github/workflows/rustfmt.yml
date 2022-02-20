@@ -1,9 +1,8 @@
 name: Rustfmt
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
 jobs:
   format:
     runs-on: ubuntu-latest
@@ -14,6 +13,5 @@ jobs:
             toolchain: stable
             components: rustfmt
             override: true
-      - uses: mbrobbel/rustfmt-check@master
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: check rustfmt
+        run: cargo fmt -- --check --color always

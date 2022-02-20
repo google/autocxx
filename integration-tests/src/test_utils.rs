@@ -60,7 +60,11 @@ impl LinkableTryBuilder {
                 if dest.exists() {
                     std::fs::remove_file(&dest).unwrap();
                 }
-                std::fs::rename(item.path(), dest).unwrap();
+                if KEEP_TEMPDIRS {
+                    std::fs::copy(item.path(), dest).unwrap();
+                } else {
+                    std::fs::rename(item.path(), dest).unwrap();
+                }
             }
         }
     }
@@ -83,7 +87,7 @@ impl LinkableTryBuilder {
         for generated_rs in generated_rs_files {
             self.move_items_into_temp_dir(
                 &generated_rs.parent().unwrap().to_path_buf(),
-                &generated_rs.file_name().unwrap().to_str().unwrap(),
+                generated_rs.file_name().unwrap().to_str().unwrap(),
             );
         }
         let temp_path = self.temp_dir.path().to_str().unwrap();
@@ -387,6 +391,9 @@ where
     b.include(tdir.path())
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
+    if KEEP_TEMPDIRS {
+        println!("Generated .rs files: {:?}", generated_rs_files);
+    }
     // Step 8: use the trybuild crate to build the Rust file.
     let r = get_builder().lock().unwrap().build(
         &target_dir,
@@ -396,12 +403,12 @@ where
         &rs_path,
         generated_rs_files,
     );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tdir.into_path().to_str());
+    }
     if r.is_err() {
         return Err(TestError::RsBuild); // details of Rust panic are a bit messy to include, and
                                         // not important at the moment.
-    }
-    if KEEP_TEMPDIRS {
-        println!("Tempdir: {:?}", tdir.into_path().to_str());
     }
     Ok(())
 }
@@ -515,8 +522,7 @@ impl CodeCheckerFns for NoSystemHeadersChecker {
             let file = File::open(filename).unwrap();
             if BufReader::new(file)
                 .lines()
-                .find(|l| l.as_ref().unwrap().starts_with("#include <"))
-                .is_some()
+                .any(|l| l.as_ref().unwrap().starts_with("#include <"))
             {
                 return Err(TestError::CppCodeExaminationFail);
             }
@@ -536,6 +542,17 @@ impl BuilderModifierFns for EnableAutodiscover {
         builder: Builder<TestBuilderContext>,
     ) -> Builder<TestBuilderContext> {
         builder.auto_allowlist(true)
+    }
+}
+
+pub(crate) struct SkipCxxGen;
+
+impl BuilderModifierFns for SkipCxxGen {
+    fn modify_autocxx_builder(
+        &self,
+        builder: Builder<TestBuilderContext>,
+    ) -> Builder<TestBuilderContext> {
+        builder.skip_cxx_gen(true)
     }
 }
 
@@ -573,5 +590,30 @@ impl<'a> CodeCheckerFns for CppMatcher<'a> {
         } else {
             Err(TestError::CppCodeExaminationFail)
         }
+    }
+}
+
+/// Counts the number of generated C++ files.
+pub(crate) struct CppCounter {
+    cpp_count: usize,
+}
+
+impl CppCounter {
+    pub(crate) fn new(cpp_count: usize) -> Self {
+        Self { cpp_count }
+    }
+}
+
+impl CodeCheckerFns for CppCounter {
+    fn check_cpp(&self, cpp: &[PathBuf]) -> Result<(), TestError> {
+        if cpp.len() == self.cpp_count {
+            Ok(())
+        } else {
+            Err(TestError::CppCodeExaminationFail)
+        }
+    }
+
+    fn skip_build(&self) -> bool {
+        true
     }
 }

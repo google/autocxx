@@ -527,16 +527,7 @@ mod tests {
             }
         };
         discoveries.search_item(&itm, None);
-        assert!(
-            discoveries
-                .extern_rust_funs
-                .iter()
-                .next()
-                .unwrap()
-                .sig
-                .ident
-                == "bar"
-        );
+        assert!(discoveries.extern_rust_funs.get(0).unwrap().sig.ident == "bar");
     }
 
     #[test]
@@ -552,8 +543,7 @@ mod tests {
         assert!(
             discoveries
                 .extern_rust_types
-                .iter()
-                .next()
+                .get(0)
                 .unwrap()
                 .get_final_ident()
                 == "Bar"

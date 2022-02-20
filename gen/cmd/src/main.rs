@@ -15,7 +15,7 @@
 #[cfg(test)]
 mod cmd_test;
 
-use autocxx_engine::{parse_file, CppCodegenOptions};
+use autocxx_engine::parse_file;
 use clap::{crate_authors, crate_version, App, Arg, ArgGroup};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
@@ -133,9 +133,9 @@ fn main() {
             .arg("gen-rs-include")
         )
         .arg(
-            Arg::with_name("cxx-gen")
-                .long("cxx-gen")
-                .help("Perform C++ codegen also for #[cxx::bridge] blocks. Only applies for --gen-cpp")
+            Arg::with_name("skip-cxx-gen")
+                .long("skip-cxx-gen")
+                .help("Skip performing C++ codegen for #[cxx::bridge] blocks. Only applies for --gen-cpp")
                 .requires("gen-cpp")
         )
         .arg(
@@ -206,11 +206,13 @@ fn main() {
         .unwrap_or_default()
         .collect();
     let suppress_system_headers = matches.is_present("suppress-system-headers");
-    let mut cpp_codegen_options = CppCodegenOptions::default();
-    cpp_codegen_options.suppress_system_headers = suppress_system_headers;
-    cpp_codegen_options.cxx_impl_annotations = get_option_string("cxx-impl-annotations", &matches);
-    cpp_codegen_options.path_to_cxx_h = get_option_string("cxx-h-path", &matches);
-    cpp_codegen_options.path_to_cxxgen_h = get_option_string("cxxgen-h-path", &matches);
+    let cpp_codegen_options = autocxx_engine::CppCodegenOptions {
+        suppress_system_headers,
+        cxx_impl_annotations: get_option_string("cxx-impl-annotations", &matches),
+        path_to_cxx_h: get_option_string("cxx-h-path", &matches),
+        path_to_cxxgen_h: get_option_string("cxxgen-h-path", &matches),
+        skip_cxx_gen: matches.is_present("skip-cxx-gen"),
+    };
     // In future, we should provide an option to write a .d file here
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56

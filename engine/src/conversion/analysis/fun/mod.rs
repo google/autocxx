@@ -26,8 +26,8 @@ use crate::{
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{
-            ApiName, CastMutability, CppVisibility, FuncToConvert, References, SpecialMemberKind,
-            SubclassName, Synthesis, Virtualness,
+            ApiName, CastMutability, CppVisibility, FuncToConvert, Provenance, References,
+            SpecialMemberKind, SubclassName, TraitImplSignature, TraitSynthesis, Virtualness,
         },
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
@@ -41,13 +41,11 @@ use std::collections::{HashMap, HashSet};
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
 use itertools::Itertools;
-use proc_macro2::{Span, TokenStream};
-use quote::{quote, ToTokens};
+use proc_macro2::Span;
+use quote::quote;
 use syn::{
-    parse_quote,
-    punctuated::Punctuated,
-    token::{Comma, Unsafe},
-    FnArg, Ident, Pat, ReturnType, Type, TypePtr, Visibility,
+    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
+    TypePtr, Visibility,
 };
 
 use crate::{
@@ -94,14 +92,13 @@ pub(crate) enum TraitMethodKind {
     MoveConstructor,
     Cast,
     Destructor,
+    Alloc,
+    Dealloc,
 }
 
 #[derive(Clone)]
 pub(crate) struct TraitMethodDetails {
-    pub(crate) impl_for_specifics: TokenStream,
-    pub(crate) trait_signature: TokenStream,
-    /// The trait is 'unsafe' itself
-    pub(crate) trait_unsafety: Option<Unsafe>,
+    pub(crate) trt: TraitImplSignature,
     pub(crate) avoid_self: bool,
     pub(crate) method_name: Ident,
     /// For traits, where we're trying to implement a specific existing
@@ -109,7 +106,7 @@ pub(crate) struct TraitMethodDetails {
     /// interface.
     pub(crate) parameter_reordering: Option<Vec<usize>>,
     /// The function we're calling from the trait requires unsafe even
-    /// though the trait isn't.
+    /// though the trait and its function aren't.
     pub(crate) trait_call_is_unsafe: bool,
 }
 
@@ -121,10 +118,10 @@ pub(crate) enum FnKind {
         kind: TraitMethodKind,
         /// The name of the type T for which we're implementing a trait,
         /// though we may be actually implementing the trait for &mut T or
-        /// similar....
+        /// similar, so we store more details of both the type and the
+        /// method in `details`
         impl_for: QualifiedName,
-        /// ... so we also store the tokenstream of the type.
-        details: TraitMethodDetails,
+        details: Box<TraitMethodDetails>,
     },
 }
 
@@ -366,7 +363,11 @@ impl<'a> FnAnalyzer<'a> {
             // Trait unsafety must always correspond to the norms for the
             // trait we're implementing.
             FnKind::TraitMethod {
-                kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
+                kind:
+                    TraitMethodKind::CopyConstructor
+                    | TraitMethodKind::MoveConstructor
+                    | TraitMethodKind::Alloc
+                    | TraitMethodKind::Dealloc,
                 ..
             } => UnsafetyNeeded::Always,
             FnKind::TraitMethod { .. } if any_param_needs_unsafe() => UnsafetyNeeded::JustBridge,
@@ -484,7 +485,7 @@ impl<'a> FnAnalyzer<'a> {
     /// and synthesize a make_unique e.g. pub fn make_unique() -> cxx::UniquePtr<A>
     fn create_make_unique(&mut self, fun: &FuncToConvert) -> Box<FuncToConvert> {
         let mut new_fun = fun.clone();
-        new_fun.synthesis = Some(Synthesis::MakeUnique);
+        new_fun.provenance = Provenance::SynthesizedMakeUnique;
         Box::new(new_fun)
     }
 
@@ -588,7 +589,7 @@ impl<'a> FnAnalyzer<'a> {
         // Part two, work out if this is a function, or method, or whatever.
         // First determine if this is actually a trait implementation.
         let trait_details = self.trait_creation_details_for_synthetic_function(
-            &fun.synthesis,
+            &fun.add_to_trait,
             ns,
             &ideal_rust_name,
             &self_ty,
@@ -634,22 +635,24 @@ impl<'a> FnAnalyzer<'a> {
                 }
                 rust_name = self.get_overload_name(ns, type_ident, rust_name);
                 let error_context = error_context_for_method(&self_ty, &rust_name);
-                let impl_for_specifics = Type::Path(self_ty.to_type_path()).to_token_stream();
+                let ty = Type::Path(self_ty.to_type_path());
                 (
                     FnKind::TraitMethod {
                         kind,
                         impl_for: self_ty,
-                        details: TraitMethodDetails {
-                            impl_for_specifics,
-                            trait_signature: quote! {
-                                autocxx::moveit::new:: #trait_id
+                        details: Box::new(TraitMethodDetails {
+                            trt: TraitImplSignature {
+                                ty,
+                                trait_signature: parse_quote! {
+                                    autocxx::moveit::new:: #trait_id
+                                },
+                                unsafety: Some(parse_quote! { unsafe }),
                             },
-                            trait_unsafety: Some(parse_quote! { unsafe }),
                             avoid_self: true,
                             method_name: make_ident(method_name),
                             parameter_reordering: Some(vec![1, 0]),
                             trait_call_is_unsafe: false,
-                        },
+                        }),
                     },
                     error_context,
                     rust_name,
@@ -657,28 +660,30 @@ impl<'a> FnAnalyzer<'a> {
             } else if matches!(fun.special_member, Some(SpecialMemberKind::Destructor)) {
                 rust_name = self.get_overload_name(ns, type_ident, rust_name);
                 let error_context = error_context_for_method(&self_ty, &rust_name);
-                let impl_for_specifics = Type::Path(self_ty.to_type_path()).to_token_stream();
+                let ty = Type::Path(self_ty.to_type_path());
                 (
                     FnKind::TraitMethod {
                         kind: TraitMethodKind::Destructor,
                         impl_for: self_ty,
-                        details: TraitMethodDetails {
-                            impl_for_specifics,
-                            trait_signature: quote! {
-                                Drop
+                        details: Box::new(TraitMethodDetails {
+                            trt: TraitImplSignature {
+                                ty,
+                                trait_signature: parse_quote! {
+                                    Drop
+                                },
+                                unsafety: None,
                             },
-                            trait_unsafety: None,
                             avoid_self: false,
                             method_name: make_ident("drop"),
                             parameter_reordering: None,
                             trait_call_is_unsafe: true,
-                        },
+                        }),
                     },
                     error_context,
                     rust_name,
                 )
             } else {
-                let method_kind = if matches!(fun.synthesis, Some(Synthesis::MakeUnique)) {
+                let method_kind = if matches!(fun.provenance, Provenance::SynthesizedMakeUnique) {
                     // We're re-running this routine for a function we already analyzed.
                     // Previously we made a placement "new" (MethodKind::Constructor).
                     // This time we've asked ourselves to synthesize a make_unique.
@@ -956,7 +961,6 @@ impl<'a> FnAnalyzer<'a> {
         let effective_cpp_name = cpp_name.as_ref().unwrap_or(&rust_name);
         let cpp_name_incompatible_with_cxx =
             validate_ident_ok_for_rust(effective_cpp_name).is_err();
-        let synthetic_cpp_function_contents = synthesic_cpp_need(fun);
         // If possible, we'll put knowledge of the C++ API directly into the cxx::bridge
         // mod. However, there are various circumstances where cxx can't work with the existing
         // C++ API and we need to create a C++ wrapper function which is more cxx-compliant.
@@ -978,7 +982,7 @@ impl<'a> FnAnalyzer<'a> {
             _ if param_conversion_needed => true,
             _ if ret_type_conversion_needed => true,
             _ if cpp_name_incompatible_with_cxx => true,
-            _ if synthetic_cpp_function_contents.is_some() => true,
+            _ if fun.synthetic_cpp.is_some() => true,
             _ => false,
         };
 
@@ -992,7 +996,7 @@ impl<'a> FnAnalyzer<'a> {
                 "_"
             };
             cxxbridge_name = make_ident(&format!("{}{}autocxx_wrapper", cxxbridge_name, joiner));
-            let (payload, cpp_function_kind) = match synthetic_cpp_function_contents {
+            let (payload, cpp_function_kind) = match fun.synthetic_cpp.as_ref().cloned() {
                 Some((payload, cpp_function_kind)) => (payload, cpp_function_kind),
                 None => match kind {
                     FnKind::Method(_, MethodKind::MakeUnique) => {
@@ -1155,39 +1159,39 @@ impl<'a> FnAnalyzer<'a> {
     /// of a trait, rather than a function/method.
     fn trait_creation_details_for_synthetic_function(
         &mut self,
-        synthesis: &Option<Synthesis>,
+        synthesis: &Option<TraitSynthesis>,
         ns: &Namespace,
         ideal_rust_name: &str,
         self_ty: &Option<QualifiedName>,
     ) -> Option<(FnKind, ErrorContext, String)> {
         synthesis.as_ref().and_then(|synthesis| match synthesis {
-            Synthesis::Cast { to_type, mutable } => {
+            TraitSynthesis::Cast { to_type, mutable } => {
                 let rust_name = self.get_function_overload_name(ns, ideal_rust_name.to_string());
                 let from_type = self_ty.as_ref().unwrap();
                 let from_type_path = from_type.to_type_path();
                 let to_type = to_type.to_type_path();
-                let (trait_signature, impl_for_specifics, method_name) = match *mutable {
+                let (trait_signature, ty, method_name) = match *mutable {
                     CastMutability::ConstToConst => (
-                        quote! {
+                        parse_quote! {
                             AsRef < #to_type >
                         },
-                        from_type_path.to_token_stream(),
+                        Type::Path(from_type_path),
                         "as_ref",
                     ),
                     CastMutability::MutToConst => (
-                        quote! {
+                        parse_quote! {
                             AsRef < #to_type >
                         },
-                        quote! {
+                        parse_quote! {
                             &'a mut ::std::pin::Pin < &'a mut #from_type_path >
                         },
                         "as_ref",
                     ),
                     CastMutability::MutToMut => (
-                        quote! {
+                        parse_quote! {
                             autocxx::PinMut < #to_type >
                         },
-                        quote! {
+                        parse_quote! {
                             ::std::pin::Pin < &'a mut #from_type_path >
                         },
                         "pin_mut",
@@ -1198,22 +1202,66 @@ impl<'a> FnAnalyzer<'a> {
                     FnKind::TraitMethod {
                         kind: TraitMethodKind::Cast,
                         impl_for: from_type.clone(),
-                        details: TraitMethodDetails {
-                            impl_for_specifics,
-                            trait_signature,
-                            trait_unsafety: None,
+                        details: Box::new(TraitMethodDetails {
+                            trt: TraitImplSignature {
+                                ty,
+                                trait_signature,
+                                unsafety: None,
+                            },
                             avoid_self: false,
                             method_name,
                             parameter_reordering: None,
                             trait_call_is_unsafe: false,
-                        },
+                        }),
                     },
                     ErrorContext::Item(make_ident(&rust_name)),
                     rust_name,
                 ))
             }
-            _ => None,
+            TraitSynthesis::AllocUninitialized(ty) => self.generate_alloc_or_deallocate(
+                ideal_rust_name,
+                ty,
+                "allocate_uninitialized_cpp_storage",
+                TraitMethodKind::Alloc,
+            ),
+            TraitSynthesis::FreeUninitialized(ty) => self.generate_alloc_or_deallocate(
+                ideal_rust_name,
+                ty,
+                "free_uninitialized_cpp_storage",
+                TraitMethodKind::Dealloc,
+            ),
         })
+    }
+
+    fn generate_alloc_or_deallocate(
+        &mut self,
+        ideal_rust_name: &str,
+        ty: &QualifiedName,
+        method_name: &str,
+        kind: TraitMethodKind,
+    ) -> Option<(FnKind, ErrorContext, String)> {
+        let rust_name =
+            self.get_function_overload_name(ty.get_namespace(), ideal_rust_name.to_string());
+        let typ = ty.to_type_path();
+        Some((
+            FnKind::TraitMethod {
+                impl_for: ty.clone(),
+                details: Box::new(TraitMethodDetails {
+                    trt: TraitImplSignature {
+                        ty: Type::Path(typ),
+                        trait_signature: parse_quote! { autocxx::moveit::MakeCppStorage },
+                        unsafety: Some(parse_quote! { unsafe }),
+                    },
+                    avoid_self: false,
+                    method_name: make_ident(method_name),
+                    parameter_reordering: None,
+                    trait_call_is_unsafe: false,
+                }),
+                kind,
+            },
+            ErrorContext::Item(make_ident(&rust_name)),
+            rust_name,
+        ))
     }
 
     fn get_function_overload_name(&mut self, ns: &Namespace, ideal_rust_name: String) -> String {
@@ -1513,11 +1561,11 @@ impl<'a> FnAnalyzer<'a> {
         references: References,
     ) {
         let ident = match label {
-            Some(label) => make_ident(format!(
+            Some(label) => make_ident(self.config.uniquify_name_per_mod(&format!(
                 "{}_synthetic_{}_ctor",
                 self_ty.get_final_item(),
                 label
-            )),
+            ))),
             None => self_ty.get_final_ident(),
         };
         let fake_api_name = ApiName::new(self_ty.get_namespace(), ident.clone());
@@ -1539,8 +1587,10 @@ impl<'a> FnAnalyzer<'a> {
                     references,
                     original_name: None,
                     synthesized_this_type: None,
-                    synthesis: None,
                     is_deleted: false,
+                    add_to_trait: None,
+                    synthetic_cpp: None,
+                    provenance: Provenance::SynthesizedOther,
                 }),
             )
         });
@@ -1552,13 +1602,6 @@ fn error_context_for_method(self_ty: &QualifiedName, rust_name: &str) -> ErrorCo
     ErrorContext::Method {
         self_ty: self_ty.get_final_ident(),
         method: make_ident(rust_name),
-    }
-}
-
-fn synthesic_cpp_need(fun: &FuncToConvert) -> Option<(CppFunctionBody, CppFunctionKind)> {
-    match fun.synthesis {
-        Some(Synthesis::Cast { .. }) => Some((CppFunctionBody::Cast, CppFunctionKind::Function)),
-        _ => None,
     }
 }
 
@@ -1634,6 +1677,7 @@ impl Api<FnPhase> {
                 ..
             } => Box::new(field_types.iter().cloned()),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter().cloned()),
+            // TODO constructors need to depend on the alloc/free fns
             Api::Subclass {
                 name: _,
                 superclass,

@@ -179,6 +179,13 @@ impl<CTX: BuilderContext> Builder<CTX> {
         self
     }
 
+    /// Whether to skip using [`cxx_gen`] to generate the C++ code,
+    /// so that some other process can handle that.
+    pub fn skip_cxx_gen(mut self, skip_cxx_gen: bool) -> Self {
+        self.cpp_codegen_options.skip_cxx_gen = skip_cxx_gen;
+        self
+    }
+
     /// Build autocxx C++ files and return a cc::Build you can use to build
     /// more from a build.rs file.
     pub fn build(self) -> Result<BuilderBuild, BuilderError> {

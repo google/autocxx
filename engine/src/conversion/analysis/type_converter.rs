@@ -125,7 +125,7 @@ impl<'a> TypeConverter<'a> {
         A::TypedefAnalysis: TypedefTarget,
     {
         Self {
-            types_found: Self::find_types(apis),
+            types_found: find_types(apis),
             typedefs: Self::find_typedefs(apis),
             concrete_templates: Self::find_concrete_templates(apis),
             forward_declarations: Self::find_incomplete_types(apis),
@@ -524,28 +524,6 @@ impl<'a> TypeConverter<'a> {
         }
     }
 
-    fn find_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
-        apis.iter()
-            .filter_map(|api| match api {
-                Api::ForwardDeclaration { .. }
-                | Api::ConcreteType { .. }
-                | Api::Typedef { .. }
-                | Api::Enum { .. }
-                | Api::Struct { .. }
-                | Api::Subclass { .. }
-                | Api::RustType { .. } => Some(api.name()),
-                Api::StringConstructor { .. }
-                | Api::Function { .. }
-                | Api::Const { .. }
-                | Api::CType { .. }
-                | Api::RustSubclassFn { .. }
-                | Api::IgnoredItem { .. }
-                | Api::RustFn { .. } => None,
-            })
-            .cloned()
-            .collect()
-    }
-
     fn find_typedefs<A: AnalysisPhase>(apis: &[Api<A>]) -> HashMap<QualifiedName, Type>
     where
         A::TypedefAnalysis: TypedefTarget,
@@ -622,4 +600,26 @@ impl TypedefTarget for TypedefAnalysis {
             TypedefKind::Use(_) => None,
         }
     }
+}
+
+pub(crate) fn find_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+    apis.iter()
+        .filter_map(|api| match api {
+            Api::ForwardDeclaration { .. }
+            | Api::ConcreteType { .. }
+            | Api::Typedef { .. }
+            | Api::Enum { .. }
+            | Api::Struct { .. }
+            | Api::Subclass { .. }
+            | Api::RustType { .. } => Some(api.name()),
+            Api::StringConstructor { .. }
+            | Api::Function { .. }
+            | Api::Const { .. }
+            | Api::CType { .. }
+            | Api::RustSubclassFn { .. }
+            | Api::IgnoredItem { .. }
+            | Api::RustFn { .. } => None,
+        })
+        .cloned()
+        .collect()
 }
