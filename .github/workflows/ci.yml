@@ -18,13 +18,13 @@ jobs:
           - rust: beta
           - rust: stable
           - name: macOS
-            rust: nightly
+            rust: stable
             os: macos
           - name: Windows (gnu)
-            rust: nightly-x86_64-pc-windows-gnu
+            rust: stable-x86_64-pc-windows-gnu
             os: windows
           - name: Windows (msvc)
-            rust: nightly-x86_64-pc-windows-msvc
+            rust: stable-x86_64-pc-windows-msvc
             os: windows
             flags: /EHsc
     env:
