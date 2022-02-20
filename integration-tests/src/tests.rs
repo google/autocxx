@@ -5889,6 +5889,7 @@ fn test_rust_reference() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_rust_reference_autodiscover() {
     let hdr = indoc! {"
@@ -6016,6 +6017,7 @@ fn test_box() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_box_via_extern_rust() {
     let hdr = indoc! {"
@@ -6120,6 +6122,7 @@ fn test_extern_rust_fn_in_mod() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_mut() {
     let hdr = indoc! {"
@@ -6326,6 +6329,7 @@ fn test_pv_subclass_ptr_param() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_return() {
     let hdr = indoc! {"
@@ -6367,6 +6371,7 @@ fn test_pv_subclass_return() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_passed_to_fn() {
     let hdr = indoc! {"
@@ -6538,6 +6543,7 @@ fn test_two_subclasses() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_two_superclasses_with_same_name_method() {
     let hdr = indoc! {"
@@ -6634,6 +6640,7 @@ fn test_pv_protected_constructor() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_protected_method() {
     let hdr = indoc! {"
@@ -6682,6 +6689,7 @@ fn test_pv_protected_method() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_allocation_not_self_owned() {
     let hdr = indoc! {"
@@ -6976,6 +6984,7 @@ fn test_pv_subclass_allocation_self_owned() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_calls() {
     let hdr = indoc! {"
@@ -7491,6 +7500,7 @@ fn test_pv_subclass_overrides() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_namespaced_superclass() {
     let hdr = indoc! {"
@@ -7891,6 +7901,7 @@ fn test_no_rvo_move() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_abstract_up() {
     let hdr = indoc! {"
