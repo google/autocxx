@@ -61,6 +61,7 @@ jobs:
           RUSTFLAGS: ${{env.RUSTFLAGS}} ${{matrix.os && '--cfg skip_non_linux_failing_tests' || ''}}
         id: testsuite
         shell: bash
+      - run: cargo build --workspace ${{steps.testsuite.outputs.exclude}}
       - run: cargo test --workspace ${{steps.testsuite.outputs.exclude}}
       - name: Build s2 example
         working-directory: ./examples/s2
