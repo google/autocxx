@@ -8023,6 +8023,7 @@ fn test_chrono_problem() {
     run_test("", hdr, rs, &[], &["Class"]);
 }
 
+#[allow(clippy::unnecessary-to-owned)] // clippy falsely triggers on into_iter()
 fn size_and_alignment_test(pod: bool) {
     static TYPES: [(&str, &str); 6] = [
         ("A", "struct A { uint8_t a; };"),
