@@ -1,10 +1,10 @@
 name: CI
 
 on:
-  pull_request:
   push:
+    branches: [main]
+  pull_request:
   schedule: [cron: "40 1 * * *"]
-  workflow_dispatch:
 
 jobs:
   test:
@@ -39,7 +39,7 @@ jobs:
         with:
           toolchain: ${{matrix.rust}}
           components: rustfmt
-     # For operating systems that have it packaged, install creduce
+      # For operating systems that have it packaged, install creduce
       - name: Install creduce (Linux)
         if: matrix.os == ''
         run: sudo apt-get install creduce
@@ -93,7 +93,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_TERM_COLOR: always
-    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v2
       - uses: dtolnay/rust-toolchain@clippy
