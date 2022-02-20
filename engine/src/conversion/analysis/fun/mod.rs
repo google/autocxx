@@ -27,8 +27,8 @@ use crate::{
         },
         api::{
             ApiName, CastMutability, CppVisibility, FuncToConvert, Provenance, References,
-            SpecialMemberKind, SubclassName, TraitImplSignature, TraitSynthesis, UnsafetyNeeded,
-            Virtualness,
+            SpecialMemberKind, StructDetails, SubclassName, TraitImplSignature, TraitSynthesis,
+            UnsafetyNeeded, Virtualness,
         },
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
@@ -80,10 +80,11 @@ pub(crate) enum ReceiverMutability {
     Mutable,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum MethodKind {
     Normal(ReceiverMutability),
     Constructor,
+    DefaultConstructor,
     MakeUnique,
     Static,
     Virtual(ReceiverMutability),
@@ -198,24 +199,39 @@ impl Default for ReturnTypeAnalysis {
     }
 }
 
+pub(crate) struct FnStructAnalysis {
+    pub(crate) pod: PodAnalysis,
+    pub(crate) constructors: PublicConstructors,
+}
+
 /// An analysis phase where we've analyzed each function, but
 /// haven't yet determined which constructors/etc. belong to each type.
 pub(crate) struct FnPrePhase;
 
 impl AnalysisPhase for FnPrePhase {
     type TypedefAnalysis = TypedefAnalysis;
-    type StructAnalysis = PodAnalysis;
+    type StructAnalysis = FnStructAnalysis;
     type FunAnalysis = FnAnalysis;
 }
 
 pub(crate) struct PodAndDepAnalysis {
     pub(crate) pod: PodAnalysis,
     pub(crate) constructor_and_allocator_deps: Vec<QualifiedName>,
+    pub(crate) constructors: PublicConstructors,
 }
 
 /// Analysis phase after we've finished analyzing functions and determined
 /// which constructors etc. belong to them.
 pub(crate) struct FnPhase;
+
+/// Indicates which kinds of public constructors are known to exist for a type.
+#[derive(Debug, Default, Copy, Clone)]
+pub(crate) struct PublicConstructors {
+    pub(crate) default_constructor: bool,
+    pub(crate) copy_constructor: bool,
+    pub(crate) move_constructor: bool,
+    pub(crate) destructor: bool,
+}
 
 impl AnalysisPhase for FnPhase {
     type TypedefAnalysis = TypedefAnalysis;
@@ -246,6 +262,23 @@ pub(crate) struct FnAnalyzer<'a> {
     existing_superclass_trait_api_names: HashSet<QualifiedName>,
 }
 
+/// Leaves the [`FnStructAnalysis::constructors`] at its default for [`add_missing_constructors`]
+/// to fill out.
+fn convert_struct(
+    name: ApiName,
+    details: Box<StructDetails>,
+    analysis: PodAnalysis,
+) -> Result<Box<dyn Iterator<Item = Api<FnPrePhase>>>, ConvertErrorWithContext> {
+    Ok(Box::new(std::iter::once(Api::Struct {
+        name,
+        details,
+        analysis: FnStructAnalysis {
+            pod: analysis,
+            constructors: Default::default(),
+        },
+    })))
+}
+
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: Vec<Api<PodPhase>>,
@@ -270,11 +303,12 @@ impl<'a> FnAnalyzer<'a> {
             apis,
             &mut results,
             |name, fun, _, _| me.analyze_foreign_fn_and_subclasses(name, fun),
-            Api::struct_unchanged,
+            convert_struct,
             Api::enum_unchanged,
             Api::typedef_unchanged,
         );
         me.add_missing_constructors(&mut results);
+        me.add_make_uniques(&mut results);
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }
@@ -414,6 +448,62 @@ impl<'a> FnAnalyzer<'a> {
         }
     }
 
+    fn add_make_uniques(&mut self, apis: &mut Vec<Api<FnPrePhase>>) {
+        let mut results = Vec::new();
+        'outer: for api in apis.iter() {
+            if let Api::Function {
+                name,
+                fun,
+                analysis,
+                ..
+            } = api
+            {
+                let initial_name = name.clone();
+                if let FnKind::Method(
+                    sup,
+                    MethodKind::Constructor | MethodKind::DefaultConstructor,
+                ) = &analysis.kind
+                {
+                    // Now go find the Api::Struct for our type, and verify it has an accessible
+                    // destructor.
+                    for api in apis.iter() {
+                        match api {
+                            Api::Struct { name, analysis, .. } if &name.name == sup => {
+                                if !analysis.constructors.destructor {
+                                    continue 'outer;
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+
+                    // Create a make_unique too
+                    self.create_make_unique(fun, initial_name, &mut results);
+
+                    for sub in self.subclasses_by_superclass(sup) {
+                        // Create a subclass constructor. This is a synthesized function
+                        // which didn't exist in the original C++.
+                        let (subclass_constructor_func, subclass_constructor_name) =
+                            create_subclass_constructor(sub, analysis, sup, fun);
+                        self.analyze_and_add(
+                            subclass_constructor_name.clone(),
+                            subclass_constructor_func.clone(),
+                            &mut results,
+                            TypeConversionSophistication::Regular,
+                        );
+                        // and its corresponding make_unique
+                        self.create_make_unique(
+                            &subclass_constructor_func,
+                            subclass_constructor_name,
+                            &mut results,
+                        );
+                    }
+                }
+            }
+        }
+        apis.extend(results.into_iter());
+    }
+
     /// Analyze a given function, and any permutations of that function which
     /// we might additionally generate (e.g. for subclasses.)
     fn analyze_foreign_fn_and_subclasses(
@@ -421,109 +511,82 @@ impl<'a> FnAnalyzer<'a> {
         name: ApiName,
         fun: Box<FuncToConvert>,
     ) -> Result<Box<dyn Iterator<Item = Api<FnPrePhase>>>, ConvertErrorWithContext> {
-        let initial_name = name.clone();
         let (analysis, name) =
             self.analyze_foreign_fn(name, &fun, TypeConversionSophistication::Regular, None);
         let mut results = Vec::new();
 
         // Consider whether we need to synthesize subclass items.
-        match &analysis.kind {
-            FnKind::Method(sup, MethodKind::Constructor) => {
-                // Create a make_unique too
-                self.create_make_unique(&fun, initial_name, &mut results);
-
-                for sub in self.subclasses_by_superclass(sup) {
-                    // Create a subclass constructor. This is a synthesized function
-                    // which didn't exist in the original C++.
-                    let (subclass_constructor_func, subclass_constructor_name) =
-                        create_subclass_constructor(sub, &analysis, sup, &fun);
-                    self.analyze_and_add(
-                        subclass_constructor_name.clone(),
-                        subclass_constructor_func.clone(),
-                        &mut results,
-                        TypeConversionSophistication::Regular,
-                    );
-                    // and its corresponding make_unique
-                    self.create_make_unique(
-                        &subclass_constructor_func,
-                        subclass_constructor_name,
-                        &mut results,
-                    );
-                }
-            }
-            FnKind::Method(
-                sup,
-                MethodKind::Virtual(receiver_mutability)
-                | MethodKind::PureVirtual(receiver_mutability),
-            ) => {
-                let (simpler_analysis, _) = self.analyze_foreign_fn(
-                    name.clone(),
-                    &fun,
-                    TypeConversionSophistication::SimpleForSubclasses,
-                    Some(analysis.rust_name.clone()),
+        if let FnKind::Method(
+            sup,
+            MethodKind::Virtual(receiver_mutability) | MethodKind::PureVirtual(receiver_mutability),
+        ) = &analysis.kind
+        {
+            let (simpler_analysis, _) = self.analyze_foreign_fn(
+                name.clone(),
+                &fun,
+                TypeConversionSophistication::SimpleForSubclasses,
+                Some(analysis.rust_name.clone()),
+            );
+            for sub in self.subclasses_by_superclass(sup) {
+                // For each subclass, we need to create a plain-C++ method to call its superclass
+                // and a Rust/C++ bridge API to call _that_.
+                // What we're generating here is entirely about the subclass, so the
+                // superclass's namespace is irrelevant. We generate
+                // all subclasses in the root namespace.
+                let is_pure_virtual = matches!(
+                    &simpler_analysis.kind,
+                    FnKind::Method(_, MethodKind::PureVirtual(..))
                 );
-                for sub in self.subclasses_by_superclass(sup) {
-                    // For each subclass, we need to create a plain-C++ method to call its superclass
-                    // and a Rust/C++ bridge API to call _that_.
-                    // What we're generating here is entirely about the subclass, so the
-                    // superclass's namespace is irrelevant. We generate
-                    // all subclasses in the root namespace.
-                    let is_pure_virtual = matches!(
-                        &simpler_analysis.kind,
-                        FnKind::Method(_, MethodKind::PureVirtual(..))
-                    );
-                    let super_fn_name =
-                        SubclassName::get_super_fn_name(&Namespace::new(), &analysis.rust_name);
-                    let trait_api_name = SubclassName::get_trait_api_name(sup, &analysis.rust_name);
+                let super_fn_name =
+                    SubclassName::get_super_fn_name(&Namespace::new(), &analysis.rust_name);
+                let trait_api_name = SubclassName::get_trait_api_name(sup, &analysis.rust_name);
 
-                    // Create the Rust API representing the subclass implementation (allowing calls
-                    // from C++ -> Rust)
-                    results.push(create_subclass_function(
-                        &sub,
+                // Create the Rust API representing the subclass implementation (allowing calls
+                // from C++ -> Rust)
+                results.push(create_subclass_function(
+                    &sub,
+                    &simpler_analysis,
+                    &name,
+                    receiver_mutability,
+                    sup,
+                    if is_pure_virtual {
+                        vec![trait_api_name.clone()]
+                    } else {
+                        vec![trait_api_name.clone(), super_fn_name.clone()]
+                    },
+                ));
+
+                // Create the trait item for the <superclass>_methods and <superclass>_supers
+                // traits. This is required per-superclass, not per-subclass, so don't
+                // create it if it already exists.
+                if !self
+                    .existing_superclass_trait_api_names
+                    .contains(&trait_api_name)
+                {
+                    self.existing_superclass_trait_api_names
+                        .insert(trait_api_name.clone());
+                    results.push(create_subclass_trait_item(
+                        ApiName::new_from_qualified_name(trait_api_name),
                         &simpler_analysis,
-                        &name,
                         receiver_mutability,
-                        sup,
-                        if is_pure_virtual {
-                            vec![trait_api_name.clone()]
-                        } else {
-                            vec![trait_api_name.clone(), super_fn_name.clone()]
-                        },
+                        sup.clone(),
+                        is_pure_virtual,
                     ));
+                }
 
-                    // Create the trait item for the <superclass>_methods and <superclass>_supers
-                    // traits. This is required per-superclass, not per-subclass, so don't
-                    // create it if it already exists.
-                    if !self
-                        .existing_superclass_trait_api_names
-                        .contains(&trait_api_name)
-                    {
-                        self.existing_superclass_trait_api_names
-                            .insert(trait_api_name.clone());
-                        results.push(create_subclass_trait_item(
-                            ApiName::new_from_qualified_name(trait_api_name),
-                            &simpler_analysis,
-                            receiver_mutability,
-                            sup.clone(),
-                            is_pure_virtual,
-                        ));
-                    }
-
-                    if !is_pure_virtual {
-                        // Create a C++ API representing the superclass implementation (allowing
-                        // calls from Rust->C++)
-                        let maybe_wrap = create_subclass_fn_wrapper(sub, &super_fn_name, &fun);
-                        let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
-                        self.analyze_and_add(
-                            super_fn_name,
-                            maybe_wrap,
-                            &mut results,
-                            TypeConversionSophistication::SimpleForSubclasses,
-                        );
-                    }
+                if !is_pure_virtual {
+                    // Create a C++ API representing the superclass implementation (allowing
+                    // calls from Rust->C++)
+                    let maybe_wrap = create_subclass_fn_wrapper(sub, &super_fn_name, &fun);
+                    let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
+                    self.analyze_and_add(
+                        super_fn_name,
+                        maybe_wrap,
+                        &mut results,
+                        TypeConversionSophistication::SimpleForSubclasses,
+                    );
                 }
             }
-            _ => {}
         }
 
         results.push(Api::Function {
@@ -706,47 +769,64 @@ impl<'a> FnAnalyzer<'a> {
             ) {
                 let is_move =
                     matches!(fun.special_member, Some(SpecialMemberKind::MoveConstructor));
-                let (kind, method_name, trait_id) = if is_move {
-                    (
-                        TraitMethodKind::MoveConstructor,
-                        "move_new",
-                        quote! { MoveNew },
-                    )
-                } else {
-                    (
-                        TraitMethodKind::CopyConstructor,
-                        "copy_new",
-                        quote! { CopyNew },
-                    )
-                };
                 if let Some(constructor_suffix) = rust_name.strip_prefix(nested_type_ident) {
                     rust_name = format!("new{}", constructor_suffix);
                 }
                 rust_name = predetermined_rust_name
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
                 let error_context = error_context_for_method(&self_ty, &rust_name);
-                let ty = Type::Path(self_ty.to_type_path());
-                (
-                    FnKind::TraitMethod {
-                        kind,
-                        impl_for: self_ty,
-                        details: Box::new(TraitMethodDetails {
-                            trt: TraitImplSignature {
-                                ty,
-                                trait_signature: parse_quote! {
-                                    autocxx::moveit::new:: #trait_id
+
+                let arg_is_reference = matches!(
+                    param_details[1].conversion.unwrapped_type,
+                    Type::Reference(_)
+                );
+                // Some exotic forms of copy constructor have const and/or volatile qualifiers.
+                // These are not sufficient to implement CopyNew, so we just treat them as regular
+                // constructors. We detect them by their argument being translated to Pin at this
+                // point.
+                if is_move || arg_is_reference {
+                    let (kind, method_name, trait_id) = if is_move {
+                        (
+                            TraitMethodKind::MoveConstructor,
+                            "move_new",
+                            quote! { MoveNew },
+                        )
+                    } else {
+                        (
+                            TraitMethodKind::CopyConstructor,
+                            "copy_new",
+                            quote! { CopyNew },
+                        )
+                    };
+                    let ty = Type::Path(self_ty.to_type_path());
+                    (
+                        FnKind::TraitMethod {
+                            kind,
+                            impl_for: self_ty,
+                            details: Box::new(TraitMethodDetails {
+                                trt: TraitImplSignature {
+                                    ty,
+                                    trait_signature: parse_quote! {
+                                        autocxx::moveit::new:: #trait_id
+                                    },
+                                    unsafety: Some(parse_quote! { unsafe }),
                                 },
-                                unsafety: Some(parse_quote! { unsafe }),
-                            },
-                            avoid_self: true,
-                            method_name: make_ident(method_name),
-                            parameter_reordering: Some(vec![1, 0]),
-                            trait_call_is_unsafe: false,
-                        }),
-                    },
-                    error_context,
-                    rust_name,
-                )
+                                avoid_self: true,
+                                method_name: make_ident(method_name),
+                                parameter_reordering: Some(vec![1, 0]),
+                                trait_call_is_unsafe: false,
+                            }),
+                        },
+                        error_context,
+                        rust_name,
+                    )
+                } else {
+                    (
+                        FnKind::Method(self_ty, MethodKind::Constructor),
+                        error_context,
+                        rust_name,
+                    )
+                }
             } else if matches!(fun.special_member, Some(SpecialMemberKind::Destructor)) {
                 rust_name = predetermined_rust_name
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
@@ -778,7 +858,10 @@ impl<'a> FnAnalyzer<'a> {
                     // We're re-running this routine for a function we already analyzed.
                     // Previously we made a placement "new" (MethodKind::Constructor).
                     // This time we've asked ourselves to synthesize a make_unique.
-                    let constructor_suffix = rust_name.strip_prefix(nested_type_ident).unwrap();
+                    let constructor_suffix = rust_name
+                        .strip_prefix(nested_type_ident)
+                        .or_else(|| rust_name.strip_prefix("new"))
+                        .unwrap();
                     rust_name = format!("make_unique{}", constructor_suffix);
                     // Strip off the 'this' arg.
                     params = params.into_iter().skip(1).collect();
@@ -797,7 +880,14 @@ impl<'a> FnAnalyzer<'a> {
                     // If there are multiple constructors, bindgen generates
                     // new, new1, new2 etc. and we'll keep those suffixes.
                     rust_name = format!("new{}", constructor_suffix);
-                    MethodKind::Constructor
+                    if matches!(
+                        fun.special_member,
+                        Some(SpecialMemberKind::DefaultConstructor)
+                    ) {
+                        MethodKind::DefaultConstructor
+                    } else {
+                        MethodKind::Constructor
+                    }
                 } else if is_static_method {
                     MethodKind::Static
                 } else {
@@ -845,7 +935,7 @@ impl<'a> FnAnalyzer<'a> {
         // pointer not a reference. For copy + move constructors, we also
         // enforce Rust-side conversions to comply with moveit traits.
         match kind {
-            FnKind::Method(_, MethodKind::Constructor) => {
+            FnKind::Method(_, MethodKind::Constructor | MethodKind::DefaultConstructor) => {
                 self.reanalyze_parameter(
                     0,
                     fun,
@@ -969,6 +1059,7 @@ impl<'a> FnAnalyzer<'a> {
                 FnKind::Method(
                     ref self_ty,
                     MethodKind::Constructor
+                    | MethodKind::DefaultConstructor
                     | MethodKind::MakeUnique
                     | MethodKind::Normal(..)
                     | MethodKind::PureVirtual(..)
@@ -1062,6 +1153,7 @@ impl<'a> FnAnalyzer<'a> {
         let wrapper_function_needed = match kind {
             FnKind::Method(_, MethodKind::Static)
             | FnKind::Method(_, MethodKind::Constructor)
+            | FnKind::Method(_, MethodKind::DefaultConstructor)
             | FnKind::Method(_, MethodKind::Virtual(_))
             | FnKind::Method(_, MethodKind::PureVirtual(_))
             | FnKind::TraitMethod {
@@ -1096,6 +1188,7 @@ impl<'a> FnAnalyzer<'a> {
                         (CppFunctionBody::MakeUnique, CppFunctionKind::Function)
                     }
                     FnKind::Method(ref self_ty, MethodKind::Constructor)
+                    | FnKind::Method(ref self_ty, MethodKind::DefaultConstructor)
                     | FnKind::TraitMethod {
                         kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                         impl_for: ref self_ty,
@@ -1616,18 +1709,31 @@ impl<'a> FnAnalyzer<'a> {
     /// If a type has explicit constructors, bindgen will generate corresponding
     /// constructor functions, which we'll have already converted to make_unique methods.
     /// C++ mandates the synthesis of certain implicit constructors, to which we
-    /// need ro create bindings too. We do that here.
+    /// need to create bindings too. We do that here.
     /// It is tempting to make this a separate analysis phase, to be run later than
     /// the function analysis; but that would make the code much more complex as it
     /// would need to output a `FnAnalysisBody`. By running it as part of this phase
     /// we can simply generate the sort of thing bindgen generates, then ask
     /// the existing code in this phase to figure out what to do with it.
+    ///
+    /// Also fills out the [`FnStructAnalysis::constructors`] fields with information useful
+    /// for further analysis phases.
     fn add_missing_constructors(&mut self, apis: &mut Vec<Api<FnPrePhase>>) {
-        if self.config.exclude_impls {
-            return;
-        }
-        let implicit_constructors_needed = find_missing_constructors(apis);
-        for (self_ty, implicit_constructors_needed) in implicit_constructors_needed {
+        for (self_ty, items_found) in find_missing_constructors(apis).iter() {
+            if let Some(Api::Struct {
+                analysis: FnStructAnalysis { constructors, .. },
+                ..
+            }) = apis.iter_mut().find(|api| api.name() == self_ty)
+            {
+                constructors.default_constructor = items_found.default_constructor.callable_any();
+                constructors.copy_constructor = items_found.const_copy_constructor.callable_any()
+                    || items_found.non_const_copy_constructor.callable_any();
+                constructors.move_constructor = items_found.move_constructor.callable_any();
+                constructors.destructor = items_found.destructor.callable_any();
+            }
+            if self.config.exclude_impls {
+                continue;
+            }
             if self
                 .config
                 .is_on_constructor_blocklist(&self_ty.to_cpp_name())
@@ -1635,7 +1741,7 @@ impl<'a> FnAnalyzer<'a> {
                 continue;
             }
             let path = self_ty.to_type_path();
-            if implicit_constructors_needed.default_constructor {
+            if items_found.implicit_default_constructor_needed() {
                 self.synthesize_constructor(
                     self_ty.clone(),
                     None,
@@ -1645,7 +1751,7 @@ impl<'a> FnAnalyzer<'a> {
                     References::default(),
                 );
             }
-            if implicit_constructors_needed.move_constructor {
+            if items_found.implicit_move_constructor_needed() {
                 self.synthesize_constructor(
                     self_ty.clone(),
                     Some("move"),
@@ -1658,11 +1764,7 @@ impl<'a> FnAnalyzer<'a> {
                     },
                 )
             }
-            // C++ synthesizes two different implicit copy constructors, but moveit
-            // supports only one, so we'll always synthesize that one.
-            if implicit_constructors_needed.copy_constructor_taking_const_t
-                || implicit_constructors_needed.copy_constructor_taking_t
-            {
+            if items_found.implicit_copy_constructor_needed() {
                 self.synthesize_constructor(
                     self_ty.clone(),
                     Some("const_copy"),
@@ -1674,6 +1776,16 @@ impl<'a> FnAnalyzer<'a> {
                         ..Default::default()
                     },
                 )
+            }
+            if items_found.implicit_destructor_needed() {
+                self.synthesize_constructor(
+                    self_ty.clone(),
+                    None,
+                    apis,
+                    SpecialMemberKind::Destructor,
+                    parse_quote! { this: *mut #path },
+                    References::default(),
+                );
             }
         }
     }

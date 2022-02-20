@@ -18,6 +18,7 @@ use super::{
 };
 use crate::conversion::api::Api;
 use crate::conversion::{
+    analysis::fun::FnStructAnalysis,
     api::TypeKind,
     error_reporter::{convert_apis, convert_item_apis},
     ConvertError,
@@ -44,7 +45,7 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
     for mut api in apis.iter_mut() {
         match &mut api {
             Api::Struct { analysis, name, .. } if abstract_types.contains(&name.name) => {
-                analysis.kind = TypeKind::Abstract;
+                analysis.pod.kind = TypeKind::Abstract;
             }
             _ => {}
         }
@@ -60,7 +61,11 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
         for mut api in apis.iter_mut() {
             match &mut api {
                 Api::Struct {
-                    analysis: PodAnalysis { bases, kind, .. },
+                    analysis:
+                        FnStructAnalysis {
+                            pod: PodAnalysis { bases, kind, .. },
+                            ..
+                        },
                     ..
                 } if *kind != TypeKind::Abstract && (!abstract_types.is_disjoint(bases)) => {
                     *kind = TypeKind::Abstract;
@@ -80,7 +85,7 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
         Api::Function {
             analysis:
                 FnAnalysis {
-                    kind: FnKind::Method(self_ty, MethodKind::MakeUnique | MethodKind::Constructor)
+                    kind: FnKind::Method(self_ty, MethodKind::MakeUnique | MethodKind::Constructor | MethodKind::DefaultConstructor)
                         | FnKind::TraitMethod{ kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor, impl_for: self_ty, ..},
                     ..
                 },
@@ -101,8 +106,12 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
     convert_item_apis(apis, &mut results, |api| match api {
         Api::Struct {
             analysis:
-                PodAnalysis {
-                    kind: TypeKind::Abstract,
+                FnStructAnalysis {
+                    pod:
+                        PodAnalysis {
+                            kind: TypeKind::Abstract,
+                            ..
+                        },
                     ..
                 },
             ..

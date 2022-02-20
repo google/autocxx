@@ -14,164 +14,99 @@
 
 //! Module which understands C++ constructor synthesis rules.
 
-/// Output of the C++ rules about what implicit constructors should be generated.
-#[cfg_attr(test, derive(Eq, PartialEq))]
-#[derive(Debug)]
-pub(super) struct ImplicitConstructorsNeeded {
-    pub(super) default_constructor: bool,
-    pub(super) copy_constructor_taking_t: bool,
-    pub(super) copy_constructor_taking_const_t: bool,
-    pub(super) move_constructor: bool,
+use crate::conversion::api::CppVisibility;
+
+/// Indicates what we found out about a category of special member function.
+///
+/// In the end, we only care whether it's public and exists, but we track a bit more information to
+/// support determining the information for dependent classes.
+#[derive(Debug, Copy, Clone)]
+pub(super) enum SpecialMemberFound {
+    /// This covers being deleted in any way:
+    ///   * Explicitly deleted
+    ///   * Implicitly defaulted when that means being deleted
+    ///   * Explicitly defaulted when that means being deleted
+    ///
+    /// It also covers not being either user declared or implicitly defaulted.
+    NotPresent,
+    /// Implicit special member functions, indicated by this, are always public.
+    Implicit,
+    /// This covers being explicitly defaulted (when that is not deleted) or being user-defined.
+    Explicit(CppVisibility),
 }
 
-/// Input to the C++ rules about which implicit constructors are generated.
-#[derive(Default, Debug)]
-pub(super) struct ExplicitItemsFound {
-    pub(super) move_constructor: bool,
-    pub(super) copy_constructor: bool,
-    pub(super) any_other_constructor: bool,
-    pub(super) any_bases_or_fields_lack_const_copy_constructors: bool,
-    pub(super) any_bases_or_fields_have_deleted_or_inaccessible_copy_constructors: bool,
-    pub(super) destructor: bool,
-    pub(super) any_bases_have_deleted_or_inaccessible_destructors: bool,
-    pub(super) copy_assignment_operator: bool,
-    pub(super) move_assignment_operator: bool,
-    pub(super) has_rvalue_reference_fields: bool,
-    pub(super) any_field_or_base_not_understood: bool,
-}
-
-pub(super) fn determine_implicit_constructors(
-    explicits: ExplicitItemsFound,
-) -> ImplicitConstructorsNeeded {
-    if explicits.any_field_or_base_not_understood {
-        // Don't generate anything
-        return ImplicitConstructorsNeeded {
-            default_constructor: false,
-            copy_constructor_taking_t: false,
-            copy_constructor_taking_const_t: false,
-            move_constructor: false,
-        };
+impl SpecialMemberFound {
+    /// Returns whether code outside of subclasses can call this special member function.
+    pub fn callable_any(&self) -> bool {
+        matches!(self, Self::Explicit(CppVisibility::Public) | Self::Implicit)
     }
 
-    let any_constructor =
-        explicits.copy_constructor || explicits.move_constructor || explicits.any_other_constructor;
-    // If no user-declared constructors of any kind are provided for a class type (struct, class, or union),
-    // the compiler will always declare a default constructor as an inline public member of its class.
-    let default_constructor = !any_constructor;
+    /// Returns whether code in a subclass can call this special member function.
+    pub fn callable_subclass(&self) -> bool {
+        matches!(
+            self,
+            Self::Explicit(CppVisibility::Public)
+                | Self::Explicit(CppVisibility::Protected)
+                | Self::Implicit
+        )
+    }
 
-    // If no user-defined copy constructors are provided for a class type (struct, class, or union),
-    // the compiler will always declare a copy constructor as a non-explicit inline public member of its class.
-    // This implicitly-declared copy constructor has the form T::T(const T&) if all of the following are true:
-    //  each direct and virtual base B of T has a copy constructor whose parameters are const B& or const volatile B&;
-    //  each non-static data member M of T of class type or array of class type has a copy constructor whose parameters are const M& or const volatile M&.
+    /// Returns whether this exists at all. Note that this will return true even if it's private,
+    /// which is generally not very useful, but does come into play for some rules around which
+    /// default special member functions are deleted vs don't exist.
+    pub fn exists(&self) -> bool {
+        matches!(self, Self::Explicit(_) | Self::Implicit)
+    }
 
-    // The implicitly-declared or defaulted copy constructor for class T is defined as deleted if any of the following conditions are true:
-    // T is a union-like class and has a variant member with non-trivial copy constructor; // we don't support unions anyway
-    // T has a user-defined move constructor or move assignment operator (this condition only causes the implicitly-declared, not the defaulted, copy constructor to be deleted).
-    // T has non-static data members that cannot be copied (have deleted, inaccessible, or ambiguous copy constructors);
-    // T has direct or virtual base class that cannot be copied (has deleted, inaccessible, or ambiguous copy constructors);
-    // T has direct or virtual base class with a deleted or inaccessible destructor;
-    // T has a data member of rvalue reference type;
-    let copy_constructor_is_deleted = explicits.move_constructor
-        || explicits.move_assignment_operator
-        || explicits.any_bases_or_fields_have_deleted_or_inaccessible_copy_constructors
-        || explicits.any_bases_have_deleted_or_inaccessible_destructors
-        || explicits.has_rvalue_reference_fields;
+    pub fn exists_implicit(&self) -> bool {
+        matches!(self, Self::Implicit)
+    }
 
-    let (copy_constructor_taking_const_t, copy_constructor_taking_t) =
-        if explicits.copy_constructor || copy_constructor_is_deleted {
-            (false, false)
-        } else if explicits.any_bases_or_fields_lack_const_copy_constructors {
-            (false, true)
-        } else {
-            (true, false)
-        };
-
-    // If no user-defined move constructors are provided for a class type (struct, class, or union), and all of the following is true:
-    // there are no user-declared copy constructors;
-    // there are no user-declared copy assignment operators;
-    // there are no user-declared move assignment operators;
-    // there is no user-declared destructor.
-    // then the compiler will declare a move constructor
-    let move_constructor = !(explicits.move_constructor
-        || explicits.copy_constructor
-        || explicits.destructor
-        || explicits.copy_assignment_operator
-        || explicits.move_assignment_operator);
-
-    ImplicitConstructorsNeeded {
-        default_constructor,
-        copy_constructor_taking_t,
-        copy_constructor_taking_const_t,
-        move_constructor,
+    pub fn exists_explicit(&self) -> bool {
+        matches!(self, Self::Explicit(_))
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::determine_implicit_constructors;
+/// Information about which special member functions exist based on the C++ rules.
+///
+/// Not all of this information is used directly, but we need to track it to determine the
+/// information we do need for classes which are used as members or base classes.
+#[derive(Debug, Copy, Clone)]
+pub(super) struct ItemsFound {
+    pub(super) default_constructor: SpecialMemberFound,
+    pub(super) destructor: SpecialMemberFound,
+    pub(super) const_copy_constructor: SpecialMemberFound,
+    /// Remember that [`const_copy_constructor`] may be used in place of this if it exists.
+    pub(super) non_const_copy_constructor: SpecialMemberFound,
+    pub(super) move_constructor: SpecialMemberFound,
+}
 
-    use super::ExplicitItemsFound;
-
-    #[test]
-    fn test_simple() {
-        let inputs = ExplicitItemsFound::default();
-        let outputs = determine_implicit_constructors(inputs);
-        assert!(outputs.default_constructor);
-        assert!(outputs.copy_constructor_taking_const_t);
-        assert!(!outputs.copy_constructor_taking_t);
-        assert!(outputs.move_constructor);
+impl ItemsFound {
+    /// Returns whether we should generate a default constructor wrapper, because bindgen won't do
+    /// one for the implicit default constructor which exists.
+    pub(super) fn implicit_default_constructor_needed(&self) -> bool {
+        self.default_constructor.exists_implicit()
     }
 
-    #[test]
-    fn test_with_destructor() {
-        let inputs = ExplicitItemsFound {
-            destructor: true,
-            ..Default::default()
-        };
-        let outputs = determine_implicit_constructors(inputs);
-        assert!(outputs.default_constructor);
-        assert!(outputs.copy_constructor_taking_const_t);
-        assert!(!outputs.copy_constructor_taking_t);
-        assert!(!outputs.move_constructor);
+    /// Returns whether we should generate a copy constructor wrapper, because bindgen won't do one
+    /// for the implicit copy constructor which exists.
+    pub(super) fn implicit_copy_constructor_needed(&self) -> bool {
+        let any_implicit_copy = self.const_copy_constructor.exists_implicit()
+            || self.non_const_copy_constructor.exists_implicit();
+        let no_explicit_copy = !(self.const_copy_constructor.exists_explicit()
+            || self.non_const_copy_constructor.exists_explicit());
+        any_implicit_copy && no_explicit_copy
     }
 
-    #[test]
-    fn test_with_pesky_base() {
-        let inputs = ExplicitItemsFound {
-            any_bases_or_fields_lack_const_copy_constructors: true,
-            ..Default::default()
-        };
-        let outputs = determine_implicit_constructors(inputs);
-        assert!(outputs.default_constructor);
-        assert!(!outputs.copy_constructor_taking_const_t);
-        assert!(outputs.copy_constructor_taking_t);
-        assert!(outputs.move_constructor);
+    /// Returns whether we should generate a move constructor wrapper, because bindgen won't do one
+    /// for the implicit move constructor which exists.
+    pub(super) fn implicit_move_constructor_needed(&self) -> bool {
+        self.move_constructor.exists_implicit()
     }
 
-    #[test]
-    fn test_with_user_defined_move_constructor() {
-        let inputs = ExplicitItemsFound {
-            move_constructor: true,
-            ..Default::default()
-        };
-        let outputs = determine_implicit_constructors(inputs);
-        assert!(!outputs.default_constructor);
-        assert!(!outputs.copy_constructor_taking_const_t);
-        assert!(!outputs.copy_constructor_taking_t);
-        assert!(!outputs.move_constructor);
-    }
-
-    #[test]
-    fn test_with_user_defined_misc_constructor() {
-        let inputs = ExplicitItemsFound {
-            any_other_constructor: true,
-            ..Default::default()
-        };
-        let outputs = determine_implicit_constructors(inputs);
-        assert!(!outputs.default_constructor);
-        assert!(outputs.copy_constructor_taking_const_t);
-        assert!(!outputs.copy_constructor_taking_t);
-        assert!(outputs.move_constructor);
+    /// Returns whether we should generate a destructor wrapper, because bindgen won't do one for
+    /// the implicit destructor which exists.
+    pub(super) fn implicit_destructor_needed(&self) -> bool {
+        self.destructor.exists_implicit()
     }
 }

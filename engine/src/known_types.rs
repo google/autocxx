@@ -43,7 +43,7 @@ struct TypeDetails {
     rs_name: String,
     /// C++ equivalent name for a Rust type.
     cpp_name: String,
-    //// The behavior of the type.
+    /// The behavior of the type.
     behavior: Behavior,
     /// Any extra non-canonical names
     extra_non_canonical_name: Option<String>,
@@ -191,6 +191,11 @@ impl TypeDatabase {
         self.canonical_names.keys().chain(self.by_rs_name.keys())
     }
 
+    /// Returns whether the given type is a known type.
+    pub(crate) fn is_known(&self, qn: &QualifiedName) -> bool {
+        self.canonical_names.contains_key(qn) || self.by_rs_name.contains_key(qn)
+    }
+
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
     pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (QualifiedName, bool)> {
@@ -217,28 +222,12 @@ impl TypeDatabase {
         pod_safety.into_iter()
     }
 
-    pub(crate) fn all_types_with_move_constructors(
-        &self,
-    ) -> impl Iterator<Item = QualifiedName> + '_ {
-        self.all_names()
-            .filter(|qn| self.get(qn).unwrap().has_move_constructor)
-            .cloned()
+    pub(crate) fn has_move_constructor(&self, qn: &QualifiedName) -> bool {
+        self.get(qn).unwrap().has_move_constructor
     }
 
-    pub(crate) fn all_types_with_const_copy_constructors(
-        &self,
-    ) -> impl Iterator<Item = QualifiedName> + '_ {
-        self.all_names()
-            .filter(|qn| self.get(qn).unwrap().has_const_copy_constructor)
-            .cloned()
-    }
-
-    pub(crate) fn all_types_without_copy_constructors(
-        &self,
-    ) -> impl Iterator<Item = QualifiedName> + '_ {
-        self.all_names()
-            .filter(|qn| !self.get(qn).unwrap().has_const_copy_constructor)
-            .cloned()
+    pub(crate) fn has_const_copy_constructor(&self, qn: &QualifiedName) -> bool {
+        self.get(qn).unwrap().has_const_copy_constructor
     }
 
     /// Whether this TypePath should be treated as a value in C++

@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    fun::{FnPhase, FnPrePhase, PodAndDepAnalysis},
+    fun::{FnPhase, FnPrePhase, FnStructAnalysis, PodAndDepAnalysis},
     pod::PodAnalysis,
     tdef::TypedefAnalysis,
 };
@@ -44,13 +44,18 @@ impl HasDependencies for Api<FnPrePhase> {
             } => Box::new(old_tyname.iter().chain(deps.iter())),
             Api::Struct {
                 analysis:
-                    PodAnalysis {
-                        kind: TypeKind::Pod,
-                        field_types,
+                    FnStructAnalysis {
+                        pod:
+                            PodAnalysis {
+                                kind: TypeKind::Pod,
+                                bases,
+                                field_types,
+                                ..
+                            },
                         ..
                     },
                 ..
-            } => Box::new(field_types.iter()),
+            } => Box::new(field_types.iter().chain(bases.iter())),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter()),
             Api::Subclass {
                 name: _,
@@ -81,15 +86,18 @@ impl HasDependencies for Api<FnPhase> {
                         pod:
                             PodAnalysis {
                                 kind: TypeKind::Pod,
+                                bases,
                                 field_types,
                                 ..
                             },
                         constructor_and_allocator_deps,
+                        ..
                     },
                 ..
             } => Box::new(
                 field_types
                     .iter()
+                    .chain(bases.iter())
                     .chain(constructor_and_allocator_deps.iter()),
             ),
             Api::Struct {

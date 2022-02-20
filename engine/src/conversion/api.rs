@@ -198,7 +198,7 @@ impl std::hash::Hash for TraitImplSignature {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum SpecialMemberKind {
     DefaultConstructor,
     CopyConstructor,

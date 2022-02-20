@@ -49,15 +49,14 @@ use self::{
 };
 
 use super::{
-    analysis::fun::PodAndDepAnalysis,
+    analysis::fun::{FnPhase, ReceiverMutability},
+    api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind},
+};
+use super::{
     api::{Layout, Provenance, RustSubclassFnDetails, SuperclassMethod, TraitImplSignature},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
-};
-use super::{
-    analysis::fun::{FnPhase, ReceiverMutability},
-    api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind},
 };
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::{quote, ToTokens};
@@ -491,17 +490,16 @@ impl<'a> RsCodeGenerator<'a> {
                 ..Default::default()
             },
             Api::Struct {
-                details,
-                analysis: PodAndDepAnalysis { pod, .. },
-                ..
+                details, analysis, ..
             } => {
                 let doc_attr = get_doc_attr(&details.item.attrs);
                 let layout = details.layout.clone();
                 self.generate_type(
                     &name,
                     id,
-                    pod.kind,
-                    pod.movable,
+                    analysis.pod.kind,
+                    analysis.constructors.move_constructor,
+                    analysis.constructors.destructor,
                     || Some((Item::Struct(details.item), doc_attr)),
                     associated_methods,
                     layout,
@@ -514,6 +512,7 @@ impl<'a> RsCodeGenerator<'a> {
                     id,
                     TypeKind::Pod,
                     true,
+                    true,
                     || Some((Item::Enum(item), doc_attr)),
                     associated_methods,
                     None,
@@ -524,6 +523,7 @@ impl<'a> RsCodeGenerator<'a> {
                 id,
                 TypeKind::Abstract,
                 false, // assume for now that these types can't be kept in a Vector
+                true,  // assume for now that these types can be put in a smart pointer
                 || None,
                 associated_methods,
                 None,
@@ -690,9 +690,10 @@ impl<'a> RsCodeGenerator<'a> {
         });
         RsCodegenResult {
             extern_c_mod_items,
-            // For now we just assume we can't keep subclasses in vectors.
-            // That's the reason for the 'false'
-            bridge_items: create_impl_items(&cpp_id, false, self.config),
+            // For now we just assume we can't keep subclasses in vectors, but we can put them in
+            // smart pointers.
+            // That's the reason for the 'false' and 'true'
+            bridge_items: create_impl_items(&cpp_id, false, true, self.config),
             bindgen_mod_items,
             materializations: vec![Use::Custom(Box::new(parse_quote! {
                 pub use cxxbridge::#cpp_id;
@@ -781,6 +782,7 @@ impl<'a> RsCodeGenerator<'a> {
         id: Ident,
         type_kind: TypeKind,
         movable: bool,
+        destroyable: bool,
         item_creator: F,
         associated_methods: &HashMap<QualifiedName, Vec<SuperclassMethod>>,
         layout: Option<Layout>,
@@ -827,7 +829,7 @@ impl<'a> RsCodeGenerator<'a> {
                 bindgen_mod_items.push(item);
                 RsCodegenResult {
                     global_items: self.generate_extern_type_impl(type_kind, name),
-                    bridge_items: create_impl_items(&id, movable, self.config),
+                    bridge_items: create_impl_items(&id, movable, destroyable, self.config),
                     extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, None)],
                     bindgen_mod_items,
                     materializations,

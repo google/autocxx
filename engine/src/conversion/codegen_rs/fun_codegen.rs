@@ -124,7 +124,10 @@ pub(super) fn gen_function(
 
     if analysis.rust_wrapper_needed {
         match kind {
-            FnKind::Method(ref type_name, MethodKind::Constructor) => {
+            FnKind::Method(
+                ref type_name,
+                MethodKind::Constructor | MethodKind::DefaultConstructor,
+            ) => {
                 // Constructor.
                 impl_entry = Some(fn_generator.generate_constructor_impl(type_name));
             }
@@ -133,7 +136,9 @@ pub(super) fn gen_function(
                 impl_entry = Some(fn_generator.generate_method_impl(
                     matches!(
                         method_kind,
-                        MethodKind::MakeUnique | MethodKind::Constructor
+                        MethodKind::MakeUnique
+                            | MethodKind::Constructor
+                            | MethodKind::DefaultConstructor
                     ),
                     type_name,
                     &ret_type,
