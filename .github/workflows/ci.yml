@@ -56,7 +56,7 @@ jobs:
           # no creduce on non-linux, so exclude tests needing creduce there
           # non-linux failures https://github.com/google/autocxx/issues/819
           # beta failing tests https://github.com/google/autocxx/issues/818
-          RUSTFLAGS: ${{env.RUSTFLAGS}} ${{runner.os != 'Linux' && '--exclude autocxx-reduce --exclude autocxx-gen' || ''}} ${{runner.os != 'Linux && '--cfg skip_non_linux_failing_tests' || ''}} ${{matrix.rust == 'beta' && '--cfg skip_beta_failing_tests' || ''}}
+          RUSTFLAGS: ${{env.RUSTFLAGS}} ${{runner.os != 'Linux' && '--exclude autocxx-reduce --exclude autocxx-gen' || ''}} ${{runner.os != 'Linux' && '--cfg skip_non_linux_failing_tests' || ''}} ${{matrix.rust == 'beta' && '--cfg skip_beta_failing_tests' || ''}}
         id: testsuite
         shell: bash
       - run: cargo build --workspace ${{steps.testsuite.outputs.exclude}}
