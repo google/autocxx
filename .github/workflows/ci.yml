@@ -39,10 +39,11 @@ jobs:
         with:
           toolchain: ${{matrix.rust}}
           components: rustfmt
-      - name: Install creduce
-        # For operating systems that have it packaged, install creduce
+     # For operating systems that have it packaged, install creduce
+      - name: Install creduce (Linux)
         if: matrix.os == ''
         run: sudo apt-get install creduce
+      - name: Install creduce (MacOS)
         if: matrix.os == 'macOS'
         run: brew install creduce
       - name: Set LIBCLANG_PATH (Windows)
