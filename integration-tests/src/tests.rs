@@ -6371,6 +6371,7 @@ fn test_pv_subclass_return() {
     );
 }
 
+#[cfg_attr(skip_non_linux_failing_tests, ignore)]
 #[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_passed_to_fn() {
