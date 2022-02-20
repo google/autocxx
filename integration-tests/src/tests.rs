@@ -117,6 +117,39 @@ fn test_take_i32() {
 }
 
 #[test]
+fn test_nested_module() {
+    let cxx = indoc! {"
+        void do_nothing() {
+        }
+    "};
+    let hdr = indoc! {"
+        void do_nothing();
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let unexpanded_rust = |hdr: &str| {
+        quote! {
+            mod a {
+                use autocxx::prelude::*;
+
+                include_cpp!(
+                    #hexathorpe include #hdr
+                    generate!("do_nothing")
+                    safety!(unsafe)
+                );
+
+                pub use ffi::*;
+            }
+
+            fn main() {
+                a::do_nothing();
+            }
+        }
+    };
+
+    do_run_test_manual(cxx, hdr, unexpanded_rust, None, None).unwrap();
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/681
 #[cfg(target_pointer_width = "64")]
 fn test_return_big_ints() {
