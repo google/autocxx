@@ -39,21 +39,22 @@ jobs:
         with:
           toolchain: ${{matrix.rust}}
           components: rustfmt
-      - name: Install creduce (ubuntu)
-        # Windows and macOS jobs don't have creduce available, so
-        # don't apt-get install creduce on them
+      - name: Install creduce
+        # For operating systems that have it packaged, install creduce
         if: matrix.os == ''
         run: sudo apt-get install creduce
+        if: matrix.os == 'macOS'
+        run: brew install creduce
       - name: Set LIBCLANG_PATH (Windows)
         # Windows github action doesn't set the path for clang, so set it
         # See https://github.com/rust-lang/rust-bindgen/issues/1797
         if: matrix.os == 'windows'
         run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
       - name: Exclude failing targets and tests
-        # no creduce on non-linux, so exclude tests needing creduce there
+        # no creduce on Windows, so exclude tests needing creduce there
         run: |
           echo RUSTFLAGS=$RUSTFLAGS >> $GITHUB_ENV
-          echo ::set-output name=exclude::${{runner.os != 'Linux' && '--exclude autocxx-reduce --exclude autocxx-gen' || ''}}
+          echo ::set-output name=exclude::${{runner.os == 'Windows' && '--exclude autocxx-reduce --exclude autocxx-gen' || ''}}
         env:
           # non-linux failures https://github.com/google/autocxx/issues/819
           # beta failing tests https://github.com/google/autocxx/issues/818
