@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::test_utils::{
+mod test_utils;
+
+use indoc::indoc;
+use test_utils::{
     directives_from_lists, do_run_test_manual, make_clang_arg_adder, make_error_finder,
     make_string_finder, run_test, run_test_ex, run_test_expect_fail, run_test_expect_fail_ex,
     CppCounter, CppMatcher, EnableAutodiscover, NoSystemHeadersChecker, SetSuppressSystemHeaders,
     SkipCxxGen,
 };
-use indoc::indoc;
 use itertools::Itertools;
 use proc_macro2::Span;
 use quote::quote;

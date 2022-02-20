@@ -108,7 +108,7 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
 }
 
 /// A positive test, we expect to pass.
-pub(crate) fn run_test(
+pub fn run_test(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
