@@ -7195,6 +7195,7 @@ fn test_pv_subclass_calls() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_types() {
     let hdr = indoc! {"
