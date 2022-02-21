@@ -3478,6 +3478,7 @@ fn test_root_ns_meth_ret_nonpod() {
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
 }
 
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_forward_declaration() {
@@ -3526,6 +3527,7 @@ fn test_ulong() {
     run_test("", hdr, rs, &["daft"], &[]);
 }
 
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_typedef_to_ulong() {
@@ -3601,6 +3603,7 @@ fn test_reserved_name() {
     run_test("", hdr, rs, &["async_"], &[]);
 }
 
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_nested_type() {
@@ -5315,6 +5318,7 @@ fn test_blocklist_not_overly_broad() {
     run_test("", hdr, rs, &["rust_func", "std_func"], &[]);
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[test]
 fn test_stringview() {
@@ -5889,6 +5893,7 @@ fn test_rust_reference() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_rust_reference_autodiscover() {
     let hdr = indoc! {"
@@ -6283,6 +6288,7 @@ fn test_pv_subclass_not_pub() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_ptr_param() {
     let hdr = indoc! {"

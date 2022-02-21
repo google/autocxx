@@ -79,8 +79,6 @@ jobs:
         run: cargo build --workspace
       - name: Build chromium render-frame-host example
         working-directory: ./examples/chromium-fake-render-frame-host
-        # chromium-fake-render-frame-host doesn't link on Windows
-        if: matrix.os != 'windows'
         run: cargo build --workspace
       - name: Build non-trivial-type-on-stack example
         working-directory: ./examples/non-trivial-type-on-stack
