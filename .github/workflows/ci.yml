@@ -18,13 +18,13 @@ jobs:
           - rust: beta
           - rust: stable
           - name: macOS
-            rust: stable
+            rust: nightly
             os: macos
           - name: Windows (gnu)
-            rust: stable-x86_64-pc-windows-gnu
+            rust: nightly-x86_64-pc-windows-gnu
             os: windows
           - name: Windows (msvc)
-            rust: stable-x86_64-pc-windows-msvc
+            rust: nightly-x86_64-pc-windows-msvc
             os: windows
             flags: /EHsc
     env:
@@ -59,7 +59,7 @@ jobs:
         env:
           # non-linux failures https://github.com/google/autocxx/issues/819
           # beta failing tests https://github.com/google/autocxx/issues/818
-          RUSTFLAGS: ${{runner.os != 'Linux' && '--cfg skip_non_linux_failing_tests' || ''}} ${{matrix.rust == 'beta' && '--cfg skip_beta_failing_tests' || ''}}
+          RUSTFLAGS: ${{runner.name == 'Windows (msvc)' && '--cfg skip_windows_msvc_failing_tests' || ''}} ${{runner.name == 'Windows (gnu)' && '--cfg skip_windows_gnu_failing_tests' || ''}} ${{matrix.rust == 'beta' && '--cfg skip_beta_failing_tests' || ''}}
         id: testsuite
         shell: bash
       - run: cargo test --workspace ${{steps.testsuite.outputs.exclude}}

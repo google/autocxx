@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(test)]
+
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Write},
