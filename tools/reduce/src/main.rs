@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(test)]
-mod reduce_test;
-
 use std::{
     fs::File,
     io::Write,
@@ -266,7 +263,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         .unwrap()
         .to_string();
     let gen_cmd = matches.value_of("gen-cmd").unwrap_or(&default_gen_cmd);
-    if Path::new(gen_cmd).exists() == false {
+    if !Path::new(gen_cmd).exists() {
         panic!(
             "autocxx-gen not found in {}. hint: autocxx-reduce --gen-cmd /path/to/autocxx-gen",
             gen_cmd

@@ -3511,6 +3511,8 @@ fn test_root_ns_meth_ret_nonpod() {
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
 }
 
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_forward_declaration() {
     let hdr = indoc! {"
@@ -3558,6 +3560,8 @@ fn test_ulong() {
     run_test("", hdr, rs, &["daft"], &[]);
 }
 
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_typedef_to_ulong() {
     let hdr = indoc! {"
@@ -3632,6 +3636,8 @@ fn test_reserved_name() {
     run_test("", hdr, rs, &["async_"], &[]);
 }
 
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_nested_type() {
     // Test that we can import APIs that use nested types.
@@ -4461,6 +4467,8 @@ fn test_double_underscores_ignored() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
+// This test fails on Windows gnu but not on Windows msvc
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[test]
 fn test_double_underscore_typedef_ignored() {
     let hdr = indoc! {"
@@ -5343,6 +5351,8 @@ fn test_blocklist_not_overly_broad() {
     run_test("", hdr, rs, &["rust_func", "std_func"], &[]);
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[test]
 fn test_stringview() {
     // Test that APIs using std::string_view do not otherwise cause errors.
@@ -5413,6 +5423,7 @@ fn test_include_cpp_in_path() {
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_bitset() {
     let hdr = indoc! {"
@@ -5915,6 +5926,7 @@ fn test_rust_reference() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_rust_reference_autodiscover() {
     let hdr = indoc! {"
@@ -6014,6 +6026,7 @@ fn test_rust_reference_method() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_box() {
     let hdr = indoc! {"
@@ -6308,6 +6321,7 @@ fn test_pv_subclass_not_pub() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_ptr_param() {
     let hdr = indoc! {"
@@ -6352,6 +6366,8 @@ fn test_pv_subclass_ptr_param() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_return() {
     let hdr = indoc! {"
@@ -6393,6 +6409,7 @@ fn test_pv_subclass_return() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_passed_to_fn() {
     let hdr = indoc! {"
@@ -6435,6 +6452,7 @@ fn test_pv_subclass_passed_to_fn() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_derive_defaults() {
     let hdr = indoc! {"
@@ -6564,6 +6582,7 @@ fn test_two_subclasses() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_two_superclasses_with_same_name_method() {
     let hdr = indoc! {"
@@ -6660,6 +6679,7 @@ fn test_pv_protected_constructor() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_protected_method() {
     let hdr = indoc! {"
@@ -6843,6 +6863,7 @@ fn test_pv_subclass_allocation_not_self_owned() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_allocation_self_owned() {
     let hdr = indoc! {"
@@ -7002,6 +7023,7 @@ fn test_pv_subclass_allocation_self_owned() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_calls() {
     let hdr = indoc! {"
@@ -7207,6 +7229,7 @@ fn test_pv_subclass_calls() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_types() {
     let hdr = indoc! {"
@@ -7517,6 +7540,7 @@ fn test_pv_subclass_overrides() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_namespaced_superclass() {
     let hdr = indoc! {"
@@ -7689,6 +7713,8 @@ fn test_copy_and_move_constructor_moveit() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+// This test fails on Windows gnu but not on Windows msvc
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[test]
 fn test_uniqueptr_moveit() {
     let hdr = indoc! {"
@@ -7711,6 +7737,8 @@ fn test_uniqueptr_moveit() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+// This test fails on Windows gnu but not on Windows msvc
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[test]
 fn test_various_emplacement() {
     let hdr = indoc! {"
@@ -7739,6 +7767,7 @@ fn test_various_emplacement() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_emplace_uses_overridden_new_and_delete() {
     let hdr = indoc! {"
@@ -7913,6 +7942,7 @@ fn test_no_rvo_move() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_abstract_up() {
     let hdr = indoc! {"
@@ -7962,6 +7992,7 @@ fn test_class_having_protected_method() {
     run_test("", hdr, rs, &[], &["A"]);
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_protected_inner_class() {
     let hdr = indoc! {"
@@ -7987,6 +8018,7 @@ fn test_protected_inner_class() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_private_inner_class() {
     let hdr = indoc! {"
@@ -8064,6 +8096,7 @@ fn size_and_alignment_test(pod: bool) {
     "},
         type_definitions, function_definitions
     );
+    #[allow(clippy::unnecessary_to_owned)] // wrongly triggers on into_iter() below
     let allowlist_fns: Vec<String> = TYPES
         .iter()
         .flat_map(|(name, _)| {

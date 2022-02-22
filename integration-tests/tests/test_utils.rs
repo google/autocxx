@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(test)]
+
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Write},
@@ -86,7 +88,7 @@ impl LinkableTryBuilder {
         }
         for generated_rs in generated_rs_files {
             self.move_items_into_temp_dir(
-                &generated_rs.parent().unwrap().to_path_buf(),
+                &generated_rs.parent().unwrap(),
                 generated_rs.file_name().unwrap().to_str().unwrap(),
             );
         }
@@ -108,7 +110,7 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
 }
 
 /// A positive test, we expect to pass.
-pub(crate) fn run_test(
+pub fn run_test(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
@@ -382,7 +384,8 @@ where
         .host(&target)
         .target(&target)
         .opt_level(1)
-        .flag("-std=c++14");
+        .flag("-std=c++14") // For clang
+        .flag_if_supported("/GX"); // Enable C++ exceptions for msvc
     let b = if let Some(builder_modifier) = builder_modifier {
         builder_modifier.modify_cc_builder(b)
     } else {

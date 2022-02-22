@@ -1,6 +1,7 @@
 [package]
 name = "autocxx-integration-tests"
 version = "0.1.0"
+autotests = false
 edition = "2021"
 
 [dev-dependencies]
@@ -27,3 +28,8 @@ itertools = "0.10"
 version = "1.0.39"
 features = [ "full" ]
 #features = [ "full", "extra-traits" ]
+
+[[test]]
+name = "integration_tests"
+path = "tests/lib.rs"
+harness = true
