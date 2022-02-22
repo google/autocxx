@@ -7965,6 +7965,7 @@ fn test_abstract_up() {
     run_test("", hdr, rs, &["A", "get_a"], &[]);
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_abstract_private() {
     let hdr = indoc! {"
