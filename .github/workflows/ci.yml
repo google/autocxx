@@ -63,27 +63,66 @@ jobs:
         id: testsuite
         shell: bash
       - run: cargo test --workspace ${{steps.testsuite.outputs.exclude}}
+
+  examples:
+    name: ${{matrix.name || format('Rust {0}', matrix.rust)}}
+    runs-on: ${{matrix.os || 'ubuntu'}}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rust: nightly
+          - rust: beta
+          - rust: stable
+          - name: macOS
+            rust: nightly
+            os: macos
+          - name: Windows (gnu)
+            rust: nightly-x86_64-pc-windows-gnu
+            os: windows
+          - name: Windows (msvc)
+            rust: nightly-x86_64-pc-windows-msvc
+            os: windows
+            flags: /EHsc
+    env:
+      CARGO_TERM_COLOR: always
+      CXXFLAGS: ${{matrix.flags}}
+      RUSTFLAGS: --cfg deny_warnings -Dwarnings
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{matrix.rust}}
+          components: rustfmt
+      - name: Set LIBCLANG_PATH (Windows)
+        # Windows github action doesn't set the path for clang, so set it
+        # See https://github.com/rust-lang/rust-bindgen/issues/1797
+        if: matrix.os == 'windows'
+        run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
       - name: Build s2 example
         working-directory: ./examples/s2
         # s2 doesn't link on Windows
         if: matrix.os != 'windows'
-        run: cargo build --workspace
+        run: cargo build
       - name: Build steam example
         working-directory: ./examples/steam-mini
-        run: cargo build --workspace
+        run: cargo build
       - name: Build subclass example
         working-directory: ./examples/subclass
-        run: cargo build --workspace
+        run: cargo build
       - name: Build pod example
         working-directory: ./examples/pod
-        run: cargo build --workspace
+        run: cargo build
       - name: Build chromium render-frame-host example
         working-directory: ./examples/chromium-fake-render-frame-host
-        run: cargo build --workspace
+        # chromium-fake-render-frame-host doesn't link on Windows
+        if: matrix.os != 'windows'
+        run: cargo build
       - name: Build non-trivial-type-on-stack example
         working-directory: ./examples/non-trivial-type-on-stack
-        if: matrix.os != 'windows'
-        run: cargo build --workspace
+        run: cargo build
 
   clippy:
     name: Clippy
