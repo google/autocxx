@@ -19,6 +19,7 @@ use tempdir::TempDir;
 
 static MAIN_RS: &str = include_str!("../../../demo/src/main.rs");
 static INPUT_H: &str = include_str!("../../../demo/src/input.h");
+static BLANK: &str = "// Blank autocxx placeholder";
 
 #[test]
 fn test_help() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,7 +33,7 @@ where
     F: FnOnce(&mut Command),
 {
     let result = base_test_ex(tmp_dir, arg_modifier);
-    assert_contentful(&tmp_dir, "gen0.cc");
+    assert_contentful(tmp_dir, "gen0.cc");
     result
 }
 
@@ -158,7 +159,7 @@ fn assert_contentful(outdir: &TempDir, fname: &str) {
         panic!("File {} didn't exist", p.to_string_lossy());
     }
     assert!(
-        p.metadata().unwrap().len() > super::BLANK.len().try_into().unwrap(),
+        p.metadata().unwrap().len() > BLANK.len().try_into().unwrap(),
         "File {} is empty",
         fname
     );
@@ -170,7 +171,7 @@ fn assert_not_contentful(outdir: &TempDir, fname: &str) {
         panic!("File {} didn't exist", p.to_string_lossy());
     }
     assert!(
-        p.metadata().unwrap().len() <= super::BLANK.len().try_into().unwrap(),
+        p.metadata().unwrap().len() <= BLANK.len().try_into().unwrap(),
         "File {} is not empty",
         fname
     );

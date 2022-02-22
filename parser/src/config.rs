@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
+use std::{borrow::Cow, collections::HashSet};
 
 use proc_macro2::Span;
 use quote::ToTokens;
@@ -353,7 +353,7 @@ impl IncludeCppConfig {
         if self.exclude_utilities {
             Vec::new()
         } else {
-            vec![self.get_makestring_name()]
+            vec![self.get_makestring_name().to_string()]
         }
     }
 
@@ -390,14 +390,18 @@ impl IncludeCppConfig {
         self.blocklist.iter()
     }
 
-    pub fn get_makestring_name(&self) -> String {
-        format!(
-            "autocxx_make_string_{}",
-            self.mod_name
-                .as_ref()
-                .map(|i| i.to_string())
-                .unwrap_or_else(|| "default".into())
-        )
+    /// In case there are multiple sets of ffi mods in a single binary,
+    /// endeavor to return a name which can be used to make symbols
+    /// unique.
+    pub fn uniquify_name_per_mod<'a>(&self, name: &'a str) -> Cow<'a, str> {
+        match self.mod_name.as_ref() {
+            None => Cow::Borrowed(name),
+            Some(md) => Cow::Owned(format!("{}_{}", name, md)),
+        }
+    }
+
+    pub fn get_makestring_name(&self) -> Cow<str> {
+        self.uniquify_name_per_mod("autocxx_make_string")
     }
 
     pub fn is_rust_type(&self, id: &Ident) -> bool {

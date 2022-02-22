@@ -117,6 +117,39 @@ fn test_take_i32() {
 }
 
 #[test]
+fn test_nested_module() {
+    let cxx = indoc! {"
+        void do_nothing() {
+        }
+    "};
+    let hdr = indoc! {"
+        void do_nothing();
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let unexpanded_rust = |hdr: &str| {
+        quote! {
+            mod a {
+                use autocxx::prelude::*;
+
+                include_cpp!(
+                    #hexathorpe include #hdr
+                    generate!("do_nothing")
+                    safety!(unsafe)
+                );
+
+                pub use ffi::*;
+            }
+
+            fn main() {
+                a::do_nothing();
+            }
+        }
+    };
+
+    do_run_test_manual(cxx, hdr, unexpanded_rust, None, None).unwrap();
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/681
 #[cfg(target_pointer_width = "64")]
 fn test_return_big_ints() {
@@ -1198,7 +1231,7 @@ fn test_i32_const() {
     let cxx = indoc! {"
     "};
     let hdr = indoc! {"
-        #include <cstdint>  
+        #include <cstdint>
         const uint32_t BOB = 3;
     "};
     let rs = quote! {
@@ -1213,7 +1246,7 @@ fn test_negative_rs_nonsense() {
     let cxx = indoc! {"
     "};
     let hdr = indoc! {"
-        #include <cstdint>  
+        #include <cstdint>
         const uint32_t BOB = 3;
     "};
     let rs = quote! {
@@ -1228,7 +1261,7 @@ fn test_negative_cpp_nonsense() {
     let cxx = indoc! {"
     "};
     let hdr = indoc! {"
-        #include <cstdint>  
+        #include <cstdint>
         const uint32_t BOB = CAT;
     "};
     let rs = quote! {
@@ -1780,17 +1813,17 @@ fn test_multiple_classes_with_methods() {
 
         struct TrivialStruct {
             uint32_t val = 0;
-        
+
             uint32_t get() const;
             uint32_t inc();
         };
         TrivialStruct make_trivial_struct();
-        
+
         class TrivialClass {
           public:
             uint32_t get() const;
             uint32_t inc();
-        
+
           private:
             uint32_t val_ = 1;
         };
@@ -1799,7 +1832,7 @@ fn test_multiple_classes_with_methods() {
         struct OpaqueStruct {
             // ~OpaqueStruct();
             uint32_t val = 2;
-        
+
             uint32_t get() const;
             uint32_t inc();
         };
@@ -1810,7 +1843,7 @@ fn test_multiple_classes_with_methods() {
             // ~OpaqueClass();
             uint32_t get() const;
             uint32_t inc();
-        
+
           private:
             uint32_t val_ = 3;
         };
@@ -3478,6 +3511,8 @@ fn test_root_ns_meth_ret_nonpod() {
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
 }
 
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_forward_declaration() {
     let hdr = indoc! {"
@@ -3525,6 +3560,8 @@ fn test_ulong() {
     run_test("", hdr, rs, &["daft"], &[]);
 }
 
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_typedef_to_ulong() {
     let hdr = indoc! {"
@@ -3599,6 +3636,8 @@ fn test_reserved_name() {
     run_test("", hdr, rs, &["async_"], &[]);
 }
 
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_nested_type() {
     // Test that we can import APIs that use nested types.
@@ -3961,6 +4000,54 @@ fn test_cint_in_pod_struct() {
         assert_eq!(ffi::take_a(a), 32);
     };
     run_test("", hdr, rs, &["take_a"], &["A"]);
+}
+
+#[test]
+fn test_string_in_struct() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <memory>
+        struct A {
+            std::string a;
+        };
+        inline A make_a(std::string b) {
+            A bob;
+            bob.a = b;
+            return bob;
+        }
+        inline uint32_t take_a(A a) {
+            return a.a.size();
+        }
+    "};
+    let rs = quote! {
+        use ffi::ToCppString;
+        assert_eq!(ffi::take_a(ffi::make_a("hello".into_cpp())), 5);
+    };
+    run_test("", hdr, rs, &["make_a", "take_a"], &[]);
+}
+
+#[test]
+fn test_up_in_struct() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <memory>
+        struct A {
+            std::unique_ptr<std::string> a;
+        };
+        inline A make_a(std::string b) {
+            A bob;
+            bob.a = std::make_unique<std::string>(b);
+            return bob;
+        }
+        inline uint32_t take_a(A a) {
+            return a.a->size();
+        }
+    "};
+    let rs = quote! {
+        use ffi::ToCppString;
+        assert_eq!(ffi::take_a(ffi::make_a("hello".into_cpp())), 5);
+    };
+    run_test("", hdr, rs, &["make_a", "take_a"], &[]);
 }
 
 #[test]
@@ -4380,6 +4467,8 @@ fn test_double_underscores_ignored() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
+// This test fails on Windows gnu but not on Windows msvc
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[test]
 fn test_double_underscore_typedef_ignored() {
     let hdr = indoc! {"
@@ -4863,7 +4952,7 @@ fn test_issue_490() {
         typedef i bp;
         typedef typename ay<b, bp>::h bh;
         bn<bh, bp> bq;
-        
+
         public:
         unique_ptr();
         unique_ptr(bh);
@@ -5262,6 +5351,8 @@ fn test_blocklist_not_overly_broad() {
     run_test("", hdr, rs, &["rust_func", "std_func"], &[]);
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[test]
 fn test_stringview() {
     // Test that APIs using std::string_view do not otherwise cause errors.
@@ -5332,6 +5423,7 @@ fn test_include_cpp_in_path() {
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_bitset() {
     let hdr = indoc! {"
@@ -5786,6 +5878,25 @@ fn test_shared_ptr() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/799
+fn test_shared_ptr_const() {
+    let hdr = indoc! {"
+        #include <memory>
+        inline std::shared_ptr<const int> make_shared_int() {
+            return std::make_shared<const int>(3);
+        }
+        inline int take_shared_int(std::shared_ptr<const int> a) {
+            return *a;
+        }
+    "};
+    let rs = quote! {
+        let a = ffi::make_shared_int();
+        assert_eq!(ffi::take_shared_int(a.clone()), autocxx::c_int(3));
+    };
+    run_test("", hdr, rs, &["make_shared_int", "take_shared_int"], &[]);
+}
+
+#[test]
 fn test_rust_reference() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -5815,6 +5926,7 @@ fn test_rust_reference() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_rust_reference_autodiscover() {
     let hdr = indoc! {"
@@ -5914,6 +6026,7 @@ fn test_rust_reference_method() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_box() {
     let hdr = indoc! {"
@@ -6208,6 +6321,7 @@ fn test_pv_subclass_not_pub() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_ptr_param() {
     let hdr = indoc! {"
@@ -6252,6 +6366,8 @@ fn test_pv_subclass_ptr_param() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_return() {
     let hdr = indoc! {"
@@ -6293,6 +6409,7 @@ fn test_pv_subclass_return() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_passed_to_fn() {
     let hdr = indoc! {"
@@ -6335,6 +6452,7 @@ fn test_pv_subclass_passed_to_fn() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_derive_defaults() {
     let hdr = indoc! {"
@@ -6417,6 +6535,111 @@ fn test_non_pv_subclass() {
 }
 
 #[test]
+fn test_two_subclasses() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo() const {}
+        virtual ~Observer() {}
+    };
+    inline void bar() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserverA::new_rust_owned(MyObserverA { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+            let obs = MyObserverB::new_rust_owned(MyObserverB { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+        },
+        quote! {
+            generate!("bar")
+            subclass!("Observer",MyObserverA)
+            subclass!("Observer",MyObserverB)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverA {
+                a: u32
+            }
+            impl Observer_methods for MyObserverA {
+            }
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverB {
+                a: u32
+            }
+            impl Observer_methods for MyObserverB {
+            }
+        }),
+    );
+}
+
+#[cfg_attr(skip_beta_failing_tests, ignore)]
+#[test]
+fn test_two_superclasses_with_same_name_method() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class ObserverA {
+    public:
+        ObserverA() {}
+        virtual void foo() const {}
+        virtual ~ObserverA() {}
+    };
+
+    class ObserverB {
+        public:
+            ObserverB() {}
+            virtual void foo() const {}
+            virtual ~ObserverB() {}
+        };
+    inline void bar() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserverA::new_rust_owned(MyObserverA { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+            let obs = MyObserverB::new_rust_owned(MyObserverB { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+        },
+        quote! {
+            generate!("bar")
+            subclass!("ObserverA",MyObserverA)
+            subclass!("ObserverB",MyObserverB)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::ObserverA_methods;
+            use ffi::ObserverB_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverA {
+                a: u32
+            }
+            impl ObserverA_methods for MyObserverA {
+            }
+            #[autocxx::subclass::subclass]
+            pub struct MyObserverB {
+                a: u32
+            }
+            impl ObserverB_methods for MyObserverB {
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_pv_protected_constructor() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -6456,6 +6679,7 @@ fn test_pv_protected_constructor() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_protected_method() {
     let hdr = indoc! {"
@@ -6639,6 +6863,7 @@ fn test_pv_subclass_allocation_not_self_owned() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_allocation_self_owned() {
     let hdr = indoc! {"
@@ -6798,6 +7023,7 @@ fn test_pv_subclass_allocation_self_owned() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_calls() {
     let hdr = indoc! {"
@@ -7003,6 +7229,7 @@ fn test_pv_subclass_calls() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_types() {
     let hdr = indoc! {"
@@ -7313,6 +7540,7 @@ fn test_pv_subclass_overrides() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_namespaced_superclass() {
     let hdr = indoc! {"
@@ -7485,6 +7713,125 @@ fn test_copy_and_move_constructor_moveit() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+// This test fails on Windows gnu but not on Windows msvc
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[test]
+fn test_uniqueptr_moveit() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        use autocxx::moveit::EmplaceUnpinned;
+        let mut up_obj = cxx::UniquePtr::emplace(ffi::A::new());
+        up_obj.as_mut().unwrap().set(42);
+        assert_eq!(up_obj.get(), 42);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+// This test fails on Windows gnu but not on Windows msvc
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[test]
+fn test_various_emplacement() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        void set(uint32_t val) { a = val; }
+        uint32_t get() const { return a; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        use autocxx::moveit::EmplaceUnpinned;
+        use autocxx::moveit::Emplace;
+        let mut up_obj = cxx::UniquePtr::emplace(ffi::A::new());
+        up_obj.pin_mut().set(666);
+        // Can't current move out of a UniquePtr
+        let mut box_obj = Box::emplace(ffi::A::new());
+        box_obj.as_mut().set(667);
+        let box_obj2 = Box::emplace(autocxx::moveit::new::mov(box_obj));
+        moveit! { let back_on_stack = autocxx::moveit::new::mov(box_obj2); }
+        assert_eq!(back_on_stack.get(), 667);
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
+#[test]
+fn test_emplace_uses_overridden_new_and_delete() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        void* operator new(size_t count);
+        void operator delete(void* ptr) noexcept;
+        void* operator new(size_t count, void* ptr);
+        std::string so_we_are_non_trivial;
+    };
+    void reset_flags();
+    bool was_new_called();
+    bool was_delete_called();
+    "};
+    let cxx = indoc! {"
+        bool new_called;
+        bool delete_called;
+        void reset_flags() {
+            new_called = false;
+            delete_called = false;
+        }
+        void* A::operator new(size_t count) {
+            new_called = true;
+            return ::operator new(count);
+        }
+        void* A::operator new(size_t count, void* ptr) {
+            return ::operator new(count, ptr);
+        }
+        void A::operator delete(void* ptr) noexcept {
+            delete_called = true;
+            ::operator delete(ptr);
+        }
+        bool was_new_called() {
+            return new_called;
+        }
+        bool was_delete_called() {
+            return delete_called;
+        }
+    "};
+    let rs = quote! {
+        ffi::reset_flags();
+        {
+            let _ = ffi::A::make_unique();
+            assert!(ffi::was_new_called());
+        }
+        assert!(ffi::was_delete_called());
+        ffi::reset_flags();
+        {
+            use autocxx::moveit::EmplaceUnpinned;
+            let _ = cxx::UniquePtr::emplace(ffi::A::new());
+        }
+        assert!(ffi::was_delete_called());
+    };
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &["A", "reset_flags", "was_new_called", "was_delete_called"],
+        &[],
+    );
+}
+
 #[test]
 fn test_explicit_everything() {
     let hdr = indoc! {"
@@ -7595,6 +7942,7 @@ fn test_no_rvo_move() {
     );
 }
 
+#[cfg_attr(skip_beta_failing_tests, ignore)]
 #[test]
 fn test_abstract_up() {
     let hdr = indoc! {"
@@ -7644,6 +7992,7 @@ fn test_class_having_protected_method() {
     run_test("", hdr, rs, &[], &["A"]);
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_protected_inner_class() {
     let hdr = indoc! {"
@@ -7669,6 +8018,7 @@ fn test_protected_inner_class() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_private_inner_class() {
     let hdr = indoc! {"
@@ -7726,7 +8076,7 @@ fn test_chrono_problem() {
 }
 
 fn size_and_alignment_test(pod: bool) {
-    static TYPES: [(&'static str, &'static str); 6] = [
+    static TYPES: [(&str, &str); 6] = [
         ("A", "struct A { uint8_t a; };"),
         ("B", "struct B { uint32_t a; };"),
         ("C", "struct C { uint64_t a; };"),
@@ -7746,6 +8096,7 @@ fn size_and_alignment_test(pod: bool) {
     "},
         type_definitions, function_definitions
     );
+    #[allow(clippy::unnecessary_to_owned)] // wrongly triggers on into_iter() below
     let allowlist_fns: Vec<String> = TYPES
         .iter()
         .flat_map(|(name, _)| {
@@ -7786,7 +8137,7 @@ fn size_and_alignment_test(pod: bool) {
         },
     );
     if pod {
-        run_test("", &hdr, rs.clone(), &allowlist_fns, &allowlist_types);
+        run_test("", &hdr, rs, &allowlist_fns, &allowlist_types);
     } else {
         run_test("", &hdr, rs, &allowlist_both, &[]);
     }

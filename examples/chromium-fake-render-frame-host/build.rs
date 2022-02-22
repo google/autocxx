@@ -15,7 +15,8 @@
 fn main() {
     let path = std::path::PathBuf::from("src");
     let mut b = autocxx_build::Builder::new("src/main.rs", &[&path]).expect_build();
-    b.flag_if_supported("-std=c++17")
+    b.flag_if_supported("-std=c++17")       // clang
+        .flag_if_supported("/std:c++17")    // msvc
         .file("src/fake-chromium-src.cc")
         .compile("autocxx-fake-render-frame-host-example");
     println!("cargo:rerun-if-changed=src/main.rs");

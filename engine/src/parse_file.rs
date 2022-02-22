@@ -19,12 +19,12 @@ use crate::{
     RebuildDependencyRecorder,
 };
 use autocxx_parser::directives::SUBCLASS;
-use autocxx_parser::{Subclass, SubclassAttrs};
+use autocxx_parser::{RustPath, Subclass, SubclassAttrs};
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use std::{collections::HashSet, fmt::Display, io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
-use syn::{Item, LitStr};
+use syn::{token::Brace, Item, ItemMod, LitStr};
 
 /// Errors which may occur when parsing a Rust source file to discover
 /// and interpret include_cxx macros.
@@ -87,65 +87,115 @@ pub fn parse_file<P1: AsRef<Path>>(
 }
 
 fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<ParsedFile, ParseError> {
-    let mut results = Vec::new();
-    let mut extra_superclasses = Vec::new();
-    let mut discoveries = Discoveries::default();
-    for item in source.items {
-        results.push(match item {
-            Item::Macro(mac)
-                if mac
-                    .mac
-                    .path
-                    .segments
-                    .last()
-                    .map(|s| s.ident == "include_cpp")
-                    .unwrap_or(false) =>
-            {
-                Segment::Autocxx(
-                    crate::IncludeCppEngine::new_from_syn(mac.mac.clone())
-                        .map_err(ParseError::AutocxxCodegenError)?,
-                )
-            }
-            Item::Mod(itm)
-                if itm
-                    .attrs
-                    .iter()
-                    .any(|attr| attr.path.to_token_stream().to_string() == "cxx :: bridge") =>
-            {
-                Segment::Cxx(CxxBridge::from(itm))
-            }
-            Item::Struct(ref its) if auto_allowlist => {
-                let attrs = &its.attrs;
-                let is_superclass_attr = attrs.iter().find(|attr| {
-                    attr.path
+    #[derive(Default)]
+    struct State {
+        auto_allowlist: bool,
+        results: Vec<Segment>,
+        extra_superclasses: Vec<Subclass>,
+        discoveries: Discoveries,
+    }
+    impl State {
+        fn parse_item(&mut self, item: Item, mod_path: Option<RustPath>) -> Result<(), ParseError> {
+            let result = match item {
+                Item::Macro(mac)
+                    if mac
+                        .mac
+                        .path
                         .segments
                         .last()
-                        .map(|seg| seg.ident == "is_subclass" || seg.ident == SUBCLASS)
-                        .unwrap_or(false)
-                });
-                if let Some(is_superclass_attr) = is_superclass_attr {
-                    if !is_superclass_attr.tokens.is_empty() {
-                        let subclass = its.ident.clone();
-                        let args: SubclassAttrs = is_superclass_attr
-                            .parse_args()
-                            .map_err(ParseError::Syntax)?;
-                        if let Some(superclass) = args.superclass {
-                            extra_superclasses.push(Subclass {
-                                superclass,
-                                subclass,
-                            })
+                        .map(|s| s.ident == "include_cpp")
+                        .unwrap_or(false) =>
+                {
+                    Segment::Autocxx(
+                        crate::IncludeCppEngine::new_from_syn(mac.mac)
+                            .map_err(ParseError::AutocxxCodegenError)?,
+                    )
+                }
+                Item::Mod(itm)
+                    if itm
+                        .attrs
+                        .iter()
+                        .any(|attr| attr.path.to_token_stream().to_string() == "cxx :: bridge") =>
+                {
+                    Segment::Cxx(CxxBridge::from(itm))
+                }
+                Item::Mod(itm) => {
+                    if let Some((brace, items)) = itm.content {
+                        let mut mod_state = State {
+                            auto_allowlist: self.auto_allowlist,
+                            ..Default::default()
+                        };
+                        let mod_path = match &mod_path {
+                            None => RustPath::new_from_ident(itm.ident.clone()),
+                            Some(mod_path) => mod_path.append(itm.ident.clone()),
+                        };
+                        for item in items {
+                            mod_state.parse_item(item, Some(mod_path.clone()))?
                         }
+                        self.extra_superclasses.extend(mod_state.extra_superclasses);
+                        self.discoveries.extend(mod_state.discoveries);
+                        Segment::Mod(
+                            mod_state.results,
+                            (
+                                brace,
+                                ItemMod {
+                                    content: None,
+                                    ..itm
+                                },
+                            ),
+                        )
+                    } else {
+                        Segment::Other(Item::Mod(itm))
                     }
                 }
-                discoveries.search_item(&item);
-                Segment::Other(item)
-            }
-            _ => {
-                discoveries.search_item(&item);
-                Segment::Other(item)
-            }
-        });
+                Item::Struct(ref its) if self.auto_allowlist => {
+                    let attrs = &its.attrs;
+                    let is_superclass_attr = attrs.iter().find(|attr| {
+                        attr.path
+                            .segments
+                            .last()
+                            .map(|seg| seg.ident == "is_subclass" || seg.ident == SUBCLASS)
+                            .unwrap_or(false)
+                    });
+                    if let Some(is_superclass_attr) = is_superclass_attr {
+                        if !is_superclass_attr.tokens.is_empty() {
+                            let subclass = its.ident.clone();
+                            let args: SubclassAttrs = is_superclass_attr
+                                .parse_args()
+                                .map_err(ParseError::Syntax)?;
+                            if let Some(superclass) = args.superclass {
+                                self.extra_superclasses.push(Subclass {
+                                    superclass,
+                                    subclass,
+                                })
+                            }
+                        }
+                    }
+                    self.discoveries.search_item(&item, mod_path);
+                    Segment::Other(item)
+                }
+                _ => {
+                    self.discoveries.search_item(&item, mod_path);
+                    Segment::Other(item)
+                }
+            };
+            self.results.push(result);
+            Ok(())
+        }
     }
+    let mut state = State {
+        auto_allowlist,
+        ..Default::default()
+    };
+    for item in source.items {
+        state.parse_item(item, None)?
+    }
+    let State {
+        auto_allowlist,
+        mut results,
+        mut extra_superclasses,
+        mut discoveries,
+    } = state;
     if !auto_allowlist
         && (!discoveries.extern_rust_types.is_empty() || !discoveries.extern_rust_funs.is_empty())
     {
@@ -209,6 +259,7 @@ pub struct ParsedFile(Vec<Segment>);
 enum Segment {
     Autocxx(IncludeCppEngine),
     Cxx(CxxBridge),
+    Mod(Vec<Segment>, (Brace, ItemMod)),
     Other(Item),
 }
 
@@ -222,36 +273,75 @@ pub trait CppBuildable {
 impl ParsedFile {
     /// Get all the autocxxes in this parsed file.
     pub fn get_rs_buildables(&self) -> impl Iterator<Item = &IncludeCppEngine> {
-        self.0.iter().filter_map(|s| match s {
-            Segment::Autocxx(includecpp) => Some(includecpp),
-            _ => None,
-        })
+        fn do_get_rs_buildables(segments: &[Segment]) -> impl Iterator<Item = &IncludeCppEngine> {
+            segments
+                .iter()
+                .flat_map(|s| -> Box<dyn Iterator<Item = &IncludeCppEngine>> {
+                    match s {
+                        Segment::Autocxx(includecpp) => Box::new(std::iter::once(includecpp)),
+                        Segment::Mod(segments, _) => Box::new(do_get_rs_buildables(segments)),
+                        _ => Box::new(std::iter::empty()),
+                    }
+                })
+        }
+
+        do_get_rs_buildables(&self.0)
     }
 
     /// Get all items which can result in C++ code
     pub fn get_cpp_buildables(&self) -> impl Iterator<Item = &dyn CppBuildable> {
-        self.0.iter().filter_map(|s| match s {
-            Segment::Autocxx(includecpp) => Some(includecpp as &dyn CppBuildable),
-            Segment::Cxx(cxxbridge) => Some(cxxbridge as &dyn CppBuildable),
-            _ => None,
-        })
+        fn do_get_cpp_buildables(segments: &[Segment]) -> impl Iterator<Item = &dyn CppBuildable> {
+            segments
+                .iter()
+                .flat_map(|s| -> Box<dyn Iterator<Item = &dyn CppBuildable>> {
+                    match s {
+                        Segment::Autocxx(includecpp) => {
+                            Box::new(std::iter::once(includecpp as &dyn CppBuildable))
+                        }
+                        Segment::Cxx(cxxbridge) => {
+                            Box::new(std::iter::once(cxxbridge as &dyn CppBuildable))
+                        }
+                        Segment::Mod(segments, _) => Box::new(do_get_cpp_buildables(segments)),
+                        _ => Box::new(std::iter::empty()),
+                    }
+                })
+        }
+
+        do_get_cpp_buildables(&self.0)
     }
 
     fn get_autocxxes_mut(&mut self) -> impl Iterator<Item = &mut IncludeCppEngine> {
-        self.0.iter_mut().filter_map(|s| match s {
-            Segment::Autocxx(includecpp) => Some(includecpp),
-            _ => None,
-        })
+        fn do_get_autocxxes_mut(
+            segments: &mut [Segment],
+        ) -> impl Iterator<Item = &mut IncludeCppEngine> {
+            segments
+                .iter_mut()
+                .flat_map(|s| -> Box<dyn Iterator<Item = &mut IncludeCppEngine>> {
+                    match s {
+                        Segment::Autocxx(includecpp) => Box::new(std::iter::once(includecpp)),
+                        Segment::Mod(segments, _) => Box::new(do_get_autocxxes_mut(segments)),
+                        _ => Box::new(std::iter::empty()),
+                    }
+                })
+        }
+
+        do_get_autocxxes_mut(&mut self.0)
     }
 
     pub fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
-        self.0
-            .iter()
-            .filter_map(|s| match s {
-                Segment::Autocxx(includecpp) => Some(includecpp.include_dirs()),
-                _ => None,
-            })
-            .flatten()
+        fn do_get_include_dirs(segments: &[Segment]) -> impl Iterator<Item = &PathBuf> {
+            segments
+                .iter()
+                .flat_map(|s| -> Box<dyn Iterator<Item = &PathBuf>> {
+                    match s {
+                        Segment::Autocxx(includecpp) => Box::new(includecpp.include_dirs()),
+                        Segment::Mod(segments, _) => Box::new(do_get_include_dirs(segments)),
+                        _ => Box::new(std::iter::empty()),
+                    }
+                })
+        }
+
+        do_get_include_dirs(&self.0)
     }
 
     pub fn resolve_all(
@@ -292,13 +382,30 @@ impl ParsedFile {
 impl ToTokens for ParsedFile {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         for seg in &self.0 {
-            match seg {
-                Segment::Other(item) => item.to_tokens(tokens),
-                Segment::Autocxx(autocxx) => {
-                    let these_tokens = autocxx.generate_rs();
-                    tokens.extend(these_tokens);
-                }
-                Segment::Cxx(itemmod) => itemmod.to_tokens(tokens),
+            seg.to_tokens(tokens)
+        }
+    }
+}
+
+impl ToTokens for Segment {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        match self {
+            Segment::Other(item) => item.to_tokens(tokens),
+            Segment::Autocxx(autocxx) => {
+                let these_tokens = autocxx.generate_rs();
+                tokens.extend(these_tokens);
+            }
+            Segment::Cxx(cxxbridge) => cxxbridge.to_tokens(tokens),
+            Segment::Mod(segments, (brace, itemmod)) => {
+                let mod_items = segments
+                    .iter()
+                    .map(|segment| syn::parse2::<Item>(segment.to_token_stream()).unwrap())
+                    .collect();
+                let itemmod = ItemMod {
+                    content: Some((*brace, mod_items)),
+                    ..itemmod.clone()
+                };
+                Item::Mod(itemmod).to_tokens(tokens)
             }
         }
     }

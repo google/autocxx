@@ -36,10 +36,10 @@ pub(super) struct Discoveries {
 }
 
 impl Discoveries {
-    pub(super) fn search_item(&mut self, item: &Item) {
+    pub(super) fn search_item(&mut self, item: &Item, mod_path: Option<RustPath>) {
         let mut this_mod = PerModDiscoveries {
             discoveries: self,
-            mod_path: None,
+            mod_path,
         };
         this_mod.search_item(item);
     }
@@ -48,6 +48,12 @@ impl Discoveries {
         self.cpp_list.is_empty()
             && self.extern_rust_funs.is_empty()
             && self.extern_rust_types.is_empty()
+    }
+
+    pub(crate) fn extend(&mut self, other: Self) {
+        self.cpp_list.extend(other.cpp_list);
+        self.extern_rust_funs.extend(other.extern_rust_funs);
+        self.extern_rust_types.extend(other.extern_rust_types);
     }
 }
 
@@ -425,7 +431,7 @@ mod tests {
                 }
             }
         };
-        discoveries.search_item(&itm);
+        discoveries.search_item(&itm, None);
         assert_cpp_found(&discoveries);
     }
 
@@ -437,7 +443,7 @@ mod tests {
                 ffi::xxx()
             }
         };
-        discoveries.search_item(&itm);
+        discoveries.search_item(&itm, None);
         assert_cpp_found(&discoveries);
     }
 
@@ -449,7 +455,7 @@ mod tests {
                 ffi::xxx();
             }
         };
-        discoveries.search_item(&itm);
+        discoveries.search_item(&itm, None);
         assert_cpp_found(&discoveries);
     }
 
@@ -461,7 +467,7 @@ mod tests {
                 ffi::a::b::xxx();
             }
         };
-        discoveries.search_item(&itm);
+        discoveries.search_item(&itm, None);
         assert!(!discoveries.cpp_list.is_empty());
         assert!(discoveries.cpp_list.iter().next().unwrap() == "a::b::xxx");
     }
@@ -474,7 +480,7 @@ mod tests {
                 a + 3 * foo(ffi::xxx());
             }
         };
-        discoveries.search_item(&itm);
+        discoveries.search_item(&itm, None);
         assert_cpp_found(&discoveries);
     }
 
@@ -486,7 +492,7 @@ mod tests {
                 let foo: ffi::xxx = bar();
             }
         };
-        discoveries.search_item(&itm);
+        discoveries.search_item(&itm, None);
         assert_cpp_found(&discoveries);
     }
 
@@ -497,7 +503,7 @@ mod tests {
             fn bar(a: &mut ffi::xxx) {
             }
         };
-        discoveries.search_item(&itm);
+        discoveries.search_item(&itm, None);
         assert_cpp_found(&discoveries);
     }
 
@@ -508,7 +514,7 @@ mod tests {
             fn bar(a: cxx::UniquePtr<ffi::xxx>) {
             }
         };
-        discoveries.search_item(&itm);
+        discoveries.search_item(&itm, None);
         assert_cpp_found(&discoveries);
     }
 
@@ -520,17 +526,8 @@ mod tests {
             fn bar(a: cxx::UniquePtr<ffi::xxx>) {
             }
         };
-        discoveries.search_item(&itm);
-        assert!(
-            discoveries
-                .extern_rust_funs
-                .iter()
-                .next()
-                .unwrap()
-                .sig
-                .ident
-                == "bar"
-        );
+        discoveries.search_item(&itm, None);
+        assert!(discoveries.extern_rust_funs.get(0).unwrap().sig.ident == "bar");
     }
 
     #[test]
@@ -542,12 +539,11 @@ mod tests {
 
             }
         };
-        discoveries.search_item(&itm);
+        discoveries.search_item(&itm, None);
         assert!(
             discoveries
                 .extern_rust_types
-                .iter()
-                .next()
+                .get(0)
                 .unwrap()
                 .get_final_ident()
                 == "Bar"

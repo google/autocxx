@@ -16,7 +16,6 @@ use crate::conversion::{
     analysis::fun::function_wrapper::{CppConversionType, TypeConversionPolicy},
     ConvertError,
 };
-use crate::known_types::type_lacks_copy_constructor;
 
 use super::type_to_cpp::{type_to_cpp, CppNameMap};
 
@@ -53,14 +52,16 @@ impl TypeConversionPolicy {
         &self,
         var_name: &str,
         cpp_name_map: &CppNameMap,
-        use_rvo: bool,
+        is_return: bool,
     ) -> Result<String, ConvertError> {
+        // If is_return we want to avoid unnecessary std::moves because they
+        // make RVO less effective
         Ok(match self.cpp_conversion {
             CppConversionType::None => {
-                if type_lacks_copy_constructor(&self.unwrapped_type) && !use_rvo {
-                    format!("std::move({})", var_name)
-                } else {
+                if is_return {
                     var_name.to_string()
+                } else {
+                    format!("std::move({})", var_name)
                 }
             }
             CppConversionType::FromUniquePtrToValue | CppConversionType::FromPtrToMove => {

@@ -12,8 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(test)]
-mod tests;
-
-#[cfg(test)]
+mod integration_test;
 mod test_utils;
