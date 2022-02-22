@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: ${{matrix.name || format('Rust {0}', matrix.rust)}}
+    name: ${{matrix.name || format('Rust {0}', matrix.rust)}}-test
     runs-on: ${{matrix.os || 'ubuntu'}}-latest
     strategy:
       fail-fast: false
@@ -65,7 +65,7 @@ jobs:
       - run: cargo test --workspace ${{steps.testsuite.outputs.exclude}}
 
   examples:
-    name: ${{matrix.name || format('Rust {0}', matrix.rust)}}
+    name: ${{matrix.name || format('Rust {0}', matrix.rust)}}-examples
     runs-on: ${{matrix.os || 'ubuntu'}}-latest
     strategy:
       fail-fast: false
