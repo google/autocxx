@@ -6367,6 +6367,7 @@ fn test_pv_subclass_ptr_param() {
 }
 
 #[cfg_attr(skip_beta_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_return() {
     let hdr = indoc! {"
@@ -7766,6 +7767,7 @@ fn test_various_emplacement() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_emplace_uses_overridden_new_and_delete() {
     let hdr = indoc! {"
