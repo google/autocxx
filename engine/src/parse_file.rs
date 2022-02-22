@@ -107,7 +107,7 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                         .unwrap_or(false) =>
                 {
                     Segment::Autocxx(
-                        crate::IncludeCppEngine::new_from_syn(mac.mac.clone())
+                        crate::IncludeCppEngine::new_from_syn(mac.mac)
                             .map_err(ParseError::AutocxxCodegenError)?,
                     )
                 }
@@ -273,9 +273,7 @@ pub trait CppBuildable {
 impl ParsedFile {
     /// Get all the autocxxes in this parsed file.
     pub fn get_rs_buildables(&self) -> impl Iterator<Item = &IncludeCppEngine> {
-        fn do_get_rs_buildables(
-            segments: &Vec<Segment>,
-        ) -> impl Iterator<Item = &IncludeCppEngine> {
+        fn do_get_rs_buildables(segments: &[Segment]) -> impl Iterator<Item = &IncludeCppEngine> {
             segments
                 .iter()
                 .flat_map(|s| -> Box<dyn Iterator<Item = &IncludeCppEngine>> {
@@ -292,9 +290,7 @@ impl ParsedFile {
 
     /// Get all items which can result in C++ code
     pub fn get_cpp_buildables(&self) -> impl Iterator<Item = &dyn CppBuildable> {
-        fn do_get_cpp_buildables(
-            segments: &Vec<Segment>,
-        ) -> impl Iterator<Item = &dyn CppBuildable> {
+        fn do_get_cpp_buildables(segments: &[Segment]) -> impl Iterator<Item = &dyn CppBuildable> {
             segments
                 .iter()
                 .flat_map(|s| -> Box<dyn Iterator<Item = &dyn CppBuildable>> {
@@ -316,7 +312,7 @@ impl ParsedFile {
 
     fn get_autocxxes_mut(&mut self) -> impl Iterator<Item = &mut IncludeCppEngine> {
         fn do_get_autocxxes_mut(
-            segments: &mut Vec<Segment>,
+            segments: &mut [Segment],
         ) -> impl Iterator<Item = &mut IncludeCppEngine> {
             segments
                 .iter_mut()
@@ -333,7 +329,7 @@ impl ParsedFile {
     }
 
     pub fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
-        fn do_get_include_dirs(segments: &Vec<Segment>) -> impl Iterator<Item = &PathBuf> {
+        fn do_get_include_dirs(segments: &[Segment]) -> impl Iterator<Item = &PathBuf> {
             segments
                 .iter()
                 .flat_map(|s| -> Box<dyn Iterator<Item = &PathBuf>> {
