@@ -126,23 +126,21 @@ fn test_nested_module() {
         void do_nothing();
     "};
     let hexathorpe = Token![#](Span::call_site());
-    let unexpanded_rust = |hdr: &str| {
-        quote! {
-            mod a {
-                use autocxx::prelude::*;
+    let unexpanded_rust = quote! {
+        mod a {
+            use autocxx::prelude::*;
 
-                include_cpp!(
-                    #hexathorpe include #hdr
-                    generate!("do_nothing")
-                    safety!(unsafe)
-                );
+            include_cpp!(
+                #hexathorpe include "input.h"
+                generate!("do_nothing")
+                safety!(unsafe)
+            );
 
-                pub use ffi::*;
-            }
+            pub use ffi::*;
+        }
 
-            fn main() {
-                a::do_nothing();
-            }
+        fn main() {
+            a::do_nothing();
         }
     };
 
@@ -2332,17 +2330,15 @@ fn test_destructor_no_safety() {
         WithDtor::~WithDtor() {}
     "};
     let hexathorpe = Token![#](Span::call_site());
-    let unexpanded_rust = |hdr: &str| {
-        quote! {
-            use autocxx::prelude::*;
+    let unexpanded_rust = quote! {
+        use autocxx::prelude::*;
 
-            include_cpp!(
-                #hexathorpe include #hdr
-                generate!("WithDtor")
-            );
+        include_cpp!(
+            #hexathorpe include "input.h"
+            generate!("WithDtor")
+        );
 
-            fn main() {}
-        }
+        fn main() {}
     };
 
     do_run_test_manual(cxx, hdr, unexpanded_rust, None, None).unwrap();
@@ -5382,18 +5378,16 @@ fn test_include_cpp_alone() {
             return 5;
         }
     "};
-    let rs = |hdr| {
-        let hexathorpe = Token![#](Span::call_site());
-        quote! {
-            use autocxx::include_cpp;
-            include_cpp! {
-                #hexathorpe include #hdr
-                safety!(unsafe_ffi)
-                generate!("give_int")
-            }
-            fn main() {
-                assert_eq!(ffi::give_int(), 5);
-            }
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::include_cpp;
+        include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("give_int")
+        }
+        fn main() {
+            assert_eq!(ffi::give_int(), 5);
         }
     };
     do_run_test_manual("", hdr, rs, None, None).unwrap();
@@ -5407,18 +5401,16 @@ fn test_include_cpp_in_path() {
             return 5;
         }
     "};
-    let rs = |hdr| {
-        let hexathorpe = Token![#](Span::call_site());
-        quote! {
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
             autocxx::include_cpp! {
-                #hexathorpe include #hdr
+                #hexathorpe include "input.h"
                 safety!(unsafe_ffi)
                 generate!("give_int")
             }
             fn main() {
                 assert_eq!(ffi::give_int(), 5);
             }
-        }
     };
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
@@ -5705,27 +5697,25 @@ fn test_two_mods() {
             return a.a;
         }
     "};
-    let rs = |hdr| {
-        let hexathorpe = Token![#](Span::call_site());
-        quote! {
-            autocxx::include_cpp! {
-                #hexathorpe include #hdr
-                safety!(unsafe_ffi)
-                generate!("give_a")
-                generate!("get_a")
-            }
-            autocxx::include_cpp! {
-                #hexathorpe include #hdr
-                name!(ffi2)
-                generate!("give_b")
-                generate!("get_b")
-            }
-            fn main() {
-                let a = ffi::give_a();
-                assert_eq!(ffi::get_a(a), 5);
-                let b = unsafe { ffi2::give_b() };
-                assert_eq!(unsafe { ffi2::get_b(b) }, 8);
-            }
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("give_a")
+            generate!("get_a")
+        }
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            name!(ffi2)
+            generate!("give_b")
+            generate!("get_b")
+        }
+        fn main() {
+            let a = ffi::give_a();
+            assert_eq!(ffi::get_a(a), 5);
+            let b = unsafe { ffi2::give_b() };
+            assert_eq!(unsafe { ffi2::get_b(b) }, 8);
         }
     };
     do_run_test_manual("", hdr, rs, None, None).unwrap();
@@ -5742,25 +5732,23 @@ fn test_manual_bridge() {
             return 5;
         }
     "};
-    let rs = |hdr| {
-        let hexathorpe = Token![#](Span::call_site());
-        quote! {
-            autocxx::include_cpp! {
-                #hexathorpe include #hdr
-                safety!(unsafe_ffi)
-                generate!("give_int")
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("give_int")
+        }
+        #[cxx::bridge]
+        mod ffi2 {
+            unsafe extern "C++" {
+                include!("input.h");
+                fn give_int2() -> u32;
             }
-            #[cxx::bridge]
-            mod ffi2 {
-                unsafe extern "C++" {
-                    include!(#hdr);
-                    fn give_int2() -> u32;
-                }
-            }
-            fn main() {
-                assert_eq!(ffi::give_int(), 5);
-                assert_eq!(ffi2::give_int2(), 5);
-            }
+        }
+        fn main() {
+            assert_eq!(ffi::give_int(), 5);
+            assert_eq!(ffi2::give_int2(), 5);
         }
     };
     do_run_test_manual("", hdr, rs, None, None).unwrap();
@@ -5782,11 +5770,10 @@ fn test_manual_bridge_mixed_types() {
             return a;
         }
     "};
-    let rs = |hdr| {
-        let hexathorpe = Token![#](Span::call_site());
-        quote! {
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
             autocxx::include_cpp! {
-                #hexathorpe include #hdr
+                #hexathorpe include "input.h"
                 safety!(unsafe_ffi)
                 generate!("take_A")
                 generate!("A")
@@ -5794,7 +5781,7 @@ fn test_manual_bridge_mixed_types() {
             #[cxx::bridge]
             mod ffi2 {
                 unsafe extern "C++" {
-                    include!(#hdr);
+                    include!("input.h");
                     type A = crate::ffi::A;
                     fn give_A() -> UniquePtr<A>;
                 }
@@ -5803,7 +5790,6 @@ fn test_manual_bridge_mixed_types() {
                 let a = ffi2::give_A();
                 assert_eq!(ffi::take_A(&a), autocxx::c_int(5));
             }
-        }
     };
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }

@@ -270,12 +270,11 @@ fn do_run_test(
     extra_rust: Option<TokenStream>,
 ) -> Result<(), TestError> {
     let hexathorpe = Token![#](Span::call_site());
-    let unexpanded_rust = |hdr: &str| {
-        quote! {
+    let unexpanded_rust = quote! {
             use autocxx::prelude::*;
 
             include_cpp!(
-                #hexathorpe include #hdr
+                #hexathorpe include "input.h"
                 safety!(unsafe_ffi)
                 #directives
             );
@@ -285,7 +284,7 @@ fn do_run_test(
             fn main() {
                 #rust_code
             }
-        }
+
     };
     do_run_test_manual(
         cxx_code,
@@ -304,18 +303,14 @@ impl BuilderContext for TestBuilderContext {
     }
 }
 
-pub(crate) fn do_run_test_manual<F>(
+pub(crate) fn do_run_test_manual(
     cxx_code: &str,
     header_code: &str,
-    rust_code_generator: F,
+    mut rust_code: TokenStream,
     builder_modifier: Option<BuilderModifier>,
     rust_code_checker: Option<CodeChecker>,
-) -> Result<(), TestError>
-where
-    F: FnOnce(&'static str) -> TokenStream,
-{
+) -> Result<(), TestError> {
     const HEADER_NAME: &str = "input.h";
-    let mut rust_code = rust_code_generator(HEADER_NAME);
     // Step 2: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
     write_to_file(
