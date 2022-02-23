@@ -143,4 +143,4 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: dtolnay/install@cargo-outdated
-      - run: cargo outdated --exit-code 1
+      - run: cargo outdated -R -w
