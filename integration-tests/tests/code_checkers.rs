@@ -22,7 +22,7 @@ use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::Item;
 
-use crate::test_utils::{CodeChecker, CodeCheckerFns, TestError};
+use autocxx_integration_tests::{CodeChecker, CodeCheckerFns, TestError};
 
 /// Generates a closure which can be used to ensure that the given symbol
 /// is mentioned in the output and has documentation attached.

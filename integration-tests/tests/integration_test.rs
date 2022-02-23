@@ -19,10 +19,10 @@ use crate::{
     code_checkers::{
         make_error_finder, make_string_finder, CppCounter, CppMatcher, NoSystemHeadersChecker,
     },
-    test_utils::{
-        directives_from_lists, do_run_test_manual, run_test, run_test_ex, run_test_expect_fail,
-        run_test_expect_fail_ex,
-    },
+};
+use autocxx_integration_tests::{
+    directives_from_lists, do_run_test_manual, run_test, run_test_ex, run_test_expect_fail,
+    run_test_expect_fail_ex,
 };
 use indoc::indoc;
 use itertools::Itertools;

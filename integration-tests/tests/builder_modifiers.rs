@@ -14,7 +14,7 @@
 
 use autocxx_engine::Builder;
 
-use crate::test_utils::{BuilderModifier, BuilderModifierFns, TestBuilderContext};
+use autocxx_integration_tests::{BuilderModifier, BuilderModifierFns, TestBuilderContext};
 
 struct ClangArgAdder(Vec<String>);
 

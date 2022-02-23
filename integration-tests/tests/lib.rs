@@ -15,4 +15,3 @@
 mod builder_modifiers;
 mod code_checkers;
 mod integration_test;
-mod test_utils;
