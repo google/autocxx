@@ -12,5 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod builder_modifiers;
+mod code_checkers;
 mod integration_test;
 mod test_utils;

@@ -12,11 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::test_utils::{
-    directives_from_lists, do_run_test_manual, make_clang_arg_adder, make_error_finder,
-    make_string_finder, run_test, run_test_ex, run_test_expect_fail, run_test_expect_fail_ex,
-    CppCounter, CppMatcher, EnableAutodiscover, NoSystemHeadersChecker, SetSuppressSystemHeaders,
-    SkipCxxGen,
+use crate::{
+    builder_modifiers::{
+        make_clang_arg_adder, EnableAutodiscover, SetSuppressSystemHeaders, SkipCxxGen,
+    },
+    code_checkers::{
+        make_error_finder, make_string_finder, CppCounter, CppMatcher, NoSystemHeadersChecker,
+    },
+    test_utils::{
+        directives_from_lists, do_run_test_manual, run_test, run_test_ex, run_test_expect_fail,
+        run_test_expect_fail_ex,
+    },
 };
 use indoc::indoc;
 use itertools::Itertools;
