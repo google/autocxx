@@ -139,7 +139,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_TERM_COLOR: always
-    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v2
       - uses: dtolnay/install@cargo-outdated
