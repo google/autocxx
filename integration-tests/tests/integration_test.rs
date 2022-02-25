@@ -5353,6 +5353,20 @@ fn test_blocklist_not_overly_broad() {
     run_test("", hdr, rs, &["rust_func", "std_func"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/837
+fn test_ref_qualified_method() {
+    let hdr = indoc! {"
+        struct A {
+            void foo() & {}
+        };
+    "};
+    let rs = quote! {
+        A::make_unique().foo();
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
 #[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[test]
