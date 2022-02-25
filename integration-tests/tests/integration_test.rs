@@ -5251,6 +5251,35 @@ fn test_error_generated_for_array_dependent_method() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/835
+fn test_error_generated_for_pod_with_nontrivial_destructor() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <functional>
+        struct A {
+            ~A() {}
+        };
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &[], &["A"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/835
+fn test_error_generated_for_pod_with_nontrivial_move_constructor() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <functional>
+        struct A {
+            A() = default;
+            A(A&&) {}
+        };
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &[], &["A"]);
+}
+
+#[test]
 fn test_keyword_function() {
     let hdr = indoc! {"
         inline void move(int a) {};
