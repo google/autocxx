@@ -378,7 +378,7 @@ pub fn do_run_test_manual(
         .host(&target)
         .target(&target)
         .opt_level(1)
-        .flag_if_supported("-std=c++14") // For clang
+        .flag("-std=c++14") // For clang
         .flag_if_supported("/GX"); // Enable C++ exceptions for msvc
     let b = if let Some(builder_modifier) = builder_modifier {
         builder_modifier.modify_cc_builder(b)
