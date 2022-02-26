@@ -31,6 +31,8 @@ jobs:
       CARGO_TERM_COLOR: always
       CXXFLAGS: ${{matrix.flags}}
       RUSTFLAGS: --cfg deny_warnings -Dwarnings
+      CARGO_INCREMENTAL: 0
+
     steps:
       - uses: actions/checkout@v2
         with:
@@ -38,7 +40,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{matrix.rust}}
-          components: rustfmt
       # For operating systems that have it packaged, install creduce
       - name: Install creduce (Linux)
         if: matrix.os == ''
