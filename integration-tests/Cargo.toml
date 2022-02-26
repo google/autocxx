@@ -18,7 +18,7 @@ version = "0.1.0"
 autotests = false
 edition = "2021"
 
-[dev-dependencies]
+[dependencies]
 proc-macro2 = "1.0.11"
 trybuild = "1.0.53"
 test-log = "0.2.2"
