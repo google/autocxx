@@ -1,7 +1,5 @@
 name: CI
 
-
-
 on:
   push:
     branches: [main]
@@ -82,7 +80,7 @@ jobs:
       - run: cargo test --workspace ${{steps.testsuite.outputs.exclude}}
 
   examples:
-    name: ${{matrix.name || format('Rust {0}', matrix.rust)}}-examples
+    name: Examples ${{matrix.name || format('Rust {0}', matrix.rust)}}
     runs-on: ${{matrix.os || 'ubuntu'}}-latest
     strategy:
       fail-fast: false
@@ -102,7 +100,6 @@ jobs:
             os: windows
             flags: /EHsc
     env:
-      CARGO_TERM_COLOR: always
       CXXFLAGS: ${{matrix.flags}}
       RUSTFLAGS: --cfg deny_warnings -Dwarnings
     steps:
