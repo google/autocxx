@@ -15,7 +15,9 @@
 pub(crate) mod abstract_types;
 pub(crate) mod allocators;
 pub(crate) mod casts;
+pub(crate) mod constructor_deps;
 pub(crate) mod ctypes;
+pub(crate) mod deps;
 mod depth_first;
 pub(crate) mod fun;
 pub(crate) mod gc;

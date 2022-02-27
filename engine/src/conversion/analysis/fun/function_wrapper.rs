@@ -22,17 +22,23 @@ use syn::{parse_quote, Ident, Type};
 pub(crate) enum CppConversionType {
     None,
     FromUniquePtrToValue,
+    FromPtrToValue,
     FromValueToUniquePtr,
     FromPtrToMove,
 }
 
 impl CppConversionType {
+    /// If we've found a function which does X to its parameter, what
+    /// is the opposite of X? This is used for subclasses where calls
+    /// from Rust to C++ might also involve calls from C++ to Rust.
     fn inverse(&self) -> Self {
         match self {
             CppConversionType::None => CppConversionType::None,
-            CppConversionType::FromUniquePtrToValue => CppConversionType::FromValueToUniquePtr,
+            CppConversionType::FromUniquePtrToValue | CppConversionType::FromPtrToValue => {
+                CppConversionType::FromValueToUniquePtr
+            }
             CppConversionType::FromValueToUniquePtr => CppConversionType::FromUniquePtrToValue,
-            CppConversionType::FromPtrToMove => panic!("Did not expect to have to invert move"),
+            _ => panic!("Did not expect to have to invert this conversion"),
         }
     }
 }
@@ -45,6 +51,7 @@ pub(crate) enum RustConversionType {
     FromPinMaybeUninitToPtr,
     FromPinMoveRefToPtr,
     FromTypeToPtr,
+    FromValueParamToPtr,
 }
 
 impl RustConversionType {
@@ -105,6 +112,12 @@ impl TypeConversionPolicy {
     pub(crate) fn converted_rust_type(&self) -> Type {
         match self.cpp_conversion {
             CppConversionType::FromUniquePtrToValue => self.make_unique_ptr_type(),
+            CppConversionType::FromPtrToValue => {
+                let innerty = &self.unwrapped_type;
+                parse_quote! {
+                    *mut #innerty
+                }
+            }
             _ => self.unwrapped_type.clone(),
         }
     }
@@ -120,12 +133,22 @@ impl TypeConversionPolicy {
         !matches!(self.rust_conversion, RustConversionType::None)
     }
 
+    /// Subclass support involves calls from Rust -> C++, but
+    /// also from C++ -> Rust. Work out the correct argument conversion
+    /// type for the latter call, when given the former.
     pub(crate) fn inverse(&self) -> Self {
         Self {
             unwrapped_type: self.unwrapped_type.clone(),
             cpp_conversion: self.cpp_conversion.inverse(),
             rust_conversion: self.rust_conversion.clone(),
         }
+    }
+
+    pub(crate) fn bridge_unsafe_needed(&self) -> bool {
+        matches!(
+            self.rust_conversion,
+            RustConversionType::FromValueParamToPtr
+        )
     }
 }
 

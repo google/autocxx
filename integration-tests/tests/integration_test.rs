@@ -1697,6 +1697,7 @@ fn test_return_string_by_value() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 fn test_method_pass_string_by_value() {
     let cxx = indoc! {"
         uint32_t Bob::measure_string(std::string z) const {
@@ -4026,6 +4027,7 @@ fn test_string_in_struct() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 fn test_up_in_struct() {
     let hdr = indoc! {"
         #include <string>
@@ -4074,6 +4076,7 @@ fn test_typedef_to_std_in_struct() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 fn test_typedef_to_up_in_struct() {
     let hdr = indoc! {"
         #include <string>
@@ -5224,6 +5227,8 @@ fn test_error_generated_for_array_dependent_function() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 fn test_error_generated_for_array_dependent_method() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -7662,6 +7667,28 @@ fn test_implicit_constructor_moveit() {
 }
 
 #[test]
+fn test_pass_by_value_moveit() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        void set(uint32_t val) { a = val; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    inline void take_a(A a) {}
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut stack_obj = ffi::A::new();
+        }
+        stack_obj.as_mut().set(42);
+        ffi::take_a(&*stack_obj);
+    };
+    run_test("", hdr, rs, &["A", "take_a"], &[]);
+}
+
+#[test]
 fn test_destructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
@@ -7847,6 +7874,32 @@ fn test_emplace_uses_overridden_new_and_delete() {
         &["A", "reset_flags", "was_new_called", "was_delete_called"],
         &[],
     );
+}
+
+#[test]
+fn test_pass_by_reference_to_value_param() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() : count(0) {}
+        std::string so_we_are_non_trivial;
+        uint32_t count;
+    };
+    void take_a(A a) {
+        a.count++;
+    }
+    uint32_t report_on_a(const A& a) {
+        return a.count;
+    }
+    "};
+    let rs = quote! {
+        let a = ffi::A::make_unique();
+        ffi::take_a(a.as_ref().unwrap());
+        ffi::take_a(&a); // syntactic sugar
+        assert_eq!(ffi::report_on_a(&a), 0); // should have acted upon copies
+    };
+    run_test("", hdr, rs, &["A", "take_a", "report_on_a"], &[]);
 }
 
 #[test]

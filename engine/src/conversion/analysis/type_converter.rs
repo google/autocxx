@@ -618,6 +618,7 @@ pub(crate) fn find_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<Qualified
             | Api::CType { .. }
             | Api::RustSubclassFn { .. }
             | Api::IgnoredItem { .. }
+            | Api::SubclassTraitItem { .. }
             | Api::RustFn { .. } => None,
         })
         .cloned()
