@@ -62,6 +62,8 @@ use autocxx_engine::IncludeCppEngine;
 /// that's gone into the [cxx] crate, such bindings are pleasant and idiomatic to use
 /// from Rust, and usually don't require the `unsafe` keyword.
 ///
+/// For full documentation, see [the manual](https://autocxx.github.io/).
+///
 /// # The [`include_cpp`] macro
 ///
 /// Within the braces of the `include_cpp!{...}` macro, you should provide
