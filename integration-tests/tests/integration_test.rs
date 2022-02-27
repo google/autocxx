@@ -3513,8 +3513,6 @@ fn test_root_ns_meth_ret_nonpod() {
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
 }
 
-#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_forward_declaration() {
     let hdr = indoc! {"
@@ -3525,7 +3523,6 @@ fn test_forward_declaration() {
             B() {}
             uint32_t a;
             void daft(const A&) const {}
-            void daft2(std::unique_ptr<A>) const {}
             static B daft3(const A&) { B b; return b; }
         };
         A* get_a();
@@ -5464,7 +5461,6 @@ fn test_include_cpp_in_path() {
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_bitset() {
     let hdr = indoc! {"
@@ -5479,7 +5475,7 @@ fn test_bitset() {
         };
 
         template <size_t _Size>
-        class __attribute__ ((__type_visibility__(\"default\"))) bitset
+        class bitset
             : private __bitset<_Size == 0 ? 0 : (_Size - 1) / (sizeof(size_t) * 8) + 1, _Size>
         {
         public:
@@ -6398,7 +6394,6 @@ fn test_pv_subclass_ptr_param() {
     );
 }
 
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_return() {
     let hdr = indoc! {"
@@ -7790,7 +7785,6 @@ fn test_various_emplacement() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_emplace_uses_overridden_new_and_delete() {
     let hdr = indoc! {"
@@ -8014,7 +8008,6 @@ fn test_class_having_protected_method() {
     run_test("", hdr, rs, &[], &["A"]);
 }
 
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_protected_inner_class() {
     let hdr = indoc! {"
@@ -8032,7 +8025,7 @@ fn test_protected_inner_class() {
         };
 
         inline B protected_method_2() {
-            return { .x = 0 };
+            return { 0 };
         }
     };
     "};
@@ -8040,7 +8033,6 @@ fn test_protected_inner_class() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_private_inner_class() {
     let hdr = indoc! {"
@@ -8059,7 +8051,7 @@ fn test_private_inner_class() {
         };
 
         inline B private_method_2() {
-            return { .x = 0 };
+            return { 0 };
         }
     };
     "};
