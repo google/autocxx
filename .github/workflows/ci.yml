@@ -161,7 +161,7 @@ jobs:
           # leak sanitization, but we don't care about backtraces here, so long
           # as the other tests have them.
           RUST_BACKTRACE: "0"
-        run: cargo -Z build-std --workspace test --target x86_64-unknown-linux-gnu
+        run: cargo -Z build-std test --workspace --target x86_64-unknown-linux-gnu
 
   # Clippy check
   clippy:
