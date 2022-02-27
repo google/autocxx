@@ -218,7 +218,7 @@ fn code_block_flags(line: &str) -> HashSet<String> {
 }
 
 fn recognize_line(line: &str) -> LineType {
-    if line.starts_with("```rust") {
+    if line.starts_with("```") && line.len() > 3 {
         let flags = code_block_flags(line);
         if flags.contains("autocxx") {
             LineType::CodeBlockStartAutocxx(flags)
@@ -268,12 +268,14 @@ fn handle_code_block(
     // Don't run the test cases yet, because we want the preprocessor to spot
     // basic formatting errors before getting into the time consuming business of
     // running tests.
-    test_cases.push(TestCase {
-        cpp: cpp.to_string(),
-        hdr: hdr.to_string(),
-        rs: syn::parse_file(&rs).unwrap(),
-        location,
-    });
+    if !flags.contains("nocompile") {
+        test_cases.push(TestCase {
+            cpp: cpp.to_string(),
+            hdr: hdr.to_string(),
+            rs: syn::parse_file(&rs).unwrap(),
+            location,
+        });
+    }
 
     output.into_iter()
 }
