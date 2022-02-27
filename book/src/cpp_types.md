@@ -12,7 +12,7 @@ Rust and C++ differ in an important way:
 This makes a big difference: C++ objects can have self-referential pointers, and any such pointer would be invalidated by Rust doing
 a memcpy. Such self-referential pointers are common - even some implementations of `std::string` do it.
 
-# POD and non-POD
+## POD and non-POD
 
 When asking `autocxx` to generate bindings for a type, then, you have to make a choice.
 
@@ -34,3 +34,23 @@ Non-POD types are awkward:
 By default, `autocxx` generates non-POD types. You can request a POD type using `generate_pod!`. Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++.
 
 See [the chapter on storage](storage.md) for lots more detail on how you can hold onto non-POD types.
+
+## Forward declarations
+
+A type which is incomplete in the C++ headers (i.e. represented only by a forward
+declaration) can't be held in a `UniquePtr` within Rust (because Rust can't know
+if it has a destructor that will need to be called if the object is `Drop`ped.)
+Naturally, such an object can't be passed by value either; it can still be
+referenced in Rust references.
+
+## Generic types
+
+If you're using one of the generic types which is supported natively by cxx,
+e.g. `std::unique_ptr`, it should work as you expect. For other generic types,
+we synthesize a concrete Rust type, corresponding to a C++ typedef, for each
+concrete instantiation of the type. Such generated types are always opaque,
+and never have methods attached. That's therefore enough to pass them
+between return types and parameters of other functions within [`cxx::UniquePtr`]s
+but not really enough to do anything else with these types just yet. Hopefully,
+this will be improved in future. At present such types have a name
+`AutocxxConcrete{n}` but this may change in future.

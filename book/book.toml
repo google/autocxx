@@ -13,8 +13,12 @@ create-missing = false
 [preprocessor.autocxx]
 command = "../target/debug/autocxx-mdbook-preprocessor"
 
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
 [output.html]
 cname = "autocxx.github.io"
 git-repository-url = "https://github.com/google/autocxx"
 playground = { copyable = false }
 print = { enable = false }
+additional-js = ["mermaid.min.js", "mermaid-init.js"]

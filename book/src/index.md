@@ -50,21 +50,22 @@ fn main() {
 
 A more complex example:
 
-```rust,ignore,autocxx,hidecpp,nocompile
+```rust,ignore,autocxx,hidecpp
 autocxx_integration_tests::doctest(
 "
+#include <strstream>
+void Goat::add_a_horn() { horns++; }
 Goat::Goat() : horns(0) {}
 Goat::~Goat() {}
-void Goat::add_a_horn() { horns++; }
 std::string Goat::describe() const {
     std::ostrstream oss;
     std::string plural = horns == 1 ? \"\" : \"s\";
-    oss << \"This goat has \" << horns << \"horn\" << plural << \".\";
+    oss << \"This goat has \" << horns << \" horn\" << plural << \".\";
     return oss.str();
 }
 ",
-"#include <stdint.h>
-#include <strstream>
+"#include <cstdint>
+#include <string>
 
 class Goat {
 public:
@@ -86,9 +87,9 @@ include_cpp! {
 }
 
 fn main() {
-    let mut goat = ffi::Goat::make_unique();
-    goat.as_mut().add_a_horn();
-    goat.as_mut().add_a_horn();
+    let mut goat = ffi::Goat::make_unique(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
+    goat.as_mut().unwrap().add_a_horn();
+    goat.as_mut().unwrap().add_a_horn();
     assert_eq!(goat.describe().as_ref().unwrap().to_string_lossy(), "This goat has 2 horns.");
 }
 }
