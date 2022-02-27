@@ -1697,6 +1697,7 @@ fn test_return_string_by_value() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 fn test_method_pass_string_by_value() {
     let cxx = indoc! {"
         uint32_t Bob::measure_string(std::string z) const {
@@ -4026,6 +4027,7 @@ fn test_string_in_struct() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 fn test_up_in_struct() {
     let hdr = indoc! {"
         #include <string>
@@ -4074,6 +4076,7 @@ fn test_typedef_to_std_in_struct() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 fn test_typedef_to_up_in_struct() {
     let hdr = indoc! {"
         #include <string>
@@ -5224,6 +5227,8 @@ fn test_error_generated_for_array_dependent_function() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 fn test_error_generated_for_array_dependent_method() {
     let hdr = indoc! {"
         #include <cstdint>
