@@ -12,8 +12,6 @@
 (all of this is because the underlying [`cxx`] crate has such versatility).
 Some of these have some quirks in the way they're exposed in Rust, described below.
 
-
-
 ### Passing between C++ and Rust by value
 
 Rust is free to move data around at any time. That's _not OK_ for some C++ types
