@@ -1,4 +1,4 @@
-name: Rustfmt
+name: Rustfmt and rustdoc
 on:
   push:
     branches: [main]
@@ -15,3 +15,9 @@ jobs:
             override: true
       - name: check rustfmt
         run: cargo fmt -- --check --color always
+      - name: check rustdoc
+        # Note that this is `cargo rustdoc` and not `cargo doc`)
+        run: |
+          for package in $(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | .name'); do
+            cargo rustdoc --color always -p "$package" -- -D warnings
+          done
