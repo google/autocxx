@@ -40,6 +40,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{matrix.rust}}
+          components: rustfmt
       # For operating systems that have it packaged, install creduce
       - name: Install creduce (Linux)
         if: matrix.os == ''
