@@ -1,12 +1,10 @@
 # Naming
 
-
-
 ## Namespaces
 
 The C++ namespace structure is reflected in mods within the generated
 ffi mod. However, at present there is an internal limitation that
-autocxx can't handle multiple symbols with the same identifier, even
+autocxx can't handle multiple types with the same identifier, even
 if they're in different namespaces. This will be fixed in future.
 
 # Nested classes

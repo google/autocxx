@@ -16,8 +16,8 @@ a memcpy. Such self-referential pointers are common - even some implementations 
 
 When asking `autocxx` to generate bindings for a type, then, you have to make a choice.
 
-* This C++ type is trivial. It has no destructor or move constructor (or they're trivial), and thus Rust is free to move it around the stack as it wishes. `autocxx` calls these types POD ("plain old data"). Alternatively,
-* This C++ type has a non-trivial destructor or move constructor, so we can't allow Rust to move this around. `autocxx` calls these types non-POD.
+* *This C++ type is trivial*. It has no destructor or move constructor (or they're trivial), and thus Rust is free to move it around the stack as it wishes. `autocxx` calls these types POD ("plain old data"). Alternatively,
+* *This C++ type has a non-trivial destructor or move constructor, so we can't allow Rust to move this around*. `autocxx` calls these types non-POD.
 
 POD types are nicer:
 
@@ -28,10 +28,10 @@ POD types are nicer:
 Non-POD types are awkward:
 
 * You can't just _have_ one as a Rust variable. Normally you hold them in a [`cxx::UniquePtr`], though there are other options.
-* There is no access to fields.
+* There is no access to fields (yet).
 * You can't even have a `&mut` reference to one, because then you might be able to use [`std::mem::swap`] or similara. You can have a `Pin<&mut>` reference, which is more fiddly.
 
-By default, `autocxx` generates non-POD types. You can request a POD type using `generate_pod!`. Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++.
+By default, `autocxx` generates non-POD types. You can request a POD type using [`generate_pod!`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html). Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++.
 
 See [the chapter on storage](storage.md) for lots more detail on how you can hold onto non-POD types.
 
@@ -51,6 +51,7 @@ we synthesize a concrete Rust type, corresponding to a C++ typedef, for each
 concrete instantiation of the type. Such generated types are always opaque,
 and never have methods attached. That's therefore enough to pass them
 between return types and parameters of other functions within [`cxx::UniquePtr`]s
-but not really enough to do anything else with these types just yet. Hopefully,
-this will be improved in future. At present such types have a name
-`AutocxxConcrete{n}` but this may change in future.
+but not really enough to do anything else with these types yet.
+
+To make them more useful, you might have to add extra C++ functions to extract
+data or otherwise deal with them.

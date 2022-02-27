@@ -3,6 +3,7 @@
 - [Rust ❤️  pre-existing C++](index.md)
 - [Tutorial](tutorial.md)
 - [Workflow](workflow.md)
+- [Allowlist and syntax](allowlist.md)
 - [Building](building.md)
 - [Storage - stack and heaps](storage.md)
 - [Pointers, references, values](references_etc.md)

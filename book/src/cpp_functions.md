@@ -1,7 +1,17 @@
 # C++ functions
 
+Calling C++ functions is largly as you might expect.
 
+## Value and rvalue parameters
 
+Functions taking [non-POD](cpp_types.md) value parameters can take a `cxx::UniquePtr<T>`
+or a `&T`. This gives you the choice of Rust semantics - where a parameter
+is absorbed and destroyed - or C++ semantics where the parameter is copied.
+
+## Return values
+
+At present, return values for [non-POD](cpp_types.md) types are always
+a `cxx::UniquePtr<T>`. This is likely to change in future.
 
 ## Overloads - and identifiers ending in digits
 

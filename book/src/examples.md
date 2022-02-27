@@ -1,7 +1,5 @@
 # Examples
 
-# Examples
-
 * [Demo](https://github.com/google/autocxx/tree/main/demo) - simplest possible demo
 * [S2 example](https://github.com/google/autocxx/tree/main/examples/s2) - example using S2 geometry library
 * [Steam example](https://github.com/google/autocxx/tree/main/examples/steam-mini) - example using (something like) the Steam client library

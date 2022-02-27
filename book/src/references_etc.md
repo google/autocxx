@@ -12,7 +12,7 @@
 (all of this is because the underlying [`cxx`] crate has such versatility).
 Some of these have some quirks in the way they're exposed in Rust, described below.
 
-### Passing between C++ and Rust by value
+## Passing between C++ and Rust by value
 
 Rust is free to move data around at any time. That's _not OK_ for some C++ types
 which have non-trivial move constructors or destructors. Such types are common
@@ -21,6 +21,7 @@ in API declarations which we want to make available in Rust. Worse still, Rust
 has no visibility into whether a C++ type meets these criteria. What do we do?
 
 You have a choice:
+
 * As standard, any C++ type passed by value will be `std::move`d on the C++ side
   into a `std::unique_ptr` before being passed to Rust, and similarly moved out
   of a `std::unique_ptr` when passed from Rust to C++.

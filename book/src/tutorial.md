@@ -32,7 +32,8 @@ fn main() {
     let path = std::path::PathBuf::from("src"); // include path
     let mut b = autocxx_build::Builder::new("src/main.rs", &[&path]).expect_build();
         // This assumes all your C++ bindings are in main.rs
-    b.flag_if_supported("-std=c++14").compile("autocxx-demo");
+    b.flag_if_supported("-std=c++14")
+     .compile("autocxx-demo"); // arbitrary library name, pick anything
     println!("cargo:rerun-if-changed=src/main.rs");
     // Add instructions to link to any C++ libraries you need.
 }
@@ -45,7 +46,7 @@ use autocxx::prelude::*;
 
 include_cpp! {
     #include "my_header.h" // your header file name
-    safety!(unsafe) // see details of unsafety policies described in include_cpp
+    safety!(unsafe) // see details of unsafety policies described in the 'safety' section of the book
     generate!("MyAPIFunction") // add this line for each function or type you wish to generate
 }
 ```
@@ -60,7 +61,4 @@ fn main() {
 
 C++ types such as `std::string` and `std::unique_ptr` are represented using the types provided by the marvellous [cxx](https://cxx.rs) library. This provides good ergonomics and safety norms, so unlike with normal `bindgen` bindings, you won't _normally_ need to write `unsafe` code for every function call.
 
-Some caveats:
-
-* Not all C++ features are supported. You _will_ come across APIs - possibly many APIs - where autocxx doesn't work. It should emit reasonable diagnostics explaining the problem. See the [workflow](workflow.md) section for how you see these diagnostics, how to work out what went wrong and how to work around it.
-* `autocxx` can be frustrating when you run up against its limitations. It's designed to allow importing of APIs from complex existing codebases. It's often a better choice to use [cxx](https://cxx.rs) directly.
+Next, read the section about [workflows](workflow.md).

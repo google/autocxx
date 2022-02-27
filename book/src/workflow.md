@@ -1,33 +1,42 @@
 # Workflow
 
+C++ is complex, and `autocxx` can't ingest everything.
+
 Here's how to approach autocxx:
 
 ```mermaid
 flowchart TB
     %%{init:{'flowchart':{'nodeSpacing': 60, 'rankSpacing': 30}}}%%
-    autocxx[Add a dependency on autocxx in your project]
-    which-build([Do you use cargo?])
-    autocxx--->which-build
-    autocxx-build[Add a dev dependency on autocxx-build]
-    build-rs[In your build.rs, tell autocxx-build about your header include path]
-    autocxx-build--->build-rs
-    which-build-- Yes -->autocxx-build
-    macro[Add include_cpp! macro: list headers and allowlist]
-    build-rs--->macro
-    autocxx-gen[Use autocxx-gen command line tool]
-    which-build-- No -->autocxx-gen
-    autocxx-gen--->macro
-    build[Build]
-    macro--->build
-    check[Confirm generation using cargo expand]
-    build--->check
-    manual[Add manual cxx::bridge for anything missing]
-    check--->manual
-    use[Use generated ffi mod APIs]
-    manual--->use
+    try[Try it!]
+    fail(Build failed)
+    missing_api(Build worked, but my API has disappeared)
+    ok(All OK)
+    try-->fail
+    try-->missing_api
+    try-->ok
+    block[Block APIs]
+    fail-->block
+    block-->try
+    expand[cargo expand or check docs in IDE]
+    missing_api-->expand
+    manual[Add manual cxx::bridge or extra C++ APIs for anything missing]
+    expand-->manual
+    manual-->try
 ```
 
-# Did it work? How do I deal with failure?
+This section explains more about this cycle.
+
+## The build failed
+
+`autocxx` should nearly always successfully parse the C++ codebase and
+generate _some_ APIs. It's reliant on `bindgen`, but `bindgen` is excellent
+and rarely bails out entirely.
+
+If it does, you may be able to use the [`block!` macro](https://docs.rs/autocxx/latest/autocxx/macro.block.html).
+
+We'd appreciate a minimized bug report of the troublesome code - see [contributing](contributing.md).
+
+## The build works, but didn't generate the API I expected
 
 Once you've achieved a successful build, you might wonder how to know what
 bindings have been generated. `cargo expand` will show you. Alternatively,
