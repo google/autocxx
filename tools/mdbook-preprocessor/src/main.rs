@@ -270,8 +270,8 @@ fn handle_code_block(
     // running tests.
     if !flags.contains("nocompile") {
         test_cases.push(TestCase {
-            cpp: cpp.to_string(),
-            hdr: hdr.to_string(),
+            cpp: unescape_quotes(&cpp),
+            hdr: unescape_quotes(&hdr),
             rs: syn::parse_file(&rs).unwrap(),
             location,
         });
@@ -303,4 +303,8 @@ fn extract_span(text: &[String], span: Span) -> Cow<str> {
 fn escape_hexathorpes(input: &str) -> Cow<str> {
     let re = regex::Regex::new(r"(?m)^(?P<ws>\s*)#(?P<c>.*)").unwrap();
     re.replace_all(input, "$ws##$c")
+}
+
+fn unescape_quotes(input: &str) -> String {
+    input.replace("\\\"", "\"")
 }
