@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{borrow::Cow, fmt::Display, io, path::PathBuf, process};
+use std::{borrow::Cow, collections::HashSet, fmt::Display, io, path::PathBuf, process};
 
 use anyhow::Error;
 use clap::{crate_authors, crate_version, Arg, ArgMatches, Command};
 use itertools::Itertools;
 use mdbook::{book::Book, preprocess::CmdPreprocessor};
-use proc_macro2::{Span, TokenStream};
-use syn::{spanned::Spanned, Expr};
+use proc_macro2::Span;
+use syn::{spanned::Spanned, Expr, __private::ToTokens};
 
 static LONG_ABOUT: &str =
     "This is an mdbook preprocessor tailored for autocxx code examples. Autocxx
@@ -114,7 +114,7 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
             autocxx_integration_tests::doctest(
                 &case.cpp,
                 &case.hdr,
-                case.rs,
+                case.rs.to_token_stream(),
                 args.value_of_os("manifest_dir").unwrap(),
             );
             eprintln!(
@@ -142,9 +142,9 @@ fn substitute_chapter(chapter: &str, filename: &str, test_cases: &mut Vec<TestCa
                 LineType::CodeBlockStart | LineType::CodeBlockEnd => {
                     ChapterParseState::OtherCodeBlock
                 }
-                LineType::CodeBlockStartAutocxx => {
+                LineType::CodeBlockStartAutocxx(block_flags) => {
                     push_line = false;
-                    ChapterParseState::OurCodeBlock(Vec::new())
+                    ChapterParseState::OurCodeBlock(block_flags, Vec::new())
                 }
                 LineType::Misc => ChapterParseState::Start,
             },
@@ -153,18 +153,18 @@ fn substitute_chapter(chapter: &str, filename: &str, test_cases: &mut Vec<TestCa
                 LineType::Misc => ChapterParseState::OtherCodeBlock,
                 _ => panic!("Found confusing conflicting block markers"),
             },
-            ChapterParseState::OurCodeBlock(mut lines) => match line_type {
+            ChapterParseState::OurCodeBlock(flags, mut lines) => match line_type {
                 LineType::Misc => {
                     push_line = false;
                     lines.push(line.to_string());
-                    ChapterParseState::OurCodeBlock(lines)
+                    ChapterParseState::OurCodeBlock(flags, lines)
                 }
                 LineType::CodeBlockEnd => {
                     let location = MiniSpan {
                         filename: filename.to_string(),
                         start_line: line_no - lines.len(),
                     };
-                    out.extend(handle_code_block(lines, location, test_cases));
+                    out.extend(handle_code_block(flags, lines, location, test_cases));
                     push_line = false;
                     ChapterParseState::Start
                 }
@@ -195,28 +195,36 @@ impl Display for MiniSpan {
 struct TestCase {
     cpp: String,
     hdr: String,
-    rs: TokenStream,
+    rs: syn::File,
     location: MiniSpan,
 }
 
 enum ChapterParseState {
     Start,
     OtherCodeBlock,
-    OurCodeBlock(Vec<String>), // have found rust,autocxx
+    OurCodeBlock(HashSet<String>, Vec<String>), // have found rust,autocxx
 }
 
 enum LineType {
     CodeBlockStart,
-    CodeBlockStartAutocxx,
+    CodeBlockStartAutocxx(HashSet<String>),
     CodeBlockEnd,
     Misc,
 }
 
+fn code_block_flags(line: &str) -> HashSet<String> {
+    let line = &line[3..];
+    line.split(',').map(|s| s.to_string()).collect()
+}
+
 fn recognize_line(line: &str) -> LineType {
-    if line == "```rust" {
-        LineType::CodeBlockStart
-    } else if line == "```rust,autocxx" {
-        LineType::CodeBlockStartAutocxx
+    if line.starts_with("```rust") {
+        let flags = code_block_flags(line);
+        if flags.contains("autocxx") {
+            LineType::CodeBlockStartAutocxx(flags)
+        } else {
+            LineType::CodeBlockStart
+        }
     } else if line == "```" {
         LineType::CodeBlockEnd
     } else {
@@ -225,6 +233,7 @@ fn recognize_line(line: &str) -> LineType {
 }
 
 fn handle_code_block(
+    flags: HashSet<String>,
     lines: Vec<String>,
     location: MiniSpan,
     test_cases: &mut Vec<TestCase>,
@@ -245,7 +254,7 @@ fn handle_code_block(
         hdr.to_string(),
         "```".to_string(),
     ];
-    if !cpp.is_empty() {
+    if !cpp.is_empty() && !flags.contains("hidecpp") {
         output.push("#### C++ implementation:".to_string());
         output.push("```cpp".to_string());
         output.push(cpp.to_string());
@@ -262,7 +271,7 @@ fn handle_code_block(
     test_cases.push(TestCase {
         cpp: cpp.to_string(),
         hdr: hdr.to_string(),
-        rs: rs.parse().unwrap(),
+        rs: syn::parse_file(&rs).unwrap(),
         location,
     });
 
