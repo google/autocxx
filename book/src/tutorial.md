@@ -12,9 +12,9 @@ You will need:
 * [LLVM to be installed](https://rust-lang.github.io/rust-bindgen/requirements.html).
 * Some patience. This is not a magic solution. C++/Rust interop is hard. Avoid it if you can!
 
-The rest of this 'getting started' section assumes Cargo - if you're using something else, see the [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html) documentation.
+The rest of this 'getting started' section assumes Cargo - if you're using something else, see the [building](building.md) section.
 
-First, add `autocxx` and `cxx` to your `dependencies` and `autocxx-build` to your `build-dependencies` in your `Cargo.toml`.
+First, add `autocxx` *and `cxx`* to your `dependencies` and `autocxx-build` to your `build-dependencies` in your `Cargo.toml`.
 
 ```toml
 [dependencies]
@@ -62,7 +62,5 @@ C++ types such as `std::string` and `std::unique_ptr` are represented using the 
 
 Some caveats:
 
-* Not all C++ features are supported. You _will_ come across APIs - possibly many APIs - where autocxx doesn't work. It should emit reasonable diagnostics explaining the problem. See the section on "dealing with failure" in the [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html) documentation.
+* Not all C++ features are supported. You _will_ come across APIs - possibly many APIs - where autocxx doesn't work. It should emit reasonable diagnostics explaining the problem. See the [workflow](workflow.md) section for how you see these diagnostics, how to work out what went wrong and how to work around it.
 * `autocxx` can be frustrating when you run up against its limitations. It's designed to allow importing of APIs from complex existing codebases. It's often a better choice to use [cxx](https://cxx.rs) directly.
-
-A full user manual can be found in the documentation for [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html). See [demo/src/main.rs](demo/src/main.rs) for a basic example, and the [examples](examples/) directory for more.

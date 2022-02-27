@@ -50,7 +50,7 @@ fn main() {
 
 A more complex example:
 
-```rust,ignore,autocxx,hidecpp
+```rust,ignore,autocxx,hidecpp,nocompile
 autocxx_integration_tests::doctest(
 "
 Goat::Goat() : horns(0) {}
