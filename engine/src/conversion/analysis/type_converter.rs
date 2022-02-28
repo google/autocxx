@@ -34,6 +34,7 @@ use syn::{
 use super::tdef::TypedefAnalysis;
 
 /// Certain kinds of type may require special handling by callers.
+#[derive(Debug)]
 pub(crate) enum TypeKind {
     Regular,
     Pointer,

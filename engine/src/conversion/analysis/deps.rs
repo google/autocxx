@@ -49,13 +49,13 @@ impl HasDependencies for Api<FnPrePhase> {
                             PodAnalysis {
                                 kind: TypeKind::Pod,
                                 bases,
-                                field_types,
+                                field_deps,
                                 ..
                             },
                         ..
                     },
                 ..
-            } => Box::new(field_types.iter().chain(bases.iter())),
+            } => Box::new(field_deps.iter().chain(bases.iter())),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter()),
             Api::Subclass {
                 name: _,
@@ -87,7 +87,7 @@ impl HasDependencies for Api<FnPhase> {
                             PodAnalysis {
                                 kind: TypeKind::Pod,
                                 bases,
-                                field_types,
+                                field_deps,
                                 ..
                             },
                         constructor_and_allocator_deps,
@@ -95,7 +95,7 @@ impl HasDependencies for Api<FnPhase> {
                     },
                 ..
             } => Box::new(
-                field_types
+                field_deps
                     .iter()
                     .chain(bases.iter())
                     .chain(constructor_and_allocator_deps.iter()),

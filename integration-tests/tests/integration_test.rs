@@ -2913,7 +2913,6 @@ fn test_templated_typedef() {
 
         struct Origin {
             Origin() {}
-            ~Origin() {}
             StringPiece host;
         };
     "};
@@ -2941,7 +2940,6 @@ fn test_struct_templated_typedef() {
 
         struct Origin {
             Origin() {}
-            ~Origin() {}
             StringPiece host;
         };
     "};
@@ -4076,9 +4074,6 @@ fn test_typedef_to_std_in_struct() {
         #include <string>
         typedef std::string my_string;
         struct A {
-            A() {}
-            ~A() {}
-            A(A&&) = default;
             my_string a;
         };
         inline A make_a(std::string b) {
@@ -4105,9 +4100,6 @@ fn test_typedef_to_up_in_struct() {
         #include <memory>
         typedef std::unique_ptr<std::string> my_string;
         struct A {
-            A() {}
-            ~A() {}
-            A(A&&) = default;
             my_string a;
         };
         inline A make_a(std::string b) {
@@ -4652,8 +4644,7 @@ fn test_unexpected_use() {
         class RenderFrameHost {
         public:
             RenderFrameHost() {}
-            ~RenderFrameHost() {}
-            d e;
+        d e;
         };
         } // namespace content
         "};
@@ -9053,12 +9044,42 @@ fn test_implicit_constructor_rules() {
         test_movable![ffi::TwoCopy];
         test_call_a![ffi::TwoCopy];
 
-        // TODO: Need to differentiate pointers from the types they point to.
+        // TODO: Treat pointers and references differently so this has a default constructor.
         //test_constructible![ffi::MemberPointerDeleted];
         //test_make_unique![ffi::MemberPointerDeleted];
-        //test_copyable![ffi::MemberPointerDeleted];
-        //test_movable![ffi::MemberPointerDeleted];
+        test_copyable![ffi::MemberPointerDeleted];
+        test_movable![ffi::MemberPointerDeleted];
         test_call_a![ffi::MemberPointerDeleted];
+
+        test_copyable![ffi::MemberConstPointerDeleted];
+        test_movable![ffi::MemberConstPointerDeleted];
+        test_call_a![ffi::MemberConstPointerDeleted];
+
+        //test_copyable![ffi::MemberConst];
+        //test_movable![ffi::MemberConst];
+        //test_call_a![ffi::MemberConst];
+
+        test_copyable![ffi::MemberReferenceDeleted];
+        test_movable![ffi::MemberReferenceDeleted];
+        test_call_a![ffi::MemberReferenceDeleted];
+
+        test_copyable![ffi::MemberConstReferenceDeleted];
+        test_movable![ffi::MemberConstReferenceDeleted];
+        test_call_a![ffi::MemberConstReferenceDeleted];
+
+        test_copyable![ffi::MemberReference];
+        test_movable![ffi::MemberReference];
+        test_call_a![ffi::MemberReference];
+
+        test_copyable![ffi::MemberConstReference];
+        test_movable![ffi::MemberConstReference];
+        test_call_a![ffi::MemberConstReference];
+
+        test_movable![ffi::MemberRvalueReferenceDeleted];
+        test_call_a![ffi::MemberRvalueReferenceDeleted];
+
+        test_movable![ffi::MemberRvalueReference];
+        test_call_a![ffi::MemberRvalueReference];
 
         test_call_a_as![ffi::BasePublicDeleted, ffi::PublicDeleted];
 
@@ -9325,16 +9346,15 @@ fn test_implicit_constructor_rules() {
             "NonConstCopy",
             "TwoCopy",
             "MemberPointerDeleted",
-            // TODO: Need to handle const and/or reference members without
-            // default initializers.
-            //"MemberConstPointerDeleted",
+            "MemberConstPointerDeleted",
+            // TODO: Handle top-level const on C++ members correctly.
             //"MemberConst",
-            //"MemberReferenceDeleted",
-            //"MemberConstReferenceDeleted",
-            //"MemberReference",
-            //"MemberConstReference",
-            //"MemberRvalueReferenceDeleted",
-            //"MemberRvalueReference",
+            "MemberReferenceDeleted",
+            "MemberConstReferenceDeleted",
+            "MemberReference",
+            "MemberConstReference",
+            "MemberRvalueReferenceDeleted",
+            "MemberRvalueReference",
             "BasePublicDeleted",
             "BasePublicDeletedDefault",
             "BasePublicDeletedCopy",

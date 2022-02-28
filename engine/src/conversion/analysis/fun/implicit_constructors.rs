@@ -14,9 +14,14 @@
 
 use std::collections::{hash_map, HashMap};
 
+use syn::Type;
+
 use crate::{
     conversion::{
-        analysis::{depth_first::depth_first, fun::FnStructAnalysis, pod::PodAnalysis},
+        analysis::{
+            depth_first::depth_first, fun::FnStructAnalysis, pod::PodAnalysis,
+            type_converter::TypeKind,
+        },
         api::{Api, CppVisibility, FuncToConvert, SpecialMemberKind},
     },
     known_types::known_types,
@@ -93,7 +98,7 @@ pub(super) fn find_missing_constructors(
                 FnStructAnalysis {
                     pod:
                         PodAnalysis {
-                            bases, field_types, ..
+                            bases, field_info, ..
                         },
                     ..
                 },
@@ -116,25 +121,42 @@ pub(super) fn find_missing_constructors(
                 }
             };
             let bases_items_found: Vec<_> = bases.iter().map_while(get_items_found).collect();
-            let field_types_items_found: Vec<_> =
-                field_types.iter().map_while(get_items_found).collect();
+            let fields_items_found: Vec<_> = field_info
+                .iter()
+                .filter_map(|field_info| match field_info.type_kind {
+                    TypeKind::Regular | TypeKind::SubclassHolder(_) => match field_info.ty {
+                        Type::Path(ref qn) => get_items_found(&QualifiedName::from_type_path(qn)),
+                        _ => None,
+                    },
+                    // TODO: Figure out how to differentiate between pointers and references coming
+                    // from C++. Pointers have a default constructor.
+                    TypeKind::Pointer | TypeKind::Reference | TypeKind::MutableReference => {
+                        Some(ItemsFound {
+                            default_constructor: SpecialMemberFound::NotPresent,
+                            destructor: SpecialMemberFound::Implicit,
+                            const_copy_constructor: SpecialMemberFound::Implicit,
+                            non_const_copy_constructor: SpecialMemberFound::NotPresent,
+                            move_constructor: SpecialMemberFound::Implicit,
+                        })
+                    }
+                })
+                .collect();
             let has_rvalue_reference_fields = details.has_rvalue_reference_fields;
 
             // Check that all the bases and field types are known first. This combined with
             // iterating via [`depth_first`] means we can safely search in `items_found` for all of
             // them.
             //
-            // Conservatively, we will not acknowledge the existence of defaulted special member
-            // functions for any struct/class where we don't fully understand all field types.
-            // However, we can still look for explictly declared versions and use those.
+            // Conservatively, we will not acknowledge the existence of most defaulted or implicit
+            // special member functions for any struct/class where we don't fully understand all
+            // field types.  However, we can still look for explictly declared versions and use
+            // those. See below for destructors.
             //
             // We need to extend our knowledge to understand the constructor behavior of things in
             // known_types.rs, then we'll be able to cope with types which contain strings,
             // unique_ptrs etc.
-            //
-            // We also need to learn to follow typedefs.
             if bases_items_found.len() != bases.len()
-                || field_types_items_found.len() != field_types.len()
+                || fields_items_found.len() != field_info.len()
             {
                 let is_explicit = |kind: ExplicitKind| -> SpecialMemberFound {
                     // TODO: For https://github.com/google/autocxx/issues/815, map
@@ -151,7 +173,27 @@ pub(super) fn find_missing_constructors(
                 };
                 let items_found = ItemsFound {
                     default_constructor: is_explicit(ExplicitKind::DefaultConstructor),
-                    destructor: is_explicit(ExplicitKind::Destructor),
+                    destructor: match find_explicit(ExplicitKind::Destructor) {
+                        // Assume that unknown types have destructors. This is common, and allows
+                        // use to generate UniquePtr wrappers with them.
+                        //
+                        // However, this will generate C++ code that doesn't compile if the unknown
+                        // type does not have an accessible destructor. Maybe we should have a way
+                        // to disable that?
+                        //
+                        // TODO: For https://github.com/google/autocxx/issues/815, map
+                        // ExplicitFound::Defaulted(_) to Explicit.
+                        None => SpecialMemberFound::Implicit,
+                        // If there are multiple destructors, assume that one of them will be
+                        // selected by overload resolution.
+                        Some(ExplicitFound::Multiple) => {
+                            SpecialMemberFound::Explicit(CppVisibility::Public)
+                        }
+                        Some(ExplicitFound::Deleted) => SpecialMemberFound::NotPresent,
+                        Some(ExplicitFound::UserDefined(visibility)) => {
+                            SpecialMemberFound::Explicit(*visibility)
+                        }
+                    },
                     const_copy_constructor: is_explicit(ExplicitKind::ConstCopyConstructor),
                     non_const_copy_constructor: is_explicit(ExplicitKind::NonConstCopyConstructor),
                     move_constructor: is_explicit(ExplicitKind::MoveConstructor),
@@ -207,11 +249,11 @@ pub(super) fn find_missing_constructors(
                         });
                         // TODO: Allow member initializers for
                         // https://github.com/google/autocxx/issues/816.
-                        let members_allow = field_types_items_found.iter().all(|items_found| {
+                        let members_allow = fields_items_found.iter().all(|items_found| {
                             items_found.destructor.callable_any()
                                 && items_found.default_constructor.callable_any()
                         });
-                        if bases_allow && members_allow {
+                        if !has_rvalue_reference_fields && bases_allow && members_allow {
                             // TODO: For https://github.com/google/autocxx/issues/815, grab the
                             // visibility from an explicit default if present.
                             SpecialMemberFound::Implicit
@@ -240,7 +282,7 @@ pub(super) fn find_missing_constructors(
                         let bases_allow = bases_items_found
                             .iter()
                             .all(|items_found| items_found.destructor.callable_subclass());
-                        let members_allow = field_types_items_found
+                        let members_allow = fields_items_found
                             .iter()
                             .all(|items_found| items_found.destructor.callable_any());
                         if bases_allow && members_allow {
@@ -287,7 +329,7 @@ pub(super) fn find_missing_constructors(
                                 && (items_found.const_copy_constructor.callable_subclass()
                                     || items_found.non_const_copy_constructor.callable_subclass())
                         });
-                        let members_allow = field_types_items_found.iter().all(|items_found| {
+                        let members_allow = fields_items_found.iter().all(|items_found| {
                             items_found.destructor.callable_any()
                                 && (items_found.const_copy_constructor.callable_any()
                                     || items_found.non_const_copy_constructor.callable_any())
@@ -297,7 +339,7 @@ pub(super) fn find_missing_constructors(
                             // visibility and existence of const and non-const from an explicit default if present.
                             let dependencies_are_const = bases_items_found
                                 .iter()
-                                .chain(field_types_items_found.iter())
+                                .chain(fields_items_found.iter())
                                 .all(|items_found| items_found.const_copy_constructor.exists());
                             if dependencies_are_const {
                                 (SpecialMemberFound::Implicit, SpecialMemberFound::NotPresent)
@@ -357,7 +399,7 @@ pub(super) fn find_missing_constructors(
                             items_found.destructor.callable_subclass()
                                 && items_found.move_constructor.callable_subclass()
                         });
-                        let members_allow = field_types_items_found
+                        let members_allow = fields_items_found
                             .iter()
                             .all(|items_found| items_found.move_constructor.callable_any());
                         if bases_allow && members_allow {
