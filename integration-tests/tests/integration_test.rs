@@ -7877,6 +7877,7 @@ fn test_emplace_uses_overridden_new_and_delete() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/833
 fn test_pass_by_reference_to_value_param() {
     let hdr = indoc! {"
     #include <stdint.h>
