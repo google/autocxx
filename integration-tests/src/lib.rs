@@ -33,11 +33,16 @@ const KEEP_TEMPDIRS: bool = false;
 
 /// API to run a documentation test. Panics if the test fails.
 /// Guarantees not to emit anything to stdout and so can be run in an mdbook context.
-pub fn doctest(cxx_code: &str, header_code: &str, rust_code: TokenStream, manifest_dir: &OsStr) {
+pub fn doctest(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code: TokenStream,
+    manifest_dir: &OsStr,
+) -> Result<(), TestError> {
     let stdout_gag = gag::BufferRedirect::stdout().unwrap();
     std::env::set_var("CARGO_PKG_NAME", "autocxx-integration-tests");
     std::env::set_var("CARGO_MANIFEST_DIR", manifest_dir);
-    do_run_test_manual(cxx_code, header_code, rust_code, None, None).unwrap();
+    let r = do_run_test_manual(cxx_code, header_code, rust_code, None, None);
     let mut stdout_str = String::new();
     stdout_gag
         .into_inner()
@@ -46,6 +51,7 @@ pub fn doctest(cxx_code: &str, header_code: &str, rust_code: TokenStream, manife
     if !stdout_str.is_empty() {
         eprintln!("Stdout from test:\n{}", stdout_str);
     }
+    r
 }
 
 fn get_builder() -> &'static Mutex<LinkableTryBuilder> {
