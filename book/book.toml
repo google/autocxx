@@ -22,3 +22,4 @@ git-repository-url = "https://github.com/google/autocxx"
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
 
 [output.linkcheck]
+warning-policy = "error"
