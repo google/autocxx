@@ -102,6 +102,7 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
     });
 
     // Now run any test cases we accumulated.
+    let mut any_fails = false;
     if !args.is_present("skip_tests") {
         let num_tests = test_cases.len();
         for (counter, case) in test_cases.into_iter().enumerate() {
@@ -111,19 +112,25 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
                 num_tests,
                 &case.location
             );
-            autocxx_integration_tests::doctest(
+            let passed = autocxx_integration_tests::doctest(
                 &case.cpp,
                 &case.hdr,
                 case.rs.to_token_stream(),
                 args.value_of_os("manifest_dir").unwrap(),
-            );
+            )
+            .is_ok();
             eprintln!(
-                "Doctest {}/{} at {} passed.",
+                "Doctest {}/{} at {} {}.",
                 counter + 1,
                 num_tests,
-                &case.location
+                &case.location,
+                if passed { "passed" } else { "failed" }
             );
+            any_fails = any_fails || !passed;
         }
+    }
+    if any_fails {
+        panic!("One or more tests failed.");
     }
 
     serde_json::to_writer(io::stdout(), &book)?;
