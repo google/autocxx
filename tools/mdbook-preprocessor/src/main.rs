@@ -70,8 +70,13 @@ fn main() {
             .default_value_os(calculate_cargo_dir().as_os_str())
         )
         .get_matches();
-    if matches.subcommand_matches("supports").is_some() {
-        process::exit(0); // we support all renderers.
+    if let Some(supports_matches) = matches.subcommand_matches("supports") {
+        // Only do our preprocessing and testing for the html renderer, not linkcheck.
+        if supports_matches.value_of("renderer") == Some("html") {
+            process::exit(0);
+        } else {
+            process::exit(1);
+        }
     }
     preprocess(&matches).unwrap();
 }
