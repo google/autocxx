@@ -38,9 +38,9 @@ include_cpp! {
 fn main() {
     let mut goat = ffi::Goat::make_unique(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
     // C++-like semantics...
-    ffi::feed_goat(&goat);
+    // ffi::feed_goat(&goat); // temporarily disabled, bug #852
     // ... you've still got the goat!
-    ffi::feed_goat(&goat);
+    // ffi::feed_goat(&goat); // temporarily disabled, bug #852
     // Or, Rust-like semantics, where the goat is consumed.
     ffi::feed_goat(goat);
     // No goat any more...
