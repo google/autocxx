@@ -240,7 +240,7 @@ fn handle_code_block(
 ) -> impl Iterator<Item = String> {
     let input_str = lines.join("\n");
     let fn_call = syn::parse_str::<syn::Expr>(&input_str)
-        .expect(&format!("Unable to parse outer function at {}", location));
+        .unwrap_or_else(|_| panic!("Unable to parse outer function at {}", location));
     let fn_call = match fn_call {
         Expr::Call(expr) => expr,
         _ => panic!("Parsing unexpected"),
@@ -273,7 +273,8 @@ fn handle_code_block(
         test_cases.push(TestCase {
             cpp: unescape_quotes(&cpp),
             hdr: unescape_quotes(&hdr),
-            rs: syn::parse_file(&rs).expect(&format!("Unable to parse code at {}", location)),
+            rs: syn::parse_file(&rs)
+                .unwrap_or_else(|_| panic!("Unable to parse code at {}", location)),
             location,
         });
     }
