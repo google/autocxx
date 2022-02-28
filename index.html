@@ -1,0 +1,256 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Rust ❤️  pre-existing C++ - Rust ♡ Existing C++</title>
+        <!-- Custom HTML head -->
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <meta name="description" content="autocxx — safe interop between Rust and existing C++">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+    </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script type="text/javascript">
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script type="text/javascript">
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script type="text/javascript">
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="index.html" class="active"><strong aria-hidden="true">1.</strong> Rust ❤️  pre-existing C++</a></li><li class="chapter-item expanded "><a href="tutorial.html"><strong aria-hidden="true">2.</strong> Tutorial</a></li><li class="chapter-item expanded "><a href="workflow.html"><strong aria-hidden="true">3.</strong> Workflow</a></li><li class="chapter-item expanded "><a href="allowlist.html"><strong aria-hidden="true">4.</strong> Allowlist and syntax</a></li><li class="chapter-item expanded "><a href="building.html"><strong aria-hidden="true">5.</strong> Building</a></li><li class="chapter-item expanded "><a href="storage.html"><strong aria-hidden="true">6.</strong> Storage - stack and heaps</a></li><li class="chapter-item expanded "><a href="references_etc.html"><strong aria-hidden="true">7.</strong> Pointers, references, values</a></li><li class="chapter-item expanded "><a href="primitives.html"><strong aria-hidden="true">8.</strong> Built-in types</a></li><li class="chapter-item expanded "><a href="naming.html"><strong aria-hidden="true">9.</strong> C++ type and function names</a></li><li class="chapter-item expanded "><a href="cpp_types.html"><strong aria-hidden="true">10.</strong> C++ structs, enums and classes</a></li><li class="chapter-item expanded "><a href="cpp_functions.html"><strong aria-hidden="true">11.</strong> C++ functions</a></li><li class="chapter-item expanded "><a href="rust_calls.html"><strong aria-hidden="true">12.</strong> Callbacks into Rust</a></li><li class="chapter-item expanded "><a href="other_features.html"><strong aria-hidden="true">13.</strong> Other C++ features</a></li><li class="chapter-item expanded "><a href="safety.html"><strong aria-hidden="true">14.</strong> Safety</a></li><li class="chapter-item expanded "><a href="rustic.html"><strong aria-hidden="true">15.</strong> Rustic bindings</a></li><li class="chapter-item expanded "><a href="examples.html"><strong aria-hidden="true">16.</strong> Examples</a></li><li class="chapter-item expanded "><a href="credits.html"><strong aria-hidden="true">17.</strong> Credits</a></li><li class="chapter-item expanded "><a href="contributing.html"><strong aria-hidden="true">18.</strong> Contributing</a></li><li class="chapter-item expanded "><a href="code-of-conduct.html"><strong aria-hidden="true">19.</strong> Code of Conduct</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Rust ♡ Existing C++</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/google/autocxx" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script type="text/javascript">
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <p><a href="https://github.com/google/autocxx"><img src="https://img.shields.io/crates/l/autocxx" alt="GitHub" /></a>
+<a href="https://crates.io/crates/autocxx"><img src="https://img.shields.io/crates/d/autocxx" alt="crates.io" /></a>
+<a href="https://docs.rs/autocxx"><img src="https://docs.rs/autocxx/badge.svg" alt="docs.rs" /></a></p>
+<h1 id="autocxx--automatic-safe-interop-between-rust-and-c"><a class="header" href="#autocxx--automatic-safe-interop-between-rust-and-c">autocxx — automatic safe interop between Rust and C++</a></h1>
+<p>Welcome to <code>autocxx</code> and thank you for reading!</p>
+<p>Use <code>autocxx</code> if you have a large existing C++ codebase and you want to use its types and functions from Rust with maximal safety and minimal fuss.</p>
+<p><code>autocxx</code> is like <code>bindgen</code>, in that it enables you to use C++ functions and types from within Rust. But it automates a lot of the fiddly things you need to do with <code>bindgen</code> bindings: calling destructors, converting strings, unsafely handling raw pointers. C++ functions and types within <code>autocxx</code> bindings should behave naturally and ergonomically, <em>almost</em> as if they were safe Rust functions and types themselves. These ergonomics and safety improvements come from the <a href="https://cxx.rs"><code>cxx</code></a> project - hence the name of this tool, <code>autocxx</code>.</p>
+<p><code>autocxx</code> combines the safety and ergonomics of <code>cxx</code> with the automatic bindings generation of <code>bindgen</code>. It stands on the shoulders of those giants!</p>
+<h2 id="when-is-autocxx-the-right-tool"><a class="header" href="#when-is-autocxx-the-right-tool">When is <code>autocxx</code> the right tool?</a></h2>
+<p>Not always:</p>
+<ul>
+<li>If you are making bindings to C code, as opposed to C++, use <a href="https://rust-lang.github.io/rust-bindgen/"><code>bindgen</code></a> instead.</li>
+<li>If you have can make unrestricted changes to the C++ code, use <a href="https://cxx.rs"><code>cxx</code></a> instead.</li>
+<li>If your C++ to Rust interface is just a few functions or types, use <a href="https://cxx.rs"><code>cxx</code></a> instead.</li>
+</ul>
+<p>But sometimes:</p>
+<ul>
+<li>If you need to call arbitrary functions and use arbitrary types within an existing C++ codebase, use <code>autocxx</code>. You're in the right place!</li>
+<li>Like <code>cxx</code>, but unlike <code>bindgen</code>, <code>autocxx</code> also allows you to make calls from C++ to Rust.</li>
+</ul>
+<h2 id="examples-to-give-you-a-feel-for-autocxx"><a class="header" href="#examples-to-give-you-a-feel-for-autocxx">Examples to give you a feel for <code>autocxx</code></a></h2>
+<p>Here's a code example:</p>
+<h4 id="c-header"><a class="header" href="#c-header">C++ header:</a></h4>
+<pre><code class="language-cpp">#include &lt;stdint.h&gt;
+inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
+</code></pre>
+<h4 id="rust"><a class="header" href="#rust">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;do_math&quot;)
+}
+
+fn main() {
+    assert_eq!(ffi::do_math(12, 13), 25);
+}
+
+</code></pre>
+<p>A more complex example:</p>
+<h4 id="c-header-1"><a class="header" href="#c-header-1">C++ header:</a></h4>
+<pre><code class="language-cpp">#include &lt;cstdint&gt;
+#include &lt;string&gt;
+
+class Goat {
+public:
+    Goat();
+    ~Goat();
+    void add_a_horn();
+    std::string describe() const;
+private:
+    uint32_t horns;
+};
+
+</code></pre>
+<h4 id="rust-1"><a class="header" href="#rust-1">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;Goat&quot;)
+}
+
+fn main() {
+    let mut goat = ffi::Goat::make_unique(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
+    goat.pin_mut().add_a_horn();
+    goat.pin_mut().add_a_horn();
+    assert_eq!(goat.describe().as_ref().unwrap().to_string_lossy(), &quot;This goat has 2 horns.&quot;);
+}
+
+</code></pre>
+<p>This is typical <code>autocxx</code> code: the C++ objects behave much like Rust objects, but
+sometimes extra steps are required to handle cases like null pointers or converting strings that may not be UTF-8.</p>
+<p>Still, fundamentally, you can interact with C++ objects without using <code>unsafe</code> in the majority of cases.
+<code>cxx</code> takes care of the fundamentals of lifetimes and destructors.</p>
+<h2 id="how-to-read-this-book"><a class="header" href="#how-to-read-this-book">How to read this book</a></h2>
+<p>We'd recommend starting with <a href="tutorial.html">tutorial</a> and then <a href="workflow.html">workflow</a>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="next" href="tutorial.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="next" href="tutorial.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+        <script type="text/javascript">
+            window.playground_copyable = true;
+        </script>
+        <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
+        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="book.js" type="text/javascript" charset="utf-8"></script>
+
+        <!-- Custom JS scripts -->
+        <script type="text/javascript" src="mermaid.min.js"></script>
+        <script type="text/javascript" src="mermaid-init.js"></script>
+    </body>
+</html>

@@ -1,0 +1,282 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Pointers, references, values - Rust ♡ Existing C++</title>
+        <!-- Custom HTML head -->
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <meta name="description" content="autocxx — safe interop between Rust and existing C++">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+    </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script type="text/javascript">
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script type="text/javascript">
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script type="text/javascript">
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="index.html"><strong aria-hidden="true">1.</strong> Rust ❤️  pre-existing C++</a></li><li class="chapter-item expanded "><a href="tutorial.html"><strong aria-hidden="true">2.</strong> Tutorial</a></li><li class="chapter-item expanded "><a href="workflow.html"><strong aria-hidden="true">3.</strong> Workflow</a></li><li class="chapter-item expanded "><a href="allowlist.html"><strong aria-hidden="true">4.</strong> Allowlist and syntax</a></li><li class="chapter-item expanded "><a href="building.html"><strong aria-hidden="true">5.</strong> Building</a></li><li class="chapter-item expanded "><a href="storage.html"><strong aria-hidden="true">6.</strong> Storage - stack and heaps</a></li><li class="chapter-item expanded "><a href="references_etc.html" class="active"><strong aria-hidden="true">7.</strong> Pointers, references, values</a></li><li class="chapter-item expanded "><a href="primitives.html"><strong aria-hidden="true">8.</strong> Built-in types</a></li><li class="chapter-item expanded "><a href="naming.html"><strong aria-hidden="true">9.</strong> C++ type and function names</a></li><li class="chapter-item expanded "><a href="cpp_types.html"><strong aria-hidden="true">10.</strong> C++ structs, enums and classes</a></li><li class="chapter-item expanded "><a href="cpp_functions.html"><strong aria-hidden="true">11.</strong> C++ functions</a></li><li class="chapter-item expanded "><a href="rust_calls.html"><strong aria-hidden="true">12.</strong> Callbacks into Rust</a></li><li class="chapter-item expanded "><a href="other_features.html"><strong aria-hidden="true">13.</strong> Other C++ features</a></li><li class="chapter-item expanded "><a href="safety.html"><strong aria-hidden="true">14.</strong> Safety</a></li><li class="chapter-item expanded "><a href="rustic.html"><strong aria-hidden="true">15.</strong> Rustic bindings</a></li><li class="chapter-item expanded "><a href="examples.html"><strong aria-hidden="true">16.</strong> Examples</a></li><li class="chapter-item expanded "><a href="credits.html"><strong aria-hidden="true">17.</strong> Credits</a></li><li class="chapter-item expanded "><a href="contributing.html"><strong aria-hidden="true">18.</strong> Contributing</a></li><li class="chapter-item expanded "><a href="code-of-conduct.html"><strong aria-hidden="true">19.</strong> Code of Conduct</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Rust ♡ Existing C++</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/google/autocxx" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script type="text/javascript">
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="pointers-references-values"><a class="header" href="#pointers-references-values">Pointers, references, values</a></h1>
+<p><code>autocxx</code> knows how to deal with C++ APIs which take C++ types:</p>
+<ul>
+<li>By value</li>
+<li>By reference (const or not)</li>
+<li>By raw pointer</li>
+<li>By <code>std::unique_ptr</code></li>
+<li>By <code>std::shared_ptr</code></li>
+<li>By <code>std::weak_ptr</code></li>
+<li>(Soon to come) By rvalue reference (that is, as a move parameter)</li>
+</ul>
+<p>(all of this is because the underlying [<code>cxx</code>] crate has such versatility).
+Some of these have some quirks in the way they're exposed in Rust, described below.</p>
+<h2 id="passing-between-c-and-rust-by-value"><a class="header" href="#passing-between-c-and-rust-by-value">Passing between C++ and Rust by value</a></h2>
+<p>Rust is free to move data around at any time. That's <em>not OK</em> for some C++ types
+which have non-trivial move constructors or destructors. Such types are common
+in C++ (for example, even C++ <code>std::string</code>s) and these types commonly appear
+in API declarations which we want to make available in Rust. Worse still, Rust
+has no visibility into whether a C++ type meets these criteria. What do we do?</p>
+<p>You have a choice:</p>
+<ul>
+<li>As standard, any C++ type passed by value will be <code>std::move</code>d on the C++ side
+into a <code>std::unique_ptr</code> before being passed to Rust, and similarly moved out
+of a <code>std::unique_ptr</code> when passed from Rust to C++.</li>
+<li>If you know that your C++ type can be safely byte-copied, then you can
+override this behavior by using [<code>generate_pod</code>] instead of [<code>generate</code>].</li>
+</ul>
+<p>There's not a significant ergonomic problem from the use of [<code>cxx::UniquePtr</code>].
+The main negative of the automatic boxing into [<code>cxx::UniquePtr</code>] is performance:
+specifically, the need to
+allocate heap cells on the C++ side and move data into and out of them.
+You don't want to be doing this inside a tight loop (but if you're calling
+across the C++/Rust boundary in a tight loop, perhaps reconsider that boundary
+anyway).</p>
+<p>If you want your type to be transferred between Rust and C++ truly <em>by value</em>
+then use [<code>generate_pod</code>] instead of [<code>generate</code>].</p>
+<p>Specifically, to be compatible with [<code>generate_pod</code>], your C++ type must either:</p>
+<ul>
+<li>Lack a move constructor <em>and</em> lack a destructor</li>
+<li>Or contain a human promise that it's relocatable, by implementing
+the C++ trait <code>IsRelocatable</code> per the instructions in
+<a href="https://github.com/dtolnay/cxx/blob/master/include/cxx.h">cxx.h</a></li>
+</ul>
+<p>Otherwise, your build will fail.</p>
+<p>This doesn't just make a difference to the generated code for the type;
+it also makes a difference to any functions which take or return that type.
+If there's a C++ function which takes a struct by value, but that struct
+is not declared as POD-safe, then we'll generate wrapper functions to move
+that type into and out of [<code>cxx::UniquePtr</code>]s.</p>
+<p>There is one other option under construction. The <code>moveit</code> crate replicates
+C++ value move and copying semantics in Rust. There is limited early support
+for <code>moveit</code> within autocxx; specifically, you can call C++ constructors
+to emplace even non-trivial objects on the Rust stack using <code>moveit</code>, and
+then call methods on them or use references to them in other function calls.
+At present, you can't copy or move such objects - once they're created,
+that's it, until it's dropped. At present therefore such objects can't be
+passed into C++ functions which take non-POD types by value. This facility
+is therefore best avoided for now until it's more complete - but see
+<code>examples/non-trivial-type-on-stack</code> if you want to see how to use it.</p>
+<h3 id="references-and-pointers"><a class="header" href="#references-and-pointers">References and pointers</a></h3>
+<p>We follow [cxx] norms here. Specifically:</p>
+<ul>
+<li>A C++ reference becomes a Rust reference</li>
+<li>A C++ pointer becomes a Rust pointer.</li>
+<li>If a reference is returned with an ambiguous lifetime, we don't generate
+code for the function</li>
+<li>Pointers require use of <code>unsafe</code>, references don't necessarily.</li>
+</ul>
+<p>That last point is key. If your C++ API takes pointers, you're going
+to have to use <code>unsafe</code>. Similarly, if your C++ API returns a pointer,
+you'll have to use <code>unsafe</code> to do anything useful with the pointer in Rust.
+This is intentional: a pointer from C++ might be subject to concurrent
+mutation, or it might have a lifetime that could disappear at any moment.
+As a human, you must promise that you understand the constraints around
+use of that pointer and that's what the <code>unsafe</code> keyword is for.</p>
+<p>Exactly the same issues apply to C++ references <em>in theory</em>, but in practice,
+they usually don't. Therefore [cxx] has taken the view that we can &quot;trust&quot;
+a C++ reference to a higher degree than a pointer, and autocxx follows that
+lead. In practice, of course, references are rarely return values from C++
+APIs so we rarely have to navel-gaze about the trustworthiness of a
+reference.</p>
+<p>(See also the discussion of [<code>safety</code>] - if you haven't specified
+an unsafety policy, <em>all</em> C++ APIs require <code>unsafe</code> so the discussion is moot.)</p>
+<p>If you're given a C++ object by pointer, and you want to interact with it,
+you'll need to figure out the guarantees attached to the C++ object - most
+notably its lifetime. To see some of the decision making process involved
+see the <a href="https://github.com/google/autocxx/tree/main/examples/steam-mini/src/main.rs">Steam example</a>.</p>
+<h3 id="cxxuniqueptrs"><a class="header" href="#cxxuniqueptrs">[<code>cxx::UniquePtr</code>]s</a></h3>
+<p>We use [<code>cxx::UniquePtr</code>] in completely the normal way, but there are a few
+quirks which you're more likely to run into with <code>autocxx</code>.</p>
+<ul>
+<li>Calling methods: you may need to use [<code>cxx::UniquePtr::pin_mut</code>] to get
+a reference on which you can call a method.</li>
+<li>Getting a raw pointer in order to pass to some pre-existing function:
+at present you need to do:
+<pre><code class="language-rust ignore">   let mut a = ffi::A::make_unique();
+   unsafe { ffi::TakePointerToA(std::pin::Pin::&lt;&amp;mut ffi::A&gt;::into_inner_unchecked(a.pin_mut())) };
+</code></pre>
+This may be simplified in future.
+// </li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="storage.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+                            <a rel="next" href="primitives.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="storage.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+                    <a rel="next" href="primitives.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+        <script type="text/javascript">
+            window.playground_copyable = true;
+        </script>
+        <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
+        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="book.js" type="text/javascript" charset="utf-8"></script>
+
+        <!-- Custom JS scripts -->
+        <script type="text/javascript" src="mermaid.min.js"></script>
+        <script type="text/javascript" src="mermaid-init.js"></script>
+    </body>
+</html>
