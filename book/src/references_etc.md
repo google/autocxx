@@ -67,6 +67,7 @@ is therefore best avoided for now until it's more complete - but see
 ### References and pointers
 
 We follow [cxx] norms here. Specifically:
+
 * A C++ reference becomes a Rust reference
 * A C++ pointer becomes a Rust pointer.
 * If a reference is returned with an ambiguous lifetime, we don't generate

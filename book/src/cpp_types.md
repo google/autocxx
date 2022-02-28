@@ -35,6 +35,54 @@ By default, `autocxx` generates non-POD types. You can request a POD type using 
 
 See [the chapter on storage](storage.md) for lots more detail on how you can hold onto non-POD types.
 
+## Construction
+
+Each constructor results in _two_ Rust functions.
+
+* A `new` function exists, which
+  offers a constructor per the standards of the `moveit` crate, and thus can be used
+  to place the object on the Rust stack (as well as in various containers such as `Box`
+  and `UniquePtr`)
+* A `make_unique` function is also created, which constructs the item directly into
+  a `cxx::UniquePtr`. This is more commonly what you want.
+
+```rust,ignore,autocxx,hidecpp
+autocxx_integration_tests::doctest(
+"void A::set(uint32_t val) { a = val; }
+uint32_t A::get() const { return a; }",
+"#include <stdint.h>
+#include <string>
+struct A {
+    A() {}
+    void set(uint32_t val);
+    uint32_t get() const;
+    uint32_t a;
+};
+",
+{
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include "input.h"
+    safety!(unsafe_ffi)
+    generate!("A")
+}
+
+fn main() {
+    moveit! {
+        let mut stack_obj = ffi::A::new();
+    }
+    stack_obj.as_mut().set(42);
+    assert_eq!(stack_obj.get(), 42);
+
+    let mut heap_obj = ffi::A::make_unique();
+    heap_obj.pin_mut().set(42);
+    assert_eq!(heap_obj.get(), 42);
+}
+}
+)
+```
+
 ## Forward declarations
 
 A type which is incomplete in the C++ headers (i.e. represented only by a forward

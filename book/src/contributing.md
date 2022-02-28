@@ -96,3 +96,11 @@ order of preference here's how we would like to hear about your problem:
   and send the _entire_ log to us. This will include two key bits of logging:
   the C++ bindings as distilled by `bindgen`, and then the version which
   we've converted and moulded to be suitable for use by `cxx`.
+
+## How to contribute to this manual
+
+More examples in this manual are _very_ welcomed!
+
+Because `autocxx` examples require both Rust and C++ code to be linked together,
+a custom preprocessor is used for this manual. See one of the existing examples
+such as in `index.md` to see how to do this.
