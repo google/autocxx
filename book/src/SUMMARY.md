@@ -14,6 +14,7 @@
 - [Callbacks into Rust](rust_calls.md)
 - [Other C++ features](other_features.md)
 - [Safety](safety.md)
+- [Rustic bindings](rustic.md)
 - [Examples](examples.md)
 - [Credits](credits.md)
 - [Contributing](contributing.md)

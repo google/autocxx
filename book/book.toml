@@ -16,6 +16,8 @@ command = "../target/debug/autocxx-mdbook-preprocessor"
 [preprocessor.mermaid]
 command = "mdbook-mermaid"
 
+[output.linkcheck]
+
 [output.html]
 cname = "autocxx.github.io"
 git-repository-url = "https://github.com/google/autocxx"
