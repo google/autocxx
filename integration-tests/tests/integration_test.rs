@@ -5282,6 +5282,54 @@ fn test_error_generated_for_pod_with_nontrivial_move_constructor() {
 }
 
 #[test]
+fn test_double_destruction() {
+    let hdr = indoc! {"
+        #include <stdio.h>
+        #include <stdlib.h>
+        // A simple type to let Rust verify the destructor is run.
+        struct DestructorFlag {
+            DestructorFlag() = default;
+            DestructorFlag(const DestructorFlag&) = default;
+            DestructorFlag(DestructorFlag&&) = default;
+
+            ~DestructorFlag() {
+                if (!flag) return;
+                if (*flag) {
+                    fprintf(stderr, \"DestructorFlag is already set\\n\");
+                    abort();
+                }
+                *flag = true;
+                // Note we deliberately do NOT clear the value of `flag`, to catch Rust calling
+                // this destructor twice.
+            }
+
+            bool *flag = nullptr;
+        };
+
+        struct ExplicitlyDefaulted {
+            ExplicitlyDefaulted() = default;
+            ~ExplicitlyDefaulted() = default;
+
+            DestructorFlag flag;
+
+            void set_flag(bool *flag_pointer) { flag.flag = flag_pointer; }
+        };
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut moveit_t = ffi::ExplicitlyDefaulted::new();
+        }
+        let mut destructor_flag = false;
+        unsafe {
+            moveit_t.as_mut().set_flag(&mut destructor_flag);
+        }
+        std::mem::drop(moveit_t);
+        assert!(destructor_flag, "Destructor did not run with moveit for {}", quote::quote!{$t});
+    };
+    run_test("", hdr, rs, &[], &["DestructorFlag", "ExplicitlyDefaulted"]);
+}
+
+#[test]
 fn test_keyword_function() {
     let hdr = indoc! {"
         inline void move(int a) {};
