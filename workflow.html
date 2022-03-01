@@ -178,8 +178,8 @@ need to enable <em>both</em>:</p>
 bindings for all your C++ APIs. This may manifest as a hard failure or a soft
 failure:</p>
 <ul>
-<li>If you specified such an item in a [<code>generate</code>] directive (or similar such
-as [<code>generate_pod</code>]) then your build will fail.</li>
+<li>If you specified such an item in a <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate</code></a> directive (or similar such
+as <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod</code></a>) then your build will fail.</li>
 <li>If such APIs are methods belonging to a type, <code>autocxx</code> will generate other
 methods for the type but ignore those.</li>
 </ul>
@@ -189,15 +189,15 @@ as rust documentation explaining what went wrong.</p>
 <ul>
 <li>Add more, simpler C++ APIs which fulfil the same need but are compatible with
 <code>autocxx</code>.</li>
-<li>Write manual bindings. This is most useful if a type is supported by [cxx]
+<li>Write manual bindings. This is most useful if a <a href="https://cxx.rs/bindings.html">type is supported</a> by <code>cxx</code>
 but not <code>autocxx</code> (for example, at the time of writing <code>std::array</code>). See
 the later section on 'combinining automatic and manual bindings'.</li>
 </ul>
 <h1 id="mixing-manual-and-automated-bindings"><a class="header" href="#mixing-manual-and-automated-bindings">Mixing manual and automated bindings</a></h1>
-<p><code>autocxx</code> uses [cxx] underneath, and its build process will happily spot and
-process and manually-crafted [<code>cxx::bridge</code>] mods which you include in your
+<p><code>autocxx</code> uses <a href="https://cxx.rs"><code>cxx</code></a> underneath, and its build process will happily spot and
+process and manually-crafted <a href="https://cxx.rs/concepts.html"><code>cxx::bridge</code> mods</a> which you include in your
 Rust source code. A common pattern good be to use <code>autocxx</code> to generate
-all the bindings possible, then hand-craft a [<code>cxx::bridge</code>] mod for the
+all the bindings possible, then hand-craft a <code>cxx::bridge</code> mod for the
 remainder where <code>autocxx</code> falls short.</p>
 <p>To do this, you'll need to use the <a href="https://cxx.rs/extern-c++.html#reusing-existing-binding-types">ability of one cxx::bridge mod to refer to types from another</a>,
 for example:</p>

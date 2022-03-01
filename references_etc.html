@@ -148,7 +148,7 @@
 <li>By <code>std::weak_ptr</code></li>
 <li>(Soon to come) By rvalue reference (that is, as a move parameter)</li>
 </ul>
-<p>(all of this is because the underlying [<code>cxx</code>] crate has such versatility).
+<p>(all of this is because the underlying <a href="https://cxx.rs"><code>cxx</code></a> crate has such versatility).
 Some of these have some quirks in the way they're exposed in Rust, described below.</p>
 <h2 id="passing-between-c-and-rust-by-value"><a class="header" href="#passing-between-c-and-rust-by-value">Passing between C++ and Rust by value</a></h2>
 <p>Rust is free to move data around at any time. That's <em>not OK</em> for some C++ types
@@ -162,18 +162,18 @@ has no visibility into whether a C++ type meets these criteria. What do we do?</
 into a <code>std::unique_ptr</code> before being passed to Rust, and similarly moved out
 of a <code>std::unique_ptr</code> when passed from Rust to C++.</li>
 <li>If you know that your C++ type can be safely byte-copied, then you can
-override this behavior by using [<code>generate_pod</code>] instead of [<code>generate</code>].</li>
+override this behavior by using <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod</code></a> instead of <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate</code></a>.</li>
 </ul>
-<p>There's not a significant ergonomic problem from the use of [<code>cxx::UniquePtr</code>].
-The main negative of the automatic boxing into [<code>cxx::UniquePtr</code>] is performance:
+<p>There's not a significant ergonomic problem from the use of <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>.
+The main negative of the automatic boxing into <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> is performance:
 specifically, the need to
 allocate heap cells on the C++ side and move data into and out of them.
 You don't want to be doing this inside a tight loop (but if you're calling
 across the C++/Rust boundary in a tight loop, perhaps reconsider that boundary
 anyway).</p>
 <p>If you want your type to be transferred between Rust and C++ truly <em>by value</em>
-then use [<code>generate_pod</code>] instead of [<code>generate</code>].</p>
-<p>Specifically, to be compatible with [<code>generate_pod</code>], your C++ type must either:</p>
+then use <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod</code></a> instead of <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate</code></a>.</p>
+<p>Specifically, to be compatible with <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod</code></a>, your C++ type must either:</p>
 <ul>
 <li>Lack a move constructor <em>and</em> lack a destructor</li>
 <li>Or contain a human promise that it's relocatable, by implementing
@@ -185,7 +185,7 @@ the C++ trait <code>IsRelocatable</code> per the instructions in
 it also makes a difference to any functions which take or return that type.
 If there's a C++ function which takes a struct by value, but that struct
 is not declared as POD-safe, then we'll generate wrapper functions to move
-that type into and out of [<code>cxx::UniquePtr</code>]s.</p>
+that type into and out of <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>s.</p>
 <p>There is one other option under construction. The <code>moveit</code> crate replicates
 C++ value move and copying semantics in Rust. There is limited early support
 for <code>moveit</code> within autocxx; specifically, you can call C++ constructors
@@ -197,7 +197,7 @@ passed into C++ functions which take non-POD types by value. This facility
 is therefore best avoided for now until it's more complete - but see
 <code>examples/non-trivial-type-on-stack</code> if you want to see how to use it.</p>
 <h3 id="references-and-pointers"><a class="header" href="#references-and-pointers">References and pointers</a></h3>
-<p>We follow [cxx] norms here. Specifically:</p>
+<p>We follow <a href="https://cxx.rs"><code>cxx</code></a> norms here. Specifically:</p>
 <ul>
 <li>A C++ reference becomes a Rust reference</li>
 <li>A C++ pointer becomes a Rust pointer.</li>
@@ -213,22 +213,22 @@ mutation, or it might have a lifetime that could disappear at any moment.
 As a human, you must promise that you understand the constraints around
 use of that pointer and that's what the <code>unsafe</code> keyword is for.</p>
 <p>Exactly the same issues apply to C++ references <em>in theory</em>, but in practice,
-they usually don't. Therefore [cxx] has taken the view that we can &quot;trust&quot;
+they usually don't. Therefore <a href="https://cxx.rs"><code>cxx</code></a> has taken the view that we can &quot;trust&quot;
 a C++ reference to a higher degree than a pointer, and autocxx follows that
 lead. In practice, of course, references are rarely return values from C++
 APIs so we rarely have to navel-gaze about the trustworthiness of a
 reference.</p>
-<p>(See also the discussion of [<code>safety</code>] - if you haven't specified
+<p>(See also the discussion of <a href="safety.html"><code>safety</code></a> - if you haven't specified
 an unsafety policy, <em>all</em> C++ APIs require <code>unsafe</code> so the discussion is moot.)</p>
 <p>If you're given a C++ object by pointer, and you want to interact with it,
 you'll need to figure out the guarantees attached to the C++ object - most
 notably its lifetime. To see some of the decision making process involved
 see the <a href="https://github.com/google/autocxx/tree/main/examples/steam-mini/src/main.rs">Steam example</a>.</p>
-<h3 id="cxxuniqueptrs"><a class="header" href="#cxxuniqueptrs">[<code>cxx::UniquePtr</code>]s</a></h3>
-<p>We use [<code>cxx::UniquePtr</code>] in completely the normal way, but there are a few
+<h3 id="cxxuniqueptrs"><a class="header" href="#cxxuniqueptrs"><a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>s</a></h3>
+<p>We use <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> in completely the normal way, but there are a few
 quirks which you're more likely to run into with <code>autocxx</code>.</p>
 <ul>
-<li>Calling methods: you may need to use [<code>cxx::UniquePtr::pin_mut</code>] to get
+<li>Calling methods: you may need to use <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut"><code>cxx::UniquePtr::pin_mut</code></a> to get
 a reference on which you can call a method.</li>
 <li>Getting a raw pointer in order to pass to some pre-existing function:
 at present you need to do:

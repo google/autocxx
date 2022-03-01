@@ -308,8 +308,8 @@ need to enable <em>both</em>:</p>
 bindings for all your C++ APIs. This may manifest as a hard failure or a soft
 failure:</p>
 <ul>
-<li>If you specified such an item in a [<code>generate</code>] directive (or similar such
-as [<code>generate_pod</code>]) then your build will fail.</li>
+<li>If you specified such an item in a <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate</code></a> directive (or similar such
+as <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod</code></a>) then your build will fail.</li>
 <li>If such APIs are methods belonging to a type, <code>autocxx</code> will generate other
 methods for the type but ignore those.</li>
 </ul>
@@ -319,15 +319,15 @@ as rust documentation explaining what went wrong.</p>
 <ul>
 <li>Add more, simpler C++ APIs which fulfil the same need but are compatible with
 <code>autocxx</code>.</li>
-<li>Write manual bindings. This is most useful if a type is supported by [cxx]
+<li>Write manual bindings. This is most useful if a <a href="https://cxx.rs/bindings.html">type is supported</a> by <code>cxx</code>
 but not <code>autocxx</code> (for example, at the time of writing <code>std::array</code>). See
 the later section on 'combinining automatic and manual bindings'.</li>
 </ul>
 <h1 id="mixing-manual-and-automated-bindings"><a class="header" href="#mixing-manual-and-automated-bindings">Mixing manual and automated bindings</a></h1>
-<p><code>autocxx</code> uses [cxx] underneath, and its build process will happily spot and
-process and manually-crafted [<code>cxx::bridge</code>] mods which you include in your
+<p><code>autocxx</code> uses <a href="https://cxx.rs"><code>cxx</code></a> underneath, and its build process will happily spot and
+process and manually-crafted <a href="https://cxx.rs/concepts.html"><code>cxx::bridge</code> mods</a> which you include in your
 Rust source code. A common pattern good be to use <code>autocxx</code> to generate
-all the bindings possible, then hand-craft a [<code>cxx::bridge</code>] mod for the
+all the bindings possible, then hand-craft a <code>cxx::bridge</code> mod for the
 remainder where <code>autocxx</code> falls short.</p>
 <p>To do this, you'll need to use the <a href="https://cxx.rs/extern-c++.html#reusing-existing-binding-types">ability of one cxx::bridge mod to refer to types from another</a>,
 for example:</p>
@@ -378,7 +378,7 @@ see the chapter on <a href="cpp_types.html">C++ types</a>.</li>
 <h1 id="configuring-the-build---if-youre-not-using-cargo"><a class="header" href="#configuring-the-build---if-youre-not-using-cargo">Configuring the build - if you're not using cargo</a></h1>
 <p>See the <code>autocxx-gen</code> crate. You'll need to:</p>
 <ul>
-<li>Run the <code>codegen</code> phase. You'll need to use the [autocxx-gen]
+<li>Run the <code>codegen</code> phase. You'll need to use the <a href="https://crates.io/crates/autocxx-gen"><code>autocxx-gen</code></a>
 tool to process the .rs code into C++ header and
 implementation files. This will also generate <code>.rs</code> side bindings.</li>
 <li>Educate the procedural macro about where to find the generated <code>.rs</code> bindings. Set the
@@ -417,13 +417,13 @@ because it allows only a single <code>include_cpp!</code> block per <code>.rs</c
 <h2 id="non-pod-types"><a class="header" href="#non-pod-types">Non-POD types</a></h2>
 <p>Non-POD types can be stored:</p>
 <ul>
-<li>In a [<code>cxx::UniquePtr</code>]. This is cxx's Rust wrapper for <code>std::unique_ptr</code> - so the object is stored in the C++ heap. Most of the time you handle a C++ object from <code>autocxx</code>, it will be stored in one of these.</li>
-<li>In a [<code>Box</code>] - so the object is stored on the Rust heap. This is kind of pointless. Don't do this.</li>
-<li>On the Rust stack, using the [<code>autocxx::moveit</code>] macro.</li>
+<li>In a <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>. This is cxx's Rust wrapper for <code>std::unique_ptr</code> - so the object is stored in the C++ heap. Most of the time you handle a C++ object from <code>autocxx</code>, it will be stored in one of these.</li>
+<li>In a <a href="https://doc.rust-lang.org/std/boxed/struct.Box.html"><code>Box</code></a> - so the object is stored on the Rust heap. This is kind of pointless. Don't do this.</li>
+<li>On the Rust stack, using the <a href="https://docs.rs/moveit/latest/moveit/macro.moveit.html"><code>autocxx::moveit</code></a> macro.</li>
 </ul>
-<p>If in doubt, use [<code>cxx::UniquePtr</code>]. It's simple and ergonomic.</p>
+<p>If in doubt, use <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>. It's simple and ergonomic.</p>
 <h2 id="whose-heap-is-it-anyway"><a class="header" href="#whose-heap-is-it-anyway">Whose heap is it anyway?</a></h2>
-<p>Specifically [<code>cxx::UniquePtr</code>] is a binding to <code>std::unique_ptr&lt;T,std::default_delete&lt;T&gt;&gt;</code> which means the object will be deleted using the C++ <code>delete</code> operator. This will respect any overridden <code>operator delete</code> on the type, and similarly, the functions which <code>autocxx</code> provides to <em>construct</em> types should respect overridden <code>operator new</code>. This means: if your C++ type has code to create itself in some special or unusual heap partition, that should work fine.</p>
+<p>Specifically <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> is a binding to <code>std::unique_ptr&lt;T,std::default_delete&lt;T&gt;&gt;</code> which means the object will be deleted using the C++ <code>delete</code> operator. This will respect any overridden <code>operator delete</code> on the type, and similarly, the functions which <code>autocxx</code> provides to <em>construct</em> types should respect overridden <code>operator new</code>. This means: if your C++ type has code to create itself in some special or unusual heap partition, that should work fine.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="pointers-references-values"><a class="header" href="#pointers-references-values">Pointers, references, values</a></h1>
 <p><code>autocxx</code> knows how to deal with C++ APIs which take C++ types:</p>
 <ul>
@@ -435,7 +435,7 @@ because it allows only a single <code>include_cpp!</code> block per <code>.rs</c
 <li>By <code>std::weak_ptr</code></li>
 <li>(Soon to come) By rvalue reference (that is, as a move parameter)</li>
 </ul>
-<p>(all of this is because the underlying [<code>cxx</code>] crate has such versatility).
+<p>(all of this is because the underlying <a href="https://cxx.rs"><code>cxx</code></a> crate has such versatility).
 Some of these have some quirks in the way they're exposed in Rust, described below.</p>
 <h2 id="passing-between-c-and-rust-by-value"><a class="header" href="#passing-between-c-and-rust-by-value">Passing between C++ and Rust by value</a></h2>
 <p>Rust is free to move data around at any time. That's <em>not OK</em> for some C++ types
@@ -449,18 +449,18 @@ has no visibility into whether a C++ type meets these criteria. What do we do?</
 into a <code>std::unique_ptr</code> before being passed to Rust, and similarly moved out
 of a <code>std::unique_ptr</code> when passed from Rust to C++.</li>
 <li>If you know that your C++ type can be safely byte-copied, then you can
-override this behavior by using [<code>generate_pod</code>] instead of [<code>generate</code>].</li>
+override this behavior by using <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod</code></a> instead of <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate</code></a>.</li>
 </ul>
-<p>There's not a significant ergonomic problem from the use of [<code>cxx::UniquePtr</code>].
-The main negative of the automatic boxing into [<code>cxx::UniquePtr</code>] is performance:
+<p>There's not a significant ergonomic problem from the use of <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>.
+The main negative of the automatic boxing into <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> is performance:
 specifically, the need to
 allocate heap cells on the C++ side and move data into and out of them.
 You don't want to be doing this inside a tight loop (but if you're calling
 across the C++/Rust boundary in a tight loop, perhaps reconsider that boundary
 anyway).</p>
 <p>If you want your type to be transferred between Rust and C++ truly <em>by value</em>
-then use [<code>generate_pod</code>] instead of [<code>generate</code>].</p>
-<p>Specifically, to be compatible with [<code>generate_pod</code>], your C++ type must either:</p>
+then use <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod</code></a> instead of <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate</code></a>.</p>
+<p>Specifically, to be compatible with <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod</code></a>, your C++ type must either:</p>
 <ul>
 <li>Lack a move constructor <em>and</em> lack a destructor</li>
 <li>Or contain a human promise that it's relocatable, by implementing
@@ -472,7 +472,7 @@ the C++ trait <code>IsRelocatable</code> per the instructions in
 it also makes a difference to any functions which take or return that type.
 If there's a C++ function which takes a struct by value, but that struct
 is not declared as POD-safe, then we'll generate wrapper functions to move
-that type into and out of [<code>cxx::UniquePtr</code>]s.</p>
+that type into and out of <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>s.</p>
 <p>There is one other option under construction. The <code>moveit</code> crate replicates
 C++ value move and copying semantics in Rust. There is limited early support
 for <code>moveit</code> within autocxx; specifically, you can call C++ constructors
@@ -484,7 +484,7 @@ passed into C++ functions which take non-POD types by value. This facility
 is therefore best avoided for now until it's more complete - but see
 <code>examples/non-trivial-type-on-stack</code> if you want to see how to use it.</p>
 <h3 id="references-and-pointers"><a class="header" href="#references-and-pointers">References and pointers</a></h3>
-<p>We follow [cxx] norms here. Specifically:</p>
+<p>We follow <a href="https://cxx.rs"><code>cxx</code></a> norms here. Specifically:</p>
 <ul>
 <li>A C++ reference becomes a Rust reference</li>
 <li>A C++ pointer becomes a Rust pointer.</li>
@@ -500,22 +500,22 @@ mutation, or it might have a lifetime that could disappear at any moment.
 As a human, you must promise that you understand the constraints around
 use of that pointer and that's what the <code>unsafe</code> keyword is for.</p>
 <p>Exactly the same issues apply to C++ references <em>in theory</em>, but in practice,
-they usually don't. Therefore [cxx] has taken the view that we can &quot;trust&quot;
+they usually don't. Therefore <a href="https://cxx.rs"><code>cxx</code></a> has taken the view that we can &quot;trust&quot;
 a C++ reference to a higher degree than a pointer, and autocxx follows that
 lead. In practice, of course, references are rarely return values from C++
 APIs so we rarely have to navel-gaze about the trustworthiness of a
 reference.</p>
-<p>(See also the discussion of [<code>safety</code>] - if you haven't specified
+<p>(See also the discussion of <a href="safety.html"><code>safety</code></a> - if you haven't specified
 an unsafety policy, <em>all</em> C++ APIs require <code>unsafe</code> so the discussion is moot.)</p>
 <p>If you're given a C++ object by pointer, and you want to interact with it,
 you'll need to figure out the guarantees attached to the C++ object - most
 notably its lifetime. To see some of the decision making process involved
 see the <a href="https://github.com/google/autocxx/tree/main/examples/steam-mini/src/main.rs">Steam example</a>.</p>
-<h3 id="cxxuniqueptrs"><a class="header" href="#cxxuniqueptrs">[<code>cxx::UniquePtr</code>]s</a></h3>
-<p>We use [<code>cxx::UniquePtr</code>] in completely the normal way, but there are a few
+<h3 id="cxxuniqueptrs"><a class="header" href="#cxxuniqueptrs"><a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>s</a></h3>
+<p>We use <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> in completely the normal way, but there are a few
 quirks which you're more likely to run into with <code>autocxx</code>.</p>
 <ul>
-<li>Calling methods: you may need to use [<code>cxx::UniquePtr::pin_mut</code>] to get
+<li>Calling methods: you may need to use <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut"><code>cxx::UniquePtr::pin_mut</code></a> to get
 a reference on which you can call a method.</li>
 <li>Getting a raw pointer in order to pass to some pre-existing function:
 at present you need to do:
@@ -527,7 +527,7 @@ This may be simplified in future.
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="built-in-types"><a class="header" href="#built-in-types">Built-in types</a></h1>
 <p><code>autocxx</code> relies primarily on the <a href="https://cxx.rs/bindings.html">standard cxx types</a>.
-In particular you should become familiar with [<code>cxx::UniquePtr</code>] and [<code>cxx::CxxString</code>].</p>
+In particular you should become familiar with <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> and <a href="https://docs.rs/cxx/latest/cxx/struct.CxxString.html"><code>cxx::CxxString</code></a>.</p>
 <p>There are a few additional integer types, such as <a href="https://docs.rs/autocxx/latest/autocxx/struct.c_int.html"><code>c_int</code></a>,
 which are not yet upstreamed to <code>cxx</code>. These are to support those pesky C/C++ integer types
 which do not have a predictable number of bits on different machines.</p>
@@ -550,7 +550,7 @@ fn main() {
 
 </code></pre>
 <h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
-<p><code>autocxx</code> uses [<code>cxx::CxxString</code>]. However, as noted above, we can't
+<p><code>autocxx</code> uses <a href="https://docs.rs/cxx/latest/cxx/struct.CxxString.html"><code>cxx::CxxString</code></a>. However, as noted above, we can't
 just pass a C++ string by value, so we'll box and unbox it automatically
 such that you're really dealing with <code>UniquePtr&lt;CxxString&gt;</code> on the Rust
 side, even if the API just took or returned a plain old <code>std::string</code>.</p>
@@ -563,7 +563,7 @@ converted transparently to a C++ string.</p>
 documentation because they're dynamically generated in <em>your</em> code
 so that they can call through to a <code>make_string</code> implementation in
 the C++ that we're injecting into your C++ build system.</p>
-<p>(None of that happens if you use [<code>exclude_utilities</code>], so don't do that.)</p>
+<p>(None of that happens if you use <a href="https://docs.rs/autocxx/latest/autocxx/macro.exclude_utilities.html"><code>exclude_utilities</code></a>, so don't do that.)</p>
 <h4 id="c-header-3"><a class="header" href="#c-header-3">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;string&gt;
 #include &lt;cstdint&gt;
@@ -588,9 +588,9 @@ fn main() {
 (for example) you can pass its mutable reference or pointer into some
 pre-existing C++ API, call <code>ffi::make_string(&quot;&quot;)</code> which will return
 a blank <code>UniquePtr&lt;CxxString&gt;</code>.</p>
-<p>Don't attempt to use [<code>cxx::let_cpp_string</code>] which will allocate the
+<p>Don't attempt to use <a href="https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html"><code>cxx::let_cpp_string</code></a> which will allocate the
 string on the stack, and is generally incompatible with the
-[<code>cxx::UniquePtr</code>]-based approaches we use here.</p>
+<a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>-based approaches we use here.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="naming"><a class="header" href="#naming">Naming</a></h1>
 <h2 id="namespaces"><a class="header" href="#namespaces">Namespaces</a></h2>
 <p>The C++ namespace structure is reflected in mods within the generated
@@ -628,9 +628,9 @@ a memcpy. Such self-referential pointers are common - even some implementations 
 </ul>
 <p>Non-POD types are awkward:</p>
 <ul>
-<li>You can't just <em>have</em> one as a Rust variable. Normally you hold them in a [<code>cxx::UniquePtr</code>], though there are other options.</li>
+<li>You can't just <em>have</em> one as a Rust variable. Normally you hold them in a <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>, though there are other options.</li>
 <li>There is no access to fields (yet).</li>
-<li>You can't even have a <code>&amp;mut</code> reference to one, because then you might be able to use [<code>std::mem::swap</code>] or similar. You can have a <code>Pin&lt;&amp;mut&gt;</code> reference, which is more fiddly.</li>
+<li>You can't even have a <code>&amp;mut</code> reference to one, because then you might be able to use <a href="https://doc.rust-lang.org/stable/std/mem/fn.swap.html"><code>std::mem::swap</code></a> or similar. You can have a <code>Pin&lt;&amp;mut&gt;</code> reference, which is more fiddly.</li>
 </ul>
 <p>By default, <code>autocxx</code> generates non-POD types. You can request a POD type using <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod!</code></a>. Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, and if you <em>use</em> it as a POD type
 at the C++ boundary, your build will fail thanks to some static assertions generated in the C++.</p>
@@ -691,7 +691,7 @@ e.g. <code>std::unique_ptr</code>, it should work as you expect. For other gener
 we synthesize a concrete Rust type, corresponding to a C++ typedef, for each
 concrete instantiation of the type. Such generated types are always opaque,
 and never have methods attached. That's therefore enough to pass them
-between return types and parameters of other functions within [<code>cxx::UniquePtr</code>]s
+between return types and parameters of other functions within <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>s
 but not really enough to do anything else with these types yet.</p>
 <p>To make them more useful, you might have to add extra C++ functions to extract
 data or otherwise deal with them.</p>
@@ -768,7 +768,7 @@ using the C++ observer/listener pattern.</p>
 implement the Observer pattern, they're documented under <a href="rust_calls.html">calls from C++ to Rust</a>.</p>
 <h2 id="exceptions"><a class="header" href="#exceptions">Exceptions</a></h2>
 <p>Exceptions are not supported. If your C++ code is compiled with exceptions,
-you can expect serious runtime explosions. The underlying [cxx] crate has
+you can expect serious runtime explosions. The underlying <a href="https://cxx.rs"><code>cxx</code></a> crate has
 exception support, so it would be possible to add them.</p>
 <h2 id="preprocessor-symbols"><a class="header" href="#preprocessor-symbols">Preprocessor symbols</a></h2>
 <p><code>#define</code> and other preprocessor symbols will appear as constants.

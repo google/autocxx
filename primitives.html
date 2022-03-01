@@ -139,7 +139,7 @@
                     <main>
                         <h1 id="built-in-types"><a class="header" href="#built-in-types">Built-in types</a></h1>
 <p><code>autocxx</code> relies primarily on the <a href="https://cxx.rs/bindings.html">standard cxx types</a>.
-In particular you should become familiar with [<code>cxx::UniquePtr</code>] and [<code>cxx::CxxString</code>].</p>
+In particular you should become familiar with <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> and <a href="https://docs.rs/cxx/latest/cxx/struct.CxxString.html"><code>cxx::CxxString</code></a>.</p>
 <p>There are a few additional integer types, such as <a href="https://docs.rs/autocxx/latest/autocxx/struct.c_int.html"><code>c_int</code></a>,
 which are not yet upstreamed to <code>cxx</code>. These are to support those pesky C/C++ integer types
 which do not have a predictable number of bits on different machines.</p>
@@ -162,7 +162,7 @@ fn main() {
 
 </code></pre>
 <h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
-<p><code>autocxx</code> uses [<code>cxx::CxxString</code>]. However, as noted above, we can't
+<p><code>autocxx</code> uses <a href="https://docs.rs/cxx/latest/cxx/struct.CxxString.html"><code>cxx::CxxString</code></a>. However, as noted above, we can't
 just pass a C++ string by value, so we'll box and unbox it automatically
 such that you're really dealing with <code>UniquePtr&lt;CxxString&gt;</code> on the Rust
 side, even if the API just took or returned a plain old <code>std::string</code>.</p>
@@ -175,7 +175,7 @@ converted transparently to a C++ string.</p>
 documentation because they're dynamically generated in <em>your</em> code
 so that they can call through to a <code>make_string</code> implementation in
 the C++ that we're injecting into your C++ build system.</p>
-<p>(None of that happens if you use [<code>exclude_utilities</code>], so don't do that.)</p>
+<p>(None of that happens if you use <a href="https://docs.rs/autocxx/latest/autocxx/macro.exclude_utilities.html"><code>exclude_utilities</code></a>, so don't do that.)</p>
 <h4 id="c-header-1"><a class="header" href="#c-header-1">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;string&gt;
 #include &lt;cstdint&gt;
@@ -200,9 +200,9 @@ fn main() {
 (for example) you can pass its mutable reference or pointer into some
 pre-existing C++ API, call <code>ffi::make_string(&quot;&quot;)</code> which will return
 a blank <code>UniquePtr&lt;CxxString&gt;</code>.</p>
-<p>Don't attempt to use [<code>cxx::let_cpp_string</code>] which will allocate the
+<p>Don't attempt to use <a href="https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html"><code>cxx::let_cpp_string</code></a> which will allocate the
 string on the stack, and is generally incompatible with the
-[<code>cxx::UniquePtr</code>]-based approaches we use here.</p>
+<a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>-based approaches we use here.</p>
 
                     </main>
 
