@@ -6,7 +6,7 @@ Building in a `cargo` environment is explained in [the tutorial](tutorial.md).
 
 See the `autocxx-gen` crate. You'll need to:
 
-* Run the `codegen` phase. You'll need to use the [autocxx-gen]
+* Run the `codegen` phase. You'll need to use the [`autocxx-gen`](https://crates.io/crates/autocxx-gen)
   tool to process the .rs code into C++ header and
   implementation files. This will also generate `.rs` side bindings.
 * Educate the procedural macro about where to find the generated `.rs` bindings. Set the

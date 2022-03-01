@@ -48,8 +48,8 @@ need to enable _both_:
 Either way, you'll find (for sure!) that `autocxx` hasn't been able to generate
 bindings for all your C++ APIs. This may manifest as a hard failure or a soft
 failure:
-* If you specified such an item in a [`generate`] directive (or similar such
-  as [`generate_pod`]) then your build will fail.
+* If you specified such an item in a [`generate`](https://docs.rs/autocxx/latest/autocxx/macro.generate.html) directive (or similar such
+  as [`generate_pod`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html)) then your build will fail.
 * If such APIs are methods belonging to a type, `autocxx` will generate other
   methods for the type but ignore those.
 
@@ -59,16 +59,16 @@ as rust documentation explaining what went wrong.
 If this happens (and it will!) your options are:
 * Add more, simpler C++ APIs which fulfil the same need but are compatible with
   `autocxx`.
-* Write manual bindings. This is most useful if a type is supported by [cxx]
+* Write manual bindings. This is most useful if a [type is supported](https://cxx.rs/bindings.html) by `cxx`
   but not `autocxx` (for example, at the time of writing `std::array`). See
   the later section on 'combinining automatic and manual bindings'.
 
 # Mixing manual and automated bindings
 
-`autocxx` uses [cxx] underneath, and its build process will happily spot and
-process and manually-crafted [`cxx::bridge`] mods which you include in your
+`autocxx` uses [`cxx`](https://cxx.rs) underneath, and its build process will happily spot and
+process and manually-crafted [`cxx::bridge` mods](https://cxx.rs/concepts.html) which you include in your
 Rust source code. A common pattern good be to use `autocxx` to generate
-all the bindings possible, then hand-craft a [`cxx::bridge`] mod for the
+all the bindings possible, then hand-craft a `cxx::bridge` mod for the
 remainder where `autocxx` falls short.
 
 To do this, you'll need to use the [ability of one cxx::bridge mod to refer to types from another](https://cxx.rs/extern-c++.html#reusing-existing-binding-types),

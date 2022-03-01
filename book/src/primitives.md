@@ -1,7 +1,7 @@
 # Built-in types
 
 `autocxx` relies primarily on the [standard cxx types](https://cxx.rs/bindings.html).
-In particular you should become familiar with [`cxx::UniquePtr`] and [`cxx::CxxString`].
+In particular you should become familiar with [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html) and [`cxx::CxxString`](https://docs.rs/cxx/latest/cxx/struct.CxxString.html).
 
 There are a few additional integer types, such as [`c_int`](https://docs.rs/autocxx/latest/autocxx/struct.c_int.html),
 which are not yet upstreamed to `cxx`. These are to support those pesky C/C++ integer types
@@ -29,7 +29,7 @@ fn main() {
 
 ## Strings
 
-`autocxx` uses [`cxx::CxxString`]. However, as noted above, we can't
+`autocxx` uses [`cxx::CxxString`](https://docs.rs/cxx/latest/cxx/struct.CxxString.html). However, as noted above, we can't
 just pass a C++ string by value, so we'll box and unbox it automatically
 such that you're really dealing with `UniquePtr<CxxString>` on the Rust
 side, even if the API just took or returned a plain old `std::string`.
@@ -45,7 +45,7 @@ documentation because they're dynamically generated in _your_ code
 so that they can call through to a `make_string` implementation in
 the C++ that we're injecting into your C++ build system.
 
-(None of that happens if you use [`exclude_utilities`], so don't do that.)
+(None of that happens if you use [`exclude_utilities`](https://docs.rs/autocxx/latest/autocxx/macro.exclude_utilities.html), so don't do that.)
 
 ```rust,ignore,autocxx
 autocxx_integration_tests::doctest(
@@ -74,6 +74,6 @@ If you need to create a blank `UniquePtr<CxxString>` in Rust, such that
 pre-existing C++ API, call `ffi::make_string("")` which will return
 a blank `UniquePtr<CxxString>`.
 
-Don't attempt to use [`cxx::let_cpp_string`] which will allocate the
+Don't attempt to use [`cxx::let_cpp_string`](https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html) which will allocate the
 string on the stack, and is generally incompatible with the
-[`cxx::UniquePtr`]-based approaches we use here.
+[`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html)-based approaches we use here.
