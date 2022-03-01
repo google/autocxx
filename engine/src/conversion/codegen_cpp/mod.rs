@@ -202,7 +202,7 @@ impl<'a> CppCodeGenerator<'a> {
                         },
                     ..
                 } => {
-                    self.generate_pod_assertion(name.cpp_name());
+                    self.generate_pod_assertion(name.qualified_cpp_name());
                 }
                 _ => panic!("Should have filtered on needs_cpp_codegen"),
             }
