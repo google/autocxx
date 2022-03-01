@@ -306,6 +306,10 @@ macro_rules! ctype_wrapper {
         #[repr(transparent)]
         pub struct $r(pub ::std::os::raw::$r);
 
+        /// # Safety
+        ///
+        /// We assert that the namespace and type ID refer to a C++
+        /// type which is equivalent to this Rust type.
         unsafe impl autocxx_engine::cxx::ExternType for $r {
             type Id = autocxx_engine::cxx::type_id!($c);
             type Kind = autocxx_engine::cxx::kind::Trivial;
@@ -348,6 +352,10 @@ ctype_wrapper!(c_uchar, "c_uchar", "Newtype wrapper for an unsigned char");
 #[repr(transparent)]
 pub struct c_void(pub ::std::os::raw::c_void);
 
+/// # Safety
+///
+/// We assert that the namespace and type ID refer to a C++
+/// type which is equivalent to this Rust type.
 unsafe impl autocxx_engine::cxx::ExternType for c_void {
     type Id = autocxx_engine::cxx::type_id!(c_void);
     type Kind = autocxx_engine::cxx::kind::Trivial;
