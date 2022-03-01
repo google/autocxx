@@ -7673,7 +7673,6 @@ fn test_implicit_constructor_moveit() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/pull/852
 fn test_pass_by_value_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
@@ -7884,7 +7883,6 @@ fn test_emplace_uses_overridden_new_and_delete() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/833
 fn test_pass_by_reference_to_value_param() {
     let hdr = indoc! {"
     #include <stdint.h>
