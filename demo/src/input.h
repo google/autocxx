@@ -39,6 +39,6 @@ void Goat::add_a_horn() { horns++; }
 std::string Goat::describe() const {
     std::ostrstream oss;
     std::string plural = horns == 1 ? "" : "s";
-    oss << "This goat has " << horns << "horn" << plural << ".";
+    oss << "This goat has " << horns << " horn" << plural << ".";
     return oss.str();
 }
