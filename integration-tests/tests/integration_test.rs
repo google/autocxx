@@ -7667,7 +7667,6 @@ fn test_implicit_constructor_moveit() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/pull/852
 fn test_pass_by_value_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
