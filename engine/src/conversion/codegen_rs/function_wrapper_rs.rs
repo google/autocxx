@@ -119,6 +119,16 @@ impl TypeConversionPolicy {
                 } else {
                     call
                 };
+                // This is the usual trick to put something on the stack, then
+                // immediately shadow the variable name so it can't be accessed or moved.
+                // Ideally, the second line here would be
+                //   let #space_var_name = Pin::new_unchecked(&mut #space_var_name);
+                // and then from that point onwards the original value could
+                // only ever be accessed via a pinned reference. This turns
+                // out to be hard.
+                // https://github.com/google/autocxx/issues/856
+                // In practice, as this is generated code we can guarantee
+                // nobody else accesses #space_var_name at all, so this is safe.
                 (
                     Some(quote! {
                         let mut #space_var_name = autocxx::ValueParamHandler::new(#var_name);
