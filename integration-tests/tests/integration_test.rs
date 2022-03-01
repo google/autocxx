@@ -5293,54 +5293,41 @@ fn test_double_destruction() {
         #include <stdio.h>
         #include <stdlib.h>
         // A simple type to let Rust verify the destructor is run.
-        struct DestructorFlag {
-            DestructorFlag() = default;
-            DestructorFlag(const DestructorFlag&) = default;
-            DestructorFlag(DestructorFlag&&) = default;
+        struct NotTriviallyDestructible {
+            NotTriviallyDestructible() = default;
+            NotTriviallyDestructible(const NotTriviallyDestructible&) = default;
+            NotTriviallyDestructible(NotTriviallyDestructible&&) = default;
 
-            ~DestructorFlag() {
-                if (!flag) return;
-                if (*flag) {
-                    fprintf(stderr, \"DestructorFlag is already set\\n\");
-                    abort();
-                }
-                *flag = true;
-                // Note we deliberately do NOT clear the value of `flag`, to catch Rust calling
-                // this destructor twice.
-            }
-
-            bool *flag = nullptr;
+            ~NotTriviallyDestructible() {}
         };
 
         struct ExplicitlyDefaulted {
             ExplicitlyDefaulted() = default;
             ~ExplicitlyDefaulted() = default;
 
-            DestructorFlag flag;
-
-            void set_flag(bool *flag_pointer) { flag.flag = flag_pointer; }
+            NotTriviallyDestructible flag;
         };
     "};
     let rs = quote! {
         moveit! {
             let mut moveit_t = ffi::ExplicitlyDefaulted::new();
         }
-        let mut destructor_flag = false;
-        unsafe {
-            moveit_t.as_mut().set_flag(&mut destructor_flag);
-        }
-        std::mem::drop(moveit_t);
     };
     match do_run_test(
         "",
         hdr,
         rs,
-        directives_from_lists(&[], &["DestructorFlag", "ExplicitlyDefaulted"], None),
+        directives_from_lists(
+            &[],
+            &["NotTriviallyDestructible", "ExplicitlyDefaulted"],
+            None,
+        ),
         None,
         None,
         None,
     ) {
-        Err(TestError::CppBuild(_)) => {}
+        Err(TestError::CppBuild(_)) => {} // be sure this fails due to a static_assert
+        // rather than some runtime problem
         _ => panic!("Test didn't fail as expected"),
     };
 }
