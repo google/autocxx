@@ -469,10 +469,7 @@ impl<'a> CppCodeGenerator<'a> {
                 CppFunctionBody::AllocUninitialized(ty) => {
                     let namespaced_ty = self.namespaced_name(ty);
                     (
-                        format!(
-                            "new_appropriately<{}>(1, static_cast<{}*>(nullptr));",
-                            namespaced_ty, namespaced_ty
-                        ),
+                        format!("new_appropriately<{}>(1);", namespaced_ty,),
                         "".to_string(),
                         true,
                     )
