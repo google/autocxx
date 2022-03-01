@@ -23,10 +23,8 @@ jobs:
         with:
           mdbook-version: 'latest'
 
-      #- name: Install mdbook-linkcheck
-        #run: |
-          #curl -LSfs https://japaric.github.io/trust/install.sh | \
-            #sh -s -- --git Michael-F-Bryan/mdbook-linkcheck
+      - name: Install mdbook-linkcheck
+        run: cargo install mdbook-linkcheck
     
       - name: Install mdbook-mermaid
         run: |
@@ -41,5 +39,5 @@ jobs:
         if: ${{ github.ref == 'refs/heads/main' }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./book/build
+          publish_dir: ./book/build/html
           #cname: autocxx.rs

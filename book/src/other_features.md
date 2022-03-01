@@ -6,7 +6,7 @@ implement the Observer pattern, they're documented under [calls from C++ to Rust
 ## Exceptions
 
 Exceptions are not supported. If your C++ code is compiled with exceptions,
-you can expect serious runtime explosions. The underlying [cxx] crate has
+you can expect serious runtime explosions. The underlying [`cxx`](https://cxx.rs) crate has
 exception support, so it would be possible to add them.
 
 ## Preprocessor symbols
