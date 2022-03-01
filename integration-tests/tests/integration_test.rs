@@ -5253,22 +5253,27 @@ fn test_error_generated_for_array_dependent_method() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/835
 fn test_error_generated_for_pod_with_nontrivial_destructor() {
+    // take_a is necessary here because cxx won't generate the required
+    // static assertions unless the type is actually used in some context
+    // where cxx needs to decide it's trivial or non-trivial.
     let hdr = indoc! {"
         #include <cstdint>
         #include <functional>
         struct A {
             ~A() {}
         };
+        inline void take_a(A) {}
     "};
     let rs = quote! {};
-    run_test_expect_fail("", hdr, rs, &[], &["A"]);
+    run_test_expect_fail("", hdr, rs, &["take_a"], &["A"]);
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/835
 fn test_error_generated_for_pod_with_nontrivial_move_constructor() {
+    // take_a is necessary here because cxx won't generate the required
+    // static assertions unless the type is actually used in some context
+    // where cxx needs to decide it's trivial or non-trivial.
     let hdr = indoc! {"
         #include <cstdint>
         #include <functional>
@@ -5276,9 +5281,10 @@ fn test_error_generated_for_pod_with_nontrivial_move_constructor() {
             A() = default;
             A(A&&) {}
         };
+        inline void take_a(A) {}
     "};
     let rs = quote! {};
-    run_test_expect_fail("", hdr, rs, &[], &["A"]);
+    run_test_expect_fail("", hdr, rs, &["take_a"], &["A"]);
 }
 
 #[test]
@@ -7667,6 +7673,7 @@ fn test_implicit_constructor_moveit() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/pull/852
 fn test_pass_by_value_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
@@ -7877,6 +7884,7 @@ fn test_emplace_uses_overridden_new_and_delete() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/833
 fn test_pass_by_reference_to_value_param() {
     let hdr = indoc! {"
     #include <stdint.h>

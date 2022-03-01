@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use cxx::{memory::UniquePtrTarget, UniquePtr};
-use moveit::{CopyNew, New};
+// use moveit::{CopyNew, New};
 use std::{marker::PhantomPinned, mem::MaybeUninit, pin::Pin};
 
 /// A trait representing a parameter to a C++ function which is received
@@ -37,7 +37,7 @@ use std::{marker::PhantomPinned, mem::MaybeUninit, pin::Pin};
 /// # Use of `moveit` traits
 ///
 /// Most of the implementations of this trait require the type to implement
-/// [`CopyNew`], which is simply the `autocxx`/`moveit` way of saying that
+/// [`moveit::CopyNew`], which is simply the `autocxx`/`moveit` way of saying that
 /// the type has a copy constructor in C++.
 ///
 /// # Performance
@@ -76,24 +76,24 @@ pub trait ValueParam<T> {
     fn get_ptr(&mut self) -> *mut T;
 }
 
-impl<T> ValueParam<T> for &T
-where
-    T: CopyNew,
-{
-    type StackStorage = T;
+// impl<T> ValueParam<T> for &T
+// where
+//     T: CopyNew,
+// {
+//     type StackStorage = T;
 
-    fn needs_stack_space(&self) -> bool {
-        true
-    }
+//     fn needs_stack_space(&self) -> bool {
+//         true
+//     }
 
-    fn populate_stack_space(&self, this: Pin<&mut MaybeUninit<Self::StackStorage>>) {
-        unsafe { crate::moveit::new::copy(*self).new(this) }
-    }
+//     fn populate_stack_space(&self, this: Pin<&mut MaybeUninit<Self::StackStorage>>) {
+//         unsafe { crate::moveit::new::copy(*self).new(this) }
+//     }
 
-    fn get_ptr(&mut self) -> *mut T {
-        unreachable!()
-    }
-}
+//     fn get_ptr(&mut self) -> *mut T {
+//         unreachable!()
+//     }
+// }
 
 impl<T> ValueParam<T> for UniquePtr<T>
 where
@@ -117,32 +117,32 @@ where
     }
 }
 
-impl<T> ValueParam<T> for &UniquePtr<T>
-where
-    T: UniquePtrTarget + CopyNew,
-{
-    type StackStorage = T;
+// impl<T> ValueParam<T> for &UniquePtr<T>
+// where
+//     T: UniquePtrTarget + CopyNew,
+// {
+//     type StackStorage = T;
 
-    fn needs_stack_space(&self) -> bool {
-        true
-    }
+//     fn needs_stack_space(&self) -> bool {
+//         true
+//     }
 
-    fn populate_stack_space(&self, this: Pin<&mut MaybeUninit<Self::StackStorage>>) {
-        // Invoke a copy constructor on the Rust side, because we'll use std::move on the C++
-        // side.
-        unsafe {
-            crate::moveit::new::copy(
-                self.as_ref()
-                    .expect("Passed a NULL &UniquePtr as a C++ value parameter"),
-            )
-            .new(this)
-        }
-    }
+//     fn populate_stack_space(&self, this: Pin<&mut MaybeUninit<Self::StackStorage>>) {
+//         // Invoke a copy constructor on the Rust side, because we'll use std::move on the C++
+//         // side.
+//         unsafe {
+//             crate::moveit::new::copy(
+//                 self.as_ref()
+//                     .expect("Passed a NULL &UniquePtr as a C++ value parameter"),
+//             )
+//             .new(this)
+//         }
+//     }
 
-    fn get_ptr(&mut self) -> *mut T {
-        unreachable!()
-    }
-}
+//     fn get_ptr(&mut self) -> *mut T {
+//         unreachable!()
+//     }
+// }
 
 /// Implementation detail for how we pass value parameters into C++.
 /// This type is instantiated by auto-generated autocxx code each time we

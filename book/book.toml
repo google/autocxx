@@ -17,7 +17,7 @@ command = "../target/debug/autocxx-mdbook-preprocessor"
 command = "mdbook-mermaid"
 
 [output.html]
-cname = "autocxx.github.io"
+cname = "google.github.io/autocxx"
 git-repository-url = "https://github.com/google/autocxx"
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
 
