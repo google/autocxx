@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![forbid(unsafe_code)]
+
 use autocxx_engine::{BuilderBuild, BuilderContext, BuilderError, RebuildDependencyRecorder};
 use std::{collections::HashSet, io::Write, sync::Mutex};
 use std::{ffi::OsStr, path::Path};
