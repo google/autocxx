@@ -37,7 +37,7 @@ use std::{marker::PhantomPinned, mem::MaybeUninit, pin::Pin};
 /// # Use of `moveit` traits
 ///
 /// Most of the implementations of this trait require the type to implement
-/// [`moveit::CopyNew`], which is simply the `autocxx`/`moveit` way of saying that
+/// [`CopyNew`], which is simply the `autocxx`/`moveit` way of saying that
 /// the type has a copy constructor in C++.
 ///
 /// # Performance
