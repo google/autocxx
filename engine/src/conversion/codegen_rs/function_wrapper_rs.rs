@@ -109,7 +109,7 @@ impl TypeConversionPolicy {
                     panic!("Unexpected non-ident parameter name");
                 };
                 let space_var_name = make_ident(format!("{}_space", var_name));
-                let call = quote! { #space_var_name.populate()  };
+                let call = quote! { #space_var_name.populate();  };
                 let call = if wrap_in_unsafe {
                     quote! {
                         unsafe {
