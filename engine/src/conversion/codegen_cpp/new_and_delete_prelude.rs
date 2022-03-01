@@ -23,30 +23,28 @@ pub(super) static NEW_AND_DELETE_PRELUDE: &str = indoc! {"
     #include <stddef.h>
     #ifndef AUTOCXX_NEW_AND_DELETE_PRELUDE
     #define AUTOCXX_NEW_AND_DELETE_PRELUDE
-    template<class T>
-    auto delete_imp(T* ptr, int) -> decltype(T::operator delete(ptr), void()) {
+    // Mechanics to call custom operator new and delete
+    template <typename T>
+    auto delete_imp(T *ptr, int) -> decltype((void)T::operator delete(ptr)) {
       T::operator delete(ptr);
     }
-    template<class T>
-    auto delete_imp(T* ptr, long) -> decltype(::operator delete(ptr), void()) {
-      ::operator delete(ptr);
-    }
-    template<class T>
-    auto delete_appropriately(T* obj) -> decltype(delete_imp(obj, 0), void()) {
+    template <typename T> void delete_imp(T *ptr, long) { ::operator delete(ptr); }
+    template <typename T> void delete_appropriately(T *obj) {
+      // 0 is a better match for the first 'delete_imp' so will match
+      // preferentially.
       delete_imp(obj, 0);
     }
-    template<class T>
-    auto new_imp(size_t count, int, T*) -> decltype(T::operator new(count)) {
+    template <typename T>
+    auto new_imp(size_t count, int) -> decltype(T::operator new(count)) {
       return T::operator new(count);
     }
-    template<class T>
-    auto new_imp(size_t count, long, T*) -> decltype(::operator new(count)) {
+    template <typename T> void *new_imp(size_t count, long) {
       return ::operator new(count);
     }
-    template<class T>
-    auto new_appropriately(size_t count, T* dummy) -> T* {
-      return static_cast<T*>(new_imp(count, 0, dummy));
+    template <typename T> T *new_appropriately(size_t count) {
+      // 0 is a better match for the first 'delete_imp' so will match
+      // preferentially.
+      return static_cast<T *>(new_imp<T>(count, 0));
     }
-
     #endif // AUTOCXX_NEW_AND_DELETE_PRELUDE
 "};

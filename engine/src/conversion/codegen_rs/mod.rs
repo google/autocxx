@@ -24,6 +24,7 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::IncludeCppConfig;
 
+use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
@@ -60,8 +61,6 @@ use super::{
 };
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::{quote, ToTokens};
-
-unzip_n::unzip_n!(pub 4);
 
 /// An entry which needs to go into an `impl` block for a given type.
 struct ImplBlockDetails {
@@ -191,18 +190,22 @@ impl<'a> RsCodeGenerator<'a> {
         // sub-mods by namespace. From here on, things are flat.
         let (_, rs_codegen_results): (Vec<_>, Vec<_>) =
             rs_codegen_results_and_namespaces.into_iter().unzip();
-        let (extern_c_mod_items, extern_rust_mod_items, all_items, bridge_items) =
-            rs_codegen_results
-                .into_iter()
-                .map(|api| {
-                    (
-                        api.extern_c_mod_items,
-                        api.extern_rust_mod_items,
-                        api.global_items,
-                        api.bridge_items,
-                    )
-                })
-                .unzip_n_vec();
+        let (extern_c_mod_items, extern_rust_mod_items, all_items, bridge_items): (
+            Vec<_>,
+            Vec<_>,
+            Vec<_>,
+            Vec<_>,
+        ) = rs_codegen_results
+            .into_iter()
+            .map(|api| {
+                (
+                    api.extern_c_mod_items,
+                    api.extern_rust_mod_items,
+                    api.global_items,
+                    api.bridge_items,
+                )
+            })
+            .multiunzip();
         // Items for the [cxx::bridge] mod...
         let mut bridge_items: Vec<Item> = bridge_items.into_iter().flatten().collect();
         // Things to include in the "extern "C"" mod passed within the cxx::bridge
