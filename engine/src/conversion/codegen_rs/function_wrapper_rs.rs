@@ -109,7 +109,7 @@ impl TypeConversionPolicy {
                     panic!("Unexpected non-ident parameter name");
                 };
                 let space_var_name = make_ident(format!("{}_space", var_name));
-                let call = quote! { autocxx::ValueParamHandler::new(#var_name)  };
+                let call = quote! { #space_var_name.populate()  };
                 let call = if wrap_in_unsafe {
                     quote! {
                         unsafe {
@@ -121,7 +121,9 @@ impl TypeConversionPolicy {
                 };
                 (
                     Some(quote! {
-                        let mut #space_var_name = #call;
+                        let mut #space_var_name = autocxx::ValueParamHandler::new(#var_name);
+                        let #space_var_name = &mut #space_var_name;
+                        #call
                     }),
                     quote! {
                         #space_var_name.get_ptr()

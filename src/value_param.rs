@@ -162,11 +162,7 @@ impl<T, VP: ValueParam<T>> ValueParamHandler<T, VP> {
     /// this may be largely a no-op or it may involve storing a whole
     /// extra copy of the type.
     ///
-    /// # Safety
-    ///
-    /// Callers must guarantee that this type will not move
-    /// in memory.
-    pub unsafe fn new(param: VP) -> Self {
+    pub fn new(param: VP) -> Self {
         let mut this = Self {
             param,
             space: None,
@@ -174,10 +170,21 @@ impl<T, VP: ValueParam<T>> ValueParamHandler<T, VP> {
         };
         if this.param.needs_stack_space() {
             this.space = Some(MaybeUninit::uninit());
-            this.param
-                .populate_stack_space(Pin::new_unchecked(this.space.as_mut().unwrap()));
         }
         this
+    }
+
+    /// Populate this stack space if needs be.
+    ///
+    /// # Safety
+    ///
+    /// Callers must guarantee that this type will not move
+    /// in memory between calls to [`populate`] and [`get_ptr`].
+    pub unsafe fn populate(&mut self) {
+        if self.param.needs_stack_space() {
+            self.param
+                .populate_stack_space(Pin::new_unchecked(self.space.as_mut().unwrap()));
+        }
     }
 
     /// Return a pointer to the underlying value which can be passed to C++.
