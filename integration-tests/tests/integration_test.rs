@@ -21,8 +21,8 @@ use crate::{
     },
 };
 use autocxx_integration_tests::{
-    directives_from_lists, do_run_test_manual, run_test, run_test_ex, run_test_expect_fail,
-    run_test_expect_fail_ex,
+    directives_from_lists, do_run_test, do_run_test_manual, run_test, run_test_ex,
+    run_test_expect_fail, run_test_expect_fail_ex, TestError,
 };
 use indoc::indoc;
 use itertools::Itertools;
@@ -5330,9 +5330,19 @@ fn test_double_destruction() {
             moveit_t.as_mut().set_flag(&mut destructor_flag);
         }
         std::mem::drop(moveit_t);
-        assert!(destructor_flag, "Destructor did not run with moveit for {}", quote::quote!{$t});
     };
-    run_test("", hdr, rs, &[], &["DestructorFlag", "ExplicitlyDefaulted"]);
+    match do_run_test(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&[], &["DestructorFlag", "ExplicitlyDefaulted"], None),
+        None,
+        None,
+        None,
+    ) {
+        Err(TestError::CppBuild(_)) => {}
+        _ => panic!("Test didn't fail as expected"),
+    };
 }
 
 #[test]

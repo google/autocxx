@@ -282,7 +282,7 @@ pub fn directives_from_lists(
 }
 
 #[allow(clippy::too_many_arguments)] // least typing for each test
-fn do_run_test(
+pub fn do_run_test(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
