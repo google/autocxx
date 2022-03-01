@@ -29,9 +29,10 @@ Non-POD types are awkward:
 
 * You can't just _have_ one as a Rust variable. Normally you hold them in a [`cxx::UniquePtr`], though there are other options.
 * There is no access to fields (yet).
-* You can't even have a `&mut` reference to one, because then you might be able to use [`std::mem::swap`] or similara. You can have a `Pin<&mut>` reference, which is more fiddly.
+* You can't even have a `&mut` reference to one, because then you might be able to use [`std::mem::swap`] or similar. You can have a `Pin<&mut>` reference, which is more fiddly.
 
-By default, `autocxx` generates non-POD types. You can request a POD type using [`generate_pod!`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html). Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++.
+By default, `autocxx` generates non-POD types. You can request a POD type using [`generate_pod!`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html). Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, and if you _use_ it as a POD type
+at the C++ boundary, your build will fail thanks to some static assertions generated in the C++.
 
 See [the chapter on storage](storage.md) for lots more detail on how you can hold onto non-POD types.
 
