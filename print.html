@@ -723,7 +723,7 @@ include_cpp! {
 }
 
 fn main() {
-    let mut goat = ffi::Goat::make_unique(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
+    let goat = ffi::Goat::make_unique(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
     // C++-like semantics...
     ffi::feed_goat(&amp;goat);
     // ... you've still got the goat!
@@ -762,6 +762,61 @@ C++ classes. (Yes, even more experimental than all the rest of this!)
 See <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclass.html"><code>subclass::CppSubclass</code></a> for information about how you do this.
 This is useful primarily if you want to listen out for messages broadcast
 using the C++ observer/listener pattern.</p>
+<h4 id="c-header-6"><a class="header" href="#c-header-6">C++ header:</a></h4>
+<pre><code class="language-cpp">#include &lt;memory&gt;
+class GoatObserver {
+public:
+    virtual void goat_full() const = 0;
+    virtual ~GoatObserver() {}
+};
+
+void register_observer(const GoatObserver&amp; observer);
+void deregister_observer();
+void feed_goat();
+
+</code></pre>
+<h4 id="rust-6"><a class="header" href="#rust-6">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+use autocxx::subclass::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;register_observer&quot;)
+    generate!(&quot;deregister_observer&quot;)
+    generate!(&quot;feed_goat&quot;)
+    subclass!(&quot;GoatObserver&quot;, MyGoatObserver)
+}
+
+use ffi::*;
+
+#[is_subclass(superclass(&quot;GoatObserver&quot;))]
+#[derive(Default)]
+pub struct MyGoatObserver;
+
+impl GoatObserver_methods for MyGoatObserver {
+    fn goat_full(&amp;self) {
+        println!(&quot;BURP!&quot;);
+    }
+}
+
+impl Drop for MyGoatObserver {
+    fn drop(&amp;mut self) {
+        deregister_observer();
+    }
+}
+
+fn main() {
+    let goat_obs = MyGoatObserver::default_rust_owned();
+    // Register a reference to the superclass &amp;ffi::GoatObserver
+    register_observer(goat_obs.as_ref().borrow().as_ref());
+    feed_goat();
+    feed_goat();
+    feed_goat(); // prints BURP!
+}
+
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="other-c-features"><a class="header" href="#other-c-features">Other C++ features</a></h1>
 <p>You can make Rust subclasses of C++ classes - as these are mostly used to
 implement the Observer pattern, they're documented under <a href="rust_calls.html">calls from C++ to Rust</a>.</p>
@@ -791,11 +846,11 @@ assert_eq!(std::str::from_utf8(&amp;ffi::BOB).unwrap().trim_end_matches(char::fr
 <p>See <a href="https://docs.rs/autocxx/latest/autocxx/macro.safety.html"><code>safety!</code></a> in the documentation for more details.</p>
 <h2 id="examples-with-and-without-safetyunsafe"><a class="header" href="#examples-with-and-without-safetyunsafe">Examples with and without <code>safety!(unsafe)</code></a></h2>
 <p>Without a <code>safety!</code> directive:</p>
-<h4 id="c-header-6"><a class="header" href="#c-header-6">C++ header:</a></h4>
+<h4 id="c-header-7"><a class="header" href="#c-header-7">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;cstdint&gt;
 inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 </code></pre>
-<h4 id="rust-6"><a class="header" href="#rust-6">Rust:</a></h4>
+<h4 id="rust-7"><a class="header" href="#rust-7">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -810,11 +865,11 @@ fn main() {
 
 </code></pre>
 <p>With a <code>safety!</code> directive:</p>
-<h4 id="c-header-7"><a class="header" href="#c-header-7">C++ header:</a></h4>
+<h4 id="c-header-8"><a class="header" href="#c-header-8">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;cstdint&gt;
 inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 </code></pre>
-<h4 id="rust-7"><a class="header" href="#rust-7">Rust:</a></h4>
+<h4 id="rust-8"><a class="header" href="#rust-8">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
