@@ -1772,6 +1772,16 @@ impl Api<FnPhase> {
                 | Api::CType { .. }
                 | Api::RustSubclassFn { .. }
                 | Api::Subclass { .. }
+                | Api::Struct {
+                    analysis: PodAndDepAnalysis {
+                        pod: PodAnalysis {
+                            kind: TypeKind::Pod,
+                            ..
+                        },
+                        ..
+                    },
+                    ..
+                }
         )
     }
 

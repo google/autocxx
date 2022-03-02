@@ -21,8 +21,8 @@ use crate::{
     },
 };
 use autocxx_integration_tests::{
-    directives_from_lists, do_run_test_manual, run_test, run_test_ex, run_test_expect_fail,
-    run_test_expect_fail_ex,
+    directives_from_lists, do_run_test, do_run_test_manual, run_test, run_test_ex,
+    run_test_expect_fail, run_test_expect_fail_ex, TestError,
 };
 use indoc::indoc;
 use itertools::Itertools;
@@ -5285,6 +5285,51 @@ fn test_error_generated_for_pod_with_nontrivial_move_constructor() {
     "};
     let rs = quote! {};
     run_test_expect_fail("", hdr, rs, &["take_a"], &["A"]);
+}
+
+#[test]
+fn test_double_destruction() {
+    let hdr = indoc! {"
+        #include <stdio.h>
+        #include <stdlib.h>
+        // A simple type to let Rust verify the destructor is run.
+        struct NotTriviallyDestructible {
+            NotTriviallyDestructible() = default;
+            NotTriviallyDestructible(const NotTriviallyDestructible&) = default;
+            NotTriviallyDestructible(NotTriviallyDestructible&&) = default;
+
+            ~NotTriviallyDestructible() {}
+        };
+
+        struct ExplicitlyDefaulted {
+            ExplicitlyDefaulted() = default;
+            ~ExplicitlyDefaulted() = default;
+
+            NotTriviallyDestructible flag;
+        };
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut moveit_t = ffi::ExplicitlyDefaulted::new();
+        }
+    };
+    match do_run_test(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(
+            &[],
+            &["NotTriviallyDestructible", "ExplicitlyDefaulted"],
+            None,
+        ),
+        None,
+        None,
+        None,
+    ) {
+        Err(TestError::CppBuild(_)) => {} // be sure this fails due to a static_assert
+        // rather than some runtime problem
+        _ => panic!("Test didn't fail as expected"),
+    };
 }
 
 #[test]
