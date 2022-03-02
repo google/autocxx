@@ -19,20 +19,111 @@ use syn::Type;
 use crate::{
     conversion::{
         analysis::{
-            depth_first::depth_first, fun::FnStructAnalysis, pod::PodAnalysis,
+            depth_first::depth_first, fun::PodAndConstructorAnalysis, pod::PodAnalysis,
             type_converter::TypeKind,
         },
         api::{Api, CppVisibility, FuncToConvert, SpecialMemberKind},
     },
-    known_types::known_types,
+    known_types::{known_types, KnownTypeConstructorDetails},
     types::QualifiedName,
 };
 
-use super::{
-    implicit_constructor_rules::{ItemsFound, SpecialMemberFound},
-    FnAnalysis, FnKind, FnPrePhase, MethodKind, ReceiverMutability, TraitMethodKind,
-};
+use super::{FnAnalysis, FnKind, FnPrePhase, MethodKind, ReceiverMutability, TraitMethodKind};
 
+/// Indicates what we found out about a category of special member function.
+///
+/// In the end, we only care whether it's public and exists, but we track a bit more information to
+/// support determining the information for dependent classes.
+#[derive(Debug, Copy, Clone)]
+pub(super) enum SpecialMemberFound {
+    /// This covers being deleted in any way:
+    ///   * Explicitly deleted
+    ///   * Implicitly defaulted when that means being deleted
+    ///   * Explicitly defaulted when that means being deleted
+    ///
+    /// It also covers not being either user declared or implicitly defaulted.
+    NotPresent,
+    /// Implicit special member functions, indicated by this, are always public.
+    Implicit,
+    /// This covers being explicitly defaulted (when that is not deleted) or being user-defined.
+    Explicit(CppVisibility),
+}
+
+impl SpecialMemberFound {
+    /// Returns whether code outside of subclasses can call this special member function.
+    pub fn callable_any(&self) -> bool {
+        matches!(self, Self::Explicit(CppVisibility::Public) | Self::Implicit)
+    }
+
+    /// Returns whether code in a subclass can call this special member function.
+    pub fn callable_subclass(&self) -> bool {
+        matches!(
+            self,
+            Self::Explicit(CppVisibility::Public)
+                | Self::Explicit(CppVisibility::Protected)
+                | Self::Implicit
+        )
+    }
+
+    /// Returns whether this exists at all. Note that this will return true even if it's private,
+    /// which is generally not very useful, but does come into play for some rules around which
+    /// default special member functions are deleted vs don't exist.
+    pub fn exists(&self) -> bool {
+        matches!(self, Self::Explicit(_) | Self::Implicit)
+    }
+
+    pub fn exists_implicit(&self) -> bool {
+        matches!(self, Self::Implicit)
+    }
+
+    pub fn exists_explicit(&self) -> bool {
+        matches!(self, Self::Explicit(_))
+    }
+}
+
+/// Information about which special member functions exist based on the C++ rules.
+///
+/// Not all of this information is used directly, but we need to track it to determine the
+/// information we do need for classes which are used as members or base classes.
+#[derive(Debug, Copy, Clone)]
+pub(super) struct ItemsFound {
+    pub(super) default_constructor: SpecialMemberFound,
+    pub(super) destructor: SpecialMemberFound,
+    pub(super) const_copy_constructor: SpecialMemberFound,
+    /// Remember that [`const_copy_constructor`] may be used in place of this if it exists.
+    pub(super) non_const_copy_constructor: SpecialMemberFound,
+    pub(super) move_constructor: SpecialMemberFound,
+}
+
+impl ItemsFound {
+    /// Returns whether we should generate a default constructor wrapper, because bindgen won't do
+    /// one for the implicit default constructor which exists.
+    pub(super) fn implicit_default_constructor_needed(&self) -> bool {
+        self.default_constructor.exists_implicit()
+    }
+
+    /// Returns whether we should generate a copy constructor wrapper, because bindgen won't do one
+    /// for the implicit copy constructor which exists.
+    pub(super) fn implicit_copy_constructor_needed(&self) -> bool {
+        let any_implicit_copy = self.const_copy_constructor.exists_implicit()
+            || self.non_const_copy_constructor.exists_implicit();
+        let no_explicit_copy = !(self.const_copy_constructor.exists_explicit()
+            || self.non_const_copy_constructor.exists_explicit());
+        any_implicit_copy && no_explicit_copy
+    }
+
+    /// Returns whether we should generate a move constructor wrapper, because bindgen won't do one
+    /// for the implicit move constructor which exists.
+    pub(super) fn implicit_move_constructor_needed(&self) -> bool {
+        self.move_constructor.exists_implicit()
+    }
+
+    /// Returns whether we should generate a destructor wrapper, because bindgen won't do one for
+    /// the implicit destructor which exists.
+    pub(super) fn implicit_destructor_needed(&self) -> bool {
+        self.destructor.exists_implicit()
+    }
+}
 #[derive(Hash, Eq, PartialEq)]
 enum ExplicitKind {
     DefaultConstructor,
@@ -67,15 +158,18 @@ enum ExplicitFound {
     Multiple,
 }
 
+/// Analyzes which constructors are present for each type.
+///
 /// If a type has explicit constructors, bindgen will generate corresponding
 /// constructor functions, which we'll have already converted to make_unique methods.
-/// For types with implicit constructors, we synthesize them here.
+/// For types with implicit constructors, we enumerate them here.
+///
 /// It is tempting to make this a separate analysis phase, to be run later than
 /// the function analysis; but that would make the code much more complex as it
 /// would need to output a `FnAnalysisBody`. By running it as part of this phase
 /// we can simply generate the sort of thing bindgen generates, then ask
 /// the existing code in this phase to figure out what to do with it.
-pub(super) fn find_missing_constructors(
+pub(super) fn find_constructors_present(
     apis: &[Api<FnPrePhase>],
 ) -> HashMap<QualifiedName, ItemsFound> {
     let explicits = find_explicit_items(apis);
@@ -95,7 +189,7 @@ pub(super) fn find_missing_constructors(
         if let Api::Struct {
             name,
             analysis:
-                FnStructAnalysis {
+                PodAndConstructorAnalysis {
                     pod:
                         PodAnalysis {
                             bases, field_info, ..
@@ -114,8 +208,8 @@ pub(super) fn find_missing_constructors(
                 })
             };
             let get_items_found = |qn: &QualifiedName| -> Option<ItemsFound> {
-                if known_types().is_known(qn) {
-                    Some(known_type_items_found(qn))
+                if let Some(constructor_details) = known_types().get_constructor_details(qn) {
+                    Some(known_type_items_found(constructor_details))
                 } else {
                     all_items_found.get(qn).copied()
                 }
@@ -128,8 +222,9 @@ pub(super) fn find_missing_constructors(
                         Type::Path(ref qn) => get_items_found(&QualifiedName::from_type_path(qn)),
                         _ => None,
                     },
-                    // TODO: Figure out how to differentiate between pointers and references coming
-                    // from C++. Pointers have a default constructor.
+                    // TODO: https://github.com/google/autocxx/issues/865 Figure out how to
+                    // differentiate between pointers and references coming from C++. Pointers
+                    // have a default constructor.
                     TypeKind::Pointer | TypeKind::Reference | TypeKind::MutableReference => {
                         Some(ItemsFound {
                             default_constructor: SpecialMemberFound::NotPresent,
@@ -505,8 +600,12 @@ fn find_explicit_items(apis: &[Api<FnPrePhase>]) -> HashMap<ExplicitType, Explic
                 fun,
                 ..
             } => match method_kind {
-                MethodKind::DefaultConstructor => Some(ExplicitKind::DefaultConstructor),
-                MethodKind::Constructor => Some(ExplicitKind::OtherConstructor),
+                MethodKind::Constructor { is_default: true } => {
+                    Some(ExplicitKind::DefaultConstructor)
+                }
+                MethodKind::Constructor { is_default: false } => {
+                    Some(ExplicitKind::OtherConstructor)
+                }
                 _ => None,
             }
             .map_or((), |explicit_kind| {
@@ -538,7 +637,7 @@ fn find_explicit_items(apis: &[Api<FnPrePhase>]) -> HashMap<ExplicitType, Explic
 }
 
 /// Returns the information for a given known type.
-fn known_type_items_found(ty: &QualifiedName) -> ItemsFound {
+fn known_type_items_found(constructor_details: KnownTypeConstructorDetails) -> ItemsFound {
     let exists_public = SpecialMemberFound::Explicit(CppVisibility::Public);
     let exists_public_if = |exists| {
         if exists {
@@ -550,8 +649,8 @@ fn known_type_items_found(ty: &QualifiedName) -> ItemsFound {
     ItemsFound {
         default_constructor: exists_public,
         destructor: exists_public,
-        const_copy_constructor: exists_public_if(known_types().has_const_copy_constructor(ty)),
+        const_copy_constructor: exists_public_if(constructor_details.has_const_copy_constructor),
         non_const_copy_constructor: SpecialMemberFound::NotPresent,
-        move_constructor: exists_public_if(known_types().has_move_constructor(ty)),
+        move_constructor: exists_public_if(constructor_details.has_move_constructor),
     }
 }

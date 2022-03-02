@@ -24,7 +24,8 @@ use crate::{
 };
 
 use super::fun::{
-    FnAnalysis, FnKind, FnPhase, FnPrePhase, FnStructAnalysis, PodAndDepAnalysis, TraitMethodKind,
+    FnAnalysis, FnKind, FnPhase, FnPrePhase, PodAndConstructorAnalysis, PodAndDepAnalysis,
+    TraitMethodKind,
 };
 
 /// We've now analyzed all functions (including both implicit and explicit
@@ -53,7 +54,7 @@ pub(crate) fn decorate_types_with_constructor_deps(
 fn decorate_struct(
     name: ApiName,
     details: Box<StructDetails>,
-    fn_struct: FnStructAnalysis,
+    fn_struct: PodAndConstructorAnalysis,
     constructors_and_allocators_by_type: &mut HashMap<QualifiedName, Vec<QualifiedName>>,
 ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
     let pod = fn_struct.pod;

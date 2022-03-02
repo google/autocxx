@@ -26,15 +26,17 @@ pub(crate) fn create_impl_items(
     }
     let mut results = Vec::new();
     if destroyable {
-        results.push(Item::Impl(parse_quote! {
-            impl UniquePtr<#id> {}
-        }));
-        results.push(Item::Impl(parse_quote! {
-            impl SharedPtr<#id> {}
-        }));
-        results.push(Item::Impl(parse_quote! {
-            impl WeakPtr<#id> {}
-        }));
+        results.extend([
+            Item::Impl(parse_quote! {
+                impl UniquePtr<#id> {}
+            }),
+            Item::Impl(parse_quote! {
+                impl SharedPtr<#id> {}
+            }),
+            Item::Impl(parse_quote! {
+                impl WeakPtr<#id> {}
+            }),
+        ]);
     }
     if movable {
         results.push(Item::Impl(parse_quote! {

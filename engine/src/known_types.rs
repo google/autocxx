@@ -159,6 +159,11 @@ pub enum CxxGenericType {
     Rust,
 }
 
+pub struct KnownTypeConstructorDetails {
+    pub has_move_constructor: bool,
+    pub has_const_copy_constructor: bool,
+}
+
 impl TypeDatabase {
     fn get(&self, ty: &QualifiedName) -> Option<&TypeDetails> {
         // The following line is important. It says that
@@ -191,11 +196,6 @@ impl TypeDatabase {
         self.canonical_names.keys().chain(self.by_rs_name.keys())
     }
 
-    /// Returns whether the given type is a known type.
-    pub(crate) fn is_known(&self, qn: &QualifiedName) -> bool {
-        self.canonical_names.contains_key(qn) || self.by_rs_name.contains_key(qn)
-    }
-
     /// Types which are known to be safe (or unsafe) to hold and pass by
     /// value in Rust.
     pub(crate) fn get_pod_safe_types(&self) -> impl Iterator<Item = (QualifiedName, bool)> {
@@ -222,12 +222,14 @@ impl TypeDatabase {
         pod_safety.into_iter()
     }
 
-    pub(crate) fn has_move_constructor(&self, qn: &QualifiedName) -> bool {
-        self.get(qn).unwrap().has_move_constructor
-    }
-
-    pub(crate) fn has_const_copy_constructor(&self, qn: &QualifiedName) -> bool {
-        self.get(qn).unwrap().has_const_copy_constructor
+    pub(crate) fn get_constructor_details(
+        &self,
+        qn: &QualifiedName,
+    ) -> Option<KnownTypeConstructorDetails> {
+        self.get(qn).map(|x| KnownTypeConstructorDetails {
+            has_move_constructor: x.has_move_constructor,
+            has_const_copy_constructor: x.has_const_copy_constructor,
+        })
     }
 
     /// Whether this TypePath should be treated as a value in C++

@@ -973,6 +973,7 @@ impl<'a> RsCodeGenerator<'a> {
                     }))),
                 )
             }
+            ErrorContext::NoCode => (None, None),
         };
         RsCodegenResult {
             impl_entry,

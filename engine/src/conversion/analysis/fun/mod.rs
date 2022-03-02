@@ -14,7 +14,6 @@
 
 mod bridge_name_tracker;
 pub(crate) mod function_wrapper;
-mod implicit_constructor_rules;
 mod implicit_constructors;
 mod overload_tracker;
 mod subclass;
@@ -60,7 +59,7 @@ use crate::{
 use self::{
     bridge_name_tracker::BridgeNameTracker,
     function_wrapper::RustConversionType,
-    implicit_constructors::find_missing_constructors,
+    implicit_constructors::find_constructors_present,
     overload_tracker::OverloadTracker,
     subclass::{
         create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function,
@@ -83,8 +82,7 @@ pub(crate) enum ReceiverMutability {
 #[derive(Clone, Debug)]
 pub(crate) enum MethodKind {
     Normal(ReceiverMutability),
-    Constructor,
-    DefaultConstructor,
+    Constructor { is_default: bool },
     MakeUnique,
     Static,
     Virtual(ReceiverMutability),
@@ -199,7 +197,7 @@ impl Default for ReturnTypeAnalysis {
     }
 }
 
-pub(crate) struct FnStructAnalysis {
+pub(crate) struct PodAndConstructorAnalysis {
     pub(crate) pod: PodAnalysis,
     pub(crate) constructors: PublicConstructors,
 }
@@ -210,7 +208,7 @@ pub(crate) struct FnPrePhase;
 
 impl AnalysisPhase for FnPrePhase {
     type TypedefAnalysis = TypedefAnalysis;
-    type StructAnalysis = FnStructAnalysis;
+    type StructAnalysis = PodAndConstructorAnalysis;
     type FunAnalysis = FnAnalysis;
 }
 
@@ -262,7 +260,7 @@ pub(crate) struct FnAnalyzer<'a> {
     existing_superclass_trait_api_names: HashSet<QualifiedName>,
 }
 
-/// Leaves the [`FnStructAnalysis::constructors`] at its default for [`add_missing_constructors`]
+/// Leaves the [`PodAndConstructorAnalysis::constructors`] at its default for [`add_constructors_present`]
 /// to fill out.
 fn convert_struct(
     name: ApiName,
@@ -272,7 +270,7 @@ fn convert_struct(
     Ok(Box::new(std::iter::once(Api::Struct {
         name,
         details,
-        analysis: FnStructAnalysis {
+        analysis: PodAndConstructorAnalysis {
             pod: analysis,
             constructors: Default::default(),
         },
@@ -307,7 +305,7 @@ impl<'a> FnAnalyzer<'a> {
             Api::enum_unchanged,
             Api::typedef_unchanged,
         );
-        me.add_missing_constructors(&mut results);
+        me.add_constructors_present(&mut results);
         me.add_make_uniques(&mut results);
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
@@ -454,50 +452,48 @@ impl<'a> FnAnalyzer<'a> {
             if let Api::Function {
                 name,
                 fun,
-                analysis,
+                analysis:
+                    analysis @ FnAnalysis {
+                        kind: FnKind::Method(sup, MethodKind::Constructor { .. }),
+                        ..
+                    },
                 ..
             } = api
             {
                 let initial_name = name.clone();
-                if let FnKind::Method(
-                    sup,
-                    MethodKind::Constructor | MethodKind::DefaultConstructor,
-                ) = &analysis.kind
-                {
-                    // Now go find the Api::Struct for our type, and verify it has an accessible
-                    // destructor.
-                    for api in apis.iter() {
-                        match api {
-                            Api::Struct { name, analysis, .. } if &name.name == sup => {
-                                if !analysis.constructors.destructor {
-                                    continue 'outer;
-                                }
+                // Now go find the Api::Struct for our type, and verify it has an accessible
+                // destructor.
+                for api in apis.iter() {
+                    match api {
+                        Api::Struct { name, analysis, .. } if &name.name == sup => {
+                            if !analysis.constructors.destructor {
+                                continue 'outer;
                             }
-                            _ => (),
                         }
+                        _ => (),
                     }
+                }
 
-                    // Create a make_unique too
-                    self.create_make_unique(fun, initial_name, &mut results);
+                // Create a make_unique too
+                self.create_make_unique(fun, initial_name, &mut results);
 
-                    for sub in self.subclasses_by_superclass(sup) {
-                        // Create a subclass constructor. This is a synthesized function
-                        // which didn't exist in the original C++.
-                        let (subclass_constructor_func, subclass_constructor_name) =
-                            create_subclass_constructor(sub, analysis, sup, fun);
-                        self.analyze_and_add(
-                            subclass_constructor_name.clone(),
-                            subclass_constructor_func.clone(),
-                            &mut results,
-                            TypeConversionSophistication::Regular,
-                        );
-                        // and its corresponding make_unique
-                        self.create_make_unique(
-                            &subclass_constructor_func,
-                            subclass_constructor_name,
-                            &mut results,
-                        );
-                    }
+                for sub in self.subclasses_by_superclass(sup) {
+                    // Create a subclass constructor. This is a synthesized function
+                    // which didn't exist in the original C++.
+                    let (subclass_constructor_func, subclass_constructor_name) =
+                        create_subclass_constructor(sub, analysis, sup, fun);
+                    self.analyze_and_add(
+                        subclass_constructor_name.clone(),
+                        subclass_constructor_func.clone(),
+                        &mut results,
+                        TypeConversionSophistication::Regular,
+                    );
+                    // and its corresponding make_unique
+                    self.create_make_unique(
+                        &subclass_constructor_func,
+                        subclass_constructor_name,
+                        &mut results,
+                    );
                 }
             }
         }
@@ -822,7 +818,7 @@ impl<'a> FnAnalyzer<'a> {
                     )
                 } else {
                     (
-                        FnKind::Method(self_ty, MethodKind::Constructor),
+                        FnKind::Method(self_ty, MethodKind::Constructor { is_default: false }),
                         error_context,
                         rust_name,
                     )
@@ -880,13 +876,11 @@ impl<'a> FnAnalyzer<'a> {
                     // If there are multiple constructors, bindgen generates
                     // new, new1, new2 etc. and we'll keep those suffixes.
                     rust_name = format!("new{}", constructor_suffix);
-                    if matches!(
-                        fun.special_member,
-                        Some(SpecialMemberKind::DefaultConstructor)
-                    ) {
-                        MethodKind::DefaultConstructor
-                    } else {
-                        MethodKind::Constructor
+                    MethodKind::Constructor {
+                        is_default: matches!(
+                            fun.special_member,
+                            Some(SpecialMemberKind::DefaultConstructor)
+                        ),
                     }
                 } else if is_static_method {
                     MethodKind::Static
@@ -935,7 +929,7 @@ impl<'a> FnAnalyzer<'a> {
         // pointer not a reference. For copy + move constructors, we also
         // enforce Rust-side conversions to comply with moveit traits.
         match kind {
-            FnKind::Method(_, MethodKind::Constructor | MethodKind::DefaultConstructor) => {
+            FnKind::Method(_, MethodKind::Constructor { .. }) => {
                 self.reanalyze_parameter(
                     0,
                     fun,
@@ -1058,8 +1052,7 @@ impl<'a> FnAnalyzer<'a> {
             match kind {
                 FnKind::Method(
                     ref self_ty,
-                    MethodKind::Constructor
-                    | MethodKind::DefaultConstructor
+                    MethodKind::Constructor { .. }
                     | MethodKind::MakeUnique
                     | MethodKind::Normal(..)
                     | MethodKind::PureVirtual(..)
@@ -1152,8 +1145,7 @@ impl<'a> FnAnalyzer<'a> {
         // original function.
         let wrapper_function_needed = match kind {
             FnKind::Method(_, MethodKind::Static)
-            | FnKind::Method(_, MethodKind::Constructor)
-            | FnKind::Method(_, MethodKind::DefaultConstructor)
+            | FnKind::Method(_, MethodKind::Constructor { .. })
             | FnKind::Method(_, MethodKind::Virtual(_))
             | FnKind::Method(_, MethodKind::PureVirtual(_))
             | FnKind::TraitMethod {
@@ -1187,8 +1179,7 @@ impl<'a> FnAnalyzer<'a> {
                     FnKind::Method(_, MethodKind::MakeUnique) => {
                         (CppFunctionBody::MakeUnique, CppFunctionKind::Function)
                     }
-                    FnKind::Method(ref self_ty, MethodKind::Constructor)
-                    | FnKind::Method(ref self_ty, MethodKind::DefaultConstructor)
+                    FnKind::Method(ref self_ty, MethodKind::Constructor { .. })
                     | FnKind::TraitMethod {
                         kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
                         impl_for: ref self_ty,
@@ -1716,12 +1707,12 @@ impl<'a> FnAnalyzer<'a> {
     /// we can simply generate the sort of thing bindgen generates, then ask
     /// the existing code in this phase to figure out what to do with it.
     ///
-    /// Also fills out the [`FnStructAnalysis::constructors`] fields with information useful
+    /// Also fills out the [`PodAndConstructorAnalysis::constructors`] fields with information useful
     /// for further analysis phases.
-    fn add_missing_constructors(&mut self, apis: &mut Vec<Api<FnPrePhase>>) {
-        for (self_ty, items_found) in find_missing_constructors(apis).iter() {
+    fn add_constructors_present(&mut self, apis: &mut Vec<Api<FnPrePhase>>) {
+        for (self_ty, items_found) in find_constructors_present(apis).iter() {
             if let Some(Api::Struct {
-                analysis: FnStructAnalysis { constructors, .. },
+                analysis: PodAndConstructorAnalysis { constructors, .. },
                 ..
             }) = apis.iter_mut().find(|api| api.name() == self_ty)
             {

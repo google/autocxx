@@ -18,7 +18,7 @@ use super::{
 };
 use crate::conversion::api::Api;
 use crate::conversion::{
-    analysis::fun::FnStructAnalysis,
+    analysis::fun::PodAndConstructorAnalysis,
     api::TypeKind,
     error_reporter::{convert_apis, convert_item_apis},
     ConvertError,
@@ -62,7 +62,7 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
             match &mut api {
                 Api::Struct {
                     analysis:
-                        FnStructAnalysis {
+                        PodAndConstructorAnalysis {
                             pod: PodAnalysis { bases, kind, .. },
                             ..
                         },
@@ -85,7 +85,7 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
         Api::Function {
             analysis:
                 FnAnalysis {
-                    kind: FnKind::Method(self_ty, MethodKind::MakeUnique | MethodKind::Constructor | MethodKind::DefaultConstructor)
+                    kind: FnKind::Method(self_ty, MethodKind::MakeUnique | MethodKind::Constructor{..})
                         | FnKind::TraitMethod{ kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor, impl_for: self_ty, ..},
                     ..
                 },
@@ -106,7 +106,7 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
     convert_item_apis(apis, &mut results, |api| match api {
         Api::Struct {
             analysis:
-                FnStructAnalysis {
+                PodAndConstructorAnalysis {
                     pod:
                         PodAnalysis {
                             kind: TypeKind::Abstract,

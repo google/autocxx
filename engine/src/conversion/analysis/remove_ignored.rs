@@ -46,7 +46,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: Vec<Api<FnPhase>>) -> 
         iterate_again = false;
         apis = apis
             .into_iter()
-            .filter_map(|api| {
+            .map(|api| {
                 if api.deps().any(|dep| ignored_items.contains(dep)) {
                     iterate_again = true;
                     ignored_items.insert(api.name().clone());
@@ -60,7 +60,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: Vec<Api<FnPhase>>) -> 
                     if let Some(missing_dep) = first.cloned() {
                         create_ignore_item(api, ConvertError::UnknownDependentType(missing_dep))
                     } else {
-                        Some(api)
+                        api
                     }
                 }
             })
@@ -69,10 +69,10 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: Vec<Api<FnPhase>>) -> 
     apis
 }
 
-fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Option<Api<FnPhase>> {
+fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Api<FnPhase> {
     let id = api.name().get_final_ident();
     log::info!("Marking as ignored: {} because {}", id.to_string(), err);
-    Some(Api::IgnoredItem {
+    Api::IgnoredItem {
         name: api.name_info().clone(),
         err,
         ctx: match api {
@@ -83,11 +83,7 @@ fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Option<Api<FnPhas
                         ..
                     },
                 ..
-            } => {
-                // We're not going to generate the impl block for the trait, which means there's no
-                // place to attach an error.
-                return None;
-            }
+            } => ErrorContext::NoCode,
             Api::Function {
                 analysis:
                     FnAnalysis {
@@ -101,5 +97,5 @@ fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Option<Api<FnPhas
             },
             _ => ErrorContext::Item(id),
         },
-    })
+    }
 }

@@ -9052,7 +9052,8 @@ fn test_implicit_constructor_rules() {
         test_movable![ffi::TwoCopy];
         test_call_a![ffi::TwoCopy];
 
-        // TODO: Treat pointers and references differently so this has a default constructor.
+        // TODO: https://github.com/google/autocxx/issues/865
+        // Treat pointers and references differently so this has a default constructor.
         //test_constructible![ffi::MemberPointerDeleted];
         //test_make_unique![ffi::MemberPointerDeleted];
         test_copyable![ffi::MemberPointerDeleted];
