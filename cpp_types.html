@@ -166,8 +166,7 @@ a memcpy. Such self-referential pointers are common - even some implementations 
 <li>There is no access to fields (yet).</li>
 <li>You can't even have a <code>&amp;mut</code> reference to one, because then you might be able to use <a href="https://doc.rust-lang.org/stable/std/mem/fn.swap.html"><code>std::mem::swap</code></a> or similar. You can have a <code>Pin&lt;&amp;mut&gt;</code> reference, which is more fiddly.</li>
 </ul>
-<p>By default, <code>autocxx</code> generates non-POD types. You can request a POD type using <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod!</code></a>. Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, and if you <em>use</em> it as a POD type
-at the C++ boundary, your build will fail thanks to some static assertions generated in the C++.</p>
+<p>By default, <code>autocxx</code> generates non-POD types. You can request a POD type using <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod!</code></a>. Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++.</p>
 <p>See <a href="storage.html">the chapter on storage</a> for lots more detail on how you can hold onto non-POD types.</p>
 <h2 id="construction"><a class="header" href="#construction">Construction</a></h2>
 <p>Each constructor results in <em>two</em> Rust functions.</p>
