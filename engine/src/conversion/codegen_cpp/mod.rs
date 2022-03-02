@@ -451,49 +451,37 @@ impl<'a> CppCodeGenerator<'a> {
         } else {
             arg_list.join(", ")
         };
-        let (mut underlying_function_call, field_assignments, need_allocators) =
-            match &details.payload {
-                CppFunctionBody::MakeUnique | CppFunctionBody::Cast => {
-                    (arg_list, "".to_string(), false)
-                }
-                CppFunctionBody::PlacementNew(ns, id) => {
-                    let ty_id = QualifiedName::new(ns, id.clone());
-                    let ty_id = self.namespaced_name(&ty_id);
-                    (
-                        format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
-                        "".to_string(),
-                        false,
-                    )
-                }
-                CppFunctionBody::Destructor(ns, id) => {
-                    let ty_id = QualifiedName::new(ns, id.clone());
-                    let ty_id = final_ident_using_original_name_map(&ty_id, &self.original_name_map);
-                    (format!("{}->~{}()", arg_list, ty_id), "".to_string(), false)
-                }
-                CppFunctionBody::FunctionCall(ns, id) => match receiver {
-                    Some(receiver) => (
-                        format!("{}.{}({})", receiver, id, arg_list),
-                        "".to_string(),
-                        false,
-                    ),
-                    None => {
-                        let underlying_function_call = ns
-                            .into_iter()
-                            .cloned()
-                            .chain(std::iter::once(id.to_string()))
-                            .join("::");
-                        (
-                            format!("{}({})", underlying_function_call, arg_list),
-                            "".to_string(),
-                            false,
-                        )
-                    }
-                },
-                CppFunctionBody::StaticMethodCall(ns, ty_id, fn_id) => {
+        let (mut underlying_function_call, field_assignments, need_allocators) = match &details
+            .payload
+        {
+            CppFunctionBody::MakeUnique | CppFunctionBody::Cast => {
+                (arg_list, "".to_string(), false)
+            }
+            CppFunctionBody::PlacementNew(ns, id) => {
+                let ty_id = QualifiedName::new(ns, id.clone());
+                let ty_id = self.namespaced_name(&ty_id);
+                (
+                    format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
+                    "".to_string(),
+                    false,
+                )
+            }
+            CppFunctionBody::Destructor(ns, id) => {
+                let ty_id = QualifiedName::new(ns, id.clone());
+                let ty_id = final_ident_using_original_name_map(&ty_id, &self.original_name_map);
+                (format!("{}->~{}()", arg_list, ty_id), "".to_string(), false)
+            }
+            CppFunctionBody::FunctionCall(ns, id) => match receiver {
+                Some(receiver) => (
+                    format!("{}.{}({})", receiver, id, arg_list),
+                    "".to_string(),
+                    false,
+                ),
+                None => {
                     let underlying_function_call = ns
                         .into_iter()
                         .cloned()
-                        .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
+                        .chain(std::iter::once(id.to_string()))
                         .join("::");
                     (
                         format!("{}({})", underlying_function_call, arg_list),
@@ -501,21 +489,34 @@ impl<'a> CppCodeGenerator<'a> {
                         false,
                     )
                 }
-                CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list, false),
-                CppFunctionBody::AllocUninitialized(ty) => {
-                    let namespaced_ty = self.namespaced_name(ty);
-                    (
-                        format!("new_appropriately<{}>(1);", namespaced_ty,),
-                        "".to_string(),
-                        true,
-                    )
-                }
-                CppFunctionBody::FreeUninitialized(ty) => (
-                    format!("delete_appropriately<{}>(arg0);", self.namespaced_name(ty)),
+            },
+            CppFunctionBody::StaticMethodCall(ns, ty_id, fn_id) => {
+                let underlying_function_call = ns
+                    .into_iter()
+                    .cloned()
+                    .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
+                    .join("::");
+                (
+                    format!("{}({})", underlying_function_call, arg_list),
+                    "".to_string(),
+                    false,
+                )
+            }
+            CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list, false),
+            CppFunctionBody::AllocUninitialized(ty) => {
+                let namespaced_ty = self.namespaced_name(ty);
+                (
+                    format!("new_appropriately<{}>(1);", namespaced_ty,),
                     "".to_string(),
                     true,
-                ),
-            };
+                )
+            }
+            CppFunctionBody::FreeUninitialized(ty) => (
+                format!("delete_appropriately<{}>(arg0);", self.namespaced_name(ty)),
+                "".to_string(),
+                true,
+            ),
+        };
         if let Some(ret) = &details.return_conversion {
             underlying_function_call = format!(
                 "return {}",
