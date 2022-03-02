@@ -27,7 +27,7 @@ use std::collections::{HashMap, HashSet};
 use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
 use self::type_to_cpp::{
-    identifier_using_original_name_map, namespaced_name_using_original_name_map,
+    final_ident_using_original_name_map, namespaced_name_using_original_name_map,
 };
 
 use super::{
@@ -467,12 +467,7 @@ impl<'a> CppCodeGenerator<'a> {
                 }
                 CppFunctionBody::Destructor(ns, id) => {
                     let ty_id = QualifiedName::new(ns, id.clone());
-                    let ty_id = identifier_using_original_name_map(&ty_id, &self.original_name_map);
-                    // If the name refers to a nested identifier, then we only want the last part
-                    // of it to name the destructor.
-                    let ty_id = ty_id
-                        .rsplit_once("::")
-                        .map_or(ty_id.as_str(), |(_, ty_id)| ty_id);
+                    let ty_id = final_ident_using_original_name_map(&ty_id, &self.original_name_map);
                     (format!("{}->~{}()", arg_list, ty_id), "".to_string(), false)
                 }
                 CppFunctionBody::FunctionCall(ns, id) => match receiver {
