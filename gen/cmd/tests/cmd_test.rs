@@ -75,7 +75,7 @@ fn test_gen() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
     base_test(&tmp_dir, |_| {})?;
     File::create(tmp_dir.path().join("cxx.h"))
-        .and_then(|mut cxx_h| cxx_h.write_all(&autocxx_engine::HEADER.as_bytes()))?;
+        .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
     std::env::set_var("OUT_DIR", tmp_dir.path().to_str().unwrap());
     let r = build_from_folder(
         tmp_dir.path(),
@@ -128,7 +128,7 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     assert_contentful(&tmp_dir, "cxxgen.h");
     assert_contentful(&tmp_dir, "gen.complete.rs");
     File::create(tmp_dir.path().join("cxx.h"))
-        .and_then(|mut cxx_h| cxx_h.write_all(&autocxx_engine::HEADER.as_bytes()))?;
+        .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
     let r = build_from_folder(
         tmp_dir.path(),
         &tmp_dir.path().join("gen.complete.rs"),
