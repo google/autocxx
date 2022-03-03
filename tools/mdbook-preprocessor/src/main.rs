@@ -269,8 +269,8 @@ fn handle_code_block(
         _ => panic!("Parsing unexpected"),
     };
     let mut args_iter = fn_call.args.iter();
-    let cpp = extract_span(&lines, args_iter.next().unwrap().span());
-    let hdr = extract_span(&lines, args_iter.next().unwrap().span());
+    let cpp = unescape_quotes(&extract_span(&lines, args_iter.next().unwrap().span()));
+    let hdr = unescape_quotes(&extract_span(&lines, args_iter.next().unwrap().span()));
     let rs = extract_span(&lines, args_iter.next().unwrap().span());
     let mut output = vec![
         "#### C++ header:".to_string(),
@@ -294,8 +294,8 @@ fn handle_code_block(
     // running tests.
     if !flags.contains("nocompile") {
         test_cases.push(TestCase {
-            cpp: unescape_quotes(&cpp),
-            hdr: unescape_quotes(&hdr),
+            cpp,
+            hdr,
             rs: syn::parse_file(&rs)
                 .unwrap_or_else(|_| panic!("Unable to parse code at {}", location)),
             location,
