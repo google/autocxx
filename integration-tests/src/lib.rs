@@ -33,19 +33,9 @@ pub fn doctest(
     rust_code: TokenStream,
     manifest_dir: &OsStr,
 ) -> Result<(), TestError> {
-    let stdout_gag = gag::BufferRedirect::stdout().unwrap();
     std::env::set_var("CARGO_PKG_NAME", "autocxx-integration-tests");
     std::env::set_var("CARGO_MANIFEST_DIR", manifest_dir);
-    let r = do_run_test_manual(cxx_code, header_code, rust_code, None, None);
-    let mut stdout_str = String::new();
-    stdout_gag
-        .into_inner()
-        .read_to_string(&mut stdout_str)
-        .unwrap();
-    if !stdout_str.is_empty() {
-        eprintln!("Stdout from test:\n{}", stdout_str);
-    }
-    r
+    do_run_test_manual(cxx_code, header_code, rust_code, None, None)
 }
 
 fn get_builder() -> &'static Mutex<LinkableTryBuilder> {

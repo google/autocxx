@@ -19,6 +19,8 @@ itertools = "0.10"
 anyhow = "1"
 regex = "1"
 autocxx-integration-tests = { path = "../../integration-tests", version="0.1"}
+rayon = "1.5"
+gag = "1.0"
 
 [dependencies.syn]
 version = "1.0.39"

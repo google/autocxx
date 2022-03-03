@@ -31,7 +31,6 @@ indoc = "1.0"
 log = "0.4"
 cxx = "1.0.54"
 itertools = "0.10"
-gag = "1.0"
 
 [dependencies.syn]
 version = "1.0.39"

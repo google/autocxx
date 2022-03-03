@@ -6,16 +6,22 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![forbid(unsafe_code)]
-
-use std::{borrow::Cow, collections::HashSet, fmt::Display, io, path::PathBuf, process};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    fmt::Display,
+    io::{self, Read},
+    path::PathBuf,
+    process,
+};
 
 use anyhow::Error;
 use clap::{crate_authors, crate_version, Arg, ArgMatches, Command};
 use itertools::Itertools;
 use mdbook::{book::Book, preprocess::CmdPreprocessor};
-use proc_macro2::Span;
-use syn::{spanned::Spanned, Expr, __private::ToTokens};
+use proc_macro2::{Span, TokenStream};
+use rayon::prelude::*;
+use syn::{Expr, __private::ToTokens, spanned::Spanned};
 
 static LONG_ABOUT: &str =
     "This is an mdbook preprocessor tailored for autocxx code examples. Autocxx
@@ -103,44 +109,63 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
     });
 
     // Now run any test cases we accumulated.
-    let mut any_fails = false;
     if !args.is_present("skip_tests") {
+        let stdout_gag = gag::BufferRedirect::stdout().unwrap();
         let num_tests = test_cases.len();
-        for (counter, case) in test_cases.into_iter().enumerate() {
-            if let Ok(test) = std::env::var("RUST_MDBOOK_SINGLE_TEST") {
-                let desired_id: usize = test.parse().unwrap();
-                if desired_id != (counter + 1) {
-                    continue;
+        let fails: Vec<_> = test_cases
+            .into_par_iter()
+            .enumerate()
+            .filter_map(|(counter, case)| {
+                if let Ok(test) = std::env::var("RUST_MDBOOK_SINGLE_TEST") {
+                    let desired_id: usize = test.parse().unwrap();
+                    if desired_id != (counter + 1) {
+                        return None;
+                    }
                 }
-            }
-            eprintln!(
-                "Running doctest {}/{} at {}",
-                counter + 1,
-                num_tests,
-                &case.location
-            );
-            let r = autocxx_integration_tests::doctest(
-                &case.cpp,
-                &case.hdr,
-                case.rs.to_token_stream(),
-                args.value_of_os("manifest_dir").unwrap(),
-            );
-            let (failed, msg) = match r {
-                Ok(_) => (false, "passed".to_string()),
-                Err(e) => (true, format!("failed: {:?}", e)),
-            };
-            eprintln!(
-                "Doctest {}/{} at {} {}.",
-                counter + 1,
-                num_tests,
-                &case.location,
-                msg
-            );
-            any_fails = any_fails || failed;
+                eprintln!(
+                    "Running doctest {}/{} at {}",
+                    counter + 1,
+                    num_tests,
+                    &case.location
+                );
+                let failed = autocxx_integration_tests::doctest(
+                    &case.cpp,
+                    &case.hdr,
+                    case.rs,
+                    args.value_of_os("manifest_dir").unwrap(),
+                )
+                .is_err();
+                eprintln!(
+                    "Doctest {}/{} at {} {}.",
+                    counter + 1,
+                    num_tests,
+                    &case.location,
+                    if failed { "failed" } else { "passed" }
+                );
+                if failed {
+                    Some(TestId {
+                        location: case.location,
+                        test_id: counter,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut stdout_str = String::new();
+        stdout_gag
+            .into_inner()
+            .read_to_string(&mut stdout_str)
+            .unwrap();
+        if !stdout_str.is_empty() {
+            eprintln!("Stdout from tests:\n{}", stdout_str);
         }
-    }
-    if any_fails {
-        panic!("One or more tests failed.");
+        if !fails.is_empty() {
+            panic!(
+                "One or more tests failed: {}",
+                fails.into_iter().sorted().map(|s| s.to_string()).join(", ")
+            );
+        }
     }
 
     serde_json::to_writer(io::stdout(), &book)?;
@@ -196,8 +221,21 @@ fn substitute_chapter(chapter: &str, filename: &str, test_cases: &mut Vec<TestCa
     out.join("\n")
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct TestId {
+    location: MiniSpan,
+    test_id: usize,
+}
+
+impl Display for TestId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(ID {}): {}", self.test_id, self.location)
+    }
+}
+
 /// Like `proc_macro2::Span` but only has the starting line. For basic
 /// diagnostics.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct MiniSpan {
     filename: String,
     start_line: usize,
@@ -212,9 +250,11 @@ impl Display for MiniSpan {
 struct TestCase {
     cpp: String,
     hdr: String,
-    rs: syn::File,
+    rs: TokenStream,
     location: MiniSpan,
 }
+
+unsafe impl Send for TestCase {}
 
 enum ChapterParseState {
     Start,
@@ -291,7 +331,8 @@ fn handle_code_block(
             cpp,
             hdr,
             rs: syn::parse_file(&rs)
-                .unwrap_or_else(|_| panic!("Unable to parse code at {}", location)),
+                .unwrap_or_else(|_| panic!("Unable to parse code at {}", location))
+                .to_token_stream(),
             location,
         });
     }
