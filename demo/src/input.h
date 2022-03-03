@@ -15,7 +15,7 @@
 #pragma once
 
 #include <cstdint>
-#include <strstream>
+#include <sstream>
 #include <stdint.h>
 #include <string>
 
@@ -37,7 +37,7 @@ Goat::Goat() : horns(0) {}
 Goat::~Goat() {}
 void Goat::add_a_horn() { horns++; }
 std::string Goat::describe() const {
-    std::ostrstream oss;
+    std::ostringstream oss;
     std::string plural = horns == 1 ? "" : "s";
     oss << "This goat has " << horns << " horn" << plural << ".";
     return oss.str();
