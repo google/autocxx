@@ -123,7 +123,7 @@ impl LinkableTryBuilder {
     }
 
     fn move_items_into_temp_dir<P1: AsRef<Path>>(&self, src_path: &P1, pattern: &str) {
-        for item in std::fs::read_dir(src_path).expect(&src_path.as_ref().to_string_lossy()) {
+        for item in std::fs::read_dir(src_path).unwrap() {
             let item = item.unwrap();
             if item.file_name().into_string().unwrap().contains(pattern) {
                 let dest = self.temp_dir.path().join(item.file_name());
