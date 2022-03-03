@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![forbid(unsafe_code)]
+
 use autocxx_parser::{IncludeCpp, SubclassAttrs};
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};

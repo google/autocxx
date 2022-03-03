@@ -16,6 +16,7 @@ use std::collections::HashSet;
 
 use crate::types::{make_ident, Namespace, QualifiedName};
 use autocxx_parser::RustPath;
+use itertools::Itertools;
 use quote::ToTokens;
 use syn::{
     parse::Parse,
@@ -313,6 +314,15 @@ impl ApiName {
             .as_ref()
             .cloned()
             .unwrap_or_else(|| self.name.get_final_item().to_string())
+    }
+
+    pub(crate) fn qualified_cpp_name(&self) -> String {
+        let cpp_name = self.cpp_name();
+        self.name
+            .ns_segment_iter()
+            .cloned()
+            .chain(std::iter::once(cpp_name))
+            .join("::")
     }
 
     pub(crate) fn cpp_name_if_present(&self) -> Option<&String> {

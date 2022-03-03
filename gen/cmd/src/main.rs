@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![forbid(unsafe_code)]
+
 use autocxx_engine::parse_file;
 use clap::{crate_authors, crate_version, App, Arg, ArgGroup};
 use proc_macro2::TokenStream;
