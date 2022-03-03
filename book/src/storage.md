@@ -16,6 +16,8 @@ Non-POD types can be stored:
 
 If in doubt, use [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html). It's simple and ergonomic.
 
+See [C++ types](cpp_types.md) for a code example showing a type existing on both the stack and the heap.
+
 ## Whose heap is it anyway?
 
 Specifically [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html) is a binding to `std::unique_ptr<T,std::default_delete<T>>` which means the object will be deleted using the C++ `delete` operator. This will respect any overridden `operator delete` on the type, and similarly, the functions which `autocxx` provides to _construct_ types should respect overridden `operator new`. This means: if your C++ type has code to create itself in some special or unusual heap partition, that should work fine.
