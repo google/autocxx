@@ -16,8 +16,7 @@ use std::{
     fs::File,
     io::Write,
     os::unix::prelude::PermissionsExt,
-    path::{Path, PathBuf},
-    process::Command as Cmd
+    path::{Path, PathBuf}
 };
 
 use autocxx_engine::{get_clang_path, make_clang_args, preprocess};
@@ -315,7 +314,7 @@ const REMOVE_PASS_LINE_MARKERS: &[&str] = &["--remove-pass", "pass_line_markers"
 const SKIP_INITIAL_PASSES: &[&str] = &["--skip-initial-passes"];
 
 fn creduce_supports_remove_pass(creduce_cmd: &str) -> bool {
-    let cmd = Cmd::new(creduce_cmd).arg("--help").output();
+    let cmd = std::process::Command::new(creduce_cmd).arg("--help").output();
     let msg = match cmd {
         Err(error) => panic!("failed to run creduce. creduce_cmd = {}. hint: autocxx-reduce --creduce /path/to/creduce. error = {}", creduce_cmd, error),
         Ok(result) => result.stdout
@@ -345,7 +344,7 @@ fn run_creduce<'a>(
         )
         .collect::<Vec<_>>();
     println!("Command: {} {}", creduce_cmd, args.join(" "));
-    Cmd::new(creduce_cmd)
+    std::process::Command::new(creduce_cmd)
         .args(args)
         .status()
         .expect("failed to creduce");
@@ -361,7 +360,7 @@ fn run_sample_gen_cmd(
     let args = args.collect::<Vec<_>>();
     let args_str = args.join(" ");
     announce_progress(&format!("Running sample gen cmd: {} {}", gen_cmd, args_str));
-    Cmd::new(gen_cmd).args(args).status()?;
+    std::process::Command::new(gen_cmd).args(args).status()?;
     Ok(())
 }
 
