@@ -91,7 +91,7 @@ if it has a destructor that will need to be called if the object is `Drop`ped.)
 Naturally, such an object can't be passed by value either; it can still be
 referenced in Rust references.
 
-## Generic types
+## Generic (templated) types
 
 If you're using one of the generic types which is supported natively by cxx,
 e.g. `std::unique_ptr`, it should work as you expect. For other generic types,
@@ -99,7 +99,16 @@ we synthesize a concrete Rust type, corresponding to a C++ typedef, for each
 concrete instantiation of the type. Such generated types are always opaque,
 and never have methods attached. That's therefore enough to pass them
 between return types and parameters of other functions within [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html)s
-but not really enough to do anything else with these types yet.
+but not really enough to do anything else with these types yet[^templated].
+
+[^templated]: Future improvements tracked [here](https://github.com/google/autocxx/issues/349)
 
 To make them more useful, you might have to add extra C++ functions to extract
 data or otherwise deal with them.
+
+## Abstract types
+
+`autocxx` does not allow instantiation of abstract types[^abstract].
+
+[^abstract]: `autocxx`'s determination of abstract types is a bit approximate and
+[could be improved](https://github.com/google/autocxx/issues/774).

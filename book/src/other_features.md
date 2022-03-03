@@ -13,7 +13,9 @@ exception support, so it would be possible to add them.
 
 `#define` and other preprocessor symbols will appear as constants.
 At present there is no way to do compile-time disablement of code
-(equivalent of `#ifdef`).
+(equivalent of `#ifdef`)[^ifdef].
+
+[^ifdef]: [This feature](https://github.com/google/autocxx/issues/57) should add ifdef support.
 
 ## String constants
 
