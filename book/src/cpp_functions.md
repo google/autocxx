@@ -52,6 +52,12 @@ fn main() {
 
 Specifically, you can pass anything which implements [`ValueParam<T>`](https://docs.rs/autocxx/latest/autocxx/trait.ValueParam.html).
 
+## Default parameters
+
+Are not yet supported[^default].
+
+[^default]: the work is [planned here](https://github.com/google/autocxx/issues/563).
+
 ## Return values
 
 At present, return values for [non-POD](cpp_types.md) types are always
