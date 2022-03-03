@@ -2954,9 +2954,7 @@ fn test_enum_typedef() {
     let hdr = indoc! {"
         enum ConstraintSolverParameters_TrailCompression : int {
             ConstraintSolverParameters_TrailCompression_NO_COMPRESSION = 0,
-            ConstraintSolverParameters_TrailCompression_COMPRESS_WITH_ZLIB = 1,
-            ConstraintSolverParameters_TrailCompression_ConstraintSolverParameters_TrailCompression_INT_MIN_SENTINEL_DO_NOT_USE_ = -2147483648,
-            ConstraintSolverParameters_TrailCompression_ConstraintSolverParameters_TrailCompression_INT_MAX_SENTINEL_DO_NOT_USE_ = 2147483647
+            ConstraintSolverParameters_TrailCompression_COMPRESS_WITH_ZLIB = 1
         };
         typedef ConstraintSolverParameters_TrailCompression TrailCompression;
     "};
