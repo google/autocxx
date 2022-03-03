@@ -1733,7 +1733,7 @@ impl<'a> FnAnalyzer<'a> {
             }
             let path = self_ty.to_type_path();
             if items_found.implicit_default_constructor_needed() {
-                self.synthesize_constructor(
+                self.synthesize_special_member(
                     self_ty.clone(),
                     None,
                     apis,
@@ -1743,7 +1743,7 @@ impl<'a> FnAnalyzer<'a> {
                 );
             }
             if items_found.implicit_move_constructor_needed() {
-                self.synthesize_constructor(
+                self.synthesize_special_member(
                     self_ty.clone(),
                     Some("move"),
                     apis,
@@ -1756,7 +1756,7 @@ impl<'a> FnAnalyzer<'a> {
                 )
             }
             if items_found.implicit_copy_constructor_needed() {
-                self.synthesize_constructor(
+                self.synthesize_special_member(
                     self_ty.clone(),
                     Some("const_copy"),
                     apis,
@@ -1769,7 +1769,7 @@ impl<'a> FnAnalyzer<'a> {
                 )
             }
             if items_found.implicit_destructor_needed() {
-                self.synthesize_constructor(
+                self.synthesize_special_member(
                     self_ty.clone(),
                     None,
                     apis,
@@ -1781,7 +1781,7 @@ impl<'a> FnAnalyzer<'a> {
         }
     }
 
-    fn synthesize_constructor(
+    fn synthesize_special_member(
         &mut self,
         self_ty: QualifiedName,
         label: Option<&str>,
