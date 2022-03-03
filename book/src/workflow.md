@@ -2,6 +2,14 @@
 
 C++ is complex, and `autocxx` can't ingest everything.
 
+First tip - use an IDE. Type annotation and autocompletion is _incredibly_ helpful in an `autocxx`
+context, where you may be dealing with `UniquePtr<T>` and `Option<&T>` and `Pin<&mut T>` very often.
+![VSCode autocompletion of autocxx APIs](vscode1.png)
+
+As you'll see, it's also _essential_ when `autocxx` can't produce bindings for some reason.
+
+## General workflow
+
 Here's how to approach autocxx:
 
 ```mermaid
@@ -26,7 +34,7 @@ flowchart TB
 
 This section explains more about this cycle.
 
-## The build failed
+## The build entirely failed
 
 `autocxx` should nearly always successfully parse the C++ codebase and
 generate _some_ APIs. It's reliant on `bindgen`, but `bindgen` is excellent
@@ -56,6 +64,8 @@ failure:
 In this latter case, you should see helpful messages _in the generated bindings_
 as rust documentation explaining what went wrong.
 
+![VSCode showing an error for an API where autocxx couldn't generate bindings](vscode2.png)
+
 If this happens (and it will!) your options are:
 * Add more, simpler C++ APIs which fulfil the same need but are compatible with
   `autocxx`.
@@ -63,7 +73,7 @@ If this happens (and it will!) your options are:
   but not `autocxx` (for example, at the time of writing `std::array`). See
   the later section on 'combinining automatic and manual bindings'.
 
-# Mixing manual and automated bindings
+## Mixing manual and automated bindings
 
 `autocxx` uses [`cxx`](https://cxx.rs) underneath, and its build process will happily spot and
 process and manually-crafted [`cxx::bridge` mods](https://cxx.rs/concepts.html) which you include in your
