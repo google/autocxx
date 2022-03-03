@@ -110,6 +110,68 @@ Each subclass also implements a trait called `<superclass name>_supers` which
 includes all superclass methods. You can call methods on that, and if you
 don't implement a particular method, that will be used as the default.
 
+```rust,ignore,autocxx,hidecpp
+autocxx_integration_tests::doctest(
+"",
+"
+#include <iostream>
+class Dinosaur {
+public:
+    Dinosaur() {}
+    virtual void eat() const {
+        std::cout << \"Roarrr!! I ate you!\n\";
+    }
+    virtual ~Dinosaur() {}
+};
+
+// Currently, autocxx requires at least one 'generate!' call.
+inline void do_a_thing() {};
+",
+{
+use autocxx::prelude::*;
+use autocxx::subclass::*;
+
+include_cpp! {
+    #include "input.h"
+    safety!(unsafe_ffi)
+    subclass!("Dinosaur", TRex)
+    subclass!("Dinosaur", Diplodocus)
+    generate!("do_a_thing")
+}
+
+use ffi::*;
+
+#[is_subclass(superclass("Dinosaur"))]
+#[derive(Default)]
+pub struct TRex;
+
+#[is_subclass(superclass("Dinosaur"))]
+#[derive(Default)]
+pub struct Diplodocus;
+
+impl Dinosaur_methods for TRex {
+    // TRex does NOT implement the 'eat' method
+    // so C++ behavior will be used
+}
+
+impl Dinosaur_methods for Diplodocus {
+    fn eat(&self) {
+        println!("Ahh, some nice juicy leaves.");
+        // Could call self.eat_super() if we
+        // developed unexpected carnivorous cravings.
+    }
+}
+
+fn main() {
+    let trex = TRex::default_rust_owned();
+    trex.borrow().as_ref().eat(); // eats human
+    let diplo = Diplodocus::default_rust_owned();
+    diplo.borrow().as_ref().eat(); // eats shoots and leaves
+}
+}
+)
+```
+
 ## Subclass casting
 
 Subclasses implement `AsRef` to enable casting to superclasses.
