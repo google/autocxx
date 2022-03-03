@@ -428,6 +428,7 @@ because it allows only a single <code>include_cpp!</code> block per <code>.rs</c
 <li>On the Rust stack, using the <a href="https://docs.rs/moveit/latest/moveit/macro.moveit.html"><code>autocxx::moveit</code></a> macro.</li>
 </ul>
 <p>If in doubt, use <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>. It's simple and ergonomic.</p>
+<p>See <a href="cpp_types.html">C++ types</a> for a code example showing a type existing on both the stack and the heap.</p>
 <h2 id="whose-heap-is-it-anyway"><a class="header" href="#whose-heap-is-it-anyway">Whose heap is it anyway?</a></h2>
 <p>Specifically <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> is a binding to <code>std::unique_ptr&lt;T,std::default_delete&lt;T&gt;&gt;</code> which means the object will be deleted using the C++ <code>delete</code> operator. This will respect any overridden <code>operator delete</code> on the type, and similarly, the functions which <code>autocxx</code> provides to <em>construct</em> types should respect overridden <code>operator new</code>. This means: if your C++ type has code to create itself in some special or unusual heap partition, that should work fine.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="pointers-references-values"><a class="header" href="#pointers-references-values">Pointers, references, values</a></h1>
@@ -820,7 +821,7 @@ class Dinosaur {
 public:
     Dinosaur() {}
     virtual void eat() const {
-        std::cout &lt;&lt; \&quot;Roarrr!! I ate you!\n\&quot;;
+        std::cout &lt;&lt; &quot;Roarrr!! I ate you!\n&quot;;
     }
     virtual ~Dinosaur() {}
 };
