@@ -195,6 +195,7 @@ impl<'a> BridgeConverter<'a> {
                     self.include_list,
                     bindgen_mod,
                     self.config,
+                    cpp.as_ref().map(|file_pair| file_pair.header_name.clone()),
                 );
                 Ok(CodegenResults { rs, cpp })
             }
