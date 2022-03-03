@@ -113,27 +113,36 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
     if !args.is_present("skip_tests") {
         let num_tests = test_cases.len();
         for (counter, case) in test_cases.into_iter().enumerate() {
+            if let Ok(test) = std::env::var("RUST_MDBOOK_SINGLE_TEST") {
+                let desired_id: usize = test.parse().unwrap();
+                if desired_id != (counter + 1) {
+                    continue;
+                }
+            }
             eprintln!(
                 "Running doctest {}/{} at {}",
                 counter + 1,
                 num_tests,
                 &case.location
             );
-            let passed = autocxx_integration_tests::doctest(
+            let r = autocxx_integration_tests::doctest(
                 &case.cpp,
                 &case.hdr,
                 case.rs.to_token_stream(),
                 args.value_of_os("manifest_dir").unwrap(),
-            )
-            .is_ok();
+            );
+            let (failed, msg) = match r {
+                Ok(_) => (false, "passed".to_string()),
+                Err(e) => (true, format!("failed: {:?}", e)),
+            };
             eprintln!(
                 "Doctest {}/{} at {} {}.",
                 counter + 1,
                 num_tests,
                 &case.location,
-                if passed { "passed" } else { "failed" }
+                msg
             );
-            any_fails = any_fails || !passed;
+            any_fails = any_fails || failed;
         }
     }
     if any_fails {
