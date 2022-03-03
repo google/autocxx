@@ -139,6 +139,11 @@
                     <main>
                         <h1 id="workflow"><a class="header" href="#workflow">Workflow</a></h1>
 <p>C++ is complex, and <code>autocxx</code> can't ingest everything.</p>
+<p>First tip - use an IDE. Type annotation and autocompletion is <em>incredibly</em> helpful in an <code>autocxx</code>
+context, where you may be dealing with <code>UniquePtr&lt;T&gt;</code> and <code>Option&lt;&amp;T&gt;</code> and <code>Pin&lt;&amp;mut T&gt;</code> very often.
+<img src="vscode1.png" alt="VSCode autocompletion of autocxx APIs" /></p>
+<p>As you'll see, it's also <em>essential</em> when <code>autocxx</code> can't produce bindings for some reason.</p>
+<h2 id="general-workflow"><a class="header" href="#general-workflow">General workflow</a></h2>
 <p>Here's how to approach autocxx:</p>
 <pre class="mermaid">flowchart TB
     %%{init:{'flowchart':{'nodeSpacing': 60, 'rankSpacing': 30}}}%%
@@ -159,7 +164,7 @@
     manual--&gt;try
 </pre>
 <p>This section explains more about this cycle.</p>
-<h2 id="the-build-failed"><a class="header" href="#the-build-failed">The build failed</a></h2>
+<h2 id="the-build-entirely-failed"><a class="header" href="#the-build-entirely-failed">The build entirely failed</a></h2>
 <p><code>autocxx</code> should nearly always successfully parse the C++ codebase and
 generate <em>some</em> APIs. It's reliant on <code>bindgen</code>, but <code>bindgen</code> is excellent
 and rarely bails out entirely.</p>
@@ -185,6 +190,7 @@ methods for the type but ignore those.</li>
 </ul>
 <p>In this latter case, you should see helpful messages <em>in the generated bindings</em>
 as rust documentation explaining what went wrong.</p>
+<p><img src="vscode2.png" alt="VSCode showing an error for an API where autocxx couldn't generate bindings" /></p>
 <p>If this happens (and it will!) your options are:</p>
 <ul>
 <li>Add more, simpler C++ APIs which fulfil the same need but are compatible with
@@ -193,7 +199,7 @@ as rust documentation explaining what went wrong.</p>
 but not <code>autocxx</code> (for example, at the time of writing <code>std::array</code>). See
 the later section on 'combinining automatic and manual bindings'.</li>
 </ul>
-<h1 id="mixing-manual-and-automated-bindings"><a class="header" href="#mixing-manual-and-automated-bindings">Mixing manual and automated bindings</a></h1>
+<h2 id="mixing-manual-and-automated-bindings"><a class="header" href="#mixing-manual-and-automated-bindings">Mixing manual and automated bindings</a></h2>
 <p><code>autocxx</code> uses <a href="https://cxx.rs"><code>cxx</code></a> underneath, and its build process will happily spot and
 process and manually-crafted <a href="https://cxx.rs/concepts.html"><code>cxx::bridge</code> mods</a> which you include in your
 Rust source code. A common pattern good be to use <code>autocxx</code> to generate

@@ -178,6 +178,7 @@ fn main() {
 }
 
 </code></pre>
+<p>Specifically, you can pass anything which implements <a href="https://docs.rs/autocxx/latest/autocxx/trait.ValueParam.html"><code>ValueParam&lt;T&gt;</code></a>.</p>
 <h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
 <p>At present, return values for <a href="cpp_types.html">non-POD</a> types are always
 a <code>cxx::UniquePtr&lt;T&gt;</code>. This is likely to change in future.</p>
