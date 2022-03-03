@@ -84,7 +84,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "clap 2.34.0",
+ "clap 3.1.2",
  "env_logger",
  "itertools 0.10.3",
  "lazy_static",
@@ -147,7 +147,7 @@ version = "0.16.0"
 dependencies = [
  "assert_cmd",
  "autocxx-engine",
- "clap 3.1.5",
+ "clap 3.1.2",
  "env_logger",
  "proc-macro2",
  "quote",
@@ -207,7 +207,7 @@ dependencies = [
  "assert_cmd",
  "autocxx-engine",
  "autocxx-parser",
- "clap 3.1.5",
+ "clap 3.1.2",
  "indoc",
  "itertools 0.10.3",
  "proc-macro2",
@@ -271,22 +271,7 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "2.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0610544180c38b88101fecf2dd634b174a62eef6946f84dfc6a7127512b381c"
-dependencies = [
- "ansi_term",
- "atty",
- "bitflags",
- "strsim 0.8.0",
- "textwrap 0.11.0",
- "unicode-width",
- "vec_map",
-]
-
-[[package]]
-name = "clap"
-version = "3.1.5"
+version = "3.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ced1892c55c910c1219e98d6fc8d71f6bddba7905866ce740066d8bfea859312"
 dependencies = [
