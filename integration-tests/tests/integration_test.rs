@@ -7740,6 +7740,9 @@ fn test_pass_by_value_moveit() {
     #include <stdint.h>
     #include <string>
     struct A {
+        A() = default;
+        A(const A&) = delete;
+        A(A&&) = default;
         void set(uint32_t val) { a = val; }
         uint32_t a;
         std::string so_we_are_non_trivial;
@@ -7951,6 +7954,8 @@ fn test_pass_by_reference_to_value_param() {
     #include <string>
     struct A {
         A() : count(0) {}
+        A(const A&) = delete;
+        A(A&&) = default;
         std::string so_we_are_non_trivial;
         uint32_t count;
     };
