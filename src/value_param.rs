@@ -201,7 +201,7 @@ impl<T, VP: ValueParam<T>> ValueParamHandler<T, VP> {
     /// since it was created, and [`populate`] has been called exactly once
     /// prior to this call.
     pub fn get_ptr(&mut self) -> *mut T {
-        if let Some(ref mut space) = self.space {
+        if let Some(space) = &mut self.space {
             // Safety: 'space' is guaranteed to be populated due to the unsafety
             // contract of 'populate'.
             let ptr =
@@ -217,8 +217,9 @@ impl<T, VP: ValueParam<T>> ValueParamHandler<T, VP> {
 
 impl<T, VP: ValueParam<T>> Drop for ValueParamHandler<T, VP> {
     fn drop(&mut self) {
-        if let Some(space) = self.space.take() {
-            unsafe { space.assume_init() };
+        if let Some(space) = self.space.as_mut() {
+            // Switch to MaybeUninit::assume_init_drop when stabilized
+            unsafe { std::ptr::drop_in_place(space.assume_init_mut()) };
         }
     }
 }
