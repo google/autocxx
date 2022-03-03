@@ -19,10 +19,10 @@ use crate::{
     code_checkers::{
         make_error_finder, make_string_finder, CppCounter, CppMatcher, NoSystemHeadersChecker,
     },
-    test_utils::{
-        directives_from_lists, do_run_test_manual, run_test, run_test_ex, run_test_expect_fail,
-        run_test_expect_fail_ex,
-    },
+};
+use autocxx_integration_tests::{
+    directives_from_lists, do_run_test, do_run_test_manual, run_test, run_test_ex,
+    run_test_expect_fail, run_test_expect_fail_ex, TestError,
 };
 use indoc::indoc;
 use itertools::Itertools;
@@ -1697,6 +1697,7 @@ fn test_return_string_by_value() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 fn test_method_pass_string_by_value() {
     let cxx = indoc! {"
         uint32_t Bob::measure_string(std::string z) const {
@@ -2322,6 +2323,23 @@ fn test_destructor() {
         drop(with_dtor);
     };
     run_test(cxx, hdr, rs, &["WithDtor", "make_with_dtor"], &[]);
+}
+
+#[test]
+fn test_nested_with_destructor() {
+    // Regression test, naming the destructor in the generated C++ is a bit tricky.
+    let hdr = indoc! {"
+        struct A {
+            struct B {
+                B() = default;
+                ~B() = default;
+            };
+        };
+    "};
+    let rs = quote! {
+        ffi::A_B::make_unique();
+    };
+    run_test("", hdr, rs, &["A", "A_B"], &[]);
 }
 
 // Even without a `safety!`, we still need to generate a safe `fn drop`.
@@ -3513,8 +3531,6 @@ fn test_root_ns_meth_ret_nonpod() {
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
 }
 
-#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_forward_declaration() {
     let hdr = indoc! {"
@@ -3525,7 +3541,6 @@ fn test_forward_declaration() {
             B() {}
             uint32_t a;
             void daft(const A&) const {}
-            void daft2(std::unique_ptr<A>) const {}
             static B daft3(const A&) { B b; return b; }
         };
         A* get_a();
@@ -4029,6 +4044,7 @@ fn test_string_in_struct() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 fn test_up_in_struct() {
     let hdr = indoc! {"
         #include <string>
@@ -4077,6 +4093,7 @@ fn test_typedef_to_std_in_struct() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 fn test_typedef_to_up_in_struct() {
     let hdr = indoc! {"
         #include <string>
@@ -5227,6 +5244,8 @@ fn test_error_generated_for_array_dependent_function() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 fn test_error_generated_for_array_dependent_method() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -5248,6 +5267,86 @@ fn test_error_generated_for_array_dependent_method() {
         )),
         None,
     );
+}
+
+#[test]
+fn test_error_generated_for_pod_with_nontrivial_destructor() {
+    // take_a is necessary here because cxx won't generate the required
+    // static assertions unless the type is actually used in some context
+    // where cxx needs to decide it's trivial or non-trivial.
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <functional>
+        struct A {
+            ~A() {}
+        };
+        inline void take_a(A) {}
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &["take_a"], &["A"]);
+}
+
+#[test]
+fn test_error_generated_for_pod_with_nontrivial_move_constructor() {
+    // take_a is necessary here because cxx won't generate the required
+    // static assertions unless the type is actually used in some context
+    // where cxx needs to decide it's trivial or non-trivial.
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <functional>
+        struct A {
+            A() = default;
+            A(A&&) {}
+        };
+        inline void take_a(A) {}
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &["take_a"], &["A"]);
+}
+
+#[test]
+fn test_double_destruction() {
+    let hdr = indoc! {"
+        #include <stdio.h>
+        #include <stdlib.h>
+        // A simple type to let Rust verify the destructor is run.
+        struct NotTriviallyDestructible {
+            NotTriviallyDestructible() = default;
+            NotTriviallyDestructible(const NotTriviallyDestructible&) = default;
+            NotTriviallyDestructible(NotTriviallyDestructible&&) = default;
+
+            ~NotTriviallyDestructible() {}
+        };
+
+        struct ExplicitlyDefaulted {
+            ExplicitlyDefaulted() = default;
+            ~ExplicitlyDefaulted() = default;
+
+            NotTriviallyDestructible flag;
+        };
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut moveit_t = ffi::ExplicitlyDefaulted::new();
+        }
+    };
+    match do_run_test(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(
+            &[],
+            &["NotTriviallyDestructible", "ExplicitlyDefaulted"],
+            None,
+        ),
+        None,
+        None,
+        None,
+    ) {
+        Err(TestError::CppBuild(_)) => {} // be sure this fails due to a static_assert
+        // rather than some runtime problem
+        _ => panic!("Test didn't fail as expected"),
+    };
 }
 
 #[test]
@@ -5353,6 +5452,20 @@ fn test_blocklist_not_overly_broad() {
     run_test("", hdr, rs, &["rust_func", "std_func"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/837
+fn test_ref_qualified_method() {
+    let hdr = indoc! {"
+        struct A {
+            void foo() & {}
+        };
+    "};
+    let rs = quote! {
+        A::make_unique().foo();
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
 #[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
 #[test]
@@ -5421,7 +5534,6 @@ fn test_include_cpp_in_path() {
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_bitset() {
     let hdr = indoc! {"
@@ -5436,7 +5548,7 @@ fn test_bitset() {
         };
 
         template <size_t _Size>
-        class __attribute__ ((__type_visibility__(\"default\"))) bitset
+        class bitset
             : private __bitset<_Size == 0 ? 0 : (_Size - 1) / (sizeof(size_t) * 8) + 1, _Size>
         {
         public:
@@ -6355,7 +6467,6 @@ fn test_pv_subclass_ptr_param() {
     );
 }
 
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_pv_subclass_return() {
     let hdr = indoc! {"
@@ -7624,6 +7735,28 @@ fn test_implicit_constructor_moveit() {
 }
 
 #[test]
+fn test_pass_by_value_moveit() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        void set(uint32_t val) { a = val; }
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    inline void take_a(A a) {}
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut stack_obj = ffi::A::new();
+        }
+        stack_obj.as_mut().set(42);
+        ffi::take_a(&*stack_obj);
+    };
+    run_test("", hdr, rs, &["A", "take_a"], &[]);
+}
+
+#[test]
 fn test_destructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
@@ -7747,7 +7880,6 @@ fn test_various_emplacement() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_emplace_uses_overridden_new_and_delete() {
     let hdr = indoc! {"
@@ -7810,6 +7942,32 @@ fn test_emplace_uses_overridden_new_and_delete() {
         &["A", "reset_flags", "was_new_called", "was_delete_called"],
         &[],
     );
+}
+
+#[test]
+fn test_pass_by_reference_to_value_param() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() : count(0) {}
+        std::string so_we_are_non_trivial;
+        uint32_t count;
+    };
+    void take_a(A a) {
+        a.count++;
+    }
+    uint32_t report_on_a(const A& a) {
+        return a.count;
+    }
+    "};
+    let rs = quote! {
+        let a = ffi::A::make_unique();
+        ffi::take_a(a.as_ref().unwrap());
+        ffi::take_a(&a); // syntactic sugar
+        assert_eq!(ffi::report_on_a(&a), 0); // should have acted upon copies
+    };
+    run_test("", hdr, rs, &["A", "take_a", "report_on_a"], &[]);
 }
 
 #[test]
@@ -7971,7 +8129,6 @@ fn test_class_having_protected_method() {
     run_test("", hdr, rs, &[], &["A"]);
 }
 
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_protected_inner_class() {
     let hdr = indoc! {"
@@ -7989,7 +8146,7 @@ fn test_protected_inner_class() {
         };
 
         inline B protected_method_2() {
-            return { .x = 0 };
+            return { 0 };
         }
     };
     "};
@@ -7997,7 +8154,6 @@ fn test_protected_inner_class() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
-#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 #[test]
 fn test_private_inner_class() {
     let hdr = indoc! {"
@@ -8016,7 +8172,7 @@ fn test_private_inner_class() {
         };
 
         inline B private_method_2() {
-            return { .x = 0 };
+            return { 0 };
         }
     };
     "};

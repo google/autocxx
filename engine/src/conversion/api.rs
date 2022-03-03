@@ -16,13 +16,14 @@ use std::collections::HashSet;
 
 use crate::types::{make_ident, Namespace, QualifiedName};
 use autocxx_parser::RustPath;
+use itertools::Itertools;
 use quote::ToTokens;
 use syn::{
     parse::Parse,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
     Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
-    ReturnType, Signature, Type, Visibility,
+    Pat, ReturnType, Signature, Type, Visibility,
 };
 
 use super::{
@@ -122,6 +123,20 @@ pub(crate) struct SubclassConstructorDetails {
     /// Implementation of the constructor _itself_ as distinct
     /// from any wrapper function we create to call it.
     pub(crate) cpp_impl: CppFunction,
+}
+
+/// Contributions to traits representing C++ superclasses that
+/// we may implement as Rust subclasses.
+#[derive(Clone)]
+pub(crate) struct SuperclassMethod {
+    pub(crate) name: Ident,
+    pub(crate) receiver: QualifiedName,
+    pub(crate) params: Punctuated<FnArg, Comma>,
+    pub(crate) param_names: Vec<Pat>,
+    pub(crate) ret_type: ReturnType,
+    pub(crate) receiver_mutability: ReceiverMutability,
+    pub(crate) requires_unsafe: UnsafetyNeeded,
+    pub(crate) is_pure_virtual: bool,
 }
 
 /// Information about references (as opposed to pointers) to be found
@@ -301,6 +316,15 @@ impl ApiName {
             .unwrap_or_else(|| self.name.get_final_item().to_string())
     }
 
+    pub(crate) fn qualified_cpp_name(&self) -> String {
+        let cpp_name = self.cpp_name();
+        self.name
+            .ns_segment_iter()
+            .cloned()
+            .chain(std::iter::once(cpp_name))
+            .join("::")
+    }
+
     pub(crate) fn cpp_name_if_present(&self) -> Option<&String> {
         self.cpp_name.as_ref()
     }
@@ -351,6 +375,17 @@ impl SubclassName {
     fn with_suffix(&self, suffix: &str) -> Ident {
         make_ident(format!("{}{}", self.0.name.get_final_item(), suffix))
     }
+    pub(crate) fn get_trait_api_name(sup: &QualifiedName, method_name: &str) -> QualifiedName {
+        QualifiedName::new(
+            sup.get_namespace(),
+            make_ident(format!(
+                "{}_{}_trait_item",
+                sup.get_final_item(),
+                method_name
+            )),
+        )
+    }
+    // TODO this and the following should probably include both class name and method name
     pub(crate) fn get_super_fn_name(superclass_namespace: &Namespace, id: &str) -> QualifiedName {
         let id = make_ident(format!("{}_super", id));
         QualifiedName::new(superclass_namespace, id)
@@ -460,6 +495,12 @@ pub(crate) enum Api<T: AnalysisPhase> {
         name: SubclassName,
         superclass: QualifiedName,
     },
+    /// Contributions to the traits representing superclass methods that we might
+    /// subclass in Rust.
+    SubclassTraitItem {
+        name: ApiName,
+        details: SuperclassMethod,
+    },
 }
 
 pub(crate) struct RustSubclassFnDetails {
@@ -469,9 +510,16 @@ pub(crate) struct RustSubclassFnDetails {
     pub(crate) method_name: Ident,
     pub(crate) superclass: QualifiedName,
     pub(crate) receiver_mutability: ReceiverMutability,
-    pub(crate) dependency: Option<QualifiedName>,
-    pub(crate) requires_unsafe: bool,
+    pub(crate) dependencies: Vec<QualifiedName>,
+    pub(crate) requires_unsafe: UnsafetyNeeded,
     pub(crate) is_pure_virtual: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum UnsafetyNeeded {
+    None,
+    JustBridge,
+    Always,
 }
 
 impl<T: AnalysisPhase> Api<T> {
@@ -491,6 +539,7 @@ impl<T: AnalysisPhase> Api<T> {
             Api::RustFn { name, .. } => name,
             Api::RustSubclassFn { name, .. } => name,
             Api::Subclass { name, .. } => &name.0,
+            Api::SubclassTraitItem { name, .. } => name,
         }
     }
 

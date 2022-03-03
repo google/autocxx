@@ -1,4 +1,4 @@
-// Copyright 2021 Google LLC
+// Copyright 2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(test)]
-
 use std::{
+    ffi::OsStr,
     fs::File,
     io::{Read, Write},
     panic::RefUnwindSafe,
@@ -31,6 +30,29 @@ use syn::Token;
 use tempfile::{tempdir, TempDir};
 
 const KEEP_TEMPDIRS: bool = false;
+
+/// API to run a documentation test. Panics if the test fails.
+/// Guarantees not to emit anything to stdout and so can be run in an mdbook context.
+pub fn doctest(
+    cxx_code: &str,
+    header_code: &str,
+    rust_code: TokenStream,
+    manifest_dir: &OsStr,
+) -> Result<(), TestError> {
+    let stdout_gag = gag::BufferRedirect::stdout().unwrap();
+    std::env::set_var("CARGO_PKG_NAME", "autocxx-integration-tests");
+    std::env::set_var("CARGO_MANIFEST_DIR", manifest_dir);
+    let r = do_run_test_manual(cxx_code, header_code, rust_code, None, None);
+    let mut stdout_str = String::new();
+    stdout_gag
+        .into_inner()
+        .read_to_string(&mut stdout_str)
+        .unwrap();
+    if !stdout_str.is_empty() {
+        eprintln!("Stdout from test:\n{}", stdout_str);
+    }
+    r
+}
 
 fn get_builder() -> &'static Mutex<LinkableTryBuilder> {
     static INSTANCE: OnceCell<Mutex<LinkableTryBuilder>> = OnceCell::new();
@@ -131,7 +153,7 @@ pub fn run_test(
 
 // A trait for objects which can check the output of the code creation
 // process.
-pub(crate) trait CodeCheckerFns {
+pub trait CodeCheckerFns {
     fn check_rust(&self, _rs: syn::File) -> Result<(), TestError> {
         Ok(())
     }
@@ -145,10 +167,10 @@ pub(crate) trait CodeCheckerFns {
 
 // A function applied to the resultant generated Rust code
 // which can be used to inspect that code.
-pub(crate) type CodeChecker = Box<dyn CodeCheckerFns>;
+pub type CodeChecker = Box<dyn CodeCheckerFns>;
 
 // A trait for objects which can modify builders for testing purposes.
-pub(crate) trait BuilderModifierFns {
+pub trait BuilderModifierFns {
     fn modify_autocxx_builder(
         &self,
         builder: Builder<TestBuilderContext>,
@@ -158,11 +180,11 @@ pub(crate) trait BuilderModifierFns {
     }
 }
 
-pub(crate) type BuilderModifier = Box<dyn BuilderModifierFns>;
+pub type BuilderModifier = Box<dyn BuilderModifierFns>;
 
 /// A positive test, we expect to pass.
 #[allow(clippy::too_many_arguments)] // least typing for each test
-pub(crate) fn run_test_ex(
+pub fn run_test_ex(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
@@ -183,7 +205,7 @@ pub(crate) fn run_test_ex(
     .unwrap()
 }
 
-pub(crate) fn run_test_expect_fail(
+pub fn run_test_expect_fail(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
@@ -202,7 +224,7 @@ pub(crate) fn run_test_expect_fail(
     .expect_err("Unexpected success");
 }
 
-pub(crate) fn run_test_expect_fail_ex(
+pub fn run_test_expect_fail_ex(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
@@ -225,7 +247,7 @@ pub(crate) fn run_test_expect_fail_ex(
 
 /// In the future maybe the tests will distinguish the exact type of failure expected.
 #[derive(Debug)]
-pub(crate) enum TestError {
+pub enum TestError {
     AutoCxx(BuilderError),
     CppBuild(cc::Error),
     RsBuild,
@@ -237,7 +259,7 @@ pub(crate) enum TestError {
     CppCodeExaminationFail,
 }
 
-pub(crate) fn directives_from_lists(
+pub fn directives_from_lists(
     generate: &[&str],
     generate_pods: &[&str],
     extra_directives: Option<TokenStream>,
@@ -260,7 +282,7 @@ pub(crate) fn directives_from_lists(
 }
 
 #[allow(clippy::too_many_arguments)] // least typing for each test
-fn do_run_test(
+pub fn do_run_test(
     cxx_code: &str,
     header_code: &str,
     rust_code: TokenStream,
@@ -295,7 +317,8 @@ fn do_run_test(
     )
 }
 
-pub(crate) struct TestBuilderContext;
+/// The [`BuilderContext`] used in autocxx's integration tests.
+pub struct TestBuilderContext;
 
 impl BuilderContext for TestBuilderContext {
     fn get_dependency_recorder() -> Option<Box<dyn RebuildDependencyRecorder>> {
@@ -303,7 +326,7 @@ impl BuilderContext for TestBuilderContext {
     }
 }
 
-pub(crate) fn do_run_test_manual(
+pub fn do_run_test_manual(
     cxx_code: &str,
     header_code: &str,
     mut rust_code: TokenStream,

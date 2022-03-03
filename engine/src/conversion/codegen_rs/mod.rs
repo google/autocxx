@@ -24,15 +24,15 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::IncludeCppConfig;
 
+use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Pat, ReturnType, TraitItem,
+    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, TraitItem,
 };
 
 use crate::{
     conversion::{
-        analysis::fun::MethodKind,
         codegen_rs::{
             non_pod_struct::{make_non_pod, new_non_pod_struct},
             unqualify::{unqualify_params, unqualify_ret_type},
@@ -50,8 +50,8 @@ use self::{
 };
 
 use super::{
-    analysis::fun::{FnAnalysis, FnKind},
-    api::{Layout, Provenance, RustSubclassFnDetails, TraitImplSignature},
+    analysis::fun::PodAndDepAnalysis,
+    api::{Layout, Provenance, RustSubclassFnDetails, SuperclassMethod, TraitImplSignature},
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
@@ -62,8 +62,6 @@ use super::{
 };
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::{quote, ToTokens};
-
-unzip_n::unzip_n!(pub 4);
 
 /// An entry which needs to go into an `impl` block for a given type.
 struct ImplBlockDetails {
@@ -134,16 +132,6 @@ fn get_string_items() -> Vec<Item> {
     .to_vec()
 }
 
-struct SuperclassMethod {
-    name: Ident,
-    params: Punctuated<FnArg, Comma>,
-    param_names: Vec<Pat>,
-    ret_type: ReturnType,
-    receiver_mutability: ReceiverMutability,
-    requires_unsafe: bool,
-    is_pure_virtual: bool,
-}
-
 /// Type which handles generation of Rust code.
 /// In practice, much of the "generation" involves connecting together
 /// existing lumps of code within the Api structures.
@@ -203,18 +191,22 @@ impl<'a> RsCodeGenerator<'a> {
         // sub-mods by namespace. From here on, things are flat.
         let (_, rs_codegen_results): (Vec<_>, Vec<_>) =
             rs_codegen_results_and_namespaces.into_iter().unzip();
-        let (extern_c_mod_items, extern_rust_mod_items, all_items, bridge_items) =
-            rs_codegen_results
-                .into_iter()
-                .map(|api| {
-                    (
-                        api.extern_c_mod_items,
-                        api.extern_rust_mod_items,
-                        api.global_items,
-                        api.bridge_items,
-                    )
-                })
-                .unzip_n_vec();
+        let (extern_c_mod_items, extern_rust_mod_items, all_items, bridge_items): (
+            Vec<_>,
+            Vec<_>,
+            Vec<_>,
+            Vec<_>,
+        ) = rs_codegen_results
+            .into_iter()
+            .map(|api| {
+                (
+                    api.extern_c_mod_items,
+                    api.extern_rust_mod_items,
+                    api.global_items,
+                    api.bridge_items,
+                )
+            })
+            .multiunzip();
         // Items for the [cxx::bridge] mod...
         let mut bridge_items: Vec<Item> = bridge_items.into_iter().flatten().collect();
         // Things to include in the "extern "C"" mod passed within the cxx::bridge
@@ -279,38 +271,10 @@ impl<'a> RsCodeGenerator<'a> {
                 .map(|sc| (QualifiedName::new_from_cpp_name(sc), Vec::new())),
         );
         for api in apis {
-            if let Api::Function {
-                name,
-                analysis:
-                    FnAnalysis {
-                        kind: FnKind::Method(receiver, method_kind),
-                        params,
-                        ret_type,
-                        param_details,
-                        ..
-                    },
-                ..
-            } = api
-            {
-                match method_kind {
-                    MethodKind::Virtual(receiver_mutability)
-                    | MethodKind::PureVirtual(receiver_mutability) => {
-                        let list = results.get_mut(receiver);
-                        if let Some(list) = list {
-                            let param_names =
-                                param_details.iter().map(|pd| pd.name.clone()).collect();
-                            list.push(SuperclassMethod {
-                                name: name.name.get_final_ident(),
-                                params: params.clone(),
-                                ret_type: ret_type.clone(),
-                                param_names,
-                                receiver_mutability: receiver_mutability.clone(),
-                                requires_unsafe: param_details.iter().any(|pd| pd.requires_unsafe),
-                                is_pure_virtual: matches!(method_kind, MethodKind::PureVirtual(..)),
-                            })
-                        }
-                    }
-                    _ => {} // otherwise, this is not a superclass of anything specified as a subclass!(..)
+            if let Api::SubclassTraitItem { details, .. } = api {
+                let list = results.get_mut(&details.receiver);
+                if let Some(list) = list {
+                    list.push(details.clone());
                 }
             }
         }
@@ -530,15 +494,17 @@ impl<'a> RsCodeGenerator<'a> {
                 ..Default::default()
             },
             Api::Struct {
-                details, analysis, ..
+                details,
+                analysis: PodAndDepAnalysis { pod, .. },
+                ..
             } => {
                 let doc_attr = get_doc_attr(&details.item.attrs);
                 let layout = details.layout.clone();
                 self.generate_type(
                     &name,
                     id,
-                    analysis.kind,
-                    analysis.movable,
+                    pod.kind,
+                    pod.movable,
                     || Some((Item::Struct(details.item), doc_attr)),
                     associated_methods,
                     layout,
@@ -601,6 +567,7 @@ impl<'a> RsCodeGenerator<'a> {
                 self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
             }
             Api::IgnoredItem { err, ctx, .. } => Self::generate_error_entry(err, ctx),
+            Api::SubclassTraitItem { .. } => RsCodegenResult::default(),
         }
     }
 
@@ -663,7 +630,7 @@ impl<'a> RsCodeGenerator<'a> {
                     let peer_fn = make_ident(peer_fn);
                     *(params.iter_mut().next().unwrap()) = first_param;
                     let param_names = m.param_names.iter().skip(1);
-                    let unsafe_token = get_unsafe_token(m.requires_unsafe);
+                    let unsafe_token = m.requires_unsafe.wrapper_token();
                     parse_quote! {
                         #unsafe_token fn #cpp_super_method_name(#params) #ret {
                             use autocxx::subclass::CppSubclass;
@@ -753,7 +720,7 @@ impl<'a> RsCodeGenerator<'a> {
     ) -> RsCodegenResult {
         let params = details.params;
         let ret = details.ret;
-        let unsafe_token = get_unsafe_token(details.requires_unsafe);
+        let unsafe_token = details.requires_unsafe.wrapper_token();
         let global_def = quote! { #unsafe_token fn #api_name(#params) #ret };
         let params = unqualify_params(params);
         let ret = unqualify_ret_type(ret);
@@ -908,7 +875,7 @@ impl<'a> RsCodeGenerator<'a> {
                         ReceiverMutability::Mutable => parse_quote!(&mut self),
                     };
                     let ret_type = &method.ret_type;
-                    let unsafe_token = get_unsafe_token(method.requires_unsafe);
+                    let unsafe_token = method.requires_unsafe.wrapper_token();
                     if method.is_pure_virtual {
                         (
                             None,
@@ -1122,14 +1089,6 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn find_output_mod_root(ns: &Namespace) -> impl Iterator<Item = Ident> {
         std::iter::repeat(make_ident("super")).take(ns.depth())
-    }
-}
-
-fn get_unsafe_token(requires_unsafe: bool) -> TokenStream {
-    if requires_unsafe {
-        quote! { unsafe }
-    } else {
-        quote! {}
     }
 }
 

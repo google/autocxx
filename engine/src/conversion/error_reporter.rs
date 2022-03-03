@@ -132,6 +132,12 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                     ctx,
                 })))
             }
+            Api::SubclassTraitItem { name, details } => {
+                Ok(Box::new(std::iter::once(Api::SubclassTraitItem {
+                    name,
+                    details,
+                })))
+            }
             // Apply a mapping to the following
             Api::Enum { name, item } => enum_conversion(name, item),
             Api::Typedef {

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{
-    fun::{FnAnalysis, FnKind, FnPhase, MethodKind, TraitMethodKind},
+    fun::{FnAnalysis, FnKind, FnPhase, FnPrePhase, MethodKind, TraitMethodKind},
     pod::PodAnalysis,
 };
 use crate::conversion::api::Api;
@@ -25,7 +25,7 @@ use crate::conversion::{
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
-pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
+pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnPrePhase>> {
     let mut abstract_types: HashSet<_> = apis
         .iter()
         .filter_map(|api| match &api {

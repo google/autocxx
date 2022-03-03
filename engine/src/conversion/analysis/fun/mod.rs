@@ -27,7 +27,8 @@ use crate::{
         },
         api::{
             ApiName, CastMutability, CppVisibility, FuncToConvert, Provenance, References,
-            SpecialMemberKind, SubclassName, TraitImplSignature, TraitSynthesis, Virtualness,
+            SpecialMemberKind, SubclassName, TraitImplSignature, TraitSynthesis, UnsafetyNeeded,
+            Virtualness,
         },
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
@@ -61,7 +62,10 @@ use self::{
     function_wrapper::RustConversionType,
     implicit_constructors::find_missing_constructors,
     overload_tracker::OverloadTracker,
-    subclass::{create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function},
+    subclass::{
+        create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function,
+        create_subclass_trait_item,
+    },
 };
 
 use super::{
@@ -135,13 +139,9 @@ pub(crate) enum RustRenameStrategy {
     /// Even the #[rust_name] attribute would cause conflicts, and we need
     /// to use a 'use XYZ as ABC'
     RenameInOutputMod(Ident),
-}
-
-#[derive(Clone)]
-pub(crate) enum UnsafetyNeeded {
-    None,
-    JustBridge,
-    Always,
+    /// This function requires us to generate a Rust function to do
+    /// parameter conversion.
+    RenameUsingWrapperFunction,
 }
 
 #[derive(Clone)]
@@ -166,6 +166,8 @@ pub(crate) struct FnAnalysis {
     /// Whether this can be called by external code. Not so for
     /// protected methods.
     pub(crate) externally_callable: bool,
+    /// Whether we need to generate a Rust-side calling function
+    pub(crate) rust_wrapper_needed: bool,
 }
 
 #[derive(Clone)]
@@ -175,7 +177,7 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) self_type: Option<(QualifiedName, ReceiverMutability)>,
     pub(crate) was_reference: bool,
     pub(crate) deps: HashSet<QualifiedName>,
-    pub(crate) requires_unsafe: bool,
+    pub(crate) requires_unsafe: UnsafetyNeeded,
 }
 
 struct ReturnTypeAnalysis {
@@ -196,12 +198,38 @@ impl Default for ReturnTypeAnalysis {
     }
 }
 
+/// An analysis phase where we've analyzed each function, but
+/// haven't yet determined which constructors/etc. belong to each type.
+pub(crate) struct FnPrePhase;
+
+impl AnalysisPhase for FnPrePhase {
+    type TypedefAnalysis = TypedefAnalysis;
+    type StructAnalysis = PodAnalysis;
+    type FunAnalysis = FnAnalysis;
+}
+
+pub(crate) struct PodAndDepAnalysis {
+    pub(crate) pod: PodAnalysis,
+    pub(crate) constructor_and_allocator_deps: Vec<QualifiedName>,
+}
+
+/// Analysis phase after we've finished analyzing functions and determined
+/// which constructors etc. belong to them.
 pub(crate) struct FnPhase;
 
 impl AnalysisPhase for FnPhase {
     type TypedefAnalysis = TypedefAnalysis;
-    type StructAnalysis = PodAnalysis;
+    type StructAnalysis = PodAndDepAnalysis;
     type FunAnalysis = FnAnalysis;
+}
+
+/// Whether to allow highly optimized calls because this is a simple Rust->C++ call,
+/// or to use a simpler set of policies because this is a subclass call where
+/// we may have C++->Rust->C++ etc.
+#[derive(Copy, Clone)]
+enum TypeConversionSophistication {
+    Regular,
+    SimpleForSubclasses,
 }
 
 pub(crate) struct FnAnalyzer<'a> {
@@ -215,6 +243,7 @@ pub(crate) struct FnAnalyzer<'a> {
     subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
     nested_type_name_map: HashMap<QualifiedName, String>,
     generic_types: HashSet<QualifiedName>,
+    existing_superclass_trait_api_names: HashSet<QualifiedName>,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -222,7 +251,7 @@ impl<'a> FnAnalyzer<'a> {
         apis: Vec<Api<PodPhase>>,
         unsafe_policy: UnsafePolicy,
         config: &'a IncludeCppConfig,
-    ) -> Vec<Api<FnPhase>> {
+    ) -> Vec<Api<FnPrePhase>> {
         let mut me = Self {
             unsafe_policy,
             extra_apis: Vec::new(),
@@ -234,6 +263,7 @@ impl<'a> FnAnalyzer<'a> {
             subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
             nested_type_name_map: Self::build_nested_type_map(&apis),
             generic_types: Self::build_generic_type_set(&apis),
+            existing_superclass_trait_api_names: HashSet::new(),
         };
         let mut results = Vec::new();
         convert_apis(
@@ -352,13 +382,8 @@ impl<'a> FnAnalyzer<'a> {
         param_details: &[ArgumentAnalysis],
         kind: &FnKind,
     ) -> UnsafetyNeeded {
-        let any_non_self_param_needs_unsafe = || -> bool {
-            param_details
-                .iter()
-                .any(|pd| pd.self_type.is_none() && pd.requires_unsafe)
-        };
-        let any_param_needs_unsafe =
-            || -> bool { param_details.iter().any(|pd| pd.requires_unsafe) };
+        let unsafest_non_self_param = UnsafetyNeeded::from_param_details(param_details, true);
+        let unsafest_param = UnsafetyNeeded::from_param_details(param_details, false);
         match kind {
             // Trait unsafety must always correspond to the norms for the
             // trait we're implementing.
@@ -370,15 +395,22 @@ impl<'a> FnAnalyzer<'a> {
                     | TraitMethodKind::Dealloc,
                 ..
             } => UnsafetyNeeded::Always,
-            FnKind::TraitMethod { .. } if any_param_needs_unsafe() => UnsafetyNeeded::JustBridge,
-            FnKind::TraitMethod { .. } => UnsafetyNeeded::None,
-            _ if self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
-                || any_non_self_param_needs_unsafe() =>
-            {
-                UnsafetyNeeded::Always
-            }
-            _ if any_param_needs_unsafe() => UnsafetyNeeded::JustBridge,
-            _ => UnsafetyNeeded::None,
+            FnKind::TraitMethod { .. } => match unsafest_param {
+                UnsafetyNeeded::Always => UnsafetyNeeded::JustBridge,
+                _ => unsafest_param,
+            },
+            _ if self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe => UnsafetyNeeded::Always,
+            _ => match unsafest_non_self_param {
+                UnsafetyNeeded::Always => UnsafetyNeeded::Always,
+                UnsafetyNeeded::JustBridge => match unsafest_param {
+                    UnsafetyNeeded::Always => UnsafetyNeeded::JustBridge,
+                    _ => unsafest_non_self_param,
+                },
+                UnsafetyNeeded::None => match unsafest_param {
+                    UnsafetyNeeded::Always => UnsafetyNeeded::JustBridge,
+                    _ => unsafest_param,
+                },
+            },
         }
     }
 
@@ -388,17 +420,17 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         fun: Box<FuncToConvert>,
-    ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
+    ) -> Result<Box<dyn Iterator<Item = Api<FnPrePhase>>>, ConvertErrorWithContext> {
         let initial_name = name.clone();
-        let (analysis, name) = self.analyze_foreign_fn(name, &fun);
+        let (analysis, name) =
+            self.analyze_foreign_fn(name, &fun, TypeConversionSophistication::Regular, None);
         let mut results = Vec::new();
 
         // Consider whether we need to synthesize subclass items.
         match &analysis.kind {
             FnKind::Method(sup, MethodKind::Constructor) => {
                 // Create a make_unique too
-                let make_unique_func = self.create_make_unique(&fun);
-                self.analyze_and_add(initial_name, make_unique_func, &mut results);
+                self.create_make_unique(&fun, initial_name, &mut results);
 
                 for sub in self.subclasses_by_superclass(sup) {
                     // Create a subclass constructor. This is a synthesized function
@@ -409,10 +441,14 @@ impl<'a> FnAnalyzer<'a> {
                         subclass_constructor_name.clone(),
                         subclass_constructor_func.clone(),
                         &mut results,
+                        TypeConversionSophistication::Regular,
                     );
                     // and its corresponding make_unique
-                    let make_unique_func = self.create_make_unique(&subclass_constructor_func);
-                    self.analyze_and_add(subclass_constructor_name, make_unique_func, &mut results);
+                    self.create_make_unique(
+                        &subclass_constructor_func,
+                        subclass_constructor_name,
+                        &mut results,
+                    );
                 }
             }
             FnKind::Method(
@@ -420,6 +456,12 @@ impl<'a> FnAnalyzer<'a> {
                 MethodKind::Virtual(receiver_mutability)
                 | MethodKind::PureVirtual(receiver_mutability),
             ) => {
+                let (simpler_analysis, _) = self.analyze_foreign_fn(
+                    name.clone(),
+                    &fun,
+                    TypeConversionSophistication::SimpleForSubclasses,
+                    Some(analysis.rust_name.clone()),
+                );
                 for sub in self.subclasses_by_superclass(sup) {
                     // For each subclass, we need to create a plain-C++ method to call its superclass
                     // and a Rust/C++ bridge API to call _that_.
@@ -427,29 +469,57 @@ impl<'a> FnAnalyzer<'a> {
                     // superclass's namespace is irrelevant. We generate
                     // all subclasses in the root namespace.
                     let is_pure_virtual = matches!(
-                        &analysis.kind,
+                        &simpler_analysis.kind,
                         FnKind::Method(_, MethodKind::PureVirtual(..))
                     );
                     let super_fn_name =
                         SubclassName::get_super_fn_name(&Namespace::new(), &analysis.rust_name);
+                    let trait_api_name = SubclassName::get_trait_api_name(sup, &analysis.rust_name);
 
+                    // Create the Rust API representing the subclass implementation (allowing calls
+                    // from C++ -> Rust)
                     results.push(create_subclass_function(
                         &sub,
-                        &analysis,
+                        &simpler_analysis,
                         &name,
                         receiver_mutability,
                         sup,
                         if is_pure_virtual {
-                            None
+                            vec![trait_api_name.clone()]
                         } else {
-                            Some(&super_fn_name)
+                            vec![trait_api_name.clone(), super_fn_name.clone()]
                         },
                     ));
 
+                    // Create the trait item for the <superclass>_methods and <superclass>_supers
+                    // traits. This is required per-superclass, not per-subclass, so don't
+                    // create it if it already exists.
+                    if !self
+                        .existing_superclass_trait_api_names
+                        .contains(&trait_api_name)
+                    {
+                        self.existing_superclass_trait_api_names
+                            .insert(trait_api_name.clone());
+                        results.push(create_subclass_trait_item(
+                            ApiName::new_from_qualified_name(trait_api_name),
+                            &simpler_analysis,
+                            receiver_mutability,
+                            sup.clone(),
+                            is_pure_virtual,
+                        ));
+                    }
+
                     if !is_pure_virtual {
+                        // Create a C++ API representing the superclass implementation (allowing
+                        // calls from Rust->C++)
                         let maybe_wrap = create_subclass_fn_wrapper(sub, &super_fn_name, &fun);
                         let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
-                        self.analyze_and_add(super_fn_name, maybe_wrap, &mut results);
+                        self.analyze_and_add(
+                            super_fn_name,
+                            maybe_wrap,
+                            &mut results,
+                            TypeConversionSophistication::SimpleForSubclasses,
+                        );
                     }
                 }
             }
@@ -470,9 +540,10 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         new_func: Box<FuncToConvert>,
-        results: &mut Vec<Api<FnPhase>>,
+        results: &mut Vec<Api<FnPrePhase>>,
+        sophistication: TypeConversionSophistication,
     ) {
-        let (analysis, name) = self.analyze_foreign_fn(name, &new_func);
+        let (analysis, name) = self.analyze_foreign_fn(name, &new_func, sophistication, None);
         results.push(Api::Function {
             fun: new_func,
             analysis,
@@ -483,10 +554,21 @@ impl<'a> FnAnalyzer<'a> {
 
     /// Take a constructor e.g. pub fn A_A(this: *mut root::A);
     /// and synthesize a make_unique e.g. pub fn make_unique() -> cxx::UniquePtr<A>
-    fn create_make_unique(&mut self, fun: &FuncToConvert) -> Box<FuncToConvert> {
+    fn create_make_unique(
+        &mut self,
+        fun: &FuncToConvert,
+        initial_name: ApiName,
+        results: &mut Vec<Api<FnPrePhase>>,
+    ) {
         let mut new_fun = fun.clone();
         new_fun.provenance = Provenance::SynthesizedMakeUnique;
-        Box::new(new_fun)
+        let make_unique_func = Box::new(new_fun);
+        self.analyze_and_add(
+            initial_name,
+            make_unique_func,
+            results,
+            TypeConversionSophistication::Regular,
+        );
     }
 
     /// Determine how to materialize a function.
@@ -504,7 +586,13 @@ impl<'a> FnAnalyzer<'a> {
     /// The other major thing we do here is figure out naming for the function.
     /// This depends on overloads, and what other functions are floating around.
     /// The output of this analysis phase is used by both Rust and C++ codegen.
-    fn analyze_foreign_fn(&mut self, name: ApiName, fun: &FuncToConvert) -> (FnAnalysis, ApiName) {
+    fn analyze_foreign_fn(
+        &mut self,
+        name: ApiName,
+        fun: &FuncToConvert,
+        sophistication: TypeConversionSophistication,
+        predetermined_rust_name: Option<String>,
+    ) -> (FnAnalysis, ApiName) {
         let mut cpp_name = name.cpp_name_if_present().cloned();
         let ns = name.name.get_namespace();
 
@@ -529,6 +617,7 @@ impl<'a> FnAnalyzer<'a> {
                     &fun.references,
                     true,
                     None,
+                    sophistication,
                 )
             })
             .partition(Result::is_ok);
@@ -633,7 +722,8 @@ impl<'a> FnAnalyzer<'a> {
                 if let Some(constructor_suffix) = rust_name.strip_prefix(nested_type_ident) {
                     rust_name = format!("new{}", constructor_suffix);
                 }
-                rust_name = self.get_overload_name(ns, type_ident, rust_name);
+                rust_name = predetermined_rust_name
+                    .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
                 let error_context = error_context_for_method(&self_ty, &rust_name);
                 let ty = Type::Path(self_ty.to_type_path());
                 (
@@ -658,7 +748,8 @@ impl<'a> FnAnalyzer<'a> {
                     rust_name,
                 )
             } else if matches!(fun.special_member, Some(SpecialMemberKind::Destructor)) {
-                rust_name = self.get_overload_name(ns, type_ident, rust_name);
+                rust_name = predetermined_rust_name
+                    .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
                 let error_context = error_context_for_method(&self_ty, &rust_name);
                 let ty = Type::Path(self_ty.to_type_path());
                 (
@@ -719,7 +810,8 @@ impl<'a> FnAnalyzer<'a> {
                     }
                 };
                 // Disambiguate overloads.
-                let rust_name = self.get_overload_name(ns, type_ident, rust_name);
+                let rust_name = predetermined_rust_name
+                    .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
                 let error_context = error_context_for_method(&self_ty, &rust_name);
                 (
                     FnKind::Method(self_ty, method_kind),
@@ -762,6 +854,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut params,
                     &mut param_details,
                     None,
+                    sophistication,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
             }
@@ -778,6 +871,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut params,
                     &mut param_details,
                     Some(RustConversionType::FromTypeToPtr),
+                    sophistication,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
             }
@@ -793,6 +887,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut params,
                     &mut param_details,
                     Some(RustConversionType::FromPinMaybeUninitToPtr),
+                    sophistication,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
             }
@@ -809,6 +904,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut params,
                     &mut param_details,
                     Some(RustConversionType::FromPinMaybeUninitToPtr),
+                    sophistication,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
                 self.reanalyze_parameter(
@@ -819,6 +915,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut params,
                     &mut param_details,
                     Some(RustConversionType::FromPinMoveRefToPtr),
+                    sophistication,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
             }
@@ -879,11 +976,7 @@ impl<'a> FnAnalyzer<'a> {
                 ) if !known_types().is_cxx_acceptable_receiver(self_ty) => {
                     set_ignore_reason(ConvertError::UnsupportedReceiver);
                 }
-                FnKind::Method(ref self_ty, _)
-                | FnKind::TraitMethod {
-                    impl_for: ref self_ty,
-                    ..
-                } if !self.is_on_allowlist(self_ty) => {
+                FnKind::Method(ref self_ty, _) if !self.is_on_allowlist(self_ty) => {
                     // Bindgen will output methods for types which have been encountered
                     // virally as arguments on other allowlisted types. But we don't want
                     // to generate methods unless the user has specifically asked us to.
@@ -1080,11 +1173,25 @@ impl<'a> FnAnalyzer<'a> {
 
         let vis = fun.vis.clone();
 
+        let any_param_needs_rust_conversion = param_details
+            .iter()
+            .any(|pd| pd.conversion.rust_work_needed());
+
+        let rust_wrapper_needed = match kind {
+            FnKind::TraitMethod { .. } => true,
+            FnKind::Method(..) => any_param_needs_rust_conversion || cxxbridge_name != rust_name,
+            _ => any_param_needs_rust_conversion,
+        };
+
         // Naming, part two.
         // Work out our final naming strategy.
         validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).unwrap_or_else(set_ignore_reason);
         let rust_name_ident = make_ident(&rust_name);
         let (id, rust_rename_strategy) = match kind {
+            _ if rust_wrapper_needed => (
+                rust_name_ident,
+                RustRenameStrategy::RenameUsingWrapperFunction,
+            ),
             FnKind::Function if cxxbridge_name != rust_name => (
                 cxxbridge_name.clone(),
                 RustRenameStrategy::RenameInOutputMod(rust_name_ident),
@@ -1107,6 +1214,7 @@ impl<'a> FnAnalyzer<'a> {
             deps,
             ignore_reason,
             externally_callable,
+            rust_wrapper_needed,
         };
         let name = ApiName::new_with_cpp_name(ns, id, cpp_name);
         (analysis, name)
@@ -1124,6 +1232,7 @@ impl<'a> FnAnalyzer<'a> {
         params: &mut Punctuated<FnArg, Comma>,
         param_details: &mut [ArgumentAnalysis],
         force_rust_conversion: Option<RustConversionType>,
+        sophistication: TypeConversionSophistication,
     ) -> Result<(), ConvertError> {
         self.convert_fn_arg(
             fun.inputs.iter().nth(param_idx).unwrap(),
@@ -1133,6 +1242,7 @@ impl<'a> FnAnalyzer<'a> {
             &fun.references,
             false,
             force_rust_conversion,
+            sophistication,
         )
         .map(|(new_arg, new_analysis)| {
             param_details[param_idx] = new_analysis;
@@ -1286,6 +1396,7 @@ impl<'a> FnAnalyzer<'a> {
         references: &References,
         treat_this_as_reference: bool,
         force_rust_conversion: Option<RustConversionType>,
+        sophistication: TypeConversionSophistication,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
             FnArg::Typed(pt) => {
@@ -1357,9 +1468,18 @@ impl<'a> FnAnalyzer<'a> {
                     &subclass_holder.cloned(),
                     treat_as_rvalue_reference,
                     force_rust_conversion,
+                    sophistication,
                 );
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
+                let requires_unsafe =
+                    if matches!(annotated_type.kind, type_converter::TypeKind::Pointer) {
+                        UnsafetyNeeded::Always
+                    } else if conversion.bridge_unsafe_needed() {
+                        UnsafetyNeeded::JustBridge
+                    } else {
+                        UnsafetyNeeded::None
+                    };
                 (
                     FnArg::Typed(pt),
                     ArgumentAnalysis {
@@ -1372,10 +1492,7 @@ impl<'a> FnAnalyzer<'a> {
                                 | type_converter::TypeKind::MutableReference
                         ),
                         deps: annotated_type.types_encountered,
-                        requires_unsafe: matches!(
-                            annotated_type.kind,
-                            type_converter::TypeKind::Pointer
-                        ),
+                        requires_unsafe,
                     },
                 )
             }
@@ -1389,6 +1506,7 @@ impl<'a> FnAnalyzer<'a> {
         is_subclass_holder: &Option<Ident>,
         is_rvalue_ref: bool,
         force_rust_conversion: Option<RustConversionType>,
+        sophistication: TypeConversionSophistication,
     ) -> TypeConversionPolicy {
         if let Some(holder_id) = is_subclass_holder {
             let subclass = SubclassName::from_holder_name(holder_id);
@@ -1417,11 +1535,20 @@ impl<'a> FnAnalyzer<'a> {
                         cpp_conversion: CppConversionType::FromUniquePtrToValue,
                         rust_conversion: RustConversionType::FromStr,
                     }
-                } else {
+                } else if matches!(
+                    sophistication,
+                    TypeConversionSophistication::SimpleForSubclasses
+                ) {
                     TypeConversionPolicy {
                         unwrapped_type: ty,
                         cpp_conversion: CppConversionType::FromUniquePtrToValue,
                         rust_conversion: RustConversionType::None,
+                    }
+                } else {
+                    TypeConversionPolicy {
+                        unwrapped_type: ty,
+                        cpp_conversion: CppConversionType::FromPtrToValue,
+                        rust_conversion: RustConversionType::FromValueParamToPtr,
                     }
                 }
             }
@@ -1495,7 +1622,7 @@ impl<'a> FnAnalyzer<'a> {
     /// would need to output a `FnAnalysisBody`. By running it as part of this phase
     /// we can simply generate the sort of thing bindgen generates, then ask
     /// the existing code in this phase to figure out what to do with it.
-    fn add_missing_constructors(&mut self, apis: &mut Vec<Api<FnPhase>>) {
+    fn add_missing_constructors(&mut self, apis: &mut Vec<Api<FnPrePhase>>) {
         if self.config.exclude_impls {
             return;
         }
@@ -1555,7 +1682,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         self_ty: QualifiedName,
         label: Option<&str>,
-        apis: &mut Vec<Api<FnPhase>>,
+        apis: &mut Vec<Api<FnPrePhase>>,
         special_member: SpecialMemberKind,
         inputs: Punctuated<FnArg, Comma>,
         references: References,
@@ -1645,6 +1772,16 @@ impl Api<FnPhase> {
                 | Api::CType { .. }
                 | Api::RustSubclassFn { .. }
                 | Api::Subclass { .. }
+                | Api::Struct {
+                    analysis: PodAndDepAnalysis {
+                        pod: PodAnalysis {
+                            kind: TypeKind::Pod,
+                            ..
+                        },
+                        ..
+                    },
+                    ..
+                }
         )
     }
 
@@ -1657,37 +1794,5 @@ impl Api<FnPhase> {
             | Api::RustSubclassFn { .. } => None,
             _ => Some(self.name().get_final_ident()),
         }
-    }
-
-    /// Any dependencies on other APIs which this API has.
-    pub(crate) fn deps(&self) -> Box<dyn Iterator<Item = QualifiedName> + '_> {
-        match self {
-            Api::Typedef {
-                old_tyname,
-                analysis: TypedefAnalysis { deps, .. },
-                ..
-            } => Box::new(old_tyname.iter().chain(deps.iter()).cloned()),
-            Api::Struct {
-                analysis:
-                    PodAnalysis {
-                        kind: TypeKind::Pod,
-                        field_types,
-                        ..
-                    },
-                ..
-            } => Box::new(field_types.iter().cloned()),
-            Api::Function { analysis, .. } => Box::new(analysis.deps.iter().cloned()),
-            // TODO constructors need to depend on the alloc/free fns
-            Api::Subclass {
-                name: _,
-                superclass,
-            } => Box::new(std::iter::once(superclass.clone())),
-            Api::RustSubclassFn { details, .. } => Box::new(details.dependency.iter().cloned()),
-            _ => Box::new(std::iter::empty()),
-        }
-    }
-
-    pub(crate) fn format_deps(&self) -> String {
-        self.deps().join(",")
     }
 }

@@ -18,7 +18,7 @@ use autocxx_parser::IncludeCppConfig;
 
 use crate::{conversion::api::Api, types::QualifiedName};
 
-use super::fun::FnPhase;
+use super::{deps::HasDependencies, fun::FnPhase};
 
 /// This is essentially mark-and-sweep garbage collection of the
 /// [Api]s that we've discovered. Why do we do this, you might wonder?
@@ -63,7 +63,7 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
             continue;
         }
         if let Some(mut these_apis) = by_typename.remove(&todo) {
-            todos.extend(these_apis.iter().flat_map(|api| api.deps()));
+            todos.extend(these_apis.iter().flat_map(|api| api.deps().cloned()));
             output.append(&mut these_apis);
         } // otherwise, probably an intrinsic e.g. uint32_t.
         done.insert(todo);

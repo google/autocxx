@@ -16,6 +16,7 @@
 
 /// Output of the C++ rules about what implicit constructors should be generated.
 #[cfg_attr(test, derive(Eq, PartialEq))]
+#[derive(Debug)]
 pub(super) struct ImplicitConstructorsNeeded {
     pub(super) default_constructor: bool,
     pub(super) copy_constructor_taking_t: bool,

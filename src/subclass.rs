@@ -74,11 +74,14 @@ pub mod prelude {
     };
 }
 
+/// A trait representing the C++ side of a Rust/C++ subclass pair.
 #[doc(hidden)]
 pub trait CppSubclassCppPeer: UniquePtrTarget {
     fn relinquish_ownership(&self);
 }
 
+/// A type used for how the C++ side of a Rust/C++ subclass pair refers to
+/// the Rust side.
 #[doc(hidden)]
 pub enum CppSubclassRustPeerHolder<T> {
     Owned(Rc<RefCell<T>>),
@@ -102,6 +105,8 @@ impl<T> CppSubclassRustPeerHolder<T> {
     }
 }
 
+/// A type showing how the Rust side of a Rust/C++ subclass pair refers to
+/// the C++ side.
 #[doc(hidden)]
 pub enum CppSubclassCppPeerHolder<CppPeer: CppSubclassCppPeer> {
     Empty,
@@ -121,6 +126,8 @@ impl<CppPeer: CppSubclassCppPeer> CppSubclassCppPeerHolder<CppPeer> {
             CppSubclassCppPeerHolder::Empty => panic!("Peer not set up"),
             CppSubclassCppPeerHolder::Owned(peer) => peer.pin_mut(),
             CppSubclassCppPeerHolder::Unowned(peer) => unsafe {
+                // Safety: guaranteed safe because this is a pointer to a C++ object,
+                // and C++ never moves things in memory.
                 Pin::new_unchecked(peer.as_mut().unwrap())
             },
         }
@@ -129,6 +136,8 @@ impl<CppPeer: CppSubclassCppPeer> CppSubclassCppPeerHolder<CppPeer> {
         match self {
             CppSubclassCppPeerHolder::Empty => panic!("Peer not set up"),
             CppSubclassCppPeerHolder::Owned(peer) => peer.as_ref(),
+            // Safety: guaranteed safe because this is a pointer to a C++ object,
+            // and C++ never moves things in memory.
             CppSubclassCppPeerHolder::Unowned(peer) => unsafe { peer.as_ref().unwrap() },
         }
     }
@@ -136,6 +145,8 @@ impl<CppPeer: CppSubclassCppPeer> CppSubclassCppPeerHolder<CppPeer> {
         *self = Self::Owned(Box::new(peer));
     }
     fn set_unowned(&mut self, peer: &mut UniquePtr<CppPeer>) {
+        // Safety: guaranteed safe because this is a pointer to a C++ object,
+        // and C++ never moves things in memory.
         *self = Self::Unowned(unsafe {
             std::pin::Pin::<&mut CppPeer>::into_inner_unchecked(peer.pin_mut())
         });

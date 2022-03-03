@@ -20,7 +20,7 @@ use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability};
 use crate::conversion::analysis::pod::PodPhase;
 use crate::conversion::api::{
     CppVisibility, FuncToConvert, Provenance, RustSubclassFnDetails, SubclassConstructorDetails,
-    SubclassName, Virtualness,
+    SubclassName, SuperclassMethod, UnsafetyNeeded, Virtualness,
 };
 use crate::{
     conversion::{
@@ -32,7 +32,7 @@ use crate::{
     types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::{FnAnalysis, FnPhase};
+use super::{FnAnalysis, FnPrePhase};
 
 pub(super) fn subclasses_by_superclass(
     apis: &[Api<PodPhase>],
@@ -77,14 +77,41 @@ pub(super) fn create_subclass_fn_wrapper(
     })
 }
 
+pub(super) fn create_subclass_trait_item(
+    name: ApiName,
+    analysis: &FnAnalysis,
+    receiver_mutability: &ReceiverMutability,
+    receiver: QualifiedName,
+    is_pure_virtual: bool,
+) -> Api<FnPrePhase> {
+    let param_names = analysis
+        .param_details
+        .iter()
+        .map(|pd| pd.name.clone())
+        .collect();
+    Api::SubclassTraitItem {
+        name,
+        details: SuperclassMethod {
+            name: make_ident(&analysis.rust_name),
+            params: analysis.params.clone(),
+            ret_type: analysis.ret_type.clone(),
+            param_names,
+            receiver_mutability: receiver_mutability.clone(),
+            requires_unsafe: UnsafetyNeeded::from_param_details(&analysis.param_details, false),
+            is_pure_virtual,
+            receiver,
+        },
+    }
+}
+
 pub(super) fn create_subclass_function(
     sub: &SubclassName,
     analysis: &super::FnAnalysis,
     name: &ApiName,
     receiver_mutability: &ReceiverMutability,
     superclass: &QualifiedName,
-    dependency: Option<&QualifiedName>,
-) -> Api<FnPhase> {
+    dependencies: Vec<QualifiedName>,
+) -> Api<FnPrePhase> {
     let cpp = sub.cpp();
     let holder_name = sub.holder();
     let rust_call_name = make_ident(format!(
@@ -102,7 +129,13 @@ pub(super) fn create_subclass_function(
     } else {
         CppFunctionKind::ConstMethod
     };
-    let subclass_function: Api<FnPhase> = Api::RustSubclassFn {
+    let argument_conversion = analysis
+        .param_details
+        .iter()
+        .skip(1)
+        .map(|p| p.conversion.clone())
+        .collect();
+    Api::RustSubclassFn {
         name: ApiName::new_in_root_namespace(rust_call_name.clone()),
         subclass: sub.clone(),
         details: Box::new(RustSubclassFnDetails {
@@ -114,27 +147,21 @@ pub(super) fn create_subclass_function(
                 wrapper_function_name: name.name.get_final_ident(),
                 original_cpp_name: name.cpp_name(),
                 return_conversion: analysis.ret_conversion.clone(),
-                argument_conversion: analysis
-                    .param_details
-                    .iter()
-                    .skip(1)
-                    .map(|p| p.conversion.clone())
-                    .collect(),
+                argument_conversion,
                 kind,
                 pass_obs_field: true,
                 qualification: Some(cpp),
             },
             superclass: superclass.clone(),
             receiver_mutability: receiver_mutability.clone(),
-            dependency: dependency.cloned(),
-            requires_unsafe: analysis.param_details.iter().any(|pd| pd.requires_unsafe),
+            dependencies,
+            requires_unsafe: UnsafetyNeeded::from_param_details(&analysis.param_details, false),
             is_pure_virtual: matches!(
                 analysis.kind,
                 FnKind::Method(_, MethodKind::PureVirtual(..))
             ),
         }),
-    };
-    subclass_function
+    }
 }
 
 pub(super) fn create_subclass_constructor(
