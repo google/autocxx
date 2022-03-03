@@ -218,16 +218,25 @@ declaration) can't be held in a <code>UniquePtr</code> within Rust (because Rust
 if it has a destructor that will need to be called if the object is <code>Drop</code>ped.)
 Naturally, such an object can't be passed by value either; it can still be
 referenced in Rust references.</p>
-<h2 id="generic-types"><a class="header" href="#generic-types">Generic types</a></h2>
+<h2 id="generic-templated-types"><a class="header" href="#generic-templated-types">Generic (templated) types</a></h2>
 <p>If you're using one of the generic types which is supported natively by cxx,
 e.g. <code>std::unique_ptr</code>, it should work as you expect. For other generic types,
 we synthesize a concrete Rust type, corresponding to a C++ typedef, for each
 concrete instantiation of the type. Such generated types are always opaque,
 and never have methods attached. That's therefore enough to pass them
 between return types and parameters of other functions within <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>s
-but not really enough to do anything else with these types yet.</p>
+but not really enough to do anything else with these types yet<sup class="footnote-reference"><a href="#templated">1</a></sup>.</p>
+<div class="footnote-definition" id="templated"><sup class="footnote-definition-label">1</sup>
+<p>Future improvements tracked <a href="https://github.com/google/autocxx/issues/349">here</a></p>
+</div>
 <p>To make them more useful, you might have to add extra C++ functions to extract
 data or otherwise deal with them.</p>
+<h2 id="abstract-types"><a class="header" href="#abstract-types">Abstract types</a></h2>
+<p><code>autocxx</code> does not allow instantiation of abstract types<sup class="footnote-reference"><a href="#abstract">2</a></sup>.</p>
+<div class="footnote-definition" id="abstract"><sup class="footnote-definition-label">2</sup>
+<p><code>autocxx</code>'s determination of abstract types is a bit approximate and
+<a href="https://github.com/google/autocxx/issues/774">could be improved</a>.</p>
+</div>
 
                     </main>
 

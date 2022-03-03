@@ -179,6 +179,11 @@ fn main() {
 
 </code></pre>
 <p>Specifically, you can pass anything which implements <a href="https://docs.rs/autocxx/latest/autocxx/trait.ValueParam.html"><code>ValueParam&lt;T&gt;</code></a>.</p>
+<h2 id="default-parameters"><a class="header" href="#default-parameters">Default parameters</a></h2>
+<p>Are not yet supported<sup class="footnote-reference"><a href="#default">1</a></sup>.</p>
+<div class="footnote-definition" id="default"><sup class="footnote-definition-label">1</sup>
+<p>the work is <a href="https://github.com/google/autocxx/issues/563">planned here</a>.</p>
+</div>
 <h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
 <p>At present, return values for <a href="cpp_types.html">non-POD</a> types are always
 a <code>cxx::UniquePtr&lt;T&gt;</code>. This is likely to change in future.</p>

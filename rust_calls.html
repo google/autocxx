@@ -146,7 +146,7 @@
 <li>Allow Rust subclasses of C++ classes.</li>
 </ul>
 <p>This latter option is most commonly used for implementing &quot;listeners&quot; or <a href="https://en.wikipedia.org/wiki/Observer_pattern">&quot;observers&quot;</a>, so is often in practice how C++ will call into Rust. More details below.</p>
-<h1 id="subclasses"><a class="header" href="#subclasses">Subclasses</a></h1>
+<h2 id="subclasses"><a class="header" href="#subclasses">Subclasses</a></h2>
 <p>There is limited and experimental support for creating Rust subclasses of
 C++ classes. (Yes, even more experimental than all the rest of this!)
 See <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclass.html"><code>subclass::CppSubclass</code></a> for information about how you do this.
@@ -207,6 +207,84 @@ fn main() {
 }
 
 </code></pre>
+<h2 id="subclass-ownership"><a class="header" href="#subclass-ownership">Subclass ownership</a></h2>
+<p>See <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclass.html"><code>subclass::CppSubclass</code></a>
+for full details, but you must decide who owns your subclass:</p>
+<ul>
+<li>C++ owns it</li>
+<li>Rust owns it</li>
+<li>It's self-owned, and only ever frees itself (using <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclassSelfOwned.html#method.delete_self"><code>delete_self</code></a>).</li>
+</ul>
+<p>Please be careful: the observer pattern is a minefield for use-after-free bugs.
+It's recommended that you wrap any such subclass in some sort of Rust newtype
+wrapper which <a href="rustic.html">enforces any ownership invariants</a> so that users
+of your types literally can't make any mistakes.</p>
+<h2 id="calling-superclass-methods"><a class="header" href="#calling-superclass-methods">Calling superclass methods</a></h2>
+<p>Each subclass also implements a trait called <code>&lt;superclass name&gt;_supers</code> which
+includes all superclass methods. You can call methods on that, and if you
+don't implement a particular method, that will be used as the default.</p>
+<h4 id="c-header-1"><a class="header" href="#c-header-1">C++ header:</a></h4>
+<pre><code class="language-cpp">
+#include &lt;iostream&gt;
+class Dinosaur {
+public:
+    Dinosaur() {}
+    virtual void eat() const {
+        std::cout &lt;&lt; \&quot;Roarrr!! I ate you!\n\&quot;;
+    }
+    virtual ~Dinosaur() {}
+};
+
+// Currently, autocxx requires at least one 'generate!' call.
+inline void do_a_thing() {};
+
+</code></pre>
+<h4 id="rust-1"><a class="header" href="#rust-1">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+use autocxx::subclass::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    subclass!(&quot;Dinosaur&quot;, TRex)
+    subclass!(&quot;Dinosaur&quot;, Diplodocus)
+    generate!(&quot;do_a_thing&quot;)
+}
+
+use ffi::*;
+
+#[is_subclass(superclass(&quot;Dinosaur&quot;))]
+#[derive(Default)]
+pub struct TRex;
+
+#[is_subclass(superclass(&quot;Dinosaur&quot;))]
+#[derive(Default)]
+pub struct Diplodocus;
+
+impl Dinosaur_methods for TRex {
+    // TRex does NOT implement the 'eat' method
+    // so C++ behavior will be used
+}
+
+impl Dinosaur_methods for Diplodocus {
+    fn eat(&amp;self) {
+        println!(&quot;Ahh, some nice juicy leaves.&quot;);
+        // Could call self.eat_super() if we
+        // developed unexpected carnivorous cravings.
+    }
+}
+
+fn main() {
+    let trex = TRex::default_rust_owned();
+    trex.borrow().as_ref().eat(); // eats human
+    let diplo = Diplodocus::default_rust_owned();
+    diplo.borrow().as_ref().eat(); // eats shoots and leaves
+}
+
+</code></pre>
+<h2 id="subclass-casting"><a class="header" href="#subclass-casting">Subclass casting</a></h2>
+<p>Subclasses implement <code>AsRef</code> to enable casting to superclasses.</p>
 
                     </main>
 

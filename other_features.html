@@ -147,7 +147,10 @@ exception support, so it would be possible to add them.</p>
 <h2 id="preprocessor-symbols"><a class="header" href="#preprocessor-symbols">Preprocessor symbols</a></h2>
 <p><code>#define</code> and other preprocessor symbols will appear as constants.
 At present there is no way to do compile-time disablement of code
-(equivalent of <code>#ifdef</code>).</p>
+(equivalent of <code>#ifdef</code>)<sup class="footnote-reference"><a href="#ifdef">1</a></sup>.</p>
+<div class="footnote-definition" id="ifdef"><sup class="footnote-definition-label">1</sup>
+<p><a href="https://github.com/google/autocxx/issues/57">This feature</a> should add ifdef support.</p>
+</div>
 <h2 id="string-constants"><a class="header" href="#string-constants">String constants</a></h2>
 <p>Whether from a preprocessor symbol or from a C++ <code>char*</code> constant,
 strings appear as <code>[u8]</code> with a null terminator. To get a Rust string,

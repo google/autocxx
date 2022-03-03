@@ -649,16 +649,25 @@ declaration) can't be held in a <code>UniquePtr</code> within Rust (because Rust
 if it has a destructor that will need to be called if the object is <code>Drop</code>ped.)
 Naturally, such an object can't be passed by value either; it can still be
 referenced in Rust references.</p>
-<h2 id="generic-types"><a class="header" href="#generic-types">Generic types</a></h2>
+<h2 id="generic-templated-types"><a class="header" href="#generic-templated-types">Generic (templated) types</a></h2>
 <p>If you're using one of the generic types which is supported natively by cxx,
 e.g. <code>std::unique_ptr</code>, it should work as you expect. For other generic types,
 we synthesize a concrete Rust type, corresponding to a C++ typedef, for each
 concrete instantiation of the type. Such generated types are always opaque,
 and never have methods attached. That's therefore enough to pass them
 between return types and parameters of other functions within <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>s
-but not really enough to do anything else with these types yet.</p>
+but not really enough to do anything else with these types yet<sup class="footnote-reference"><a href="#templated">1</a></sup>.</p>
+<div class="footnote-definition" id="templated"><sup class="footnote-definition-label">1</sup>
+<p>Future improvements tracked <a href="https://github.com/google/autocxx/issues/349">here</a></p>
+</div>
 <p>To make them more useful, you might have to add extra C++ functions to extract
 data or otherwise deal with them.</p>
+<h2 id="abstract-types"><a class="header" href="#abstract-types">Abstract types</a></h2>
+<p><code>autocxx</code> does not allow instantiation of abstract types<sup class="footnote-reference"><a href="#abstract">2</a></sup>.</p>
+<div class="footnote-definition" id="abstract"><sup class="footnote-definition-label">2</sup>
+<p><code>autocxx</code>'s determination of abstract types is a bit approximate and
+<a href="https://github.com/google/autocxx/issues/774">could be improved</a>.</p>
+</div>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="c-functions"><a class="header" href="#c-functions">C++ functions</a></h1>
 <p>Calling C++ functions is largly as you might expect.</p>
 <h2 id="value-and-rvalue-parameters"><a class="header" href="#value-and-rvalue-parameters">Value and rvalue parameters</a></h2>
@@ -701,6 +710,11 @@ fn main() {
 
 </code></pre>
 <p>Specifically, you can pass anything which implements <a href="https://docs.rs/autocxx/latest/autocxx/trait.ValueParam.html"><code>ValueParam&lt;T&gt;</code></a>.</p>
+<h2 id="default-parameters"><a class="header" href="#default-parameters">Default parameters</a></h2>
+<p>Are not yet supported<sup class="footnote-reference"><a href="#default">1</a></sup>.</p>
+<div class="footnote-definition" id="default"><sup class="footnote-definition-label">1</sup>
+<p>the work is <a href="https://github.com/google/autocxx/issues/563">planned here</a>.</p>
+</div>
 <h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
 <p>At present, return values for <a href="cpp_types.html">non-POD</a> types are always
 a <code>cxx::UniquePtr&lt;T&gt;</code>. This is likely to change in future.</p>
@@ -722,7 +736,7 @@ implementation.</p>
 <li>Allow Rust subclasses of C++ classes.</li>
 </ul>
 <p>This latter option is most commonly used for implementing &quot;listeners&quot; or <a href="https://en.wikipedia.org/wiki/Observer_pattern">&quot;observers&quot;</a>, so is often in practice how C++ will call into Rust. More details below.</p>
-<h1 id="subclasses"><a class="header" href="#subclasses">Subclasses</a></h1>
+<h2 id="subclasses"><a class="header" href="#subclasses">Subclasses</a></h2>
 <p>There is limited and experimental support for creating Rust subclasses of
 C++ classes. (Yes, even more experimental than all the rest of this!)
 See <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclass.html"><code>subclass::CppSubclass</code></a> for information about how you do this.
@@ -783,6 +797,84 @@ fn main() {
 }
 
 </code></pre>
+<h2 id="subclass-ownership"><a class="header" href="#subclass-ownership">Subclass ownership</a></h2>
+<p>See <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclass.html"><code>subclass::CppSubclass</code></a>
+for full details, but you must decide who owns your subclass:</p>
+<ul>
+<li>C++ owns it</li>
+<li>Rust owns it</li>
+<li>It's self-owned, and only ever frees itself (using <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclassSelfOwned.html#method.delete_self"><code>delete_self</code></a>).</li>
+</ul>
+<p>Please be careful: the observer pattern is a minefield for use-after-free bugs.
+It's recommended that you wrap any such subclass in some sort of Rust newtype
+wrapper which <a href="rustic.html">enforces any ownership invariants</a> so that users
+of your types literally can't make any mistakes.</p>
+<h2 id="calling-superclass-methods"><a class="header" href="#calling-superclass-methods">Calling superclass methods</a></h2>
+<p>Each subclass also implements a trait called <code>&lt;superclass name&gt;_supers</code> which
+includes all superclass methods. You can call methods on that, and if you
+don't implement a particular method, that will be used as the default.</p>
+<h4 id="c-header-7"><a class="header" href="#c-header-7">C++ header:</a></h4>
+<pre><code class="language-cpp">
+#include &lt;iostream&gt;
+class Dinosaur {
+public:
+    Dinosaur() {}
+    virtual void eat() const {
+        std::cout &lt;&lt; \&quot;Roarrr!! I ate you!\n\&quot;;
+    }
+    virtual ~Dinosaur() {}
+};
+
+// Currently, autocxx requires at least one 'generate!' call.
+inline void do_a_thing() {};
+
+</code></pre>
+<h4 id="rust-7"><a class="header" href="#rust-7">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+use autocxx::subclass::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    subclass!(&quot;Dinosaur&quot;, TRex)
+    subclass!(&quot;Dinosaur&quot;, Diplodocus)
+    generate!(&quot;do_a_thing&quot;)
+}
+
+use ffi::*;
+
+#[is_subclass(superclass(&quot;Dinosaur&quot;))]
+#[derive(Default)]
+pub struct TRex;
+
+#[is_subclass(superclass(&quot;Dinosaur&quot;))]
+#[derive(Default)]
+pub struct Diplodocus;
+
+impl Dinosaur_methods for TRex {
+    // TRex does NOT implement the 'eat' method
+    // so C++ behavior will be used
+}
+
+impl Dinosaur_methods for Diplodocus {
+    fn eat(&amp;self) {
+        println!(&quot;Ahh, some nice juicy leaves.&quot;);
+        // Could call self.eat_super() if we
+        // developed unexpected carnivorous cravings.
+    }
+}
+
+fn main() {
+    let trex = TRex::default_rust_owned();
+    trex.borrow().as_ref().eat(); // eats human
+    let diplo = Diplodocus::default_rust_owned();
+    diplo.borrow().as_ref().eat(); // eats shoots and leaves
+}
+
+</code></pre>
+<h2 id="subclass-casting"><a class="header" href="#subclass-casting">Subclass casting</a></h2>
+<p>Subclasses implement <code>AsRef</code> to enable casting to superclasses.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="other-c-features"><a class="header" href="#other-c-features">Other C++ features</a></h1>
 <p>You can make Rust subclasses of C++ classes - as these are mostly used to
 implement the Observer pattern, they're documented under <a href="rust_calls.html">calls from C++ to Rust</a>.</p>
@@ -793,7 +885,10 @@ exception support, so it would be possible to add them.</p>
 <h2 id="preprocessor-symbols"><a class="header" href="#preprocessor-symbols">Preprocessor symbols</a></h2>
 <p><code>#define</code> and other preprocessor symbols will appear as constants.
 At present there is no way to do compile-time disablement of code
-(equivalent of <code>#ifdef</code>).</p>
+(equivalent of <code>#ifdef</code>)<sup class="footnote-reference"><a href="#ifdef">1</a></sup>.</p>
+<div class="footnote-definition" id="ifdef"><sup class="footnote-definition-label">1</sup>
+<p><a href="https://github.com/google/autocxx/issues/57">This feature</a> should add ifdef support.</p>
+</div>
 <h2 id="string-constants"><a class="header" href="#string-constants">String constants</a></h2>
 <p>Whether from a preprocessor symbol or from a C++ <code>char*</code> constant,
 strings appear as <code>[u8]</code> with a null terminator. To get a Rust string,
@@ -812,11 +907,11 @@ assert_eq!(std::str::from_utf8(&amp;ffi::BOB).unwrap().trim_end_matches(char::fr
 <p>See <a href="https://docs.rs/autocxx/latest/autocxx/macro.safety.html"><code>safety!</code></a> in the documentation for more details.</p>
 <h2 id="examples-with-and-without-safetyunsafe"><a class="header" href="#examples-with-and-without-safetyunsafe">Examples with and without <code>safety!(unsafe)</code></a></h2>
 <p>Without a <code>safety!</code> directive:</p>
-<h4 id="c-header-7"><a class="header" href="#c-header-7">C++ header:</a></h4>
+<h4 id="c-header-8"><a class="header" href="#c-header-8">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;cstdint&gt;
 inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 </code></pre>
-<h4 id="rust-7"><a class="header" href="#rust-7">Rust:</a></h4>
+<h4 id="rust-8"><a class="header" href="#rust-8">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -831,11 +926,11 @@ fn main() {
 
 </code></pre>
 <p>With a <code>safety!</code> directive:</p>
-<h4 id="c-header-8"><a class="header" href="#c-header-8">C++ header:</a></h4>
+<h4 id="c-header-9"><a class="header" href="#c-header-9">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;cstdint&gt;
 inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 </code></pre>
-<h4 id="rust-8"><a class="header" href="#rust-8">Rust:</a></h4>
+<h4 id="rust-9"><a class="header" href="#rust-9">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
