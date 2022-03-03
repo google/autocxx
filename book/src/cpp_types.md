@@ -31,7 +31,7 @@ Non-POD types are awkward:
 * There is no access to fields (yet).
 * You can't even have a `&mut` reference to one, because then you might be able to use [`std::mem::swap`](https://doc.rust-lang.org/stable/std/mem/fn.swap.html) or similar. You can have a `Pin<&mut>` reference, which is more fiddly.
 
-By default, `autocxx` generates non-POD types. You can request a POD type using [`generate_pod!`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html). Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++.
+By default, `autocxx` generates non-POD types. You can request a POD type using [`generate_pod!`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html). Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++. (If you're _really_ sure your type is freely relocatable, because you implemented the move constructor and destructor and you promise they're trivial, you can override these assertions using the C++ trait `IsRelocatable` per the instructions in [cxx.h](https://github.com/dtolnay/cxx/blob/master/include/cxx.h)).
 
 See [the chapter on storage](storage.md) for lots more detail on how you can hold onto non-POD types.
 
