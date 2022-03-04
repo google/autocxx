@@ -12,6 +12,7 @@ use crate::{
     conversion::{
         analysis::{depth_first::depth_first, pod::PodAnalysis, type_converter::find_types},
         api::{Api, CppVisibility, FuncToConvert, SpecialMemberKind},
+        apivec::ApiVec,
     },
     known_types::known_types,
     types::QualifiedName,
@@ -52,7 +53,7 @@ struct ExplicitFound {
 /// we can simply generate the sort of thing bindgen generates, then ask
 /// the existing code in this phase to figure out what to do with it.
 pub(super) fn find_missing_constructors(
-    apis: &[Api<FnPrePhase>],
+    apis: &ApiVec<FnPrePhase>,
 ) -> HashMap<QualifiedName, ImplicitConstructorsNeeded> {
     let mut all_known_types = find_types(apis);
     all_known_types.extend(known_types().all_names().cloned());
@@ -148,7 +149,7 @@ pub(super) fn find_missing_constructors(
     implicit_constructors_needed
 }
 
-fn find_explicit_items(apis: &[Api<FnPrePhase>]) -> HashSet<ExplicitFound> {
+fn find_explicit_items(apis: &ApiVec<FnPrePhase>) -> HashSet<ExplicitFound> {
     apis.iter()
         .filter_map(|api| match api {
             Api::Function {

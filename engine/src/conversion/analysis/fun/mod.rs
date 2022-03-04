@@ -20,10 +20,11 @@ use crate::{
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{
-            ApiName, CastMutability, CppVisibility, FuncToConvert, Provenance, References,
-            SpecialMemberKind, SubclassName, TraitImplSignature, TraitSynthesis, UnsafetyNeeded,
-            Virtualness,
+            ApiName, CastMutability, CppVisibility, FuncToConvert, NullPhase, Provenance,
+            References, SpecialMemberKind, SubclassName, TraitImplSignature, TraitSynthesis,
+            UnsafetyNeeded, Virtualness,
         },
+        apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::{convert_apis, report_any_error},
@@ -45,7 +46,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, TypeKind},
         ConvertError,
     },
     types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},
@@ -232,7 +233,7 @@ enum TypeConversionSophistication {
 
 pub(crate) struct FnAnalyzer<'a> {
     unsafe_policy: UnsafePolicy,
-    extra_apis: Vec<UnanalyzedApi>,
+    extra_apis: ApiVec<NullPhase>,
     type_converter: TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
@@ -246,13 +247,13 @@ pub(crate) struct FnAnalyzer<'a> {
 
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
-        apis: Vec<Api<PodPhase>>,
+        apis: ApiVec<PodPhase>,
         unsafe_policy: UnsafePolicy,
         config: &'a IncludeCppConfig,
-    ) -> Vec<Api<FnPrePhase>> {
+    ) -> ApiVec<FnPrePhase> {
         let mut me = Self {
             unsafe_policy,
-            extra_apis: Vec::new(),
+            extra_apis: ApiVec::new(),
             type_converter: TypeConverter::new(config, &apis),
             bridge_name_tracker: BridgeNameTracker::new(),
             config,
@@ -263,7 +264,7 @@ impl<'a> FnAnalyzer<'a> {
             generic_types: Self::build_generic_type_set(&apis),
             existing_superclass_trait_api_names: HashSet::new(),
         };
-        let mut results = Vec::new();
+        let mut results = ApiVec::new();
         convert_apis(
             apis,
             &mut results,
@@ -277,7 +278,7 @@ impl<'a> FnAnalyzer<'a> {
         results
     }
 
-    fn build_pod_safe_type_set(apis: &[Api<PodPhase>]) -> HashSet<QualifiedName> {
+    fn build_pod_safe_type_set(apis: &ApiVec<PodPhase>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct {
@@ -307,7 +308,7 @@ impl<'a> FnAnalyzer<'a> {
             .collect()
     }
 
-    fn build_generic_type_set(apis: &[Api<PodPhase>]) -> HashSet<QualifiedName> {
+    fn build_generic_type_set(apis: &ApiVec<PodPhase>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct {
@@ -324,7 +325,7 @@ impl<'a> FnAnalyzer<'a> {
 
     /// Builds a mapping from a qualified type name to the last 'nest'
     /// of its name, if it has multiple elements.
-    fn build_nested_type_map(apis: &[Api<PodPhase>]) -> HashMap<QualifiedName, String> {
+    fn build_nested_type_map(apis: &ApiVec<PodPhase>) -> HashMap<QualifiedName, String> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct { name, .. } | Api::Enum { name, .. } => {
@@ -422,7 +423,7 @@ impl<'a> FnAnalyzer<'a> {
         let initial_name = name.clone();
         let (analysis, name) =
             self.analyze_foreign_fn(name, &fun, TypeConversionSophistication::Regular, None);
-        let mut results = Vec::new();
+        let mut results = ApiVec::new();
 
         // Consider whether we need to synthesize subclass items.
         match &analysis.kind {
@@ -544,7 +545,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         new_func: Box<FuncToConvert>,
-        results: &mut Vec<Api<FnPrePhase>>,
+        results: &mut ApiVec<FnPrePhase>,
         sophistication: TypeConversionSophistication,
     ) -> QualifiedName {
         let (analysis, name) = self.analyze_foreign_fn(name, &new_func, sophistication, None);
@@ -563,7 +564,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         fun: &FuncToConvert,
         initial_name: ApiName,
-        results: &mut Vec<Api<FnPrePhase>>,
+        results: &mut ApiVec<FnPrePhase>,
     ) {
         let mut new_fun = fun.clone();
         new_fun.provenance = Provenance::SynthesizedMakeUnique;
@@ -1623,7 +1624,7 @@ impl<'a> FnAnalyzer<'a> {
     /// would need to output a `FnAnalysisBody`. By running it as part of this phase
     /// we can simply generate the sort of thing bindgen generates, then ask
     /// the existing code in this phase to figure out what to do with it.
-    fn add_missing_constructors(&mut self, apis: &mut Vec<Api<FnPrePhase>>) {
+    fn add_missing_constructors(&mut self, apis: &mut ApiVec<FnPrePhase>) {
         if self.config.exclude_impls {
             return;
         }
@@ -1683,7 +1684,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         self_ty: QualifiedName,
         label: Option<&str>,
-        apis: &mut Vec<Api<FnPrePhase>>,
+        apis: &mut ApiVec<FnPrePhase>,
         special_member: SpecialMemberKind,
         inputs: Punctuated<FnArg, Comma>,
         references: References,

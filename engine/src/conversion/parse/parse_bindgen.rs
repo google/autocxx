@@ -10,7 +10,8 @@ use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{Api, ApiName, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
+        api::{Api, ApiName, NullPhase, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
+        apivec::ApiVec,
         ConvertError,
     },
     types::Namespace,
@@ -35,7 +36,7 @@ use super::parse_foreign_mod::ParseForeignMod;
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
     config: &'a IncludeCppConfig,
-    apis: Vec<UnanalyzedApi>,
+    apis: ApiVec<NullPhase>,
 }
 
 fn api_name(ns: &Namespace, id: Ident, attrs: &BindgenSemanticAttributes) -> ApiName {
@@ -60,7 +61,7 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn new(config: &'a IncludeCppConfig) -> Self {
         ParseBindgen {
             config,
-            apis: Vec::new(),
+            apis: ApiVec::new(),
         }
     }
 
@@ -69,7 +70,7 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn parse_items(
         mut self,
         items: Vec<Item>,
-    ) -> Result<Vec<UnanalyzedApi>, ConvertError> {
+    ) -> Result<ApiVec<NullPhase>, ConvertError> {
         let items = Self::find_items_in_root(items)?;
         if !self.config.exclude_utilities() {
             generate_utilities(&mut self.apis, self.config);
@@ -131,7 +132,7 @@ impl<'a> ParseBindgen<'a> {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
         let mut mod_converter = ParseForeignMod::new(ns.clone());
-        let mut more_apis = Vec::new();
+        let mut more_apis = ApiVec::new();
         for item in items {
             report_any_error(&ns, &mut more_apis, || {
                 self.parse_item(item, &mut mod_converter, &ns)

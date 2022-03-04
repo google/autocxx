@@ -10,7 +10,7 @@ use super::{
     fun::{FnAnalysis, FnKind, FnPhase, FnPrePhase, MethodKind, TraitMethodKind},
     pod::PodAnalysis,
 };
-use crate::conversion::api::Api;
+use crate::conversion::{api::Api, apivec::ApiVec};
 use crate::conversion::{
     api::TypeKind,
     error_reporter::{convert_apis, convert_item_apis},
@@ -19,7 +19,7 @@ use crate::conversion::{
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
-pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnPrePhase>> {
+pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase>) -> ApiVec<FnPrePhase> {
     let mut abstract_types: HashSet<_> = apis
         .iter()
         .filter_map(|api| match &api {
@@ -107,7 +107,7 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
     // 2) using "type Foo;" isn't possible unless Foo is a top-level item
     //    within its namespace. Any outer names will be interpreted as namespace
     //    names and result in cxx generating "namespace Foo { class Bar }"".
-    let mut results = Vec::new();
+    let mut results = ApiVec::new();
     convert_item_apis(apis, &mut results, |api| match api {
         Api::Struct {
             analysis:
@@ -129,11 +129,11 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
     results
 }
 
-pub(crate) fn discard_ignored_functions(apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
+pub(crate) fn discard_ignored_functions(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
     // Some APIs can't be generated, e.g. because they're protected.
     // Now we've finished analyzing abstract types and constructors, we'll
-    // convert them to IgnoredI
-    let mut apis_new = Vec::new();
+    // convert them to IgnoredItems.
+    let mut apis_new = ApiVec::new();
     convert_apis(
         apis,
         &mut apis_new,

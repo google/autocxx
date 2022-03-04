@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use syn::Ident;
 
 use crate::conversion::api::ApiName;
+use crate::conversion::apivec::ApiVec;
 use crate::types::Namespace;
 use crate::{conversion::api::Api, known_types::known_types, types::QualifiedName};
 
@@ -19,7 +20,7 @@ use super::fun::FnPhase;
 
 /// Spot any variable-length C types (e.g. unsigned long)
 /// used in the [Api]s and append those as extra APIs.
-pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnPhase>>) {
+pub(crate) fn append_ctype_information(apis: &mut ApiVec<FnPhase>) {
     let ctypes: HashMap<Ident, QualifiedName> = apis
         .iter()
         .flat_map(|api| api.deps())

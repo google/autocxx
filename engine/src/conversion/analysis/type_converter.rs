@@ -8,7 +8,8 @@
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiName, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
+        apivec::ApiVec,
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -41,7 +42,7 @@ pub(crate) enum TypeKind {
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<QualifiedName>,
-    pub(crate) extra_apis: Vec<UnanalyzedApi>,
+    pub(crate) extra_apis: ApiVec<NullPhase>,
     pub(crate) kind: TypeKind,
 }
 
@@ -49,7 +50,7 @@ impl<T> Annotated<T> {
     fn new(
         ty: T,
         types_encountered: HashSet<QualifiedName>,
-        extra_apis: Vec<UnanalyzedApi>,
+        extra_apis: ApiVec<NullPhase>,
         kind: TypeKind,
     ) -> Self {
         Self {
@@ -114,7 +115,7 @@ pub(crate) struct TypeConverter<'a> {
 }
 
 impl<'a> TypeConverter<'a> {
-    pub(crate) fn new<A: AnalysisPhase>(config: &'a IncludeCppConfig, apis: &[Api<A>]) -> Self
+    pub(crate) fn new<A: AnalysisPhase>(config: &'a IncludeCppConfig, apis: &ApiVec<A>) -> Self
     where
         A::TypedefAnalysis: TypedefTarget,
     {
@@ -255,7 +256,7 @@ impl<'a> TypeConverter<'a> {
                 return Ok(Annotated::new(
                     Type::Ptr(resolved_tp.clone()),
                     deps,
-                    Vec::new(),
+                    ApiVec::new(),
                     TypeKind::Pointer,
                 ))
             }
@@ -263,7 +264,7 @@ impl<'a> TypeConverter<'a> {
                 return Ok(Annotated::new(
                     other.clone(),
                     deps,
-                    Vec::new(),
+                    ApiVec::new(),
                     TypeKind::Regular,
                 ))
             }
@@ -284,7 +285,7 @@ impl<'a> TypeConverter<'a> {
             None => typ,
         };
 
-        let mut extra_apis = Vec::new();
+        let mut extra_apis = ApiVec::new();
         let mut kind = TypeKind::Regular;
 
         // Finally let's see if it's generic.
@@ -337,7 +338,7 @@ impl<'a> TypeConverter<'a> {
     {
         let mut new_pun = Punctuated::new();
         let mut types_encountered = HashSet::new();
-        let mut extra_apis = Vec::new();
+        let mut extra_apis = ApiVec::new();
         for arg in pun.into_iter() {
             new_pun.push(match arg {
                 GenericArgument::Type(t) => {
@@ -518,7 +519,7 @@ impl<'a> TypeConverter<'a> {
         }
     }
 
-    fn find_typedefs<A: AnalysisPhase>(apis: &[Api<A>]) -> HashMap<QualifiedName, Type>
+    fn find_typedefs<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashMap<QualifiedName, Type>
     where
         A::TypedefAnalysis: TypedefTarget,
     {
@@ -534,7 +535,7 @@ impl<'a> TypeConverter<'a> {
     }
 
     fn find_concrete_templates<A: AnalysisPhase>(
-        apis: &[Api<A>],
+        apis: &ApiVec<A>,
     ) -> HashMap<String, QualifiedName> {
         apis.iter()
             .filter_map(|api| match &api {
@@ -546,7 +547,7 @@ impl<'a> TypeConverter<'a> {
             .collect()
     }
 
-    fn find_incomplete_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+    fn find_incomplete_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::ForwardDeclaration { .. } => Some(api.name()),
@@ -596,7 +597,7 @@ impl TypedefTarget for TypedefAnalysis {
     }
 }
 
-pub(crate) fn find_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+pub(crate) fn find_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
     apis.iter()
         .filter_map(|api| match api {
             Api::ForwardDeclaration { .. }
