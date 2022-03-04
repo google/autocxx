@@ -561,6 +561,12 @@ impl<T: AnalysisPhase> Api<T> {
             .unwrap_or_else(|| self.name().get_final_item())
     }
 
+    /// If this API turns out to have the same QualifiedName as another,
+    /// whether it's OK to just discard it?
+    pub(crate) fn discard_duplicates(&self) -> bool {
+        matches!(self, Api::IgnoredItem { .. })
+    }
+
     pub(crate) fn valid_types(&self) -> Box<dyn Iterator<Item = QualifiedName>> {
         match self {
             Api::Subclass { name, .. } => Box::new(

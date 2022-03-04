@@ -282,12 +282,15 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Type(ity) => {
                 let annotations = BindgenSemanticAttributes::new(&ity.attrs);
-                self.apis.push(UnanalyzedApi::Typedef {
-                    name: api_name(ns, ity.ident.clone(), &annotations),
-                    item: TypedefKind::Type(ity),
-                    old_tyname: None,
-                    analysis: (),
-                });
+                // It's known that sometimes bindgen will give us duplicate typedefs with the
+                // same name - see test_issue_264.
+                self.apis
+                    .push_eliminating_duplicates(UnanalyzedApi::Typedef {
+                        name: api_name(ns, ity.ident.clone(), &annotations),
+                        item: TypedefKind::Type(ity),
+                        old_tyname: None,
+                        analysis: (),
+                    });
                 Ok(())
             }
             _ => Err(ConvertErrorWithContext(
