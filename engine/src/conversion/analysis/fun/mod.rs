@@ -139,7 +139,11 @@ pub(crate) enum RustRenameStrategy {
 
 #[derive(Clone)]
 pub(crate) struct FnAnalysis {
+    /// Each entry in the cxx::bridge needs to have a unique name, even if
+    /// (from the perspective of Rust and C++) things are in different
+    /// namespaces/mods.
     pub(crate) cxxbridge_name: Ident,
+    /// ... so record also the name under which we wish to expose it in Rust.
     pub(crate) rust_name: String,
     pub(crate) rust_rename_strategy: RustRenameStrategy,
     pub(crate) params: Punctuated<FnArg, Comma>,

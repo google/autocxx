@@ -85,7 +85,10 @@ impl<'a> BridgeConverter<'a> {
             log::info!(
                 "APIs after {}:\n{}",
                 label,
-                apis.iter().map(|api| { format!("  {:?}", api) }).join("\n")
+                apis.iter()
+                    .map(|api| { format!("  {:?}", api) })
+                    .sorted()
+                    .join("\n")
             )
         }
     }
@@ -97,6 +100,7 @@ impl<'a> BridgeConverter<'a> {
                 label,
                 apis.iter()
                     .map(|api| { format!("  {:?}, deps={}", api, api.format_deps()) })
+                    .sorted()
                     .join("\n")
             )
         }
