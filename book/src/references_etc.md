@@ -51,15 +51,14 @@ you'll need to figure out the guarantees attached to the C++ object - most
 notably its lifetime. To see some of the decision making process involved
 see the [Steam example](https://github.com/google/autocxx/tree/main/examples/steam-mini/src/main.rs).
 
-## [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html)s
+## [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html)s tips
 
 We use [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html) in completely the normal way, but there are a few
 quirks which you're more likely to run into with `autocxx`.
 
-* Calling methods: you may need to use [`cxx::UniquePtr::pin_mut`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut) to get
-  a reference on which you can call a method.
-* Getting a raw pointer in order to pass to some pre-existing function:
-  at present you need to do:
+* You'll need to use [`.pin_mut()`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut) a lot -
+  see [the example at the bottom of C++ functions](cpp_functions.md).
+* If you need to pass a raw pointer to a function, lots of unsafety is required - something like this:
   ```rust,ignore
      let mut a = ffi::A::make_unique();
      unsafe { ffi::TakePointerToA(std::pin::Pin::<&mut ffi::A>::into_inner_unchecked(a.pin_mut())) };

@@ -99,7 +99,7 @@ order of preference here's how we would like to hear about your problem:
 
 ## How to contribute to this manual
 
-More examples in this manual are _very_ welcomed!
+More examples in this manual are _very_ welcome!
 
 Because `autocxx` examples require both Rust and C++ code to be linked together,
 a custom preprocessor is used for this manual. See one of the existing examples
