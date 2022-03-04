@@ -36,15 +36,6 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
         })
         .collect();
 
-    for mut api in apis.iter_mut() {
-        match &mut api {
-            Api::Struct { analysis, name, .. } if abstract_types.contains(&name.name) => {
-                analysis.pod.kind = TypeKind::Abstract;
-            }
-            _ => {}
-        }
-    }
-
     // Spot any derived classes (recursively). Also, any types which have a base
     // class that's not on the allowlist are presumed to be abstract, because we
     // have no way of knowing (as they're not on the allowlist, there will be
@@ -52,24 +43,52 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
     let mut iterate = true;
     while iterate {
         iterate = false;
-        for mut api in apis.iter_mut() {
-            match &mut api {
-                Api::Struct {
-                    analysis:
-                        PodAndConstructorAnalysis {
-                            pod: PodAnalysis { bases, kind, .. },
-                            ..
-                        },
-                    ..
-                } if *kind != TypeKind::Abstract && (!abstract_types.is_disjoint(bases)) => {
-                    *kind = TypeKind::Abstract;
-                    abstract_types.insert(api.name().clone());
-                    // Recurse in case there are further dependent types
-                    iterate = true;
+        apis = apis
+            .into_iter()
+            .map(|api| {
+                match api {
+                    Api::Struct {
+                        analysis:
+                            PodAndConstructorAnalysis {
+                                pod:
+                                    PodAnalysis {
+                                        bases,
+                                        kind: TypeKind::Pod | TypeKind::NonPod,
+                                        castable_bases,
+                                        field_deps,
+                                        field_info,
+                                        is_generic,
+                                    },
+                                constructors,
+                            },
+                        name,
+                        details,
+                    } if abstract_types.contains(&name.name)
+                        || !abstract_types.is_disjoint(&bases) =>
+                    {
+                        abstract_types.insert(name.name.clone());
+                        // Recurse in case there are further dependent types
+                        iterate = true;
+                        Api::Struct {
+                            analysis: PodAndConstructorAnalysis {
+                                pod: PodAnalysis {
+                                    bases,
+                                    kind: TypeKind::Abstract,
+                                    castable_bases,
+                                    field_deps,
+                                    field_info,
+                                    is_generic,
+                                },
+                                constructors,
+                            },
+                            name,
+                            details,
+                        }
+                    }
+                    _ => api,
                 }
-                _ => {}
-            }
-        }
+            })
+            .collect()
     }
 
     // We also need to remove any constructors belonging to these
