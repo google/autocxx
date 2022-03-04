@@ -534,20 +534,23 @@ impl<'a> FnAnalyzer<'a> {
         Ok(Box::new(results.into_iter()))
     }
 
+    /// Adds an API, usually a synthesized API. Returns the final calculated API name, which can be used
+    /// for others to depend on this.
     fn analyze_and_add(
         &mut self,
         name: ApiName,
         new_func: Box<FuncToConvert>,
         results: &mut Vec<Api<FnPrePhase>>,
         sophistication: TypeConversionSophistication,
-    ) {
+    ) -> QualifiedName {
         let (analysis, name) = self.analyze_foreign_fn(name, &new_func, sophistication, None);
         results.push(Api::Function {
             fun: new_func,
             analysis,
-            name,
+            name: name.clone(),
             name_for_gc: None,
         });
+        name.name
     }
 
     /// Take a constructor e.g. pub fn A_A(this: *mut root::A);
