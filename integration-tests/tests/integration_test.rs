@@ -1,16 +1,10 @@
 // Copyright 2021 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use crate::{
     builder_modifiers::{
@@ -2954,9 +2948,7 @@ fn test_enum_typedef() {
     let hdr = indoc! {"
         enum ConstraintSolverParameters_TrailCompression : int {
             ConstraintSolverParameters_TrailCompression_NO_COMPRESSION = 0,
-            ConstraintSolverParameters_TrailCompression_COMPRESS_WITH_ZLIB = 1,
-            ConstraintSolverParameters_TrailCompression_ConstraintSolverParameters_TrailCompression_INT_MIN_SENTINEL_DO_NOT_USE_ = -2147483648,
-            ConstraintSolverParameters_TrailCompression_ConstraintSolverParameters_TrailCompression_INT_MAX_SENTINEL_DO_NOT_USE_ = 2147483647
+            ConstraintSolverParameters_TrailCompression_COMPRESS_WITH_ZLIB = 1
         };
         typedef ConstraintSolverParameters_TrailCompression TrailCompression;
     "};

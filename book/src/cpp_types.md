@@ -1,6 +1,6 @@
 # C++ structs, enums and classes
 
-If you add a C++ struct, class or enum to the allowlist, Rust bindings will be generated to that type and to any methods it has.
+If you add a C++ struct, class or enum to the [allowlist](allowlist.md), Rust bindings will be generated to that type and to any methods it has.
 Even if you don't add it to the allowlist, the type may be generated if it's required by some other function - but in this case
 all its methods won't be generated.
 
@@ -31,7 +31,7 @@ Non-POD types are awkward:
 * There is no access to fields (yet).
 * You can't even have a `&mut` reference to one, because then you might be able to use [`std::mem::swap`](https://doc.rust-lang.org/stable/std/mem/fn.swap.html) or similar. You can have a `Pin<&mut>` reference, which is more fiddly.
 
-By default, `autocxx` generates non-POD types. You can request a POD type using [`generate_pod!`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html). Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++.
+By default, `autocxx` generates non-POD types. You can request a POD type using [`generate_pod!`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html). Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++. (If you're _really_ sure your type is freely relocatable, because you implemented the move constructor and destructor and you promise they're trivial, you can override these assertions using the C++ trait `IsRelocatable` per the instructions in [cxx.h](https://github.com/dtolnay/cxx/blob/master/include/cxx.h)).
 
 See [the chapter on storage](storage.md) for lots more detail on how you can hold onto non-POD types.
 
@@ -87,11 +87,11 @@ fn main() {
 
 A type which is incomplete in the C++ headers (i.e. represented only by a forward
 declaration) can't be held in a `UniquePtr` within Rust (because Rust can't know
-if it has a destructor that will need to be called if the object is `Drop`ped.)
+if it has a destructor that will need to be called if the object is dropped.)
 Naturally, such an object can't be passed by value either; it can still be
 referenced in Rust references.
 
-## Generic types
+## Generic (templated) types
 
 If you're using one of the generic types which is supported natively by cxx,
 e.g. `std::unique_ptr`, it should work as you expect. For other generic types,
@@ -99,7 +99,16 @@ we synthesize a concrete Rust type, corresponding to a C++ typedef, for each
 concrete instantiation of the type. Such generated types are always opaque,
 and never have methods attached. That's therefore enough to pass them
 between return types and parameters of other functions within [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html)s
-but not really enough to do anything else with these types yet.
+but not really enough to do anything else with these types yet[^templated].
+
+[^templated]: Future improvements tracked [here](https://github.com/google/autocxx/issues/349)
 
 To make them more useful, you might have to add extra C++ functions to extract
 data or otherwise deal with them.
+
+## Abstract types
+
+`autocxx` does not allow instantiation of abstract types[^abstract].
+
+[^abstract]: `autocxx`'s determination of abstract types is a bit approximate and
+[could be improved](https://github.com/google/autocxx/issues/774).

@@ -1,16 +1,10 @@
 // Copyright 2022 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 #![forbid(unsafe_code)]
 
@@ -113,27 +107,36 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
     if !args.is_present("skip_tests") {
         let num_tests = test_cases.len();
         for (counter, case) in test_cases.into_iter().enumerate() {
+            if let Ok(test) = std::env::var("RUST_MDBOOK_SINGLE_TEST") {
+                let desired_id: usize = test.parse().unwrap();
+                if desired_id != (counter + 1) {
+                    continue;
+                }
+            }
             eprintln!(
                 "Running doctest {}/{} at {}",
                 counter + 1,
                 num_tests,
                 &case.location
             );
-            let passed = autocxx_integration_tests::doctest(
+            let r = autocxx_integration_tests::doctest(
                 &case.cpp,
                 &case.hdr,
                 case.rs.to_token_stream(),
                 args.value_of_os("manifest_dir").unwrap(),
-            )
-            .is_ok();
+            );
+            let (failed, msg) = match r {
+                Ok(_) => (false, "passed".to_string()),
+                Err(e) => (true, format!("failed: {:?}", e)),
+            };
             eprintln!(
                 "Doctest {}/{} at {} {}.",
                 counter + 1,
                 num_tests,
                 &case.location,
-                if passed { "passed" } else { "failed" }
+                msg
             );
-            any_fails = any_fails || !passed;
+            any_fails = any_fails || failed;
         }
     }
     if any_fails {
@@ -260,8 +263,8 @@ fn handle_code_block(
         _ => panic!("Parsing unexpected"),
     };
     let mut args_iter = fn_call.args.iter();
-    let cpp = extract_span(&lines, args_iter.next().unwrap().span());
-    let hdr = extract_span(&lines, args_iter.next().unwrap().span());
+    let cpp = unescape_quotes(&extract_span(&lines, args_iter.next().unwrap().span()));
+    let hdr = unescape_quotes(&extract_span(&lines, args_iter.next().unwrap().span()));
     let rs = extract_span(&lines, args_iter.next().unwrap().span());
     let mut output = vec![
         "#### C++ header:".to_string(),
@@ -285,8 +288,8 @@ fn handle_code_block(
     // running tests.
     if !flags.contains("nocompile") {
         test_cases.push(TestCase {
-            cpp: unescape_quotes(&cpp),
-            hdr: unescape_quotes(&hdr),
+            cpp,
+            hdr,
             rs: syn::parse_file(&rs)
                 .unwrap_or_else(|_| panic!("Unable to parse code at {}", location)),
             location,

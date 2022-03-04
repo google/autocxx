@@ -9,7 +9,7 @@ You can:
 
 This latter option is most commonly used for implementing "listeners" or ["observers"](https://en.wikipedia.org/wiki/Observer_pattern), so is often in practice how C++ will call into Rust. More details below.
 
-# Subclasses
+## Subclasses
 
 There is limited and experimental support for creating Rust subclasses of
 C++ classes. (Yes, even more experimental than all the rest of this!)
@@ -89,3 +89,89 @@ fn main() {
 }
 )
 ```
+
+## Subclass ownership
+
+See [`subclass::CppSubclass`](https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclass.html)
+for full details, but you must decide who owns your subclass:
+
+* C++ owns it
+* Rust owns it
+* It's self-owned, and only ever frees itself (using [`delete_self`](https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclassSelfOwned.html#method.delete_self)).
+
+Please be careful: the observer pattern is a minefield for use-after-free bugs.
+It's recommended that you wrap any such subclass in some sort of Rust newtype
+wrapper which [enforces any ownership invariants](rustic.md) so that users
+of your types literally can't make any mistakes.
+
+## Calling superclass methods
+
+Each subclass also implements a trait called `<superclass name>_supers` which
+includes all superclass methods. You can call methods on that, and if you
+don't implement a particular method, that will be used as the default.
+
+```rust,ignore,autocxx,hidecpp
+autocxx_integration_tests::doctest(
+"",
+"
+#include <iostream>
+class Dinosaur {
+public:
+    Dinosaur() {}
+    virtual void eat() const {
+        std::cout << \"Roarrr!! I ate you!\n\";
+    }
+    virtual ~Dinosaur() {}
+};
+
+// Currently, autocxx requires at least one 'generate!' call.
+inline void do_a_thing() {};
+",
+{
+use autocxx::prelude::*;
+use autocxx::subclass::*;
+
+include_cpp! {
+    #include "input.h"
+    safety!(unsafe_ffi)
+    subclass!("Dinosaur", TRex)
+    subclass!("Dinosaur", Diplodocus)
+    generate!("do_a_thing")
+}
+
+use ffi::*;
+
+#[is_subclass(superclass("Dinosaur"))]
+#[derive(Default)]
+pub struct TRex;
+
+#[is_subclass(superclass("Dinosaur"))]
+#[derive(Default)]
+pub struct Diplodocus;
+
+impl Dinosaur_methods for TRex {
+    // TRex does NOT implement the 'eat' method
+    // so C++ behavior will be used
+}
+
+impl Dinosaur_methods for Diplodocus {
+    fn eat(&self) {
+        println!("Ahh, some nice juicy leaves.");
+        // Could call self.eat_super() if we
+        // developed unexpected carnivorous cravings.
+    }
+}
+
+fn main() {
+    let trex = TRex::default_rust_owned();
+    trex.borrow().as_ref().eat(); // eats human
+    let diplo = Diplodocus::default_rust_owned();
+    diplo.borrow().as_ref().eat(); // eats shoots and leaves
+}
+}
+)
+```
+
+## Subclass casting
+
+Subclasses implement `AsRef` to enable casting to superclasses.
