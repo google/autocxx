@@ -139,7 +139,7 @@ pub(super) fn create_subclass_function(
             method_name: make_ident(&analysis.rust_name),
             cpp_impl: CppFunction {
                 payload: CppFunctionBody::FunctionCall(Namespace::new(), rust_call_name),
-                wrapper_function_name: name.name.get_final_ident(),
+                wrapper_function_name: make_ident(&analysis.rust_name),
                 original_cpp_name: name.cpp_name(),
                 return_conversion: analysis.ret_conversion.clone(),
                 argument_conversion,
