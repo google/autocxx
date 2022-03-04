@@ -32,7 +32,7 @@ use super::{deps::HasDependencies, fun::FnPhase};
 ///    don't care about the other parameter types passed into those
 ///    APIs either.
 pub(crate) fn filter_apis_by_following_edges_from_allowlist(
-    mut apis: Vec<Api<FnPhase>>,
+    apis: Vec<Api<FnPhase>>,
     config: &IncludeCppConfig,
 ) -> Vec<Api<FnPhase>> {
     let mut todos: Vec<QualifiedName> = apis
@@ -45,7 +45,7 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
         .cloned()
         .collect();
     let mut by_typename: HashMap<QualifiedName, Vec<Api<FnPhase>>> = HashMap::new();
-    for api in apis.drain(..) {
+    for api in apis.into_iter() {
         let tn = api.name().clone();
         by_typename.entry(tn).or_default().push(api);
     }
