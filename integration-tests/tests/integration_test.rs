@@ -5412,6 +5412,23 @@ fn test_closure() {
 }
 
 #[test]
+fn test_multiply_nested_inner_type() {
+    let hdr = indoc! {"
+        struct Turkey {
+            struct Duck {
+                struct Hen {
+                    int wings;
+                };
+            };
+        };
+        "};
+    let rs = quote! {
+        ffi::Turkey_Duck_Hen::make_unique()
+    };
+    run_test("", hdr, rs, &[], &["Turkey_Duck_Hen"]);
+}
+
+#[test]
 fn test_underscored_namespace_for_inner_type() {
     let hdr = indoc! {"
         namespace __foo {
