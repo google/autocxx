@@ -15,7 +15,7 @@ include_cpp! {
 ```
 
 You need to include [`generate!` directives](https://docs.rs/autocxx/latest/autocxx/macro.generate.html)
-for every type or function you wish to access from Rust. You don't need to specify this for member functions
+for every *type* or *function* you wish to access from Rust. You don't need to specify this for member functions
 of types that you've added - they'll be generated automatically. (If a particular member function can't
 be generated, some placeholder item with explanatory documentation [will be generated instead](workflow.md)).
 

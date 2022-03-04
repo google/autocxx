@@ -1,6 +1,6 @@
 # C++ structs, enums and classes
 
-If you add a C++ struct, class or enum to the allowlist, Rust bindings will be generated to that type and to any methods it has.
+If you add a C++ struct, class or enum to the [allowlist](allowlist.md), Rust bindings will be generated to that type and to any methods it has.
 Even if you don't add it to the allowlist, the type may be generated if it's required by some other function - but in this case
 all its methods won't be generated.
 
@@ -87,7 +87,7 @@ fn main() {
 
 A type which is incomplete in the C++ headers (i.e. represented only by a forward
 declaration) can't be held in a `UniquePtr` within Rust (because Rust can't know
-if it has a destructor that will need to be called if the object is `Drop`ped.)
+if it has a destructor that will need to be called if the object is dropped.)
 Naturally, such an object can't be passed by value either; it can still be
 referenced in Rust references.
 

@@ -7,6 +7,37 @@ ffi mod. However, at present there is an internal limitation that
 autocxx can't handle multiple types with the same identifier, even
 if they're in different namespaces. This will be fixed in future.
 
+```rust,ignore,autocxx,hidecpp
+autocxx_integration_tests::doctest(
+"
+void generations::hey_boomer() {}
+void submarines::hey_boomer() {}",
+"
+namespace generations {
+  void hey_boomer();
+}
+namespace submarines {
+  void hey_boomer();
+}
+",
+{
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include "input.h"
+    safety!(unsafe_ffi)
+    generate!("submarines::hey_boomer")
+    generate!("generations::hey_boomer")
+}
+
+fn main() {
+    ffi::generations::hey_boomer(); // insults your elders and betters
+    ffi::submarines::hey_boomer(); // launches missiles
+}
+}
+)
+```
+
 ## Nested classes
 
 There is support for generating bindings of nested types, with some
