@@ -45,7 +45,7 @@ pub(super) fn subclasses_by_superclass(
 }
 
 pub(super) fn create_subclass_fn_wrapper(
-    sub: SubclassName,
+    sub: &SubclassName,
     super_fn_name: &QualifiedName,
     fun: &FuncToConvert,
 ) -> Box<FuncToConvert> {
