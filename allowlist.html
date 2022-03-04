@@ -149,7 +149,7 @@ include_cpp! {
 }
 </code></pre>
 <p>You need to include <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate!</code> directives</a>
-for every type or function you wish to access from Rust. You don't need to specify this for member functions
+for every <em>type</em> or <em>function</em> you wish to access from Rust. You don't need to specify this for member functions
 of types that you've added - they'll be generated automatically. (If a particular member function can't
 be generated, some placeholder item with explanatory documentation <a href="workflow.html">will be generated instead</a>).</p>
 <p>Various other directives are possible inside this macro, most notably:</p>

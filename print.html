@@ -150,13 +150,13 @@
 <p>Not always:</p>
 <ul>
 <li>If you are making bindings to C code, as opposed to C++, use <a href="https://rust-lang.github.io/rust-bindgen/"><code>bindgen</code></a> instead.</li>
-<li>If you have can make unrestricted changes to the C++ code, use <a href="https://cxx.rs"><code>cxx</code></a> instead.</li>
+<li>If you can make unrestricted changes to the C++ code, use <a href="https://cxx.rs"><code>cxx</code></a> instead.</li>
 <li>If your C++ to Rust interface is just a few functions or types, use <a href="https://cxx.rs"><code>cxx</code></a> instead.</li>
 </ul>
 <p>But sometimes:</p>
 <ul>
 <li>If you need to call arbitrary functions and use arbitrary types within an existing C++ codebase, use <code>autocxx</code>. You're in the right place!</li>
-<li>Like <code>cxx</code>, but unlike <code>bindgen</code>, <code>autocxx</code> also allows you to make calls from C++ to Rust.</li>
+<li>Like <code>cxx</code>, but unlike <code>bindgen</code>, <code>autocxx</code> helps with calls from C++ to Rust, too.</li>
 </ul>
 <h2 id="examples-to-give-you-a-feel-for-autocxx"><a class="header" href="#examples-to-give-you-a-feel-for-autocxx">Examples to give you a feel for <code>autocxx</code></a></h2>
 <p>Here's a code example:</p>
@@ -166,12 +166,13 @@ inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 </code></pre>
 <h4 id="rust"><a class="header" href="#rust">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
+// Use all the autocxx types which might be handy.
 use autocxx::prelude::*;
 
 include_cpp! {
     #include &quot;input.h&quot;
     safety!(unsafe_ffi)
-    generate!(&quot;do_math&quot;)
+    generate!(&quot;do_math&quot;) // allowlist a function
 }
 
 fn main() {
@@ -202,7 +203,7 @@ use autocxx::prelude::*;
 include_cpp! {
     #include &quot;input.h&quot;
     safety!(unsafe_ffi)
-    generate!(&quot;Goat&quot;)
+    generate!(&quot;Goat&quot;) // allowlist a type and all its methods
 }
 
 fn main() {
@@ -221,12 +222,12 @@ sometimes extra steps are required to handle cases like null pointers or convert
 <p>We'd recommend starting with <a href="tutorial.html">tutorial</a> and then <a href="workflow.html">workflow</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="tutorial"><a class="header" href="#tutorial">Tutorial</a></h1>
 <p>If you're here, you want to call some C++ from Rust, right?</p>
+<p>Let's assume you're calling into some <em>existing</em> C++ code.</p>
 <p>You will need:</p>
 <ul>
 <li>Some C++ header files (<code>.h</code> files)</li>
-<li>The C++ &quot;include path&quot;. That is, the set of directories containing those headers. (That's not necessarily the directory in which each header <em>file</em> lives; C++ might contain <code>#include &quot;foo/bar.h&quot;</code> and so your include path would need to include the directory containing the <code>foo</code> directory).</li>
+<li>The C++ &quot;include path&quot;. That is, the set of directories containing those headers. (That's not necessarily the directory in which each header <em>file</em> lives; C++ might contain <code>#include &quot;foo/bar.h&quot;</code> and so your include path would need to include the directory <em>containing</em> the <code>foo</code> directory).</li>
 <li>A list of the APIs (types and functions) from those header files which you wish to make available in Rust.</li>
-<li>Either a Cargo or non-Cargo build system.</li>
 <li>To know how to link the C++ libraries into your Cargo project. This is beyond the scope of what <code>autocxx</code> helps with, but one solution is to emit a print from your <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib">build script</a>.</li>
 <li><a href="https://rust-lang.github.io/rust-bindgen/requirements.html">LLVM to be installed</a>.</li>
 <li>Some patience. This is not a magic solution. C++/Rust interop is hard. Avoid it if you can!</li>
@@ -240,7 +241,7 @@ cxx = &quot;1.0&quot;
 [build-dependencies]
 autocxx-build = &quot;0.16.0&quot;
 </code></pre>
-<p>Now, add a <code>build.rs</code>. This is where you need your include path:</p>
+<p>Now, add a <code>build.rs</code> next to your <code>Cargo.toml</code> (this is a standard <code>cargo</code> <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html">build script</a>). This is where you need your include path:</p>
 <pre><code class="language-rust ignore">fn main() {
     let path = std::path::PathBuf::from(&quot;src&quot;); // include path
     let mut b = autocxx_build::Builder::new(&quot;src/main.rs&quot;, &amp;[&amp;path]).expect_build();
@@ -251,18 +252,19 @@ autocxx-build = &quot;0.16.0&quot;
     // Add instructions to link to any C++ libraries you need.
 }
 </code></pre>
+<p>(See <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script">the standard cargo build script output mechanisms for how you can direct Rust to link against pre-existing libraries</a>).</p>
 <p>Finally, in your <code>main.rs</code> you can use the <a href="https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html"><code>include_cpp</code></a> macro which is the heart of <code>autocxx</code>:</p>
-<pre><code class="language-rust ignore">use autocxx::prelude::*;
+<pre><code class="language-rust ignore">use autocxx::prelude::*; // use all the main autocxx functions
 
 include_cpp! {
 <span class="boring">    include &quot;my_header.h&quot; // your header file name
 </span>    safety!(unsafe) // see details of unsafety policies described in the 'safety' section of the book
-    generate!(&quot;MyAPIFunction&quot;) // add this line for each function or type you wish to generate
+    generate!(&quot;DeepThought&quot;) // add this line for each function or type you wish to generate
 }
 </code></pre>
 <p>You should then find you can call the function by referring to an <code>ffi</code> namespace:</p>
 <pre><code class="language-rust ignore">fn main() {
-    println!(&quot;Hello, world! - answer from C++ is {}&quot;, ffi::MyAPIFunction(4));
+    println!(&quot;The answer to Life, The Universe and Everything is {}&quot;, ffi::DeepThought());
 }
 </code></pre>
 <p>C++ types such as <code>std::string</code> and <code>std::unique_ptr</code> are represented using the types provided by the marvellous <a href="https://cxx.rs">cxx</a> library. This provides good ergonomics and safety norms, so unlike with normal <code>bindgen</code> bindings, you won't <em>normally</em> need to write <code>unsafe</code> code for every function call.</p>
@@ -273,66 +275,28 @@ include_cpp! {
 context, where you may be dealing with <code>UniquePtr&lt;T&gt;</code> and <code>Option&lt;&amp;T&gt;</code> and <code>Pin&lt;&amp;mut T&gt;</code> very often.
 <img src="vscode1.png" alt="VSCode autocompletion of autocxx APIs" /></p>
 <p>As you'll see, it's also <em>essential</em> when <code>autocxx</code> can't produce bindings for some reason.</p>
-<h2 id="general-workflow"><a class="header" href="#general-workflow">General workflow</a></h2>
-<p>Here's how to approach autocxx:</p>
-<pre class="mermaid">flowchart TB
-    %%{init:{'flowchart':{'nodeSpacing': 60, 'rankSpacing': 30}}}%%
-    try[Try it!]
-    fail(Build failed)
-    missing_api(Build worked, but my API has disappeared)
-    ok(All OK)
-    try--&gt;fail
-    try--&gt;missing_api
-    try--&gt;ok
-    block[Block APIs]
-    fail--&gt;block
-    block--&gt;try
-    expand[cargo expand or check docs in IDE]
-    missing_api--&gt;expand
-    manual[Add manual cxx::bridge or extra C++ APIs for anything missing]
-    expand--&gt;manual
-    manual--&gt;try
-</pre>
-<p>This section explains more about this cycle.</p>
-<h2 id="the-build-entirely-failed"><a class="header" href="#the-build-entirely-failed">The build entirely failed</a></h2>
-<p><code>autocxx</code> should nearly always successfully parse the C++ codebase and
-generate <em>some</em> APIs. It's reliant on <code>bindgen</code>, but <code>bindgen</code> is excellent
-and rarely bails out entirely.</p>
-<p>If it does, you may be able to use the <a href="https://docs.rs/autocxx/latest/autocxx/macro.block.html"><code>block!</code> macro</a>.</p>
-<p>We'd appreciate a minimized bug report of the troublesome code - see <a href="contributing.html">contributing</a>.</p>
-<h2 id="the-build-works-but-didnt-generate-the-api-i-expected"><a class="header" href="#the-build-works-but-didnt-generate-the-api-i-expected">The build works, but didn't generate the API I expected</a></h2>
-<p>Once you've achieved a successful build, you might wonder how to know what
-bindings have been generated. <code>cargo expand</code> will show you. Alternatively,
-you can get autocompletion within an IDE supported by Rust analyzer. You'll
-need to enable <em>both</em>:</p>
-<ul>
-<li>Rust-analyzer: Proc Macro: Enable</li>
-<li>Rust-analyzer: Experimental: Proc Attr Macros</li>
-</ul>
-<p>Either way, you'll find (for sure!) that <code>autocxx</code> hasn't been able to generate
-bindings for all your C++ APIs. This may manifest as a hard failure or a soft
-failure:</p>
-<ul>
-<li>If you specified such an item in a <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate</code></a> directive (or similar such
-as <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod</code></a>) then your build will fail.</li>
-<li>If such APIs are methods belonging to a type, <code>autocxx</code> will generate other
-methods for the type but ignore those.</li>
-</ul>
-<p>In this latter case, you should see helpful messages <em>in the generated bindings</em>
-as rust documentation explaining what went wrong.</p>
+<h2 id="what-if-autocxx-cant-generate-bindings"><a class="header" href="#what-if-autocxx-cant-generate-bindings">What if <code>autocxx</code> can't generate bindings?</a></h2>
+<p>This bit is important.</p>
+<p>When you use <code>autocxx</code>, you'll ask it to generate Rust bindings for <a href="allowlist.html">C++ types or functions</a> using
+<code>generate!</code> directives.</p>
+<p>If you ask to generate bindings for a specific function, and it can't: the build will fail.</p>
+<p>If you ask to generate bindings for an entire type, <code>autocxx</code> will generate bindings for as
+many methods as possible. For those methods where it can't generate bindings, it will instead
+generate some placeholder function or struct with documentation explaining what went wrong:</p>
 <p><img src="vscode2.png" alt="VSCode showing an error for an API where autocxx couldn't generate bindings" /></p>
-<p>If this happens (and it will!) your options are:</p>
+<p><em>This</em> is why it's crucial to use an IDE with <code>autocxx</code>. (Alternatively, you can use
+<code>cargo expand</code>, but it's unpleasant.)</p>
+<h2 id="how-to-work-around-cases-where-autocxx-cant-generate-bindings"><a class="header" href="#how-to-work-around-cases-where-autocxx-cant-generate-bindings">How to work around cases where <code>autocxx</code> can't generate bindings</a></h2>
+<p>Your options are:</p>
 <ul>
-<li>Add more, simpler C++ APIs which fulfil the same need but are compatible with
-<code>autocxx</code>.</li>
-<li>Write manual bindings. This is most useful if a <a href="https://cxx.rs/bindings.html">type is supported</a> by <code>cxx</code>
-but not <code>autocxx</code> (for example, at the time of writing <code>std::array</code>). See
-the later section on 'combinining automatic and manual bindings'.</li>
+<li>Write extra C++ functions with simpler parameters or return types, and generate
+bindings to them, instead.</li>
+<li>Write some manual <code>#[cxx::bridge]</code> bindings - see below.</li>
 </ul>
 <h2 id="mixing-manual-and-automated-bindings"><a class="header" href="#mixing-manual-and-automated-bindings">Mixing manual and automated bindings</a></h2>
 <p><code>autocxx</code> uses <a href="https://cxx.rs"><code>cxx</code></a> underneath, and its build process will happily spot and
-process and manually-crafted <a href="https://cxx.rs/concepts.html"><code>cxx::bridge</code> mods</a> which you include in your
-Rust source code. A common pattern good be to use <code>autocxx</code> to generate
+process manually-crafted <a href="https://cxx.rs/concepts.html"><code>cxx::bridge</code> mods</a> which you include in your
+Rust source code. A common pattern could be to use <code>autocxx</code> to generate
 all the bindings possible, then hand-craft a <code>cxx::bridge</code> mod for the
 remainder where <code>autocxx</code> falls short.</p>
 <p>To do this, you'll need to use the <a href="https://cxx.rs/extern-c++.html#reusing-existing-binding-types">ability of one cxx::bridge mod to refer to types from another</a>,
@@ -356,6 +320,21 @@ fn main() {
     assert_eq!(ffi::take_A(&amp;a), autocxx::c_int(5));
 }
 </code></pre>
+<h2 id="my-build-entirely-failed"><a class="header" href="#my-build-entirely-failed">My build entirely failed</a></h2>
+<p><code>autocxx</code> should nearly always successfully parse the C++ codebase and
+generate <em>some</em> APIs. It's reliant on <code>bindgen</code>, but <code>bindgen</code> is excellent
+and rarely bails out entirely.</p>
+<p>If it does, you may be able to use the <a href="https://docs.rs/autocxx/latest/autocxx/macro.block.html"><code>block!</code> macro</a>.</p>
+<p>We'd appreciate a minimized bug report of the troublesome code - see <a href="contributing.html">contributing</a>.</p>
+<h2 id="enabling-autocompletion-in-a-rust-analyzer-ide"><a class="header" href="#enabling-autocompletion-in-a-rust-analyzer-ide">Enabling autocompletion in a rust-analyzer IDE</a></h2>
+<p>You'll need to enable <em>both</em>:</p>
+<ul>
+<li>Rust-analyzer: Proc Macro: Enable</li>
+<li>Rust-analyzer: Experimental: Proc Attr Macros</li>
+</ul>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next steps</a></h2>
+<p>Now you've read what can go wrong with <code>autocxx</code>, and how to diagnose problems - the next step is to give it a try!
+Treat the rest of this manual as a reference.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="the-allowlist-and-include_cpp-syntax"><a class="header" href="#the-allowlist-and-include_cpp-syntax">The allowlist and <code>include_cpp</code> syntax</a></h1>
 <p>To include C++ in your Rust codebase using <code>autocxx</code>, you will need
 at least one <a href="https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html"><code>include_cpp</code> macro</a>.</p>
@@ -368,7 +347,7 @@ include_cpp! {
 }
 </code></pre>
 <p>You need to include <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate!</code> directives</a>
-for every type or function you wish to access from Rust. You don't need to specify this for member functions
+for every <em>type</em> or <em>function</em> you wish to access from Rust. You don't need to specify this for member functions
 of types that you've added - they'll be generated automatically. (If a particular member function can't
 be generated, some placeholder item with explanatory documentation <a href="workflow.html">will be generated instead</a>).</p>
 <p>Various other directives are possible inside this macro, most notably:</p>
@@ -415,7 +394,7 @@ because it allows only a single <code>include_cpp!</code> block per <code>.rs</c
     cppb --&gt; l
     rsb --&gt; l
 </pre>
-<p>This interop inevitably involves lots of fiddly small functions. It's likely to perform far better if you can achieve cross-language LTO. <a href="https://github.com/dtolnay/cxx/issues/371">This issue</a> may give some useful hints - see also all the build-related help in <a href="https://cxx.rs/">the cxx manual</a> which all applies here too.</p>
+<p>This interop inevitably involves lots of fiddly small functions. It's likely to perform far better if you can achieve cross-language link-time-optimization (LTO). <a href="https://github.com/dtolnay/cxx/issues/371">This issue</a> may give some useful hints - see also all the build-related help in <a href="https://cxx.rs/">the cxx manual</a> which all applies here too.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="storage---stack-and-heaps"><a class="header" href="#storage---stack-and-heaps">Storage - stack and heaps</a></h1>
 <p>Ensure you understand the distinction between <a href="cpp_types.html">POD and non-POD types described in the C++ types section before proceeding</a>.</p>
 <h2 id="pod-types"><a class="header" href="#pod-types">POD types</a></h2>
@@ -476,14 +455,13 @@ an unsafety policy, <em>all</em> C++ APIs require <code>unsafe</code> so the dis
 you'll need to figure out the guarantees attached to the C++ object - most
 notably its lifetime. To see some of the decision making process involved
 see the <a href="https://github.com/google/autocxx/tree/main/examples/steam-mini/src/main.rs">Steam example</a>.</p>
-<h2 id="cxxuniqueptrs"><a class="header" href="#cxxuniqueptrs"><a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>s</a></h2>
+<h2 id="cxxuniqueptrs-tips"><a class="header" href="#cxxuniqueptrs-tips"><a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>s tips</a></h2>
 <p>We use <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> in completely the normal way, but there are a few
 quirks which you're more likely to run into with <code>autocxx</code>.</p>
 <ul>
-<li>Calling methods: you may need to use <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut"><code>cxx::UniquePtr::pin_mut</code></a> to get
-a reference on which you can call a method.</li>
-<li>Getting a raw pointer in order to pass to some pre-existing function:
-at present you need to do:
+<li>You'll need to use <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut"><code>.pin_mut()</code></a> a lot -
+see <a href="cpp_functions.html">the example at the bottom of C++ functions</a>.</li>
+<li>If you need to pass a raw pointer to a function, lots of unsafety is required - something like this:
 <pre><code class="language-rust ignore">   let mut a = ffi::A::make_unique();
    unsafe { ffi::TakePointerToA(std::pin::Pin::&lt;&amp;mut ffi::A&gt;::into_inner_unchecked(a.pin_mut())) };
 </code></pre>
@@ -563,6 +541,33 @@ string on the stack, and is generally incompatible with the
 ffi mod. However, at present there is an internal limitation that
 autocxx can't handle multiple types with the same identifier, even
 if they're in different namespaces. This will be fixed in future.</p>
+<h4 id="c-header-4"><a class="header" href="#c-header-4">C++ header:</a></h4>
+<pre><code class="language-cpp">
+namespace generations {
+  void hey_boomer();
+}
+namespace submarines {
+  void hey_boomer();
+}
+
+</code></pre>
+<h4 id="rust-4"><a class="header" href="#rust-4">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;submarines::hey_boomer&quot;)
+    generate!(&quot;generations::hey_boomer&quot;)
+}
+
+fn main() {
+    ffi::generations::hey_boomer(); // insults your elders and betters
+    ffi::submarines::hey_boomer(); // launches missiles
+}
+
+</code></pre>
 <h2 id="nested-classes"><a class="header" href="#nested-classes">Nested classes</a></h2>
 <p>There is support for generating bindings of nested types, with some
 restrictions. Currently the C++ type <code>A::B</code> will be given the Rust name
@@ -570,7 +575,7 @@ restrictions. Currently the C++ type <code>A::B</code> will be given the Rust na
 <h2 id="overloads"><a class="header" href="#overloads">Overloads</a></h2>
 <p>See <a href="cpp_functions.html">the chapter on C++ functions</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="c-structs-enums-and-classes"><a class="header" href="#c-structs-enums-and-classes">C++ structs, enums and classes</a></h1>
-<p>If you add a C++ struct, class or enum to the allowlist, Rust bindings will be generated to that type and to any methods it has.
+<p>If you add a C++ struct, class or enum to the <a href="allowlist.html">allowlist</a>, Rust bindings will be generated to that type and to any methods it has.
 Even if you don't add it to the allowlist, the type may be generated if it's required by some other function - but in this case
 all its methods won't be generated.</p>
 <p>Rust and C++ differ in an important way:</p>
@@ -610,7 +615,7 @@ and <code>UniquePtr</code>)</li>
 <li>A <code>make_unique</code> function is also created, which constructs the item directly into
 a <code>cxx::UniquePtr</code>. This is more commonly what you want.</li>
 </ul>
-<h4 id="c-header-4"><a class="header" href="#c-header-4">C++ header:</a></h4>
+<h4 id="c-header-5"><a class="header" href="#c-header-5">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;stdint.h&gt;
 #include &lt;string&gt;
 struct A {
@@ -621,7 +626,7 @@ struct A {
 };
 
 </code></pre>
-<h4 id="rust-4"><a class="header" href="#rust-4">Rust:</a></h4>
+<h4 id="rust-5"><a class="header" href="#rust-5">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -647,7 +652,7 @@ fn main() {
 <h2 id="forward-declarations"><a class="header" href="#forward-declarations">Forward declarations</a></h2>
 <p>A type which is incomplete in the C++ headers (i.e. represented only by a forward
 declaration) can't be held in a <code>UniquePtr</code> within Rust (because Rust can't know
-if it has a destructor that will need to be called if the object is <code>Drop</code>ped.)
+if it has a destructor that will need to be called if the object is dropped.)
 Naturally, such an object can't be passed by value either; it can still be
 referenced in Rust references.</p>
 <h2 id="generic-templated-types"><a class="header" href="#generic-templated-types">Generic (templated) types</a></h2>
@@ -675,7 +680,7 @@ data or otherwise deal with them.</p>
 <p>Functions taking <a href="cpp_types.html">non-POD</a> value parameters can take a <code>cxx::UniquePtr&lt;T&gt;</code>
 or a <code>&amp;T</code>. This gives you the choice of Rust semantics - where a parameter
 is absorbed and destroyed - or C++ semantics where the parameter is copied.</p>
-<h4 id="c-header-5"><a class="header" href="#c-header-5">C++ header:</a></h4>
+<h4 id="c-header-6"><a class="header" href="#c-header-6">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;cstdint&gt;
 
 struct Goat {
@@ -686,7 +691,7 @@ struct Goat {
 void feed_goat(Goat g); // takes goat by value
 
 </code></pre>
-<h4 id="rust-5"><a class="header" href="#rust-5">Rust:</a></h4>
+<h4 id="rust-6"><a class="header" href="#rust-6">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -718,16 +723,113 @@ fn main() {
 </div>
 <h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
 <p>At present, return values for <a href="cpp_types.html">non-POD</a> types are always
-a <code>cxx::UniquePtr&lt;T&gt;</code>. This is likely to change in future.</p>
+a <code>cxx::UniquePtr&lt;T&gt;</code>. This is likely to change in future, at least to a type
+which is guaranteed not to be null<sup class="footnote-reference"><a href="#not-null.">2</a></sup></p>
+<div class="footnote-definition" id="not-null"><sup class="footnote-definition-label">3</sup>
+<p><a href="https://github.com/google/autocxx/issues/845">plans here</a></p>
+</div>
 <h2 id="overloads---and-identifiers-ending-in-digits"><a class="header" href="#overloads---and-identifiers-ending-in-digits">Overloads - and identifiers ending in digits</a></h2>
 <p>C++ allows function overloads; Rust doesn't. <code>autocxx</code> follows the lead
 of <code>bindgen</code> here and generating overloads as <code>func</code>, <code>func1</code>, <code>func2</code> etc.
-This is essentially awful without <code>rust-analyzer</code> IDE support, which isn't
-quite there yet.</p>
-<p><code>autocxx</code> doesn't yet support default paramters.</p>
+This is essentially awful without <code>rust-analyzer</code> IDE support - see the
+<a href="workflow.html">workflows chapter</a> for why you should be using an IDE.</p>
+<h4 id="c-header-7"><a class="header" href="#c-header-7">C++ header:</a></h4>
+<pre><code class="language-cpp">
+#include &lt;string&gt;
+struct View {
+    std::string of_what; // go and watch In Bruges, it's great
+};
+
+struct Tree {
+    int dendrochronologically_determined_age;
+};
+
+void saw(const View&amp;);
+void saw(const Tree&amp;);
+
+</code></pre>
+<h4 id="rust-7"><a class="header" href="#rust-7">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;Tree&quot;)
+    generate!(&quot;View&quot;)
+    generate!(&quot;saw&quot;)
+    generate!(&quot;saw1&quot;)
+}
+
+fn main() {
+    let view = ffi::View::make_unique();
+    ffi::saw(&amp;view);
+    let tree = ffi::Tree::make_unique();
+    ffi::saw1(&amp;tree); // yuck, overload
+}
+
+</code></pre>
+<p><code>autocxx</code> doesn't yet support default parameters.</p>
 <p>It's fairly likely we'll change the model here in the future, such that
 we can pass tuples of different parameter types into a single function
 implementation.</p>
+<h2 id="methods"><a class="header" href="#methods">Methods</a></h2>
+<p>Calling a <em>const</em> method is simple:</p>
+<h4 id="c-header-8"><a class="header" href="#c-header-8">C++ header:</a></h4>
+<pre><code class="language-cpp">
+class Sloth {
+public:
+    void sleep() const {} // sloths unchanged by sleep
+};
+
+</code></pre>
+<h4 id="rust-8"><a class="header" href="#rust-8">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;Sloth&quot;)
+}
+
+fn main() {
+    let sloth = ffi::Sloth::make_unique();
+    sloth.sleep();
+    sloth.sleep();
+}
+
+</code></pre>
+<p>Calling a non-const method is a bit more of a pain. Per <code>cxx</code> norms, all mutable
+references to C++ objects must be <a href="https://doc.rust-lang.org/std/pin/">pinned</a>.
+In practice, this means you must call <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut"><code>.pin_mut()</code></a>
+every time you call a method:</p>
+<h4 id="c-header-9"><a class="header" href="#c-header-9">C++ header:</a></h4>
+<pre><code class="language-cpp">
+class Sloth {
+public:
+    void unpeel_from_tree() {} // sloths get agitated when removed from
+        // trees, probably shouldn't be const
+};
+
+</code></pre>
+<h4 id="rust-9"><a class="header" href="#rust-9">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;Sloth&quot;)
+}
+
+fn main() {
+    let mut sloth = ffi::Sloth::make_unique();
+    sloth.pin_mut().unpeel_from_tree();
+    sloth.pin_mut().unpeel_from_tree();
+}
+
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="callbacks-into-rust"><a class="header" href="#callbacks-into-rust">Callbacks into Rust</a></h1>
 <p><code>autocxx</code> is primarily to allow calls from Rust to C++, but like <code>cxx</code> it also allows you to expose Rust APIs to C++.</p>
 <p>You can:</p>
@@ -743,7 +845,7 @@ C++ classes. (Yes, even more experimental than all the rest of this!)
 See <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclass.html"><code>subclass::CppSubclass</code></a> for information about how you do this.
 This is useful primarily if you want to listen out for messages broadcast
 using the C++ observer/listener pattern.</p>
-<h4 id="c-header-6"><a class="header" href="#c-header-6">C++ header:</a></h4>
+<h4 id="c-header-10"><a class="header" href="#c-header-10">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;memory&gt;
 class GoatObserver {
 public:
@@ -756,7 +858,7 @@ void deregister_observer();
 void feed_goat();
 
 </code></pre>
-<h4 id="rust-6"><a class="header" href="#rust-6">Rust:</a></h4>
+<h4 id="rust-10"><a class="header" href="#rust-10">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 use autocxx::subclass::*;
@@ -814,7 +916,7 @@ of your types literally can't make any mistakes.</p>
 <p>Each subclass also implements a trait called <code>&lt;superclass name&gt;_supers</code> which
 includes all superclass methods. You can call methods on that, and if you
 don't implement a particular method, that will be used as the default.</p>
-<h4 id="c-header-7"><a class="header" href="#c-header-7">C++ header:</a></h4>
+<h4 id="c-header-11"><a class="header" href="#c-header-11">C++ header:</a></h4>
 <pre><code class="language-cpp">
 #include &lt;iostream&gt;
 class Dinosaur {
@@ -830,7 +932,7 @@ public:
 inline void do_a_thing() {};
 
 </code></pre>
-<h4 id="rust-7"><a class="header" href="#rust-7">Rust:</a></h4>
+<h4 id="rust-11"><a class="header" href="#rust-11">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 use autocxx::subclass::*;
@@ -908,11 +1010,11 @@ assert_eq!(std::str::from_utf8(&amp;ffi::BOB).unwrap().trim_end_matches(char::fr
 <p>See <a href="https://docs.rs/autocxx/latest/autocxx/macro.safety.html"><code>safety!</code></a> in the documentation for more details.</p>
 <h2 id="examples-with-and-without-safetyunsafe"><a class="header" href="#examples-with-and-without-safetyunsafe">Examples with and without <code>safety!(unsafe)</code></a></h2>
 <p>Without a <code>safety!</code> directive:</p>
-<h4 id="c-header-8"><a class="header" href="#c-header-8">C++ header:</a></h4>
+<h4 id="c-header-12"><a class="header" href="#c-header-12">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;cstdint&gt;
 inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 </code></pre>
-<h4 id="rust-8"><a class="header" href="#rust-8">Rust:</a></h4>
+<h4 id="rust-12"><a class="header" href="#rust-12">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -927,11 +1029,11 @@ fn main() {
 
 </code></pre>
 <p>With a <code>safety!</code> directive:</p>
-<h4 id="c-header-9"><a class="header" href="#c-header-9">C++ header:</a></h4>
+<h4 id="c-header-13"><a class="header" href="#c-header-13">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;cstdint&gt;
 inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 </code></pre>
-<h4 id="rust-9"><a class="header" href="#rust-9">Rust:</a></h4>
+<h4 id="rust-13"><a class="header" href="#rust-13">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -995,6 +1097,7 @@ reference:</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="credits"><a class="header" href="#credits">Credits</a></h1>
 <p>David Tolnay did much of the hard work here, by inventing the underlying cxx crate, and in fact nearly all of the parsing infrastructure on which this crate depends. <code>bindgen</code> is also awesome. This crate stands on the shoulders of giants!</p>
 <p>Thanks to all the other contributors to cxx, bindgen and autocxx.</p>
+<p>And thanks to <a href="https://www.chromium.org/Home/chromium-security/memory-safety/rust-and-c-interoperability/">all in the Chromium community for inspiring this tool</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-contribute"><a class="header" href="#how-to-contribute">How to Contribute</a></h1>
 <p>We'd love to accept your patches and contributions to this project. There are
 just a few small guidelines you need to follow.</p>
@@ -1074,7 +1177,7 @@ the C++ bindings as distilled by <code>bindgen</code>, and then the version whic
 we've converted and moulded to be suitable for use by <code>cxx</code>.</li>
 </ul>
 <h2 id="how-to-contribute-to-this-manual"><a class="header" href="#how-to-contribute-to-this-manual">How to contribute to this manual</a></h2>
-<p>More examples in this manual are <em>very</em> welcomed!</p>
+<p>More examples in this manual are <em>very</em> welcome!</p>
 <p>Because <code>autocxx</code> examples require both Rust and C++ code to be linked together,
 a custom preprocessor is used for this manual. See one of the existing examples
 such as in <code>index.md</code> to see how to do this.</p>

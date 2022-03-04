@@ -149,13 +149,13 @@
 <p>Not always:</p>
 <ul>
 <li>If you are making bindings to C code, as opposed to C++, use <a href="https://rust-lang.github.io/rust-bindgen/"><code>bindgen</code></a> instead.</li>
-<li>If you have can make unrestricted changes to the C++ code, use <a href="https://cxx.rs"><code>cxx</code></a> instead.</li>
+<li>If you can make unrestricted changes to the C++ code, use <a href="https://cxx.rs"><code>cxx</code></a> instead.</li>
 <li>If your C++ to Rust interface is just a few functions or types, use <a href="https://cxx.rs"><code>cxx</code></a> instead.</li>
 </ul>
 <p>But sometimes:</p>
 <ul>
 <li>If you need to call arbitrary functions and use arbitrary types within an existing C++ codebase, use <code>autocxx</code>. You're in the right place!</li>
-<li>Like <code>cxx</code>, but unlike <code>bindgen</code>, <code>autocxx</code> also allows you to make calls from C++ to Rust.</li>
+<li>Like <code>cxx</code>, but unlike <code>bindgen</code>, <code>autocxx</code> helps with calls from C++ to Rust, too.</li>
 </ul>
 <h2 id="examples-to-give-you-a-feel-for-autocxx"><a class="header" href="#examples-to-give-you-a-feel-for-autocxx">Examples to give you a feel for <code>autocxx</code></a></h2>
 <p>Here's a code example:</p>
@@ -165,12 +165,13 @@ inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 </code></pre>
 <h4 id="rust"><a class="header" href="#rust">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
+// Use all the autocxx types which might be handy.
 use autocxx::prelude::*;
 
 include_cpp! {
     #include &quot;input.h&quot;
     safety!(unsafe_ffi)
-    generate!(&quot;do_math&quot;)
+    generate!(&quot;do_math&quot;) // allowlist a function
 }
 
 fn main() {
@@ -201,7 +202,7 @@ use autocxx::prelude::*;
 include_cpp! {
     #include &quot;input.h&quot;
     safety!(unsafe_ffi)
-    generate!(&quot;Goat&quot;)
+    generate!(&quot;Goat&quot;) // allowlist a type and all its methods
 }
 
 fn main() {

@@ -143,6 +143,33 @@
 ffi mod. However, at present there is an internal limitation that
 autocxx can't handle multiple types with the same identifier, even
 if they're in different namespaces. This will be fixed in future.</p>
+<h4 id="c-header"><a class="header" href="#c-header">C++ header:</a></h4>
+<pre><code class="language-cpp">
+namespace generations {
+  void hey_boomer();
+}
+namespace submarines {
+  void hey_boomer();
+}
+
+</code></pre>
+<h4 id="rust"><a class="header" href="#rust">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;submarines::hey_boomer&quot;)
+    generate!(&quot;generations::hey_boomer&quot;)
+}
+
+fn main() {
+    ffi::generations::hey_boomer(); // insults your elders and betters
+    ffi::submarines::hey_boomer(); // launches missiles
+}
+
+</code></pre>
 <h2 id="nested-classes"><a class="header" href="#nested-classes">Nested classes</a></h2>
 <p>There is support for generating bindings of nested types, with some
 restrictions. Currently the C++ type <code>A::B</code> will be given the Rust name

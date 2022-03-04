@@ -139,12 +139,12 @@
                     <main>
                         <h1 id="tutorial"><a class="header" href="#tutorial">Tutorial</a></h1>
 <p>If you're here, you want to call some C++ from Rust, right?</p>
+<p>Let's assume you're calling into some <em>existing</em> C++ code.</p>
 <p>You will need:</p>
 <ul>
 <li>Some C++ header files (<code>.h</code> files)</li>
-<li>The C++ &quot;include path&quot;. That is, the set of directories containing those headers. (That's not necessarily the directory in which each header <em>file</em> lives; C++ might contain <code>#include &quot;foo/bar.h&quot;</code> and so your include path would need to include the directory containing the <code>foo</code> directory).</li>
+<li>The C++ &quot;include path&quot;. That is, the set of directories containing those headers. (That's not necessarily the directory in which each header <em>file</em> lives; C++ might contain <code>#include &quot;foo/bar.h&quot;</code> and so your include path would need to include the directory <em>containing</em> the <code>foo</code> directory).</li>
 <li>A list of the APIs (types and functions) from those header files which you wish to make available in Rust.</li>
-<li>Either a Cargo or non-Cargo build system.</li>
 <li>To know how to link the C++ libraries into your Cargo project. This is beyond the scope of what <code>autocxx</code> helps with, but one solution is to emit a print from your <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib">build script</a>.</li>
 <li><a href="https://rust-lang.github.io/rust-bindgen/requirements.html">LLVM to be installed</a>.</li>
 <li>Some patience. This is not a magic solution. C++/Rust interop is hard. Avoid it if you can!</li>
@@ -158,7 +158,7 @@ cxx = &quot;1.0&quot;
 [build-dependencies]
 autocxx-build = &quot;0.16.0&quot;
 </code></pre>
-<p>Now, add a <code>build.rs</code>. This is where you need your include path:</p>
+<p>Now, add a <code>build.rs</code> next to your <code>Cargo.toml</code> (this is a standard <code>cargo</code> <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html">build script</a>). This is where you need your include path:</p>
 <pre><code class="language-rust ignore">fn main() {
     let path = std::path::PathBuf::from(&quot;src&quot;); // include path
     let mut b = autocxx_build::Builder::new(&quot;src/main.rs&quot;, &amp;[&amp;path]).expect_build();
@@ -169,18 +169,19 @@ autocxx-build = &quot;0.16.0&quot;
     // Add instructions to link to any C++ libraries you need.
 }
 </code></pre>
+<p>(See <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script">the standard cargo build script output mechanisms for how you can direct Rust to link against pre-existing libraries</a>).</p>
 <p>Finally, in your <code>main.rs</code> you can use the <a href="https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html"><code>include_cpp</code></a> macro which is the heart of <code>autocxx</code>:</p>
-<pre><code class="language-rust ignore">use autocxx::prelude::*;
+<pre><code class="language-rust ignore">use autocxx::prelude::*; // use all the main autocxx functions
 
 include_cpp! {
 <span class="boring">    include &quot;my_header.h&quot; // your header file name
 </span>    safety!(unsafe) // see details of unsafety policies described in the 'safety' section of the book
-    generate!(&quot;MyAPIFunction&quot;) // add this line for each function or type you wish to generate
+    generate!(&quot;DeepThought&quot;) // add this line for each function or type you wish to generate
 }
 </code></pre>
 <p>You should then find you can call the function by referring to an <code>ffi</code> namespace:</p>
 <pre><code class="language-rust ignore">fn main() {
-    println!(&quot;Hello, world! - answer from C++ is {}&quot;, ffi::MyAPIFunction(4));
+    println!(&quot;The answer to Life, The Universe and Everything is {}&quot;, ffi::DeepThought());
 }
 </code></pre>
 <p>C++ types such as <code>std::string</code> and <code>std::unique_ptr</code> are represented using the types provided by the marvellous <a href="https://cxx.rs">cxx</a> library. This provides good ergonomics and safety norms, so unlike with normal <code>bindgen</code> bindings, you won't <em>normally</em> need to write <code>unsafe</code> code for every function call.</p>

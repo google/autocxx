@@ -143,66 +143,28 @@
 context, where you may be dealing with <code>UniquePtr&lt;T&gt;</code> and <code>Option&lt;&amp;T&gt;</code> and <code>Pin&lt;&amp;mut T&gt;</code> very often.
 <img src="vscode1.png" alt="VSCode autocompletion of autocxx APIs" /></p>
 <p>As you'll see, it's also <em>essential</em> when <code>autocxx</code> can't produce bindings for some reason.</p>
-<h2 id="general-workflow"><a class="header" href="#general-workflow">General workflow</a></h2>
-<p>Here's how to approach autocxx:</p>
-<pre class="mermaid">flowchart TB
-    %%{init:{'flowchart':{'nodeSpacing': 60, 'rankSpacing': 30}}}%%
-    try[Try it!]
-    fail(Build failed)
-    missing_api(Build worked, but my API has disappeared)
-    ok(All OK)
-    try--&gt;fail
-    try--&gt;missing_api
-    try--&gt;ok
-    block[Block APIs]
-    fail--&gt;block
-    block--&gt;try
-    expand[cargo expand or check docs in IDE]
-    missing_api--&gt;expand
-    manual[Add manual cxx::bridge or extra C++ APIs for anything missing]
-    expand--&gt;manual
-    manual--&gt;try
-</pre>
-<p>This section explains more about this cycle.</p>
-<h2 id="the-build-entirely-failed"><a class="header" href="#the-build-entirely-failed">The build entirely failed</a></h2>
-<p><code>autocxx</code> should nearly always successfully parse the C++ codebase and
-generate <em>some</em> APIs. It's reliant on <code>bindgen</code>, but <code>bindgen</code> is excellent
-and rarely bails out entirely.</p>
-<p>If it does, you may be able to use the <a href="https://docs.rs/autocxx/latest/autocxx/macro.block.html"><code>block!</code> macro</a>.</p>
-<p>We'd appreciate a minimized bug report of the troublesome code - see <a href="contributing.html">contributing</a>.</p>
-<h2 id="the-build-works-but-didnt-generate-the-api-i-expected"><a class="header" href="#the-build-works-but-didnt-generate-the-api-i-expected">The build works, but didn't generate the API I expected</a></h2>
-<p>Once you've achieved a successful build, you might wonder how to know what
-bindings have been generated. <code>cargo expand</code> will show you. Alternatively,
-you can get autocompletion within an IDE supported by Rust analyzer. You'll
-need to enable <em>both</em>:</p>
-<ul>
-<li>Rust-analyzer: Proc Macro: Enable</li>
-<li>Rust-analyzer: Experimental: Proc Attr Macros</li>
-</ul>
-<p>Either way, you'll find (for sure!) that <code>autocxx</code> hasn't been able to generate
-bindings for all your C++ APIs. This may manifest as a hard failure or a soft
-failure:</p>
-<ul>
-<li>If you specified such an item in a <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate</code></a> directive (or similar such
-as <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod</code></a>) then your build will fail.</li>
-<li>If such APIs are methods belonging to a type, <code>autocxx</code> will generate other
-methods for the type but ignore those.</li>
-</ul>
-<p>In this latter case, you should see helpful messages <em>in the generated bindings</em>
-as rust documentation explaining what went wrong.</p>
+<h2 id="what-if-autocxx-cant-generate-bindings"><a class="header" href="#what-if-autocxx-cant-generate-bindings">What if <code>autocxx</code> can't generate bindings?</a></h2>
+<p>This bit is important.</p>
+<p>When you use <code>autocxx</code>, you'll ask it to generate Rust bindings for <a href="allowlist.html">C++ types or functions</a> using
+<code>generate!</code> directives.</p>
+<p>If you ask to generate bindings for a specific function, and it can't: the build will fail.</p>
+<p>If you ask to generate bindings for an entire type, <code>autocxx</code> will generate bindings for as
+many methods as possible. For those methods where it can't generate bindings, it will instead
+generate some placeholder function or struct with documentation explaining what went wrong:</p>
 <p><img src="vscode2.png" alt="VSCode showing an error for an API where autocxx couldn't generate bindings" /></p>
-<p>If this happens (and it will!) your options are:</p>
+<p><em>This</em> is why it's crucial to use an IDE with <code>autocxx</code>. (Alternatively, you can use
+<code>cargo expand</code>, but it's unpleasant.)</p>
+<h2 id="how-to-work-around-cases-where-autocxx-cant-generate-bindings"><a class="header" href="#how-to-work-around-cases-where-autocxx-cant-generate-bindings">How to work around cases where <code>autocxx</code> can't generate bindings</a></h2>
+<p>Your options are:</p>
 <ul>
-<li>Add more, simpler C++ APIs which fulfil the same need but are compatible with
-<code>autocxx</code>.</li>
-<li>Write manual bindings. This is most useful if a <a href="https://cxx.rs/bindings.html">type is supported</a> by <code>cxx</code>
-but not <code>autocxx</code> (for example, at the time of writing <code>std::array</code>). See
-the later section on 'combinining automatic and manual bindings'.</li>
+<li>Write extra C++ functions with simpler parameters or return types, and generate
+bindings to them, instead.</li>
+<li>Write some manual <code>#[cxx::bridge]</code> bindings - see below.</li>
 </ul>
 <h2 id="mixing-manual-and-automated-bindings"><a class="header" href="#mixing-manual-and-automated-bindings">Mixing manual and automated bindings</a></h2>
 <p><code>autocxx</code> uses <a href="https://cxx.rs"><code>cxx</code></a> underneath, and its build process will happily spot and
-process and manually-crafted <a href="https://cxx.rs/concepts.html"><code>cxx::bridge</code> mods</a> which you include in your
-Rust source code. A common pattern good be to use <code>autocxx</code> to generate
+process manually-crafted <a href="https://cxx.rs/concepts.html"><code>cxx::bridge</code> mods</a> which you include in your
+Rust source code. A common pattern could be to use <code>autocxx</code> to generate
 all the bindings possible, then hand-craft a <code>cxx::bridge</code> mod for the
 remainder where <code>autocxx</code> falls short.</p>
 <p>To do this, you'll need to use the <a href="https://cxx.rs/extern-c++.html#reusing-existing-binding-types">ability of one cxx::bridge mod to refer to types from another</a>,
@@ -226,6 +188,21 @@ fn main() {
     assert_eq!(ffi::take_A(&amp;a), autocxx::c_int(5));
 }
 </code></pre>
+<h2 id="my-build-entirely-failed"><a class="header" href="#my-build-entirely-failed">My build entirely failed</a></h2>
+<p><code>autocxx</code> should nearly always successfully parse the C++ codebase and
+generate <em>some</em> APIs. It's reliant on <code>bindgen</code>, but <code>bindgen</code> is excellent
+and rarely bails out entirely.</p>
+<p>If it does, you may be able to use the <a href="https://docs.rs/autocxx/latest/autocxx/macro.block.html"><code>block!</code> macro</a>.</p>
+<p>We'd appreciate a minimized bug report of the troublesome code - see <a href="contributing.html">contributing</a>.</p>
+<h2 id="enabling-autocompletion-in-a-rust-analyzer-ide"><a class="header" href="#enabling-autocompletion-in-a-rust-analyzer-ide">Enabling autocompletion in a rust-analyzer IDE</a></h2>
+<p>You'll need to enable <em>both</em>:</p>
+<ul>
+<li>Rust-analyzer: Proc Macro: Enable</li>
+<li>Rust-analyzer: Experimental: Proc Attr Macros</li>
+</ul>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next steps</a></h2>
+<p>Now you've read what can go wrong with <code>autocxx</code>, and how to diagnose problems - the next step is to give it a try!
+Treat the rest of this manual as a reference.</p>
 
                     </main>
 

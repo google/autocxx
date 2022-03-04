@@ -138,7 +138,7 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="c-structs-enums-and-classes"><a class="header" href="#c-structs-enums-and-classes">C++ structs, enums and classes</a></h1>
-<p>If you add a C++ struct, class or enum to the allowlist, Rust bindings will be generated to that type and to any methods it has.
+<p>If you add a C++ struct, class or enum to the <a href="allowlist.html">allowlist</a>, Rust bindings will be generated to that type and to any methods it has.
 Even if you don't add it to the allowlist, the type may be generated if it's required by some other function - but in this case
 all its methods won't be generated.</p>
 <p>Rust and C++ differ in an important way:</p>
@@ -215,7 +215,7 @@ fn main() {
 <h2 id="forward-declarations"><a class="header" href="#forward-declarations">Forward declarations</a></h2>
 <p>A type which is incomplete in the C++ headers (i.e. represented only by a forward
 declaration) can't be held in a <code>UniquePtr</code> within Rust (because Rust can't know
-if it has a destructor that will need to be called if the object is <code>Drop</code>ped.)
+if it has a destructor that will need to be called if the object is dropped.)
 Naturally, such an object can't be passed by value either; it can still be
 referenced in Rust references.</p>
 <h2 id="generic-templated-types"><a class="header" href="#generic-templated-types">Generic (templated) types</a></h2>
