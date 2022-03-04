@@ -3049,6 +3049,21 @@ fn test_associated_type_problem() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
+#[test]
+fn test_two_type_constructors() {
+    // https://github.com/google/autocxx/issues/877
+    let hdr = indoc! {"
+        struct A {
+            int a;
+        };
+        struct B {
+            int B;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
 #[ignore] // https://github.com/rust-lang/rust-bindgen/issues/1924
 #[test]
 fn test_associated_type_templated_typedef() {
@@ -5412,6 +5427,24 @@ fn test_closure() {
 }
 
 #[test]
+fn test_multiply_nested_inner_type() {
+    let hdr = indoc! {"
+        struct Turkey {
+            struct Duck {
+                struct Hen {
+                    Hen() {}
+                    int wings;
+                };
+            };
+        };
+        "};
+    let rs = quote! {
+        ffi::Turkey_Duck_Hen::make_unique();
+    };
+    run_test("", hdr, rs, &[], &["Turkey_Duck_Hen"]);
+}
+
+#[test]
 fn test_underscored_namespace_for_inner_type() {
     let hdr = indoc! {"
         namespace __foo {
@@ -6585,7 +6618,7 @@ fn test_pv_subclass_derive_defaults() {
 }
 
 #[test]
-fn test_non_pv_subclass() {
+fn test_non_pv_subclass_simple() {
     let hdr = indoc! {"
     #include <cstdint>
 
@@ -7513,7 +7546,7 @@ fn test_pv_subclass_fancy_constructor() {
 }
 
 #[test]
-fn test_non_pv_subclass_overrides() {
+fn test_non_pv_subclass_overloads() {
     let hdr = indoc! {"
     #include <cstdint>
     #include <string>

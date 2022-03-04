@@ -194,6 +194,11 @@ pub(super) fn find_constructors_present(
             ..
         } = api
         {
+            if name.cpp_name_if_present().is_some() {
+                // For now we do not generate implicit constructors for nested structs - see
+                // https://github.com/google/autocxx/issues/884
+                continue;
+            }
             let name = &name.name;
             let find_explicit = |kind: ExplicitKind| -> Option<&ExplicitFound> {
                 explicits.get(&ExplicitType {
