@@ -470,23 +470,40 @@ impl<'a> FnAnalyzer<'a> {
                         &simpler_analysis.kind,
                         FnKind::Method(_, MethodKind::PureVirtual(..))
                     );
-                    let super_fn_name =
+                    let super_fn_call_name =
                         SubclassName::get_super_fn_name(&Namespace::new(), &analysis.rust_name);
+                    let super_fn_api_name = SubclassName::get_super_fn_name(
+                        &Namespace::new(),
+                        &analysis.cxxbridge_name.to_string(),
+                    );
                     let trait_api_name = SubclassName::get_trait_api_name(sup, &analysis.rust_name);
+
+                    let mut subclass_fn_deps = vec![trait_api_name.clone()];
+                    if !is_pure_virtual {
+                        // Create a C++ API representing the superclass implementation (allowing
+                        // calls from Rust->C++)
+                        let maybe_wrap =
+                            create_subclass_fn_wrapper(&sub, &super_fn_call_name, &fun);
+                        let super_fn_name = ApiName::new_from_qualified_name(super_fn_api_name);
+                        let super_fn_call_api_name = self.analyze_and_add(
+                            super_fn_name,
+                            maybe_wrap,
+                            &mut results,
+                            TypeConversionSophistication::SimpleForSubclasses,
+                        );
+                        subclass_fn_deps.push(super_fn_call_api_name);
+                    }
 
                     // Create the Rust API representing the subclass implementation (allowing calls
                     // from C++ -> Rust)
                     results.push(create_subclass_function(
+                        // RustSubclassFn
                         &sub,
                         &simpler_analysis,
                         &name,
                         receiver_mutability,
                         sup,
-                        if is_pure_virtual {
-                            vec![trait_api_name.clone()]
-                        } else {
-                            vec![trait_api_name.clone(), super_fn_name.clone()]
-                        },
+                        subclass_fn_deps,
                     ));
 
                     // Create the trait item for the <superclass>_methods and <superclass>_supers
@@ -505,19 +522,6 @@ impl<'a> FnAnalyzer<'a> {
                             sup.clone(),
                             is_pure_virtual,
                         ));
-                    }
-
-                    if !is_pure_virtual {
-                        // Create a C++ API representing the superclass implementation (allowing
-                        // calls from Rust->C++)
-                        let maybe_wrap = create_subclass_fn_wrapper(sub, &super_fn_name, &fun);
-                        let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
-                        self.analyze_and_add(
-                            super_fn_name,
-                            maybe_wrap,
-                            &mut results,
-                            TypeConversionSophistication::SimpleForSubclasses,
-                        );
                     }
                 }
             }
