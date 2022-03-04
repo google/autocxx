@@ -12,17 +12,62 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
+
+use crate::{
+    conversion::{api::ApiName, convert_error::ErrorContext, ConvertError},
+    types::QualifiedName,
+};
+
 use super::api::{AnalysisPhase, Api};
 
 /// Newtype wrapper for a list of APIs, which enforced the invariant
 /// that each API has a unique name.
 pub(crate) struct ApiVec<P: AnalysisPhase> {
     apis: Vec<Api<P>>,
+    names: HashSet<QualifiedName>,
 }
 
 impl<P: AnalysisPhase> ApiVec<P> {
     pub(crate) fn push(&mut self, api: Api<P>) {
+        let name = api.name();
+        let already_contains = self.already_contains(name);
+        if already_contains {
+            if api.discard_duplicates() {
+                log::info!("Discarding duplicate API for {}", name);
+            } else {
+                panic!(
+                    "Already have an API with that name: {}. API was {:?}",
+                    name, api
+                );
+            }
+        }
+        self.names.insert(name.clone());
         self.apis.push(api)
+    }
+
+    pub(crate) fn push_eliminating_duplicates(&mut self, api: Api<P>) {
+        let name = api.name();
+        let already_contains = self.already_contains(name);
+        if already_contains {
+            log::info!(
+                "Duplicate API for {} - removing all of them and replacing with an IgnoredItem.",
+                name
+            );
+            self.retain(|api| api.name() != name);
+            self.push(Api::IgnoredItem {
+                name: ApiName::new_from_qualified_name(name.clone()),
+                err: ConvertError::DuplicateItemsFoundInParsing,
+                ctx: ErrorContext::Item(name.get_final_ident()),
+            })
+        } else {
+            self.names.insert(name.clone());
+            self.apis.push(api)
+        }
+    }
+
+    fn already_contains(&self, name: &QualifiedName) -> bool {
+        self.names.contains(name)
     }
 
     pub(crate) fn new() -> Self {
@@ -57,6 +102,9 @@ impl<P: AnalysisPhase> ApiVec<P> {
         F: FnMut(&Api<P>) -> bool,
     {
         self.apis.retain(f);
+        self.names.clear();
+        self.names
+            .extend(self.apis.iter().map(|api| api.name()).cloned());
     }
 
     pub fn drain_all(&mut self) -> impl Iterator<Item = Api<P>> + '_ {
@@ -68,6 +116,7 @@ impl<P: AnalysisPhase> Default for ApiVec<P> {
     fn default() -> Self {
         Self {
             apis: Default::default(),
+            names: Default::default(),
         }
     }
 }

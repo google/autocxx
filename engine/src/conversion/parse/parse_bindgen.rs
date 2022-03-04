@@ -183,7 +183,7 @@ impl<'a> ParseBindgen<'a> {
                 };
                 if let Some(api) = api {
                     if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
-                        self.apis.push(api);
+                        self.apis.push_eliminating_duplicates(api);
                     }
                 }
                 Ok(())
@@ -195,7 +195,7 @@ impl<'a> ParseBindgen<'a> {
                     item: e,
                 };
                 if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
-                    self.apis.push(api);
+                    self.apis.push_eliminating_duplicates(api);
                 }
                 Ok(())
             }
@@ -252,14 +252,15 @@ impl<'a> ParseBindgen<'a> {
                                 ));
                             }
                             let annotations = BindgenSemanticAttributes::new(&use_item.attrs);
-                            self.apis.push(UnanalyzedApi::Typedef {
-                                name: api_name(ns, new_id.clone(), &annotations),
-                                item: TypedefKind::Use(parse_quote! {
-                                    pub use #old_path as #new_id;
-                                }),
-                                old_tyname: Some(old_tyname),
-                                analysis: (),
-                            });
+                            self.apis
+                                .push_eliminating_duplicates(UnanalyzedApi::Typedef {
+                                    name: api_name(ns, new_id.clone(), &annotations),
+                                    item: TypedefKind::Use(parse_quote! {
+                                        pub use #old_path as #new_id;
+                                    }),
+                                    old_tyname: Some(old_tyname),
+                                    analysis: (),
+                                });
                             break;
                         }
                         _ => {
@@ -274,7 +275,7 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Const(const_item) => {
                 let annotations = BindgenSemanticAttributes::new(&const_item.attrs);
-                self.apis.push(UnanalyzedApi::Const {
+                self.apis.push_eliminating_duplicates(UnanalyzedApi::Const {
                     name: api_name(ns, const_item.ident.clone(), &annotations),
                     const_item,
                 });
@@ -282,12 +283,15 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Type(ity) => {
                 let annotations = BindgenSemanticAttributes::new(&ity.attrs);
-                self.apis.push(UnanalyzedApi::Typedef {
-                    name: api_name(ns, ity.ident.clone(), &annotations),
-                    item: TypedefKind::Type(ity),
-                    old_tyname: None,
-                    analysis: (),
-                });
+                // It's known that sometimes bindgen will give us duplicate typedefs with the
+                // same name - see test_issue_264.
+                self.apis
+                    .push_eliminating_duplicates(UnanalyzedApi::Typedef {
+                        name: api_name(ns, ity.ident.clone(), &annotations),
+                        item: TypedefKind::Type(ity),
+                        old_tyname: None,
+                        analysis: (),
+                    });
                 Ok(())
             }
             _ => Err(ConvertErrorWithContext(
