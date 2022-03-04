@@ -9,18 +9,15 @@ if they're in different namespaces. This will be fixed in future.
 
 ```rust,ignore,autocxx,hidecpp
 autocxx_integration_tests::doctest(
-"",
 "
-namespace submarines {
-struct Boomer {
-    int number_of_missiles;
-};
-}
-
+void generations::hey_boomer() {}
+void submarines::hey_boomer() {}",
+"
 namespace generations {
-struct Boomer {
-    bool ok;
-};
+  void hey_boomer();
+}
+namespace submarines {
+  void hey_boomer();
 }
 ",
 {
@@ -29,17 +26,13 @@ use autocxx::prelude::*;
 include_cpp! {
     #include "input.h"
     safety!(unsafe_ffi)
-    generate_pod!("submarines::Boomer")
-    generate_pod!("generations::Boomer")
+    generate!("submarines::hey_boomer")
+    generate!("generations::hey_boomer")
 }
 
 fn main() {
-    let best_possible_age_person_ = ffi::generations::Boomer {
-        ok: true,
-    };
-    let submarine_ = ffi::submarines::Boomer {
-        number_of_missiles: 12
-    };
+    ffi::generations::hey_boomer(); // insults your elders and betters
+    ffi::submarines::hey_boomer(); // launches missiles
 }
 }
 )
