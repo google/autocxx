@@ -38,11 +38,42 @@ fn main() {
 )
 ```
 
-## Nested classes
+## Nested types
 
 There is support for generating bindings of nested types, with some
 restrictions. Currently the C++ type `A::B` will be given the Rust name
 `A_B` in the same module as its enclosing namespace.
+
+```rust,ignore,autocxx,hidecpp
+autocxx_integration_tests::doctest(
+"",
+"
+struct Turkey {
+    struct Duck {
+        struct Hen {
+            Hen() {}
+            int wings;
+        };
+    };
+};
+",
+{
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include "input.h"
+    safety!(unsafe_ffi)
+    generate_pod!("Turkey_Duck_Hen")
+}
+
+fn main() {
+    let turducken = ffi::Turkey_Duck_Hen::make_unique();
+}
+}
+)
+```
+
+(Currently, only explicit constructors are supported for such nested types.)
 
 ## Overloads
 
