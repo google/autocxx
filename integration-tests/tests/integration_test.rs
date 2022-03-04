@@ -5417,13 +5417,14 @@ fn test_multiply_nested_inner_type() {
         struct Turkey {
             struct Duck {
                 struct Hen {
+                    Hen() {}
                     int wings;
                 };
             };
         };
         "};
     let rs = quote! {
-        ffi::Turkey_Duck_Hen::make_unique()
+        ffi::Turkey_Duck_Hen::make_unique();
     };
     run_test("", hdr, rs, &[], &["Turkey_Duck_Hen"]);
 }
