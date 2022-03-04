@@ -11,7 +11,10 @@ use quote::quote;
 use syn::{parse_quote, FnArg};
 
 use crate::{
-    conversion::api::{Api, ApiName, CastMutability, Provenance, References, TraitSynthesis},
+    conversion::{
+        api::{Api, ApiName, CastMutability, Provenance, References, TraitSynthesis},
+        apivec::ApiVec,
+    },
     types::{make_ident, QualifiedName},
 };
 
@@ -27,7 +30,7 @@ use super::{
     pod::{PodAnalysis, PodPhase},
 };
 
-pub(crate) fn add_casts(apis: Vec<Api<PodPhase>>) -> Vec<Api<PodPhase>> {
+pub(crate) fn add_casts(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
     apis.into_iter()
         .flat_map(|api| {
             let mut resultant_apis = match api {

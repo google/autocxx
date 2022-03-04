@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::conversion::apivec::ApiVec;
 use crate::{conversion::ConvertError, known_types::known_types};
 use crate::{
     conversion::{
@@ -69,7 +70,7 @@ impl ByValueChecker {
     /// Scan APIs to work out which are by-value safe. Constructs a [ByValueChecker]
     /// that others can use to query the results.
     pub(crate) fn new_from_apis(
-        apis: &[Api<TypedefPhase>],
+        apis: &ApiVec<TypedefPhase>,
         config: &IncludeCppConfig,
     ) -> Result<ByValueChecker, ConvertError> {
         let mut byvalue_checker = ByValueChecker::new();
@@ -80,8 +81,8 @@ impl ByValueChecker {
                 .results
                 .insert(tn, StructDetails::new(safety));
         }
-        for api in apis {
-            match &api {
+        for api in apis.iter() {
+            match api {
                 Api::Typedef { analysis, .. } => {
                     let name = api.name();
                     let typedef_type = match analysis.kind {

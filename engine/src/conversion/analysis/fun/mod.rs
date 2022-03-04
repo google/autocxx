@@ -19,10 +19,11 @@ use crate::{
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{
-            ApiName, CastMutability, CppVisibility, FuncToConvert, Provenance, References,
-            SpecialMemberKind, StructDetails, SubclassName, TraitImplSignature, TraitSynthesis,
-            UnsafetyNeeded, Virtualness,
+            ApiName, CastMutability, CppVisibility, FuncToConvert, NullPhase, Provenance,
+            References, SpecialMemberKind, StructDetails, SubclassName, TraitImplSignature,
+            TraitSynthesis, UnsafetyNeeded, Virtualness,
         },
+        apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::{convert_apis, report_any_error},
@@ -44,7 +45,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, TypeKind},
         ConvertError,
     },
     types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},
@@ -246,7 +247,7 @@ enum TypeConversionSophistication {
 
 pub(crate) struct FnAnalyzer<'a> {
     unsafe_policy: UnsafePolicy,
-    extra_apis: Vec<UnanalyzedApi>,
+    extra_apis: ApiVec<NullPhase>,
     type_converter: TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
@@ -277,13 +278,13 @@ fn convert_struct(
 
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
-        apis: Vec<Api<PodPhase>>,
+        apis: ApiVec<PodPhase>,
         unsafe_policy: UnsafePolicy,
         config: &'a IncludeCppConfig,
-    ) -> Vec<Api<FnPrePhase>> {
+    ) -> ApiVec<FnPrePhase> {
         let mut me = Self {
             unsafe_policy,
-            extra_apis: Vec::new(),
+            extra_apis: ApiVec::new(),
             type_converter: TypeConverter::new(config, &apis),
             bridge_name_tracker: BridgeNameTracker::new(),
             config,
@@ -294,7 +295,7 @@ impl<'a> FnAnalyzer<'a> {
             generic_types: Self::build_generic_type_set(&apis),
             existing_superclass_trait_api_names: HashSet::new(),
         };
-        let mut results = Vec::new();
+        let mut results = ApiVec::new();
         convert_apis(
             apis,
             &mut results,
@@ -309,7 +310,7 @@ impl<'a> FnAnalyzer<'a> {
         results
     }
 
-    fn build_pod_safe_type_set(apis: &[Api<PodPhase>]) -> HashSet<QualifiedName> {
+    fn build_pod_safe_type_set(apis: &ApiVec<PodPhase>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct {
@@ -339,7 +340,7 @@ impl<'a> FnAnalyzer<'a> {
             .collect()
     }
 
-    fn build_generic_type_set(apis: &[Api<PodPhase>]) -> HashSet<QualifiedName> {
+    fn build_generic_type_set(apis: &ApiVec<PodPhase>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct {
@@ -356,7 +357,7 @@ impl<'a> FnAnalyzer<'a> {
 
     /// Builds a mapping from a qualified type name to the last 'nest'
     /// of its name, if it has multiple elements.
-    fn build_nested_type_map(apis: &[Api<PodPhase>]) -> HashMap<QualifiedName, String> {
+    fn build_nested_type_map(apis: &ApiVec<PodPhase>) -> HashMap<QualifiedName, String> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct { name, .. } | Api::Enum { name, .. } => {
@@ -444,8 +445,8 @@ impl<'a> FnAnalyzer<'a> {
         }
     }
 
-    fn add_make_uniques(&mut self, apis: &mut Vec<Api<FnPrePhase>>) {
-        let mut results = Vec::new();
+    fn add_make_uniques(&mut self, apis: &mut ApiVec<FnPrePhase>) {
+        let mut results = ApiVec::new();
         'outer: for api in apis.iter() {
             if let Api::Function {
                 name,
@@ -507,7 +508,7 @@ impl<'a> FnAnalyzer<'a> {
     ) -> Result<Box<dyn Iterator<Item = Api<FnPrePhase>>>, ConvertErrorWithContext> {
         let (analysis, name) =
             self.analyze_foreign_fn(name, &fun, TypeConversionSophistication::Regular, None);
-        let mut results = Vec::new();
+        let mut results = ApiVec::new();
 
         // Consider whether we need to synthesize subclass items.
         if let FnKind::Method(
@@ -544,8 +545,7 @@ impl<'a> FnAnalyzer<'a> {
                 if !is_pure_virtual {
                     // Create a C++ API representing the superclass implementation (allowing
                     // calls from Rust->C++)
-                    let maybe_wrap =
-                        create_subclass_fn_wrapper(&sub, &super_fn_call_name, &fun);
+                    let maybe_wrap = create_subclass_fn_wrapper(&sub, &super_fn_call_name, &fun);
                     let super_fn_name = ApiName::new_from_qualified_name(super_fn_api_name);
                     let super_fn_call_api_name = self.analyze_and_add(
                         super_fn_name,
@@ -604,7 +604,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         new_func: Box<FuncToConvert>,
-        results: &mut Vec<Api<FnPrePhase>>,
+        results: &mut ApiVec<FnPrePhase>,
         sophistication: TypeConversionSophistication,
     ) -> QualifiedName {
         let (analysis, name) = self.analyze_foreign_fn(name, &new_func, sophistication, None);
@@ -623,7 +623,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         fun: &FuncToConvert,
         initial_name: ApiName,
-        results: &mut Vec<Api<FnPrePhase>>,
+        results: &mut ApiVec<FnPrePhase>,
     ) {
         let mut new_fun = fun.clone();
         new_fun.provenance = Provenance::SynthesizedMakeUnique;
@@ -1711,19 +1711,36 @@ impl<'a> FnAnalyzer<'a> {
     ///
     /// Also fills out the [`PodAndConstructorAnalysis::constructors`] fields with information useful
     /// for further analysis phases.
-    fn add_constructors_present(&mut self, apis: &mut Vec<Api<FnPrePhase>>) {
+    fn add_constructors_present(&mut self, apis: &mut ApiVec<FnPrePhase>) {
         for (self_ty, items_found) in find_constructors_present(apis).iter() {
-            if let Some(Api::Struct {
-                analysis: PodAndConstructorAnalysis { constructors, .. },
-                ..
-            }) = apis.iter_mut().find(|api| api.name() == self_ty)
-            {
-                constructors.default_constructor = items_found.default_constructor.callable_any();
-                constructors.copy_constructor = items_found.const_copy_constructor.callable_any()
-                    || items_found.non_const_copy_constructor.callable_any();
-                constructors.move_constructor = items_found.move_constructor.callable_any();
-                constructors.destructor = items_found.destructor.callable_any();
-            }
+            *apis = apis
+                .drain_all()
+                .map(|api| match api {
+                    Api::Struct {
+                        analysis:
+                            PodAndConstructorAnalysis {
+                                constructors: _,
+                                pod,
+                            },
+                        details,
+                        name,
+                    } if api.name() == self_ty => Api::Struct {
+                        analysis: PodAndConstructorAnalysis {
+                            pod,
+                            constructors: PublicConstructors {
+                                default_constructor: items_found.default_constructor.callable_any(),
+                                copy_constructor: items_found.const_copy_constructor.callable_any()
+                                    || items_found.non_const_copy_constructor.callable_any(),
+                                move_constructor: items_found.move_constructor.callable_any(),
+                                destructor: items_found.destructor.callable_any(),
+                            },
+                        },
+                        details,
+                        name,
+                    },
+                    _ => api,
+                })
+                .collect();
             if self.config.exclude_impls {
                 continue;
             }
@@ -1787,7 +1804,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         self_ty: QualifiedName,
         label: Option<&str>,
-        apis: &mut Vec<Api<FnPrePhase>>,
+        apis: &mut ApiVec<FnPrePhase>,
         special_member: SpecialMemberKind,
         inputs: Punctuated<FnArg, Comma>,
         references: References,

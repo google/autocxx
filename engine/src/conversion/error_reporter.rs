@@ -10,6 +10,7 @@ use syn::ItemEnum;
 
 use super::{
     api::{AnalysisPhase, Api, ApiName, FuncToConvert, StructDetails, TypedefKind},
+    apivec::ApiVec,
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
@@ -20,7 +21,7 @@ use crate::types::{Namespace, QualifiedName};
 /// such that users will see documentation of the error.
 pub(crate) fn report_any_error<F, T>(
     ns: &Namespace,
-    apis: &mut Vec<Api<impl AnalysisPhase>>,
+    apis: &mut ApiVec<impl AnalysisPhase>,
     fun: F,
 ) -> Option<T>
 where
@@ -46,8 +47,8 @@ where
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
 pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
-    in_apis: Vec<Api<A>>,
-    out_apis: &mut Vec<Api<B>>,
+    in_apis: ApiVec<A>,
+    out_apis: &mut ApiVec<B>,
     mut func_conversion: FF,
     mut struct_conversion: SF,
     mut enum_conversion: EF,
@@ -77,7 +78,7 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
         A::TypedefAnalysis,
     ) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext>,
 {
-    out_apis.extend(&mut in_apis.into_iter().flat_map(|api| {
+    out_apis.extend(in_apis.into_iter().flat_map(|api| {
         let tn = api.name().clone();
         let result: Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext> = match api {
             // No changes to any of these...
@@ -180,8 +181,8 @@ fn api_or_error<T: AnalysisPhase + 'static>(
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
 pub(crate) fn convert_item_apis<F, A, B: 'static>(
-    in_apis: Vec<Api<A>>,
-    out_apis: &mut Vec<Api<B>>,
+    in_apis: ApiVec<A>,
+    out_apis: &mut ApiVec<B>,
     mut fun: F,
 ) where
     F: FnMut(Api<A>) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertError>,

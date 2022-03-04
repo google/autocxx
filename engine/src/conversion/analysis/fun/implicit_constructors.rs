@@ -17,6 +17,7 @@ use crate::{
             type_converter::TypeKind,
         },
         api::{Api, CppVisibility, FuncToConvert, SpecialMemberKind},
+        apivec::ApiVec,
     },
     known_types::{known_types, KnownTypeConstructorDetails},
     types::QualifiedName,
@@ -164,7 +165,7 @@ enum ExplicitFound {
 /// we can simply generate the sort of thing bindgen generates, then ask
 /// the existing code in this phase to figure out what to do with it.
 pub(super) fn find_constructors_present(
-    apis: &[Api<FnPrePhase>],
+    apis: &ApiVec<FnPrePhase>,
 ) -> HashMap<QualifiedName, ItemsFound> {
     let explicits = find_explicit_items(apis);
 
@@ -534,7 +535,7 @@ pub(super) fn find_constructors_present(
     all_items_found
 }
 
-fn find_explicit_items(apis: &[Api<FnPrePhase>]) -> HashMap<ExplicitType, ExplicitFound> {
+fn find_explicit_items(apis: &ApiVec<FnPrePhase>) -> HashMap<ExplicitType, ExplicitFound> {
     let mut result = HashMap::new();
     let mut merge_fun = |ty: QualifiedName, kind: ExplicitKind, fun: &FuncToConvert| match result
         .entry(ExplicitType { ty, kind })

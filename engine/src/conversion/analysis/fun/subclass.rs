@@ -16,6 +16,7 @@ use crate::conversion::api::{
     CppVisibility, FuncToConvert, Provenance, RustSubclassFnDetails, SubclassConstructorDetails,
     SubclassName, SuperclassMethod, UnsafetyNeeded, Virtualness,
 };
+use crate::conversion::apivec::ApiVec;
 use crate::{
     conversion::{
         analysis::fun::function_wrapper::{
@@ -29,7 +30,7 @@ use crate::{
 use super::{FnAnalysis, FnPrePhase};
 
 pub(super) fn subclasses_by_superclass(
-    apis: &[Api<PodPhase>],
+    apis: &ApiVec<PodPhase>,
 ) -> HashMap<QualifiedName, Vec<SubclassName>> {
     let mut subclasses_per_superclass: HashMap<QualifiedName, Vec<SubclassName>> = HashMap::new();
 

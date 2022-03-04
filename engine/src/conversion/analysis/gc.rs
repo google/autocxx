@@ -10,7 +10,10 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::IncludeCppConfig;
 
-use crate::{conversion::api::Api, types::QualifiedName};
+use crate::{
+    conversion::{api::Api, apivec::ApiVec},
+    types::QualifiedName,
+};
 
 use super::{deps::HasDependencies, fun::FnPhase};
 
@@ -32,9 +35,9 @@ use super::{deps::HasDependencies, fun::FnPhase};
 ///    don't care about the other parameter types passed into those
 ///    APIs either.
 pub(crate) fn filter_apis_by_following_edges_from_allowlist(
-    apis: Vec<Api<FnPhase>>,
+    apis: ApiVec<FnPhase>,
     config: &IncludeCppConfig,
-) -> Vec<Api<FnPhase>> {
+) -> ApiVec<FnPhase> {
     let mut todos: Vec<QualifiedName> = apis
         .iter()
         .filter(|api| {
@@ -44,13 +47,13 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
         .map(Api::name)
         .cloned()
         .collect();
-    let mut by_typename: HashMap<QualifiedName, Vec<Api<FnPhase>>> = HashMap::new();
+    let mut by_typename: HashMap<QualifiedName, ApiVec<FnPhase>> = HashMap::new();
     for api in apis.into_iter() {
         let tn = api.name().clone();
         by_typename.entry(tn).or_default().push(api);
     }
     let mut done = HashSet::new();
-    let mut output = Vec::new();
+    let mut output = ApiVec::new();
     while !todos.is_empty() {
         let todo = todos.remove(0);
         if done.contains(&todo) {

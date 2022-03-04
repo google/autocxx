@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use crate::{
     conversion::{
         api::{Api, ApiName, StructDetails, TypeKind},
+        apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
         error_reporter::convert_apis,
     },
@@ -27,11 +28,9 @@ use super::fun::{
 /// which will later be used as edges in the garbage collection, because
 /// typically any use of a type will require us to call its copy or move
 /// constructor. The same applies to its alloc/free functions.
-pub(crate) fn decorate_types_with_constructor_deps(
-    apis: Vec<Api<FnPrePhase>>,
-) -> Vec<Api<FnPhase>> {
+pub(crate) fn decorate_types_with_constructor_deps(apis: ApiVec<FnPrePhase>) -> ApiVec<FnPhase> {
     let mut constructors_and_allocators_by_type = find_important_constructors(&apis);
-    let mut results = Vec::new();
+    let mut results = ApiVec::new();
     convert_apis(
         apis,
         &mut results,
@@ -72,10 +71,10 @@ fn decorate_struct(
 }
 
 fn find_important_constructors(
-    apis: &[Api<FnPrePhase>],
+    apis: &ApiVec<FnPrePhase>,
 ) -> HashMap<QualifiedName, Vec<QualifiedName>> {
     let mut results: HashMap<QualifiedName, Vec<QualifiedName>> = HashMap::new();
-    for api in apis {
+    for api in apis.iter() {
         if let Api::Function {
             name,
             analysis:

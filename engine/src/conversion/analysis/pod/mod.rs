@@ -17,7 +17,8 @@ use syn::{ItemEnum, ItemStruct, Type, Visibility};
 use crate::{
     conversion::{
         analysis::type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, ApiName, CppVisibility, StructDetails, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, CppVisibility, NullPhase, StructDetails, TypeKind},
+        apivec::ApiVec,
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
         parse::BindgenSemanticAttributes,
@@ -60,17 +61,17 @@ impl AnalysisPhase for PodPhase {
 /// and an object which can be used to query the POD status of any
 /// type whether or not it's one of the [Api]s.
 pub(crate) fn analyze_pod_apis(
-    apis: Vec<Api<TypedefPhase>>,
+    apis: ApiVec<TypedefPhase>,
     config: &IncludeCppConfig,
-) -> Result<Vec<Api<PodPhase>>, ConvertError> {
+) -> Result<ApiVec<PodPhase>, ConvertError> {
     // This next line will return an error if any of the 'generate_pod'
     // directives from the user can't be met because, for instance,
     // a type contains a std::string or some other type which can't be
     // held safely by value in Rust.
     let byvalue_checker = ByValueChecker::new_from_apis(&apis, config)?;
-    let mut extra_apis = Vec::new();
+    let mut extra_apis = ApiVec::new();
     let mut type_converter = TypeConverter::new(config, &apis);
-    let mut results = Vec::new();
+    let mut results = ApiVec::new();
     convert_apis(
         apis,
         &mut results,
@@ -90,8 +91,8 @@ pub(crate) fn analyze_pod_apis(
     );
     // Conceivably, the process of POD-analysing the first set of APIs could result
     // in us creating new APIs to concretize generic types.
-    let extra_apis: Vec<Api<PodPhase>> = extra_apis.into_iter().map(add_analysis).collect();
-    let mut more_extra_apis = Vec::new();
+    let extra_apis: ApiVec<PodPhase> = extra_apis.into_iter().map(add_analysis).collect();
+    let mut more_extra_apis = ApiVec::new();
     convert_apis(
         extra_apis,
         &mut results,
@@ -125,7 +126,7 @@ fn analyze_enum(
 fn analyze_struct(
     byvalue_checker: &ByValueChecker,
     type_converter: &mut TypeConverter,
-    extra_apis: &mut Vec<UnanalyzedApi>,
+    extra_apis: &mut ApiVec<NullPhase>,
     name: ApiName,
     mut details: Box<StructDetails>,
     config: &IncludeCppConfig,
@@ -194,15 +195,15 @@ fn get_struct_field_types(
     s: &ItemStruct,
     field_deps: &mut HashSet<QualifiedName>,
     field_info: &mut Vec<FieldInfo>,
-    extra_apis: &mut Vec<UnanalyzedApi>,
+    extra_apis: &mut ApiVec<NullPhase>,
 ) -> Vec<ConvertError> {
     let mut convert_errors = Vec::new();
     for f in &s.fields {
         let annotated =
             type_converter.convert_type(f.ty.clone(), ns, &TypeConversionContext::CxxInnerType);
         match annotated {
-            Ok(r) => {
-                extra_apis.extend(r.extra_apis);
+            Ok(mut r) => {
+                extra_apis.append(&mut r.extra_apis);
                 // Skip base classes represented as fields. Anything which wants to include bases can chain
                 // those to the list we're building.
                 if !f
