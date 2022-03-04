@@ -1192,20 +1192,16 @@ impl<'a> FnAnalyzer<'a> {
         // Work out our final naming strategy.
         validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).unwrap_or_else(set_ignore_reason);
         let rust_name_ident = make_ident(&rust_name);
-        let (id, rust_rename_strategy) = match kind {
-            _ if rust_wrapper_needed => (
-                rust_name_ident,
-                RustRenameStrategy::RenameUsingWrapperFunction,
-            ),
-            FnKind::Function if cxxbridge_name != rust_name => (
-                cxxbridge_name.clone(),
-                RustRenameStrategy::RenameInOutputMod(rust_name_ident),
-            ),
-            _ => (rust_name_ident, RustRenameStrategy::None),
+        let rust_rename_strategy = match kind {
+            _ if rust_wrapper_needed => RustRenameStrategy::RenameUsingWrapperFunction,
+            FnKind::Function if cxxbridge_name != rust_name => {
+                RustRenameStrategy::RenameInOutputMod(rust_name_ident)
+            }
+            _ => RustRenameStrategy::None,
         };
 
         let analysis = FnAnalysis {
-            cxxbridge_name,
+            cxxbridge_name: cxxbridge_name.clone(),
             rust_name: rust_name.clone(),
             rust_rename_strategy,
             params,
@@ -1221,7 +1217,7 @@ impl<'a> FnAnalyzer<'a> {
             externally_callable,
             rust_wrapper_needed,
         };
-        let name = ApiName::new_with_cpp_name(ns, id, cpp_name);
+        let name = ApiName::new_with_cpp_name(ns, cxxbridge_name, cpp_name);
         (analysis, name)
     }
 
