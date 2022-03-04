@@ -170,10 +170,38 @@ fn main() {
 }
 
 </code></pre>
-<h2 id="nested-classes"><a class="header" href="#nested-classes">Nested classes</a></h2>
+<h2 id="nested-types"><a class="header" href="#nested-types">Nested types</a></h2>
 <p>There is support for generating bindings of nested types, with some
 restrictions. Currently the C++ type <code>A::B</code> will be given the Rust name
 <code>A_B</code> in the same module as its enclosing namespace.</p>
+<h4 id="c-header-1"><a class="header" href="#c-header-1">C++ header:</a></h4>
+<pre><code class="language-cpp">
+struct Turkey {
+    struct Duck {
+        struct Hen {
+            Hen() {}
+            int wings;
+        };
+    };
+};
+
+</code></pre>
+<h4 id="rust-1"><a class="header" href="#rust-1">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate_pod!(&quot;Turkey_Duck_Hen&quot;)
+}
+
+fn main() {
+    let turducken = ffi::Turkey_Duck_Hen::make_unique();
+}
+
+</code></pre>
+<p>(Currently, only explicit constructors are supported for such nested types.)</p>
 <h2 id="overloads"><a class="header" href="#overloads">Overloads</a></h2>
 <p>See <a href="cpp_functions.html">the chapter on C++ functions</a>.</p>
 
