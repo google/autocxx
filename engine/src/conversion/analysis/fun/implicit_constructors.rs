@@ -195,11 +195,7 @@ pub(super) fn find_constructors_present(
             ..
         } = api
         {
-            if name.cpp_name_if_present().is_some() {
-                // For now we do not generate implicit constructors for nested structs - see
-                // https://github.com/google/autocxx/issues/884
-                continue;
-            }
+            let full_name = &name;
             let name = &name.name;
             let find_explicit = |kind: ExplicitKind| -> Option<&ExplicitFound> {
                 explicits.get(&ExplicitType {
@@ -251,7 +247,10 @@ pub(super) fn find_constructors_present(
             // known_types.rs, then we'll be able to cope with types which contain strings,
             // unique_ptrs etc.
             let items_found = if bases_items_found.len() != bases.len()
-                || fields_items_found.len() != field_info.len()
+                || fields_items_found.len() != field_info.len() ||
+                // For now we do not generate implicit constructors for nested structs - see
+                // https://github.com/google/autocxx/issues/884
+                full_name.cpp_name_if_present().is_some()
             {
                 let is_explicit = |kind: ExplicitKind| -> SpecialMemberFound {
                     // TODO: For https://github.com/google/autocxx/issues/815, map

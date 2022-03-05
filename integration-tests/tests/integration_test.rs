@@ -5435,13 +5435,24 @@ fn test_multiply_nested_inner_type() {
                     Hen() {}
                     int wings;
                 };
+                struct HenImplicit {
+                    int wings;
+                };
             };
         };
         "};
     let rs = quote! {
         ffi::Turkey_Duck_Hen::make_unique();
+        // TODO: Re-enable for https://github.com/google/autocxx/issues/884.
+        //ffi::Turkey_Duck_HenImplicit::make_unique();
     };
-    run_test("", hdr, rs, &[], &["Turkey_Duck_Hen"]);
+    run_test(
+        "",
+        hdr,
+        rs,
+        &[],
+        &["Turkey_Duck_Hen", "Turkey_Duck_HenImplicit"],
+    );
 }
 
 #[test]
