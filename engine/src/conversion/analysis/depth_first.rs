@@ -87,8 +87,8 @@ mod test {
             QualifiedName::new_from_cpp_name("c"),
             vec![QualifiedName::new_from_cpp_name("a")],
         );
-        let api_list = vec![a, b, c];
-        let mut it = depth_first(api_list.iter());
+        let mut api_list = vec![a, b, c];
+        let mut it = depth_first(api_list.iter_mut());
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("a"));
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("c"));
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("b"));
