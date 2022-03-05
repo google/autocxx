@@ -89,6 +89,10 @@ impl<P: AnalysisPhase> ApiVec<P> {
         self.apis.iter()
     }
 
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Api<P>> {
+        self.apis.iter_mut()
+    }
+
     pub(crate) fn into_iter(self) -> impl Iterator<Item = Api<P>> {
         self.apis.into_iter()
     }
@@ -105,10 +109,6 @@ impl<P: AnalysisPhase> ApiVec<P> {
         self.names.clear();
         self.names
             .extend(self.apis.iter().map(|api| api.name()).cloned());
-    }
-
-    pub fn drain_all(&mut self) -> impl Iterator<Item = Api<P>> + '_ {
-        self.apis.drain(..)
     }
 }
 

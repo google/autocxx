@@ -165,7 +165,7 @@ enum ExplicitFound {
 /// we can simply generate the sort of thing bindgen generates, then ask
 /// the existing code in this phase to figure out what to do with it.
 pub(super) fn find_constructors_present(
-    apis: &ApiVec<FnPrePhase>,
+    apis: &mut ApiVec<FnPrePhase>,
 ) -> HashMap<QualifiedName, ItemsFound> {
     let explicits = find_explicit_items(apis);
 
@@ -180,7 +180,7 @@ pub(super) fn find_constructors_present(
     // These analyses include all bases and members of each class.
     let mut all_items_found: HashMap<QualifiedName, ItemsFound> = HashMap::new();
 
-    for api in depth_first(apis.iter()) {
+    for api in depth_first(apis.iter_mut()) {
         if let Api::Struct {
             name,
             analysis:
@@ -189,7 +189,7 @@ pub(super) fn find_constructors_present(
                         PodAnalysis {
                             bases, field_info, ..
                         },
-                    ..
+                    ref mut constructors,
                 },
             details,
             ..
@@ -250,7 +250,7 @@ pub(super) fn find_constructors_present(
             // We need to extend our knowledge to understand the constructor behavior of things in
             // known_types.rs, then we'll be able to cope with types which contain strings,
             // unique_ptrs etc.
-            if bases_items_found.len() != bases.len()
+            let items_found = if bases_items_found.len() != bases.len()
                 || fields_items_found.len() != field_info.len()
             {
                 let is_explicit = |kind: ExplicitKind| -> SpecialMemberFound {
@@ -294,15 +294,11 @@ pub(super) fn find_constructors_present(
                     move_constructor: is_explicit(ExplicitKind::MoveConstructor),
                 };
                 log::info!(
-                    "Special member functions found for {:?}: {:?}",
+                    "Special member functions (explicits only) found for {:?}: {:?}",
                     name,
                     items_found
                 );
-                assert!(
-                    all_items_found.insert(name.clone(), items_found).is_none(),
-                    "Duplicate struct: {:?}",
-                    name
-                );
+                items_found
             } else {
                 // If no user-declared constructors of any kind are provided for a class type (struct, class, or union),
                 // the compiler will always declare a default constructor as an inline public member of its class.
@@ -523,12 +519,15 @@ pub(super) fn find_constructors_present(
                     name,
                     items_found
                 );
-                assert!(
-                    all_items_found.insert(name.clone(), items_found).is_none(),
-                    "Duplicate struct: {:?}",
-                    name
-                );
-            }
+                items_found
+            };
+            constructors.move_constructor = items_found.move_constructor.callable_any();
+            constructors.destructor = items_found.destructor.callable_any();
+            assert!(
+                all_items_found.insert(name.clone(), items_found).is_none(),
+                "Duplicate struct: {:?}",
+                name
+            );
         }
     }
 

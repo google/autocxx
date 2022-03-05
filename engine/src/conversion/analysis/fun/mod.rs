@@ -224,8 +224,6 @@ pub(crate) struct FnPhase;
 /// Indicates which kinds of public constructors are known to exist for a type.
 #[derive(Debug, Default, Copy, Clone)]
 pub(crate) struct PublicConstructors {
-    pub(crate) default_constructor: bool,
-    pub(crate) copy_constructor: bool,
     pub(crate) move_constructor: bool,
     pub(crate) destructor: bool,
 }
@@ -1713,35 +1711,10 @@ impl<'a> FnAnalyzer<'a> {
     /// for further analysis phases.
     fn add_constructors_present(&mut self, apis: &mut ApiVec<FnPrePhase>) {
         for (self_ty, items_found) in find_constructors_present(apis).iter() {
-            *apis = apis
-                .drain_all()
-                .map(|api| match api {
-                    Api::Struct {
-                        analysis:
-                            PodAndConstructorAnalysis {
-                                constructors: _,
-                                pod,
-                            },
-                        details,
-                        name,
-                    } if api.name() == self_ty => Api::Struct {
-                        analysis: PodAndConstructorAnalysis {
-                            pod,
-                            constructors: PublicConstructors {
-                                default_constructor: items_found.default_constructor.callable_any(),
-                                copy_constructor: items_found.const_copy_constructor.callable_any()
-                                    || items_found.non_const_copy_constructor.callable_any(),
-                                move_constructor: items_found.move_constructor.callable_any(),
-                                destructor: items_found.destructor.callable_any(),
-                            },
-                        },
-                        details,
-                        name,
-                    },
-                    _ => api,
-                })
-                .collect();
             if self.config.exclude_impls {
+                // Remember that `find_constructors_present` mutates `apis`, so we always have to
+                // call that, even if we don't do anything with the return value. This is kind of
+                // messy, see the comment on this function for why.
                 continue;
             }
             if self

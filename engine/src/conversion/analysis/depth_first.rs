@@ -17,30 +17,30 @@ use super::deps::HasDependencies;
 
 /// Return APIs in a depth-first order, i.e. those with no dependencies first.
 pub(super) fn depth_first<'a, T: HasDependencies + Debug + 'a>(
-    inputs: impl Iterator<Item = &'a T> + 'a,
-) -> impl Iterator<Item = &'a T> {
+    inputs: impl Iterator<Item = &'a mut T> + 'a,
+) -> impl Iterator<Item = &'a mut T> {
     let queue: VecDeque<_> = inputs.collect();
-    let yet_to_do = queue.iter().map(|api| api.name()).collect();
+    let yet_to_do = queue.iter().map(|api| api.name()).cloned().collect();
     DepthFirstIter { queue, yet_to_do }
 }
 
 struct DepthFirstIter<'a, T: HasDependencies + Debug> {
-    queue: VecDeque<&'a T>,
-    yet_to_do: HashSet<&'a QualifiedName>,
+    queue: VecDeque<&'a mut T>,
+    yet_to_do: HashSet<QualifiedName>,
 }
 
 impl<'a, T: HasDependencies + Debug> Iterator for DepthFirstIter<'a, T> {
-    type Item = &'a T;
+    type Item = &'a mut T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let first_candidate = self.queue.get(0).map(|api| api.name());
+        let first_candidate = self.queue.get(0).map(|api| api.name()).cloned();
         while let Some(candidate) = self.queue.pop_front() {
             if !candidate.deps().any(|d| self.yet_to_do.contains(&d)) {
                 self.yet_to_do.remove(candidate.name());
                 return Some(candidate);
             }
             self.queue.push_back(candidate);
-            if self.queue.get(0).map(|api| api.name()) == first_candidate {
+            if self.queue.get(0).map(|api| api.name()) == first_candidate.as_ref() {
                 panic!(
                     "Failed to find a candidate; there must be a circular dependency. Queue is {}",
                     self.queue
