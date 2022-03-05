@@ -544,10 +544,11 @@ pub(super) fn find_constructors_present(
             ..
         } = api
         {
-            let items_found = all_items_found
-                .get(impl_for)
-                .expect("Type should be dependency of its method");
-            *type_constructors = PublicConstructors::from_items_found(items_found);
+            if let Some(items_found) = all_items_found.get(impl_for) {
+                *type_constructors = PublicConstructors::from_items_found(items_found);
+            }
+            // Otherwise we just leave it at the default of all-false. If we haven't analyzed the
+            // type, then we don't know about any constructors it might have.
         }
     }
 
