@@ -11,8 +11,9 @@
 use syn::{parse_quote, punctuated::Punctuated, token::Comma, FnArg, ReturnType};
 
 use crate::{
-    conversion::api::{
-        Api, ApiName, CppVisibility, FuncToConvert, Provenance, References, TraitSynthesis,
+    conversion::{
+        api::{Api, ApiName, CppVisibility, FuncToConvert, Provenance, References, TraitSynthesis},
+        apivec::ApiVec,
     },
     types::{make_ident, QualifiedName},
 };
@@ -22,7 +23,7 @@ use super::{
     pod::PodPhase,
 };
 
-pub(crate) fn create_alloc_and_frees(apis: Vec<Api<PodPhase>>) -> Vec<Api<PodPhase>> {
+pub(crate) fn create_alloc_and_frees(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
     apis.into_iter()
         .flat_map(|api| -> Box<dyn Iterator<Item = Api<PodPhase>>> {
             match &api {

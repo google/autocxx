@@ -10,7 +10,7 @@ use super::{
     fun::{FnAnalysis, FnKind, FnPhase, FnPrePhase, MethodKind, TraitMethodKind},
     pod::PodAnalysis,
 };
-use crate::conversion::api::Api;
+use crate::conversion::{api::Api, apivec::ApiVec};
 use crate::conversion::{
     api::TypeKind,
     error_reporter::{convert_apis, convert_item_apis},
@@ -19,7 +19,7 @@ use crate::conversion::{
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
-pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnPrePhase>> {
+pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase>) -> ApiVec<FnPrePhase> {
     let mut abstract_types: HashSet<_> = apis
         .iter()
         .filter_map(|api| match &api {
@@ -35,15 +35,6 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
         })
         .collect();
 
-    for mut api in apis.iter_mut() {
-        match &mut api {
-            Api::Struct { analysis, name, .. } if abstract_types.contains(&name.name) => {
-                analysis.kind = TypeKind::Abstract;
-            }
-            _ => {}
-        }
-    }
-
     // Spot any derived classes (recursively). Also, any types which have a base
     // class that's not on the allowlist are presumed to be abstract, because we
     // have no way of knowing (as they're not on the allowlist, there will be
@@ -51,20 +42,45 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
     let mut iterate = true;
     while iterate {
         iterate = false;
-        for mut api in apis.iter_mut() {
-            match &mut api {
-                Api::Struct {
-                    analysis: PodAnalysis { bases, kind, .. },
-                    ..
-                } if *kind != TypeKind::Abstract && (!abstract_types.is_disjoint(bases)) => {
-                    *kind = TypeKind::Abstract;
-                    abstract_types.insert(api.name().clone());
-                    // Recurse in case there are further dependent types
-                    iterate = true;
+        apis = apis
+            .into_iter()
+            .map(|api| {
+                match api {
+                    Api::Struct {
+                        analysis:
+                            PodAnalysis {
+                                bases,
+                                kind: TypeKind::Pod | TypeKind::NonPod,
+                                castable_bases,
+                                field_types,
+                                movable,
+                                is_generic,
+                            },
+                        name,
+                        details,
+                    } if abstract_types.contains(&name.name)
+                        || !abstract_types.is_disjoint(&bases) =>
+                    {
+                        abstract_types.insert(name.name.clone());
+                        // Recurse in case there are further dependent types
+                        iterate = true;
+                        Api::Struct {
+                            analysis: PodAnalysis {
+                                bases,
+                                kind: TypeKind::Abstract,
+                                castable_bases,
+                                field_types,
+                                movable,
+                                is_generic,
+                            },
+                            name,
+                            details,
+                        }
+                    }
+                    _ => api,
                 }
-                _ => {}
-            }
-        }
+            })
+            .collect()
     }
 
     // We also need to remove any constructors belonging to these
@@ -91,7 +107,7 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
     // 2) using "type Foo;" isn't possible unless Foo is a top-level item
     //    within its namespace. Any outer names will be interpreted as namespace
     //    names and result in cxx generating "namespace Foo { class Bar }"".
-    let mut results = Vec::new();
+    let mut results = ApiVec::new();
     convert_item_apis(apis, &mut results, |api| match api {
         Api::Struct {
             analysis:
@@ -113,11 +129,11 @@ pub(crate) fn mark_types_abstract(mut apis: Vec<Api<FnPrePhase>>) -> Vec<Api<FnP
     results
 }
 
-pub(crate) fn discard_ignored_functions(apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
+pub(crate) fn discard_ignored_functions(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
     // Some APIs can't be generated, e.g. because they're protected.
     // Now we've finished analyzing abstract types and constructors, we'll
-    // convert them to IgnoredI
-    let mut apis_new = Vec::new();
+    // convert them to IgnoredItems.
+    let mut apis_new = ApiVec::new();
     convert_apis(
         apis,
         &mut apis_new,

@@ -14,7 +14,8 @@ use syn::ItemType;
 use crate::{
     conversion::{
         analysis::type_converter::{add_analysis, Annotated, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, ApiName, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind},
+        apivec::ApiVec,
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
         parse::BindgenSemanticAttributes,
@@ -41,11 +42,11 @@ impl AnalysisPhase for TypedefPhase {
 #[allow(clippy::needless_collect)] // we need the extra collect because the closure borrows extra_apis
 pub(crate) fn convert_typedef_targets(
     config: &IncludeCppConfig,
-    apis: Vec<UnanalyzedApi>,
-) -> Vec<Api<TypedefPhase>> {
+    apis: ApiVec<NullPhase>,
+) -> ApiVec<TypedefPhase> {
     let mut type_converter = TypeConverter::new(config, &apis);
-    let mut extra_apis = Vec::new();
-    let mut results = Vec::new();
+    let mut extra_apis = ApiVec::new();
+    let mut results = ApiVec::new();
     convert_apis(
         apis,
         &mut results,
@@ -82,7 +83,7 @@ fn get_replacement_typedef(
     ity: ItemType,
     old_tyname: Option<QualifiedName>,
     type_converter: &mut TypeConverter,
-    extra_apis: &mut Vec<UnanalyzedApi>,
+    extra_apis: &mut ApiVec<NullPhase>,
 ) -> Result<Api<TypedefPhase>, ConvertErrorWithContext> {
     let mut converted_type = ity.clone();
     let metadata = BindgenSemanticAttributes::new_retaining_others(&mut converted_type.attrs);

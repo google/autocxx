@@ -8,6 +8,7 @@
 
 mod analysis;
 mod api;
+mod apivec;
 mod codegen_cpp;
 mod codegen_rs;
 #[cfg(test)]
@@ -42,7 +43,8 @@ use self::{
         remove_ignored::filter_apis_by_ignored_dependents,
         tdef::convert_typedef_targets,
     },
-    api::{AnalysisPhase, Api},
+    api::AnalysisPhase,
+    apivec::ApiVec,
     codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
 };
@@ -80,23 +82,27 @@ impl<'a> BridgeConverter<'a> {
         }
     }
 
-    fn dump_apis<T: AnalysisPhase>(label: &str, apis: &[Api<T>]) {
+    fn dump_apis<T: AnalysisPhase>(label: &str, apis: &ApiVec<T>) {
         if LOG_APIS {
             log::info!(
                 "APIs after {}:\n{}",
                 label,
-                apis.iter().map(|api| { format!("  {:?}", api) }).join("\n")
+                apis.iter()
+                    .map(|api| { format!("  {:?}", api) })
+                    .sorted()
+                    .join("\n")
             )
         }
     }
 
-    fn dump_apis_with_deps(label: &str, apis: &[Api<FnPhase>]) {
+    fn dump_apis_with_deps(label: &str, apis: &ApiVec<FnPhase>) {
         if LOG_APIS {
             log::info!(
                 "APIs after {}:\n{}",
                 label,
                 apis.iter()
                     .map(|api| { format!("  {:?}, deps={}", api, api.format_deps()) })
+                    .sorted()
                     .join("\n")
             )
         }

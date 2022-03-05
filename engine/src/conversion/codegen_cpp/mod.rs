@@ -33,6 +33,7 @@ use super::{
         pod::PodAnalysis,
     },
     api::{Api, Provenance, SubclassName, TypeKind},
+    apivec::ApiVec,
     ConvertError,
 };
 
@@ -105,7 +106,7 @@ struct SubclassFunction<'a> {
 impl<'a> CppCodeGenerator<'a> {
     pub(crate) fn generate_cpp_code(
         inclusions: String,
-        apis: &[Api<FnPhase>],
+        apis: &ApiVec<FnPhase>,
         config: &'a IncludeCppConfig,
         cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<Option<CppFilePair>, ConvertError> {

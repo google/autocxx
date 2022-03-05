@@ -16,6 +16,7 @@ use crate::conversion::api::{
     CppVisibility, FuncToConvert, Provenance, RustSubclassFnDetails, SubclassConstructorDetails,
     SubclassName, SuperclassMethod, UnsafetyNeeded, Virtualness,
 };
+use crate::conversion::apivec::ApiVec;
 use crate::{
     conversion::{
         analysis::fun::function_wrapper::{
@@ -29,7 +30,7 @@ use crate::{
 use super::{FnAnalysis, FnPrePhase};
 
 pub(super) fn subclasses_by_superclass(
-    apis: &[Api<PodPhase>],
+    apis: &ApiVec<PodPhase>,
 ) -> HashMap<QualifiedName, Vec<SubclassName>> {
     let mut subclasses_per_superclass: HashMap<QualifiedName, Vec<SubclassName>> = HashMap::new();
 
@@ -45,7 +46,7 @@ pub(super) fn subclasses_by_superclass(
 }
 
 pub(super) fn create_subclass_fn_wrapper(
-    sub: SubclassName,
+    sub: &SubclassName,
     super_fn_name: &QualifiedName,
     fun: &FuncToConvert,
 ) -> Box<FuncToConvert> {
@@ -138,7 +139,7 @@ pub(super) fn create_subclass_function(
             method_name: make_ident(&analysis.rust_name),
             cpp_impl: CppFunction {
                 payload: CppFunctionBody::FunctionCall(Namespace::new(), rust_call_name),
-                wrapper_function_name: name.name.get_final_ident(),
+                wrapper_function_name: make_ident(&analysis.rust_name),
                 original_cpp_name: name.cpp_name(),
                 return_conversion: analysis.ret_conversion.clone(),
                 argument_conversion,

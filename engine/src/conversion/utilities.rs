@@ -8,14 +8,17 @@
 
 use autocxx_parser::IncludeCppConfig;
 
-use super::api::{ApiName, UnanalyzedApi};
+use super::{
+    api::{ApiName, NullPhase, UnanalyzedApi},
+    apivec::ApiVec,
+};
 use crate::types::{make_ident, Namespace};
 
 /// Adds items which we always add, cos they're useful.
 /// Any APIs or techniques which do not involve actual C++ interop
 /// shouldn't go here, but instead should go into the main autocxx
 /// src/lib.rs.
-pub(crate) fn generate_utilities(apis: &mut Vec<UnanalyzedApi>, config: &IncludeCppConfig) {
+pub(crate) fn generate_utilities(apis: &mut ApiVec<NullPhase>, config: &IncludeCppConfig) {
     // Unless we've been specifically asked not to do so, we always
     // generate a 'make_string' function. That pretty much *always* means
     // we run two passes through bindgen. i.e. the next 'if' is always true,

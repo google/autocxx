@@ -10,6 +10,7 @@ use std::collections::HashSet;
 
 use super::deps::HasDependencies;
 use super::fun::{FnAnalysis, FnKind, FnPhase};
+use crate::conversion::apivec::ApiVec;
 use crate::conversion::{convert_error::ErrorContext, ConvertError};
 use crate::{conversion::api::Api, known_types};
 
@@ -17,7 +18,7 @@ use crate::{conversion::api::Api, known_types};
 /// We also eliminate any APIs that depend on some type that we just don't
 /// know about at all. In either case, we don't simply remove the type, but instead
 /// replace it with an error marker.
-pub(crate) fn filter_apis_by_ignored_dependents(mut apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
+pub(crate) fn filter_apis_by_ignored_dependents(mut apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
     let (ignored_items, valid_items): (Vec<&Api<_>>, Vec<&Api<_>>) = apis.iter().partition(|api| {
         matches!(
             api,

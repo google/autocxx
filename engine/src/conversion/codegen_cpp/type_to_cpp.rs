@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use crate::{
-    conversion::{api::Api, AnalysisPhase, ConvertError},
+    conversion::{apivec::ApiVec, AnalysisPhase, ConvertError},
     types::QualifiedName,
 };
 use itertools::Itertools;
@@ -21,7 +21,7 @@ use syn::{Token, Type};
 /// in the QualifiedName.
 pub(crate) type CppNameMap = HashMap<QualifiedName, String>;
 
-pub(crate) fn original_name_map_from_apis<T: AnalysisPhase>(apis: &[Api<T>]) -> CppNameMap {
+pub(crate) fn original_name_map_from_apis<T: AnalysisPhase>(apis: &ApiVec<T>) -> CppNameMap {
     apis.iter()
         .filter_map(|api| {
             api.cpp_name()

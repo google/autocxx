@@ -6,7 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::conversion::api::{ApiName, Provenance};
+use crate::conversion::api::{ApiName, NullPhase, Provenance};
+use crate::conversion::apivec::ApiVec;
 use crate::conversion::doc_attr::get_doc_attr;
 use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
@@ -38,7 +39,7 @@ pub(crate) struct ParseForeignMod {
     // may actually be methods (static or otherwise). Mapping from
     // function name to type name.
     method_receivers: HashMap<Ident, QualifiedName>,
-    ignored_apis: Vec<UnanalyzedApi>,
+    ignored_apis: ApiVec<NullPhase>,
 }
 
 impl ParseForeignMod {
@@ -47,14 +48,14 @@ impl ParseForeignMod {
             ns,
             funcs_to_convert: Vec::new(),
             method_receivers: HashMap::new(),
-            ignored_apis: Vec::new(),
+            ignored_apis: ApiVec::new(),
         }
     }
 
     /// Record information from foreign mod items encountered
     /// in bindgen output.
     pub(crate) fn convert_foreign_mod_items(&mut self, foreign_mod_items: Vec<ForeignItem>) {
-        let mut extra_apis = Vec::new();
+        let mut extra_apis = ApiVec::new();
         for i in foreign_mod_items {
             report_any_error(&self.ns.clone(), &mut extra_apis, || {
                 self.parse_foreign_item(i)
@@ -125,12 +126,12 @@ impl ParseForeignMod {
     /// Indicate that all foreign mods and all impl blocks have been
     /// fed into us, and we should process that information to generate
     /// the resulting APIs.
-    pub(crate) fn finished(mut self, apis: &mut Vec<UnanalyzedApi>) {
+    pub(crate) fn finished(mut self, apis: &mut ApiVec<NullPhase>) {
         apis.append(&mut self.ignored_apis);
         while !self.funcs_to_convert.is_empty() {
             let mut fun = self.funcs_to_convert.remove(0);
             fun.self_ty = self.method_receivers.get(&fun.ident).cloned();
-            apis.push(UnanalyzedApi::Function {
+            apis.push_eliminating_duplicates(UnanalyzedApi::Function {
                 name: ApiName::new_with_cpp_name(
                     &self.ns,
                     fun.ident.clone(),

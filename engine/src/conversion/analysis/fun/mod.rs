@@ -20,10 +20,11 @@ use crate::{
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{
-            ApiName, CastMutability, CppVisibility, FuncToConvert, Provenance, References,
-            SpecialMemberKind, SubclassName, TraitImplSignature, TraitSynthesis, UnsafetyNeeded,
-            Virtualness,
+            ApiName, CastMutability, CppVisibility, FuncToConvert, NullPhase, Provenance,
+            References, SpecialMemberKind, SubclassName, TraitImplSignature, TraitSynthesis,
+            UnsafetyNeeded, Virtualness,
         },
+        apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
         error_reporter::{convert_apis, report_any_error},
@@ -45,7 +46,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, TypeKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, TypeKind},
         ConvertError,
     },
     types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},
@@ -140,7 +141,11 @@ pub(crate) enum RustRenameStrategy {
 
 #[derive(Clone)]
 pub(crate) struct FnAnalysis {
+    /// Each entry in the cxx::bridge needs to have a unique name, even if
+    /// (from the perspective of Rust and C++) things are in different
+    /// namespaces/mods.
     pub(crate) cxxbridge_name: Ident,
+    /// ... so record also the name under which we wish to expose it in Rust.
     pub(crate) rust_name: String,
     pub(crate) rust_rename_strategy: RustRenameStrategy,
     pub(crate) params: Punctuated<FnArg, Comma>,
@@ -228,7 +233,7 @@ enum TypeConversionSophistication {
 
 pub(crate) struct FnAnalyzer<'a> {
     unsafe_policy: UnsafePolicy,
-    extra_apis: Vec<UnanalyzedApi>,
+    extra_apis: ApiVec<NullPhase>,
     type_converter: TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
@@ -242,13 +247,13 @@ pub(crate) struct FnAnalyzer<'a> {
 
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
-        apis: Vec<Api<PodPhase>>,
+        apis: ApiVec<PodPhase>,
         unsafe_policy: UnsafePolicy,
         config: &'a IncludeCppConfig,
-    ) -> Vec<Api<FnPrePhase>> {
+    ) -> ApiVec<FnPrePhase> {
         let mut me = Self {
             unsafe_policy,
-            extra_apis: Vec::new(),
+            extra_apis: ApiVec::new(),
             type_converter: TypeConverter::new(config, &apis),
             bridge_name_tracker: BridgeNameTracker::new(),
             config,
@@ -259,7 +264,7 @@ impl<'a> FnAnalyzer<'a> {
             generic_types: Self::build_generic_type_set(&apis),
             existing_superclass_trait_api_names: HashSet::new(),
         };
-        let mut results = Vec::new();
+        let mut results = ApiVec::new();
         convert_apis(
             apis,
             &mut results,
@@ -273,7 +278,7 @@ impl<'a> FnAnalyzer<'a> {
         results
     }
 
-    fn build_pod_safe_type_set(apis: &[Api<PodPhase>]) -> HashSet<QualifiedName> {
+    fn build_pod_safe_type_set(apis: &ApiVec<PodPhase>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct {
@@ -303,7 +308,7 @@ impl<'a> FnAnalyzer<'a> {
             .collect()
     }
 
-    fn build_generic_type_set(apis: &[Api<PodPhase>]) -> HashSet<QualifiedName> {
+    fn build_generic_type_set(apis: &ApiVec<PodPhase>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct {
@@ -320,7 +325,7 @@ impl<'a> FnAnalyzer<'a> {
 
     /// Builds a mapping from a qualified type name to the last 'nest'
     /// of its name, if it has multiple elements.
-    fn build_nested_type_map(apis: &[Api<PodPhase>]) -> HashMap<QualifiedName, String> {
+    fn build_nested_type_map(apis: &ApiVec<PodPhase>) -> HashMap<QualifiedName, String> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct { name, .. } | Api::Enum { name, .. } => {
@@ -418,7 +423,7 @@ impl<'a> FnAnalyzer<'a> {
         let initial_name = name.clone();
         let (analysis, name) =
             self.analyze_foreign_fn(name, &fun, TypeConversionSophistication::Regular, None);
-        let mut results = Vec::new();
+        let mut results = ApiVec::new();
 
         // Consider whether we need to synthesize subclass items.
         match &analysis.kind {
@@ -466,23 +471,40 @@ impl<'a> FnAnalyzer<'a> {
                         &simpler_analysis.kind,
                         FnKind::Method(_, MethodKind::PureVirtual(..))
                     );
-                    let super_fn_name =
+                    let super_fn_call_name =
                         SubclassName::get_super_fn_name(&Namespace::new(), &analysis.rust_name);
+                    let super_fn_api_name = SubclassName::get_super_fn_name(
+                        &Namespace::new(),
+                        &analysis.cxxbridge_name.to_string(),
+                    );
                     let trait_api_name = SubclassName::get_trait_api_name(sup, &analysis.rust_name);
+
+                    let mut subclass_fn_deps = vec![trait_api_name.clone()];
+                    if !is_pure_virtual {
+                        // Create a C++ API representing the superclass implementation (allowing
+                        // calls from Rust->C++)
+                        let maybe_wrap =
+                            create_subclass_fn_wrapper(&sub, &super_fn_call_name, &fun);
+                        let super_fn_name = ApiName::new_from_qualified_name(super_fn_api_name);
+                        let super_fn_call_api_name = self.analyze_and_add(
+                            super_fn_name,
+                            maybe_wrap,
+                            &mut results,
+                            TypeConversionSophistication::SimpleForSubclasses,
+                        );
+                        subclass_fn_deps.push(super_fn_call_api_name);
+                    }
 
                     // Create the Rust API representing the subclass implementation (allowing calls
                     // from C++ -> Rust)
                     results.push(create_subclass_function(
+                        // RustSubclassFn
                         &sub,
                         &simpler_analysis,
                         &name,
                         receiver_mutability,
                         sup,
-                        if is_pure_virtual {
-                            vec![trait_api_name.clone()]
-                        } else {
-                            vec![trait_api_name.clone(), super_fn_name.clone()]
-                        },
+                        subclass_fn_deps,
                     ));
 
                     // Create the trait item for the <superclass>_methods and <superclass>_supers
@@ -502,19 +524,6 @@ impl<'a> FnAnalyzer<'a> {
                             is_pure_virtual,
                         ));
                     }
-
-                    if !is_pure_virtual {
-                        // Create a C++ API representing the superclass implementation (allowing
-                        // calls from Rust->C++)
-                        let maybe_wrap = create_subclass_fn_wrapper(sub, &super_fn_name, &fun);
-                        let super_fn_name = ApiName::new_from_qualified_name(super_fn_name);
-                        self.analyze_and_add(
-                            super_fn_name,
-                            maybe_wrap,
-                            &mut results,
-                            TypeConversionSophistication::SimpleForSubclasses,
-                        );
-                    }
                 }
             }
             _ => {}
@@ -530,20 +539,23 @@ impl<'a> FnAnalyzer<'a> {
         Ok(Box::new(results.into_iter()))
     }
 
+    /// Adds an API, usually a synthesized API. Returns the final calculated API name, which can be used
+    /// for others to depend on this.
     fn analyze_and_add(
         &mut self,
         name: ApiName,
         new_func: Box<FuncToConvert>,
-        results: &mut Vec<Api<FnPrePhase>>,
+        results: &mut ApiVec<FnPrePhase>,
         sophistication: TypeConversionSophistication,
-    ) {
+    ) -> QualifiedName {
         let (analysis, name) = self.analyze_foreign_fn(name, &new_func, sophistication, None);
         results.push(Api::Function {
             fun: new_func,
             analysis,
-            name,
+            name: name.clone(),
             name_for_gc: None,
         });
+        name.name
     }
 
     /// Take a constructor e.g. pub fn A_A(this: *mut root::A);
@@ -552,7 +564,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         fun: &FuncToConvert,
         initial_name: ApiName,
-        results: &mut Vec<Api<FnPrePhase>>,
+        results: &mut ApiVec<FnPrePhase>,
     ) {
         let mut new_fun = fun.clone();
         new_fun.provenance = Provenance::SynthesizedMakeUnique;
@@ -1181,20 +1193,16 @@ impl<'a> FnAnalyzer<'a> {
         // Work out our final naming strategy.
         validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).unwrap_or_else(set_ignore_reason);
         let rust_name_ident = make_ident(&rust_name);
-        let (id, rust_rename_strategy) = match kind {
-            _ if rust_wrapper_needed => (
-                rust_name_ident,
-                RustRenameStrategy::RenameUsingWrapperFunction,
-            ),
-            FnKind::Function if cxxbridge_name != rust_name => (
-                cxxbridge_name.clone(),
-                RustRenameStrategy::RenameInOutputMod(rust_name_ident),
-            ),
-            _ => (rust_name_ident, RustRenameStrategy::None),
+        let rust_rename_strategy = match kind {
+            _ if rust_wrapper_needed => RustRenameStrategy::RenameUsingWrapperFunction,
+            FnKind::Function if cxxbridge_name != rust_name => {
+                RustRenameStrategy::RenameInOutputMod(rust_name_ident)
+            }
+            _ => RustRenameStrategy::None,
         };
 
         let analysis = FnAnalysis {
-            cxxbridge_name,
+            cxxbridge_name: cxxbridge_name.clone(),
             rust_name: rust_name.clone(),
             rust_rename_strategy,
             params,
@@ -1210,7 +1218,7 @@ impl<'a> FnAnalyzer<'a> {
             externally_callable,
             rust_wrapper_needed,
         };
-        let name = ApiName::new_with_cpp_name(ns, id, cpp_name);
+        let name = ApiName::new_with_cpp_name(ns, cxxbridge_name, cpp_name);
         (analysis, name)
     }
 
@@ -1616,7 +1624,7 @@ impl<'a> FnAnalyzer<'a> {
     /// would need to output a `FnAnalysisBody`. By running it as part of this phase
     /// we can simply generate the sort of thing bindgen generates, then ask
     /// the existing code in this phase to figure out what to do with it.
-    fn add_missing_constructors(&mut self, apis: &mut Vec<Api<FnPrePhase>>) {
+    fn add_missing_constructors(&mut self, apis: &mut ApiVec<FnPrePhase>) {
         if self.config.exclude_impls {
             return;
         }
@@ -1676,7 +1684,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         self_ty: QualifiedName,
         label: Option<&str>,
-        apis: &mut Vec<Api<FnPrePhase>>,
+        apis: &mut ApiVec<FnPrePhase>,
         special_member: SpecialMemberKind,
         inputs: Punctuated<FnArg, Comma>,
         references: References,

@@ -46,6 +46,7 @@ use self::{
 use super::{
     analysis::fun::PodAndDepAnalysis,
     api::{Layout, Provenance, RustSubclassFnDetails, SuperclassMethod, TraitImplSignature},
+    apivec::ApiVec,
     codegen_cpp::type_to_cpp::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
@@ -139,7 +140,7 @@ pub(crate) struct RsCodeGenerator<'a> {
 impl<'a> RsCodeGenerator<'a> {
     /// Generate code for a set of APIs that was discovered during parsing.
     pub(crate) fn generate_rs_code(
-        all_apis: Vec<Api<FnPhase>>,
+        all_apis: ApiVec<FnPhase>,
         include_list: &'a [String],
         bindgen_mod: ItemMod,
         config: &'a IncludeCppConfig,
@@ -153,7 +154,7 @@ impl<'a> RsCodeGenerator<'a> {
         c.rs_codegen(all_apis)
     }
 
-    fn rs_codegen(mut self, all_apis: Vec<Api<FnPhase>>) -> Vec<Item> {
+    fn rs_codegen(mut self, all_apis: ApiVec<FnPhase>) -> Vec<Item> {
         // ... and now let's start to generate the output code.
         // First off, when we generate structs we may need to add some methods
         // if they're superclasses.
@@ -256,7 +257,7 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn accumulate_superclass_methods(
         &self,
-        apis: &[Api<FnPhase>],
+        apis: &ApiVec<FnPhase>,
     ) -> HashMap<QualifiedName, Vec<SuperclassMethod>> {
         let mut results = HashMap::new();
         results.extend(
@@ -264,7 +265,7 @@ impl<'a> RsCodeGenerator<'a> {
                 .superclasses()
                 .map(|sc| (QualifiedName::new_from_cpp_name(sc), Vec::new())),
         );
-        for api in apis {
+        for api in apis.iter() {
             if let Api::SubclassTraitItem { details, .. } = api {
                 let list = results.get_mut(&details.receiver);
                 if let Some(list) = list {
@@ -1086,7 +1087,7 @@ impl<'a> RsCodeGenerator<'a> {
     }
 }
 
-fn find_trivially_constructed_subclasses(apis: &[Api<FnPhase>]) -> HashSet<QualifiedName> {
+fn find_trivially_constructed_subclasses(apis: &ApiVec<FnPhase>) -> HashSet<QualifiedName> {
     let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .filter_map(|api| match api {
