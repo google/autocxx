@@ -1779,7 +1779,6 @@ impl<'a> FnAnalyzer<'a> {
             let path = self_ty.to_type_path();
             if items_found.implicit_default_constructor_needed() {
                 self.synthesize_special_member(
-                    self_ty.clone(),
                     items_found,
                     None,
                     apis,
@@ -1790,7 +1789,6 @@ impl<'a> FnAnalyzer<'a> {
             }
             if items_found.implicit_move_constructor_needed() {
                 self.synthesize_special_member(
-                    self_ty.clone(),
                     items_found,
                     Some("move"),
                     apis,
@@ -1804,7 +1802,6 @@ impl<'a> FnAnalyzer<'a> {
             }
             if items_found.implicit_copy_constructor_needed() {
                 self.synthesize_special_member(
-                    self_ty.clone(),
                     items_found,
                     Some("const_copy"),
                     apis,
@@ -1818,7 +1815,6 @@ impl<'a> FnAnalyzer<'a> {
             }
             if items_found.implicit_destructor_needed() {
                 self.synthesize_special_member(
-                    self_ty.clone(),
                     items_found,
                     None,
                     apis,
@@ -1833,7 +1829,6 @@ impl<'a> FnAnalyzer<'a> {
     #[allow(clippy::too_many_arguments)] // it's true, but sticking with it for now
     fn synthesize_special_member(
         &mut self,
-        self_ty: QualifiedName,
         items_found: &ItemsFound,
         label: Option<&str>,
         apis: &mut ApiVec<FnPrePhase>,
@@ -1841,15 +1836,28 @@ impl<'a> FnAnalyzer<'a> {
         inputs: Punctuated<FnArg, Comma>,
         references: References,
     ) {
+        let self_ty = items_found.name.as_ref().unwrap();
         let ident = match label {
             Some(label) => make_ident(self.config.uniquify_name_per_mod(&format!(
                 "{}_synthetic_{}_ctor",
-                self_ty.get_final_item(),
+                self_ty.name.get_final_item(),
                 label
             ))),
-            None => self_ty.get_final_ident(),
+            None => self_ty.name.get_final_ident(),
         };
-        let fake_api_name = ApiName::new(self_ty.get_namespace(), ident.clone());
+        let cpp_name = if matches!(special_member, SpecialMemberKind::DefaultConstructor) {
+            // Constructors (other than move or copy) are identified in `analyze_foreign_fn` by
+            // being suffixed with the cpp_name, so we have to produce that.
+            self.nested_type_name_map
+                .get(&self_ty.name)
+                .cloned()
+                .or_else(|| Some(self_ty.name.get_final_item().to_string()))
+        } else {
+            None
+        };
+        let fake_api_name =
+            ApiName::new_with_cpp_name(self_ty.name.get_namespace(), ident.clone(), cpp_name);
+        let self_ty = &self_ty.name;
         let ns = self_ty.get_namespace().clone();
         let mut items: Vec<_> = report_any_error(&ns, apis, || {
             self.analyze_foreign_fn_and_subclasses(
@@ -1893,7 +1901,7 @@ impl<'a> FnAnalyzer<'a> {
                 ..
             } = api
             {
-                assert_eq!(impl_for, &self_ty, "Synthesized method for unexpected type");
+                assert_eq!(impl_for, self_ty, "Synthesized method for unexpected type");
                 *type_constructors = PublicConstructors::from_items_found(items_found);
             }
         }

@@ -51,7 +51,6 @@ autocxx_integration_tests::doctest(
 struct Turkey {
     struct Duck {
         struct Hen {
-            Hen() {}
             int wings;
         };
     };
@@ -72,8 +71,6 @@ fn main() {
 }
 )
 ```
-
-(Currently, only explicit constructors are supported for such nested types.)
 
 ## Overloads
 
