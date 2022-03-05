@@ -13,7 +13,9 @@ use syn::Type;
 use crate::{
     conversion::{
         analysis::{
-            depth_first::depth_first, fun::PodAndConstructorAnalysis, pod::PodAnalysis,
+            depth_first::depth_first,
+            fun::{PodAndConstructorAnalysis, PublicConstructors},
+            pod::PodAnalysis,
             type_converter::TypeKind,
         },
         api::{Api, CppVisibility, FuncToConvert, SpecialMemberKind},
@@ -520,13 +522,32 @@ pub(super) fn find_constructors_present(
                 );
                 items_found
             };
-            constructors.move_constructor = items_found.move_constructor.callable_any();
-            constructors.destructor = items_found.destructor.callable_any();
+            *constructors = PublicConstructors::from_items_found(&items_found);
             assert!(
                 all_items_found.insert(name.clone(), items_found).is_none(),
                 "Duplicate struct: {:?}",
                 name
             );
+        }
+
+        if let Api::Function {
+            analysis:
+                FnAnalysis {
+                    kind:
+                        FnKind::Method {
+                            impl_for,
+                            ref mut type_constructors,
+                            ..
+                        },
+                    ..
+                },
+            ..
+        } = api
+        {
+            let items_found = all_items_found
+                .get(impl_for)
+                .expect("Type should be dependency of its method");
+            *type_constructors = PublicConstructors::from_items_found(items_found);
         }
     }
 
@@ -554,7 +575,7 @@ fn find_explicit_items(apis: &ApiVec<FnPrePhase>) -> HashMap<ExplicitType, Expli
             Api::Function {
                 analysis:
                     FnAnalysis {
-                        kind: FnKind::Method(impl_for, ..),
+                        kind: FnKind::Method { impl_for, .. },
                         param_details,
                         ..
                     },
@@ -592,7 +613,12 @@ fn find_explicit_items(apis: &ApiVec<FnPrePhase>) -> HashMap<ExplicitType, Expli
             Api::Function {
                 analysis:
                     FnAnalysis {
-                        kind: FnKind::Method(impl_for, method_kind, ..),
+                        kind:
+                            FnKind::Method {
+                                impl_for,
+                                method_kind,
+                                ..
+                            },
                         ..
                     },
                 fun,

@@ -54,7 +54,7 @@ use crate::{
 use self::{
     bridge_name_tracker::BridgeNameTracker,
     function_wrapper::RustConversionType,
-    implicit_constructors::find_constructors_present,
+    implicit_constructors::{find_constructors_present, ItemsFound},
     overload_tracker::OverloadTracker,
     subclass::{
         create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function,
@@ -111,7 +111,11 @@ pub(crate) struct TraitMethodDetails {
 #[derive(Clone)]
 pub(crate) enum FnKind {
     Function,
-    Method(QualifiedName, MethodKind),
+    Method {
+        method_kind: MethodKind,
+        impl_for: QualifiedName,
+        type_constructors: PublicConstructors,
+    },
     TraitMethod {
         kind: TraitMethodKind,
         /// The name of the type T for which we're implementing a trait,
@@ -226,6 +230,15 @@ pub(crate) struct FnPhase;
 pub(crate) struct PublicConstructors {
     pub(crate) move_constructor: bool,
     pub(crate) destructor: bool,
+}
+
+impl PublicConstructors {
+    fn from_items_found(items_found: &ItemsFound) -> Self {
+        Self {
+            move_constructor: items_found.move_constructor.callable_any(),
+            destructor: items_found.destructor.callable_any(),
+        }
+    }
 }
 
 impl AnalysisPhase for FnPhase {
@@ -445,30 +458,29 @@ impl<'a> FnAnalyzer<'a> {
 
     fn add_make_uniques(&mut self, apis: &mut ApiVec<FnPrePhase>) {
         let mut results = ApiVec::new();
-        'outer: for api in apis.iter() {
+        for api in apis.iter() {
             if let Api::Function {
                 name,
                 fun,
                 analysis:
                     analysis @ FnAnalysis {
-                        kind: FnKind::Method(sup, MethodKind::Constructor { .. }),
+                        kind:
+                            FnKind::Method {
+                                impl_for: sup,
+                                method_kind: MethodKind::Constructor { .. },
+                                type_constructors,
+                                ..
+                            },
                         ..
                     },
                 ..
             } = api
             {
                 let initial_name = name.clone();
-                // Now go find the Api::Struct for our type, and verify it has an accessible
-                // destructor.
-                for api in apis.iter() {
-                    match api {
-                        Api::Struct { name, analysis, .. } if &name.name == sup => {
-                            if !analysis.constructors.destructor {
-                                continue 'outer;
-                            }
-                        }
-                        _ => (),
-                    }
+                // If we don't have an accessible destructor, then std::unique_ptr cannot be
+                // instantiated for this C++ type.
+                if !type_constructors.destructor {
+                    continue;
                 }
 
                 // Create a make_unique too
@@ -499,6 +511,9 @@ impl<'a> FnAnalyzer<'a> {
 
     /// Analyze a given function, and any permutations of that function which
     /// we might additionally generate (e.g. for subclasses.)
+    ///
+    /// Leaves the [`FnKind::Method::type_constructors`] at its default for [`add_constructors_present`]
+    /// to fill out.
     fn analyze_foreign_fn_and_subclasses(
         &mut self,
         name: ApiName,
@@ -509,10 +524,12 @@ impl<'a> FnAnalyzer<'a> {
         let mut results = ApiVec::new();
 
         // Consider whether we need to synthesize subclass items.
-        if let FnKind::Method(
-            sup,
-            MethodKind::Virtual(receiver_mutability) | MethodKind::PureVirtual(receiver_mutability),
-        ) = &analysis.kind
+        if let FnKind::Method {
+            impl_for: sup,
+            method_kind:
+                MethodKind::Virtual(receiver_mutability) | MethodKind::PureVirtual(receiver_mutability),
+            ..
+        } = &analysis.kind
         {
             let (simpler_analysis, _) = self.analyze_foreign_fn(
                 name.clone(),
@@ -528,7 +545,10 @@ impl<'a> FnAnalyzer<'a> {
                 // all subclasses in the root namespace.
                 let is_pure_virtual = matches!(
                     &simpler_analysis.kind,
-                    FnKind::Method(_, MethodKind::PureVirtual(..))
+                    FnKind::Method {
+                        method_kind: MethodKind::PureVirtual(..),
+                        ..
+                    }
                 );
 
                 let super_fn_call_name =
@@ -822,7 +842,11 @@ impl<'a> FnAnalyzer<'a> {
                     )
                 } else {
                     (
-                        FnKind::Method(self_ty, MethodKind::Constructor { is_default: false }),
+                        FnKind::Method {
+                            impl_for: self_ty,
+                            method_kind: MethodKind::Constructor { is_default: false },
+                            type_constructors: PublicConstructors::default(),
+                        },
                         error_context,
                         rust_name,
                     )
@@ -902,7 +926,11 @@ impl<'a> FnAnalyzer<'a> {
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
                 let error_context = error_context_for_method(&self_ty, &rust_name);
                 (
-                    FnKind::Method(self_ty, method_kind),
+                    FnKind::Method {
+                        impl_for: self_ty,
+                        method_kind,
+                        type_constructors: PublicConstructors::default(),
+                    },
                     error_context,
                     rust_name,
                 )
@@ -933,7 +961,10 @@ impl<'a> FnAnalyzer<'a> {
         // pointer not a reference. For copy + move constructors, we also
         // enforce Rust-side conversions to comply with moveit traits.
         match kind {
-            FnKind::Method(_, MethodKind::Constructor { .. }) => {
+            FnKind::Method {
+                method_kind: MethodKind::Constructor { .. },
+                ..
+            } => {
                 self.reanalyze_parameter(
                     0,
                     fun,
@@ -1054,28 +1085,28 @@ impl<'a> FnAnalyzer<'a> {
             set_ignore_reason(ConvertError::UnusedTemplateParam)
         } else {
             match kind {
-                FnKind::Method(
-                    ref self_ty,
-                    MethodKind::Constructor { .. }
-                    | MethodKind::MakeUnique
-                    | MethodKind::Normal(..)
-                    | MethodKind::PureVirtual(..)
-                    | MethodKind::Virtual(..),
-                ) if !known_types().is_cxx_acceptable_receiver(self_ty) => {
+                FnKind::Method {
+                    ref impl_for,
+                    method_kind:
+                        MethodKind::Constructor { .. }
+                        | MethodKind::MakeUnique
+                        | MethodKind::Normal(..)
+                        | MethodKind::PureVirtual(..)
+                        | MethodKind::Virtual(..),
+                    ..
+                } if !known_types().is_cxx_acceptable_receiver(impl_for) => {
                     set_ignore_reason(ConvertError::UnsupportedReceiver);
                 }
-                FnKind::Method(ref self_ty, _) if !self.is_on_allowlist(self_ty) => {
+                FnKind::Method { ref impl_for, .. } if !self.is_on_allowlist(impl_for) => {
                     // Bindgen will output methods for types which have been encountered
                     // virally as arguments on other allowlisted types. But we don't want
                     // to generate methods unless the user has specifically asked us to.
                     // It may, for instance, be a private type.
                     set_ignore_reason(ConvertError::MethodOfNonAllowlistedType);
                 }
-                FnKind::Method(ref self_ty, _)
-                | FnKind::TraitMethod {
-                    impl_for: ref self_ty,
-                    ..
-                } if self.is_generic_type(self_ty) => {
+                FnKind::Method { ref impl_for, .. } | FnKind::TraitMethod { ref impl_for, .. }
+                    if self.is_generic_type(impl_for) =>
+                {
                     set_ignore_reason(ConvertError::MethodOfGenericType);
                 }
                 _ => {}
@@ -1087,7 +1118,7 @@ impl<'a> FnAnalyzer<'a> {
         // namespace so we might need to prepend some stuff to make it unique.
         let cxxbridge_name = self.get_cxx_bridge_name(
             match kind {
-                FnKind::Method(ref self_ty, ..) => Some(self_ty.get_final_item()),
+                FnKind::Method { ref impl_for, .. } => Some(impl_for.get_final_item()),
                 FnKind::Function => None,
                 FnKind::TraitMethod { ref impl_for, .. } => Some(impl_for.get_final_item()),
             },
@@ -1101,9 +1132,13 @@ impl<'a> FnAnalyzer<'a> {
 
         // Analyze the return type, just as we previously did for the
         // parameters.
-        let mut return_analysis = if let FnKind::Method(ref self_ty, MethodKind::MakeUnique) = kind
+        let mut return_analysis = if let FnKind::Method {
+            ref impl_for,
+            method_kind: MethodKind::MakeUnique,
+            ..
+        } = kind
         {
-            let constructed_type = self_ty.to_type_path();
+            let constructed_type = impl_for.to_type_path();
             ReturnTypeAnalysis {
                 rt: parse_quote! {
                     -> #constructed_type
@@ -1112,7 +1147,7 @@ impl<'a> FnAnalyzer<'a> {
                     #constructed_type
                 })),
                 was_reference: false,
-                deps: std::iter::once(self_ty).cloned().collect(),
+                deps: std::iter::once(impl_for).cloned().collect(),
             }
         } else {
             self.convert_return_type(&fun.output, ns, &fun.references)
@@ -1148,10 +1183,14 @@ impl<'a> FnAnalyzer<'a> {
         // That wrapper function is included in the cxx::bridge, and calls through to the
         // original function.
         let wrapper_function_needed = match kind {
-            FnKind::Method(_, MethodKind::Static)
-            | FnKind::Method(_, MethodKind::Constructor { .. })
-            | FnKind::Method(_, MethodKind::Virtual(_))
-            | FnKind::Method(_, MethodKind::PureVirtual(_))
+            FnKind::Method {
+                method_kind:
+                    MethodKind::Static
+                    | MethodKind::Constructor { .. }
+                    | MethodKind::Virtual(_)
+                    | MethodKind::PureVirtual(_),
+                ..
+            }
             | FnKind::TraitMethod {
                 kind:
                     TraitMethodKind::CopyConstructor
@@ -1159,7 +1198,7 @@ impl<'a> FnAnalyzer<'a> {
                     | TraitMethodKind::Destructor,
                 ..
             } => true,
-            FnKind::Method(..) if cxxbridge_name != rust_name => true,
+            FnKind::Method { .. } if cxxbridge_name != rust_name => true,
             _ if param_conversion_needed => true,
             _ if ret_type_conversion_needed => true,
             _ if cpp_name_incompatible_with_cxx => true,
@@ -1180,16 +1219,21 @@ impl<'a> FnAnalyzer<'a> {
             let (payload, cpp_function_kind) = match fun.synthetic_cpp.as_ref().cloned() {
                 Some((payload, cpp_function_kind)) => (payload, cpp_function_kind),
                 None => match kind {
-                    FnKind::Method(_, MethodKind::MakeUnique) => {
-                        (CppFunctionBody::MakeUnique, CppFunctionKind::Function)
+                    FnKind::Method {
+                        method_kind: MethodKind::MakeUnique,
+                        ..
+                    } => (CppFunctionBody::MakeUnique, CppFunctionKind::Function),
+                    FnKind::Method {
+                        ref impl_for,
+                        method_kind: MethodKind::Constructor { .. },
+                        ..
                     }
-                    FnKind::Method(ref self_ty, MethodKind::Constructor { .. })
                     | FnKind::TraitMethod {
                         kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor,
-                        impl_for: ref self_ty,
+                        ref impl_for,
                         ..
                     } => (
-                        CppFunctionBody::PlacementNew(ns.clone(), self_ty.get_final_ident()),
+                        CppFunctionBody::PlacementNew(ns.clone(), impl_for.get_final_ident()),
                         CppFunctionKind::Constructor,
                     ),
                     FnKind::TraitMethod {
@@ -1200,15 +1244,19 @@ impl<'a> FnAnalyzer<'a> {
                         CppFunctionBody::Destructor(ns.clone(), impl_for.get_final_ident()),
                         CppFunctionKind::Function,
                     ),
-                    FnKind::Method(ref self_ty, MethodKind::Static) => (
+                    FnKind::Method {
+                        ref impl_for,
+                        method_kind: MethodKind::Static,
+                        ..
+                    } => (
                         CppFunctionBody::StaticMethodCall(
                             ns.clone(),
-                            self_ty.get_final_ident(),
+                            impl_for.get_final_ident(),
                             cpp_construction_ident,
                         ),
                         CppFunctionKind::Function,
                     ),
-                    FnKind::Method(..) => (
+                    FnKind::Method { .. } => (
                         CppFunctionBody::FunctionCall(ns.clone(), cpp_construction_ident),
                         CppFunctionKind::Method,
                     ),
@@ -1231,8 +1279,13 @@ impl<'a> FnAnalyzer<'a> {
             for pd in &param_details {
                 let type_name = pd.conversion.converted_rust_type();
                 let arg_name = if pd.self_type.is_some()
-                    && !matches!(kind, FnKind::Method(_, MethodKind::MakeUnique))
-                {
+                    && !matches!(
+                        kind,
+                        FnKind::Method {
+                            method_kind: MethodKind::MakeUnique,
+                            ..
+                        }
+                    ) {
                     parse_quote!(autocxx_gen_this)
                 } else {
                     pd.name.clone()
@@ -1267,7 +1320,7 @@ impl<'a> FnAnalyzer<'a> {
 
         let rust_wrapper_needed = match kind {
             FnKind::TraitMethod { .. } => true,
-            FnKind::Method(..) => any_param_needs_rust_conversion || cxxbridge_name != rust_name,
+            FnKind::Method { .. } => any_param_needs_rust_conversion || cxxbridge_name != rust_name,
             _ => any_param_needs_rust_conversion,
         };
 
@@ -1727,6 +1780,7 @@ impl<'a> FnAnalyzer<'a> {
             if items_found.implicit_default_constructor_needed() {
                 self.synthesize_special_member(
                     self_ty.clone(),
+                    items_found,
                     None,
                     apis,
                     SpecialMemberKind::DefaultConstructor,
@@ -1737,6 +1791,7 @@ impl<'a> FnAnalyzer<'a> {
             if items_found.implicit_move_constructor_needed() {
                 self.synthesize_special_member(
                     self_ty.clone(),
+                    items_found,
                     Some("move"),
                     apis,
                     SpecialMemberKind::MoveConstructor,
@@ -1750,6 +1805,7 @@ impl<'a> FnAnalyzer<'a> {
             if items_found.implicit_copy_constructor_needed() {
                 self.synthesize_special_member(
                     self_ty.clone(),
+                    items_found,
                     Some("const_copy"),
                     apis,
                     SpecialMemberKind::CopyConstructor,
@@ -1763,6 +1819,7 @@ impl<'a> FnAnalyzer<'a> {
             if items_found.implicit_destructor_needed() {
                 self.synthesize_special_member(
                     self_ty.clone(),
+                    items_found,
                     None,
                     apis,
                     SpecialMemberKind::Destructor,
@@ -1773,9 +1830,11 @@ impl<'a> FnAnalyzer<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // it's true, but sticking with it for now
     fn synthesize_special_member(
         &mut self,
         self_ty: QualifiedName,
+        items_found: &ItemsFound,
         label: Option<&str>,
         apis: &mut ApiVec<FnPrePhase>,
         special_member: SpecialMemberKind,
@@ -1792,11 +1851,11 @@ impl<'a> FnAnalyzer<'a> {
         };
         let fake_api_name = ApiName::new(self_ty.get_namespace(), ident.clone());
         let ns = self_ty.get_namespace().clone();
-        let items = report_any_error(&ns, apis, || {
+        let mut items: Vec<_> = report_any_error(&ns, apis, || {
             self.analyze_foreign_fn_and_subclasses(
                 fake_api_name,
                 Box::new(FuncToConvert {
-                    self_ty: Some(self_ty),
+                    self_ty: Some(self_ty.clone()),
                     ident,
                     doc_attr: None,
                     inputs,
@@ -1815,8 +1874,30 @@ impl<'a> FnAnalyzer<'a> {
                     provenance: Provenance::SynthesizedOther,
                 }),
             )
-        });
-        apis.extend(items.into_iter().flatten());
+        })
+        .into_iter()
+        .flatten()
+        .collect();
+        for ref mut api in items.iter_mut() {
+            if let Api::Function {
+                analysis:
+                    FnAnalysis {
+                        kind:
+                            FnKind::Method {
+                                ref mut type_constructors,
+                                ref impl_for,
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            } = api
+            {
+                assert_eq!(impl_for, &self_ty, "Synthesized method for unexpected type");
+                *type_constructors = PublicConstructors::from_items_found(items_found);
+            }
+        }
+        apis.extend(items.into_iter());
     }
 }
 
@@ -1835,7 +1916,7 @@ impl Api<FnPhase> {
                 ..
             } => name.clone(),
             Api::Function { analysis, .. } => match analysis.kind {
-                FnKind::Method(ref self_ty, _) => self_ty.clone(),
+                FnKind::Method { ref impl_for, .. } => impl_for.clone(),
                 FnKind::TraitMethod { ref impl_for, .. } => impl_for.clone(),
                 FnKind::Function => {
                     QualifiedName::new(self.name().get_namespace(), make_ident(&analysis.rust_name))

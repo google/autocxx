@@ -35,7 +35,7 @@ impl<'a, T: HasDependencies + Debug> Iterator for DepthFirstIter<'a, T> {
     fn next(&mut self) -> Option<Self::Item> {
         let first_candidate = self.queue.get(0).map(|api| api.name()).cloned();
         while let Some(candidate) = self.queue.pop_front() {
-            if !candidate.deps().any(|d| self.yet_to_do.contains(&d)) {
+            if !candidate.deps().any(|d| self.yet_to_do.contains(d)) {
                 self.yet_to_do.remove(candidate.name());
                 return Some(candidate);
             }

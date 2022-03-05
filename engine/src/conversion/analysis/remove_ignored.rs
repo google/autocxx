@@ -82,7 +82,10 @@ fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Api<FnPhase> {
             Api::Function {
                 analysis:
                     FnAnalysis {
-                        kind: FnKind::Method(self_ty, _),
+                        kind:
+                            FnKind::Method {
+                                impl_for: self_ty, ..
+                            },
                         ..
                     },
                 ..

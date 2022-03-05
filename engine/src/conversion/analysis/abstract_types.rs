@@ -27,7 +27,12 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase>) -> ApiVec<FnPreP
             Api::Function {
                 analysis:
                     FnAnalysis {
-                        kind: FnKind::Method(self_ty_name, MethodKind::PureVirtual(_)),
+                        kind:
+                            FnKind::Method {
+                                impl_for: self_ty_name,
+                                method_kind: MethodKind::PureVirtual(_),
+                                ..
+                            },
                         ..
                     },
                 ..
@@ -98,7 +103,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase>) -> ApiVec<FnPreP
         Api::Function {
             analysis:
                 FnAnalysis {
-                    kind: FnKind::Method(self_ty, MethodKind::MakeUnique | MethodKind::Constructor{..})
+                    kind: FnKind::Method{impl_for: self_ty, method_kind: MethodKind::MakeUnique | MethodKind::Constructor{..}, ..}
                         | FnKind::TraitMethod{ kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor, impl_for: self_ty, ..},
                     ..
                 },
