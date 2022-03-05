@@ -182,7 +182,7 @@ pub(super) fn find_constructors_present(
     // These analyses include all bases and members of each class.
     let mut all_items_found: HashMap<QualifiedName, ItemsFound> = HashMap::new();
 
-    for api in depth_first(apis.iter_mut()) {
+    for api in depth_first(apis.iter()) {
         if let Api::Struct {
             name,
             analysis:
@@ -191,7 +191,7 @@ pub(super) fn find_constructors_present(
                         PodAnalysis {
                             bases, field_info, ..
                         },
-                    ref mut constructors,
+                    ..
                 },
             details,
             ..
@@ -522,35 +522,35 @@ pub(super) fn find_constructors_present(
                 );
                 items_found
             };
-            *constructors = PublicConstructors::from_items_found(&items_found);
             assert!(
                 all_items_found.insert(name.clone(), items_found).is_none(),
                 "Duplicate struct: {:?}",
                 name
             );
         }
-
-        if let Api::Function {
-            analysis:
-                FnAnalysis {
-                    kind:
-                        FnKind::Method {
-                            impl_for,
-                            ref mut type_constructors,
-                            ..
-                        },
-                    ..
-                },
-            ..
-        } = api
-        {
-            if let Some(items_found) = all_items_found.get(impl_for) {
-                *type_constructors = PublicConstructors::from_items_found(items_found);
-            }
-            // Otherwise we just leave it at the default of all-false. If we haven't analyzed the
-            // type, then we don't know about any constructors it might have.
-        }
     }
+
+    let set_constructors = |type_name: &QualifiedName, constructors: &mut PublicConstructors| {
+        if let Some(items_found) = all_items_found.get(type_name) {
+            *constructors = PublicConstructors::from_items_found(items_found);
+        }
+        // Otherwise we just leave it at the default of all-false. If we haven't analyzed the
+        // type, then we don't know about any constructors it might have.
+    };
+
+    apis.mutate_fun_analysis(|_, _, analysis| {
+        if let FnKind::Method {
+            ref impl_for,
+            ref mut type_constructors,
+            ..
+        } = analysis.kind
+        {
+            set_constructors(impl_for, type_constructors);
+        }
+    });
+    apis.mutate_struct_analysis(|name, _, analysis| {
+        set_constructors(&name.name, &mut analysis.constructors)
+    });
 
     all_items_found
 }

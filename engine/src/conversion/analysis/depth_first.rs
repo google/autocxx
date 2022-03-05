@@ -17,30 +17,30 @@ use super::deps::HasDependencies;
 
 /// Return APIs in a depth-first order, i.e. those with no dependencies first.
 pub(super) fn depth_first<'a, T: HasDependencies + Debug + 'a>(
-    inputs: impl Iterator<Item = &'a mut T> + 'a,
-) -> impl Iterator<Item = &'a mut T> {
+    inputs: impl Iterator<Item = &'a T> + 'a,
+) -> impl Iterator<Item = &'a T> {
     let queue: VecDeque<_> = inputs.collect();
-    let yet_to_do = queue.iter().map(|api| api.name()).cloned().collect();
+    let yet_to_do = queue.iter().map(|api| api.name()).collect();
     DepthFirstIter { queue, yet_to_do }
 }
 
 struct DepthFirstIter<'a, T: HasDependencies + Debug> {
-    queue: VecDeque<&'a mut T>,
-    yet_to_do: HashSet<QualifiedName>,
+    queue: VecDeque<&'a T>,
+    yet_to_do: HashSet<&'a QualifiedName>,
 }
 
 impl<'a, T: HasDependencies + Debug> Iterator for DepthFirstIter<'a, T> {
-    type Item = &'a mut T;
+    type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let first_candidate = self.queue.get(0).map(|api| api.name()).cloned();
+        let first_candidate = self.queue.get(0).map(|api| api.name());
         while let Some(candidate) = self.queue.pop_front() {
-            if !candidate.deps().any(|d| self.yet_to_do.contains(d)) {
+            if !candidate.deps().any(|d| self.yet_to_do.contains(&d)) {
                 self.yet_to_do.remove(candidate.name());
                 return Some(candidate);
             }
             self.queue.push_back(candidate);
-            if self.queue.get(0).map(|api| api.name()) == first_candidate.as_ref() {
+            if self.queue.get(0).map(|api| api.name()) == first_candidate {
                 panic!(
                     "Failed to find a candidate; there must be a circular dependency. Queue is {}",
                     self.queue
@@ -87,8 +87,8 @@ mod test {
             QualifiedName::new_from_cpp_name("c"),
             vec![QualifiedName::new_from_cpp_name("a")],
         );
-        let mut api_list = vec![a, b, c];
-        let mut it = depth_first(api_list.iter_mut());
+        let api_list = vec![a, b, c];
+        let mut it = depth_first(api_list.iter());
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("a"));
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("c"));
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("b"));
