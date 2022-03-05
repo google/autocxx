@@ -10,12 +10,13 @@ use super::{
     fun::{FnAnalysis, FnKind, FnPhase, FnPrePhase, MethodKind, TraitMethodKind},
     pod::PodAnalysis,
 };
-use crate::conversion::{api::Api, apivec::ApiVec};
 use crate::conversion::{
+    analysis::fun::PodAndConstructorAnalysis,
     api::TypeKind,
     error_reporter::{convert_apis, convert_item_apis},
     ConvertError,
 };
+use crate::conversion::{api::Api, apivec::ApiVec};
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
@@ -26,7 +27,12 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase>) -> ApiVec<FnPreP
             Api::Function {
                 analysis:
                     FnAnalysis {
-                        kind: FnKind::Method(self_ty_name, MethodKind::PureVirtual(_)),
+                        kind:
+                            FnKind::Method {
+                                impl_for: self_ty_name,
+                                method_kind: MethodKind::PureVirtual(_),
+                                ..
+                            },
                         ..
                     },
                 ..
@@ -48,13 +54,17 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase>) -> ApiVec<FnPreP
                 match api {
                     Api::Struct {
                         analysis:
-                            PodAnalysis {
-                                bases,
-                                kind: TypeKind::Pod | TypeKind::NonPod,
-                                castable_bases,
-                                field_types,
-                                movable,
-                                is_generic,
+                            PodAndConstructorAnalysis {
+                                pod:
+                                    PodAnalysis {
+                                        bases,
+                                        kind: TypeKind::Pod | TypeKind::NonPod,
+                                        castable_bases,
+                                        field_deps,
+                                        field_info,
+                                        is_generic,
+                                    },
+                                constructors,
                             },
                         name,
                         details,
@@ -65,13 +75,16 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase>) -> ApiVec<FnPreP
                         // Recurse in case there are further dependent types
                         iterate = true;
                         Api::Struct {
-                            analysis: PodAnalysis {
-                                bases,
-                                kind: TypeKind::Abstract,
-                                castable_bases,
-                                field_types,
-                                movable,
-                                is_generic,
+                            analysis: PodAndConstructorAnalysis {
+                                pod: PodAnalysis {
+                                    bases,
+                                    kind: TypeKind::Abstract,
+                                    castable_bases,
+                                    field_deps,
+                                    field_info,
+                                    is_generic,
+                                },
+                                constructors,
                             },
                             name,
                             details,
@@ -90,7 +103,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase>) -> ApiVec<FnPreP
         Api::Function {
             analysis:
                 FnAnalysis {
-                    kind: FnKind::Method(self_ty, MethodKind::MakeUnique | MethodKind::Constructor)
+                    kind: FnKind::Method{impl_for: self_ty, method_kind: MethodKind::MakeUnique | MethodKind::Constructor{..}, ..}
                         | FnKind::TraitMethod{ kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor, impl_for: self_ty, ..},
                     ..
                 },
@@ -111,8 +124,12 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase>) -> ApiVec<FnPreP
     convert_item_apis(apis, &mut results, |api| match api {
         Api::Struct {
             analysis:
-                PodAnalysis {
-                    kind: TypeKind::Abstract,
+                PodAndConstructorAnalysis {
+                    pod:
+                        PodAnalysis {
+                            kind: TypeKind::Abstract,
+                            ..
+                        },
                     ..
                 },
             ..

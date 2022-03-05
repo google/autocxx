@@ -37,7 +37,7 @@ struct TypeDetails {
     rs_name: String,
     /// C++ equivalent name for a Rust type.
     cpp_name: String,
-    //// The behavior of the type.
+    /// The behavior of the type.
     behavior: Behavior,
     /// Any extra non-canonical names
     extra_non_canonical_name: Option<String>,
@@ -153,6 +153,11 @@ pub enum CxxGenericType {
     Rust,
 }
 
+pub struct KnownTypeConstructorDetails {
+    pub has_move_constructor: bool,
+    pub has_const_copy_constructor: bool,
+}
+
 impl TypeDatabase {
     fn get(&self, ty: &QualifiedName) -> Option<&TypeDetails> {
         // The following line is important. It says that
@@ -211,28 +216,14 @@ impl TypeDatabase {
         pod_safety.into_iter()
     }
 
-    pub(crate) fn all_types_with_move_constructors(
+    pub(crate) fn get_constructor_details(
         &self,
-    ) -> impl Iterator<Item = QualifiedName> + '_ {
-        self.all_names()
-            .filter(|qn| self.get(qn).unwrap().has_move_constructor)
-            .cloned()
-    }
-
-    pub(crate) fn all_types_with_const_copy_constructors(
-        &self,
-    ) -> impl Iterator<Item = QualifiedName> + '_ {
-        self.all_names()
-            .filter(|qn| self.get(qn).unwrap().has_const_copy_constructor)
-            .cloned()
-    }
-
-    pub(crate) fn all_types_without_copy_constructors(
-        &self,
-    ) -> impl Iterator<Item = QualifiedName> + '_ {
-        self.all_names()
-            .filter(|qn| !self.get(qn).unwrap().has_const_copy_constructor)
-            .cloned()
+        qn: &QualifiedName,
+    ) -> Option<KnownTypeConstructorDetails> {
+        self.get(qn).map(|x| KnownTypeConstructorDetails {
+            has_move_constructor: x.has_move_constructor,
+            has_const_copy_constructor: x.has_const_copy_constructor,
+        })
     }
 
     /// Whether this TypePath should be treated as a value in C++

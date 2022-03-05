@@ -12,15 +12,12 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
-use syn::{FnArg, ItemEnum, ItemStruct, Type, TypePtr, Visibility};
+use syn::{ItemEnum, ItemStruct, Type, Visibility};
 
 use crate::{
     conversion::{
-        analysis::type_converter::{add_analysis, TypeConversionContext, TypeConverter},
-        api::{
-            AnalysisPhase, Api, ApiName, CppVisibility, FuncToConvert, NullPhase,
-            SpecialMemberKind, StructDetails, TypeKind,
-        },
+        analysis::type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
+        api::{AnalysisPhase, Api, ApiName, CppVisibility, NullPhase, StructDetails, TypeKind},
         apivec::ApiVec,
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
@@ -32,6 +29,11 @@ use crate::{
 
 use super::tdef::{TypedefAnalysis, TypedefPhase};
 
+pub(crate) struct FieldInfo {
+    pub(crate) ty: Type,
+    pub(crate) type_kind: type_converter::TypeKind,
+}
+
 pub(crate) struct PodAnalysis {
     pub(crate) kind: TypeKind,
     pub(crate) bases: HashSet<QualifiedName>,
@@ -40,8 +42,8 @@ pub(crate) struct PodAnalysis {
     /// because otherwise we don't know whether they're
     /// abstract or not.
     pub(crate) castable_bases: HashSet<QualifiedName>,
-    pub(crate) field_types: HashSet<QualifiedName>,
-    pub(crate) movable: bool,
+    pub(crate) field_deps: HashSet<QualifiedName>,
+    pub(crate) field_info: Vec<FieldInfo>,
     pub(crate) is_generic: bool,
 }
 
@@ -67,8 +69,6 @@ pub(crate) fn analyze_pod_apis(
     // a type contains a std::string or some other type which can't be
     // held safely by value in Rust.
     let byvalue_checker = ByValueChecker::new_from_apis(&apis, config)?;
-    // We'll also note which types have deleted move constructors.
-    let deleted_move_constructors = find_deleted_move_and_copy_constructors(&apis);
     let mut extra_apis = ApiVec::new();
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut results = ApiVec::new();
@@ -84,7 +84,6 @@ pub(crate) fn analyze_pod_apis(
                 name,
                 details,
                 config,
-                &deleted_move_constructors,
             )
         },
         analyze_enum,
@@ -106,7 +105,6 @@ pub(crate) fn analyze_pod_apis(
                 name,
                 details,
                 config,
-                &deleted_move_constructors,
             )
         },
         analyze_enum,
@@ -132,9 +130,7 @@ fn analyze_struct(
     name: ApiName,
     mut details: Box<StructDetails>,
     config: &IncludeCppConfig,
-    deleted_move_constructors: &HashSet<QualifiedName>,
 ) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
-    let movable = !deleted_move_constructors.contains(&name.name);
     let id = name.name.get_final_ident();
     if details.vis != CppVisibility::Public {
         return Err(ConvertErrorWithContext(
@@ -145,12 +141,14 @@ fn analyze_struct(
     let metadata = BindgenSemanticAttributes::new_retaining_others(&mut details.item.attrs);
     metadata.check_for_fatal_attrs(&id)?;
     let bases = get_bases(&details.item);
-    let mut field_types = HashSet::new();
+    let mut field_deps = HashSet::new();
+    let mut field_info = Vec::new();
     let field_conversion_errors = get_struct_field_types(
         type_converter,
         name.name.get_namespace(),
         &details.item,
-        &mut field_types,
+        &mut field_deps,
+        &mut field_info,
         extra_apis,
     );
     let type_kind = if byvalue_checker.is_pod(&name.name) {
@@ -184,8 +182,8 @@ fn analyze_struct(
             kind: type_kind,
             bases: bases.into_keys().collect(),
             castable_bases,
-            field_types,
-            movable,
+            field_deps,
+            field_info,
             is_generic,
         },
     })))
@@ -195,7 +193,8 @@ fn get_struct_field_types(
     type_converter: &mut TypeConverter,
     ns: &Namespace,
     s: &ItemStruct,
-    deps: &mut HashSet<QualifiedName>,
+    field_deps: &mut HashSet<QualifiedName>,
+    field_info: &mut Vec<FieldInfo>,
     extra_apis: &mut ApiVec<NullPhase>,
 ) -> Vec<ConvertError> {
     let mut convert_errors = Vec::new();
@@ -205,7 +204,20 @@ fn get_struct_field_types(
         match annotated {
             Ok(mut r) => {
                 extra_apis.append(&mut r.extra_apis);
-                deps.extend(r.types_encountered);
+                // Skip base classes represented as fields. Anything which wants to include bases can chain
+                // those to the list we're building.
+                if !f
+                    .ident
+                    .as_ref()
+                    .map(|id| id.to_string().starts_with("_base"))
+                    .unwrap_or(false)
+                {
+                    field_deps.extend(r.types_encountered);
+                    field_info.push(FieldInfo {
+                        ty: r.ty,
+                        type_kind: r.kind,
+                    });
+                }
             }
             Err(e) => convert_errors.push(e),
         };
@@ -229,41 +241,4 @@ fn get_bases(item: &ItemStruct) -> HashMap<QualifiedName, bool> {
             }
         })
         .collect()
-}
-
-fn find_deleted_move_and_copy_constructors(apis: &ApiVec<TypedefPhase>) -> HashSet<QualifiedName> {
-    // Remove any deleted move + copy constructors from the API list and list the types
-    // that they construct.
-    apis.iter().filter_map(|api| match api {
-        Api::Function { ref fun, .. } => match &**fun {
-            FuncToConvert {
-                special_member:
-                    Some(SpecialMemberKind::MoveConstructor | SpecialMemberKind::CopyConstructor),
-                is_deleted: true,
-                inputs,
-                ..
-             } => match is_a_pointer_arg(inputs.iter().next()) {
-                    Some(ty) => Some(ty),
-                    _ => panic!("found special constructor member with something other than a pointer first arg"),
-                },
-            _ => None
-        },
-        _ => None,
-    }).collect()
-}
-
-/// Determine if a function argument is a pointer, and if so, to what.
-/// It's unfortunate that we need to do this during the POD analysis but
-/// for now, it's the best way to identify special constructor members.
-fn is_a_pointer_arg(arg: Option<&FnArg>) -> Option<QualifiedName> {
-    arg.and_then(|arg| match arg {
-        FnArg::Receiver(..) => None,
-        FnArg::Typed(pt) => match &*pt.ty {
-            Type::Ptr(TypePtr { elem, .. }) => match &**elem {
-                Type::Path(typ) => Some(QualifiedName::from_type_path(typ)),
-                _ => None,
-            },
-            _ => None,
-        },
-    })
 }

@@ -5435,13 +5435,24 @@ fn test_multiply_nested_inner_type() {
                     Hen() {}
                     int wings;
                 };
+                struct HenImplicit {
+                    int wings;
+                };
             };
         };
         "};
     let rs = quote! {
         ffi::Turkey_Duck_Hen::make_unique();
+        // TODO: Re-enable for https://github.com/google/autocxx/issues/884.
+        //ffi::Turkey_Duck_HenImplicit::make_unique();
     };
-    run_test("", hdr, rs, &[], &["Turkey_Duck_Hen"]);
+    run_test(
+        "",
+        hdr,
+        rs,
+        &[],
+        &["Turkey_Duck_Hen", "Turkey_Duck_HenImplicit"],
+    );
 }
 
 #[test]
@@ -5678,7 +5689,7 @@ fn test_ignore_function_with_rvalue_ref() {
 fn test_overloaded_ignored_function() {
     // When overloaded functions are ignored during import, the placeholder
     // functions generated for them should have unique names, just as they
-    // would have if they had ben imported successfully.
+    // would have if they had been imported successfully.
     // The test is successful if the bindings compile.
     let hdr = indoc! {"
         struct Blocked {};
@@ -8441,6 +8452,1218 @@ fn test_skip_cxx_gen() {
         Some(Box::new(SkipCxxGen)),
         Some(Box::new(CppCounter::new(1))),
         None,
+    );
+}
+
+#[test]
+/// Tests types with various forms of copy, move, and default constructors. Calls the things which
+/// should be generated, and will produce C++ compile failures if other wrappers are generated.
+///
+/// Specifically, we can have the cross product of any of these:
+///   * Explicitly deleted
+///   * Implicitly defaulted
+///   * User declared
+///   * Explicitly defaulted
+///     Not handled yet: https://github.com/google/autocxx/issues/815.
+///     Once this is handled, add equivalents of all the implicitly defaulted cases, at all
+///     visibility levels.
+/// applied to each of these:
+///   * Default constructor
+///   * Copy constructor
+///   * Move constructor
+/// in any of these:
+///   * The class itself
+///   * A base class
+///   * A field of the class
+///   * A field of a base class
+/// with any of these access modifiers:
+///   * private (impossible for implicitly defaulted)
+///   * protected (impossible for implicitly defaulted)
+///   * public
+///
+/// Various combinations of these lead to the default versions being deleted. The move and copy
+/// ones also interact with each other in various ways.
+///
+/// TODO: Remove all the `int x` members after https://github.com/google/autocxx/issues/832 is
+/// fixed.
+fn test_implicit_constructor_rules() {
+    let cxx = "";
+    let hdr = indoc! {"
+        struct AllImplicitlyDefaulted {
+            void a() const {}
+        };
+
+        struct PublicDeleted {
+            PublicDeleted() = delete;
+            PublicDeleted(const PublicDeleted&) = delete;
+            PublicDeleted(PublicDeleted&&) = delete;
+
+            void a() const {}
+
+            int x;
+        };
+        struct PublicDeletedDefault {
+            PublicDeletedDefault() = delete;
+
+            void a() const {}
+
+            int x;
+        };
+        struct PublicDeletedCopy {
+            PublicDeletedCopy() = default;
+            PublicDeletedCopy(const PublicDeletedCopy&) = delete;
+
+            void a() const {}
+
+            int x;
+        };
+        struct PublicDeletedCopyNoDefault {
+            PublicDeletedCopyNoDefault(const PublicDeletedCopyNoDefault&) = delete;
+
+            void a() const {}
+
+            int x;
+        };
+        struct PublicMoveDeletedCopy {
+            PublicMoveDeletedCopy() = default;
+            PublicMoveDeletedCopy(const PublicMoveDeletedCopy&) = delete;
+            PublicMoveDeletedCopy(PublicMoveDeletedCopy&&) = default;
+
+            void a() const {}
+
+            int x;
+        };
+        struct PublicDeletedMove {
+            PublicDeletedMove() = default;
+            PublicDeletedMove(PublicDeletedMove&&) = delete;
+
+            void a() const {}
+
+            int x;
+        };
+        struct PublicDeletedDestructor {
+            PublicDeletedDestructor() = default;
+            ~PublicDeletedDestructor() = delete;
+
+            void a() const {}
+
+            int x;
+        };
+        struct PublicDestructor {
+            PublicDestructor() = default;
+            ~PublicDestructor() = default;
+
+            void a() const {}
+
+            int x;
+        };
+
+        struct ProtectedDeleted {
+            void a() const {}
+
+            int x;
+
+          protected:
+            ProtectedDeleted() = delete;
+            ProtectedDeleted(const ProtectedDeleted&) = delete;
+            ProtectedDeleted(ProtectedDeleted&&) = delete;
+        };
+        struct ProtectedDeletedDefault {
+            void a() const {}
+
+            int x;
+
+          protected:
+            ProtectedDeletedDefault() = delete;
+        };
+        struct ProtectedDeletedCopy {
+            ProtectedDeletedCopy() = default;
+
+            void a() const {}
+
+            int x;
+
+          protected:
+            ProtectedDeletedCopy(const ProtectedDeletedCopy&) = delete;
+        };
+        struct ProtectedDeletedCopyNoDefault {
+            void a() const {}
+
+            int x;
+
+          protected:
+            ProtectedDeletedCopyNoDefault(const ProtectedDeletedCopyNoDefault&) = delete;
+        };
+        struct ProtectedMoveDeletedCopy {
+            ProtectedMoveDeletedCopy() = default;
+
+            void a() const {}
+
+            int x;
+
+          protected:
+            ProtectedMoveDeletedCopy(const ProtectedMoveDeletedCopy&) = delete;
+            ProtectedMoveDeletedCopy(ProtectedMoveDeletedCopy&&) = default;
+        };
+        struct ProtectedDeletedMove {
+            ProtectedDeletedMove() = default;
+
+            void a() const {}
+
+            int x;
+
+          protected:
+            ProtectedDeletedMove(ProtectedDeletedMove&&) = delete;
+        };
+        struct ProtectedDeletedDestructor {
+            ProtectedDeletedDestructor() = default;
+
+            void a() const {}
+
+            int x;
+
+          protected:
+            ~ProtectedDeletedDestructor() = delete;
+        };
+        struct ProtectedDestructor {
+            ProtectedDestructor() = default;
+
+            void a() const {}
+
+            int x;
+
+          protected:
+            ~ProtectedDestructor() = default;
+        };
+
+        struct PrivateDeleted {
+            void a() const {}
+
+            int x;
+
+          private:
+            PrivateDeleted() = delete;
+            PrivateDeleted(const PrivateDeleted&) = delete;
+            PrivateDeleted(PrivateDeleted&&) = delete;
+        };
+        struct PrivateDeletedDefault {
+            void a() const {}
+
+            int x;
+
+          private:
+            PrivateDeletedDefault() = delete;
+        };
+        struct PrivateDeletedCopy {
+            PrivateDeletedCopy() = default;
+
+            void a() const {}
+
+            int x;
+
+          private:
+            PrivateDeletedCopy(const PrivateDeletedCopy&) = delete;
+        };
+        struct PrivateDeletedCopyNoDefault {
+            void a() const {}
+
+            int x;
+
+          private:
+            PrivateDeletedCopyNoDefault(const PrivateDeletedCopyNoDefault&) = delete;
+        };
+        struct PrivateMoveDeletedCopy {
+            PrivateMoveDeletedCopy() = default;
+
+            void a() const {}
+
+            int x;
+
+          private:
+            PrivateMoveDeletedCopy(const PrivateMoveDeletedCopy&) = delete;
+            PrivateMoveDeletedCopy(PrivateMoveDeletedCopy&&) = default;
+        };
+        struct PrivateDeletedMove {
+            PrivateDeletedMove() = default;
+
+            void a() const {}
+
+            int x;
+
+          private:
+            PrivateDeletedMove(PrivateDeletedMove&&) = delete;
+        };
+        struct PrivateDeletedDestructor {
+            PrivateDeletedDestructor() = default;
+
+            void a() const {}
+
+            int x;
+
+          private:
+            ~PrivateDeletedDestructor() = delete;
+        };
+        struct PrivateDestructor {
+            PrivateDestructor() = default;
+
+            void a() const {}
+
+            int x;
+
+          private:
+            ~PrivateDestructor() = default;
+        };
+
+        struct NonConstCopy {
+            NonConstCopy() = default;
+
+            NonConstCopy(NonConstCopy&) {}
+            NonConstCopy(NonConstCopy&&) = default;
+
+            void a() const {}
+        };
+        struct TwoCopy {
+            TwoCopy() = default;
+
+            TwoCopy(TwoCopy&) {}
+            TwoCopy(const TwoCopy&) {}
+            TwoCopy(TwoCopy&&) = default;
+
+            void a() const {}
+        };
+
+        struct MemberPointerDeleted {
+            PublicDeleted *x;
+
+            void a() const {}
+        };
+
+        struct MemberConstPointerDeleted {
+            PublicDeleted *const x;
+
+            void a() const {}
+        };
+
+        struct MemberConst {
+            const int x;
+
+            void a() const {}
+        };
+
+        struct MemberReferenceDeleted {
+            PublicDeleted &x;
+
+            void a() const {}
+        };
+
+        struct MemberConstReferenceDeleted {
+            const PublicDeleted &x;
+
+            void a() const {}
+        };
+
+        struct MemberReference {
+            int &x;
+
+            void a() const {}
+        };
+
+        struct MemberConstReference {
+            const int &x;
+
+            void a() const {}
+        };
+
+        struct MemberRvalueReferenceDeleted {
+            PublicDeleted &&x;
+
+            void a() const {}
+        };
+
+        struct MemberRvalueReference {
+            int &&x;
+
+            void a() const {}
+        };
+
+        struct BasePublicDeleted : public PublicDeleted {};
+        struct BasePublicDeletedDefault : public PublicDeletedDefault {};
+        struct BasePublicDeletedCopy : public PublicDeletedCopy {};
+        struct BasePublicDeletedCopyNoDefault : public PublicDeletedCopyNoDefault { };
+        struct BasePublicMoveDeletedCopy : public PublicMoveDeletedCopy {};
+        struct BasePublicDeletedMove : public PublicDeletedMove {};
+        struct BasePublicDeletedDestructor : public PublicDeletedDestructor {};
+        struct BasePublicDestructor : public PublicDestructor {};
+
+        struct MemberPublicDeleted {
+            void a() const {}
+
+            PublicDeleted member;
+        };
+        struct MemberPublicDeletedDefault {
+            void a() const {}
+
+            PublicDeletedDefault member;
+        };
+        struct MemberPublicDeletedCopy {
+            void a() const {}
+
+            PublicDeletedCopy member;
+        };
+        struct MemberPublicDeletedCopyNoDefault {
+            void a() const {}
+
+            PublicDeletedCopyNoDefault member;
+        };
+        struct MemberPublicMoveDeletedCopy {
+            void a() const {}
+
+            PublicMoveDeletedCopy member;
+        };
+        struct MemberPublicDeletedMove {
+            void a() const {}
+
+            PublicDeletedMove member;
+        };
+        struct MemberPublicDeletedDestructor {
+            void a() const {}
+
+            PublicDeletedDestructor member;
+        };
+        struct MemberPublicDestructor {
+            void a() const {}
+
+            PublicDestructor member;
+        };
+
+        struct BaseMemberPublicDeleted : public MemberPublicDeleted {};
+        struct BaseMemberPublicDeletedDefault : public MemberPublicDeletedDefault {};
+        struct BaseMemberPublicDeletedCopy : public MemberPublicDeletedCopy {};
+        struct BaseMemberPublicDeletedCopyNoDefault : public MemberPublicDeletedCopyNoDefault {};
+        struct BaseMemberPublicMoveDeletedCopy : public MemberPublicMoveDeletedCopy {};
+        struct BaseMemberPublicDeletedMove : public MemberPublicDeletedMove {};
+        struct BaseMemberPublicDeletedDestructor : public MemberPublicDeletedDestructor {};
+        struct BaseMemberPublicDestructor : public MemberPublicDestructor {};
+
+        struct BaseProtectedDeleted : public ProtectedDeleted {};
+        struct BaseProtectedDeletedDefault : public ProtectedDeletedDefault {};
+        struct BaseProtectedDeletedCopy : public ProtectedDeletedCopy {};
+        struct BaseProtectedDeletedCopyNoDefault : public ProtectedDeletedCopyNoDefault {};
+        struct BaseProtectedMoveDeletedCopy : public ProtectedMoveDeletedCopy {};
+        struct BaseProtectedDeletedMove : public ProtectedDeletedMove {};
+        struct BaseProtectedDeletedDestructor : public ProtectedDeletedDestructor {};
+        struct BaseProtectedDestructor : public ProtectedDestructor {};
+
+        struct MemberProtectedDeleted {
+            void a() const {}
+
+            ProtectedDeleted member;
+        };
+        struct MemberProtectedDeletedDefault {
+            void a() const {}
+
+            ProtectedDeletedDefault member;
+        };
+        struct MemberProtectedDeletedCopy {
+            void a() const {}
+
+            ProtectedDeletedCopy member;
+        };
+        struct MemberProtectedDeletedCopyNoDefault {
+            void a() const {}
+
+            ProtectedDeletedCopyNoDefault member;
+        };
+        struct MemberProtectedMoveDeletedCopy {
+            void a() const {}
+
+            ProtectedMoveDeletedCopy member;
+        };
+        struct MemberProtectedDeletedMove {
+            void a() const {}
+
+            ProtectedDeletedMove member;
+        };
+        struct MemberProtectedDeletedDestructor {
+            void a() const {}
+
+            ProtectedDeletedDestructor member;
+        };
+        struct MemberProtectedDestructor {
+            void a() const {}
+
+            ProtectedDestructor member;
+        };
+
+        struct BaseMemberProtectedDeleted : public MemberProtectedDeleted {};
+        struct BaseMemberProtectedDeletedDefault : public MemberProtectedDeletedDefault {};
+        struct BaseMemberProtectedDeletedCopy : public MemberProtectedDeletedCopy {};
+        struct BaseMemberProtectedDeletedCopyNoDefault : public MemberProtectedDeletedCopyNoDefault {};
+        struct BaseMemberProtectedMoveDeletedCopy : public MemberProtectedMoveDeletedCopy {};
+        struct BaseMemberProtectedDeletedMove : public MemberProtectedDeletedMove {};
+        struct BaseMemberProtectedDeletedDestructor : public MemberProtectedDeletedDestructor {};
+        struct BaseMemberProtectedDestructor : public MemberProtectedDestructor {};
+
+        struct BasePrivateDeleted : public PrivateDeleted {};
+        struct BasePrivateDeletedDefault : public PrivateDeletedDefault {};
+        struct BasePrivateDeletedCopy : public PrivateDeletedCopy {};
+        struct BasePrivateDeletedCopyNoDefault : public PrivateDeletedCopyNoDefault {};
+        struct BasePrivateMoveDeletedCopy : public PrivateMoveDeletedCopy {};
+        struct BasePrivateDeletedMove : public PrivateDeletedMove {};
+        struct BasePrivateDeletedDestructor : public PrivateDeletedDestructor {};
+        struct BasePrivateDestructor : public PrivateDestructor {};
+
+        struct MemberPrivateDeleted {
+            void a() const {}
+
+            PrivateDeleted member;
+        };
+        struct MemberPrivateDeletedDefault {
+            void a() const {}
+
+            PrivateDeletedDefault member;
+        };
+        struct MemberPrivateDeletedCopy {
+            void a() const {}
+
+            PrivateDeletedCopy member;
+        };
+        struct MemberPrivateDeletedCopyNoDefault {
+            void a() const {}
+
+            PrivateDeletedCopyNoDefault member;
+        };
+        struct MemberPrivateMoveDeletedCopy {
+            void a() const {}
+
+            PrivateMoveDeletedCopy member;
+        };
+        struct MemberPrivateDeletedMove {
+            void a() const {}
+
+            PrivateDeletedMove member;
+        };
+        struct MemberPrivateDeletedDestructor {
+            void a() const {}
+
+            PrivateDeletedDestructor member;
+        };
+        struct MemberPrivateDestructor {
+            void a() const {}
+
+            PrivateDestructor member;
+        };
+
+        struct BaseMemberPrivateDeleted : public MemberPrivateDeleted {};
+        struct BaseMemberPrivateDeletedDefault : public MemberPrivateDeletedDefault {};
+        struct BaseMemberPrivateDeletedCopy : public MemberPrivateDeletedCopy {};
+        struct BaseMemberPrivateDeletedCopyNoDefault : public MemberPrivateDeletedCopyNoDefault {};
+        struct BaseMemberPrivateMoveDeletedCopy : public MemberPrivateMoveDeletedCopy {};
+        struct BaseMemberPrivateDeletedMove : public MemberPrivateDeletedMove {};
+        struct BaseMemberPrivateDeletedDestructor : public MemberPrivateDeletedDestructor {};
+        struct BaseMemberPrivateDestructor : public MemberPrivateDestructor {};
+    "};
+    let rs = quote! {
+        // Some macros to test various operations on our types. Note that some of them define
+        // functions which take arguments that the APIs defined in this test have no way to
+        // produce, because we have C++ types which can't be constructed (for example). In a real
+        // program, there might be other C++ APIs which can instantiate these types.
+
+        // TODO: https://github.com/google/autocxx/issues/829: Should this be merged with
+        // `test_make_unique`? Currently types where the Rust wrappers permit this but not that
+        // aren't running C++ destructors.
+        macro_rules! test_constructible {
+            [$t:ty] => {
+                moveit! {
+                    let _moveit_t = <$t>::new();
+                }
+            }
+        }
+        macro_rules! test_make_unique {
+            [$t:ty] => {
+                let _unique_t = <$t>::make_unique();
+            }
+        }
+        macro_rules! test_copyable {
+            [$t:ty] => {
+                {
+                    fn test_copyable(moveit_t: impl autocxx::moveit::new::New<Output = $t>) {
+                        moveit! {
+                            let moveit_t = moveit_t;
+                            let _copied_t = autocxx::moveit::new::copy(moveit_t);
+                        }
+                    }
+                }
+            }
+        }
+        macro_rules! test_movable {
+            [$t:ty] => {
+                {
+                    fn test_movable(moveit_t: impl autocxx::moveit::new::New<Output = $t>) {
+                        moveit! {
+                            let moveit_t = moveit_t;
+                            let _moved_t = autocxx::moveit::new::mov(moveit_t);
+                        }
+                    }
+                }
+            }
+        }
+        macro_rules! test_call_a {
+            [$t:ty] => {
+                {
+                    fn test_call_a(t: &$t) {
+                        t.a();
+                    }
+                }
+            }
+        }
+        macro_rules! test_call_a_as {
+            [$t:ty, $parent:ty] => {
+                {
+                    fn test_call_a(t: &$t) {
+                        let t: &$parent = t.as_ref();
+                        t.a();
+                    }
+                }
+            }
+        }
+
+        test_constructible![ffi::AllImplicitlyDefaulted];
+        test_make_unique![ffi::AllImplicitlyDefaulted];
+        test_copyable![ffi::AllImplicitlyDefaulted];
+        test_movable![ffi::AllImplicitlyDefaulted];
+        test_call_a![ffi::AllImplicitlyDefaulted];
+
+        test_call_a![ffi::PublicDeleted];
+
+        test_copyable![ffi::PublicDeletedDefault];
+        test_movable![ffi::PublicDeletedDefault];
+        test_call_a![ffi::PublicDeletedDefault];
+
+        test_constructible![ffi::PublicDeletedCopy];
+        test_make_unique![ffi::PublicDeletedCopy];
+        test_call_a![ffi::PublicDeletedCopy];
+
+        test_call_a![ffi::PublicDeletedCopyNoDefault];
+
+        test_constructible![ffi::PublicMoveDeletedCopy];
+        test_make_unique![ffi::PublicMoveDeletedCopy];
+        test_movable![ffi::PublicMoveDeletedCopy];
+        test_call_a![ffi::PublicMoveDeletedCopy];
+
+        test_constructible![ffi::PublicDeletedMove];
+        test_make_unique![ffi::PublicDeletedMove];
+        test_call_a![ffi::PublicDeletedMove];
+
+        test_constructible![ffi::PublicDeletedDestructor];
+        test_copyable![ffi::PublicDeletedDestructor];
+        test_call_a![ffi::PublicDeletedDestructor];
+
+        test_constructible![ffi::PublicDestructor];
+        test_make_unique![ffi::PublicDestructor];
+        test_copyable![ffi::PublicDestructor];
+        test_call_a![ffi::PublicDestructor];
+
+        test_call_a![ffi::ProtectedDeleted];
+
+        test_copyable![ffi::ProtectedDeletedDefault];
+        test_movable![ffi::ProtectedDeletedDefault];
+        test_call_a![ffi::ProtectedDeletedDefault];
+
+        test_constructible![ffi::ProtectedDeletedCopy];
+        test_make_unique![ffi::ProtectedDeletedCopy];
+        test_call_a![ffi::ProtectedDeletedCopy];
+
+        test_call_a![ffi::ProtectedDeletedCopyNoDefault];
+
+        test_constructible![ffi::ProtectedMoveDeletedCopy];
+        test_make_unique![ffi::ProtectedMoveDeletedCopy];
+        test_call_a![ffi::ProtectedMoveDeletedCopy];
+
+        test_constructible![ffi::ProtectedDeletedMove];
+        test_make_unique![ffi::ProtectedDeletedMove];
+        test_call_a![ffi::ProtectedDeletedMove];
+
+        test_constructible![ffi::ProtectedDeletedDestructor];
+        test_copyable![ffi::ProtectedDeletedDestructor];
+        test_call_a![ffi::ProtectedDeletedDestructor];
+
+        test_constructible![ffi::ProtectedDestructor];
+        test_copyable![ffi::ProtectedDestructor];
+        test_call_a![ffi::ProtectedDestructor];
+
+        test_call_a![ffi::PrivateDeleted];
+
+        test_copyable![ffi::PrivateDeletedDefault];
+        test_movable![ffi::PrivateDeletedDefault];
+        test_call_a![ffi::PrivateDeletedDefault];
+
+        test_constructible![ffi::PrivateDeletedCopy];
+        test_make_unique![ffi::PrivateDeletedCopy];
+        test_call_a![ffi::PrivateDeletedCopy];
+
+        test_call_a![ffi::PrivateDeletedCopyNoDefault];
+
+        test_constructible![ffi::PrivateMoveDeletedCopy];
+        test_make_unique![ffi::PrivateMoveDeletedCopy];
+        test_call_a![ffi::PrivateMoveDeletedCopy];
+
+        test_constructible![ffi::PrivateDeletedMove];
+        test_make_unique![ffi::PrivateDeletedMove];
+        test_call_a![ffi::PrivateDeletedMove];
+
+        test_constructible![ffi::PrivateDeletedDestructor];
+        test_copyable![ffi::PrivateDeletedDestructor];
+        test_call_a![ffi::PrivateDeletedDestructor];
+
+        test_constructible![ffi::PrivateDestructor];
+        test_copyable![ffi::PrivateDestructor];
+        test_call_a![ffi::PrivateDestructor];
+
+        test_constructible![ffi::NonConstCopy];
+        test_make_unique![ffi::NonConstCopy];
+        test_movable![ffi::NonConstCopy];
+        test_call_a![ffi::NonConstCopy];
+
+        test_constructible![ffi::TwoCopy];
+        test_make_unique![ffi::TwoCopy];
+        test_copyable![ffi::TwoCopy];
+        test_movable![ffi::TwoCopy];
+        test_call_a![ffi::TwoCopy];
+
+        // TODO: https://github.com/google/autocxx/issues/865
+        // Treat pointers and references differently so this has a default constructor.
+        //test_constructible![ffi::MemberPointerDeleted];
+        //test_make_unique![ffi::MemberPointerDeleted];
+        test_copyable![ffi::MemberPointerDeleted];
+        test_movable![ffi::MemberPointerDeleted];
+        test_call_a![ffi::MemberPointerDeleted];
+
+        test_copyable![ffi::MemberConstPointerDeleted];
+        test_movable![ffi::MemberConstPointerDeleted];
+        test_call_a![ffi::MemberConstPointerDeleted];
+
+        //test_copyable![ffi::MemberConst];
+        //test_movable![ffi::MemberConst];
+        //test_call_a![ffi::MemberConst];
+
+        test_copyable![ffi::MemberReferenceDeleted];
+        test_movable![ffi::MemberReferenceDeleted];
+        test_call_a![ffi::MemberReferenceDeleted];
+
+        test_copyable![ffi::MemberConstReferenceDeleted];
+        test_movable![ffi::MemberConstReferenceDeleted];
+        test_call_a![ffi::MemberConstReferenceDeleted];
+
+        test_copyable![ffi::MemberReference];
+        test_movable![ffi::MemberReference];
+        test_call_a![ffi::MemberReference];
+
+        test_copyable![ffi::MemberConstReference];
+        test_movable![ffi::MemberConstReference];
+        test_call_a![ffi::MemberConstReference];
+
+        test_movable![ffi::MemberRvalueReferenceDeleted];
+        test_call_a![ffi::MemberRvalueReferenceDeleted];
+
+        test_movable![ffi::MemberRvalueReference];
+        test_call_a![ffi::MemberRvalueReference];
+
+        test_call_a_as![ffi::BasePublicDeleted, ffi::PublicDeleted];
+
+        test_copyable![ffi::BasePublicDeletedDefault];
+        test_movable![ffi::BasePublicDeletedDefault];
+        test_call_a_as![ffi::BasePublicDeletedDefault, ffi::PublicDeletedDefault];
+
+        test_constructible![ffi::BasePublicDeletedCopy];
+        test_make_unique![ffi::BasePublicDeletedCopy];
+        test_call_a_as![ffi::BasePublicDeletedCopy, ffi::PublicDeletedCopy];
+
+        test_call_a_as![ffi::BasePublicDeletedCopyNoDefault, ffi::PublicDeletedCopyNoDefault];
+
+        test_constructible![ffi::BasePublicMoveDeletedCopy];
+        test_make_unique![ffi::BasePublicMoveDeletedCopy];
+        test_movable![ffi::BasePublicMoveDeletedCopy];
+        test_call_a_as![ffi::BasePublicMoveDeletedCopy, ffi::PublicMoveDeletedCopy];
+
+        test_constructible![ffi::BasePublicDeletedMove];
+        test_make_unique![ffi::BasePublicDeletedMove];
+        test_call_a_as![ffi::BasePublicDeletedMove, ffi::PublicDeletedMove];
+
+        test_call_a_as![ffi::BasePublicDeletedDestructor, ffi::PublicDeletedDestructor];
+
+        test_constructible![ffi::BasePublicDestructor];
+        test_make_unique![ffi::BasePublicDestructor];
+        test_copyable![ffi::BasePublicDestructor];
+        test_call_a_as![ffi::BasePublicDestructor, ffi::PublicDestructor];
+
+        test_call_a![ffi::MemberPublicDeleted];
+
+        test_copyable![ffi::MemberPublicDeletedDefault];
+        test_movable![ffi::MemberPublicDeletedDefault];
+        test_call_a![ffi::MemberPublicDeletedDefault];
+
+        test_constructible![ffi::MemberPublicDeletedCopy];
+        test_make_unique![ffi::MemberPublicDeletedCopy];
+        test_call_a![ffi::MemberPublicDeletedCopy];
+
+        test_call_a![ffi::MemberPublicDeletedCopyNoDefault];
+
+        test_constructible![ffi::MemberPublicMoveDeletedCopy];
+        test_make_unique![ffi::MemberPublicMoveDeletedCopy];
+        test_movable![ffi::MemberPublicMoveDeletedCopy];
+        test_call_a![ffi::MemberPublicMoveDeletedCopy];
+
+        test_constructible![ffi::MemberPublicDeletedMove];
+        test_make_unique![ffi::MemberPublicDeletedMove];
+        test_call_a![ffi::MemberPublicDeletedMove];
+
+        test_call_a![ffi::MemberPublicDeletedDestructor];
+
+        test_constructible![ffi::MemberPublicDestructor];
+        test_make_unique![ffi::MemberPublicDestructor];
+        test_copyable![ffi::MemberPublicDestructor];
+        test_call_a![ffi::MemberPublicDestructor];
+
+        test_call_a_as![ffi::BaseMemberPublicDeleted, ffi::MemberPublicDeleted];
+
+        test_copyable![ffi::BaseMemberPublicDeletedDefault];
+        test_movable![ffi::BaseMemberPublicDeletedDefault];
+        test_call_a_as![ffi::BaseMemberPublicDeletedDefault, ffi::MemberPublicDeletedDefault];
+
+        test_constructible![ffi::BaseMemberPublicDeletedCopy];
+        test_make_unique![ffi::BaseMemberPublicDeletedCopy];
+        test_call_a_as![ffi::BaseMemberPublicDeletedCopy, ffi::MemberPublicDeletedCopy];
+
+        test_call_a_as![ffi::BaseMemberPublicDeletedCopyNoDefault, ffi::MemberPublicDeletedCopyNoDefault];
+
+        test_constructible![ffi::BaseMemberPublicMoveDeletedCopy];
+        test_make_unique![ffi::BaseMemberPublicMoveDeletedCopy];
+        test_movable![ffi::BaseMemberPublicMoveDeletedCopy];
+        test_call_a_as![ffi::BaseMemberPublicMoveDeletedCopy, ffi::MemberPublicMoveDeletedCopy];
+
+        test_constructible![ffi::BaseMemberPublicDeletedMove];
+        test_make_unique![ffi::BaseMemberPublicDeletedMove];
+        test_call_a_as![ffi::BaseMemberPublicDeletedMove, ffi::MemberPublicDeletedMove];
+
+        test_call_a_as![ffi::BaseMemberPublicDeletedDestructor, ffi::MemberPublicDeletedDestructor];
+
+        test_constructible![ffi::BaseMemberPublicDestructor];
+        test_make_unique![ffi::BaseMemberPublicDestructor];
+        test_copyable![ffi::BaseMemberPublicDestructor];
+        test_call_a_as![ffi::BaseMemberPublicDestructor, ffi::MemberPublicDestructor];
+
+        test_call_a_as![ffi::BaseProtectedDeleted, ffi::ProtectedDeleted];
+
+        test_copyable![ffi::BaseProtectedDeletedDefault];
+        test_movable![ffi::BaseProtectedDeletedDefault];
+        test_call_a_as![ffi::BaseProtectedDeletedDefault, ffi::ProtectedDeletedDefault];
+
+        test_constructible![ffi::BaseProtectedDeletedCopy];
+        test_make_unique![ffi::BaseProtectedDeletedCopy];
+        test_call_a_as![ffi::BaseProtectedDeletedCopy, ffi::ProtectedDeletedCopy];
+
+        test_call_a_as![ffi::BaseProtectedDeletedCopyNoDefault, ffi::ProtectedDeletedCopyNoDefault];
+
+        test_constructible![ffi::BaseProtectedMoveDeletedCopy];
+        test_make_unique![ffi::BaseProtectedMoveDeletedCopy];
+        test_movable![ffi::BaseProtectedMoveDeletedCopy];
+        test_call_a_as![ffi::BaseProtectedMoveDeletedCopy, ffi::ProtectedMoveDeletedCopy];
+
+        test_constructible![ffi::BaseProtectedDeletedMove];
+        test_make_unique![ffi::BaseProtectedDeletedMove];
+        test_call_a_as![ffi::BaseProtectedDeletedMove, ffi::ProtectedDeletedMove];
+
+        test_call_a_as![ffi::BaseProtectedDeletedDestructor, ffi::ProtectedDeletedDestructor];
+
+        test_constructible![ffi::BaseProtectedDestructor];
+        test_make_unique![ffi::BaseProtectedDestructor];
+        test_copyable![ffi::BaseProtectedDestructor];
+        test_call_a_as![ffi::BaseProtectedDestructor, ffi::ProtectedDestructor];
+
+        test_call_a![ffi::MemberProtectedDeleted];
+
+        test_copyable![ffi::MemberProtectedDeletedDefault];
+        test_movable![ffi::MemberProtectedDeletedDefault];
+        test_call_a![ffi::MemberProtectedDeletedDefault];
+
+        test_constructible![ffi::MemberProtectedDeletedCopy];
+        test_make_unique![ffi::MemberProtectedDeletedCopy];
+        test_call_a![ffi::MemberProtectedDeletedCopy];
+
+        test_call_a![ffi::MemberProtectedDeletedCopyNoDefault];
+
+        test_constructible![ffi::MemberProtectedMoveDeletedCopy];
+        test_make_unique![ffi::MemberProtectedMoveDeletedCopy];
+        test_call_a![ffi::MemberProtectedMoveDeletedCopy];
+
+        test_constructible![ffi::MemberProtectedDeletedMove];
+        test_make_unique![ffi::MemberProtectedDeletedMove];
+        test_call_a![ffi::MemberProtectedDeletedMove];
+
+        test_call_a![ffi::MemberProtectedDeletedDestructor];
+
+        test_call_a![ffi::MemberProtectedDestructor];
+
+        test_call_a_as![ffi::BaseMemberProtectedDeleted, ffi::MemberProtectedDeleted];
+
+        test_copyable![ffi::BaseMemberProtectedDeletedDefault];
+        test_movable![ffi::BaseMemberProtectedDeletedDefault];
+        test_call_a_as![ffi::BaseMemberProtectedDeletedDefault, ffi::MemberProtectedDeletedDefault];
+
+        test_constructible![ffi::BaseMemberProtectedDeletedCopy];
+        test_make_unique![ffi::BaseMemberProtectedDeletedCopy];
+        test_call_a_as![ffi::BaseMemberProtectedDeletedCopy, ffi::MemberProtectedDeletedCopy];
+
+        test_call_a_as![ffi::BaseMemberProtectedDeletedCopyNoDefault, ffi::MemberProtectedDeletedCopyNoDefault];
+
+        test_constructible![ffi::BaseMemberProtectedMoveDeletedCopy];
+        test_make_unique![ffi::BaseMemberProtectedMoveDeletedCopy];
+        test_call_a_as![ffi::BaseMemberProtectedMoveDeletedCopy, ffi::MemberProtectedMoveDeletedCopy];
+
+        test_constructible![ffi::BaseMemberProtectedDeletedMove];
+        test_make_unique![ffi::BaseMemberProtectedDeletedMove];
+        test_call_a_as![ffi::BaseMemberProtectedDeletedMove, ffi::MemberProtectedDeletedMove];
+
+        test_call_a_as![ffi::BaseMemberProtectedDeletedDestructor, ffi::MemberProtectedDeletedDestructor];
+
+        test_call_a_as![ffi::BaseMemberProtectedDestructor, ffi::MemberProtectedDestructor];
+
+        test_call_a_as![ffi::BasePrivateDeleted, ffi::PrivateDeleted];
+
+        test_copyable![ffi::BasePrivateDeletedDefault];
+        test_movable![ffi::BasePrivateDeletedDefault];
+        test_call_a_as![ffi::BasePrivateDeletedDefault, ffi::PrivateDeletedDefault];
+
+        test_constructible![ffi::BasePrivateDeletedCopy];
+        test_make_unique![ffi::BasePrivateDeletedCopy];
+        test_call_a_as![ffi::BasePrivateDeletedCopy, ffi::PrivateDeletedCopy];
+
+        test_call_a_as![ffi::BasePrivateDeletedCopyNoDefault, ffi::PrivateDeletedCopyNoDefault];
+
+        test_constructible![ffi::BasePrivateMoveDeletedCopy];
+        test_make_unique![ffi::BasePrivateMoveDeletedCopy];
+        test_call_a_as![ffi::BasePrivateMoveDeletedCopy, ffi::PrivateMoveDeletedCopy];
+
+        test_constructible![ffi::BasePrivateDeletedMove];
+        test_make_unique![ffi::BasePrivateDeletedMove];
+        test_call_a_as![ffi::BasePrivateDeletedMove, ffi::PrivateDeletedMove];
+
+        test_call_a_as![ffi::BasePrivateDeletedDestructor, ffi::PrivateDeletedDestructor];
+
+        test_call_a_as![ffi::BasePrivateDestructor, ffi::PrivateDestructor];
+
+        test_call_a![ffi::MemberPrivateDeleted];
+
+        test_copyable![ffi::MemberPrivateDeletedDefault];
+        test_movable![ffi::MemberPrivateDeletedDefault];
+        test_call_a![ffi::MemberPrivateDeletedDefault];
+
+        test_constructible![ffi::MemberPrivateDeletedCopy];
+        test_make_unique![ffi::MemberPrivateDeletedCopy];
+        test_call_a![ffi::MemberPrivateDeletedCopy];
+
+        test_call_a![ffi::MemberPrivateDeletedCopyNoDefault];
+
+        test_constructible![ffi::MemberPrivateMoveDeletedCopy];
+        test_make_unique![ffi::MemberPrivateMoveDeletedCopy];
+        test_call_a![ffi::MemberPrivateMoveDeletedCopy];
+
+        test_constructible![ffi::MemberPrivateDeletedMove];
+        test_make_unique![ffi::MemberPrivateDeletedMove];
+        test_call_a![ffi::MemberPrivateDeletedMove];
+
+        test_call_a![ffi::MemberPrivateDeletedDestructor];
+
+        test_call_a![ffi::MemberPrivateDestructor];
+
+        test_call_a_as![ffi::BaseMemberPrivateDeleted, ffi::MemberPrivateDeleted];
+
+        test_copyable![ffi::BaseMemberPrivateDeletedDefault];
+        test_movable![ffi::BaseMemberPrivateDeletedDefault];
+        test_call_a_as![ffi::BaseMemberPrivateDeletedDefault, ffi::MemberPrivateDeletedDefault];
+
+        test_constructible![ffi::BaseMemberPrivateDeletedCopy];
+        test_make_unique![ffi::BaseMemberPrivateDeletedCopy];
+        test_call_a_as![ffi::BaseMemberPrivateDeletedCopy, ffi::MemberPrivateDeletedCopy];
+
+        test_call_a_as![ffi::BaseMemberPrivateDeletedCopyNoDefault, ffi::MemberPrivateDeletedCopyNoDefault];
+
+        test_constructible![ffi::BaseMemberPrivateMoveDeletedCopy];
+        test_make_unique![ffi::BaseMemberPrivateMoveDeletedCopy];
+        test_call_a_as![ffi::BaseMemberPrivateMoveDeletedCopy, ffi::MemberPrivateMoveDeletedCopy];
+
+        test_constructible![ffi::BaseMemberPrivateDeletedMove];
+        test_make_unique![ffi::BaseMemberPrivateDeletedMove];
+        test_call_a_as![ffi::BaseMemberPrivateDeletedMove, ffi::MemberPrivateDeletedMove];
+
+        test_call_a_as![ffi::BaseMemberPrivateDeletedDestructor, ffi::MemberPrivateDeletedDestructor];
+
+        test_call_a_as![ffi::BaseMemberPrivateDestructor, ffi::MemberPrivateDestructor];
+    };
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &[
+            "AllImplicitlyDefaulted",
+            "PublicDeleted",
+            "PublicDeletedDefault",
+            "PublicDeletedCopy",
+            "PublicDeletedCopyNoDefault",
+            "PublicMoveDeletedCopy",
+            "PublicDeletedMove",
+            "PublicDeletedDestructor",
+            "PublicDestructor",
+            "ProtectedDeleted",
+            "ProtectedDeletedDefault",
+            "ProtectedDeletedCopy",
+            "ProtectedDeletedCopyNoDefault",
+            "ProtectedMoveDeletedCopy",
+            "ProtectedDeletedMove",
+            "ProtectedDeletedDestructor",
+            "ProtectedDestructor",
+            "PrivateDeleted",
+            "PrivateDeletedDefault",
+            "PrivateDeletedCopy",
+            "PrivateDeletedCopyNoDefault",
+            "PrivateMoveDeletedCopy",
+            "PrivateDeletedMove",
+            "PrivateDeletedDestructor",
+            "PrivateDestructor",
+            "NonConstCopy",
+            "TwoCopy",
+            "MemberPointerDeleted",
+            "MemberConstPointerDeleted",
+            // TODO: Handle top-level const on C++ members correctly.
+            //"MemberConst",
+            "MemberReferenceDeleted",
+            "MemberConstReferenceDeleted",
+            "MemberReference",
+            "MemberConstReference",
+            "MemberRvalueReferenceDeleted",
+            "MemberRvalueReference",
+            "BasePublicDeleted",
+            "BasePublicDeletedDefault",
+            "BasePublicDeletedCopy",
+            "BasePublicDeletedCopyNoDefault",
+            "BasePublicMoveDeletedCopy",
+            "BasePublicDeletedMove",
+            "BasePublicDeletedDestructor",
+            "BasePublicDestructor",
+            "MemberPublicDeleted",
+            "MemberPublicDeletedDefault",
+            "MemberPublicDeletedCopy",
+            "MemberPublicDeletedCopyNoDefault",
+            "MemberPublicMoveDeletedCopy",
+            "MemberPublicDeletedMove",
+            "MemberPublicDeletedDestructor",
+            "MemberPublicDestructor",
+            "BaseMemberPublicDeleted",
+            "BaseMemberPublicDeletedDefault",
+            "BaseMemberPublicDeletedCopy",
+            "BaseMemberPublicDeletedCopyNoDefault",
+            "BaseMemberPublicMoveDeletedCopy",
+            "BaseMemberPublicDeletedMove",
+            "BaseMemberPublicDeletedDestructor",
+            "BaseMemberPublicDestructor",
+            "BaseProtectedDeleted",
+            "BaseProtectedDeletedDefault",
+            "BaseProtectedDeletedCopy",
+            "BaseProtectedDeletedCopyNoDefault",
+            "BaseProtectedMoveDeletedCopy",
+            "BaseProtectedDeletedMove",
+            "BaseProtectedDeletedDestructor",
+            "BaseProtectedDestructor",
+            "MemberProtectedDeleted",
+            "MemberProtectedDeletedDefault",
+            "MemberProtectedDeletedCopy",
+            "MemberProtectedDeletedCopyNoDefault",
+            "MemberProtectedMoveDeletedCopy",
+            "MemberProtectedDeletedMove",
+            "MemberProtectedDeletedDestructor",
+            "MemberProtectedDestructor",
+            "BaseMemberProtectedDeleted",
+            "BaseMemberProtectedDeletedDefault",
+            "BaseMemberProtectedDeletedCopy",
+            "BaseMemberProtectedDeletedCopyNoDefault",
+            "BaseMemberProtectedMoveDeletedCopy",
+            "BaseMemberProtectedDeletedMove",
+            "BaseMemberProtectedDeletedDestructor",
+            "BaseMemberProtectedDestructor",
+            "BasePrivateDeleted",
+            "BasePrivateDeletedDefault",
+            "BasePrivateDeletedCopy",
+            "BasePrivateDeletedCopyNoDefault",
+            "BasePrivateMoveDeletedCopy",
+            "BasePrivateDeletedMove",
+            "BasePrivateDeletedDestructor",
+            "BasePrivateDestructor",
+            "MemberPrivateDeleted",
+            "MemberPrivateDeletedDefault",
+            "MemberPrivateDeletedCopy",
+            "MemberPrivateDeletedCopyNoDefault",
+            "MemberPrivateMoveDeletedCopy",
+            "MemberPrivateDeletedMove",
+            "MemberPrivateDeletedDestructor",
+            "MemberPrivateDestructor",
+            "BaseMemberPrivateDeleted",
+            "BaseMemberPrivateDeletedDefault",
+            "BaseMemberPrivateDeletedCopy",
+            "BaseMemberPrivateDeletedCopyNoDefault",
+            "BaseMemberPrivateMoveDeletedCopy",
+            "BaseMemberPrivateDeletedMove",
+            "BaseMemberPrivateDeletedDestructor",
+            "BaseMemberPrivateDestructor",
+        ],
+        &[],
+    );
+}
+
+#[test]
+/// Test that destructors hidden in various places are correctly called.
+///
+/// Some types are excluded because we know they behave poorly due to
+/// https://github.com/google/autocxx/issues/829.
+fn test_tricky_destructors() {
+    let cxx = "";
+    let hdr = indoc! {"
+        #include <stdio.h>
+        #include <stdlib.h>
+        // A simple type to let Rust verify the destructor is run.
+        struct DestructorFlag {
+            DestructorFlag() = default;
+            DestructorFlag(const DestructorFlag&) = default;
+            DestructorFlag(DestructorFlag&&) = default;
+
+            ~DestructorFlag() {
+                if (!flag) return;
+                if (*flag) {
+                    fprintf(stderr, \"DestructorFlag is already set\\n\");
+                    abort();
+                }
+                *flag = true;
+                // Note we deliberately do NOT clear the value of `flag`, to catch Rust calling
+                // this destructor twice.
+            }
+
+            bool *flag = nullptr;
+        };
+
+        struct ImplicitlyDefaulted {
+            DestructorFlag flag;
+
+            void set_flag(bool *flag_pointer) { flag.flag = flag_pointer; }
+        };
+        struct ExplicitlyDefaulted {
+            ExplicitlyDefaulted() = default;
+            ~ExplicitlyDefaulted() = default;
+
+            DestructorFlag flag;
+
+            void set_flag(bool *flag_pointer) { flag.flag = flag_pointer; }
+        };
+        struct Explicit {
+            Explicit() = default;
+            ~Explicit() {}
+
+            DestructorFlag flag;
+
+            void set_flag(bool *flag_pointer) { flag.flag = flag_pointer; }
+        };
+
+        struct BaseImplicitlyDefaulted : public ImplicitlyDefaulted {
+            void set_flag(bool *flag_pointer) { ImplicitlyDefaulted::set_flag(flag_pointer); }
+        };
+        struct BaseExplicitlyDefaulted : public ExplicitlyDefaulted {
+            void set_flag(bool *flag_pointer) { ExplicitlyDefaulted::set_flag(flag_pointer); }
+        };
+        struct BaseExplicit : public Explicit {
+            void set_flag(bool *flag_pointer) { Explicit::set_flag(flag_pointer); }
+        };
+
+        struct MemberImplicitlyDefaulted {
+            ImplicitlyDefaulted member;
+
+            void set_flag(bool *flag_pointer) { member.set_flag(flag_pointer); }
+        };
+        struct MemberExplicitlyDefaulted {
+            ExplicitlyDefaulted member;
+
+            void set_flag(bool *flag_pointer) { member.set_flag(flag_pointer); }
+        };
+        struct MemberExplicit {
+            Explicit member;
+
+            void set_flag(bool *flag_pointer) { member.set_flag(flag_pointer); }
+        };
+
+        struct BaseMemberImplicitlyDefaulted : public MemberImplicitlyDefaulted {
+            void set_flag(bool *flag_pointer) { MemberImplicitlyDefaulted::set_flag(flag_pointer); }
+        };
+        struct BaseMemberExplicitlyDefaulted : public MemberExplicitlyDefaulted {
+            void set_flag(bool *flag_pointer) { MemberExplicitlyDefaulted::set_flag(flag_pointer); }
+        };
+        struct BaseMemberExplicit : public MemberExplicit {
+            void set_flag(bool *flag_pointer) { MemberExplicit::set_flag(flag_pointer); }
+        };
+    "};
+    let rs = quote! {
+        macro_rules! test_type {
+            [$t:ty] => {
+                let mut unique_t = <$t>::make_unique();
+                let mut destructor_flag = false;
+                unsafe {
+                    unique_t.pin_mut().set_flag(&mut destructor_flag);
+                }
+                std::mem::drop(unique_t);
+                assert!(destructor_flag, "Destructor did not run with make_unique for {}", quote::quote!{$t});
+
+                moveit! {
+                    let mut moveit_t = <$t>::new();
+                }
+                let mut destructor_flag = false;
+                unsafe {
+                    moveit_t.as_mut().set_flag(&mut destructor_flag);
+                }
+                std::mem::drop(moveit_t);
+                assert!(destructor_flag, "Destructor did not run with moveit for {}", quote::quote!{$t});
+            }
+        }
+
+        test_type![ffi::ImplicitlyDefaulted];
+        test_type![ffi::ExplicitlyDefaulted];
+        test_type![ffi::Explicit];
+        test_type![ffi::BaseImplicitlyDefaulted];
+        test_type![ffi::BaseExplicitlyDefaulted];
+        test_type![ffi::BaseExplicit];
+        test_type![ffi::MemberImplicitlyDefaulted];
+        test_type![ffi::MemberExplicitlyDefaulted];
+        test_type![ffi::MemberExplicit];
+        test_type![ffi::BaseMemberImplicitlyDefaulted];
+        test_type![ffi::BaseMemberExplicitlyDefaulted];
+        test_type![ffi::BaseMemberExplicit];
+    };
+    run_test(
+        cxx,
+        hdr,
+        rs,
+        &[
+            "DestructorFlag",
+            "ImplicitlyDefaulted",
+            "ExplicitlyDefaulted",
+            "Explicit",
+            "BaseImplicitlyDefaulted",
+            "BaseExplicitlyDefaulted",
+            "BaseExplicit",
+            "MemberImplicitlyDefaulted",
+            "MemberExplicitlyDefaulted",
+            "MemberExplicit",
+            "BaseMemberImplicitlyDefaulted",
+            "BaseMemberExplicitlyDefaulted",
+            "BaseMemberExplicit",
+        ],
+        &[],
     );
 }
 

@@ -116,15 +116,23 @@ impl Display for ConvertError {
 #[derive(Clone)]
 pub(crate) enum ErrorContext {
     Item(Ident),
-    Method { self_ty: Ident, method: Ident },
+    Method {
+        self_ty: Ident,
+        method: Ident,
+    },
+    /// This error means the context where the code would be generated doesn't exist, so there's
+    /// nowhere to attach the error, but we still want to record that we had an error generating
+    /// it.
+    NoCode,
 }
 
 impl ErrorContext {
     /// Return the ID in the output mod with which this should be associated
-    pub(crate) fn get_id(&self) -> &Ident {
+    pub(crate) fn get_id(&self) -> Option<&Ident> {
         match self {
-            ErrorContext::Item(id) => id,
-            ErrorContext::Method { self_ty, method: _ } => self_ty,
+            ErrorContext::Item(id) => Some(id),
+            ErrorContext::Method { self_ty, method: _ } => Some(self_ty),
+            ErrorContext::NoCode => None,
         }
     }
 }
@@ -134,6 +142,7 @@ impl std::fmt::Display for ErrorContext {
         match self {
             ErrorContext::Item(id) => write!(f, "{}", id),
             ErrorContext::Method { self_ty, method } => write!(f, "{}::{}", self_ty, method),
+            ErrorContext::NoCode => write!(f, "<not generated>"),
         }
     }
 }

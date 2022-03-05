@@ -35,7 +35,9 @@ where
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
             eprintln!("Ignored item {}: {}", ctx, err);
-            apis.push(ignored_item(ns, ctx, err));
+            if let Some(item) = ignored_item(ns, ctx, err) {
+                apis.push(item);
+            }
             None
         }
     }
@@ -169,11 +171,7 @@ fn api_or_error<T: AnalysisPhase + 'static>(
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
             eprintln!("Ignored {}: {}", name, err);
-            Box::new(std::iter::once(ignored_item(
-                name.get_namespace(),
-                ctx,
-                err,
-            )))
+            Box::new(ignored_item(name.get_namespace(), ctx, err).into_iter())
         }
     }
 }
@@ -200,10 +198,14 @@ pub(crate) fn convert_item_apis<F, A, B: 'static>(
     }))
 }
 
-fn ignored_item<A: AnalysisPhase>(ns: &Namespace, ctx: ErrorContext, err: ConvertError) -> Api<A> {
-    Api::IgnoredItem {
-        name: ApiName::new(ns, ctx.get_id().clone()),
+fn ignored_item<A: AnalysisPhase>(
+    ns: &Namespace,
+    ctx: ErrorContext,
+    err: ConvertError,
+) -> Option<Api<A>> {
+    ctx.get_id().cloned().map(|id| Api::IgnoredItem {
+        name: ApiName::new(ns, id),
         err,
         ctx,
-    }
+    })
 }

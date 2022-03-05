@@ -118,18 +118,26 @@ pub(super) fn gen_function(
 
     if analysis.rust_wrapper_needed {
         match kind {
-            FnKind::Method(ref type_name, MethodKind::Constructor) => {
+            FnKind::Method {
+                ref impl_for,
+                method_kind: MethodKind::Constructor { .. },
+                ..
+            } => {
                 // Constructor.
-                impl_entry = Some(fn_generator.generate_constructor_impl(type_name));
+                impl_entry = Some(fn_generator.generate_constructor_impl(impl_for));
             }
-            FnKind::Method(ref type_name, ref method_kind) => {
+            FnKind::Method {
+                ref impl_for,
+                ref method_kind,
+                ..
+            } => {
                 // Method, or static method.
                 impl_entry = Some(fn_generator.generate_method_impl(
                     matches!(
                         method_kind,
-                        MethodKind::MakeUnique | MethodKind::Constructor
+                        MethodKind::MakeUnique | MethodKind::Constructor { .. }
                     ),
-                    type_name,
+                    impl_for,
                     &ret_type,
                 ));
             }
@@ -144,7 +152,7 @@ pub(super) fn gen_function(
     }
 
     let materialization = match kind {
-        FnKind::Method(..) | FnKind::TraitMethod { .. } => None,
+        FnKind::Method { .. } | FnKind::TraitMethod { .. } => None,
         FnKind::Function => match analysis.rust_rename_strategy {
             _ if analysis.rust_wrapper_needed => {
                 Some(Use::SpecificNameFromBindgen(make_ident(rust_name)))

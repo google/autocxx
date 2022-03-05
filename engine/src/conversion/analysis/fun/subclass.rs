@@ -153,7 +153,10 @@ pub(super) fn create_subclass_function(
             requires_unsafe: UnsafetyNeeded::from_param_details(&analysis.param_details, false),
             is_pure_virtual: matches!(
                 analysis.kind,
-                FnKind::Method(_, MethodKind::PureVirtual(..))
+                FnKind::Method {
+                    method_kind: MethodKind::PureVirtual(..),
+                    ..
+                }
             ),
         }),
     }
