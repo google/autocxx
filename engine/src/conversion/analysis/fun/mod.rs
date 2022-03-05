@@ -114,7 +114,6 @@ pub(crate) enum FnKind {
     Method {
         method_kind: MethodKind,
         impl_for: QualifiedName,
-        type_constructors: PublicConstructors,
     },
     TraitMethod {
         kind: TraitMethodKind,
@@ -458,6 +457,37 @@ impl<'a> FnAnalyzer<'a> {
 
     fn add_make_uniques(&mut self, apis: &mut ApiVec<FnPrePhase>) {
         let mut results = ApiVec::new();
+
+        // Pre-assemble a list of types with known destructors, to avoid having to
+        // do a O(n^2) nested loop.
+        let types_with_destructors: HashSet<_> = apis
+            .iter()
+            .filter_map(|api| match api {
+                Api::Function {
+                    fun,
+                    analysis:
+                        FnAnalysis {
+                            kind: FnKind::TraitMethod { impl_for, .. },
+                            ..
+                        },
+                    ..
+                } if matches!(
+                    **fun,
+                    FuncToConvert {
+                        special_member: Some(SpecialMemberKind::Destructor),
+                        is_deleted: false,
+                        cpp_vis: CppVisibility::Public,
+                        ..
+                    }
+                ) =>
+                {
+                    Some(impl_for)
+                }
+                _ => None,
+            })
+            .cloned()
+            .collect();
+
         for api in apis.iter() {
             if let Api::Function {
                 name,
@@ -468,7 +498,6 @@ impl<'a> FnAnalyzer<'a> {
                             FnKind::Method {
                                 impl_for: sup,
                                 method_kind: MethodKind::Constructor { .. },
-                                type_constructors,
                                 ..
                             },
                         ..
@@ -479,7 +508,7 @@ impl<'a> FnAnalyzer<'a> {
                 let initial_name = name.clone();
                 // If we don't have an accessible destructor, then std::unique_ptr cannot be
                 // instantiated for this C++ type.
-                if !type_constructors.destructor {
+                if !types_with_destructors.contains(sup) {
                     continue;
                 }
 
@@ -845,7 +874,6 @@ impl<'a> FnAnalyzer<'a> {
                         FnKind::Method {
                             impl_for: self_ty,
                             method_kind: MethodKind::Constructor { is_default: false },
-                            type_constructors: PublicConstructors::default(),
                         },
                         error_context,
                         rust_name,
@@ -929,7 +957,6 @@ impl<'a> FnAnalyzer<'a> {
                     FnKind::Method {
                         impl_for: self_ty,
                         method_kind,
-                        type_constructors: PublicConstructors::default(),
                     },
                     error_context,
                     rust_name,
@@ -1859,7 +1886,7 @@ impl<'a> FnAnalyzer<'a> {
             ApiName::new_with_cpp_name(self_ty.name.get_namespace(), ident.clone(), cpp_name);
         let self_ty = &self_ty.name;
         let ns = self_ty.get_namespace().clone();
-        let mut items: Vec<_> = report_any_error(&ns, apis, || {
+        let items: Vec<_> = report_any_error(&ns, apis, || {
             self.analyze_foreign_fn_and_subclasses(
                 fake_api_name,
                 Box::new(FuncToConvert {
@@ -1886,25 +1913,6 @@ impl<'a> FnAnalyzer<'a> {
         .into_iter()
         .flatten()
         .collect();
-        for ref mut api in items.iter_mut() {
-            if let Api::Function {
-                analysis:
-                    FnAnalysis {
-                        kind:
-                            FnKind::Method {
-                                ref mut type_constructors,
-                                ref impl_for,
-                                ..
-                            },
-                        ..
-                    },
-                ..
-            } = api
-            {
-                assert_eq!(impl_for, self_ty, "Synthesized method for unexpected type");
-                *type_constructors = PublicConstructors::from_items_found(items_found);
-            }
-        }
         apis.extend(items.into_iter());
     }
 }

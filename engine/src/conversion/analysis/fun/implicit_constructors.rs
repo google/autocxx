@@ -546,17 +546,6 @@ pub(super) fn find_constructors_present(
         // Otherwise we just leave it at the default of all-false. If we haven't analyzed the
         // type, then we don't know about any constructors it might have.
     };
-
-    apis.mutate_fun_analysis(|_, _, analysis| {
-        if let FnKind::Method {
-            ref impl_for,
-            ref mut type_constructors,
-            ..
-        } = analysis.kind
-        {
-            set_constructors(impl_for, type_constructors);
-        }
-    });
     apis.mutate_struct_analysis(|name, _, analysis| {
         set_constructors(&name.name, &mut analysis.constructors)
     });

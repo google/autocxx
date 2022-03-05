@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{ApiName, FuncToConvert, StructDetails},
+        api::{ApiName, StructDetails},
         convert_error::ErrorContext,
         ConvertError,
     },
@@ -91,24 +91,6 @@ impl<P: AnalysisPhase> ApiVec<P> {
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &Api<P>> {
         self.apis.iter()
-    }
-
-    /// Runs a function which may mutate all the `Api::Function`s, but may not change the name.
-    pub(crate) fn mutate_fun_analysis(
-        &mut self,
-        f: impl Fn(&ApiName, &FuncToConvert, &mut P::FunAnalysis),
-    ) {
-        for api in self.apis.iter_mut() {
-            if let Api::Function {
-                name,
-                fun,
-                ref mut analysis,
-                ..
-            } = api
-            {
-                f(name, fun, analysis);
-            }
-        }
     }
 
     /// Runs a function which may mutate all the `Api::Struct`s, but may not change the name.
