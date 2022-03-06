@@ -42,10 +42,15 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: ApiVec<FnPhase>) -> Ap
         apis = apis
             .into_iter()
             .map(|api| {
-                if api.deps().any(|dep| ignored_items.contains(dep)) {
+                let ignored_dependents: HashSet<_> = api
+                    .deps()
+                    .filter(|dep| ignored_items.contains(dep))
+                    .cloned()
+                    .collect();
+                if !ignored_dependents.is_empty() {
                     iterate_again = true;
                     ignored_items.insert(api.name().clone());
-                    create_ignore_item(api, ConvertError::IgnoredDependent)
+                    create_ignore_item(api, ConvertError::IgnoredDependent(ignored_dependents))
                 } else {
                     let mut missing_deps = api.deps().filter(|dep| {
                         !valid_types.contains(dep) && !known_types().is_known_type(dep)
