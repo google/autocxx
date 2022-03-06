@@ -18,7 +18,7 @@ use crate::{
             pod::PodAnalysis,
             type_converter::TypeKind,
         },
-        api::{Api, CppVisibility, FuncToConvert, SpecialMemberKind},
+        api::{Api, ApiName, CppVisibility, FuncToConvert, SpecialMemberKind},
         apivec::ApiVec,
     },
     known_types::{known_types, KnownTypeConstructorDetails},
@@ -82,7 +82,7 @@ impl SpecialMemberFound {
 ///
 /// Not all of this information is used directly, but we need to track it to determine the
 /// information we do need for classes which are used as members or base classes.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(super) struct ItemsFound {
     pub(super) default_constructor: SpecialMemberFound,
     pub(super) destructor: SpecialMemberFound,
@@ -90,6 +90,15 @@ pub(super) struct ItemsFound {
     /// Remember that [`const_copy_constructor`] may be used in place of this if it exists.
     pub(super) non_const_copy_constructor: SpecialMemberFound,
     pub(super) move_constructor: SpecialMemberFound,
+
+    /// The full name of the type. We identify instances by [`QualifiedName`], because that's
+    /// the only thing which [`FnKind::Method`] has to tie it to, and that's unique enough for
+    /// identification.  However, when generating functions for implicit special members, we need
+    /// the extra information here.
+    ///
+    /// Will always be `Some` if any of the other fields are [`SpecialMemberFound::Implict`],
+    /// otherwise optional.
+    pub(super) name: Option<ApiName>,
 }
 
 impl ItemsFound {
@@ -197,11 +206,9 @@ pub(super) fn find_constructors_present(
             ..
         } = api
         {
-            let full_name = &name;
-            let name = &name.name;
             let find_explicit = |kind: ExplicitKind| -> Option<&ExplicitFound> {
                 explicits.get(&ExplicitType {
-                    ty: name.clone(),
+                    ty: name.name.clone(),
                     kind,
                 })
             };
@@ -209,7 +216,7 @@ pub(super) fn find_constructors_present(
                 if let Some(constructor_details) = known_types().get_constructor_details(qn) {
                     Some(known_type_items_found(constructor_details))
                 } else {
-                    all_items_found.get(qn).copied()
+                    all_items_found.get(qn).cloned()
                 }
             };
             let bases_items_found: Vec<_> = bases.iter().map_while(get_items_found).collect();
@@ -230,6 +237,7 @@ pub(super) fn find_constructors_present(
                             const_copy_constructor: SpecialMemberFound::Implicit,
                             non_const_copy_constructor: SpecialMemberFound::NotPresent,
                             move_constructor: SpecialMemberFound::Implicit,
+                            name: Some(name.clone()),
                         })
                     }
                 })
@@ -249,10 +257,7 @@ pub(super) fn find_constructors_present(
             // known_types.rs, then we'll be able to cope with types which contain strings,
             // unique_ptrs etc.
             let items_found = if bases_items_found.len() != bases.len()
-                || fields_items_found.len() != field_info.len() ||
-                // For now we do not generate implicit constructors for nested structs - see
-                // https://github.com/google/autocxx/issues/884
-                full_name.cpp_name_if_present().is_some()
+                || fields_items_found.len() != field_info.len()
             {
                 let is_explicit = |kind: ExplicitKind| -> SpecialMemberFound {
                     // TODO: For https://github.com/google/autocxx/issues/815, map
@@ -293,6 +298,7 @@ pub(super) fn find_constructors_present(
                     const_copy_constructor: is_explicit(ExplicitKind::ConstCopyConstructor),
                     non_const_copy_constructor: is_explicit(ExplicitKind::NonConstCopyConstructor),
                     move_constructor: is_explicit(ExplicitKind::MoveConstructor),
+                    name: Some(name.clone()),
                 };
                 log::info!(
                     "Special member functions (explicits only) found for {:?}: {:?}",
@@ -321,7 +327,7 @@ pub(super) fn find_constructors_present(
                     //   explicit.map_or(true, |explicit_found| matches!(explicit_found, ExplicitFound::Defaulted(_)))
                     let have_defaulted = explicit.is_none()
                         && !explicits.iter().any(|(ExplicitType { ty, kind }, _)| {
-                            ty == name
+                            ty == &name.name
                                 && match *kind {
                                     ExplicitKind::DefaultConstructor => false,
                                     ExplicitKind::ConstCopyConstructor => true,
@@ -514,6 +520,7 @@ pub(super) fn find_constructors_present(
                     const_copy_constructor,
                     non_const_copy_constructor,
                     move_constructor,
+                    name: Some(name.clone()),
                 };
                 log::info!(
                     "Special member items found for {:?}: {:?}",
@@ -523,7 +530,9 @@ pub(super) fn find_constructors_present(
                 items_found
             };
             assert!(
-                all_items_found.insert(name.clone(), items_found).is_none(),
+                all_items_found
+                    .insert(name.name.clone(), items_found)
+                    .is_none(),
                 "Duplicate struct: {:?}",
                 name
             );
@@ -677,5 +686,6 @@ fn known_type_items_found(constructor_details: KnownTypeConstructorDetails) -> I
         const_copy_constructor: exists_public_if(constructor_details.has_const_copy_constructor),
         non_const_copy_constructor: SpecialMemberFound::NotPresent,
         move_constructor: exists_public_if(constructor_details.has_move_constructor),
+        name: None,
     }
 }

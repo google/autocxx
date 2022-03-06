@@ -5432,10 +5432,24 @@ fn test_multiply_nested_inner_type() {
         struct Turkey {
             struct Duck {
                 struct Hen {
-                    Hen() {}
                     int wings;
                 };
-                struct HenImplicit {
+                struct HenWithDefault {
+                    HenWithDefault() = default;
+                    int wings;
+                };
+                struct HenWithDestructor {
+                    ~HenWithDestructor() = default;
+                    int wings;
+                };
+                struct HenWithCopy {
+                    HenWithCopy() = default;
+                    HenWithCopy(const HenWithCopy&) = default;
+                    int wings;
+                };
+                struct HenWithMove {
+                    HenWithMove() = default;
+                    HenWithMove(HenWithMove&&) = default;
                     int wings;
                 };
             };
@@ -5443,15 +5457,41 @@ fn test_multiply_nested_inner_type() {
         "};
     let rs = quote! {
         ffi::Turkey_Duck_Hen::make_unique();
-        // TODO: Re-enable for https://github.com/google/autocxx/issues/884.
-        //ffi::Turkey_Duck_HenImplicit::make_unique();
+        ffi::Turkey_Duck_HenWithDefault::make_unique();
+        ffi::Turkey_Duck_HenWithDestructor::make_unique();
+        ffi::Turkey_Duck_HenWithCopy::make_unique();
+        ffi::Turkey_Duck_HenWithMove::make_unique();
+
+        moveit! {
+            let hen = ffi::Turkey_Duck_Hen::new();
+            let moved_hen = autocxx::moveit::new::mov(hen);
+            let _copied_hen = autocxx::moveit::new::copy(moved_hen);
+
+            let hen = ffi::Turkey_Duck_HenWithDefault::new();
+            let moved_hen = autocxx::moveit::new::mov(hen);
+            let _copied_hen = autocxx::moveit::new::copy(moved_hen);
+
+            let _hen = ffi::Turkey_Duck_HenWithDestructor::new();
+
+            let hen = ffi::Turkey_Duck_HenWithCopy::new();
+            let _copied_hen = autocxx::moveit::new::copy(hen);
+
+            let hen = ffi::Turkey_Duck_HenWithMove::new();
+            let _moved_hen = autocxx::moveit::new::mov(hen);
+        }
     };
     run_test(
         "",
         hdr,
         rs,
         &[],
-        &["Turkey_Duck_Hen", "Turkey_Duck_HenImplicit"],
+        &[
+            "Turkey_Duck_Hen",
+            "Turkey_Duck_HenWithDefault",
+            "Turkey_Duck_HenWithDestructor",
+            "Turkey_Duck_HenWithCopy",
+            "Turkey_Duck_HenWithMove",
+        ],
     );
 }
 
