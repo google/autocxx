@@ -179,7 +179,6 @@ restrictions. Currently the C++ type <code>A::B</code> will be given the Rust na
 struct Turkey {
     struct Duck {
         struct Hen {
-            Hen() {}
             int wings;
         };
     };
@@ -201,7 +200,6 @@ fn main() {
 }
 
 </code></pre>
-<p>(Currently, only explicit constructors are supported for such nested types.)</p>
 <h2 id="overloads"><a class="header" href="#overloads">Overloads</a></h2>
 <p>See <a href="cpp_functions.html">the chapter on C++ functions</a>.</p>
 
