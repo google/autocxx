@@ -78,9 +78,30 @@ impl CodeCheckerFns for StringFinder {
     }
 }
 
-/// Returns a code checker which simply hunts for a given string in the results
-pub(crate) fn make_string_finder(error_texts: Vec<&'static str>) -> CodeChecker {
-    Box::new(StringFinder(error_texts))
+/// Returns a code checker which simply hunts for all of the given strings in the results.
+pub(crate) fn make_string_finder(strings: Vec<&'static str>) -> CodeChecker {
+    Box::new(StringFinder(strings))
+}
+
+struct NotStringFinder(Vec<&'static str>);
+
+impl CodeCheckerFns for NotStringFinder {
+    fn check_rust(&self, rs: syn::File) -> Result<(), TestError> {
+        let mut ts = TokenStream::new();
+        rs.to_tokens(&mut ts);
+        let toks = ts.to_string();
+        for msg in &self.0 {
+            if toks.contains(msg) {
+                return Err(TestError::RsCodeExaminationFail);
+            };
+        }
+        Ok(())
+    }
+}
+
+/// Returns a code checker which fails if any of the given strings are round in the results.
+pub(crate) fn make_not_string_finder(strings: Vec<&'static str>) -> CodeChecker {
+    Box::new(NotStringFinder(strings))
 }
 
 /// Counts the number of generated C++ files.

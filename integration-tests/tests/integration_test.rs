@@ -11,7 +11,8 @@ use crate::{
         make_clang_arg_adder, EnableAutodiscover, SetSuppressSystemHeaders, SkipCxxGen,
     },
     code_checkers::{
-        make_error_finder, make_string_finder, CppCounter, CppMatcher, NoSystemHeadersChecker,
+        make_error_finder, make_not_string_finder, make_string_finder, CppCounter, CppMatcher,
+        NoSystemHeadersChecker,
     },
 };
 use autocxx_integration_tests::{
@@ -8491,6 +8492,116 @@ fn test_skip_cxx_gen() {
         directives_from_lists(&["do_nothing"], &[], None),
         Some(Box::new(SkipCxxGen)),
         Some(Box::new(CppCounter::new(1))),
+        None,
+    );
+}
+
+#[test]
+// TODO: Uncomment the parts related to nested types once
+// https://github.com/google/autocxx/issues/893 is fixed.
+fn test_replacement_types() {
+    let hdr = indoc! {"
+        #define CLASS_BODY(starting) \\
+            public: \\
+                void set_y(int n) { x = n; } \\
+                int get_y() const { return x; } \\
+                void should_not_appear() {} \\
+            private: \\
+                int x = starting;
+        #define REPLACEMENT_BODY \\
+            public: \\
+                void set_y(int n); \\
+                int get_y() const; \\
+                int y;
+
+        class A { CLASS_BODY(10) };
+        class APod { CLASS_BODY(15) };
+
+        /// <div rustbindgen replaces=\"A\"></div>
+        class AReplacement { REPLACEMENT_BODY };
+        /// <div rustbindgen replaces=\"APod\"></div>
+        class APodReplacement { REPLACEMENT_BODY };
+
+        struct Wrapper {
+            class B { CLASS_BODY(20) };
+            class BPod { CLASS_BODY(25) };
+
+            /// <div rustbindgen replaces=\"Wrapper_B\"></div>
+            class BReplacement { REPLACEMENT_BODY };
+            /// <div rustbindgen replaces=\"Wrapper_BPod\"></div>
+            class BPodReplacement { REPLACEMENT_BODY };
+
+            class C { CLASS_BODY(30) };
+            class CPod { CLASS_BODY(35) };
+        };
+
+        /// <div rustbindgen replaces=\"Wrapper_C\"></div>
+        class CReplacement { REPLACEMENT_BODY };
+        /// <div rustbindgen replaces=\"Wrapper_CPod\"></div>
+        class CPodReplacement { REPLACEMENT_BODY };
+    "};
+    let rs = quote! {
+        {
+            let mut a = ffi::A::make_unique();
+            assert_eq!(a.get_y(), autocxx::c_int(10));
+            a.pin_mut().set_y(autocxx::c_int(1));
+
+            let mut a_pod = ffi::APod::make_unique();
+            assert_eq!(a_pod.y, 15);
+            a_pod.y = 1;
+            assert_eq!(a_pod.get_y(), autocxx::c_int(1));
+            a_pod.pin_mut().set_y(autocxx::c_int(2));
+            assert_eq!(a_pod.y, 2);
+        }
+
+        /*
+        {
+            let mut b = ffi::Wrapper_B::make_unique();
+            assert_eq!(b.get_y(), autocxx::c_int(20));
+            b.pin_mut().set_y(autocxx::c_int(1));
+
+            let mut b_pod = ffi::Wrapper_BPod::make_unique();
+            assert_eq!(b_pod.y, 25);
+            b_pod.y = 1;
+            assert_eq!(b_pod.get_y(), autocxx::c_int(1));
+            b_pod.pin_mut().set_y(autocxx::c_int(2));
+            assert_eq!(b_pod.y, 2);
+        }
+
+        {
+            let mut c = ffi::Wrapper_C::make_unique();
+            assert_eq!(c.get_y(), autocxx::c_int(20));
+            c.pin_mut().set_y(autocxx::c_int(1));
+
+            let mut c_pod = ffi::Wrapper_CPod::make_unique();
+            assert_eq!(c_pod.y, 25);
+            c_pod.y = 1;
+            assert_eq!(c_pod.get_y(), autocxx::c_int(1));
+            c_pod.pin_mut().set_y(autocxx::c_int(2));
+            assert_eq!(c_pod.y, 2);
+        }
+        */
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(
+            &[
+                "A",
+                //"Wrapper_B",
+                //"Wrapper_C",
+            ],
+            &[
+                "APod",
+                //"Wrapper_BPod",
+                //"Wrapper_CPod",
+            ],
+            None,
+        ),
+        None,
+        // Verify that all the types actually got replaced.
+        Some(make_not_string_finder(vec!["should_not_appear"])),
         None,
     );
 }
