@@ -150,7 +150,8 @@ implementation files. This will also generate <code>.rs</code> side bindings.</l
 If you use <code>autocxx-build</code>, this happens automatically. (You can alternatively
 specify <code>AUTOCXX_RS_FILE</code> to give a precise filename as opposed to a directory to search,
 though this isn't recommended unless your build system specifically requires it
-because it allows only a single <code>include_cpp!</code> block per <code>.rs</code> file.)</li>
+because it allows only a single <code>include_cpp!</code> block per <code>.rs</code> file.) See <code>gen --help</code>
+for details on the naming of the generated files.</li>
 </ul>
 <pre class="mermaid">flowchart TB
     s(Rust source with include_cpp!)
