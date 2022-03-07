@@ -21,7 +21,9 @@ use std::{
     sync::Mutex,
 };
 
-use autocxx_engine::{Builder, BuilderContext, BuilderError, RebuildDependencyRecorder, HEADER};
+use autocxx_engine::{
+    Builder, BuilderBuild, BuilderContext, BuilderError, RebuildDependencyRecorder, HEADER,
+};
 use log::info;
 use once_cell::sync::OnceCell;
 use proc_macro2::{Span, TokenStream};
@@ -52,6 +54,50 @@ pub fn doctest(
         eprintln!("Stdout from test:\n{}", stdout_str);
     }
     r
+}
+
+fn configure_builder(b: &mut BuilderBuild) -> &mut BuilderBuild {
+    let target = rust_info::get().target_triple.unwrap();
+    b.host(&target)
+        .target(&target)
+        .opt_level(1)
+        .flag("-std=c++14") // For clang
+        .flag_if_supported("/GX") // Enable C++ exceptions for msvc
+}
+
+/// API to test building pre-generated files.
+pub fn build_from_folder(
+    folder: &Path,
+    main_rs_file: &Path,
+    generated_rs_files: Vec<PathBuf>,
+    cpp_files: &[&str],
+) -> Result<(), TestError> {
+    let target_dir = folder.join("target");
+    std::fs::create_dir(&target_dir).unwrap();
+    let mut b = BuilderBuild::new();
+    for cpp_file in cpp_files.iter() {
+        b.file(folder.join(cpp_file));
+    }
+    configure_builder(&mut b)
+        .out_dir(&target_dir)
+        .include(folder)
+        .include(folder.join("demo"))
+        .try_compile("autocxx-demo")
+        .map_err(TestError::CppBuild)?;
+    // use the trybuild crate to build the Rust file.
+    let r = get_builder().lock().unwrap().build(
+        &target_dir,
+        "autocxx-demo",
+        &folder,
+        &["input.h", "cxx.h"],
+        &main_rs_file,
+        generated_rs_files,
+    );
+    if r.is_err() {
+        return Err(TestError::RsBuild); // details of Rust panic are a bit messy to include, and
+                                        // not important at the moment.
+    }
+    Ok(())
 }
 
 fn get_builder() -> &'static Mutex<LinkableTryBuilder> {
@@ -387,8 +433,6 @@ pub fn do_run_test_manual(
         }
     }
 
-    let target = rust_info::get().target_triple.unwrap();
-
     if !cxx_code.is_empty() {
         // Step 4: Write the C++ code snippet to a .cc file, along with a #include
         //         of the header emitted in step 5.
@@ -397,13 +441,7 @@ pub fn do_run_test_manual(
         b.file(cxx_path);
     }
 
-    let b = b
-        .out_dir(&target_dir)
-        .host(&target)
-        .target(&target)
-        .opt_level(1)
-        .flag("-std=c++14") // For clang
-        .flag_if_supported("/GX"); // Enable C++ exceptions for msvc
+    let b = configure_builder(&mut b).out_dir(&target_dir);
     let b = if let Some(builder_modifier) = builder_modifier {
         builder_modifier.modify_cc_builder(b)
     } else {

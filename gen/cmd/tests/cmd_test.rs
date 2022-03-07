@@ -15,11 +15,14 @@
 use std::{convert::TryInto, fs::File, io::Write, path::Path};
 
 use assert_cmd::Command;
+use autocxx_integration_tests::build_from_folder;
 use tempdir::TempDir;
 
 static MAIN_RS: &str = include_str!("../../../demo/src/main.rs");
 static INPUT_H: &str = include_str!("../../../demo/src/input.h");
 static BLANK: &str = "// Blank autocxx placeholder";
+
+const KEEP_TEMPDIRS: bool = false;
 
 #[test]
 fn test_help() -> Result<(), Box<dyn std::error::Error>> {
@@ -70,7 +73,21 @@ where
 #[test]
 fn test_gen() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
-    base_test(&tmp_dir, |_| {})
+    base_test(&tmp_dir, |_| {})?;
+    File::create(tmp_dir.path().join("cxx.h"))
+        .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
+    std::env::set_var("OUT_DIR", tmp_dir.path().to_str().unwrap());
+    let r = build_from_folder(
+        tmp_dir.path(),
+        &tmp_dir.path().join("demo/main.rs"),
+        vec![tmp_dir.path().join("autocxx-ffi-default-gen.rs")],
+        &["gen0.cc"],
+    );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tmp_dir.into_path().to_str());
+    }
+    r.unwrap();
+    Ok(())
 }
 
 #[test]
@@ -110,6 +127,18 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     assert_not_contentful(&tmp_dir, "gen2.h");
     assert_contentful(&tmp_dir, "cxxgen.h");
     assert_contentful(&tmp_dir, "gen.complete.rs");
+    File::create(tmp_dir.path().join("cxx.h"))
+        .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
+    let r = build_from_folder(
+        tmp_dir.path(),
+        &tmp_dir.path().join("gen.complete.rs"),
+        vec![],
+        &["gen0.cc"],
+    );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tmp_dir.into_path().to_str());
+    }
+    r.unwrap();
     Ok(())
 }
 

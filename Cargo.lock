@@ -151,8 +151,11 @@ name = "autocxx-gen"
 version = "0.16.0"
 dependencies = [
  "assert_cmd",
+ "autocxx",
  "autocxx-engine",
+ "autocxx-integration-tests",
  "clap 2.33.4",
+ "cxx",
  "env_logger 0.9.0",
  "proc-macro2",
  "quote",
