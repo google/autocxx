@@ -6,8 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::collections::HashSet;
 use std::fmt::Display;
 
+use itertools::Itertools;
 use syn::Ident;
 
 use crate::types::{Namespace, QualifiedName};
@@ -38,7 +40,7 @@ pub enum ConvertError {
     UnusedTemplateParam,
     TooManyUnderscores,
     UnknownDependentType(QualifiedName),
-    IgnoredDependent,
+    IgnoredDependent(HashSet<QualifiedName>),
     ReservedName(String),
     DuplicateCxxBridgeName,
     UnsupportedReceiver,
@@ -91,7 +93,7 @@ impl Display for ConvertError {
             ConvertError::UnusedTemplateParam => write!(f, "This function or method uses a type where one of the template parameters was incomprehensible to bindgen/autocxx - probably because it uses template specialization.")?,
             ConvertError::TooManyUnderscores => write!(f, "Names containing __ are reserved by C++ so not acceptable to cxx")?,
             ConvertError::UnknownDependentType(qn) => write!(f, "This item relies on a type not known to autocxx ({})", qn.to_cpp_name())?,
-            ConvertError::IgnoredDependent => write!(f, "This item depends on some other type which autocxx could not generate.")?,
+            ConvertError::IgnoredDependent(qns) => write!(f, "This item depends on some other type(s) which autocxx could not generate, some of them are: {}", qns.iter().join(", "))?,
             ConvertError::ReservedName(id) => write!(f, "The item name '{}' is a reserved word in Rust.", id)?,
             ConvertError::DuplicateCxxBridgeName => write!(f, "This item name is used in multiple namespaces. At present, autocxx and cxx allow only one type of a given name. This limitation will be fixed in future.")?,
             ConvertError::UnsupportedReceiver => write!(f, "This is a method on a type which can't be used as the receiver in Rust (i.e. self/this). This is probably because some type involves template specialization.")?,
