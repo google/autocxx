@@ -8,13 +8,13 @@
 
 #![forbid(unsafe_code)]
 
-use autocxx_engine::parse_file;
+use autocxx_engine::{parse_file, HeaderNamer};
 use clap::{crate_authors, crate_version, App, Arg, ArgGroup};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::{fs::File, path::Path};
+use std::{cell::Cell, fs::File, path::Path};
 
 pub(crate) static BLANK: &str = "// Blank autocxx placeholder";
 
@@ -55,13 +55,21 @@ a) set AUTOCXX_RS when using autocxx_macro
 b) build all *.cc files produced by this tool.
 
 If your build system requires each build rule to make precise filenames
-known in advance, then use --generate-exact 2
-and --fix-rs-include-name. If you do this, you'll need to:
-a) Have exactly one include_cpp directive in each source .rs file
-   (or use different numbers with --generate-exact)
-b) Set AUTOCXX_RS_FILE when using autocxx_macro.
-c) Teach your build system always that the outputs of this tool
-   are always guaranteed to be gen0.include.rs, gen0.cc and gen1.cc.
+known in advance, then you will need to:
+a) Use `--generate-exact <N> --gen-rs-complete`
+b) Teach your build system that the C++ files to compile are named `gen0.h`,
+   `gen0.cc`, `gen1.h`, `gen1.cc`, etc (through `N`), corresponding
+   to each `include_cpp!` section, plus 'cxxgen.h`. `gen.complete.rs` will also
+   be generated and should be compiled _instead of_ the original Rust file.
+c) If `N` is bigger than the number of files needed, extra no-op files will
+   be emitted. These may still be compiled normally, but won't do anything. If
+   `N` is smaller than the number of files needed, generation will fail.
+
+Note that there is currently no way to teach each `include_cpp!` section
+which `.include.rs` file to use, so the only way to get fixed output paths is
+with `--gen-rs-complete`. There are always multiple `.cc` files (even with just
+a single `include_cpp!` section), and we always generate the same number of each
+type of file.
 ";
 
 fn main() {
@@ -165,14 +173,14 @@ fn main() {
             Arg::with_name("cxx-h-path")
                 .long("cxx-h-path")
                 .value_name("PREFIX")
-                .help("prefix for path to cxx.h within #include statements. Must end in /")
+                .help("prefix for path to cxx.h (from the cxx crate) within #include statements. Must end in /")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("cxxgen-h-path")
                 .long("cxxgen-h-path")
                 .value_name("PREFIX")
-                .help("prefix for path to cxxgen.h within #include statements. Must end in /")
+                .help("prefix for path to cxxgen.h (which we generate into the output directory) within #include statements. Must end in /")
                 .takes_value(true),
         )
         .arg(
@@ -199,12 +207,26 @@ fn main() {
         .unwrap_or_default()
         .collect();
     let suppress_system_headers = matches.is_present("suppress-system-headers");
+    let desired_number = matches
+        .value_of("generate-exact")
+        .map(|s| s.parse::<usize>().unwrap());
+    let header_counter = Cell::new(0);
+    let header_namer = if desired_number.is_some() {
+        HeaderNamer(Box::new(|_| {
+            let r = format!("gen{}.h", header_counter.get());
+            header_counter.set(header_counter.get() + 1);
+            r
+        }))
+    } else {
+        Default::default()
+    };
     let cpp_codegen_options = autocxx_engine::CppCodegenOptions {
         suppress_system_headers,
         cxx_impl_annotations: get_option_string("cxx-impl-annotations", &matches),
         path_to_cxx_h: get_option_string("cxx-h-path", &matches),
         path_to_cxxgen_h: get_option_string("cxxgen-h-path", &matches),
         skip_cxx_gen: matches.is_present("skip-cxx-gen"),
+        header_namer,
     };
     // In future, we should provide an option to write a .d file here
     // by passing a callback into the dep_recorder parameter here.
@@ -213,9 +235,6 @@ fn main() {
         .resolve_all(incs, &extra_clang_args, None, &cpp_codegen_options)
         .expect("Unable to resolve macro");
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
-    let desired_number = matches
-        .value_of("generate-exact")
-        .map(|s| s.parse::<usize>().unwrap());
     if matches.is_present("gen-cpp") {
         let cpp = matches.value_of("cpp-extension").unwrap();
         let mut counter = 0usize;
@@ -232,6 +251,8 @@ fn main() {
         }
         write_placeholders(&outdir, counter, desired_number, cpp);
     }
+    drop(cpp_codegen_options);
+    write_placeholders(&outdir, header_counter.into_inner(), desired_number, "h");
     if matches.is_present("gen-rs-complete") {
         let mut ts = TokenStream::new();
         parsed_file.to_tokens(&mut ts);
@@ -254,7 +275,9 @@ fn main() {
             write_to_file(&outdir, fname, ts.to_string().as_bytes());
             counter += 1;
         }
-        write_placeholders(&outdir, counter, desired_number, "include.rs");
+        if matches.is_present("fix-rs-include-name") {
+            write_placeholders(&outdir, counter, desired_number, "include.rs");
+        }
     }
 }
 
@@ -271,7 +294,7 @@ fn write_placeholders(
 ) {
     if let Some(desired_number) = desired_number {
         if counter > desired_number {
-            panic!("More include_cpp! sections were found than expected");
+            panic!("More .{} files were generated than expected. Increase the value passed to --generate-exact or reduce the number of include_cpp! sections.", extension);
         }
         while counter < desired_number {
             let fname = format!("gen{}.{}", counter, extension);

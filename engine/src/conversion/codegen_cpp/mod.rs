@@ -95,7 +95,7 @@ pub(crate) struct CppCodeGenerator<'a> {
     inclusions: String,
     original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
-    cpp_codegen_options: &'a CppCodegenOptions,
+    cpp_codegen_options: &'a CppCodegenOptions<'a>,
 }
 
 struct SubclassFunction<'a> {
@@ -230,7 +230,10 @@ impl<'a> CppCodeGenerator<'a> {
                 headers, self.inclusions, type_definitions, declarations
             );
             log::info!("Additional C++ decls:\n{}", declarations);
-            let header_name = format!("autocxxgen_{}.h", self.config.get_mod_name());
+            let header_name = self
+                .cpp_codegen_options
+                .header_namer
+                .name_header(self.config.get_mod_name().to_string());
             let implementation = if self
                 .additional_functions
                 .iter()

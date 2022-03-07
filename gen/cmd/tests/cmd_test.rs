@@ -26,12 +26,16 @@ fn base_test<F>(tmp_dir: &TempDir, arg_modifier: F) -> Result<(), Box<dyn std::e
 where
     F: FnOnce(&mut Command),
 {
-    let result = base_test_ex(tmp_dir, arg_modifier);
+    let result = base_test_ex(tmp_dir, arg_modifier, false);
     assert_contentful(tmp_dir, "gen0.cc");
     result
 }
 
-fn base_test_ex<F>(tmp_dir: &TempDir, arg_modifier: F) -> Result<(), Box<dyn std::error::Error>>
+fn base_test_ex<F>(
+    tmp_dir: &TempDir,
+    arg_modifier: F,
+    use_complete_rs: bool,
+) -> Result<(), Box<dyn std::error::Error>>
 where
     F: FnOnce(&mut Command),
 {
@@ -47,10 +51,13 @@ where
         .arg(demo_rs)
         .arg("--outdir")
         .arg(tmp_dir.path().to_str().unwrap())
-        .arg("--gen-cpp")
-        .arg("--gen-rs-include")
-        .assert()
-        .success();
+        .arg("--gen-cpp");
+    if use_complete_rs {
+        cmd.arg("--gen-rs-complete");
+    } else {
+        cmd.arg("--gen-rs-include");
+    }
+    cmd.assert().success();
     Ok(())
 }
 
@@ -71,7 +78,7 @@ fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
             .arg("--generate-exact")
             .arg("3");
     })?;
-    assert_contains(&tmp_dir, "autocxxgen_ffi.h", "foo/cxx.h");
+    assert_contains(&tmp_dir, "gen0.h", "foo/cxx.h");
     // Currently we don't test cxxgen-h-path because we build the demo code
     // which doesn't refer to generated cxx header code.
     Ok(())
@@ -80,17 +87,23 @@ fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
-    base_test(&tmp_dir, |cmd| {
-        cmd.arg("--generate-exact")
-            .arg("3")
-            .arg("--fix-rs-include-name");
-    })?;
+    base_test_ex(
+        &tmp_dir,
+        |cmd| {
+            cmd.arg("--generate-exact").arg("3");
+        },
+        true,
+    )?;
     assert_contentful(&tmp_dir, "gen0.cc");
-    assert_exists(&tmp_dir, "gen1.cc");
-    assert_exists(&tmp_dir, "gen2.cc");
-    assert_contentful(&tmp_dir, "gen0.include.rs");
-    assert_exists(&tmp_dir, "gen1.include.rs");
-    assert_exists(&tmp_dir, "gen2.include.rs");
+    assert_contentful(&tmp_dir, "gen0.h");
+    // TODO: This file will actually try #including one of our .h files if there's anything to put
+    // in it. Figure out how to make that happen to test that it works.
+    assert_not_contentful(&tmp_dir, "gen1.cc");
+    assert_not_contentful(&tmp_dir, "gen1.h");
+    assert_not_contentful(&tmp_dir, "gen2.cc");
+    assert_not_contentful(&tmp_dir, "gen2.h");
+    assert_contentful(&tmp_dir, "cxxgen.h");
+    assert_contentful(&tmp_dir, "gen.complete.rs");
     Ok(())
 }
 
@@ -125,16 +138,22 @@ fn test_gen_repro() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_skip_cxx_gen() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
-    base_test_ex(&tmp_dir, |cmd| {
-        cmd.arg("--generate-exact")
-            .arg("3")
-            .arg("--fix-rs-include-name")
-            .arg("--skip-cxx-gen");
-    })?;
-    assert_contentful(&tmp_dir, "autocxxgen_ffi.h");
+    base_test_ex(
+        &tmp_dir,
+        |cmd| {
+            cmd.arg("--generate-exact")
+                .arg("3")
+                .arg("--fix-rs-include-name")
+                .arg("--skip-cxx-gen");
+        },
+        false,
+    )?;
+    assert_contentful(&tmp_dir, "gen0.h");
     assert_not_contentful(&tmp_dir, "gen0.cc");
     assert_exists(&tmp_dir, "gen1.cc");
+    assert_exists(&tmp_dir, "gen1.h");
     assert_exists(&tmp_dir, "gen2.cc");
+    assert_exists(&tmp_dir, "gen2.h");
     assert_contentful(&tmp_dir, "gen0.include.rs");
     assert_exists(&tmp_dir, "gen1.include.rs");
     assert_exists(&tmp_dir, "gen2.include.rs");
@@ -180,7 +199,7 @@ fn assert_exists(outdir: &TempDir, fname: &str) {
 
 fn assert_contains(outdir: &TempDir, fname: &str, pattern: &str) {
     let p = outdir.path().join(fname);
-    let content = std::fs::read_to_string(&p).unwrap();
+    let content = std::fs::read_to_string(&p).expect(fname);
     eprintln!("content = {}", content);
     assert!(content.contains(pattern));
 }

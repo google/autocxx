@@ -12,7 +12,7 @@ use autocxx_engine::{BuilderBuild, BuilderContext, BuilderError, RebuildDependen
 use std::{collections::HashSet, io::Write, sync::Mutex};
 use std::{ffi::OsStr, path::Path};
 
-pub type Builder = autocxx_engine::Builder<CargoBuilderContext>;
+pub type Builder = autocxx_engine::Builder<'static, CargoBuilderContext>;
 
 #[deprecated]
 /// Use [`Builder::new`] instead

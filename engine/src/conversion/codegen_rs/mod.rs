@@ -134,6 +134,7 @@ pub(crate) struct RsCodeGenerator<'a> {
     bindgen_mod: ItemMod,
     original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
+    header_name: Option<String>,
 }
 
 impl<'a> RsCodeGenerator<'a> {
@@ -143,12 +144,14 @@ impl<'a> RsCodeGenerator<'a> {
         include_list: &'a [String],
         bindgen_mod: ItemMod,
         config: &'a IncludeCppConfig,
+        header_name: Option<String>,
     ) -> Vec<Item> {
         let c = Self {
             include_list,
             bindgen_mod,
             original_name_map: original_name_map_from_apis(&all_apis),
             config,
+            header_name,
         };
         c.rs_codegen(all_apis)
     }
@@ -285,7 +288,7 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn build_include_foreign_items(&self, has_additional_cpp_needs: bool) -> Vec<ForeignItem> {
         let extra_inclusion = if has_additional_cpp_needs {
-            Some(format!("autocxxgen_{}.h", self.config.get_mod_name()))
+            Some(self.header_name.clone().unwrap())
         } else {
             None
         };

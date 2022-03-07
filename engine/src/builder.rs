@@ -77,14 +77,14 @@ pub trait BuilderContext {
 /// It would be unusual to use this directly - see the `autocxx_build` or
 /// `autocxx_gen` crates.
 #[cfg_attr(feature = "nightly", doc(cfg(feature = "build")))]
-pub struct Builder<BuilderContext> {
+pub struct Builder<'a, BuilderContext> {
     rs_file: PathBuf,
     autocxx_incs: Vec<OsString>,
     extra_clang_args: Vec<String>,
     dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     custom_gendir: Option<PathBuf>,
     auto_allowlist: bool,
-    cpp_codegen_options: CppCodegenOptions,
+    cpp_codegen_options: CppCodegenOptions<'a>,
     // This member is to ensure that this type is parameterized
     // by a BuilderContext. The goal is to balance three needs:
     // (1) have most of the functionality over in autocxx_engine,
@@ -95,7 +95,7 @@ pub struct Builder<BuilderContext> {
     ctx: PhantomData<BuilderContext>,
 }
 
-impl<CTX: BuilderContext> Builder<CTX> {
+impl<CTX: BuilderContext> Builder<'_, CTX> {
     #[doc(hidden)]
     pub fn new(
         rs_file: impl AsRef<Path>,

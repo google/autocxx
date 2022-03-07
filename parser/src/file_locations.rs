@@ -23,7 +23,7 @@ use std::path::PathBuf;
 /// (based on a hash of the contents of `include_cpp!`.) But
 /// some types of build system need to know the precise file _name_
 /// produced by the codegen phase and passed into the macro phase,
-/// so we have a `AUTOCXX_RS_FILE` option for that.
+/// so we have some options for that. See `gen --help` for details.
 pub enum FileLocationStrategy {
     Custom(PathBuf),
     FromAutocxxRsFile(PathBuf),

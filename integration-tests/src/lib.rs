@@ -155,10 +155,10 @@ pub type CodeChecker = Box<dyn CodeCheckerFns>;
 
 // A trait for objects which can modify builders for testing purposes.
 pub trait BuilderModifierFns {
-    fn modify_autocxx_builder(
+    fn modify_autocxx_builder<'a>(
         &self,
-        builder: Builder<TestBuilderContext>,
-    ) -> Builder<TestBuilderContext>;
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext>;
     fn modify_cc_builder<'a>(&self, builder: &'a mut cc::Build) -> &'a mut cc::Build {
         builder
     }

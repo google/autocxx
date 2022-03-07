@@ -18,10 +18,10 @@ pub(crate) fn make_clang_arg_adder(args: &[&str]) -> Option<BuilderModifier> {
 }
 
 impl BuilderModifierFns for ClangArgAdder {
-    fn modify_autocxx_builder(
+    fn modify_autocxx_builder<'a>(
         &self,
-        builder: Builder<TestBuilderContext>,
-    ) -> Builder<TestBuilderContext> {
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
         let refs: Vec<_> = self.0.iter().map(|s| s.as_str()).collect();
         builder.extra_clang_args(&refs)
     }
@@ -37,10 +37,10 @@ impl BuilderModifierFns for ClangArgAdder {
 pub(crate) struct SetSuppressSystemHeaders;
 
 impl BuilderModifierFns for SetSuppressSystemHeaders {
-    fn modify_autocxx_builder(
+    fn modify_autocxx_builder<'a>(
         &self,
-        builder: Builder<TestBuilderContext>,
-    ) -> Builder<TestBuilderContext> {
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
         builder.suppress_system_headers(true)
     }
 }
@@ -48,10 +48,10 @@ impl BuilderModifierFns for SetSuppressSystemHeaders {
 pub(crate) struct EnableAutodiscover;
 
 impl BuilderModifierFns for EnableAutodiscover {
-    fn modify_autocxx_builder(
+    fn modify_autocxx_builder<'a>(
         &self,
-        builder: Builder<TestBuilderContext>,
-    ) -> Builder<TestBuilderContext> {
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
         builder.auto_allowlist(true)
     }
 }
@@ -59,10 +59,10 @@ impl BuilderModifierFns for EnableAutodiscover {
 pub(crate) struct SkipCxxGen;
 
 impl BuilderModifierFns for SkipCxxGen {
-    fn modify_autocxx_builder(
+    fn modify_autocxx_builder<'a>(
         &self,
-        builder: Builder<TestBuilderContext>,
-    ) -> Builder<TestBuilderContext> {
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
         builder.skip_cxx_gen(true)
     }
 }
