@@ -640,6 +640,12 @@ impl Default for HeaderNamer<'static> {
     }
 }
 
+impl HeaderNamer<'_> {
+    fn name_header(&self, mod_name: String) -> String {
+        self.0(mod_name)
+    }
+}
+
 /// Options for C++ codegen
 #[derive(Default)]
 pub struct CppCodegenOptions<'a> {
