@@ -1906,34 +1906,36 @@ impl<'a> FnAnalyzer<'a> {
             ApiName::new_with_cpp_name(self_ty.name.get_namespace(), ident.clone(), cpp_name);
         let self_ty = &self_ty.name;
         let ns = self_ty.get_namespace().clone();
-        let items: Vec<_> = report_any_error(&ns, apis, || {
-            self.analyze_foreign_fn_and_subclasses(
-                fake_api_name,
-                Box::new(FuncToConvert {
-                    self_ty: Some(self_ty.clone()),
-                    ident,
-                    doc_attr: None,
-                    inputs,
-                    output: ReturnType::Default,
-                    vis: parse_quote! { pub },
-                    virtualness: Virtualness::None,
-                    cpp_vis: CppVisibility::Public,
-                    special_member: Some(special_member),
-                    unused_template_param: false,
-                    references,
-                    original_name: None,
-                    synthesized_this_type: None,
-                    is_deleted: false,
-                    add_to_trait: None,
-                    synthetic_cpp: None,
-                    provenance: Provenance::SynthesizedOther,
-                }),
-            )
-        })
-        .into_iter()
-        .flatten()
-        .collect();
-        apis.extend(items.into_iter());
+        let mut any_errors = ApiVec::new();
+        apis.extend(
+            report_any_error(&ns, &mut any_errors, || {
+                self.analyze_foreign_fn_and_subclasses(
+                    fake_api_name,
+                    Box::new(FuncToConvert {
+                        self_ty: Some(self_ty.clone()),
+                        ident,
+                        doc_attr: None,
+                        inputs,
+                        output: ReturnType::Default,
+                        vis: parse_quote! { pub },
+                        virtualness: Virtualness::None,
+                        cpp_vis: CppVisibility::Public,
+                        special_member: Some(special_member),
+                        unused_template_param: false,
+                        references,
+                        original_name: None,
+                        synthesized_this_type: None,
+                        is_deleted: false,
+                        add_to_trait: None,
+                        synthetic_cpp: None,
+                        provenance: Provenance::SynthesizedOther,
+                    }),
+                )
+            })
+            .into_iter()
+            .flatten(),
+        );
+        apis.append(&mut any_errors);
     }
 }
 
