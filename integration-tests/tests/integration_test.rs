@@ -7821,6 +7821,13 @@ fn test_pass_by_value_moveit() {
         std::string so_we_are_non_trivial;
     };
     inline void take_a(A a) {}
+    struct B {
+        B() {}
+        B(const B&) {}
+        B(B&&) {}
+        std::string so_we_are_non_trivial;
+    };
+    inline void take_b(B b) {}
     "};
     let rs = quote! {
         moveit! {
@@ -7828,8 +7835,28 @@ fn test_pass_by_value_moveit() {
         }
         stack_obj.as_mut().set(42);
         ffi::take_a(&*stack_obj);
+        ffi::take_a(as_copy(stack_obj.as_ref()));
+        ffi::take_a(as_copy(stack_obj.as_ref()));
+        // A has no move constructor so we can't consume it.
+
+        let heap_obj = ffi::A::make_unique();
+        ffi::take_a(heap_obj.as_ref().unwrap());
+        ffi::take_a(&heap_obj);
+        ffi::take_a(autocxx::as_copy(heap_obj.as_ref().unwrap()));
+        ffi::take_a(heap_obj); // consume
+
+        moveit! {
+            let mut stack_obj = ffi::B::new();
+        }
+        ffi::take_b(&*stack_obj);
+        ffi::take_b(as_copy(stack_obj.as_ref()));
+        ffi::take_b(as_copy(stack_obj.as_ref()));
+        ffi::take_b(as_mov(stack_obj)); // due to move constructor
+
+        // Test direct-from-New-to-param.
+        ffi::take_b(as_new(ffi::B::new()));
     };
-    run_test("", hdr, rs, &["A", "take_a"], &[]);
+    run_test("", hdr, rs, &["A", "take_a", "B", "take_b"], &[]);
 }
 
 #[test]

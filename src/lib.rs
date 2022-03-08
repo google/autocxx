@@ -414,11 +414,17 @@ pub trait PinMut<T>: AsRef<T> {
     fn pin_mut(&mut self) -> std::pin::Pin<&mut T>;
 }
 
+pub use value_param::as_copy;
+pub use value_param::as_mov;
+pub use value_param::as_new;
 pub use value_param::ValueParam;
 pub use value_param::ValueParamHandler;
 
 /// Imports which you're likely to want to use.
 pub mod prelude {
+    pub use crate::as_copy;
+    pub use crate::as_mov;
+    pub use crate::as_new;
     pub use crate::c_int;
     pub use crate::c_long;
     pub use crate::c_longlong;
