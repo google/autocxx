@@ -220,17 +220,6 @@ pub struct ValueParamHandler<T, VP: ValueParam<T>> {
 }
 
 impl<T, VP: ValueParam<T>> ValueParamHandler<T, VP> {
-    /// Create a new storage space for something that's about to be passed
-    /// by value to C++. Depending on the `ValueParam` type passed in,
-    /// this may be largely a no-op or it may involve storing a whole
-    /// extra copy of the type.
-    pub fn new() -> Self {
-        Self {
-            space: None,
-            _pinned: PhantomPinned,
-        }
-    }
-
     /// Populate this stack space if needs be. Note safety guarantees
     /// on [`get_ptr`].
     ///
@@ -248,9 +237,18 @@ impl<T, VP: ValueParam<T>> ValueParamHandler<T, VP> {
     /// Per the unsafety contract of [`populate`], the object must not have moved
     /// since it was created, and [`populate`] has been called exactly once
     /// prior to this call.
-    pub unsafe fn get_ptr(&mut self) -> *mut T {
+    pub fn get_ptr(&mut self) -> *mut T {
         // Pinning safe because of the guarantees the caller gives.
-        VP::get_ptr(Pin::new_unchecked(self.space.as_mut().unwrap()))
+        unsafe { VP::get_ptr(Pin::new_unchecked(self.space.as_mut().unwrap())) }
+    }
+}
+
+impl<T, VP: ValueParam<T>> Default for ValueParamHandler<T, VP> {
+    fn default() -> Self {
+        Self {
+            space: None,
+            _pinned: PhantomPinned,
+        }
     }
 }
 

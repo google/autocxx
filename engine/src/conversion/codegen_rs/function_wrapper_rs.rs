@@ -125,7 +125,7 @@ impl TypeConversionPolicy {
                 // nobody else accesses #space_var_name at all, so this is safe.
                 (
                     Some(quote! {
-                        let mut #space_var_name = autocxx::ValueParamHandler::new();
+                        let mut #space_var_name = autocxx::ValueParamHandler::default();
                         let #space_var_name = &mut #space_var_name;
                         #call
                     }),
