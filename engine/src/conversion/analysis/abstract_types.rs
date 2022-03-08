@@ -7,20 +7,22 @@
 // except according to those terms.
 
 use super::{
-    fun::{FnAnalysis, FnKind, FnPhase, FnPrePhase, MethodKind, TraitMethodKind},
+    fun::{
+        FnAnalysis, FnKind, FnPhase, FnPrePhase2, MethodKind, PodAndConstructorAnalysis,
+        TraitMethodKind,
+    },
     pod::PodAnalysis,
 };
+use crate::conversion::{api::Api, apivec::ApiVec};
 use crate::conversion::{
-    analysis::fun::PodAndConstructorAnalysis,
     api::TypeKind,
     error_reporter::{convert_apis, convert_item_apis},
     ConvertError,
 };
-use crate::conversion::{api::Api, apivec::ApiVec};
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
-pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase>) -> ApiVec<FnPrePhase> {
+pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhase2> {
     let mut abstract_types: HashSet<_> = apis
         .iter()
         .filter_map(|api| match &api {

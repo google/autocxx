@@ -12,12 +12,7 @@ use syn::Type;
 
 use crate::{
     conversion::{
-        analysis::{
-            depth_first::depth_first,
-            fun::{PodAndConstructorAnalysis, PublicConstructors},
-            pod::PodAnalysis,
-            type_converter::TypeKind,
-        },
+        analysis::{depth_first::depth_first, pod::PodAnalysis, type_converter::TypeKind},
         api::{Api, ApiName, CppVisibility, FuncToConvert, SpecialMemberKind},
         apivec::ApiVec,
     },
@@ -25,7 +20,7 @@ use crate::{
     types::QualifiedName,
 };
 
-use super::{FnAnalysis, FnKind, FnPrePhase, MethodKind, ReceiverMutability, TraitMethodKind};
+use super::{FnAnalysis, FnKind, FnPrePhase1, MethodKind, ReceiverMutability, TraitMethodKind};
 
 /// Indicates what we found out about a category of special member function.
 ///
@@ -176,7 +171,7 @@ enum ExplicitFound {
 /// we can simply generate the sort of thing bindgen generates, then ask
 /// the existing code in this phase to figure out what to do with it.
 pub(super) fn find_constructors_present(
-    apis: &mut ApiVec<FnPrePhase>,
+    apis: &ApiVec<FnPrePhase1>,
 ) -> HashMap<QualifiedName, ItemsFound> {
     let explicits = find_explicit_items(apis);
 
@@ -194,14 +189,9 @@ pub(super) fn find_constructors_present(
     for api in depth_first(apis.iter()) {
         if let Api::Struct {
             name,
-            analysis:
-                PodAndConstructorAnalysis {
-                    pod:
-                        PodAnalysis {
-                            bases, field_info, ..
-                        },
-                    ..
-                },
+            analysis: PodAnalysis {
+                bases, field_info, ..
+            },
             details,
             ..
         } = api
@@ -539,32 +529,10 @@ pub(super) fn find_constructors_present(
         }
     }
 
-    let set_constructors = |type_name: &QualifiedName, constructors: &mut PublicConstructors| {
-        if let Some(items_found) = all_items_found.get(type_name) {
-            *constructors = PublicConstructors::from_items_found(items_found);
-        }
-        // Otherwise we just leave it at the default of all-false. If we haven't analyzed the
-        // type, then we don't know about any constructors it might have.
-    };
-
-    apis.mutate_fun_analysis(|_, _, analysis| {
-        if let FnKind::Method {
-            ref impl_for,
-            ref mut type_constructors,
-            ..
-        } = analysis.kind
-        {
-            set_constructors(impl_for, type_constructors);
-        }
-    });
-    apis.mutate_struct_analysis(|name, _, analysis| {
-        set_constructors(&name.name, &mut analysis.constructors)
-    });
-
     all_items_found
 }
 
-fn find_explicit_items(apis: &ApiVec<FnPrePhase>) -> HashMap<ExplicitType, ExplicitFound> {
+fn find_explicit_items(apis: &ApiVec<FnPrePhase1>) -> HashMap<ExplicitType, ExplicitFound> {
     let mut result = HashMap::new();
     let mut merge_fun = |ty: QualifiedName, kind: ExplicitKind, fun: &FuncToConvert| match result
         .entry(ExplicitType { ty, kind })

@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    fun::{FnPhase, FnPrePhase, PodAndConstructorAnalysis, PodAndDepAnalysis},
+    fun::{FnPhase, FnPrePhase1, PodAndDepAnalysis},
     pod::PodAnalysis,
     tdef::TypedefAnalysis,
 };
@@ -28,7 +28,7 @@ pub(crate) trait HasDependencies {
     }
 }
 
-impl HasDependencies for Api<FnPrePhase> {
+impl HasDependencies for Api<FnPrePhase1> {
     fn deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
         match self {
             Api::Typedef {
@@ -38,14 +38,10 @@ impl HasDependencies for Api<FnPrePhase> {
             } => Box::new(old_tyname.iter().chain(deps.iter())),
             Api::Struct {
                 analysis:
-                    PodAndConstructorAnalysis {
-                        pod:
-                            PodAnalysis {
-                                kind: TypeKind::Pod,
-                                bases,
-                                field_deps,
-                                ..
-                            },
+                    PodAnalysis {
+                        kind: TypeKind::Pod,
+                        bases,
+                        field_deps,
                         ..
                     },
                 ..
