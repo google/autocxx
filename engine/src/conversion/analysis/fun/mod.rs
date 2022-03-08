@@ -20,8 +20,8 @@ use crate::{
         },
         api::{
             ApiName, CastMutability, CppVisibility, FuncToConvert, NullPhase, Provenance,
-            References, SpecialMemberKind, StructDetails, SubclassName, TraitImplSignature,
-            TraitSynthesis, UnsafetyNeeded, Virtualness,
+            References, SpecialMemberKind, SubclassName, TraitImplSignature, TraitSynthesis,
+            UnsafetyNeeded, Virtualness,
         },
         apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
@@ -206,9 +206,19 @@ pub(crate) struct PodAndConstructorAnalysis {
 
 /// An analysis phase where we've analyzed each function, but
 /// haven't yet determined which constructors/etc. belong to each type.
-pub(crate) struct FnPrePhase;
+pub(crate) struct FnPrePhase1;
 
-impl AnalysisPhase for FnPrePhase {
+impl AnalysisPhase for FnPrePhase1 {
+    type TypedefAnalysis = TypedefAnalysis;
+    type StructAnalysis = PodAnalysis;
+    type FunAnalysis = FnAnalysis;
+}
+
+/// An analysis phase where we've analyzed each function, and identified
+/// what implicit constructors/destructors are present in each type.
+pub(crate) struct FnPrePhase2;
+
+impl AnalysisPhase for FnPrePhase2 {
     type TypedefAnalysis = TypedefAnalysis;
     type StructAnalysis = PodAndConstructorAnalysis;
     type FunAnalysis = FnAnalysis;
@@ -269,29 +279,12 @@ pub(crate) struct FnAnalyzer<'a> {
     existing_superclass_trait_api_names: HashSet<QualifiedName>,
 }
 
-/// Leaves the [`PodAndConstructorAnalysis::constructors`] at its default for [`add_constructors_present`]
-/// to fill out.
-fn convert_struct(
-    name: ApiName,
-    details: Box<StructDetails>,
-    analysis: PodAnalysis,
-) -> Result<Box<dyn Iterator<Item = Api<FnPrePhase>>>, ConvertErrorWithContext> {
-    Ok(Box::new(std::iter::once(Api::Struct {
-        name,
-        details,
-        analysis: PodAndConstructorAnalysis {
-            pod: analysis,
-            constructors: Default::default(),
-        },
-    })))
-}
-
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: ApiVec<PodPhase>,
         unsafe_policy: UnsafePolicy,
         config: &'a IncludeCppConfig,
-    ) -> ApiVec<FnPrePhase> {
+    ) -> ApiVec<FnPrePhase2> {
         let mut me = Self {
             unsafe_policy,
             extra_apis: ApiVec::new(),
@@ -310,11 +303,11 @@ impl<'a> FnAnalyzer<'a> {
             apis,
             &mut results,
             |name, fun, _, _| me.analyze_foreign_fn_and_subclasses(name, fun),
-            convert_struct,
+            Api::struct_unchanged,
             Api::enum_unchanged,
             Api::typedef_unchanged,
         );
-        me.add_constructors_present(&mut results);
+        let mut results = me.add_constructors_present(results);
         me.add_make_uniques(&mut results);
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
@@ -455,7 +448,7 @@ impl<'a> FnAnalyzer<'a> {
         }
     }
 
-    fn add_make_uniques(&mut self, apis: &mut ApiVec<FnPrePhase>) {
+    fn add_make_uniques(&mut self, apis: &mut ApiVec<FnPrePhase2>) {
         let mut results = ApiVec::new();
 
         // Pre-assemble a list of types with known destructors, to avoid having to
@@ -547,7 +540,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         name: ApiName,
         fun: Box<FuncToConvert>,
-    ) -> Result<Box<dyn Iterator<Item = Api<FnPrePhase>>>, ConvertErrorWithContext> {
+    ) -> Result<Box<dyn Iterator<Item = Api<FnPrePhase1>>>, ConvertErrorWithContext> {
         let (analysis, name) =
             self.analyze_foreign_fn(name, &fun, TypeConversionSophistication::Regular, None);
         let mut results = ApiVec::new();
@@ -647,11 +640,11 @@ impl<'a> FnAnalyzer<'a> {
 
     /// Adds an API, usually a synthesized API. Returns the final calculated API name, which can be used
     /// for others to depend on this.
-    fn analyze_and_add(
+    fn analyze_and_add<P: AnalysisPhase<FunAnalysis = FnAnalysis>>(
         &mut self,
         name: ApiName,
         new_func: Box<FuncToConvert>,
-        results: &mut ApiVec<FnPrePhase>,
+        results: &mut ApiVec<P>,
         sophistication: TypeConversionSophistication,
     ) -> QualifiedName {
         let (analysis, name) = self.analyze_foreign_fn(name, &new_func, sophistication, None);
@@ -670,7 +663,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         fun: &FuncToConvert,
         initial_name: ApiName,
-        results: &mut ApiVec<FnPrePhase>,
+        results: &mut ApiVec<FnPrePhase2>,
     ) {
         let mut new_fun = fun.clone();
         new_fun.provenance = Provenance::SynthesizedMakeUnique;
@@ -1789,8 +1782,9 @@ impl<'a> FnAnalyzer<'a> {
     ///
     /// Also fills out the [`PodAndConstructorAnalysis::constructors`] fields with information useful
     /// for further analysis phases.
-    fn add_constructors_present(&mut self, apis: &mut ApiVec<FnPrePhase>) {
-        for (self_ty, items_found) in find_constructors_present(apis).iter() {
+    fn add_constructors_present(&mut self, mut apis: ApiVec<FnPrePhase1>) -> ApiVec<FnPrePhase2> {
+        let all_items_found = find_constructors_present(&apis);
+        for (self_ty, items_found) in all_items_found.iter() {
             if self.config.exclude_impls {
                 // Remember that `find_constructors_present` mutates `apis`, so we always have to
                 // call that, even if we don't do anything with the return value. This is kind of
@@ -1808,7 +1802,7 @@ impl<'a> FnAnalyzer<'a> {
                 self.synthesize_special_member(
                     items_found,
                     None,
-                    apis,
+                    &mut apis,
                     SpecialMemberKind::DefaultConstructor,
                     parse_quote! { this: *mut #path },
                     References::default(),
@@ -1818,7 +1812,7 @@ impl<'a> FnAnalyzer<'a> {
                 self.synthesize_special_member(
                     items_found,
                     Some("move"),
-                    apis,
+                    &mut apis,
                     SpecialMemberKind::MoveConstructor,
                     parse_quote! { this: *mut #path, other: *mut #path },
                     References {
@@ -1831,7 +1825,7 @@ impl<'a> FnAnalyzer<'a> {
                 self.synthesize_special_member(
                     items_found,
                     Some("const_copy"),
-                    apis,
+                    &mut apis,
                     SpecialMemberKind::CopyConstructor,
                     parse_quote! { this: *mut #path, other: *const #path },
                     References {
@@ -1844,13 +1838,39 @@ impl<'a> FnAnalyzer<'a> {
                 self.synthesize_special_member(
                     items_found,
                     None,
-                    apis,
+                    &mut apis,
                     SpecialMemberKind::Destructor,
                     parse_quote! { this: *mut #path },
                     References::default(),
                 );
             }
         }
+
+        // Also, annotate each type with the constructors we found.
+        let mut results = ApiVec::new();
+        convert_apis(
+            apis,
+            &mut results,
+            Api::fun_unchanged,
+            |name, details, analysis| {
+                let items_found = all_items_found.get(&name.name);
+                Ok(Box::new(std::iter::once(Api::Struct {
+                    name,
+                    details,
+                    analysis: PodAndConstructorAnalysis {
+                        pod: analysis,
+                        constructors: if let Some(items_found) = items_found {
+                            PublicConstructors::from_items_found(items_found)
+                        } else {
+                            PublicConstructors::default()
+                        },
+                    },
+                })))
+            },
+            Api::enum_unchanged,
+            Api::typedef_unchanged,
+        );
+        results
     }
 
     #[allow(clippy::too_many_arguments)] // it's true, but sticking with it for now
@@ -1858,7 +1878,7 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         items_found: &ItemsFound,
         label: Option<&str>,
-        apis: &mut ApiVec<FnPrePhase>,
+        apis: &mut ApiVec<FnPrePhase1>,
         special_member: SpecialMemberKind,
         inputs: Punctuated<FnArg, Comma>,
         references: References,

@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::fun::{
-    FnAnalysis, FnKind, FnPhase, FnPrePhase, PodAndConstructorAnalysis, PodAndDepAnalysis,
+    FnAnalysis, FnKind, FnPhase, FnPrePhase2, PodAndConstructorAnalysis, PodAndDepAnalysis,
     TraitMethodKind,
 };
 
@@ -28,7 +28,7 @@ use super::fun::{
 /// which will later be used as edges in the garbage collection, because
 /// typically any use of a type will require us to call its copy or move
 /// constructor. The same applies to its alloc/free functions.
-pub(crate) fn decorate_types_with_constructor_deps(apis: ApiVec<FnPrePhase>) -> ApiVec<FnPhase> {
+pub(crate) fn decorate_types_with_constructor_deps(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPhase> {
     let mut constructors_and_allocators_by_type = find_important_constructors(&apis);
     let mut results = ApiVec::new();
     convert_apis(
@@ -71,7 +71,7 @@ fn decorate_struct(
 }
 
 fn find_important_constructors(
-    apis: &ApiVec<FnPrePhase>,
+    apis: &ApiVec<FnPrePhase2>,
 ) -> HashMap<QualifiedName, Vec<QualifiedName>> {
     let mut results: HashMap<QualifiedName, Vec<QualifiedName>> = HashMap::new();
     for api in apis.iter() {

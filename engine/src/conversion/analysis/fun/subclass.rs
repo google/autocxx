@@ -27,7 +27,7 @@ use crate::{
     types::{make_ident, Namespace, QualifiedName},
 };
 
-use super::{FnAnalysis, FnPrePhase};
+use super::{FnAnalysis, FnPrePhase1};
 
 pub(super) fn subclasses_by_superclass(
     apis: &ApiVec<PodPhase>,
@@ -78,7 +78,7 @@ pub(super) fn create_subclass_trait_item(
     receiver_mutability: &ReceiverMutability,
     receiver: QualifiedName,
     is_pure_virtual: bool,
-) -> Api<FnPrePhase> {
+) -> Api<FnPrePhase1> {
     let param_names = analysis
         .param_details
         .iter()
@@ -106,7 +106,7 @@ pub(super) fn create_subclass_function(
     receiver_mutability: &ReceiverMutability,
     superclass: &QualifiedName,
     dependencies: Vec<QualifiedName>,
-) -> Api<FnPrePhase> {
+) -> Api<FnPrePhase1> {
     let cpp = sub.cpp();
     let holder_name = sub.holder();
     let rust_call_name = make_ident(format!(
