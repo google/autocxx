@@ -21,8 +21,27 @@ use crate::{
 
 use super::api::{AnalysisPhase, Api};
 
-/// Newtype wrapper for a list of APIs, which enforced the invariant
+/// Newtype wrapper for a list of APIs, which enforces the invariant
 /// that each API has a unique name.
+///
+/// Specifically, each API should have a unique [`QualifiedName`] which is kept
+/// within an [`ApiName`]. The [`QualifiedName`] is used to refer to this API
+/// from others, e.g. to represent edges in the graph used for garbage collection,
+/// so that's why this uniqueness is so important.
+///
+/// At present, this type also refuses to allow mutation of an API once it
+/// has been added to a set. This is because the autocxx engine is
+/// fundamentally organized into lots of analysis phases, each one _adding_
+/// fields rather than mutating earlier fields. The idea here is that it's
+/// impossible for stupid future maintainers (i.e. me) to make errors by
+/// referring to fields before they're filled in. If a field exists, it's
+/// correct.
+///
+/// While this is currently the case, it's possible that in future we could
+/// see legitimate reasons to break this latter invariant and allow mutation
+/// of APIs within an existing `ApiVec`. But it's extremely important that
+/// the naming-uniqueness-invariant remains, so any such mutation should
+/// allow mutation only of other fields, not the name.
 pub(crate) struct ApiVec<P: AnalysisPhase> {
     apis: Vec<Api<P>>,
     names: HashSet<QualifiedName>,
