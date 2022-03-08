@@ -416,6 +416,9 @@ pub trait PinMut<T>: AsRef<T> {
 
 pub use value_param::ValueParam;
 pub use value_param::ValueParamHandler;
+pub use value_param::as_copy;
+pub use value_param::as_mov;
+pub use value_param::as_new;
 
 /// Imports which you're likely to want to use.
 pub mod prelude {
@@ -431,6 +434,9 @@ pub mod prelude {
     pub use crate::c_void;
     pub use crate::cpp_semantics;
     pub use crate::include_cpp;
+    pub use crate::as_copy;
+    pub use crate::as_mov;
+    pub use crate::as_new;
     pub use crate::PinMut;
     pub use crate::ValueParam;
     pub use moveit::moveit;
