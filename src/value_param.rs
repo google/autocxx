@@ -53,7 +53,7 @@ use std::{marker::PhantomPinned, mem::MaybeUninit, ops::Deref, pin::Pin};
 ///
 /// # Safety
 ///
-/// Implementers must guarantee that the pointer returned by [`get_ptr`]
+/// Implementers must guarantee that the pointer returned by `get_ptr`
 /// is of the correct size and alignment of `T`.
 pub unsafe trait ValueParam<T> {
     /// Any stack storage required. If, as part of passing to C++,
@@ -154,7 +154,7 @@ where
     }
 }
 
-/// Explicitly force a value parameter to be taken using any type of [`autocxx::moveit::new::New`],
+/// Explicitly force a value parameter to be taken using any type of [`crate::moveit::new::New`],
 /// i.e. a constructor.
 pub fn as_new<N: New<Output = T>, T>(constructor: N) -> impl ValueParam<T> {
     ByNew(constructor)
