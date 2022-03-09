@@ -360,6 +360,18 @@ see the chapter on <a href="cpp_types.html">C++ types</a>.</li>
 <p>See <a href="https://docs.rs/autocxx/latest/autocxx/">the docs.rs documentation for the full list</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="building"><a class="header" href="#building">Building</a></h1>
 <p>Building in a <code>cargo</code> environment is explained in <a href="tutorial.html">the tutorial</a>.</p>
+<p>If your build depends on later editions of the C++ standard library, you will need to ensure that both <code>libclang</code> and the compiler are sent the appropriate flag, like this:</p>
+<pre><code class="language-rust ignore">fn main() {
+    let path = std::path::PathBuf::from(&quot;src&quot;); // include path
+    let mut b = autocxx_build::Builder::new(&quot;src/main.rs&quot;, &amp;[&amp;path])
+        .extra_clang_args(&amp;[&quot;-std=c++17&quot;])
+        .expect_build();
+    b.flag_if_supported(&quot;-std=c++17&quot;)
+        .compile(&quot;autocxx-demo&quot;); // arbitrary library name, pick anything
+    println!(&quot;cargo:rerun-if-changed=src/main.rs&quot;);
+    // Add instructions to link to any C++ libraries you need.
+}
+</code></pre>
 <h1 id="configuring-the-build---if-youre-not-using-cargo"><a class="header" href="#configuring-the-build---if-youre-not-using-cargo">Configuring the build - if you're not using cargo</a></h1>
 <p>See the <code>autocxx-gen</code> crate. You'll need to:</p>
 <ul>
