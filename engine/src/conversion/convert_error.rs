@@ -57,6 +57,7 @@ pub enum ConvertError {
     MethodOfNonAllowlistedType,
     MethodOfGenericType,
     DuplicateItemsFoundInParsing,
+    ConstructorWithOnlyOneParam,
 }
 
 fn format_maybe_identifier(id: &Option<Ident>) -> String {
@@ -110,6 +111,7 @@ impl Display for ConvertError {
             ConvertError::MethodOfNonAllowlistedType => write!(f, "This type was not on the allowlist, so we are not generating methods for it.")?,
             ConvertError::MethodOfGenericType => write!(f, "This type is templated, so we can't generate bindings. We will instead generate bindings for each instantiation.")?,
             ConvertError::DuplicateItemsFoundInParsing => write!(f, "bindgen generated multiple different APIs (functions/types) with this name. autocxx doesn't know how to diambiguate them, so we won't generate bindings for any of them.")?,
+            ConvertError::ConstructorWithOnlyOneParam => write!(f, "bindgen generated a move or copy constructor with an unexpected number of parameters.")?,
         }
         Ok(())
     }

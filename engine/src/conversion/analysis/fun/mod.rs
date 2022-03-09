@@ -818,9 +818,13 @@ impl<'a> FnAnalyzer<'a> {
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
                 let error_context = error_context_for_method(&self_ty, &rust_name);
 
+                // If this is 'None', then something weird is going on. We'll check for that
+                // later when we have enough context to generate useful errors.
                 let arg_is_reference = matches!(
-                    param_details[1].conversion.unwrapped_type,
-                    Type::Reference(_)
+                    param_details
+                        .get(1)
+                        .map(|param| &param.conversion.unwrapped_type),
+                    Some(Type::Reference(_))
                 );
                 // Some exotic forms of copy constructor have const and/or volatile qualifiers.
                 // These are not sufficient to implement CopyNew, so we just treat them as regular
@@ -1018,6 +1022,9 @@ impl<'a> FnAnalyzer<'a> {
                 kind: TraitMethodKind::CopyConstructor,
                 ..
             } => {
+                if param_details.len() < 2 {
+                    set_ignore_reason(ConvertError::ConstructorWithOnlyOneParam);
+                }
                 self.reanalyze_parameter(
                     0,
                     fun,
@@ -1035,6 +1042,9 @@ impl<'a> FnAnalyzer<'a> {
                 kind: TraitMethodKind::MoveConstructor,
                 ..
             } => {
+                if param_details.len() < 2 {
+                    set_ignore_reason(ConvertError::ConstructorWithOnlyOneParam);
+                }
                 self.reanalyze_parameter(
                     0,
                     fun,
