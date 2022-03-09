@@ -7860,6 +7860,43 @@ fn test_pass_by_value_moveit() {
 }
 
 #[test]
+fn test_nonconst_reference_parameter() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        std::string so_we_are_non_trivial;
+    };
+    inline void take_a(A&) {}
+    "};
+    let rs = quote! {
+        let mut heap_obj = ffi::A::make_unique();
+        ffi::take_a(heap_obj.pin_mut());
+    };
+    run_test("", hdr, rs, &["A", "take_a"], &[]);
+}
+
+#[test]
+fn test_nonconst_reference_method_parameter() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        std::string so_we_are_non_trivial;
+    };
+    struct B {
+        inline void take_a(A&) const {}
+    };
+    "};
+    let rs = quote! {
+        let mut a = ffi::A::make_unique();
+        let b = ffi::B::make_unique();
+        b.take_a(a.pin_mut());
+    };
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
 fn test_destructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
