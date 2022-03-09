@@ -2,6 +2,21 @@
 
 Building in a `cargo` environment is explained in [the tutorial](tutorial.md).
 
+If your build depends on later editions of the C++ standard library, you will need to ensure that both `libclang` and the compiler are sent the appropriate flag, like this:
+
+```rust,ignore
+fn main() {
+    let path = std::path::PathBuf::from("src"); // include path
+    let mut b = autocxx_build::Builder::new("src/main.rs", &[&path])
+        .extra_clang_args(&["-std=c++17"])
+        .expect_build();
+    b.flag_if_supported("-std=c++17")
+        .compile("autocxx-demo"); // arbitrary library name, pick anything
+    println!("cargo:rerun-if-changed=src/main.rs");
+    // Add instructions to link to any C++ libraries you need.
+}
+```
+
 # Configuring the build - if you're not using cargo
 
 See the `autocxx-gen` crate. You'll need to:
