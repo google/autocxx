@@ -7877,6 +7877,26 @@ fn test_nonconst_reference_parameter() {
 }
 
 #[test]
+fn test_nonconst_reference_method_parameter() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        std::string so_we_are_non_trivial;
+    };
+    struct B {
+        inline void take_a(A&) const {}
+    };
+    "};
+    let rs = quote! {
+        let mut a = ffi::A::make_unique();
+        let b = ffi::B::make_unique();
+        b.take_a(a.pin_mut());
+    };
+    run_test("", hdr, rs, &["A", "B"], &[]);
+}
+
+#[test]
 fn test_destructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
