@@ -6206,6 +6206,30 @@ fn test_rust_reference_method() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
+// TODO - replace make_clang_arg_adder with something that knows how to add an MSVC-suitable
+// directive for the cc build.
+fn test_cpp17() {
+    let hdr = indoc! {"
+        static_assert(__cplusplus >= 201703L, \"This file expects a C++17 compatible compiler.\");
+        inline void foo() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            ffi::foo();
+        },
+        quote! {
+            generate!("foo")
+        },
+        make_clang_arg_adder(&["-std=c++17"]),
+        None,
+        None,
+    );
+}
+
+#[test]
 fn test_box() {
     let hdr = indoc! {"
         #include <cxx.h>
