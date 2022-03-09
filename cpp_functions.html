@@ -179,6 +179,42 @@ fn main() {
 
 </code></pre>
 <p>Specifically, you can pass anything which implements <a href="https://docs.rs/autocxx/latest/autocxx/trait.ValueParam.html"><code>ValueParam&lt;T&gt;</code></a>.</p>
+<p>If you're keeping non-POD values on the Rust stack, you need to explicitly use <a href="https://docs.rs/autocxx/latest/autocxx/prelude/fn.as_mov.html"><code>as_mov</code></a> to indicate that you want to
+consume the object using move semantics:</p>
+<h4 id="c-header-1"><a class="header" href="#c-header-1">C++ header:</a></h4>
+<pre><code class="language-cpp">#include &lt;cstdint&gt;
+
+struct Blimp {
+    Blimp();
+    uint32_t tons_of_helium;
+};
+
+void burst(Blimp b); // consumes blimp,
+    // but because C++ is amazing, may copy the blimp first.
+
+</code></pre>
+<h4 id="rust-1"><a class="header" href="#rust-1">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;Blimp&quot;)
+    generate!(&quot;burst&quot;)
+}
+
+fn main() {
+    moveit! {
+        let mut blimp = ffi::Blimp::new();
+    }
+    ffi::burst(&amp;*blimp); // pass by copy
+    ffi::burst(as_copy(blimp.as_ref())); // explicitly say you want to pass by copy
+    ffi::burst(as_mov(blimp)); // consume, using move constructor
+}
+
+</code></pre>
+<p>Rvalue parameters are not yet supported.</p>
 <h2 id="default-parameters"><a class="header" href="#default-parameters">Default parameters</a></h2>
 <p>Are not yet supported<sup class="footnote-reference"><a href="#default">1</a></sup>.</p>
 <div class="footnote-definition" id="default"><sup class="footnote-definition-label">1</sup>
@@ -196,7 +232,7 @@ which is guaranteed not to be null<sup class="footnote-reference"><a href="#not-
 of <code>bindgen</code> here and generating overloads as <code>func</code>, <code>func1</code>, <code>func2</code> etc.
 This is essentially awful without <code>rust-analyzer</code> IDE support - see the
 <a href="workflow.html">workflows chapter</a> for why you should be using an IDE.</p>
-<h4 id="c-header-1"><a class="header" href="#c-header-1">C++ header:</a></h4>
+<h4 id="c-header-2"><a class="header" href="#c-header-2">C++ header:</a></h4>
 <pre><code class="language-cpp">
 #include &lt;string&gt;
 struct View {
@@ -211,7 +247,7 @@ void saw(const View&amp;);
 void saw(const Tree&amp;);
 
 </code></pre>
-<h4 id="rust-1"><a class="header" href="#rust-1">Rust:</a></h4>
+<h4 id="rust-2"><a class="header" href="#rust-2">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -238,7 +274,7 @@ we can pass tuples of different parameter types into a single function
 implementation.</p>
 <h2 id="methods"><a class="header" href="#methods">Methods</a></h2>
 <p>Calling a <em>const</em> method is simple:</p>
-<h4 id="c-header-2"><a class="header" href="#c-header-2">C++ header:</a></h4>
+<h4 id="c-header-3"><a class="header" href="#c-header-3">C++ header:</a></h4>
 <pre><code class="language-cpp">
 class Sloth {
 public:
@@ -246,7 +282,7 @@ public:
 };
 
 </code></pre>
-<h4 id="rust-2"><a class="header" href="#rust-2">Rust:</a></h4>
+<h4 id="rust-3"><a class="header" href="#rust-3">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -267,7 +303,7 @@ fn main() {
 references to C++ objects must be <a href="https://doc.rust-lang.org/std/pin/">pinned</a>.
 In practice, this means you must call <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut"><code>.pin_mut()</code></a>
 every time you call a method:</p>
-<h4 id="c-header-3"><a class="header" href="#c-header-3">C++ header:</a></h4>
+<h4 id="c-header-4"><a class="header" href="#c-header-4">C++ header:</a></h4>
 <pre><code class="language-cpp">
 class Sloth {
 public:
@@ -276,7 +312,7 @@ public:
 };
 
 </code></pre>
-<h4 id="rust-3"><a class="header" href="#rust-3">Rust:</a></h4>
+<h4 id="rust-4"><a class="header" href="#rust-4">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
