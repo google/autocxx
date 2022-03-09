@@ -2,7 +2,7 @@
 
 Building in a `cargo` environment is explained in [the tutorial](tutorial.md).
 
-If your build depends on later editions of the C++ standard library, you will need to ensure that both clang and the compiler are sent the appropriate flag, like this:
+If your build depends on later editions of the C++ standard library, you will need to ensure that both `libclang` and the compiler are sent the appropriate flag, like this:
 
 ```rust,ignore
 fn main() {
