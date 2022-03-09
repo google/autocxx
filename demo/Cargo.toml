@@ -8,13 +8,13 @@
 
 [package]
 name = "autocxx-demo"
-version = "0.16.0"
+version = "0.17.0"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2021"
 
 [dependencies]
 cxx = "1.0.54"
-autocxx = { path = "..", version="0.16.0" }
+autocxx = { path = "..", version="0.17.0" }
 
 [build-dependencies]
-autocxx-build = { path = "../gen/build", version="0.16.0" }
+autocxx-build = { path = "../gen/build", version="0.17.0" }
