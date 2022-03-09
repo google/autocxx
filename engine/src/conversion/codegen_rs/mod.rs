@@ -44,8 +44,9 @@ use self::{
 
 use super::{
     analysis::{
-        fun::{FnPhase, PodAndDepAnalysis, ReceiverMutability},
+        fun::{PodAndDepAnalysis, ReceiverMutability},
         pod::PodAnalysis,
+        AnnotatedFnPhase,
     },
     api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind},
     convert_error::ErrorContextType,
@@ -143,7 +144,7 @@ pub(crate) struct RsCodeGenerator<'a> {
 impl<'a> RsCodeGenerator<'a> {
     /// Generate code for a set of APIs that was discovered during parsing.
     pub(crate) fn generate_rs_code(
-        all_apis: ApiVec<FnPhase>,
+        all_apis: ApiVec<AnnotatedFnPhase>,
         include_list: &'a [String],
         bindgen_mod: ItemMod,
         config: &'a IncludeCppConfig,
@@ -159,7 +160,7 @@ impl<'a> RsCodeGenerator<'a> {
         c.rs_codegen(all_apis)
     }
 
-    fn rs_codegen(mut self, all_apis: ApiVec<FnPhase>) -> Vec<Item> {
+    fn rs_codegen(mut self, all_apis: ApiVec<AnnotatedFnPhase>) -> Vec<Item> {
         // ... and now let's start to generate the output code.
         // First off, when we generate structs we may need to add some methods
         // if they're superclasses.
@@ -264,7 +265,7 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn accumulate_superclass_methods(
         &self,
-        apis: &ApiVec<FnPhase>,
+        apis: &ApiVec<AnnotatedFnPhase>,
     ) -> HashMap<QualifiedName, Vec<SuperclassMethod>> {
         let mut results = HashMap::new();
         results.extend(
@@ -458,7 +459,7 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn generate_rs_for_api(
         &self,
-        api: Api<FnPhase>,
+        api: Api<AnnotatedFnPhase>,
         associated_methods: &HashMap<QualifiedName, Vec<SuperclassMethod>>,
         subclasses_with_a_single_trivial_constructor: &HashSet<QualifiedName>,
         non_pod_types: &HashSet<QualifiedName>,
@@ -1113,7 +1114,9 @@ impl<'a> RsCodeGenerator<'a> {
     }
 }
 
-fn find_trivially_constructed_subclasses(apis: &ApiVec<FnPhase>) -> HashSet<QualifiedName> {
+fn find_trivially_constructed_subclasses(
+    apis: &ApiVec<AnnotatedFnPhase>,
+) -> HashSet<QualifiedName> {
     let (simple_constructors, complex_constructors): (Vec<_>, Vec<_>) = apis
         .iter()
         .filter_map(|api| match api {
@@ -1136,7 +1139,9 @@ fn find_trivially_constructed_subclasses(apis: &ApiVec<FnPhase>) -> HashSet<Qual
         .collect()
 }
 
-fn find_non_pod_types(apis: &ApiVec<FnPhase>) -> HashSet<QualifiedName> {
+fn find_non_pod_types<P: AnalysisPhase<StructAnalysis = PodAndDepAnalysis>>(
+    apis: &ApiVec<P>,
+) -> HashSet<QualifiedName> {
     apis.iter()
         .filter_map(|api| match api {
             Api::Struct {

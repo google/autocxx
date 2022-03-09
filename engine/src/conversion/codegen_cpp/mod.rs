@@ -31,9 +31,10 @@ use super::{
     analysis::{
         fun::{
             function_wrapper::{CppFunction, CppFunctionBody},
-            FnPhase, PodAndDepAnalysis,
+            PodAndDepAnalysis,
         },
         pod::PodAnalysis,
+        AnnotatedFnAnalysis, AnnotatedFnPhase,
     },
     api::{Api, Provenance, SubclassName, TypeKind},
     apivec::ApiVec,
@@ -109,7 +110,7 @@ struct SubclassFunction<'a> {
 impl<'a> CppCodeGenerator<'a> {
     pub(crate) fn generate_cpp_code(
         inclusions: String,
-        apis: &ApiVec<FnPhase>,
+        apis: &ApiVec<AnnotatedFnPhase>,
         config: &'a IncludeCppConfig,
         cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<Option<CppFilePair>, ConvertError> {
@@ -143,7 +144,7 @@ impl<'a> CppCodeGenerator<'a> {
     // It's important to keep this in sync with Api::needs_cpp_codegen.
     fn add_needs<'b>(
         &mut self,
-        apis: impl Iterator<Item = &'a Api<FnPhase>>,
+        apis: impl Iterator<Item = &'a Api<AnnotatedFnPhase>>,
     ) -> Result<(), ConvertError> {
         let mut constructors_by_subclass: HashMap<SubclassName, Vec<&CppFunction>> = HashMap::new();
         let mut methods_by_subclass: HashMap<SubclassName, Vec<SubclassFunction>> = HashMap::new();
@@ -153,10 +154,14 @@ impl<'a> CppCodeGenerator<'a> {
                 Api::StringConstructor { .. } => self.generate_string_constructor(),
                 Api::Function {
                     analysis:
-                        FnAnalysis {
-                            cpp_wrapper: Some(cpp_wrapper),
-                            ignore_reason: Ok(_),
-                            externally_callable: true,
+                        AnnotatedFnAnalysis {
+                            fun:
+                                FnAnalysis {
+                                    cpp_wrapper: Some(cpp_wrapper),
+                                    ignore_reason: Ok(_),
+                                    externally_callable: true,
+                                    ..
+                                },
                             ..
                         },
                     fun,
@@ -465,9 +470,7 @@ impl<'a> CppCodeGenerator<'a> {
         let (mut underlying_function_call, field_assignments, need_allocators) = match &details
             .payload
         {
-            CppFunctionBody::MakeUnique | CppFunctionBody::Cast => {
-                (arg_list, "".to_string(), false)
-            }
+            CppFunctionBody::Cast => (arg_list, "".to_string(), false),
             CppFunctionBody::PlacementNew(ns, id) => {
                 let ty_id = QualifiedName::new(ns, id.clone());
                 let ty_id = self.namespaced_name(&ty_id);

@@ -33,6 +33,7 @@ use crate::{
 use self::{
     analysis::{
         abstract_types::{discard_ignored_functions, mark_types_abstract},
+        add_make_uniques,
         allocators::create_alloc_and_frees,
         casts::add_casts,
         check_names,
@@ -182,6 +183,7 @@ impl<'a> BridgeConverter<'a> {
                 // Determine what variably-sized C types (e.g. int) we need to include
                 analysis::ctypes::append_ctype_information(&mut analyzed_apis);
                 Self::dump_apis_with_deps("GC", &analyzed_apis);
+                let analyzed_apis = add_make_uniques(analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
                 let cpp = CppCodeGenerator::generate_cpp_code(
