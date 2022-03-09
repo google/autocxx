@@ -6206,6 +6206,27 @@ fn test_rust_reference_method() {
 }
 
 #[test]
+fn test_cpp17() {
+    let hdr = indoc! {"
+        static_assert(__cplusplus >= 201703L, \"This file expects a C++17 compatible compiler.\");
+        inline void foo() {}
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            ffi::foo();
+        },
+        quote! {
+            generate!("foo")
+        },
+        make_clang_arg_adder(&["-std=c++17"]),
+        None,
+        None,
+    );
+}
+
+#[test]
 fn test_box() {
     let hdr = indoc! {"
         #include <cxx.h>
