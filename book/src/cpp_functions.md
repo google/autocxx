@@ -52,6 +52,50 @@ fn main() {
 
 Specifically, you can pass anything which implements [`ValueParam<T>`](https://docs.rs/autocxx/latest/autocxx/trait.ValueParam.html).
 
+If you're keeping non-POD values on the Rust stack, you need to explicitly use [`as_mov`](https://docs.rs/autocxx/latest/autocxx/prelude/fn.as_mov.html) to indicate that you want to
+consume the object using move semantics:
+
+```rust,ignore,autocxx,hidecpp
+autocxx_integration_tests::doctest(
+"
+#include <strstream>
+Blimp::Blimp() {}
+void burst(Blimp g) {}
+",
+"#include <cstdint>
+
+struct Blimp {
+    Blimp();
+    uint32_t tons_of_helium;
+};
+
+void burst(Blimp b); // consumes blimp,
+    // but because C++ is amazing, may copy the blimp first.
+",
+{
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include "input.h"
+    safety!(unsafe_ffi)
+    generate!("Blimp")
+    generate!("burst")
+}
+
+fn main() {
+    moveit! {
+        let mut blimp = ffi::Blimp::new();
+    }
+    ffi::burst(&*blimp); // pass by copy
+    ffi::burst(as_copy(blimp.as_ref())); // explicitly say you want to pass by copy
+    ffi::burst(as_mov(blimp)); // consume, using move constructor
+}
+}
+)
+```
+
+Rvalue parameters are not yet supported.
+
 ## Default parameters
 
 Are not yet supported[^default].
