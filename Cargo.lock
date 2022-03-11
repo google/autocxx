@@ -75,7 +75,6 @@ name = "autocxx"
 version = "0.17.0"
 dependencies = [
  "aquamarine",
- "autocxx-engine",
  "autocxx-macro",
  "cxx",
  "moveit",
@@ -131,7 +130,6 @@ dependencies = [
  "autocxx-bindgen",
  "autocxx-parser",
  "cc",
- "cxx",
  "cxx-gen",
  "indoc",
  "itertools 0.10.3",

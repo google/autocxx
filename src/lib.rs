@@ -17,9 +17,6 @@
 pub mod subclass;
 mod value_param;
 
-#[allow(unused_imports)] // doc cross-reference only
-use autocxx_engine::IncludeCppEngine;
-
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// Include some C++ headers in your Rust project.
 ///
@@ -95,7 +92,7 @@ use autocxx_engine::IncludeCppEngine;
 /// # Internals
 ///
 /// For documentation on how this all actually _works_, see
-/// [IncludeCppEngine].
+/// `IncludeCppEngine` within the `autocxx_engine` crate.
 #[macro_export]
 macro_rules! include_cpp {
     (
@@ -133,7 +130,7 @@ macro_rules! generate {
 /// for C++ types which have trivial move constructors and no
 /// destructor - you'll encounter a compile error otherwise.
 /// If your type doesn't match that description, use [generate]
-/// instead, and own the type using [UniquePtr][autocxx_engine::cxx::UniquePtr].
+/// instead, and own the type using [UniquePtr][cxx::UniquePtr].
 /// A directive to be included inside
 /// [include_cpp] - see [include_cpp] for general information.
 #[macro_export]
@@ -304,9 +301,9 @@ macro_rules! ctype_wrapper {
         ///
         /// We assert that the namespace and type ID refer to a C++
         /// type which is equivalent to this Rust type.
-        unsafe impl autocxx_engine::cxx::ExternType for $r {
-            type Id = autocxx_engine::cxx::type_id!($c);
-            type Kind = autocxx_engine::cxx::kind::Trivial;
+        unsafe impl cxx::ExternType for $r {
+            type Id = cxx::type_id!($c);
+            type Kind = cxx::kind::Trivial;
         }
 
         impl From<::std::os::raw::$r> for $r {
@@ -350,9 +347,9 @@ pub struct c_void(pub ::std::os::raw::c_void);
 ///
 /// We assert that the namespace and type ID refer to a C++
 /// type which is equivalent to this Rust type.
-unsafe impl autocxx_engine::cxx::ExternType for c_void {
-    type Id = autocxx_engine::cxx::type_id!(c_void);
-    type Kind = autocxx_engine::cxx::kind::Trivial;
+unsafe impl cxx::ExternType for c_void {
+    type Id = cxx::type_id!(c_void);
+    type Kind = cxx::kind::Trivial;
 }
 
 /// autocxx couldn't generate these bindings.
@@ -446,5 +443,9 @@ pub mod prelude {
 /// Re-export moveit for ease of consumers.
 pub use moveit;
 
-/// And cxx too...
+/// Re-export cxx such that clients can use the same version as
+/// us. This doesn't enable clients to avoid depending on the cxx
+/// crate too, unfortunately, since generated cxx::bridge code
+/// refers explicitly to ::cxx. See
+/// <https://github.com/google/autocxx/issues/36>
 pub use cxx;
