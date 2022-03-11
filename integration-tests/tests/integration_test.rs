@@ -7918,6 +7918,10 @@ fn test_nonconst_reference_parameter() {
     let hdr = indoc! {"
     #include <stdint.h>
     #include <string>
+
+    // Force generating a wrapper for the second `take_a`.
+    struct NOP { void take_a(); };
+
     struct A {
         std::string so_we_are_non_trivial;
     };
@@ -7927,7 +7931,7 @@ fn test_nonconst_reference_parameter() {
         let mut heap_obj = ffi::A::make_unique();
         ffi::take_a(heap_obj.pin_mut());
     };
-    run_test("", hdr, rs, &["A", "take_a"], &[]);
+    run_test("", hdr, rs, &["NOP", "A", "take_a"], &[]);
 }
 
 #[test]
@@ -7935,6 +7939,10 @@ fn test_nonconst_reference_method_parameter() {
     let hdr = indoc! {"
     #include <stdint.h>
     #include <string>
+
+    // Force generating a wrapper for the second `take_a`.
+    struct NOP { void take_a(); };
+
     struct A {
         std::string so_we_are_non_trivial;
     };
@@ -7947,7 +7955,7 @@ fn test_nonconst_reference_method_parameter() {
         let b = ffi::B::make_unique();
         b.take_a(a.pin_mut());
     };
-    run_test("", hdr, rs, &["A", "B"], &[]);
+    run_test("", hdr, rs, &["NOP", "A", "B"], &[]);
 }
 
 #[test]
