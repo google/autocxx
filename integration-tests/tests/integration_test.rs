@@ -708,6 +708,36 @@ fn test_take_nonpod_by_ref() {
 }
 
 #[test]
+fn test_take_nonpod_by_up() {
+    let cxx = indoc! {"
+        uint32_t take_bob(std::unique_ptr<Bob> a) {
+            return a->a;
+        }
+        std::unique_ptr<Bob> make_bob(uint32_t a) {
+            auto b = std::make_unique<Bob>();
+            b->a = a;
+            return b;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+
+        struct NOP { void take_bob(); };
+        std::unique_ptr<Bob> make_bob(uint32_t a);
+        uint32_t take_bob(std::unique_ptr<Bob> a);
+    "};
+    let rs = quote! {
+        let a = ffi::make_bob(12);
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob", "NOP"], &[]);
+}
+
+#[test]
 fn test_take_nonpod_by_ptr_simple() {
     let cxx = indoc! {"
         uint32_t take_bob(const Bob* a) {
