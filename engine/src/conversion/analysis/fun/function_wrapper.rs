@@ -15,6 +15,7 @@ use syn::{parse_quote, Ident, Type};
 #[derive(Clone, Debug)]
 pub(crate) enum CppConversionType {
     None,
+    Move,
     FromUniquePtrToValue,
     FromPtrToValue,
     FromValueToUniquePtr,
