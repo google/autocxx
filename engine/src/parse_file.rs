@@ -13,12 +13,12 @@ use crate::{
     RebuildDependencyRecorder,
 };
 use autocxx_parser::directives::SUBCLASS;
-use autocxx_parser::{RustPath, Subclass, SubclassAttrs};
+use autocxx_parser::{AllowlistEntry, RustPath, Subclass, SubclassAttrs};
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use std::{collections::HashSet, fmt::Display, io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
-use syn::{token::Brace, Item, ItemMod, LitStr};
+use syn::{token::Brace, Item, ItemMod};
 
 /// Errors which may occur when parsing a Rust source file to discover
 /// and interpret include_cxx macros.
@@ -213,7 +213,7 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                         engine
                             .config_mut()
                             .allowlist
-                            .push(LitStr::new(&cpp, Span::call_site()))
+                            .push(AllowlistEntry::Item(cpp), Span::call_site())
                             .map_err(ParseError::Syntax)?;
                     }
                 }

@@ -12,7 +12,7 @@ use proc_macro2::Span;
 use quote::ToTokens;
 use syn::{
     parse::{Parse, ParseStream},
-    LitStr, Signature, Token,
+    Signature, Token,
 };
 use syn::{Ident, Result as ParseResult};
 
@@ -64,31 +64,47 @@ impl ToTokens for UnsafePolicy {
     }
 }
 
+/// An entry in the allowlist.
+#[derive(Hash, Debug)]
+pub enum AllowlistEntry {
+    Item(String),
+    Namespace(String),
+}
+
+impl AllowlistEntry {
+    fn to_bindgen_item(&self) -> String {
+        match self {
+            AllowlistEntry::Item(i) => i.clone(),
+            AllowlistEntry::Namespace(ns) => format!("{}::*", ns),
+        }
+    }
+}
+
 /// Allowlist configuration.
 #[derive(Hash, Debug)]
 pub enum Allowlist {
-    Unspecified(Vec<String>),
+    Unspecified(Vec<AllowlistEntry>),
     All,
-    Specific(Vec<String>),
+    Specific(Vec<AllowlistEntry>),
 }
 
 impl Allowlist {
-    pub fn push(&mut self, item: LitStr) -> ParseResult<()> {
+    pub fn push(&mut self, item: AllowlistEntry, span: Span) -> ParseResult<()> {
         match self {
             Allowlist::Unspecified(ref mut uncommitted_list) => {
                 let new_list = uncommitted_list
                     .drain(..)
-                    .chain(std::iter::once(item.value()))
+                    .chain(std::iter::once(item))
                     .collect();
                 *self = Allowlist::Specific(new_list);
             }
             Allowlist::All => {
                 return Err(syn::Error::new(
-                    item.span(),
-                    "use either generate!/generate_pod! or generate_all!, not both.",
+                    span,
+                    "use either generate!/generate_pod!/generate_ns! or generate_all!, not both.",
                 ))
             }
-            Allowlist::Specific(list) => list.push(item.value()),
+            Allowlist::Specific(list) => list.push(item),
         };
         Ok(())
     }
@@ -97,7 +113,7 @@ impl Allowlist {
         if matches!(self, Allowlist::Specific(..)) {
             return Err(syn::Error::new(
                 ident.span(),
-                "use either generate!/generate_pod! or generate_all!, not both.",
+                "use either generate!/generate_pod!/generate_ns! or generate_all!, not both.",
             ));
         }
         *self = Allowlist::All;
@@ -185,13 +201,24 @@ impl Parse for IncludeCppConfig {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
-                    allowlist.push(generate)?;
+                    allowlist.push(AllowlistEntry::Item(generate.value()), generate.span())?;
+                } else if ident == "generate_ns" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let generate_ns: syn::LitStr = args.parse()?;
+                    allowlist.push(
+                        AllowlistEntry::Namespace(generate_ns.value()),
+                        generate_ns.span(),
+                    )?;
                 } else if ident == "generate_pod" {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate_pod: syn::LitStr = args.parse()?;
                     pod_requests.push(generate_pod.value());
-                    allowlist.push(generate_pod)?;
+                    allowlist.push(
+                        AllowlistEntry::Item(generate_pod.value()),
+                        generate_pod.span(),
+                    )?;
                 } else if ident == "pod" {
                     let args;
                     syn::parenthesized!(args in input);
@@ -315,7 +342,16 @@ impl IncludeCppConfig {
     /// we should raise an error if we weren't able to do so.
     pub fn must_generate_list(&self) -> Box<dyn Iterator<Item = String> + '_> {
         if let Allowlist::Specific(items) = &self.allowlist {
-            Box::new(items.iter().chain(self.pod_requests.iter()).cloned())
+            Box::new(
+                items
+                    .iter()
+                    .filter_map(|i| match i {
+                        AllowlistEntry::Item(i) => Some(i),
+                        AllowlistEntry::Namespace(_) => None,
+                    })
+                    .chain(self.pod_requests.iter())
+                    .cloned(),
+            )
         } else {
             Box::new(self.pod_requests.iter().cloned())
         }
@@ -328,8 +364,8 @@ impl IncludeCppConfig {
             Allowlist::Specific(items) => Some(Box::new(
                 items
                     .iter()
-                    .chain(self.pod_requests.iter())
-                    .cloned()
+                    .map(AllowlistEntry::to_bindgen_item)
+                    .chain(self.pod_requests.iter().cloned())
                     .chain(self.active_utilities())
                     .chain(self.subclasses.iter().flat_map(|sc| {
                         [
@@ -449,7 +485,7 @@ impl IncludeCppConfig {
             } else {
                 Err(syn::Error::new(
                     Span::call_site(),
-                    "expected either generate! or generate_all!",
+                    "expected either generate!/generate_ns! or generate_all!",
                 ))
             }
         } else {
@@ -503,7 +539,12 @@ impl ToTokens for IncludeCppConfig {
             Allowlist::All => tokens.extend(quote! { generate_all!() }),
             Allowlist::Specific(items) => {
                 for i in items {
-                    tokens.extend(quote! { generate!(#i) });
+                    match i {
+                        AllowlistEntry::Item(i) => tokens.extend(quote! { generate!(#i) }),
+                        AllowlistEntry::Namespace(ns) => {
+                            tokens.extend(quote! { generate_ns!(#ns) })
+                        }
+                    }
                 }
             }
             Allowlist::Unspecified(_) => panic!("Allowlist mode not yet determined"),
