@@ -396,16 +396,18 @@ impl IncludeCppConfig {
     /// This second pass may seem redundant. But sometimes bindgen generates
     /// unnecessary stuff.
     pub fn is_on_allowlist(&self, cpp_name: &str) -> bool {
-        match self.bindgen_allowlist() {
-            None => true,
-            Some(mut items) => {
-                items.any(|item| item == cpp_name)
-                    || self.active_utilities().iter().any(|item| *item == cpp_name)
-                    || self.is_subclass_holder(cpp_name)
-                    || self.is_subclass_cpp(cpp_name)
-                    || self.is_rust_fun(cpp_name)
+        self.active_utilities().iter().any(|item| *item == cpp_name)
+            || self.is_subclass_holder(cpp_name)
+            || self.is_subclass_cpp(cpp_name)
+            || self.is_rust_fun(cpp_name)
+            || match &self.allowlist {
+                Allowlist::Unspecified(_) => panic!("Eek no allowlist yet"),
+                Allowlist::All => true,
+                Allowlist::Specific(items) => items.iter().any(|entry| match entry {
+                    AllowlistEntry::Item(i) => i == cpp_name,
+                    AllowlistEntry::Namespace(ns) => cpp_name.starts_with(ns),
+                }),
             }
-        }
     }
 
     pub fn is_on_blocklist(&self, cpp_name: &str) -> bool {
