@@ -252,7 +252,7 @@ autocxx-build = &quot;0.17.0&quot;
     // Add instructions to link to any C++ libraries you need.
 }
 </code></pre>
-<p>(See <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script">the standard cargo build script output mechanisms for how you can direct Rust to link against pre-existing libraries</a>).</p>
+<p>See <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script">the standard cargo build script output mechanisms for how you can direct Rust to link against pre-existing libraries</a>, and see the <a href="building.html">building section of this book for more details about build options - for example, enabling C++17</a>.</p>
 <p>Finally, in your <code>main.rs</code> you can use the <a href="https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html"><code>include_cpp</code></a> macro which is the heart of <code>autocxx</code>:</p>
 <pre><code class="language-rust ignore">use autocxx::prelude::*; // use all the main autocxx functions
 
@@ -359,7 +359,8 @@ see the chapter on <a href="cpp_types.html">C++ types</a>.</li>
 </ul>
 <p>See <a href="https://docs.rs/autocxx/latest/autocxx/">the docs.rs documentation for the full list</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="building"><a class="header" href="#building">Building</a></h1>
-<p>Building in a <code>cargo</code> environment is explained in <a href="tutorial.html">the tutorial</a>.</p>
+<h2 id="building-if-youre-using-cargo"><a class="header" href="#building-if-youre-using-cargo">Building if you're using cargo</a></h2>
+<p>The basics of building in a <code>cargo</code> environment are explained in <a href="tutorial.html">the tutorial</a>.</p>
 <p>If your build depends on later editions of the C++ standard library, you will need to ensure that both <code>libclang</code> and the compiler are sent the appropriate flag, like this:</p>
 <pre><code class="language-rust ignore">fn main() {
     let path = std::path::PathBuf::from(&quot;src&quot;); // include path
@@ -372,7 +373,7 @@ see the chapter on <a href="cpp_types.html">C++ types</a>.</li>
     // Add instructions to link to any C++ libraries you need.
 }
 </code></pre>
-<h1 id="configuring-the-build---if-youre-not-using-cargo"><a class="header" href="#configuring-the-build---if-youre-not-using-cargo">Configuring the build - if you're not using cargo</a></h1>
+<h2 id="building---if-youre-not-using-cargo"><a class="header" href="#building---if-youre-not-using-cargo">Building - if you're not using cargo</a></h2>
 <p>See the <code>autocxx-gen</code> crate. You'll need to:</p>
 <ul>
 <li>Run the <code>codegen</code> phase. You'll need to use the <a href="https://crates.io/crates/autocxx-gen"><code>autocxx-gen</code></a>

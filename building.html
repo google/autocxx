@@ -138,7 +138,8 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="building"><a class="header" href="#building">Building</a></h1>
-<p>Building in a <code>cargo</code> environment is explained in <a href="tutorial.html">the tutorial</a>.</p>
+<h2 id="building-if-youre-using-cargo"><a class="header" href="#building-if-youre-using-cargo">Building if you're using cargo</a></h2>
+<p>The basics of building in a <code>cargo</code> environment are explained in <a href="tutorial.html">the tutorial</a>.</p>
 <p>If your build depends on later editions of the C++ standard library, you will need to ensure that both <code>libclang</code> and the compiler are sent the appropriate flag, like this:</p>
 <pre><code class="language-rust ignore">fn main() {
     let path = std::path::PathBuf::from(&quot;src&quot;); // include path
@@ -151,7 +152,7 @@
     // Add instructions to link to any C++ libraries you need.
 }
 </code></pre>
-<h1 id="configuring-the-build---if-youre-not-using-cargo"><a class="header" href="#configuring-the-build---if-youre-not-using-cargo">Configuring the build - if you're not using cargo</a></h1>
+<h2 id="building---if-youre-not-using-cargo"><a class="header" href="#building---if-youre-not-using-cargo">Building - if you're not using cargo</a></h2>
 <p>See the <code>autocxx-gen</code> crate. You'll need to:</p>
 <ul>
 <li>Run the <code>codegen</code> phase. You'll need to use the <a href="https://crates.io/crates/autocxx-gen"><code>autocxx-gen</code></a>
