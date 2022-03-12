@@ -40,7 +40,7 @@ fn main() {
 }
 ```
 
-(See [the standard cargo build script output mechanisms for how you can direct Rust to link against pre-existing libraries](https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script)).
+See [the standard cargo build script output mechanisms for how you can direct Rust to link against pre-existing libraries](https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script), and see the [building section of this book for more details about build options - for example, enabling C++17](building.md).
 
 Finally, in your `main.rs` you can use the [`include_cpp`](https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html) macro which is the heart of `autocxx`:
 
