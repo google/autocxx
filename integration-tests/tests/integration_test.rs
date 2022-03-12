@@ -8195,6 +8195,34 @@ fn test_explicit_everything() {
 }
 
 #[test]
+fn test_generate_ns() {
+    let hdr = indoc! {"
+    namespace A {
+        inline void foo() {}
+        inline void bar() {}
+    }
+    namespace B {
+        inline void baz() {}
+    }
+    "};
+    let rs = quote! {
+        ffi::A::foo();
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! {
+            generate_ns!("A")
+            safety!(unsafe_ffi)
+        },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
 fn test_no_constructor_make_unique_ns() {
     let hdr = indoc! {"
     #include <stdint.h>
