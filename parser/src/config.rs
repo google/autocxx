@@ -75,7 +75,7 @@ impl AllowlistEntry {
     fn to_bindgen_item(&self) -> String {
         match self {
             AllowlistEntry::Item(i) => i.clone(),
-            AllowlistEntry::Namespace(ns) => format!("{}::*", ns),
+            AllowlistEntry::Namespace(ns) => format!("{}::.*", ns),
         }
     }
 }
