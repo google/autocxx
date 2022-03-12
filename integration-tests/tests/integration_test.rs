@@ -710,10 +710,10 @@ fn test_take_nonpod_by_ref() {
 #[test]
 fn test_take_nonpod_by_up() {
     let cxx = indoc! {"
-        inline uint32_t take_bob(std::unique_ptr<Bob> a) {
+        uint32_t take_bob(std::unique_ptr<Bob> a) {
             return a->a;
         }
-        inline std::unique_ptr<Bob> make_bob(uint32_t a) {
+        std::unique_ptr<Bob> make_bob(uint32_t a) {
             auto b = std::make_unique<Bob>();
             b->a = a;
             return b;
@@ -726,7 +726,7 @@ fn test_take_nonpod_by_up() {
             uint32_t a;
         };
 
-        struct NOP { void take_bob(); };
+        struct NOP { inline void take_bob(); };
         std::unique_ptr<Bob> make_bob(uint32_t a);
         uint32_t take_bob(std::unique_ptr<Bob> a);
     "};
