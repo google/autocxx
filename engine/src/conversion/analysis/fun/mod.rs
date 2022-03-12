@@ -256,6 +256,14 @@ impl AnalysisPhase for FnPhase {
     type FunAnalysis = FnAnalysis;
 }
 
+pub(crate) struct EndPhase;
+
+impl AnalysisPhase for EndPhase {
+    type TypedefAnalysis = TypedefAnalysis;
+    type StructAnalysis = PodAndDepAnalysis;
+    type FunAnalysis = FnAnalysis;
+}
+
 /// Whether to allow highly optimized calls because this is a simple Rust->C++ call,
 /// or to use a simpler set of policies because this is a subclass call where
 /// we may have C++->Rust->C++ etc.

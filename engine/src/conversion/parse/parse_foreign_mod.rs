@@ -131,7 +131,7 @@ impl ParseForeignMod {
         while !self.funcs_to_convert.is_empty() {
             let mut fun = self.funcs_to_convert.remove(0);
             fun.self_ty = self.method_receivers.get(&fun.ident).cloned();
-            apis.push_eliminating_duplicates(UnanalyzedApi::Function {
+            apis.push(UnanalyzedApi::Function {
                 name: ApiName::new_with_cpp_name(
                     &self.ns,
                     fun.ident.clone(),
