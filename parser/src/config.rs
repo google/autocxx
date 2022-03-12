@@ -387,6 +387,18 @@ impl IncludeCppConfig {
         }
     }
 
+    fn is_subclass_or_superclass(&self, cpp_name: &str) -> bool {
+        self.subclasses
+            .iter()
+            .flat_map(|sc| {
+                [
+                    Cow::Owned(sc.subclass.to_string()),
+                    Cow::Borrowed(&sc.superclass),
+                ]
+            })
+            .any(|item| cpp_name == item.as_str())
+    }
+
     /// Whether this type is on the allowlist specified by the user.
     ///
     /// A note on the allowlist handling in general. It's used in two places:
@@ -397,6 +409,7 @@ impl IncludeCppConfig {
     /// unnecessary stuff.
     pub fn is_on_allowlist(&self, cpp_name: &str) -> bool {
         self.active_utilities().iter().any(|item| *item == cpp_name)
+            || self.is_subclass_or_superclass(cpp_name)
             || self.is_subclass_holder(cpp_name)
             || self.is_subclass_cpp(cpp_name)
             || self.is_rust_fun(cpp_name)
