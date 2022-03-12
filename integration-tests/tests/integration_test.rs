@@ -710,10 +710,10 @@ fn test_take_nonpod_by_ref() {
 #[test]
 fn test_take_nonpod_by_up() {
     let cxx = indoc! {"
-        uint32_t take_bob(std::unique_ptr<Bob> a) {
+        inline uint32_t take_bob(std::unique_ptr<Bob> a) {
             return a->a;
         }
-        std::unique_ptr<Bob> make_bob(uint32_t a) {
+        inline std::unique_ptr<Bob> make_bob(uint32_t a) {
             auto b = std::make_unique<Bob>();
             b->a = a;
             return b;
@@ -7920,7 +7920,7 @@ fn test_nonconst_reference_parameter() {
     #include <string>
 
     // Force generating a wrapper for the second `take_a`.
-    struct NOP { void take_a(); };
+    struct NOP { void take_a() {}; };
 
     struct A {
         std::string so_we_are_non_trivial;
@@ -7941,7 +7941,7 @@ fn test_nonconst_reference_method_parameter() {
     #include <string>
 
     // Force generating a wrapper for the second `take_a`.
-    struct NOP { void take_a(); };
+    struct NOP { void take_a() {}; };
 
     struct A {
         std::string so_we_are_non_trivial;
