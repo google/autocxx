@@ -1683,7 +1683,7 @@ impl<'a> FnAnalyzer<'a> {
                 };
                 TypeConversionPolicy {
                     unwrapped_type: ty,
-                    cpp_conversion: CppConversionType::None,
+                    cpp_conversion: CppConversionType::Move,
                     rust_conversion: RustConversionType::ToBoxedUpHolder(subclass),
                 }
             };
@@ -1693,7 +1693,15 @@ impl<'a> FnAnalyzer<'a> {
                 let ty = ty.clone();
                 let tn = QualifiedName::from_type_path(p);
                 if self.pod_safe_types.contains(&tn) {
-                    TypeConversionPolicy::new_unconverted(ty)
+                    if known_types().lacks_copy_constructor(&tn) {
+                        TypeConversionPolicy {
+                            unwrapped_type: ty,
+                            cpp_conversion: CppConversionType::Move,
+                            rust_conversion: RustConversionType::None,
+                        }
+                    } else {
+                        TypeConversionPolicy::new_unconverted(ty)
+                    }
                 } else if known_types().convertible_from_strs(&tn)
                     && !self.config.exclude_utilities()
                 {

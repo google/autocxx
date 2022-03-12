@@ -708,6 +708,36 @@ fn test_take_nonpod_by_ref() {
 }
 
 #[test]
+fn test_take_nonpod_by_up() {
+    let cxx = indoc! {"
+        uint32_t take_bob(std::unique_ptr<Bob> a) {
+            return a->a;
+        }
+        std::unique_ptr<Bob> make_bob(uint32_t a) {
+            auto b = std::make_unique<Bob>();
+            b->a = a;
+            return b;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        struct Bob {
+            uint32_t a;
+        };
+
+        struct NOP { inline void take_bob(); };
+        std::unique_ptr<Bob> make_bob(uint32_t a);
+        uint32_t take_bob(std::unique_ptr<Bob> a);
+    "};
+    let rs = quote! {
+        let a = ffi::make_bob(12);
+        assert_eq!(ffi::take_bob(a), 12);
+    };
+    run_test(cxx, hdr, rs, &["take_bob", "Bob", "make_bob", "NOP"], &[]);
+}
+
+#[test]
 fn test_take_nonpod_by_ptr_simple() {
     let cxx = indoc! {"
         uint32_t take_bob(const Bob* a) {
@@ -7888,6 +7918,10 @@ fn test_nonconst_reference_parameter() {
     let hdr = indoc! {"
     #include <stdint.h>
     #include <string>
+
+    // Force generating a wrapper for the second `take_a`.
+    struct NOP { void take_a() {}; };
+
     struct A {
         std::string so_we_are_non_trivial;
     };
@@ -7897,7 +7931,7 @@ fn test_nonconst_reference_parameter() {
         let mut heap_obj = ffi::A::make_unique();
         ffi::take_a(heap_obj.pin_mut());
     };
-    run_test("", hdr, rs, &["A", "take_a"], &[]);
+    run_test("", hdr, rs, &["NOP", "A", "take_a"], &[]);
 }
 
 #[test]
@@ -7905,6 +7939,10 @@ fn test_nonconst_reference_method_parameter() {
     let hdr = indoc! {"
     #include <stdint.h>
     #include <string>
+
+    // Force generating a wrapper for the second `take_a`.
+    struct NOP { void take_a() {}; };
+
     struct A {
         std::string so_we_are_non_trivial;
     };
@@ -7917,7 +7955,7 @@ fn test_nonconst_reference_method_parameter() {
         let b = ffi::B::make_unique();
         b.take_a(a.pin_mut());
     };
-    run_test("", hdr, rs, &["A", "B"], &[]);
+    run_test("", hdr, rs, &["NOP", "A", "B"], &[]);
 }
 
 #[test]

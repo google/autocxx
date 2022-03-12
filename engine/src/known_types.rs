@@ -235,6 +235,18 @@ impl TypeDatabase {
             .unwrap_or(false)
     }
 
+    /// Whether this can only be passed around using `std::move`
+    pub(crate) fn lacks_copy_constructor(&self, tn: &QualifiedName) -> bool {
+        self.get(tn)
+            .map(|td| {
+                matches!(
+                    td.behavior,
+                    Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe
+                )
+            })
+            .unwrap_or(false)
+    }
+
     /// Here we substitute any names which we know are Special from
     /// our type database, e.g. std::unique_ptr -> UniquePtr.
     /// We strip off and ignore

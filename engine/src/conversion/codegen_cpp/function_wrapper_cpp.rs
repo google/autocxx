@@ -57,12 +57,9 @@ impl TypeConversionPolicy {
         // If is_return we want to avoid unnecessary std::moves because they
         // make RVO less effective
         Ok(match self.cpp_conversion {
-            CppConversionType::None => {
-                if is_return {
-                    var_name.to_string()
-                } else {
-                    format!("std::move({})", var_name)
-                }
+            CppConversionType::None => var_name.to_string(),
+            CppConversionType::Move => {
+                format!("std::move({})", var_name)
             }
             CppConversionType::FromUniquePtrToValue | CppConversionType::FromPtrToMove => {
                 format!("std::move(*{})", var_name)
