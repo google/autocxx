@@ -233,7 +233,7 @@ impl Display for QualifiedName {
 /// where code will be output as part of the `#[cxx::bridge]` mod.
 pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), ConvertError> {
     validate_ident_ok_for_rust(id)?;
-    if id.contains("__") || id == "autocxx_deliberate_fail" {
+    if id.contains("__") || id.contains("autocxx_deliberate_fail") {
         Err(ConvertError::TooManyUnderscores)
     } else {
         Ok(())

@@ -5849,12 +5849,6 @@ fn test_no_impl() {
 fn test_generate_all() {
     let hdr = indoc! {"
         #include <cstdint>
-        #include <string>
-        struct Foo {
-            Foo() {}
-            std::string a;
-        };
-        inline void autocxx_deliberate_fail(Foo) {}
         inline uint32_t give_int() {
             return 5;
         }
@@ -6041,6 +6035,19 @@ fn test_issue486() {
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["spanner::Key"], &[]);
+}
+
+#[test]
+fn test_deliberate_fail() {
+    let hdr = indoc! {"
+        #include <string>
+        struct Foo {
+            Foo() {}
+        };
+        inline void autocxx_deliberate_fail(Foo) {}
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["autocxx_deliberate_fail"], &[]);
 }
 
 #[test]
