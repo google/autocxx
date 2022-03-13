@@ -1973,6 +1973,12 @@ impl Api<FnPhase> {
                 }
             },
             Api::RustSubclassFn { subclass, .. } => subclass.0.name.clone(),
+            Api::IgnoredItem { name, ctx, .. } => match ctx {
+                ErrorContext::Method { self_ty, .. } => {
+                    QualifiedName::new(name.name.get_namespace(), self_ty.clone())
+                }
+                _ => name.name.clone(),
+            },
             _ => self.name().clone(),
         }
     }
