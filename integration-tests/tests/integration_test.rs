@@ -5849,6 +5849,12 @@ fn test_no_impl() {
 fn test_generate_all() {
     let hdr = indoc! {"
         #include <cstdint>
+        #include <string>
+        struct Foo {
+            Foo() {}
+            std::string a;
+        };
+        inline void autocxx_deliberate_fail(Foo) {}
         inline uint32_t give_int() {
             return 5;
         }
