@@ -930,15 +930,16 @@ impl<'a> RsCodeGenerator<'a> {
     /// generated.
     fn generate_error_entry(err: ConvertError, ctx: ErrorContext) -> RsCodegenResult {
         let err = format!("autocxx bindings couldn't be generated: {}", err);
-        let (impl_entry, materialization) = match ctx {
+        let (impl_entry, bindgen_mod_item, materialization) = match ctx {
             ErrorContext::Item(id) => {
                 let id = Self::sanitize_error_ident(&id).unwrap_or(id);
                 (
                     None,
-                    Some(Use::Custom(Box::new(parse_quote! {
+                    Some(parse_quote! {
                         #[doc = #err]
                         pub struct #id;
-                    }))),
+                    }),
+                    Some(Use::UsedFromBindgen),
                 )
             }
             ErrorContext::Method { self_ty, method }
@@ -958,6 +959,7 @@ impl<'a> RsCodeGenerator<'a> {
                         ty: self_ty,
                     })),
                     None,
+                    None,
                 )
             }
             ErrorContext::Method { self_ty, method } => {
@@ -965,16 +967,18 @@ impl<'a> RsCodeGenerator<'a> {
                 let id = make_ident(format!("{}_method_{}", self_ty, method));
                 (
                     None,
-                    Some(Use::Custom(Box::new(parse_quote! {
+                    Some(parse_quote! {
                         #[doc = #err]
                         pub struct #id;
-                    }))),
+                    }),
+                    Some(Use::UsedFromBindgen),
                 )
             }
-            ErrorContext::NoCode => (None, None),
+            ErrorContext::NoCode => (None, None, None),
         };
         RsCodegenResult {
             impl_entry,
+            bindgen_mod_items: bindgen_mod_item.into_iter().collect(),
             materializations: materialization.into_iter().collect(),
             ..Default::default()
         }
