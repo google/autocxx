@@ -302,7 +302,7 @@ impl<'a> FnAnalyzer<'a> {
         convert_apis(
             apis,
             &mut results,
-            |name, fun, _, _| me.analyze_foreign_fn_and_subclasses(name, fun),
+            |name, fun, _| me.analyze_foreign_fn_and_subclasses(name, fun),
             Api::struct_unchanged,
             Api::enum_unchanged,
             Api::typedef_unchanged,
@@ -632,7 +632,6 @@ impl<'a> FnAnalyzer<'a> {
             fun,
             analysis,
             name,
-            name_for_gc: None,
         });
 
         Ok(Box::new(results.into_iter()))
@@ -652,7 +651,6 @@ impl<'a> FnAnalyzer<'a> {
             fun: new_func,
             analysis,
             name: name.clone(),
-            name_for_gc: None,
         });
         name.name
     }
@@ -1967,10 +1965,6 @@ fn error_context_for_method(self_ty: &QualifiedName, rust_name: &str) -> ErrorCo
 impl Api<FnPhase> {
     pub(crate) fn typename_for_allowlist(&self) -> QualifiedName {
         match &self {
-            Api::Function {
-                name_for_gc: Some(name),
-                ..
-            } => name.clone(),
             Api::Function { analysis, .. } => match analysis.kind {
                 FnKind::Method { ref impl_for, .. } => impl_for.clone(),
                 FnKind::TraitMethod { ref impl_for, .. } => impl_for.clone(),

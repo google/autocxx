@@ -91,7 +91,6 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
     };
     Api::Function {
         name: ApiName::new_from_qualified_name(name),
-        name_for_gc: None,
         fun: Box::new(crate::conversion::api::FuncToConvert {
             ident,
             doc_attr: None,

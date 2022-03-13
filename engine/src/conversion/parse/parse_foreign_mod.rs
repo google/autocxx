@@ -139,7 +139,6 @@ impl ParseForeignMod {
                 ),
                 fun: Box::new(fun),
                 analysis: (),
-                name_for_gc: None,
             })
         }
     }
