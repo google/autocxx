@@ -12,6 +12,7 @@ use std::{
     path::PathBuf,
 };
 
+use itertools::{Either, Itertools};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::Item;
@@ -49,17 +50,33 @@ impl CodeCheckerFns for ErrorFinder {
 }
 
 fn find_ffi_items(f: syn::File) -> Result<Vec<Item>, TestError> {
-    Ok(f.items
+    let md = f
+        .items
         .into_iter()
         .filter_map(|i| match i {
             Item::Mod(itm) => Some(itm),
             _ => None,
         })
         .next()
-        .ok_or(TestError::RsCodeExaminationFail)?
+        .ok_or(TestError::RsCodeExaminationFail)?;
+    let mut items = Vec::new();
+    find_all_non_mod_items(md, &mut items);
+    Ok(items)
+}
+
+fn find_all_non_mod_items(md: syn::ItemMod, items: &mut Vec<Item>) {
+    let (more_mods, mut these_items): (Vec<_>, Vec<_>) = md
         .content
-        .ok_or(TestError::RsCodeExaminationFail)?
-        .1)
+        .into_iter()
+        .flat_map(|(_, more_items)| more_items.into_iter())
+        .partition_map(|i| match i {
+            Item::Mod(itm) => Either::Left(itm),
+            _ => Either::Right(i),
+        });
+    items.append(&mut these_items);
+    for md in more_mods.into_iter() {
+        find_all_non_mod_items(md, items);
+    }
 }
 
 struct StringFinder(Vec<&'static str>);
