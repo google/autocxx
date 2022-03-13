@@ -103,7 +103,7 @@ impl TypeConversionPolicy {
                     panic!("Unexpected non-ident parameter name");
                 };
                 let space_var_name = make_ident(format!("{}_space", var_name));
-                let call = quote! { #space_var_name.populate(#var_name);  };
+                let call = quote! { #space_var_name.as_mut().populate(#var_name);  };
                 let call = if wrap_in_unsafe {
                     quote! {
                         unsafe {
@@ -115,18 +115,12 @@ impl TypeConversionPolicy {
                 };
                 // This is the usual trick to put something on the stack, then
                 // immediately shadow the variable name so it can't be accessed or moved.
-                // Ideally, the second line here would be
-                //   let #space_var_name = Pin::new_unchecked(&mut #space_var_name);
-                // and then from that point onwards the original value could
-                // only ever be accessed via a pinned reference. This turns
-                // out to be hard.
-                // https://github.com/google/autocxx/issues/856
-                // In practice, as this is generated code we can guarantee
-                // nobody else accesses #space_var_name at all, so this is safe.
                 (
                     Some(quote! {
                         let mut #space_var_name = autocxx::ValueParamHandler::default();
-                        let #space_var_name = &mut #space_var_name;
+                        let mut #space_var_name = unsafe {
+                            std::pin::Pin::new_unchecked(&mut #space_var_name)
+                        };
                         #call
                     }),
                     quote! {
