@@ -156,13 +156,12 @@ pub(crate) fn discard_ignored_functions(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase
     convert_apis(
         apis,
         &mut apis_new,
-        |name, fun, analysis, name_for_gc| {
+        |name, fun, analysis| {
             analysis.ignore_reason.clone()?;
             Ok(Box::new(std::iter::once(Api::Function {
                 name,
                 fun,
                 analysis,
-                name_for_gc,
             })))
         },
         Api::struct_unchanged,

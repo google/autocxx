@@ -60,7 +60,6 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
         ApiName,
         Box<FuncToConvert>,
         A::FunAnalysis,
-        Option<QualifiedName>,
     ) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext>,
     SF: FnMut(
         ApiName,
@@ -147,8 +146,7 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                 name,
                 fun,
                 analysis,
-                name_for_gc,
-            } => func_conversion(name, fun, analysis, name_for_gc),
+            } => func_conversion(name, fun, analysis),
             Api::Struct {
                 name,
                 details,

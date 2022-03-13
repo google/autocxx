@@ -429,7 +429,6 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// A function. May include some analysis.
     Function {
         name: ApiName,
-        name_for_gc: Option<QualifiedName>,
         fun: Box<FuncToConvert>,
         analysis: T::FunAnalysis,
     },
@@ -627,7 +626,6 @@ impl<T: AnalysisPhase> Api<T> {
         name: ApiName,
         fun: Box<FuncToConvert>,
         analysis: T::FunAnalysis,
-        name_for_gc: Option<QualifiedName>,
     ) -> Result<Box<dyn Iterator<Item = Api<T>>>, ConvertErrorWithContext>
     where
         T: 'static,
@@ -636,7 +634,6 @@ impl<T: AnalysisPhase> Api<T> {
             name,
             fun,
             analysis,
-            name_for_gc,
         })))
     }
 
