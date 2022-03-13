@@ -573,11 +573,8 @@ fn find_explicit_items(apis: &ApiVec<FnPrePhase1>) -> HashMap<ExplicitType, Expl
                         let receiver_mutability = &param_details
                             .iter()
                             .next()
-                            .unwrap()
-                            .self_type
-                            .as_ref()
-                            .unwrap()
-                            .1;
+                            .map(|p| p.self_type.as_ref().unwrap().1.clone())
+                            .unwrap_or(ReceiverMutability::Const);
                         match receiver_mutability {
                             ReceiverMutability::Const => ExplicitKind::ConstCopyAssignmentOperator,
                             ReceiverMutability::Mutable => {
