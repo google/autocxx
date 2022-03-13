@@ -14,7 +14,7 @@ use super::{
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
-use crate::types::{make_ident, Namespace, QualifiedName};
+use crate::types::{Namespace, QualifiedName};
 
 /// Run some code which may generate a ConvertError.
 /// If it does, try to note the problem in our output APIs
@@ -36,13 +36,11 @@ where
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
             eprintln!("Ignored item {}: {}", ctx, err);
             let id = match &ctx {
-                ErrorContext::Item(id) => id.clone(),
-                ErrorContext::Method { self_ty, method } => {
-                    make_ident(format!("{}_{}", self_ty, method))
-                }
+                ErrorContext::Item(id) => id,
+                ErrorContext::Method { self_ty, .. } => self_ty,
                 ErrorContext::NoCode => panic!("Shouldn't happen"),
             };
-            let api_name = ApiName::new_from_qualified_name(QualifiedName::new(ns, id));
+            let api_name = ApiName::new_from_qualified_name(QualifiedName::new(ns, id.clone()));
             if let Some(item) = ignored_item(api_name, ctx, err) {
                 apis.push(item);
             }
@@ -210,9 +208,5 @@ fn ignored_item<A: AnalysisPhase>(
     ctx: ErrorContext,
     err: ConvertError,
 ) -> Option<Api<A>> {
-    Some(Api::IgnoredItem {
-        name: name.clone(),
-        err,
-        ctx,
-    })
+    Some(Api::IgnoredItem { name, err, ctx })
 }
