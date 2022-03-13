@@ -135,7 +135,7 @@ fn analyze_struct(
     if details.vis != CppVisibility::Public {
         return Err(ConvertErrorWithContext(
             ConvertError::NonPublicNestedType,
-            Some(ErrorContext::Item(id)),
+            Some(ErrorContext::new_for_item(id)),
         ));
     }
     let metadata = BindgenSemanticAttributes::new_retaining_others(&mut details.item.attrs);
@@ -157,11 +157,14 @@ fn analyze_struct(
         if details.has_rvalue_reference_fields {
             return Err(ConvertErrorWithContext(
                 ConvertError::RValueReferenceField,
-                Some(ErrorContext::Item(id)),
+                Some(ErrorContext::new_for_item(id)),
             ));
         }
         if let Some(err) = field_conversion_errors.into_iter().next() {
-            return Err(ConvertErrorWithContext(err, Some(ErrorContext::Item(id))));
+            return Err(ConvertErrorWithContext(
+                err,
+                Some(ErrorContext::new_for_item(id)),
+            ));
         }
         TypeKind::Pod
     } else {

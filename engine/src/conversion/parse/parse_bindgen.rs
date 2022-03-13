@@ -50,7 +50,7 @@ pub(crate) fn api_name_qualified(
 ) -> Result<ApiName, ConvertErrorWithContext> {
     match validate_ident_ok_for_cxx(&id.to_string()) {
         Err(e) => {
-            let ctx = ErrorContext::Item(id);
+            let ctx = ErrorContext::new_for_item(id);
             Err(ConvertErrorWithContext(e, Some(ctx)))
         }
         Ok(..) => Ok(api_name(ns, id, attrs)),
@@ -248,7 +248,7 @@ impl<'a> ParseBindgen<'a> {
                             if new_tyname == old_tyname {
                                 return Err(ConvertErrorWithContext(
                                     ConvertError::InfinitelyRecursiveTypedef(new_tyname),
-                                    Some(ErrorContext::Item(new_id.clone())),
+                                    Some(ErrorContext::new_for_item(new_id.clone())),
                                 ));
                             }
                             let annotations = BindgenSemanticAttributes::new(&use_item.attrs);

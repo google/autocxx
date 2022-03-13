@@ -59,7 +59,7 @@ impl BindgenSemanticAttributes {
         if self.has_attr("unused_template_param") {
             Err(ConvertErrorWithContext(
                 ConvertError::UnusedTemplateParam,
-                Some(ErrorContext::Item(id_for_context.clone())),
+                Some(ErrorContext::new_for_item(id_for_context.clone())),
             ))
         } else {
             Ok(())

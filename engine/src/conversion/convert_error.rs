@@ -12,7 +12,10 @@ use std::fmt::Display;
 use itertools::Itertools;
 use syn::Ident;
 
-use crate::types::{Namespace, QualifiedName};
+use crate::{
+    known_types,
+    types::{make_ident, Namespace, QualifiedName},
+};
 
 #[derive(Debug, Clone)]
 pub enum ConvertError {
@@ -117,9 +120,11 @@ impl Display for ConvertError {
     }
 }
 
+/// All idents in this structure are guaranteed to be something we can safely codegen for.
 #[derive(Clone)]
 pub(crate) enum ErrorContext {
     Item(Ident),
+    SanitizedItem(Ident),
     Method {
         self_ty: Ident,
         method: Ident,
@@ -130,10 +135,43 @@ pub(crate) enum ErrorContext {
     NoCode,
 }
 
+impl ErrorContext {
+    pub(crate) fn new_for_item(id: Ident) -> Self {
+        match Self::sanitize_error_ident(&id) {
+            None => Self::Item(id),
+            Some(sanitized) => Self::SanitizedItem(sanitized),
+        }
+    }
+
+    pub(crate) fn new_for_method(self_ty: Ident, method: Ident) -> Self {
+        // If this IgnoredItem relates to a method on a self_ty which we can't represent,
+        // e.g. u8, then forget about trying to attach this error text to something within
+        // an impl block.
+        match Self::sanitize_error_ident(&self_ty) {
+            None => Self::Method {
+                self_ty,
+                method: Self::sanitize_error_ident(&method).unwrap_or(method),
+            },
+            Some(_) => Self::Item(make_ident(format!("{}_{}", self_ty, method))),
+        }
+    }
+
+    /// Because errors may be generated for invalid types or identifiers,
+    /// we may need to scrub the name
+    fn sanitize_error_ident(id: &Ident) -> Option<Ident> {
+        let qn = QualifiedName::new(&Namespace::new(), id.clone());
+        if known_types().conflicts_with_built_in_type(&qn) {
+            Some(make_ident(format!("{}_autocxx_error", qn.get_final_item())))
+        } else {
+            None
+        }
+    }
+}
+
 impl std::fmt::Display for ErrorContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ErrorContext::Item(id) => write!(f, "{}", id),
+            ErrorContext::Item(id) | ErrorContext::SanitizedItem(id) => write!(f, "{}", id),
             ErrorContext::Method { self_ty, method } => write!(f, "{}::{}", self_ty, method),
             ErrorContext::NoCode => write!(f, "<not generated>"),
         }

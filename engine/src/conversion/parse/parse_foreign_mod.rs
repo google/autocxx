@@ -93,7 +93,7 @@ impl ParseForeignMod {
             }
             ForeignItem::Static(item) => Err(ConvertErrorWithContext(
                 ConvertError::StaticData(item.ident.to_string()),
-                Some(ErrorContext::Item(item.ident)),
+                Some(ErrorContext::new_for_item(item.ident)),
             )),
             _ => Err(ConvertErrorWithContext(
                 ConvertError::UnexpectedForeignItem,

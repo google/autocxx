@@ -36,7 +36,7 @@ where
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
             eprintln!("Ignored item {}: {}", ctx, err);
             let id = match &ctx {
-                ErrorContext::Item(id) => id,
+                ErrorContext::Item(id) | ErrorContext::SanitizedItem(id) => id,
                 ErrorContext::Method { self_ty, .. } => self_ty,
                 ErrorContext::NoCode => panic!("Shouldn't happen"),
             };
@@ -197,7 +197,7 @@ pub(crate) fn convert_item_apis<F, A, B: 'static>(
         let fullname = api.name_info().clone();
         let tn = api.name().clone();
         let result = fun(api).map_err(|e| {
-            ConvertErrorWithContext(e, Some(ErrorContext::Item(tn.get_final_ident())))
+            ConvertErrorWithContext(e, Some(ErrorContext::new_for_item(tn.get_final_ident())))
         });
         api_or_error(fullname, result)
     }))

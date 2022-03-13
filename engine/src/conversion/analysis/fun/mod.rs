@@ -971,7 +971,7 @@ impl<'a> FnAnalyzer<'a> {
             let rust_name = self.get_function_overload_name(ns, ideal_rust_name);
             (
                 FnKind::Function,
-                ErrorContext::Item(make_ident(&rust_name)),
+                ErrorContext::new_for_item(make_ident(&rust_name)),
                 rust_name,
             )
         };
@@ -1497,7 +1497,7 @@ impl<'a> FnAnalyzer<'a> {
                             trait_call_is_unsafe: false,
                         }),
                     },
-                    ErrorContext::Item(make_ident(&rust_name)),
+                    ErrorContext::new_for_item(make_ident(&rust_name)),
                     rust_name,
                 ))
             }
@@ -1542,7 +1542,7 @@ impl<'a> FnAnalyzer<'a> {
                 }),
                 kind,
             },
-            ErrorContext::Item(make_ident(&rust_name)),
+            ErrorContext::new_for_item(make_ident(&rust_name)),
             rust_name,
         ))
     }
@@ -1964,10 +1964,7 @@ impl<'a> FnAnalyzer<'a> {
 }
 
 fn error_context_for_method(self_ty: &QualifiedName, rust_name: &str) -> ErrorContext {
-    ErrorContext::Method {
-        self_ty: self_ty.get_final_ident(),
-        method: make_ident(rust_name),
-    }
+    ErrorContext::new_for_method(self_ty.get_final_ident(), make_ident(rust_name))
 }
 
 impl Api<FnPhase> {

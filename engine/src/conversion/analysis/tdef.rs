@@ -96,14 +96,14 @@ fn get_replacement_typedef(
     match type_conversion_results {
         Err(err) => Err(ConvertErrorWithContext(
             err,
-            Some(ErrorContext::Item(name.name.get_final_ident())),
+            Some(ErrorContext::new_for_item(name.name.get_final_ident())),
         )),
         Ok(Annotated {
             ty: syn::Type::Path(ref typ),
             ..
         }) if QualifiedName::from_type_path(typ) == name.name => Err(ConvertErrorWithContext(
             ConvertError::InfinitelyRecursiveTypedef(name.name.clone()),
-            Some(ErrorContext::Item(name.name.get_final_ident())),
+            Some(ErrorContext::new_for_item(name.name.get_final_ident())),
         )),
         Ok(mut final_type) => {
             converted_type.ty = Box::new(final_type.ty.clone());
