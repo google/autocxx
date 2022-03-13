@@ -225,21 +225,24 @@ impl<T, VP: ValueParam<T>> ValueParamHandler<T, VP> {
     ///
     /// # Safety
     ///
-    /// Callers must guarantee that this type will not move
-    /// in memory between calls to [`populate`] and [`get_ptr`].
     /// Callers must call [`populate`] exactly once prior to calling [`get_ptr`].
-    pub unsafe fn populate(&mut self, param: VP) {
-        // Pinning safe due to safety guarantees on `get_ptr`
-        param.populate_stack_space(Pin::new_unchecked(&mut self.space));
+    pub unsafe fn populate(self: Pin<&mut Self>, param: VP) {
+        // Structural pinning, as documented in [`std::pin`].
+        param.populate_stack_space(self.map_unchecked_mut(|s| &mut s.space))
     }
 
     /// Return a pointer to the underlying value which can be passed to C++.
-    /// Per the unsafety contract of [`populate`], the object must not have moved
-    /// since it was created, and [`populate`] has been called exactly once
+    ///
+    /// Per the unsafety contract of [`populate`], [`populate`] has been called exactly once
     /// prior to this call.
-    pub fn get_ptr(&mut self) -> *mut T {
-        // Pinning safe because of the guarantees the caller gives.
-        unsafe { VP::get_ptr(Pin::new_unchecked(self.space.as_mut().unwrap())) }
+    pub fn get_ptr(self: Pin<&mut Self>) -> *mut T {
+        // Structural pinning, as documented in [`std::pin`]. `map_unchecked_mut` doesn't play
+        // nicely with `unwrap`, so we have to do it manually.
+        unsafe {
+            VP::get_ptr(Pin::new_unchecked(
+                self.get_unchecked_mut().space.as_mut().unwrap(),
+            ))
+        }
     }
 }
 
