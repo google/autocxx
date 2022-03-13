@@ -945,9 +945,6 @@ impl<'a> RsCodeGenerator<'a> {
             ErrorContext::Method { self_ty, method }
                 if Self::sanitize_error_ident(&self_ty).is_none() =>
             {
-                // This could go wrong if a separate error has caused
-                // us to drop an entire type as well as one of its individual items.
-                // Then we'll be applying an impl to a thing which doesn't exist. TODO.
                 let method = Self::sanitize_error_ident(&method).unwrap_or(method);
                 (
                     Some(Box::new(ImplBlockDetails {
@@ -964,14 +961,17 @@ impl<'a> RsCodeGenerator<'a> {
             }
             ErrorContext::Method { self_ty, method } => {
                 // If the type can't be represented (e.g. u8) this would get fiddly.
+                // TODO we might have methods hanging off this type which won't work
+                // because we're not putting it in the bindgen mod. We need to find
+                // a way to eliminate those methods entirely.
                 let id = make_ident(format!("{}_method_{}", self_ty, method));
                 (
                     None,
-                    Some(parse_quote! {
+                    None,
+                    Some(Use::Custom(Box::new(parse_quote! {
                         #[doc = #err]
                         pub struct #id;
-                    }),
-                    Some(Use::UsedFromBindgen),
+                    }))),
                 )
             }
             ErrorContext::NoCode => (None, None, None),
