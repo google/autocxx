@@ -53,32 +53,21 @@ impl<P: AnalysisPhase> ApiVec<P> {
         let already_contains = self.already_contains(name);
         if already_contains {
             if api.discard_duplicates() {
+                // This is already an IgnoredItem or something else where
+                // we can silently drop it.
                 log::info!("Discarding duplicate API for {}", name);
             } else {
-                panic!(
-                    "Already have an API with that name: {}. API was {:?}",
-                    name, api
+                log::info!(
+                    "Duplicate API for {} - removing all of them and replacing with an IgnoredItem.",
+                    name
                 );
+                self.retain(|api| api.name() != name);
+                self.push(Api::IgnoredItem {
+                    name: ApiName::new_from_qualified_name(name.clone()),
+                    err: ConvertError::DuplicateItemsFoundInParsing,
+                    ctx: Some(ErrorContext::new_for_item(name.get_final_ident())),
+                })
             }
-        }
-        self.names.insert(name.clone());
-        self.apis.push(api)
-    }
-
-    pub(crate) fn push_eliminating_duplicates(&mut self, api: Api<P>) {
-        let name = api.name();
-        let already_contains = self.already_contains(name);
-        if already_contains {
-            log::info!(
-                "Duplicate API for {} - removing all of them and replacing with an IgnoredItem.",
-                name
-            );
-            self.retain(|api| api.name() != name);
-            self.push(Api::IgnoredItem {
-                name: ApiName::new_from_qualified_name(name.clone()),
-                err: ConvertError::DuplicateItemsFoundInParsing,
-                ctx: ErrorContext::Item(name.get_final_ident()),
-            })
         } else {
             self.names.insert(name.clone());
             self.apis.push(api)

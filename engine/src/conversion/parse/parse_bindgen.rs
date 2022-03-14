@@ -50,7 +50,7 @@ pub(crate) fn api_name_qualified(
 ) -> Result<ApiName, ConvertErrorWithContext> {
     match validate_ident_ok_for_cxx(&id.to_string()) {
         Err(e) => {
-            let ctx = ErrorContext::Item(id);
+            let ctx = ErrorContext::new_for_item(id);
             Err(ConvertErrorWithContext(e, Some(ctx)))
         }
         Ok(..) => Ok(api_name(ns, id, attrs)),
@@ -183,7 +183,7 @@ impl<'a> ParseBindgen<'a> {
                 };
                 if let Some(api) = api {
                     if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
-                        self.apis.push_eliminating_duplicates(api);
+                        self.apis.push(api);
                     }
                 }
                 Ok(())
@@ -195,7 +195,7 @@ impl<'a> ParseBindgen<'a> {
                     item: e,
                 };
                 if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
-                    self.apis.push_eliminating_duplicates(api);
+                    self.apis.push(api);
                 }
                 Ok(())
             }
@@ -248,19 +248,18 @@ impl<'a> ParseBindgen<'a> {
                             if new_tyname == old_tyname {
                                 return Err(ConvertErrorWithContext(
                                     ConvertError::InfinitelyRecursiveTypedef(new_tyname),
-                                    Some(ErrorContext::Item(new_id.clone())),
+                                    Some(ErrorContext::new_for_item(new_id.clone())),
                                 ));
                             }
                             let annotations = BindgenSemanticAttributes::new(&use_item.attrs);
-                            self.apis
-                                .push_eliminating_duplicates(UnanalyzedApi::Typedef {
-                                    name: api_name(ns, new_id.clone(), &annotations),
-                                    item: TypedefKind::Use(parse_quote! {
-                                        pub use #old_path as #new_id;
-                                    }),
-                                    old_tyname: Some(old_tyname),
-                                    analysis: (),
-                                });
+                            self.apis.push(UnanalyzedApi::Typedef {
+                                name: api_name(ns, new_id.clone(), &annotations),
+                                item: TypedefKind::Use(parse_quote! {
+                                    pub use #old_path as #new_id;
+                                }),
+                                old_tyname: Some(old_tyname),
+                                analysis: (),
+                            });
                             break;
                         }
                         _ => {
@@ -275,7 +274,7 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Const(const_item) => {
                 let annotations = BindgenSemanticAttributes::new(&const_item.attrs);
-                self.apis.push_eliminating_duplicates(UnanalyzedApi::Const {
+                self.apis.push(UnanalyzedApi::Const {
                     name: api_name(ns, const_item.ident.clone(), &annotations),
                     const_item,
                 });
@@ -285,13 +284,12 @@ impl<'a> ParseBindgen<'a> {
                 let annotations = BindgenSemanticAttributes::new(&ity.attrs);
                 // It's known that sometimes bindgen will give us duplicate typedefs with the
                 // same name - see test_issue_264.
-                self.apis
-                    .push_eliminating_duplicates(UnanalyzedApi::Typedef {
-                        name: api_name(ns, ity.ident.clone(), &annotations),
-                        item: TypedefKind::Type(ity),
-                        old_tyname: None,
-                        analysis: (),
-                    });
+                self.apis.push(UnanalyzedApi::Typedef {
+                    name: api_name(ns, ity.ident.clone(), &annotations),
+                    item: TypedefKind::Type(ity),
+                    old_tyname: None,
+                    analysis: (),
+                });
                 Ok(())
             }
             _ => Err(ConvertErrorWithContext(

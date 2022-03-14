@@ -19,15 +19,9 @@ use crate::{conversion::api::Api, known_types};
 /// know about at all. In either case, we don't simply remove the type, but instead
 /// replace it with an error marker.
 pub(crate) fn filter_apis_by_ignored_dependents(mut apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
-    let (ignored_items, valid_items): (Vec<&Api<_>>, Vec<&Api<_>>) = apis.iter().partition(|api| {
-        matches!(
-            api,
-            Api::IgnoredItem {
-                ctx: ErrorContext::Item(..),
-                ..
-            }
-        )
-    });
+    let (ignored_items, valid_items): (Vec<&Api<_>>, Vec<&Api<_>>) = apis
+        .iter()
+        .partition(|api| matches!(api, Api::IgnoredItem { .. }));
     let mut ignored_items: HashSet<_> = ignored_items
         .into_iter()
         .map(|api| api.name().clone())
@@ -83,7 +77,7 @@ fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Api<FnPhase> {
                         ..
                     },
                 ..
-            } => ErrorContext::NoCode,
+            } => None,
             Api::Function {
                 analysis:
                     FnAnalysis {
@@ -94,11 +88,8 @@ fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Api<FnPhase> {
                         ..
                     },
                 ..
-            } => ErrorContext::Method {
-                self_ty: self_ty.get_final_ident(),
-                method: id,
-            },
-            _ => ErrorContext::Item(id),
+            } => Some(ErrorContext::new_for_method(self_ty.get_final_ident(), id)),
+            _ => Some(ErrorContext::new_for_item(id)),
         },
     }
 }

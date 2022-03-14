@@ -33,7 +33,6 @@ use crate::{
         },
         doc_attr::get_doc_attr,
     },
-    known_types::known_types,
     types::{make_ident, Namespace, QualifiedName},
 };
 use impl_item_creator::create_impl_items;
@@ -46,6 +45,7 @@ use self::{
 use super::{
     analysis::fun::{FnPhase, ReceiverMutability},
     api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind},
+    convert_error::ErrorContextType,
 };
 use super::{
     api::{Layout, Provenance, RustSubclassFnDetails, SuperclassMethod, TraitImplSignature},
@@ -564,8 +564,12 @@ impl<'a> RsCodeGenerator<'a> {
                     subclasses_with_a_single_trivial_constructor.contains(&name.0.name);
                 self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
             }
-            Api::IgnoredItem { err, ctx, .. } => Self::generate_error_entry(err, ctx),
-            Api::SubclassTraitItem { .. } => RsCodegenResult::default(),
+            Api::IgnoredItem {
+                err,
+                ctx: Some(ctx),
+                ..
+            } => Self::generate_error_entry(err, ctx),
+            Api::IgnoredItem { .. } | Api::SubclassTraitItem { .. } => RsCodegenResult::default(),
         }
     }
 
@@ -930,64 +934,43 @@ impl<'a> RsCodeGenerator<'a> {
     /// generated.
     fn generate_error_entry(err: ConvertError, ctx: ErrorContext) -> RsCodegenResult {
         let err = format!("autocxx bindings couldn't be generated: {}", err);
-        let (impl_entry, materialization) = match ctx {
-            ErrorContext::Item(id) => {
-                let id = Self::sanitize_error_ident(&id).unwrap_or(id);
-                (
-                    None,
-                    Some(Use::Custom(Box::new(parse_quote! {
+        let (impl_entry, bindgen_mod_item, materialization) = match ctx.into_type() {
+            ErrorContextType::Item(id) => (
+                // Populate within bindgen mod because impl blocks may attach.
+                None,
+                Some(parse_quote! {
+                    #[doc = #err]
+                    pub struct #id;
+                }),
+                Some(Use::SpecificNameFromBindgen(id)),
+            ),
+            ErrorContextType::SanitizedItem(id) => (
+                // Guaranteed to be no impl blocks - populate directly in output mod.
+                None,
+                None,
+                Some(Use::Custom(Box::new(parse_quote! {
+                    #[doc = #err]
+                    pub struct #id;
+                }))),
+            ),
+            ErrorContextType::Method { self_ty, method } => (
+                Some(Box::new(ImplBlockDetails {
+                    item: parse_quote! {
                         #[doc = #err]
-                        pub struct #id;
-                    }))),
-                )
-            }
-            ErrorContext::Method { self_ty, method }
-                if Self::sanitize_error_ident(&self_ty).is_none() =>
-            {
-                // This could go wrong if a separate error has caused
-                // us to drop an entire type as well as one of its individual items.
-                // Then we'll be applying an impl to a thing which doesn't exist. TODO.
-                let method = Self::sanitize_error_ident(&method).unwrap_or(method);
-                (
-                    Some(Box::new(ImplBlockDetails {
-                        item: parse_quote! {
-                            #[doc = #err]
-                            fn #method(_uhoh: autocxx::BindingGenerationFailure) {
-                            }
-                        },
-                        ty: self_ty,
-                    })),
-                    None,
-                )
-            }
-            ErrorContext::Method { self_ty, method } => {
-                // If the type can't be represented (e.g. u8) this would get fiddly.
-                let id = make_ident(format!("{}_method_{}", self_ty, method));
-                (
-                    None,
-                    Some(Use::Custom(Box::new(parse_quote! {
-                        #[doc = #err]
-                        pub struct #id;
-                    }))),
-                )
-            }
-            ErrorContext::NoCode => (None, None),
+                        fn #method(_uhoh: autocxx::BindingGenerationFailure) {
+                        }
+                    },
+                    ty: self_ty,
+                })),
+                None,
+                None,
+            ),
         };
         RsCodegenResult {
             impl_entry,
+            bindgen_mod_items: bindgen_mod_item.into_iter().collect(),
             materializations: materialization.into_iter().collect(),
             ..Default::default()
-        }
-    }
-
-    /// Because errors may be generated for invalid types or identifiers,
-    /// we may need to scrub the name
-    fn sanitize_error_ident(id: &Ident) -> Option<Ident> {
-        let qn = QualifiedName::new(&Namespace::new(), id.clone());
-        if known_types().conflicts_with_built_in_type(&qn) {
-            Some(make_ident(format!("{}_autocxx_error", qn.get_final_item())))
-        } else {
-            None
         }
     }
 
