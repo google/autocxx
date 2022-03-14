@@ -548,9 +548,8 @@ fn main() {
 (for example) you can pass its mutable reference or pointer into some
 pre-existing C++ API, call <code>ffi::make_string(&quot;&quot;)</code> which will return
 a blank <code>UniquePtr&lt;CxxString&gt;</code>.</p>
-<p>Don't attempt to use <a href="https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html"><code>cxx::let_cpp_string</code></a> which will allocate the
-string on the stack, and is generally incompatible with the
-<a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>-based approaches we use here.</p>
+<p>If all you need is a <em>reference</em> to a <code>CxxString</code>, you can alternatively use
+<a href="https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html"><code>cxx::let_cpp_string</code></a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="naming"><a class="header" href="#naming">Naming</a></h1>
 <h2 id="namespaces"><a class="header" href="#namespaces">Namespaces</a></h2>
 <p>The C++ namespace structure is reflected in mods within the generated
