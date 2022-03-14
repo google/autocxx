@@ -19,11 +19,11 @@ First, add `autocxx` *and `cxx`* to your `dependencies` and `autocxx-build` to y
 
 ```toml
 [dependencies]
-autocxx = "0.17.0"
+autocxx = "0.17.1"
 cxx = "1.0"
 
 [build-dependencies]
-autocxx-build = "0.17.0"
+autocxx-build = "0.17.1"
 ```
 
 Now, add a `build.rs` next to your `Cargo.toml` (this is a standard `cargo` [build script](https://doc.rust-lang.org/cargo/reference/build-scripts.html)). This is where you need your include path:
