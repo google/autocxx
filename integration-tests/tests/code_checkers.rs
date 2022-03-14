@@ -38,13 +38,15 @@ impl CodeCheckerFns for ErrorFinder {
                 _ => None,
             })
             .next()
-            .ok_or(TestError::RsCodeExaminationFail)?;
+            .ok_or(TestError::RsCodeExaminationFail(
+                "Couldn't find item".into(),
+            ))?;
         // Ensure doc attribute
         error_item
             .attrs
             .into_iter()
             .find(|a| a.path.get_ident().filter(|p| *p == "doc").is_some())
-            .ok_or(TestError::RsCodeExaminationFail)?;
+            .ok_or(TestError::RsCodeExaminationFail("Item had no docs".into()))?;
         Ok(())
     }
 }
@@ -58,7 +60,7 @@ fn find_ffi_items(f: syn::File) -> Result<Vec<Item>, TestError> {
             _ => None,
         })
         .next()
-        .ok_or(TestError::RsCodeExaminationFail)?;
+        .ok_or(TestError::RsCodeExaminationFail("No mods in file".into()))?;
     let mut items = Vec::new();
     find_all_non_mod_items(md, &mut items);
     Ok(items)
@@ -88,7 +90,9 @@ impl CodeCheckerFns for StringFinder {
         let toks = ts.to_string();
         for msg in &self.0 {
             if !toks.contains(msg) {
-                return Err(TestError::RsCodeExaminationFail);
+                return Err(TestError::RsCodeExaminationFail(
+                    "Couldn't find string".into(),
+                ));
             };
         }
         Ok(())

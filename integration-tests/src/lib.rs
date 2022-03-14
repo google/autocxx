@@ -239,7 +239,7 @@ pub enum TestError {
     RsFileOpen(std::io::Error),
     RsFileRead(std::io::Error),
     RsFileParse(syn::Error),
-    RsCodeExaminationFail,
+    RsCodeExaminationFail(String),
     CppCodeExaminationFail,
 }
 
