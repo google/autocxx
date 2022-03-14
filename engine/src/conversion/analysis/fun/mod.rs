@@ -1970,7 +1970,11 @@ impl Api<FnPhase> {
                 }
             },
             Api::RustSubclassFn { subclass, .. } => subclass.0.name.clone(),
-            Api::IgnoredItem { name, ctx, .. } => match ctx.get_type() {
+            Api::IgnoredItem {
+                name,
+                ctx: Some(ctx),
+                ..
+            } => match ctx.get_type() {
                 ErrorContextType::Method { self_ty, .. } => {
                     QualifiedName::new(name.name.get_namespace(), self_ty.clone())
                 }

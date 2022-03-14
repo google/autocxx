@@ -77,7 +77,7 @@ fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Api<FnPhase> {
                         ..
                     },
                 ..
-            } => ErrorContext::new_without_code(),
+            } => None,
             Api::Function {
                 analysis:
                     FnAnalysis {
@@ -88,8 +88,8 @@ fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Api<FnPhase> {
                         ..
                     },
                 ..
-            } => ErrorContext::new_for_method(self_ty.get_final_ident(), id),
-            _ => ErrorContext::new_for_item(id),
+            } => Some(ErrorContext::new_for_method(self_ty.get_final_ident(), id)),
+            _ => Some(ErrorContext::new_for_item(id)),
         },
     }
 }

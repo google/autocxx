@@ -467,7 +467,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     IgnoredItem {
         name: ApiName,
         err: ConvertError,
-        ctx: ErrorContext,
+        ctx: Option<ErrorContext>,
     },
     /// A Rust type which is not a C++ type.
     RustType { name: ApiName, path: RustPath },

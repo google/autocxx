@@ -564,8 +564,12 @@ impl<'a> RsCodeGenerator<'a> {
                     subclasses_with_a_single_trivial_constructor.contains(&name.0.name);
                 self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
             }
-            Api::IgnoredItem { err, ctx, .. } => Self::generate_error_entry(err, ctx),
-            Api::SubclassTraitItem { .. } => RsCodegenResult::default(),
+            Api::IgnoredItem {
+                err,
+                ctx: Some(ctx),
+                ..
+            } => Self::generate_error_entry(err, ctx),
+            Api::IgnoredItem { .. } | Api::SubclassTraitItem { .. } => RsCodegenResult::default(),
         }
     }
 
@@ -961,7 +965,6 @@ impl<'a> RsCodeGenerator<'a> {
                 None,
                 None,
             ),
-            ErrorContextType::NoCode => (None, None, None),
         };
         RsCodegenResult {
             impl_entry,

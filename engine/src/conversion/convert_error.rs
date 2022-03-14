@@ -136,14 +136,7 @@ pub(crate) struct ErrorContext(ErrorContextType, PhantomSanitized);
 pub(crate) enum ErrorContextType {
     Item(Ident),
     SanitizedItem(Ident),
-    Method {
-        self_ty: Ident,
-        method: Ident,
-    },
-    /// This error means the context where the code would be generated doesn't exist, so there's
-    /// nowhere to attach the error, but we still want to record that we had an error generating
-    /// it.
-    NoCode,
+    Method { self_ty: Ident, method: Ident },
 }
 
 impl ErrorContext {
@@ -173,10 +166,6 @@ impl ErrorContext {
         }
     }
 
-    pub(crate) fn new_without_code() -> Self {
-        Self(ErrorContextType::NoCode, PhantomSanitized)
-    }
-
     /// Because errors may be generated for invalid types or identifiers,
     /// we may need to scrub the name
     fn sanitize_error_ident(id: &Ident) -> Option<Ident> {
@@ -202,7 +191,6 @@ impl std::fmt::Display for ErrorContext {
         match &self.0 {
             ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => write!(f, "{}", id),
             ErrorContextType::Method { self_ty, method } => write!(f, "{}::{}", self_ty, method),
-            ErrorContextType::NoCode => write!(f, "<not generated>"),
         }
     }
 }

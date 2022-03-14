@@ -41,10 +41,9 @@ where
             let id = match ctx.get_type() {
                 ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => id,
                 ErrorContextType::Method { self_ty, .. } => self_ty,
-                ErrorContextType::NoCode => panic!("Shouldn't happen"),
             };
             let api_name = ApiName::new_from_qualified_name(QualifiedName::new(ns, id.clone()));
-            if let Some(item) = ignored_item(api_name, ctx, err) {
+            if let Some(item) = ignored_item(api_name, Some(ctx), err) {
                 apis.push(item);
             }
             None
@@ -172,11 +171,7 @@ fn api_or_error<T: AnalysisPhase + 'static>(
 ) -> Box<dyn Iterator<Item = Api<T>>> {
     match api_or_error {
         Ok(opt) => opt,
-        Err(ConvertErrorWithContext(err, None)) => {
-            eprintln!("Ignored {}: {}", name.cpp_name(), err);
-            Box::new(std::iter::empty())
-        }
-        Err(ConvertErrorWithContext(err, Some(ctx))) => {
+        Err(ConvertErrorWithContext(err, ctx)) => {
             eprintln!("Ignored {}: {}", name.cpp_name(), err);
             Box::new(ignored_item(name, ctx, err).into_iter())
         }
@@ -208,7 +203,7 @@ pub(crate) fn convert_item_apis<F, A, B: 'static>(
 
 fn ignored_item<A: AnalysisPhase>(
     name: ApiName,
-    ctx: ErrorContext,
+    ctx: Option<ErrorContext>,
     err: ConvertError,
 ) -> Option<Api<A>> {
     Some(Api::IgnoredItem { name, err, ctx })
