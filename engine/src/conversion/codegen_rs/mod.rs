@@ -942,7 +942,7 @@ impl<'a> RsCodeGenerator<'a> {
                     #[doc = #err]
                     pub struct #id;
                 }),
-                Some(Use::UsedFromBindgen),
+                Some(Use::SpecificNameFromBindgen(id)),
             ),
             ErrorContextType::SanitizedItem(id) => (
                 // Guaranteed to be no impl blocks - populate directly in output mod.
