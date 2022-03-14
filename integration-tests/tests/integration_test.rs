@@ -5882,6 +5882,33 @@ fn test_generate_all() {
     );
 }
 
+/// This is something of a stress test -
+/// we #include <string> and try to generate everything.
+#[test]
+fn test_generate_all_string() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        inline uint32_t give_int() {
+            return 5;
+        }
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::give_int(), 5);
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! {
+            generate_all!()
+        },
+        None,
+        None,
+        None,
+    );
+}
+
 #[test]
 fn test_std_thing() {
     let hdr = indoc! {"
