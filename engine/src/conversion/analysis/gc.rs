@@ -41,7 +41,7 @@ pub(crate) fn filter_apis_by_following_edges_from_allowlist(
     let mut todos: Vec<QualifiedName> = apis
         .iter()
         .filter(|api| {
-            let tnforal = api.typename_for_allowlist();
+            let tnforal = api.name_for_allowlist();
             config.is_on_allowlist(&tnforal.to_cpp_name())
         })
         .map(Api::name)
