@@ -1960,7 +1960,7 @@ fn error_context_for_method(self_ty: &QualifiedName, rust_name: &str) -> ErrorCo
 }
 
 impl Api<FnPhase> {
-    pub(crate) fn typename_for_allowlist(&self) -> QualifiedName {
+    pub(crate) fn name_for_allowlist(&self) -> QualifiedName {
         match &self {
             Api::Function { analysis, .. } => match analysis.kind {
                 FnKind::Method { ref impl_for, .. } => impl_for.clone(),
@@ -1977,6 +1977,9 @@ impl Api<FnPhase> {
             } => match ctx.get_type() {
                 ErrorContextType::Method { self_ty, .. } => {
                     QualifiedName::new(name.name.get_namespace(), self_ty.clone())
+                }
+                ErrorContextType::Item(id) => {
+                    QualifiedName::new(name.name.get_namespace(), id.clone())
                 }
                 _ => name.name.clone(),
             },
