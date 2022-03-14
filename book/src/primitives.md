@@ -74,6 +74,5 @@ If you need to create a blank `UniquePtr<CxxString>` in Rust, such that
 pre-existing C++ API, call `ffi::make_string("")` which will return
 a blank `UniquePtr<CxxString>`.
 
-Don't attempt to use [`cxx::let_cpp_string`](https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html) which will allocate the
-string on the stack, and is generally incompatible with the
-[`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html)-based approaches we use here.
+If all you need is a _reference_ to a `CxxString`, you can alternatively use
+[`cxx::let_cpp_string`](https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html).

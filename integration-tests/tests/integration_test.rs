@@ -2831,6 +2831,19 @@ fn test_string_constant() {
 }
 
 #[test]
+fn test_string_let_cxx_string() {
+    let hdr = indoc! {"
+        #include <string>
+        inline void take_string(const std::string&) {};
+    "};
+    let rs = quote! {
+        autocxx::cxx::let_cxx_string!(s = "hello");
+        ffi::take_string(&s);
+    };
+    run_test("", hdr, rs, &["take_string"], &[]);
+}
+
+#[test]
 fn test_pod_constant_harmless_inside_type() {
     // Check that the presence of this constant doesn't break anything.
     let hdr = indoc! {"
