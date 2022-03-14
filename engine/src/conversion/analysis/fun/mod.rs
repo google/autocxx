@@ -24,8 +24,8 @@ use crate::{
             UnsafetyNeeded, Virtualness,
         },
         apivec::ApiVec,
-        convert_error::ConvertErrorWithContext,
         convert_error::ErrorContext,
+        convert_error::{ConvertErrorWithContext, ErrorContextType},
         error_reporter::{convert_apis, report_any_error},
     },
     known_types::known_types,
@@ -963,7 +963,7 @@ impl<'a> FnAnalyzer<'a> {
             let rust_name = self.get_function_overload_name(ns, ideal_rust_name);
             (
                 FnKind::Function,
-                ErrorContext::Item(make_ident(&rust_name)),
+                ErrorContext::new_for_item(make_ident(&rust_name)),
                 rust_name,
             )
         };
@@ -1489,7 +1489,7 @@ impl<'a> FnAnalyzer<'a> {
                             trait_call_is_unsafe: false,
                         }),
                     },
-                    ErrorContext::Item(make_ident(&rust_name)),
+                    ErrorContext::new_for_item(make_ident(&rust_name)),
                     rust_name,
                 ))
             }
@@ -1534,7 +1534,7 @@ impl<'a> FnAnalyzer<'a> {
                 }),
                 kind,
             },
-            ErrorContext::Item(make_ident(&rust_name)),
+            ErrorContext::new_for_item(make_ident(&rust_name)),
             rust_name,
         ))
     }
@@ -1956,10 +1956,7 @@ impl<'a> FnAnalyzer<'a> {
 }
 
 fn error_context_for_method(self_ty: &QualifiedName, rust_name: &str) -> ErrorContext {
-    ErrorContext::Method {
-        self_ty: self_ty.get_final_ident(),
-        method: make_ident(rust_name),
-    }
+    ErrorContext::new_for_method(self_ty.get_final_ident(), make_ident(rust_name))
 }
 
 impl Api<FnPhase> {
@@ -1973,8 +1970,8 @@ impl Api<FnPhase> {
                 }
             },
             Api::RustSubclassFn { subclass, .. } => subclass.0.name.clone(),
-            Api::IgnoredItem { name, ctx, .. } => match ctx {
-                ErrorContext::Method { self_ty, .. } => {
+            Api::IgnoredItem { name, ctx, .. } => match ctx.get_type() {
+                ErrorContextType::Method { self_ty, .. } => {
                     QualifiedName::new(name.name.get_namespace(), self_ty.clone())
                 }
                 _ => name.name.clone(),

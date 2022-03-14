@@ -65,7 +65,7 @@ impl<P: AnalysisPhase> ApiVec<P> {
                 self.push(Api::IgnoredItem {
                     name: ApiName::new_from_qualified_name(name.clone()),
                     err: ConvertError::DuplicateItemsFoundInParsing,
-                    ctx: ErrorContext::Item(name.get_final_ident()),
+                    ctx: ErrorContext::new_for_item(name.get_final_ident()),
                 })
             }
         } else {

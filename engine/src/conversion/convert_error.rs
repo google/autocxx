@@ -12,7 +12,10 @@ use std::fmt::Display;
 use itertools::Itertools;
 use syn::Ident;
 
-use crate::types::{Namespace, QualifiedName};
+use crate::{
+    known_types,
+    types::{make_ident, Namespace, QualifiedName},
+};
 
 #[derive(Debug, Clone)]
 pub enum ConvertError {
@@ -117,9 +120,22 @@ impl Display for ConvertError {
     }
 }
 
+/// Ensures that error contexts are always created using the constructors in this
+/// mod, therefore undergoing identifier sanitation.
 #[derive(Clone)]
-pub(crate) enum ErrorContext {
+struct PhantomSanitized;
+
+/// The context of an error, e.g. whether it applies to a function or a method.
+/// This is used to generate suitable rustdoc in the output codegen so that
+/// the errors can be revealed in rust-analyzer-based IDEs, etc.
+#[derive(Clone)]
+pub(crate) struct ErrorContext(ErrorContextType, PhantomSanitized);
+
+/// All idents in this structure are guaranteed to be something we can safely codegen for.
+#[derive(Clone)]
+pub(crate) enum ErrorContextType {
     Item(Ident),
+    SanitizedItem(Ident),
     Method {
         self_ty: Ident,
         method: Ident,
@@ -130,12 +146,63 @@ pub(crate) enum ErrorContext {
     NoCode,
 }
 
+impl ErrorContext {
+    pub(crate) fn new_for_item(id: Ident) -> Self {
+        match Self::sanitize_error_ident(&id) {
+            None => Self(ErrorContextType::Item(id), PhantomSanitized),
+            Some(sanitized) => Self(ErrorContextType::SanitizedItem(sanitized), PhantomSanitized),
+        }
+    }
+
+    pub(crate) fn new_for_method(self_ty: Ident, method: Ident) -> Self {
+        // If this IgnoredItem relates to a method on a self_ty which we can't represent,
+        // e.g. u8, then forget about trying to attach this error text to something within
+        // an impl block.
+        match Self::sanitize_error_ident(&self_ty) {
+            None => Self(
+                ErrorContextType::Method {
+                    self_ty,
+                    method: Self::sanitize_error_ident(&method).unwrap_or(method),
+                },
+                PhantomSanitized,
+            ),
+            Some(_) => Self(
+                ErrorContextType::SanitizedItem(make_ident(format!("{}_{}", self_ty, method))),
+                PhantomSanitized,
+            ),
+        }
+    }
+
+    pub(crate) fn new_without_code() -> Self {
+        Self(ErrorContextType::NoCode, PhantomSanitized)
+    }
+
+    /// Because errors may be generated for invalid types or identifiers,
+    /// we may need to scrub the name
+    fn sanitize_error_ident(id: &Ident) -> Option<Ident> {
+        let qn = QualifiedName::new(&Namespace::new(), id.clone());
+        if known_types().conflicts_with_built_in_type(&qn) {
+            Some(make_ident(format!("{}_autocxx_error", qn.get_final_item())))
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn get_type(&self) -> &ErrorContextType {
+        &self.0
+    }
+
+    pub(crate) fn into_type(self) -> ErrorContextType {
+        self.0
+    }
+}
+
 impl std::fmt::Display for ErrorContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ErrorContext::Item(id) => write!(f, "{}", id),
-            ErrorContext::Method { self_ty, method } => write!(f, "{}::{}", self_ty, method),
-            ErrorContext::NoCode => write!(f, "<not generated>"),
+        match &self.0 {
+            ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => write!(f, "{}", id),
+            ErrorContextType::Method { self_ty, method } => write!(f, "{}::{}", self_ty, method),
+            ErrorContextType::NoCode => write!(f, "<not generated>"),
         }
     }
 }

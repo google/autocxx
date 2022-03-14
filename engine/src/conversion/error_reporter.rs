@@ -14,7 +14,10 @@ use super::{
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
-use crate::types::{make_ident, Namespace, QualifiedName};
+use crate::{
+    conversion::convert_error::ErrorContextType,
+    types::{Namespace, QualifiedName},
+};
 
 /// Run some code which may generate a ConvertError.
 /// If it does, try to note the problem in our output APIs
@@ -35,14 +38,12 @@ where
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
             eprintln!("Ignored item {}: {}", ctx, err);
-            let id = match &ctx {
-                ErrorContext::Item(id) => id.clone(),
-                ErrorContext::Method { self_ty, method } => {
-                    make_ident(format!("{}_{}", self_ty, method))
-                }
-                ErrorContext::NoCode => panic!("Shouldn't happen"),
+            let id = match ctx.get_type() {
+                ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => id,
+                ErrorContextType::Method { self_ty, .. } => self_ty,
+                ErrorContextType::NoCode => panic!("Shouldn't happen"),
             };
-            let api_name = ApiName::new_from_qualified_name(QualifiedName::new(ns, id));
+            let api_name = ApiName::new_from_qualified_name(QualifiedName::new(ns, id.clone()));
             if let Some(item) = ignored_item(api_name, ctx, err) {
                 apis.push(item);
             }
@@ -199,7 +200,7 @@ pub(crate) fn convert_item_apis<F, A, B: 'static>(
         let fullname = api.name_info().clone();
         let tn = api.name().clone();
         let result = fun(api).map_err(|e| {
-            ConvertErrorWithContext(e, Some(ErrorContext::Item(tn.get_final_ident())))
+            ConvertErrorWithContext(e, Some(ErrorContext::new_for_item(tn.get_final_ident())))
         });
         api_or_error(fullname, result)
     }))
