@@ -6,6 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::collections::HashSet;
+
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
@@ -82,6 +84,7 @@ pub(super) fn gen_function(
     fun: FuncToConvert,
     analysis: FnAnalysis,
     cpp_call_name: String,
+    non_pod_types: &HashSet<QualifiedName>,
 ) -> RsCodegenResult {
     if analysis.ignore_reason.is_err() || !analysis.externally_callable {
         return RsCodegenResult::default();
@@ -111,10 +114,11 @@ pub(super) fn gen_function(
         unsafety: &analysis.requires_unsafe,
         always_unsafe_due_to_trait_definition,
         doc_attr: &doc_attr,
+        non_pod_types,
     };
     // In rare occasions, we might need to give an explicit lifetime.
     let (lifetime_tokens, params, ret_type) =
-        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type);
+        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type, non_pod_types);
 
     if analysis.rust_wrapper_needed {
         match kind {
@@ -220,6 +224,7 @@ struct FnGenerator<'a> {
     unsafety: &'a UnsafetyNeeded,
     always_unsafe_due_to_trait_definition: bool,
     doc_attr: &'a Option<Attribute>,
+    non_pod_types: &'a HashSet<QualifiedName>,
 }
 
 impl<'a> FnGenerator<'a> {
@@ -259,8 +264,12 @@ impl<'a> FnGenerator<'a> {
         ret_type: &ReturnType,
     ) -> Box<ImplBlockDetails> {
         let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(avoid_self);
-        let (lifetime_tokens, wrapper_params, ret_type) =
-            add_explicit_lifetime_if_necessary(self.param_details, wrapper_params, ret_type);
+        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
+            self.param_details,
+            wrapper_params,
+            ret_type,
+            self.non_pod_types,
+        );
         let rust_name = make_ident(self.rust_name);
         let unsafety = self.unsafety.wrapper_token();
         let doc_attr = self.doc_attr;
@@ -291,8 +300,12 @@ impl<'a> FnGenerator<'a> {
         if let Some(parameter_reordering) = &details.parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
         }
-        let (lifetime_tokens, wrapper_params, ret_type) =
-            add_explicit_lifetime_if_necessary(self.param_details, wrapper_params, ret_type);
+        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
+            self.param_details,
+            wrapper_params,
+            ret_type,
+            self.non_pod_types,
+        );
         let doc_attr = self.doc_attr;
         let unsafety = self.unsafety.wrapper_token();
         let cxxbridge_name = self.cxxbridge_name;
