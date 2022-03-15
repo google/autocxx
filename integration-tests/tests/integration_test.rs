@@ -2310,6 +2310,49 @@ fn test_return_reference() {
 }
 
 #[test]
+fn test_return_reference_non_pod() {
+    let cxx = indoc! {"
+        const Bob& give_bob(const Bob& input_bob) {
+            return input_bob;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        namespace A {
+            void give_bob(); // force wrapper generation
+        }
+        const Bob& give_bob(const Bob& input_bob);
+    "};
+    let rs = quote! {};
+    run_test(cxx, hdr, rs, &["give_bob", "Bob", "A::give_bob"], &[]);
+}
+
+#[test]
+fn test_return_reference_non_pod_string() {
+    let cxx = indoc! {"
+        const std::string& give_bob(const Bob& input_bob) {
+            return input_bob.a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <string>
+        struct Bob {
+            std::string a;
+        };
+       // namespace A {
+       //     void give_bob(); // force wrapper generation
+       // }
+        const std::string& give_bob(const Bob& input_bob);
+    "};
+    let rs = quote! {};
+    run_test(cxx, hdr, rs, &["give_bob", "Bob"], &[]);
+}
+
+#[test]
 fn test_member_return_reference() {
     let hdr = indoc! {"
         #include <string>

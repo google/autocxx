@@ -43,7 +43,10 @@ use self::{
 };
 
 use super::{
-    analysis::fun::{FnPhase, ReceiverMutability},
+    analysis::{
+        fun::{FnPhase, PodAndDepAnalysis, ReceiverMutability},
+        pod::PodAnalysis,
+    },
     api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind},
     convert_error::ErrorContextType,
 };
@@ -163,6 +166,7 @@ impl<'a> RsCodeGenerator<'a> {
         let methods_by_superclass = self.accumulate_superclass_methods(&all_apis);
         let subclasses_with_a_single_trivial_constructor =
             find_trivially_constructed_subclasses(&all_apis);
+        let non_pod_types = find_non_pod_types(&all_apis);
         // Now let's generate the Rust code.
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
@@ -173,6 +177,7 @@ impl<'a> RsCodeGenerator<'a> {
                     api,
                     &methods_by_superclass,
                     &subclasses_with_a_single_trivial_constructor,
+                    &non_pod_types,
                 );
                 ((name, gen), more_cpp_needed)
             })
@@ -456,6 +461,7 @@ impl<'a> RsCodeGenerator<'a> {
         api: Api<FnPhase>,
         associated_methods: &HashMap<QualifiedName, Vec<SuperclassMethod>>,
         subclasses_with_a_single_trivial_constructor: &HashSet<QualifiedName>,
+        non_pod_types: &HashSet<QualifiedName>,
     ) -> RsCodegenResult {
         let name = api.name().clone();
         let id = name.get_final_ident();
@@ -474,9 +480,13 @@ impl<'a> RsCodeGenerator<'a> {
                     ..Default::default()
                 }
             }
-            Api::Function { fun, analysis, .. } => {
-                gen_function(name.get_namespace(), *fun, analysis, cpp_call_name)
-            }
+            Api::Function { fun, analysis, .. } => gen_function(
+                name.get_namespace(),
+                *fun,
+                analysis,
+                cpp_call_name,
+                non_pod_types,
+            ),
             Api::Const { const_item, .. } => RsCodegenResult {
                 bindgen_mod_items: vec![Item::Const(const_item)],
                 materializations: vec![Use::UsedFromBindgen],
@@ -1096,6 +1106,27 @@ fn find_trivially_constructed_subclasses(apis: &ApiVec<FnPhase>) -> HashSet<Qual
     (&simple_constructors - &complex_constructors)
         .into_iter()
         .cloned()
+        .collect()
+}
+
+fn find_non_pod_types(apis: &ApiVec<FnPhase>) -> HashSet<QualifiedName> {
+    apis.iter()
+        .filter_map(|api| match api {
+            Api::Struct {
+                name,
+                analysis:
+                    PodAndDepAnalysis {
+                        pod:
+                            PodAnalysis {
+                                kind: TypeKind::NonPod,
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            } => Some(name.name.clone()),
+            _ => None,
+        })
         .collect()
 }
 
