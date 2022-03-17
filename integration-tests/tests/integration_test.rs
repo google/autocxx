@@ -4571,12 +4571,33 @@ fn test_double_underscores_ignored() {
         uint32_t get_a() const { return 2; }
         uint32_t a;
     };
+
+    struct __default { __default() = default; };
+    struct __destructor { ~__destructor() = default; };
+    struct __copy { __copy(const __copy&) = default; };
+    struct __copy_operator { __copy_operator &operator=(const __copy_operator&) = default; };
+    struct __move { __move(__move&&) = default; };
+    struct __move_operator { __move_operator &operator=(const __move_operator&) = default; };
     "};
     let rs = quote! {
         let b = ffi::B::make_unique();
         assert_eq!(b.get_a(), 2);
     };
-    run_test("", hdr, rs, &["B"], &[]);
+    run_test(
+        "",
+        hdr,
+        rs,
+        &[
+            "B",
+            "__default",
+            "__destructor",
+            "__copy",
+            "__copy_operator",
+            "__move",
+            "__move_operator",
+        ],
+        &[],
+    );
 }
 
 // This test fails on Windows gnu but not on Windows msvc
