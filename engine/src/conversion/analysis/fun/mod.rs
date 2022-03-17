@@ -1083,10 +1083,22 @@ impl<'a> FnAnalyzer<'a> {
             CppVisibility::Protected => false,
             CppVisibility::Public => true,
         };
-        if matches!(
+        if let Some(problem) = bads.into_iter().next() {
+            match problem {
+                Ok(_) => panic!("No error in the error"),
+                Err(problem) => set_ignore_reason(problem),
+            }
+        } else if fun.unused_template_param {
+            // This indicates that bindgen essentially flaked out because templates
+            // were too complex.
+            set_ignore_reason(ConvertError::UnusedTemplateParam)
+        } else if matches!(
             fun.special_member,
             Some(SpecialMemberKind::AssignmentOperator)
         ) {
+            // Be careful with the order of this if-else tree. Anything above here means we won't
+            // treat it as an assignment operator, but anything below we still consider when
+            // deciding which other C++ special member functions are implicitly defined.
             set_ignore_reason(ConvertError::AssignmentOperator)
         } else if fun.references.rvalue_ref_return {
             set_ignore_reason(ConvertError::RValueReturn)
@@ -1102,15 +1114,6 @@ impl<'a> FnAnalyzer<'a> {
             )
         {
             set_ignore_reason(ConvertError::RValueParam)
-        } else if let Some(problem) = bads.into_iter().next() {
-            match problem {
-                Ok(_) => panic!("No error in the error"),
-                Err(problem) => set_ignore_reason(problem),
-            }
-        } else if fun.unused_template_param {
-            // This indicates that bindgen essentially flaked out because templates
-            // were too complex.
-            set_ignore_reason(ConvertError::UnusedTemplateParam)
         } else {
             match kind {
                 FnKind::Method {
