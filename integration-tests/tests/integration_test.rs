@@ -1504,8 +1504,7 @@ fn test_method_pass_nonpod_by_value() {
 #[test]
 fn test_pass_two_nonpod_by_value() {
     let cxx = indoc! {"
-        void take_a(A, A) const {
-            
+        void take_a(A, A) {
         }
     "};
     let hdr = indoc! {"

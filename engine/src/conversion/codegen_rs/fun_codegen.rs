@@ -231,7 +231,7 @@ impl<'a> FnGenerator<'a> {
     fn generate_arg_lists(
         &self,
         avoid_self: bool,
-    ) -> (Punctuated<FnArg, Comma>, Vec<TokenStream>, Vec<TokenStream>) {
+    ) -> (Punctuated<FnArg, Comma>, TokenStream, Vec<TokenStream>) {
         let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
         let mut local_variables = Vec::new();
         let mut arg_list = Vec::new();
@@ -253,6 +253,7 @@ impl<'a> FnGenerator<'a> {
             arg_list.push(actual_arg);
             local_variables.extend(local_variable.into_iter());
         }
+        let local_variables = quote! { #(#local_variables);* };
         (wrapper_params, local_variables, arg_list)
     }
 
@@ -281,7 +282,7 @@ impl<'a> FnGenerator<'a> {
             item: ImplItem::Method(parse_quote! {
                 #doc_attr
                 pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
-                    #(#local_variables),*
+                    #local_variables
                     #call_body
                 }
             }),
@@ -317,7 +318,7 @@ impl<'a> FnGenerator<'a> {
         let item = parse_quote! {
             #doc_attr
             #unsafety fn #method_name #lifetime_tokens ( #wrapper_params ) #ret_type {
-                #(#local_variables),*
+                #local_variables
                 #call_body
             }
         };
@@ -361,7 +362,7 @@ impl<'a> FnGenerator<'a> {
         };
         let cxxbridge_name = self.cxxbridge_name;
         let body = quote! {
-            #(#local_variables),*
+            #local_variables
             autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
                 let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
                 cxxbridge::#cxxbridge_name(#(#arg_list),* )
@@ -394,7 +395,7 @@ impl<'a> FnGenerator<'a> {
         Item::Fn(parse_quote! {
             #doc_attr
             pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
-                #(#local_variables),*
+                #local_variables
                 #body
             }
         })
