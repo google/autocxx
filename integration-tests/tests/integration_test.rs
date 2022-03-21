@@ -1502,6 +1502,27 @@ fn test_method_pass_nonpod_by_value() {
 }
 
 #[test]
+fn test_pass_two_nonpod_by_value() {
+    let cxx = indoc! {"
+        void take_a(A, A) {
+        }
+    "};
+    let hdr = indoc! {"
+        #include <string>
+        struct A {
+            std::string b;
+        };
+        void take_a(A, A);
+    "};
+    let rs = quote! {
+        let a = ffi::A::make_unique();
+        let a2 = ffi::A::make_unique();
+        ffi::take_a(a, a2);
+    };
+    run_test(cxx, hdr, rs, &["A", "take_a"], &[]);
+}
+
+#[test]
 fn test_method_pass_nonpod_by_value_with_up() {
     // Checks that existing UniquePtr params are not wrecked
     // by the conversion we do here.
