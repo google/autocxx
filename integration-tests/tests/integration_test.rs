@@ -1096,6 +1096,37 @@ fn test_enum_with_funcs() {
 }
 
 #[test]
+fn test_re_export() {
+    let cxx = indoc! {"
+        Bob give_bob() {
+            return Bob::BOB_VALUE_2;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        enum Bob {
+            BOB_VALUE_1,
+            BOB_VALUE_2,
+        };
+        Bob give_bob();
+    "};
+    let rs = quote! {
+        let a = ffi::Bob::BOB_VALUE_2;
+        let b = ffi::give_bob();
+        assert!(a == b);
+    };
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        directives_from_lists(&["Bob", "give_bob"], &[], None),
+        None,
+        None,
+        Some(quote! { pub use ffi::Bob; }),
+    );
+}
+
+#[test]
 fn test_enum_no_funcs() {
     let cxx = indoc! {"
     "};
