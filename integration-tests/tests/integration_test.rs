@@ -1554,6 +1554,42 @@ fn test_pass_two_nonpod_by_value() {
 }
 
 #[test]
+fn test_issue_931() {
+    let cxx = "";
+    let hdr = indoc! {"
+    namespace a {
+        struct __cow_string {
+          __cow_string();
+        };
+        namespace {
+        class b {
+          __cow_string c;
+        };
+        } // namespace
+        class j {
+          b d;
+        };
+        template <typename> class e;
+        } // namespace a
+        namespace {
+        template <typename> struct f {};
+        } // namespace
+        namespace llvm {
+        template <class> class g {
+          union {
+            f<a::j> h;
+          };
+        };
+        class MemoryBuffer {
+          g<a::e<MemoryBuffer>> i;
+        };
+        } // namespace llvm
+    "};
+    let rs = quote! {};
+    run_test(cxx, hdr, rs, &["llvm::MemoryBuffer"], &[]);
+}
+
+#[test]
 fn test_method_pass_nonpod_by_value_with_up() {
     // Checks that existing UniquePtr params are not wrecked
     // by the conversion we do here.
