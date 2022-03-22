@@ -273,8 +273,8 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         matches.value_of("problem").unwrap(),
         &rs_path,
         &extra_clang_args,
-        matches.value_of("no-precompile").is_none(),
-        matches.value_of("no-postcompile").is_none(),
+        !matches.is_present("no-precompile"),
+        !matches.is_present("no-postcompile"),
     )?;
     run_creduce(
         matches.value_of("creduce").unwrap(),
@@ -441,7 +441,7 @@ fn make_compile_step(enabled: bool, file: &str, extra_clang_args: &[&str]) -> St
             file,
         )
     } else {
-        "".into()
+        "echo 'Skipping compilation'".into()
     }
 }
 
