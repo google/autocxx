@@ -232,6 +232,50 @@ but not really enough to do anything else with these types yet<sup class="footno
 </div>
 <p>To make them more useful, you might have to add extra C++ functions to extract
 data or otherwise deal with them.</p>
+<p>Usually, such concrete types are synthesized automatically because they're
+parameters or return values from functions. Very rarely, you may
+want to synthesize them yourself - you can do this using the
+<a href="https://docs.rs/autocxx/latest/autocxx/macro.concrete.html"><code>concrete!</code></a>
+directive. As noted, though, these types are currently opaque and fairly
+useless without passing them back and forth to C++, so this is not a commonly
+used facility. It does, however, allow you to give a more descriptive name
+to the type in Rust:</p>
+<h4 id="c-header-1"><a class="header" href="#c-header-1">C++ header:</a></h4>
+<pre><code class="language-cpp">#include &lt;string&gt;
+struct Tapioca {
+  std::string yuck;
+};
+template&lt;typename Floaters&gt;
+struct Tea {
+  Tea() : floaters(nullptr) {}
+  Floaters* floaters;
+};
+inline Tea&lt;Tapioca&gt; prepare() {
+  Tea&lt;Tapioca&gt; mixture;
+  // prepare...
+  return mixture;
+}
+inline void drink(const Tea&lt;Tapioca&gt;&amp;) {}
+
+</code></pre>
+<h4 id="rust-1"><a class="header" href="#rust-1">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;prepare&quot;)
+    generate!(&quot;drink&quot;)
+    concrete!(&quot;Tea&lt;Tapioca&gt;&quot;, Boba)
+}
+
+fn main() {
+    let nicer_than_it_sounds: cxx::UniquePtr&lt;ffi::Boba&gt; = ffi::prepare();
+    ffi::drink(&amp;nicer_than_it_sounds);
+}
+
+</code></pre>
 <h2 id="implicit-member-functions"><a class="header" href="#implicit-member-functions">Implicit member functions</a></h2>
 <p>Most of the API of a C++ type is contained within the type, so <code>autocxx</code> can
 understand what is available for Rust to call when that type is analyzed.
