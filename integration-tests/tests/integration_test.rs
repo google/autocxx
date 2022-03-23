@@ -1633,10 +1633,8 @@ fn test_method_pass_nonpod_by_value_with_up() {
 fn test_issue_940() {
     let cxx = "";
     let hdr = indoc! {"
-    namespace {
     template <class> class b;
     template <class = void> struct c;
-    } // namespace
     struct identity;
     template <class, class, class e, class> class f {
     using g = e;
