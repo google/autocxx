@@ -1591,6 +1591,22 @@ fn test_issue_931() {
 }
 
 #[test]
+fn test_issue_936() {
+    let cxx = "";
+    let hdr = indoc! {"
+    namespace a {
+    struct b;
+    }
+    class GURL {
+    public:
+        GURL(a::b &, bool);
+    };
+    "};
+    let rs = quote! {};
+    run_test(cxx, hdr, rs, &["GURL"], &[]);
+}
+
+#[test]
 fn test_method_pass_nonpod_by_value_with_up() {
     // Checks that existing UniquePtr params are not wrecked
     // by the conversion we do here.
