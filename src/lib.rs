@@ -210,6 +210,18 @@ macro_rules! name {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// A concrete type to make, for example
+/// `concrete!("Container<Contents>")`.
+/// All types msut already be on the allowlist by having used
+/// `generate!` or similar.
+///
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+#[macro_export]
+macro_rules! concrete {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 /// Specifies a global safety policy for functions generated
 /// from these headers. By default (without such a `safety!`
 /// directive) all such functions are marked as `unsafe` and
