@@ -1594,16 +1594,14 @@ fn test_issue_931() {
 fn test_issue_936() {
     let cxx = "";
     let hdr = indoc! {"
-    namespace a {
-    struct b;
-    }
-    class GURL {
+    struct a;
+    class B {
     public:
-        GURL(a::b &, bool);
+        B(a &, bool);
     };
     "};
     let rs = quote! {};
-    run_test(cxx, hdr, rs, &["GURL"], &[]);
+    run_test(cxx, hdr, rs, &["B"], &[]);
 }
 
 #[test]
