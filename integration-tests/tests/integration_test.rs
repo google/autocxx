@@ -1633,40 +1633,30 @@ fn test_method_pass_nonpod_by_value_with_up() {
 fn test_issue_940() {
     let cxx = "";
     let hdr = indoc! {"
-    namespace a {
     namespace {
     template <class> class b;
     template <class = void> struct c;
     } // namespace
-    } // namespace a
-    namespace base {
     struct identity;
-    namespace d {
     template <class, class, class e, class> class f {
     using g = e;
     g h;
     };
-    } // namespace d
-    template <class i, class k = a::c<>, class l = a::b<i>>
-    using j = d::f<i, identity, k, l>;
-    } // namespace base
-    namespace m {
+    template <class i, class k = c<>, class l = b<i>>
+    using j = f<i, identity, k, l>;
     class n;
-    }
-    namespace content {
     class RenderFrameHost {
     public:
-    virtual void o(const base::j<m::n> &);
+    virtual void o(const j<n> &);
     virtual ~RenderFrameHost() {}
     };
-    } // namespace content
     "};
     let rs = quote! {};
     run_test_ex(
         cxx,
         hdr,
         rs,
-        directives_from_lists(&["content::RenderFrameHost"], &[], None),
+        directives_from_lists(&["RenderFrameHost"], &[], None),
         make_cpp17_adder(),
         None,
         None,
