@@ -10026,6 +10026,37 @@ fn test_tricky_destructors() {
     );
 }
 
+#[test]
+fn test_concretize() {
+    let hdr = indoc! {"
+        #include <string>
+        template<typename CONTENTS>
+        class Container {
+        private:
+            CONTENTS* contents;
+        };
+        struct B {
+            std::string a;
+        };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! {
+            concrete!("Container<B>", ContainerOfB)
+            generate!("B")
+        },
+        None,
+        None,
+        Some(quote! {
+            struct HasAField {
+                contents: ffi::ContainerOfB
+            }
+        }),
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
