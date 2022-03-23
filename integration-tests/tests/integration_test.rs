@@ -8,7 +8,8 @@
 
 use crate::{
     builder_modifiers::{
-        make_clang_arg_adder, EnableAutodiscover, SetSuppressSystemHeaders, SkipCxxGen,
+        make_clang_arg_adder, make_cpp17_adder, EnableAutodiscover, SetSuppressSystemHeaders,
+        SkipCxxGen,
     },
     code_checkers::{
         make_error_finder, make_string_finder, CppCounter, CppMatcher, NoSystemHeadersChecker,
@@ -1626,6 +1627,50 @@ fn test_method_pass_nonpod_by_value_with_up() {
         assert_eq!(b.get_bob(a, a2), 12);
     };
     run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
+}
+
+#[test]
+fn test_issue_940() {
+    let cxx = "";
+    let hdr = indoc! {"
+    namespace a {
+    namespace {
+    template <class> class b;
+    template <class = void> struct c;
+    } // namespace
+    } // namespace a
+    namespace base {
+    struct identity;
+    namespace d {
+    template <class, class, class e, class> class f {
+    using g = e;
+    g h;
+    };
+    } // namespace d
+    template <class i, class k = a::c<>, class l = a::b<i>>
+    using j = d::f<i, identity, k, l>;
+    } // namespace base
+    namespace m {
+    class n;
+    }
+    namespace content {
+    class RenderFrameHost {
+    public:
+    virtual void o(const base::j<m::n> &);
+    virtual ~RenderFrameHost() {}
+    };
+    } // namespace content
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        directives_from_lists(&["content::RenderFrameHost"], &[], None),
+        make_cpp17_adder(),
+        None,
+        None,
+    );
 }
 
 #[test]
@@ -5754,7 +5799,7 @@ fn test_stringview() {
         hdr,
         rs,
         directives_from_lists(&["take_string_view", "return_string_view"], &[], None),
-        make_clang_arg_adder(&["-std=c++17"]),
+        make_cpp17_adder(),
         None,
         None,
     );
@@ -6418,7 +6463,7 @@ fn test_cpp17() {
         quote! {
             generate!("foo")
         },
-        make_clang_arg_adder(&["-std=c++17"]),
+        make_cpp17_adder(),
         None,
         None,
     );
