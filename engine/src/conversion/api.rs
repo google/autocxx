@@ -420,7 +420,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// concretize some templated C++ type.
     ConcreteType {
         name: ApiName,
-        rs_definition: Box<Type>,
+        rs_definition: Option<Box<Type>>,
         cpp_definition: String,
     },
     /// A simple note that we want to make a constructor for
