@@ -29,7 +29,7 @@ use crate::{
             TraitMethodDetails,
         },
         api::UnsafetyNeeded,
-        codegen_rs::lifetime::add_lifetime_to_all_params,
+        codegen_rs::lifetime::add_lifetime_to_all_reference_params,
     },
     types::{Namespace, QualifiedName},
 };
@@ -355,7 +355,7 @@ impl<'a> FnGenerator<'a> {
         let rust_name = make_ident(&self.rust_name);
         let any_references = self.param_details.iter().any(|pd| pd.was_reference);
         let (lifetime_param, lifetime_addition) = if any_references {
-            add_lifetime_to_all_params(&mut wrapper_params);
+            add_lifetime_to_all_reference_params(&mut wrapper_params);
             (quote! { <'a> }, quote! { + 'a })
         } else {
             (quote! {}, quote! {})
