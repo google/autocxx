@@ -6521,13 +6521,18 @@ fn test_box_via_extern_rust_in_mod() {
 }
 
 #[test]
-fn test_extern_rust_fn() {
+fn test_extern_rust_fn_simple() {
+    let cpp = indoc! {"
+        void foo() {
+            my_rust_fun();
+        }
+    "};
     let hdr = indoc! {"
         #include <cxx.h>
         inline void do_thing() {}
     "};
     run_test_ex(
-        "",
+        cpp,
         hdr,
         quote! {},
         quote! {
