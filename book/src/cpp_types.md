@@ -122,20 +122,19 @@ autocxx_integration_tests::doctest(
 "",
 "#include <string>
 struct Tapioca {
-  std::string why;
+  std::string yuck;
 };
 template<typename Floaters>
 struct Tea {
+  Tea() : floaters(nullptr) {}
   Floaters* floaters;
 };
-template<typename Floaters>
-inline Tea<Floaters> prepare() {
-  Tea<Floaters> mixture;
+inline Tea<Tapioca> prepare() {
+  Tea<Tapioca> mixture;
   // prepare...
   return mixture;
 }
-template<typename Floaters>
-inline void drink(const Team<Floaters>&) {}
+inline void drink(const Tea<Tapioca>&) {}
 ",
 {
 use autocxx::prelude::*;
@@ -149,7 +148,7 @@ include_cpp! {
 }
 
 fn main() {
-    let nicer_than_it_sounds: Boba = ffi::prepare();
+    let nicer_than_it_sounds: cxx::UniquePtr<ffi::Boba> = ffi::prepare();
     ffi::drink(&nicer_than_it_sounds);
 }
 }
