@@ -446,9 +446,9 @@ pub mod prelude {
     pub use crate::include_cpp;
     pub use crate::PinMut;
     pub use crate::ValueParam;
+    pub use cxx::UniquePtr;
     pub use moveit::moveit;
     pub use moveit::new::New;
-    pub use cxx::UniquePtr;
 }
 
 /// Re-export moveit for ease of consumers.
