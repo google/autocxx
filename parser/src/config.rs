@@ -452,7 +452,7 @@ impl IncludeCppConfig {
     fn is_concrete_type(&self, cpp_name: &str) -> bool {
         self.concretes
             .values()
-            .any(|val| &val.to_string() == cpp_name)
+            .any(|val| val.to_string() == cpp_name)
     }
 
     /// In case there are multiple sets of ffi mods in a single binary,
