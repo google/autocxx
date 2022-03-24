@@ -806,7 +806,7 @@ impl<'a> RsCodeGenerator<'a> {
         F: FnOnce() -> Option<(Item, Option<Attribute>)>,
     {
         let mut bindgen_mod_items = Vec::new();
-        let mut materializations = vec![Use::UsedFromCxxBridge];
+        let mut materializations = vec![Use::UsedFromBindgen];
         Self::add_superclass_stuff_to_type(
             name,
             &mut bindgen_mod_items,
