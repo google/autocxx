@@ -10,6 +10,10 @@ use autocxx_engine::Builder;
 
 use autocxx_integration_tests::{BuilderModifier, BuilderModifierFns, TestBuilderContext};
 
+pub(crate) fn make_cpp17_adder() -> Option<BuilderModifier> {
+    make_clang_arg_adder(&["-std=c++17"])
+}
+
 struct ClangArgAdder(Vec<String>);
 
 pub(crate) fn make_clang_arg_adder(args: &[&str]) -> Option<BuilderModifier> {

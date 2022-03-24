@@ -81,7 +81,7 @@ impl ParseForeignMod {
                     cpp_vis: annotations.get_cpp_visibility(),
                     special_member: annotations.special_member_kind(),
                     unused_template_param: annotations
-                        .has_attr("unused_template_param_in_arg_or_return"),
+                        .has_attr("incomprehensible_param_in_arg_or_return"),
                     references: annotations.get_reference_parameters_and_return(),
                     original_name: annotations.get_original_name(),
                     synthesized_this_type: None,

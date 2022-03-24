@@ -8,7 +8,8 @@
 
 use crate::{
     builder_modifiers::{
-        make_clang_arg_adder, EnableAutodiscover, SetSuppressSystemHeaders, SkipCxxGen,
+        make_clang_arg_adder, make_cpp17_adder, EnableAutodiscover, SetSuppressSystemHeaders,
+        SkipCxxGen,
     },
     code_checkers::{
         make_error_finder, make_string_finder, CppCounter, CppMatcher, NoSystemHeadersChecker,
@@ -1640,6 +1641,38 @@ fn test_method_pass_nonpod_by_value_with_up() {
         assert_eq!(b.get_bob(a, a2), 12);
     };
     run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
+}
+
+#[test]
+fn test_issue_940() {
+    let cxx = "";
+    let hdr = indoc! {"
+    template <class> class b;
+    template <class = void> struct c;
+    struct identity;
+    template <class, class, class e, class> class f {
+    using g = e;
+    g h;
+    };
+    template <class i, class k = c<>, class l = b<i>>
+    using j = f<i, identity, k, l>;
+    class n;
+    class RenderFrameHost {
+    public:
+    virtual void o(const j<n> &);
+    virtual ~RenderFrameHost() {}
+    };
+    "};
+    let rs = quote! {};
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        directives_from_lists(&["RenderFrameHost"], &[], None),
+        make_cpp17_adder(),
+        None,
+        None,
+    );
 }
 
 #[test]
@@ -5768,7 +5801,7 @@ fn test_stringview() {
         hdr,
         rs,
         directives_from_lists(&["take_string_view", "return_string_view"], &[], None),
-        make_clang_arg_adder(&["-std=c++17"]),
+        make_cpp17_adder(),
         None,
         None,
     );
@@ -6432,7 +6465,7 @@ fn test_cpp17() {
         quote! {
             generate!("foo")
         },
-        make_clang_arg_adder(&["-std=c++17"]),
+        make_cpp17_adder(),
         None,
         None,
     );
