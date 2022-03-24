@@ -63,6 +63,7 @@ use self::{
 };
 
 use super::{
+    doc_label::make_doc_attrs,
     pod::{PodAnalysis, PodPhase},
     tdef::TypedefAnalysis,
     type_converter::Annotated,
@@ -1933,7 +1934,7 @@ impl<'a> FnAnalyzer<'a> {
                     Box::new(FuncToConvert {
                         self_ty: Some(self_ty.clone()),
                         ident,
-                        doc_attr: None,
+                        doc_attrs: make_doc_attrs(format!("Synthesized {}.", special_member)),
                         inputs,
                         output: ReturnType::Default,
                         vis: parse_quote! { pub },
