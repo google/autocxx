@@ -76,20 +76,23 @@ pub(crate) fn check_names(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
 
     // Reject any names which are duplicates within the cxx bridge mod,
     // that has a flat namespace.
-    let mut names_found: HashMap<Ident, usize> = HashMap::new();
+    let mut names_found: HashMap<Ident, Vec<String>> = HashMap::new();
     for api in intermediate.iter() {
         let my_name = api.cxxbridge_name();
         if let Some(name) = my_name {
             let e = names_found.entry(name).or_default();
-            *e += 1usize;
+            e.push(api.name_info().name.to_string());
         }
     }
     let mut results = ApiVec::new();
     convert_item_apis(intermediate, &mut results, |api| {
         let my_name = api.cxxbridge_name();
         if let Some(name) = my_name {
-            if *names_found.entry(name).or_default() > 1usize {
-                Err(ConvertError::DuplicateCxxBridgeName)
+            let symbols_for_this_name = names_found.entry(name).or_default();
+            if symbols_for_this_name.len() > 1usize {
+                Err(ConvertError::DuplicateCxxBridgeName(
+                    symbols_for_this_name.clone(),
+                ))
             } else {
                 Ok(Box::new(std::iter::once(api)))
             }
