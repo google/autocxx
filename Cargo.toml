@@ -17,6 +17,7 @@ homepage = "https://autocxx.rs"
 edition = "2021"
 keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
+exclude = [ ".github", "book", "tools" ]
 
 # This is stricter about avoiding optional features in dependencies
 # such as 'syn'. We build this way such that CI spots any mistakes
