@@ -27,6 +27,7 @@ enum Behavior {
     CByValue,
     CVariableLengthByValue,
     CVoid,
+    CChar16,
     RustContainerByValueSafe,
 }
 
@@ -205,6 +206,7 @@ impl TypeDatabase {
                         | Behavior::RustByValue
                         | Behavior::CByValue
                         | Behavior::CVariableLengthByValue
+                        | Behavior::CChar16
                         | Behavior::RustContainerByValueSafe => true,
                         Behavior::CxxString
                         | Behavior::CxxContainerNotByValueSafe
@@ -283,7 +285,7 @@ impl TypeDatabase {
             .map(|td| {
                 matches!(
                     td.behavior,
-                    Behavior::CVariableLengthByValue | Behavior::CVoid
+                    Behavior::CVariableLengthByValue | Behavior::CVoid | Behavior::CChar16
                 )
             })
             .unwrap_or(false)
@@ -504,7 +506,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "autocxx::c_char16_t",
         "char16_t",
-        Behavior::CVoid,
+        Behavior::CChar16,
         Some("c_char16_t".into()),
         false,
         false,
