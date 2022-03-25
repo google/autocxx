@@ -6609,6 +6609,28 @@ fn test_extern_rust_fn_in_mod() {
 }
 
 #[test]
+fn test_issue_956() {
+    let hdr = indoc! {"
+        template <typename b> class c : b {};
+        class GURL {
+        public:
+          typedef c<char16_t> d;
+          GURL e();
+          GURL e(d &);
+        };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        directives_from_lists(&["GURL"], &[], None),
+        make_cpp17_adder(),
+        None,
+        None,
+    );
+}
+
+#[test]
 fn test_pv_subclass_mut() {
     let hdr = indoc! {"
     #include <cstdint>
