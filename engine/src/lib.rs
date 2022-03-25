@@ -395,6 +395,8 @@ impl IncludeCppEngine {
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;
         let mut new_bindings: ItemMod = parse_quote! {
+            #[doc = "Generated using autocxx - do not edit directly"]
+            #[doc = "@generated"]
             #[allow(non_snake_case)]
             #[allow(dead_code)]
             #[allow(non_upper_case_globals)]

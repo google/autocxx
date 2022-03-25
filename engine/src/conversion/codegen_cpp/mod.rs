@@ -11,7 +11,7 @@ mod new_and_delete_prelude;
 pub(crate) mod type_to_cpp;
 
 use crate::{
-    conversion::analysis::fun::{function_wrapper::CppFunctionKind, FnAnalysis},
+    conversion::{analysis::fun::{function_wrapper::CppFunctionKind, FnAnalysis}},
     types::{make_ident, QualifiedName},
     CppCodegenOptions, CppFilePair,
 };
@@ -39,6 +39,8 @@ use super::{
     apivec::ApiVec,
     ConvertError,
 };
+
+static GENERATED_FILE_HEADER: &str = "// Generated using autocxx - do not edit directly.\n// @generated.\n\n";
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
 enum Header {
@@ -239,8 +241,8 @@ impl<'a> CppCodeGenerator<'a> {
             let type_definitions = self.concat_additional_items(|x| x.type_definition.as_ref());
             let declarations = self.concat_additional_items(|x| x.declaration.as_ref());
             let declarations = format!(
-                "#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
-                headers, self.inclusions, type_definitions, declarations
+                "{}\n#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
+                GENERATED_FILE_HEADER, headers, self.inclusions, type_definitions, declarations
             );
             log::info!("Additional C++ decls:\n{}", declarations);
             let header_name = self
@@ -254,8 +256,8 @@ impl<'a> CppCodeGenerator<'a> {
             {
                 let definitions = self.concat_additional_items(|x| x.definition.as_ref());
                 let definitions = format!(
-                    "#include \"{}\"\n{}\n{}",
-                    header_name, cpp_headers, definitions
+                    "{}\n#include \"{}\"\n{}\n{}",
+                    GENERATED_FILE_HEADER, header_name, cpp_headers, definitions
                 );
                 log::info!("Additional C++ defs:\n{}", definitions);
                 Some(definitions.into_bytes())
