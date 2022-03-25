@@ -24,7 +24,7 @@ use crate::{
     },
     types::validate_ident_ok_for_cxx,
 };
-use autocxx_parser::IncludeCppConfig;
+use autocxx_parser::{IncludeCppConfig, RustPath};
 use syn::{parse_quote, Fields, Ident, Item, TypePath, UseTree};
 
 use super::{
@@ -95,11 +95,14 @@ impl<'a> ParseBindgen<'a> {
                 let id = fun.sig.ident.clone();
                 Api::RustFn {
                     name: ApiName::new_in_root_namespace(id),
-                    path: fun.path.clone(),
-                    sig: fun.sig.clone(),
+                    details: fun.clone(),
+                    receiver: fun.receiver.as_ref().map(|receiver_id| {
+                        QualifiedName::new(&Namespace::new(), receiver_id.clone())
+                    }),
                 }
             }));
-        self.apis.extend(self.config.rust_types.iter().map(|path| {
+        let unique_rust_types: HashSet<&RustPath> = self.config.rust_types.iter().collect();
+        self.apis.extend(unique_rust_types.into_iter().map(|path| {
             let id = path.get_final_ident();
             Api::RustType {
                 name: ApiName::new_in_root_namespace(id.clone()),

@@ -137,9 +137,11 @@ pub struct Subclass {
     pub subclass: Ident,
 }
 
+#[derive(Clone)]
 pub struct RustFun {
     pub path: RustPath,
     pub sig: Signature,
+    pub receiver: Option<Ident>,
 }
 
 impl std::fmt::Debug for RustFun {
@@ -288,7 +290,11 @@ impl Parse for IncludeCppConfig {
                     let path: RustPath = args.parse()?;
                     args.parse::<syn::token::Comma>()?;
                     let sig: syn::Signature = args.parse()?;
-                    extern_rust_funs.push(RustFun { path, sig });
+                    extern_rust_funs.push(RustFun {
+                        path,
+                        sig,
+                        receiver: None,
+                    });
                 } else {
                     return Err(syn::Error::new(
                         ident.span(),

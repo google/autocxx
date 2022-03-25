@@ -13,7 +13,7 @@ use syn::parse::{Parse, ParseStream};
 
 /// A little like [`syn::Path`] but simpler - contains only identifiers,
 /// no path arguments. Guaranteed to always have at least one identifier.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RustPath(Vec<Ident>);
 
 impl RustPath {
@@ -28,6 +28,14 @@ impl RustPath {
 
     pub fn get_final_ident(&self) -> &Ident {
         self.0.last().unwrap()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
