@@ -115,9 +115,15 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
             Api::RustType { name, path } => {
                 Ok(Box::new(std::iter::once(Api::RustType { name, path })))
             }
-            Api::RustFn { name, sig, path } => {
-                Ok(Box::new(std::iter::once(Api::RustFn { name, sig, path })))
-            }
+            Api::RustFn {
+                name,
+                details,
+                receiver,
+            } => Ok(Box::new(std::iter::once(Api::RustFn {
+                name,
+                details,
+                receiver,
+            }))),
             Api::RustSubclassFn {
                 name,
                 subclass,

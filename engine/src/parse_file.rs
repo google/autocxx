@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::ast_discoverer::Discoveries;
+use crate::ast_discoverer::{Discoveries, DiscoveryErr};
 use crate::CppCodegenOptions;
 use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
@@ -42,6 +42,7 @@ pub enum ParseError {
     ConflictingModNames,
     ZeroModsForDynamicDiscovery,
     MultipleModsForDynamicDiscovery,
+    Discovery(DiscoveryErr),
 }
 
 impl Display for ParseError {
@@ -58,6 +59,10 @@ impl Display for ParseError {
                 write!(f, "This file contains extra information to append to an include_cpp! but no such include_cpp! was found in this file.")?,
             ParseError::MultipleModsForDynamicDiscovery =>
                 write!(f, "This file contains extra information to append to an include_cpp! but multiple such include_cpp! declarations were found in this file.")?,
+            ParseError::Discovery(DiscoveryErr::FoundExternRustFunOnTypeWithoutClearReceiver) => write!(f, "#[extern_rust_function] was attached to a method in an impl block that was too complex for autocxx. autocxx supports only \"impl X {{...}}\" where X is a single identifier, not a path or more complex type.")?,
+            ParseError::Discovery(DiscoveryErr::NoParameterOnMethod) => write!(f, "#[extern_rust_function] was attached to a method taking no parameters.")?,
+            ParseError::Discovery(DiscoveryErr::NonReferenceReceiver) => write!(f, "#[extern_rust_function] was attached to a method taking a receiver by value.")?,
+            ParseError::Discovery(DiscoveryErr::FoundExternRustFunWithinMod) => write!(f, "#[extern_rust_function] was in an impl block nested wihtin another block. This is only supported in the outermost mod of a file, alongside the include_cpp!.")?,
         }
         Ok(())
     }
@@ -162,11 +167,15 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                             }
                         }
                     }
-                    self.discoveries.search_item(&item, mod_path);
+                    self.discoveries
+                        .search_item(&item, mod_path)
+                        .map_err(ParseError::Discovery)?;
                     Segment::Other(item)
                 }
                 _ => {
-                    self.discoveries.search_item(&item, mod_path);
+                    self.discoveries
+                        .search_item(&item, mod_path)
+                        .map_err(ParseError::Discovery)?;
                     Segment::Other(item)
                 }
             };

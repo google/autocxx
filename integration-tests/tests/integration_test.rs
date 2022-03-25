@@ -6408,37 +6408,32 @@ fn test_pass_thru_rust_reference() {
 }
 
 #[test]
-#[ignore]
-fn test_rust_reference_method() {
+fn test_extern_rust_method() {
     let hdr = indoc! {"
-    #include <cstdint>
-
-    struct RustType;
-    uint32_t take_rust_reference(const RustType& foo);
+        #include <cstdint>
+        struct RustType;
+        uint32_t examine(const RustType& foo);
     "};
     let cxx = indoc! {"
-    #include \"cxxgen.h\"
-    uint32_t take_rust_reference(const RustType& foo) {
-        return foo.get();
-    }"};
+        uint32_t examine(const RustType& foo) {
+            return foo.get();
+        }"};
     let rs = quote! {
-        let foo = RustType(3);
-        assert_eq!(ffi::take_rust_reference(&foo), 3);
+        let a = RustType(74);
+        assert_eq!(ffi::examine(&a), 74);
     };
     run_test_ex(
         cxx,
         hdr,
         rs,
-        quote! {
-            generate!("take_rust_reference")
-        },
+        directives_from_lists(&["examine"], &[], None),
         Some(Box::new(EnableAutodiscover)),
         None,
         Some(quote! {
-            #[autocxx::extern_rust_type]
+            #[autocxx::extern_rust::extern_rust_type]
             pub struct RustType(i32);
             impl RustType {
-                #[autocxx::extern_rust_function]
+                #[autocxx::extern_rust::extern_rust_function]
                 pub fn get(&self) -> i32 {
                     return self.0
                 }
@@ -6596,7 +6591,9 @@ fn test_extern_rust_fn_simple() {
     run_test_ex(
         cpp,
         hdr,
-        quote! {},
+        quote! {
+            ffi::do_thing();
+        },
         quote! {
             generate!("do_thing")
         },
@@ -6605,7 +6602,6 @@ fn test_extern_rust_fn_simple() {
         Some(quote! {
             #[autocxx::extern_rust::extern_rust_function]
             fn my_rust_fun() {
-
             }
         }),
     );

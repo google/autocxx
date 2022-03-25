@@ -16,7 +16,7 @@ pub(crate) mod unqualify;
 
 use std::collections::{HashMap, HashSet};
 
-use autocxx_parser::IncludeCppConfig;
+use autocxx_parser::{IncludeCppConfig, RustFun};
 
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
@@ -554,10 +554,33 @@ impl<'a> RsCodeGenerator<'a> {
                 }],
                 ..Default::default()
             },
-            Api::RustFn { sig, path, .. } => RsCodegenResult {
+            Api::RustFn {
+                details:
+                    RustFun {
+                        path,
+                        sig,
+                        receiver: None,
+                        ..
+                    },
+                ..
+            } => RsCodegenResult {
                 global_items: vec![parse_quote! {
                     use super::#path;
                 }],
+                extern_rust_mod_items: vec![parse_quote! {
+                    #sig;
+                }],
+                ..Default::default()
+            },
+            Api::RustFn {
+                details:
+                    RustFun {
+                        sig,
+                        receiver: Some(_),
+                        ..
+                    },
+                ..
+            } => RsCodegenResult {
                 extern_rust_mod_items: vec![parse_quote! {
                     #sig;
                 }],

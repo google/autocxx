@@ -9,7 +9,7 @@
 use std::{collections::HashSet, fmt::Display};
 
 use crate::types::{make_ident, Namespace, QualifiedName};
-use autocxx_parser::RustPath;
+use autocxx_parser::{RustFun, RustPath};
 use itertools::Itertools;
 use quote::ToTokens;
 use syn::{
@@ -17,7 +17,7 @@ use syn::{
     punctuated::Punctuated,
     token::{Comma, Unsafe},
     Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
-    Pat, ReturnType, Signature, Type, Visibility,
+    Pat, ReturnType, Type, Visibility,
 };
 
 use super::{
@@ -490,8 +490,8 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// A function for the 'extern Rust' block which is not a C++ type.
     RustFn {
         name: ApiName,
-        sig: Signature,
-        path: RustPath,
+        details: RustFun,
+        receiver: Option<QualifiedName>,
     },
     /// Some function for the extern "Rust" block.
     RustSubclassFn {
