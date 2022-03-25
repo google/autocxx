@@ -38,10 +38,12 @@ impl Discoveries {
         this_mod.search_item(item);
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.cpp_list.is_empty()
-            && self.extern_rust_funs.is_empty()
-            && self.extern_rust_types.is_empty()
+    pub(crate) fn found_allowlist(&self) -> bool {
+        !self.cpp_list.is_empty()
+    }
+
+    pub(crate) fn found_rust(&self) -> bool {
+        !self.extern_rust_funs.is_empty() || !self.extern_rust_types.is_empty()
     }
 
     pub(crate) fn extend(&mut self, other: Self) {
