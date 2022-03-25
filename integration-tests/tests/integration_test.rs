@@ -6448,6 +6448,35 @@ fn test_rust_reference_method() {
 }
 
 #[test]
+fn test_rust_reference_no_autodiscover() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    struct RustType;
+    inline uint32_t take_rust_reference(const RustType&) {
+        return 4;
+    }
+    "};
+    let rs = quote! {
+        let foo = RustType(3);
+        let result = ffi::take_rust_reference(&foo);
+        assert_eq!(result, 4);
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["take_rust_reference"], &[], None),
+        None,
+        None,
+        Some(quote! {
+            #[autocxx::extern_rust::extern_rust_type]
+            pub struct RustType(i32);
+        }),
+    );
+}
+
+#[test]
 #[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 // TODO - replace make_clang_arg_adder with something that knows how to add an MSVC-suitable
 // directive for the cc build.
@@ -6622,6 +6651,34 @@ fn test_issue_956() {
         quote! {},
         &["take_int", "take_uin16", "take_char16"],
         &[],
+    );
+}
+
+#[test]
+fn test_extern_rust_fn_no_autodiscover() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+    "};
+    let cpp = indoc! {"
+        void call_it() {
+            my_rust_fun();
+        }
+    "};
+    run_test_ex(
+        cpp,
+        hdr,
+        quote! {},
+        quote! {},
+        None,
+        None,
+        Some(quote! {
+            mod bar {
+                #[autocxx::extern_rust::extern_rust_function]
+                pub fn my_rust_fun() {
+
+                }
+            }
+        }),
     );
 }
 

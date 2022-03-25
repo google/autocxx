@@ -510,19 +510,9 @@ impl IncludeCppConfig {
         )
     }
 
-    pub fn confirm_complete(&mut self, auto_allowlist: bool) -> ParseResult<()> {
+    pub fn confirm_complete(&mut self) {
         if matches!(self.allowlist, Allowlist::Unspecified(_)) {
-            if auto_allowlist {
-                self.allowlist = Allowlist::Specific(Vec::new());
-                Ok(())
-            } else {
-                Err(syn::Error::new(
-                    Span::call_site(),
-                    "expected either generate!/generate_ns! or generate_all!",
-                ))
-            }
-        } else {
-            Ok(())
+            self.allowlist = Allowlist::Specific(Vec::new());
         }
     }
 

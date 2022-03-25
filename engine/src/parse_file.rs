@@ -42,7 +42,6 @@ pub enum ParseError {
     ConflictingModNames,
     ZeroModsForDynamicDiscovery,
     MultipleModsForDynamicDiscovery,
-    DiscoveredRustItemsWhenNotInAutoDiscover,
 }
 
 impl Display for ParseError {
@@ -59,8 +58,6 @@ impl Display for ParseError {
                 write!(f, "This file contains extra information to append to an include_cpp! but no such include_cpp! was found in this file.")?,
             ParseError::MultipleModsForDynamicDiscovery =>
                 write!(f, "This file contains extra information to append to an include_cpp! but multiple such include_cpp! declarations were found in this file.")?,
-            ParseError::DiscoveredRustItemsWhenNotInAutoDiscover =>
-                write!(f, "This file contains extra information to append to an \"extern Rust\" but auto-discover was switched off.")?,
         }
         Ok(())
     }
@@ -190,12 +187,14 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
         mut extra_superclasses,
         mut discoveries,
     } = state;
-    if !auto_allowlist
-        && (!discoveries.extern_rust_types.is_empty() || !discoveries.extern_rust_funs.is_empty())
-    {
-        return Err(ParseError::DiscoveredRustItemsWhenNotInAutoDiscover);
-    }
-    if !extra_superclasses.is_empty() || (auto_allowlist && !discoveries.is_empty()) {
+
+    let must_handle_discovered_things = discoveries.found_rust()
+        || !extra_superclasses.is_empty()
+        || (auto_allowlist && discoveries.found_allowlist());
+
+    // We do not want to enter this 'if' block unless the above conditions are true,
+    // since we may emit errors.
+    if must_handle_discovered_things {
         let mut autocxx_seg_iterator = results.iter_mut().filter_map(|seg| match seg {
             Segment::Autocxx(engine) => Some(engine),
             _ => None,
@@ -236,9 +235,7 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
         _ => None,
     });
     for seg in autocxx_seg_iterator {
-        seg.config
-            .confirm_complete(auto_allowlist)
-            .map_err(ParseError::Syntax)?;
+        seg.config.confirm_complete();
     }
     Ok(ParsedFile(results))
 }
