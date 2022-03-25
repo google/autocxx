@@ -152,8 +152,14 @@ context, where you may be dealing with <code>UniquePtr&lt;T&gt;</code> and <code
 many methods as possible. For those methods where it can't generate bindings, it will instead
 generate some placeholder function or struct with documentation explaining what went wrong:</p>
 <p><img src="vscode2.png" alt="VSCode showing an error for an API where autocxx couldn't generate bindings" /></p>
-<p><em>This</em> is why it's crucial to use an IDE with <code>autocxx</code>. (Alternatively, you can use
-<code>cargo expand</code>, but it's unpleasant.)</p>
+<p><em>This</em> is why it's crucial to use an IDE with <code>autocxx</code>.</p>
+<h2 id="how-can-i-see-what-bindings-autocxx-has-generated"><a class="header" href="#how-can-i-see-what-bindings-autocxx-has-generated">How can I see what bindings <code>autocxx</code> has generated?</a></h2>
+<p>Options:</p>
+<ul>
+<li>Use an IDE. (Did we mention, you should use an IDE?)</li>
+<li><code>pub use ffi::*</code> in your code, then run <code>cargo doc</code>.</li>
+<li>Use <code>cargo expand</code>.</li>
+</ul>
 <h2 id="how-to-work-around-cases-where-autocxx-cant-generate-bindings"><a class="header" href="#how-to-work-around-cases-where-autocxx-cant-generate-bindings">How to work around cases where <code>autocxx</code> can't generate bindings</a></h2>
 <p>Your options are:</p>
 <ul>
