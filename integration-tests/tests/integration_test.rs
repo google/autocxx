@@ -5512,7 +5512,9 @@ fn test_error_generated_for_array_dependent_method() {
         quote! { generate! ("A")},
         None,
         Some(make_string_finder(
-            ["take_func", "couldn't be generated"].to_vec(),
+            ["take_func", "couldn't be generated"]
+                .map(|s| s.to_string())
+                .to_vec(),
         )),
         None,
     );
@@ -5642,7 +5644,9 @@ fn test_doc_passthru() {
         directives_from_lists(&["A", "get_a"], &["B"], None),
         None,
         Some(make_string_finder(
-            ["Giraffes", "Elephants", "Rhinos"].to_vec(),
+            ["Giraffes", "Elephants", "Rhinos"]
+                .map(|s| s.to_string())
+                .to_vec(),
         )),
         None,
     );
@@ -10180,6 +10184,63 @@ fn test_concretize() {
                 contents: ffi::ContainerOfB
             }
         }),
+    );
+}
+
+#[test]
+fn test_doc_comments_survive() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        /// Struct line A
+        /// Struct line B
+        struct A { int b; };
+
+        /// POD struct line A
+        /// POD struct line B
+        struct B {
+            /// Field line A
+            /// Field line B
+            uint32_t b;
+
+            /// Method line A
+            /// Method line B
+            void foo() {}
+        };
+
+        /// Enum line A
+        /// Enum line B
+        enum C {
+            /// Variant line A
+            /// Variant line B
+            VARIANT,
+        };
+
+        /// Function line A
+        /// Function line B
+        inline void D() {}
+    "};
+
+    let expected_messages = [
+        "Struct",
+        "POD struct",
+        "Field",
+        "Method",
+        "Enum",
+        "Variant",
+        "Function",
+    ]
+    .into_iter()
+    .flat_map(|l| [format!("{} line A", l), format!("{} line B", l)])
+    .collect_vec();
+
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        directives_from_lists(&["A", "C", "D"], &["B"], None),
+        None,
+        Some(make_string_finder(expected_messages)),
+        None,
     );
 }
 

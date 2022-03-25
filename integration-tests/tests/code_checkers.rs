@@ -79,7 +79,7 @@ fn find_all_non_mod_items(md: syn::ItemMod, items: &mut Vec<Item>) {
     }
 }
 
-struct StringFinder(Vec<&'static str>);
+struct StringFinder(Vec<String>);
 
 impl CodeCheckerFns for StringFinder {
     fn check_rust(&self, rs: syn::File) -> Result<(), TestError> {
@@ -88,9 +88,10 @@ impl CodeCheckerFns for StringFinder {
         let toks = ts.to_string();
         for msg in &self.0 {
             if !toks.contains(msg) {
-                return Err(TestError::RsCodeExaminationFail(
-                    "Couldn't find string".into(),
-                ));
+                return Err(TestError::RsCodeExaminationFail(format!(
+                    "Couldn't find string '{}'",
+                    msg
+                )));
             };
         }
         Ok(())
@@ -98,7 +99,7 @@ impl CodeCheckerFns for StringFinder {
 }
 
 /// Returns a code checker which simply hunts for a given string in the results
-pub(crate) fn make_string_finder(error_texts: Vec<&'static str>) -> CodeChecker {
+pub(crate) fn make_string_finder(error_texts: Vec<String>) -> CodeChecker {
     Box::new(StringFinder(error_texts))
 }
 
