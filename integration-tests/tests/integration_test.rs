@@ -6611,9 +6611,18 @@ fn test_extern_rust_fn_in_mod() {
 #[test]
 fn test_issue_956() {
     let hdr = indoc! {"
-        inline void take(char16_t &) {}
+        #include <cstdint>
+        inline void take_int(int&) {}
+        inline void take_uin16(uint16_t&) {}
+        inline void take_char16(char16_t &) {}
     "};
-    run_test("", hdr, quote! {}, &["take"], &[]);
+    run_test(
+        "",
+        hdr,
+        quote! {},
+        &["take_int", "take_uin16", "take_char16"],
+        &[],
+    );
 }
 
 #[test]

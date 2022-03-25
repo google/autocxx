@@ -501,6 +501,14 @@ fn create_type_database() -> TypeDatabase {
         false,
         false,
     ));
+    db.insert(TypeDetails::new(
+        "autocxx::c_char16_t",
+        "char16_t",
+        Behavior::CVoid,
+        Some("c_char16_t".into()),
+        false,
+        false,
+    ));
     db
 }
 
