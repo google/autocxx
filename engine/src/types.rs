@@ -1,16 +1,10 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use itertools::Itertools;
 use proc_macro2::Span;
@@ -186,6 +180,14 @@ impl QualifiedName {
         }
     }
 
+    pub(crate) fn get_final_cpp_item(&self) -> String {
+        let special_cpp_name = known_types().special_cpp_name(self);
+        match special_cpp_name {
+            Some(name) => name,
+            None => self.1.to_string(),
+        }
+    }
+
     pub(crate) fn to_type_path(&self) -> TypePath {
         if let Some(known_type_path) = known_types().known_type_type_path(self) {
             known_type_path
@@ -211,10 +213,6 @@ impl QualifiedName {
         self.ns_segment_iter()
             .cloned()
             .chain(std::iter::once(self.get_final_item().to_string()))
-    }
-
-    pub(crate) fn is_cvoid(&self) -> bool {
-        self.to_cpp_name() == "void"
     }
 }
 
@@ -242,10 +240,10 @@ pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), ConvertError> {
     }
 }
 
-pub fn validate_ident_ok_for_rust(id: &str) -> Result<(), ConvertError> {
-    let id = make_ident(id);
+pub fn validate_ident_ok_for_rust(label: &str) -> Result<(), ConvertError> {
+    let id = make_ident(label);
     syn::parse2::<syn::Ident>(id.into_token_stream())
-        .map_err(|_| ConvertError::ReservedName)
+        .map_err(|_| ConvertError::ReservedName(label.to_string()))
         .map(|_| ())
 }
 

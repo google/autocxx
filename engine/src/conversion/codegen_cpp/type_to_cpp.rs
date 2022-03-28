@@ -1,19 +1,13 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use crate::{
-    conversion::{api::Api, AnalysisPhase, ConvertError},
+    conversion::{apivec::ApiVec, AnalysisPhase, ConvertError},
     types::QualifiedName,
 };
 use itertools::Itertools;
@@ -27,7 +21,7 @@ use syn::{Token, Type};
 /// in the QualifiedName.
 pub(crate) type CppNameMap = HashMap<QualifiedName, String>;
 
-pub(crate) fn original_name_map_from_apis<T: AnalysisPhase>(apis: &[Api<T>]) -> CppNameMap {
+pub(crate) fn original_name_map_from_apis<T: AnalysisPhase>(apis: &ApiVec<T>) -> CppNameMap {
     apis.iter()
         .filter_map(|api| {
             api.cpp_name()
@@ -49,6 +43,24 @@ pub(crate) fn namespaced_name_using_original_name_map(
             .join("::")
     } else {
         qual_name.to_cpp_name()
+    }
+}
+
+pub(crate) fn final_ident_using_original_name_map(
+    qual_name: &QualifiedName,
+    original_name_map: &CppNameMap,
+) -> String {
+    match original_name_map.get(qual_name) {
+        Some(original_name) => {
+            // If we have an original name, this may be a nested struct
+            // (e.g. A::B). The final ident here is just 'B' so...
+            original_name
+                .rsplit_once("::")
+                .map_or(original_name.clone(), |(_, original_name)| {
+                    original_name.to_string()
+                })
+        }
+        None => qual_name.get_final_cpp_item(),
     }
 }
 

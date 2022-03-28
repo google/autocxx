@@ -1,20 +1,15 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiName, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
+        apivec::ApiVec,
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -22,6 +17,7 @@ use crate::{
     types::{make_ident, Namespace, QualifiedName},
 };
 use autocxx_parser::IncludeCppConfig;
+use itertools::Itertools;
 use proc_macro2::Ident;
 use quote::ToTokens;
 use std::collections::{HashMap, HashSet};
@@ -33,6 +29,7 @@ use syn::{
 use super::tdef::TypedefAnalysis;
 
 /// Certain kinds of type may require special handling by callers.
+#[derive(Debug)]
 pub(crate) enum TypeKind {
     Regular,
     Pointer,
@@ -46,7 +43,7 @@ pub(crate) enum TypeKind {
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<QualifiedName>,
-    pub(crate) extra_apis: Vec<UnanalyzedApi>,
+    pub(crate) extra_apis: ApiVec<NullPhase>,
     pub(crate) kind: TypeKind,
 }
 
@@ -54,7 +51,7 @@ impl<T> Annotated<T> {
     fn new(
         ty: T,
         types_encountered: HashSet<QualifiedName>,
-        extra_apis: Vec<UnanalyzedApi>,
+        extra_apis: ApiVec<NullPhase>,
         kind: TypeKind,
     ) -> Self {
         Self {
@@ -119,12 +116,12 @@ pub(crate) struct TypeConverter<'a> {
 }
 
 impl<'a> TypeConverter<'a> {
-    pub(crate) fn new<A: AnalysisPhase>(config: &'a IncludeCppConfig, apis: &[Api<A>]) -> Self
+    pub(crate) fn new<A: AnalysisPhase>(config: &'a IncludeCppConfig, apis: &ApiVec<A>) -> Self
     where
         A::TypedefAnalysis: TypedefTarget,
     {
         Self {
-            types_found: Self::find_types(apis),
+            types_found: find_types(apis),
             typedefs: Self::find_typedefs(apis),
             concrete_templates: Self::find_concrete_templates(apis),
             forward_declarations: Self::find_incomplete_types(apis),
@@ -259,7 +256,7 @@ impl<'a> TypeConverter<'a> {
         // Now convert this type itself.
         deps.insert(original_tn.clone());
         // First let's see if this is a typedef.
-        let (typ, tn) = match self.resolve_typedef(&original_tn) {
+        let (typ, tn) = match self.resolve_typedef(&original_tn)? {
             None => (typ, original_tn),
             Some(Type::Path(resolved_tp)) => {
                 let resolved_tn = QualifiedName::from_type_path(resolved_tp);
@@ -270,7 +267,7 @@ impl<'a> TypeConverter<'a> {
                 return Ok(Annotated::new(
                     Type::Ptr(resolved_tp.clone()),
                     deps,
-                    Vec::new(),
+                    ApiVec::new(),
                     TypeKind::Pointer,
                 ))
             }
@@ -278,7 +275,7 @@ impl<'a> TypeConverter<'a> {
                 return Ok(Annotated::new(
                     other.clone(),
                     deps,
-                    Vec::new(),
+                    ApiVec::new(),
                     TypeKind::Regular,
                 ))
             }
@@ -299,7 +296,7 @@ impl<'a> TypeConverter<'a> {
             None => typ,
         };
 
-        let mut extra_apis = Vec::new();
+        let mut extra_apis = ApiVec::new();
         let mut kind = TypeKind::Regular;
 
         // Finally let's see if it's generic.
@@ -352,7 +349,7 @@ impl<'a> TypeConverter<'a> {
     {
         let mut new_pun = Punctuated::new();
         let mut types_encountered = HashSet::new();
-        let mut extra_apis = Vec::new();
+        let mut extra_apis = ApiVec::new();
         for arg in pun.into_iter() {
             new_pun.push(match arg {
                 GenericArgument::Type(t) => {
@@ -373,14 +370,26 @@ impl<'a> TypeConverter<'a> {
         ))
     }
 
-    fn resolve_typedef<'b>(&'b self, tn: &QualifiedName) -> Option<&'b Type> {
-        self.typedefs.get(tn).map(|resolution| match resolution {
-            Type::Path(typ) => {
-                let tn = QualifiedName::from_type_path(typ);
-                self.resolve_typedef(&tn).unwrap_or(resolution)
+    fn resolve_typedef<'b>(&'b self, tn: &QualifiedName) -> Result<Option<&'b Type>, ConvertError> {
+        let mut encountered = HashSet::new();
+        let mut tn = tn.clone();
+        let mut previous_typ = None;
+        loop {
+            let r = self.typedefs.get(&tn);
+            match r {
+                Some(Type::Path(typ)) => {
+                    previous_typ = r;
+                    let new_tn = QualifiedName::from_type_path(typ);
+                    if encountered.contains(&new_tn) {
+                        return Err(ConvertError::InfinitelyRecursiveTypedef(tn.clone()));
+                    }
+                    encountered.insert(new_tn.clone());
+                    tn = new_tn;
+                }
+                None => return Ok(previous_typ),
+                _ => return Ok(r),
             }
-            _ => resolution,
-        })
+        }
     }
 
     fn convert_ptr_to_reference(
@@ -423,13 +432,31 @@ impl<'a> TypeConverter<'a> {
         match e {
             Some(tn) => Ok((tn.clone(), None)),
             None => {
+                let synthetic_ident = format!(
+                    "{}_AutocxxConcrete",
+                    cpp_definition.replace(|c: char| !(c.is_ascii_alphanumeric() || c == '_'), "_")
+                );
+                // Remove runs of multiple _s. Trying to avoid a dependency on
+                // regex.
+                let synthetic_ident = synthetic_ident
+                    .split('_')
+                    .filter(|s| !s.is_empty())
+                    .join("_");
+                // Ensure we're not duplicating some existing concrete template name.
+                // If so, we'll invent a name which is guaranteed to be unique.
+                let synthetic_ident = match self
+                    .concrete_templates
+                    .values()
+                    .map(|n| n.get_final_item())
+                    .find(|s| s == &synthetic_ident)
+                {
+                    None => synthetic_ident,
+                    Some(_) => format!("AutocxxConcrete{}", count),
+                };
                 let api = UnanalyzedApi::ConcreteType {
-                    name: ApiName::new_in_root_namespace(make_ident(&format!(
-                        "AutocxxConcrete{}",
-                        count
-                    ))),
-                    rs_definition: Box::new(rs_definition.clone()),
+                    name: ApiName::new_in_root_namespace(make_ident(&synthetic_ident)),
                     cpp_definition: cpp_definition.clone(),
+                    rs_definition: Some(Box::new(rs_definition.clone())),
                 };
                 self.concrete_templates
                     .insert(cpp_definition, api.name().clone());
@@ -503,30 +530,7 @@ impl<'a> TypeConverter<'a> {
         }
     }
 
-    fn find_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
-        apis.iter()
-            .filter_map(|api| match api {
-                Api::ForwardDeclaration { .. }
-                | Api::ConcreteType { .. }
-                | Api::Typedef { .. }
-                | Api::Enum { .. }
-                | Api::Struct { .. }
-                | Api::Subclass { .. }
-                | Api::RustType { .. } => Some(api.name()),
-                Api::StringConstructor { .. }
-                | Api::Function { .. }
-                | Api::Const { .. }
-                | Api::CType { .. }
-                | Api::RustSubclassFn { .. }
-                | Api::RustSubclassConstructor { .. }
-                | Api::IgnoredItem { .. }
-                | Api::RustFn { .. } => None,
-            })
-            .cloned()
-            .collect()
-    }
-
-    fn find_typedefs<A: AnalysisPhase>(apis: &[Api<A>]) -> HashMap<QualifiedName, Type>
+    fn find_typedefs<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashMap<QualifiedName, Type>
     where
         A::TypedefAnalysis: TypedefTarget,
     {
@@ -542,7 +546,7 @@ impl<'a> TypeConverter<'a> {
     }
 
     fn find_concrete_templates<A: AnalysisPhase>(
-        apis: &[Api<A>],
+        apis: &ApiVec<A>,
     ) -> HashMap<String, QualifiedName> {
         apis.iter()
             .filter_map(|api| match &api {
@@ -554,7 +558,7 @@ impl<'a> TypeConverter<'a> {
             .collect()
     }
 
-    fn find_incomplete_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+    fn find_incomplete_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::ForwardDeclaration { .. } => Some(api.name()),
@@ -602,4 +606,27 @@ impl TypedefTarget for TypedefAnalysis {
             TypedefKind::Use(_) => None,
         }
     }
+}
+
+pub(crate) fn find_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
+    apis.iter()
+        .filter_map(|api| match api {
+            Api::ForwardDeclaration { .. }
+            | Api::ConcreteType { .. }
+            | Api::Typedef { .. }
+            | Api::Enum { .. }
+            | Api::Struct { .. }
+            | Api::Subclass { .. }
+            | Api::RustType { .. } => Some(api.name()),
+            Api::StringConstructor { .. }
+            | Api::Function { .. }
+            | Api::Const { .. }
+            | Api::CType { .. }
+            | Api::RustSubclassFn { .. }
+            | Api::IgnoredItem { .. }
+            | Api::SubclassTraitItem { .. }
+            | Api::RustFn { .. } => None,
+        })
+        .cloned()
+        .collect()
 }

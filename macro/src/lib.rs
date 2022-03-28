@@ -1,16 +1,12 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+#![forbid(unsafe_code)]
 
 use autocxx_parser::{IncludeCpp, SubclassAttrs};
 use proc_macro::TokenStream;
@@ -41,7 +37,7 @@ pub fn subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
         abort!(s.vis.span(), "Rust subclasses of C++ types must by public");
     }
     let id = &s.ident;
-    let cpp_ident = Ident::new(&format!("{}Cpp", id.to_string()), Span::call_site());
+    let cpp_ident = Ident::new(&format!("{}Cpp", id), Span::call_site());
     let input = quote! {
         cpp_peer: autocxx::subclass::CppSubclassCppPeerHolder<ffi:: #cpp_ident>
     };
@@ -117,4 +113,19 @@ pub fn extern_rust_function(attr: TokenStream, input: TokenStream) -> TokenStrea
         _ => abort!(Span::call_site(), "Expected a function"),
     }
     input
+}
+
+/// Attribute which should never be encountered in real life.
+/// This is something which features in the Rust source code generated
+/// by autocxx-bindgen and passed to autocxx-engine, which should never
+/// normally be compiled by rustc before it undergoes further processing.
+#[proc_macro_error]
+#[proc_macro_attribute]
+pub fn cpp_semantics(_attr: TokenStream, _input: TokenStream) -> TokenStream {
+    abort!(
+        Span::call_site(),
+        "Please do not attempt to compile this code. \n\
+        This code is the output from the autocxx-specific version of bindgen, \n\
+        and should be interpreted by autocxx-engine before further usage."
+    );
 }

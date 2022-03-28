@@ -1,24 +1,21 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::IncludeCppConfig;
 
-use crate::{conversion::api::Api, types::QualifiedName};
+use crate::{
+    conversion::{api::Api, apivec::ApiVec},
+    types::QualifiedName,
+};
 
-use super::fun::FnPhase;
+use super::{deps::HasDependencies, fun::FnPhase};
 
 /// This is essentially mark-and-sweep garbage collection of the
 /// [Api]s that we've discovered. Why do we do this, you might wonder?
@@ -38,25 +35,25 @@ use super::fun::FnPhase;
 ///    don't care about the other parameter types passed into those
 ///    APIs either.
 pub(crate) fn filter_apis_by_following_edges_from_allowlist(
-    mut apis: Vec<Api<FnPhase>>,
+    apis: ApiVec<FnPhase>,
     config: &IncludeCppConfig,
-) -> Vec<Api<FnPhase>> {
+) -> ApiVec<FnPhase> {
     let mut todos: Vec<QualifiedName> = apis
         .iter()
         .filter(|api| {
-            let tnforal = api.typename_for_allowlist();
+            let tnforal = api.name_for_allowlist();
             config.is_on_allowlist(&tnforal.to_cpp_name())
         })
         .map(Api::name)
         .cloned()
         .collect();
-    let mut by_typename: HashMap<QualifiedName, Vec<Api<FnPhase>>> = HashMap::new();
-    for api in apis.drain(..) {
+    let mut by_typename: HashMap<QualifiedName, ApiVec<FnPhase>> = HashMap::new();
+    for api in apis.into_iter() {
         let tn = api.name().clone();
         by_typename.entry(tn).or_default().push(api);
     }
     let mut done = HashSet::new();
-    let mut output = Vec::new();
+    let mut output = ApiVec::new();
     while !todos.is_empty() {
         let todo = todos.remove(0);
         if done.contains(&todo) {

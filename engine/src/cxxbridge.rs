@@ -1,22 +1,16 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use proc_macro2::TokenStream;
 use quote::{ToTokens, TokenStreamExt};
 use syn::ItemMod;
 
-use crate::{do_cxx_cpp_generation, parse_file::CppBuildable, GeneratedCpp};
+use crate::{do_cxx_cpp_generation, parse_file::CppBuildable, CppCodegenOptions, GeneratedCpp};
 
 /// A struct to represent a cxx::bridge (i.e. some manual bindings)
 /// found in a file. autocxx knows about them so that we can generate C++
@@ -42,9 +36,9 @@ impl ToTokens for CxxBridge {
 impl CppBuildable for CxxBridge {
     fn generate_h_and_cxx(
         &self,
-        suppress_system_headers: bool,
+        cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<GeneratedCpp, cxx_gen::Error> {
-        let fp = do_cxx_cpp_generation(self.tokens.clone(), suppress_system_headers)?;
+        let fp = do_cxx_cpp_generation(self.tokens.clone(), cpp_codegen_options)?;
         Ok(GeneratedCpp(vec![fp]))
     }
 }

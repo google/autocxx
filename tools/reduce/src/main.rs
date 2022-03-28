@@ -1,19 +1,12 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
-#[cfg(test)]
-mod reduce_test;
+#![forbid(unsafe_code)]
 
 use std::{
     fs::File,
@@ -24,9 +17,11 @@ use std::{
 };
 
 use autocxx_engine::{get_clang_path, make_clang_args, preprocess};
-use clap::{crate_authors, crate_version, App, Arg, ArgMatches};
+use autocxx_parser::IncludeCppConfig;
+use clap::{crate_authors, crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use indoc::indoc;
 use itertools::Itertools;
+use quote::ToTokens;
 use tempfile::TempDir;
 
 static LONG_HELP: &str = indoc! {"
@@ -35,7 +30,7 @@ Command line utility to minimize autocxx bug cases.
 This is a wrapper for creduce.
 
 Example command-line:
-autocxx-reduce -I my-inc-dir -h my-header -d 'generate!(\"MyClass\")' -k -- --n 64
+autocxx-reduce file -I my-inc-dir -h my-header -d 'generate!(\"MyClass\")' -k -- --n 64
 "};
 
 fn main() {
@@ -44,47 +39,74 @@ fn main() {
         .author(crate_authors!())
         .about("Reduce a C++ test case")
         .long_about(LONG_HELP)
-        .arg(
-            Arg::with_name("inc")
-                .short("I")
-                .long("inc")
-                .multiple(true)
-                .number_of_values(1)
-                .value_name("INCLUDE DIRS")
-                .help("include path")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("define")
-                .short("D")
-                .long("define")
-                .multiple(true)
-                .number_of_values(1)
-                .value_name("DEFINE")
-                .help("macro definition")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("header")
-                .short("h")
-                .long("header")
-                .multiple(true)
-                .number_of_values(1)
-                .required(true)
-                .value_name("HEADER")
-                .help("header file name")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("directive")
-                .short("d")
-                .long("directive")
-                .multiple(true)
-                .number_of_values(1)
-                .value_name("DIRECTIVE")
-                .help("directives to put within include_cpp!")
-                .takes_value(true),
-        )
+        .subcommand(SubCommand::with_name("file")
+                                      .about("reduce a header file")
+
+                                    .arg(
+                                        Arg::with_name("inc")
+                                            .short("I")
+                                            .long("inc")
+                                            .multiple(true)
+                                            .number_of_values(1)
+                                            .value_name("INCLUDE DIRS")
+                                            .help("include path")
+                                            .takes_value(true),
+                                    )
+                                    .arg(
+                                        Arg::with_name("define")
+                                            .short("D")
+                                            .long("define")
+                                            .multiple(true)
+                                            .number_of_values(1)
+                                            .value_name("DEFINE")
+                                            .help("macro definition")
+                                            .takes_value(true),
+                                    )
+                                    .arg(
+                                        Arg::with_name("header")
+                                            .short("h")
+                                            .long("header")
+                                            .multiple(true)
+                                            .number_of_values(1)
+                                            .required(true)
+                                            .value_name("HEADER")
+                                            .help("header file name")
+                                            .takes_value(true),
+                                    )
+
+                                .arg(
+                                    Arg::with_name("directive")
+                                        .short("d")
+                                        .long("directive")
+                                        .multiple(true)
+                                        .number_of_values(1)
+                                        .value_name("DIRECTIVE")
+                                        .help("directives to put within include_cpp!")
+                                        .takes_value(true),
+                                )
+                            )
+                            .subcommand(SubCommand::with_name("repro")
+                                                          .about("reduce a repro case JSON file")
+                                            .arg(
+                                                Arg::with_name("repro")
+                                                    .short("r")
+                                                    .long("repro")
+                                                    .required(true)
+                                                    .value_name("REPRODUCTION CASE JSON")
+                                                    .help("reproduction case JSON file name")
+                                                    .takes_value(true),
+                                            )
+                                            .arg(
+                                        Arg::with_name("header")
+                                            .short("h")
+                                            .long("header")
+                                            .multiple(true)
+                                            .number_of_values(1)
+                                            .value_name("HEADER")
+                                            .help("header file name; specify to resume a part-completed run")
+                                            .takes_value(true),
+                                    )
+                                        )
         .arg(
             Arg::with_name("problem")
                 .short("p")
@@ -134,6 +156,13 @@ fn main() {
                 .help("Extra arguments to pass to Clang"),
         )
         .arg(
+            Arg::with_name("creduce-args")
+                .long("creduce-arg")
+                .multiple(true)
+                .value_name("CREDUCE_ARG")
+                .help("Extra arguments to pass to Clang"),
+        )
+        .arg(
             Arg::with_name("no-precompile")
                 .long("no-precompile")
                 .help("Do not precompile the C++ header before passing to autocxxgen"),
@@ -143,7 +172,7 @@ fn main() {
                 .long("no-postcompile")
                 .help("Do not post-compile the C++ generated by autocxxgen"),
         )
-        .arg(Arg::with_name("creduce-args").last(true).multiple(true))
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .get_matches();
     run(matches).unwrap();
 }
@@ -161,32 +190,63 @@ fn run(matches: ArgMatches) -> Result<(), std::io::Error> {
     r
 }
 
+#[derive(serde_derive::Deserialize)]
+struct ReproCase {
+    config: String,
+    header: String,
+}
+
 fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> {
-    let incs: Vec<_> = matches
-        .values_of("inc")
-        .unwrap_or_default()
-        .map(PathBuf::from)
-        .collect();
-    let defs: Vec<_> = matches.values_of("define").unwrap_or_default().collect();
-    let headers: Vec<_> = matches.values_of("header").unwrap_or_default().collect();
-    let listing_path = tmp_dir.path().join("listing.h");
-    create_concatenated_header(&headers, &listing_path)?;
-    let concat_path = tmp_dir.path().join("concat.h");
-    announce_progress(&format!(
-        "Preprocessing {:?} to {:?}",
-        listing_path, concat_path
-    ));
-    preprocess(&listing_path, &concat_path, &incs, &defs)?;
     let rs_path = tmp_dir.path().join("input.rs");
-    let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
-        .chain(
-            matches
-                .values_of("directive")
+    let concat_path = tmp_dir.path().join("concat.h");
+    match matches.subcommand_matches("repro") {
+        None => {
+            let submatches = matches.subcommand_matches("file").unwrap();
+            let incs: Vec<_> = submatches
+                .values_of("inc")
                 .unwrap_or_default()
-                .map(|s| format!("{}\n", s)),
-        )
-        .collect();
-    create_rs_file(&rs_path, &directives)?;
+                .map(PathBuf::from)
+                .collect();
+            let defs: Vec<_> = submatches.values_of("define").unwrap_or_default().collect();
+            let headers: Vec<_> = submatches.values_of("header").unwrap_or_default().collect();
+            assert!(!headers.is_empty());
+            let listing_path = tmp_dir.path().join("listing.h");
+            create_concatenated_header(&headers, &listing_path)?;
+            announce_progress(&format!(
+                "Preprocessing {:?} to {:?}",
+                listing_path, concat_path
+            ));
+            preprocess(&listing_path, &concat_path, &incs, &defs)?;
+            let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
+                .chain(
+                    submatches
+                        .values_of("directive")
+                        .unwrap_or_default()
+                        .map(|s| format!("{}\n", s)),
+                )
+                .collect();
+            create_rs_file(&rs_path, &directives)?;
+        }
+        Some(submatches) => {
+            let case: ReproCase = serde_json::from_reader(File::open(PathBuf::from(
+                submatches.value_of("repro").unwrap(),
+            ))?)
+            .unwrap();
+            // Replace the headers in the config
+            let mut config: IncludeCppConfig = syn::parse_str(&case.config).unwrap();
+            config.replace_included_headers("concat.h");
+            create_file(
+                &rs_path,
+                &format!("autocxx::include_cpp!({});", config.to_token_stream()),
+            )?;
+            if let Some(header) = submatches.value_of("header") {
+                std::fs::copy(PathBuf::from(header), &concat_path)?;
+            } else {
+                create_file(&concat_path, &case.header)?
+            }
+        }
+    }
+
     let extra_clang_args: Vec<_> = matches
         .values_of("clang-args")
         .unwrap_or_default()
@@ -199,6 +259,12 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         .unwrap()
         .to_string();
     let gen_cmd = matches.value_of("gen-cmd").unwrap_or(&default_gen_cmd);
+    if !Path::new(gen_cmd).exists() {
+        panic!(
+            "autocxx-gen not found in {}. hint: autocxx-reduce --gen-cmd /path/to/autocxx-gen",
+            gen_cmd
+        );
+    }
     run_sample_gen_cmd(gen_cmd, &rs_path, tmp_dir.path(), &extra_clang_args)?;
     let interestingness_test = tmp_dir.path().join("test.sh");
     create_interestingness_test(
@@ -207,8 +273,8 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         matches.value_of("problem").unwrap(),
         &rs_path,
         &extra_clang_args,
-        matches.value_of("no-precompile").is_none(),
-        matches.value_of("no-postcompile").is_none(),
+        !matches.is_present("no-precompile"),
+        !matches.is_present("no-postcompile"),
     )?;
     run_creduce(
         matches.value_of("creduce").unwrap(),
@@ -245,11 +311,11 @@ const REMOVE_PASS_LINE_MARKERS: &[&str] = &["--remove-pass", "pass_line_markers"
 const SKIP_INITIAL_PASSES: &[&str] = &["--skip-initial-passes"];
 
 fn creduce_supports_remove_pass(creduce_cmd: &str) -> bool {
-    let msg = Command::new(creduce_cmd)
-        .arg("--help")
-        .output()
-        .unwrap()
-        .stdout;
+    let cmd = Command::new(creduce_cmd).arg("--help").output();
+    let msg = match cmd {
+        Err(error) => panic!("failed to run creduce. creduce_cmd = {}. hint: autocxx-reduce --creduce /path/to/creduce. error = {}", creduce_cmd, error),
+        Ok(result) => result.stdout
+    };
     let msg = std::str::from_utf8(&msg).unwrap();
     msg.contains("--remove-pass")
 }
@@ -308,6 +374,7 @@ fn format_gen_cmd<'a>(
         rs_file.to_str().unwrap().to_string(),
         "--gen-rs-complete".to_string(),
         "--gen-cpp".to_string(),
+        "--suppress-system-headers".to_string(),
         "--".to_string(),
     ]
     .to_vec();
@@ -344,7 +411,7 @@ fn create_interestingness_test(
         mv concat.h concat-body.h
         echo Codegen
         (echo \"#ifndef __CONCAT_H__\"; echo \"#define __CONCAT_H__\"; echo '#include \"concat-body.h\"'; echo \"#endif\") > concat.h
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h ; {} 2>&1 ) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h && {} 2>&1 ) | grep \"{}\"  >/dev/null 2>&1
         echo Remove
         rm concat.h
         echo Swap back
@@ -374,7 +441,7 @@ fn make_compile_step(enabled: bool, file: &str, extra_clang_args: &[&str]) -> St
             file,
         )
     } else {
-        "".into()
+        "echo 'Skipping compilation'".into()
     }
 }
 
@@ -395,5 +462,11 @@ fn create_concatenated_header(headers: &[&str], listing_path: &Path) -> Result<(
     for header in headers {
         file.write_all(format!("#include \"{}\"\n", header).as_bytes())?;
     }
+    Ok(())
+}
+
+fn create_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
+    let mut file = File::create(path)?;
+    write!(file, "{}", content)?;
     Ok(())
 }

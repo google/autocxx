@@ -4,17 +4,16 @@
 
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+// This feature=nightly could be set by build.rs, but since we only care
+// about it for docs, we ask docs.rs to set it in the Cargo.toml.
+#![cfg_attr(feature = "nightly", feature(doc_cfg))]
+#![forbid(unsafe_code)]
 
 mod ast_discoverer;
 mod conversion;
@@ -64,13 +63,6 @@ pub use builder::{
 pub use parse_file::{parse_file, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
-
-/// Re-export cxx such that clients can use the same version as
-/// us. This doesn't enable clients to avoid depending on the cxx
-/// crate too, unfortunately, since generated cxx::bridge code
-/// refers explicitly to ::cxx. See
-/// <https://github.com/google/autocxx/issues/36>
-pub use cxx;
 
 #[derive(Clone)]
 /// Some C++ content which should be written to disk and built.
@@ -292,6 +284,11 @@ impl IncludeCppEngine {
             })
             .enable_cxx_namespaces()
             .generate_inline_functions(true)
+            .respect_cxx_access_specs(true)
+            .use_specific_virtual_function_receiver(true)
+            .cpp_semantic_attributes(true)
+            .represent_cxx_operators(true)
+            .use_distinct_char16_t(true)
             .layout_tests(false); // TODO revisit later
         for item in known_types().get_initial_blocklist() {
             builder = builder.blocklist_item(item);
@@ -361,7 +358,7 @@ impl IncludeCppEngine {
         inc_dirs: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-        suppress_system_headers: bool,
+        cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -380,6 +377,7 @@ impl IncludeCppEngine {
         let header_contents = self.build_header();
         self.dump_header_if_so_configured(&header_contents, &inc_dirs, extra_clang_args);
         let header_and_prelude = format!("{}\n\n{}", known_types().get_prelude(), header_contents);
+        log::info!("Header and prelude for bindgen:\n{}", header_and_prelude);
         builder = builder.header_contents("example.hpp", &header_and_prelude);
 
         let bindings = builder.generate().map_err(Error::Bindgen)?;
@@ -392,7 +390,7 @@ impl IncludeCppEngine {
                 bindings,
                 self.config.unsafe_policy.clone(),
                 header_contents,
-                suppress_system_headers,
+                cpp_codegen_options,
             )
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;
@@ -432,24 +430,58 @@ impl IncludeCppEngine {
         extra_clang_args: &[&str],
     ) {
         if let Ok(output_path) = std::env::var("AUTOCXX_PREPROCESS") {
-            // Include a load of system headers at the end of the preprocessed output,
-            // because we would like to be able to generate bindings from the
-            // preprocessed header, and then build those bindings. The C++ parts
-            // of those bindings might need things inside these various headers;
-            // we make sure all these definitions and declarations are inside
-            // this one header file so that the reduction process does not have
-            // to refer to local headers on the reduction machine too.
-            let suffix = ALL_KNOWN_SYSTEM_HEADERS
-                .iter()
-                .map(|hdr| format!("#include <{}>\n", hdr))
-                .join("\n");
-            let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n{}\n",
-                self.config, header, suffix, cxx_gen::HEADER);
-            let mut tf = NamedTempFile::new().unwrap();
-            write!(tf, "{}", input).unwrap();
-            let tp = tf.into_temp_path();
-            preprocess(&tp, &PathBuf::from(output_path), inc_dirs, extra_clang_args).unwrap();
+            self.make_preprocessed_file(
+                &PathBuf::from(output_path),
+                header,
+                inc_dirs,
+                extra_clang_args,
+            );
         }
+        #[cfg(feature = "reproduction_case")]
+        if let Ok(output_path) = std::env::var("AUTOCXX_REPRO_CASE") {
+            let tf = NamedTempFile::new().unwrap();
+            self.make_preprocessed_file(
+                &PathBuf::from(tf.path()),
+                header,
+                inc_dirs,
+                extra_clang_args,
+            );
+            let header = std::fs::read_to_string(tf.path()).unwrap();
+            let output_path = PathBuf::from(output_path);
+            let config = self.config.to_token_stream().to_string();
+            let json = serde_json::json!({
+                "header": header,
+                "config": config
+            });
+            let f = File::create(&output_path).unwrap();
+            serde_json::to_writer(f, &json).unwrap();
+        }
+    }
+
+    fn make_preprocessed_file(
+        &self,
+        output_path: &Path,
+        header: &str,
+        inc_dirs: &[PathBuf],
+        extra_clang_args: &[&str],
+    ) {
+        // Include a load of system headers at the end of the preprocessed output,
+        // because we would like to be able to generate bindings from the
+        // preprocessed header, and then build those bindings. The C++ parts
+        // of those bindings might need things inside these various headers;
+        // we make sure all these definitions and declarations are inside
+        // this one header file so that the reduction process does not have
+        // to refer to local headers on the reduction machine too.
+        let suffix = ALL_KNOWN_SYSTEM_HEADERS
+            .iter()
+            .map(|hdr| format!("#include <{}>\n", hdr))
+            .join("\n");
+        let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n{}\n",
+            self.config, header, suffix, cxx_gen::HEADER);
+        let mut tf = NamedTempFile::new().unwrap();
+        write!(tf, "{}", input).unwrap();
+        let tp = tf.into_temp_path();
+        preprocess(&tp, &PathBuf::from(output_path), inc_dirs, extra_clang_args).unwrap();
     }
 }
 
@@ -483,16 +515,20 @@ static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
 
 pub fn do_cxx_cpp_generation(
     rs: TokenStream2,
-    suppress_system_headers: bool,
+    cpp_codegen_options: &CppCodegenOptions,
 ) -> Result<CppFilePair, cxx_gen::Error> {
-    let opt = cxx_gen::Opt::default();
+    let mut opt = cxx_gen::Opt::default();
+    opt.cxx_impl_annotations = cpp_codegen_options.cxx_impl_annotations.clone();
     let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
     Ok(CppFilePair {
-        header: strip_system_headers(cxx_generated.header, suppress_system_headers),
+        header: strip_system_headers(
+            cxx_generated.header,
+            cpp_codegen_options.suppress_system_headers,
+        ),
         header_name: "cxxgen.h".into(),
         implementation: Some(strip_system_headers(
             cxx_generated.implementation,
-            suppress_system_headers,
+            cpp_codegen_options.suppress_system_headers,
         )),
     })
 }
@@ -515,7 +551,7 @@ impl CppBuildable for IncludeCppEngine {
     /// Generate C++-side bindings for these APIs. Call `generate` first.
     fn generate_h_and_cxx(
         &self,
-        suppress_system_headers: bool,
+        cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<GeneratedCpp, cxx_gen::Error> {
         let mut files = Vec::new();
         match &self.state {
@@ -523,7 +559,9 @@ impl CppBuildable for IncludeCppEngine {
             State::NotGenerated => panic!("Call generate() first"),
             State::Generated(gen_results) => {
                 let rs = gen_results.item_mod.to_token_stream();
-                files.push(do_cxx_cpp_generation(rs, suppress_system_headers)?);
+                if !cpp_codegen_options.skip_cxx_gen {
+                    files.push(do_cxx_cpp_generation(rs, cpp_codegen_options)?);
+                }
                 if let Some(cpp_file_pair) = &gen_results.cpp {
                     files.push(cpp_file_pair.clone());
                 }
@@ -579,4 +617,45 @@ pub fn get_clang_path() -> String {
     std::env::var("CLANG_PATH")
         .or_else(|_| std::env::var("CXX"))
         .unwrap_or_else(|_| "clang++".to_string())
+}
+
+/// Newtype wrapper so we can give it a [`Default`].
+pub struct HeaderNamer<'a>(pub Box<dyn 'a + Fn(String) -> String>);
+
+impl Default for HeaderNamer<'static> {
+    fn default() -> Self {
+        Self(Box::new(|mod_name| format!("autocxxgen_{}.h", mod_name)))
+    }
+}
+
+impl HeaderNamer<'_> {
+    fn name_header(&self, mod_name: String) -> String {
+        self.0(mod_name)
+    }
+}
+
+/// Options for C++ codegen
+#[derive(Default)]
+pub struct CppCodegenOptions<'a> {
+    /// Whether to avoid generating `#include <some-system-header>`.
+    /// You may wish to do this to make a hermetic test case with no
+    /// external dependencies.
+    pub suppress_system_headers: bool,
+    /// Optionally, a prefix to go at `#include "<here>cxx.h". This is a header file from the `cxx`
+    /// crate.
+    pub path_to_cxx_h: Option<String>,
+    /// Optionally, a prefix to go at `#include "<here>cxxgen.h". This is a header file which we
+    /// generate.
+    pub path_to_cxxgen_h: Option<String>,
+    /// Optionally, a function called to generate each of the per-section header files. The default
+    /// names are subject to change.
+    /// The function is passed the name of the module generated by each `include_cpp`,
+    /// configured via `name`. These will be unique.
+    pub header_namer: HeaderNamer<'a>,
+    /// An annotation optionally to include on each C++ function.
+    /// For example to export the symbol from a library.
+    pub cxx_impl_annotations: Option<String>,
+    /// Whether to skip using [`cxx_gen`] to generate the C++ code,
+    /// so that some other process can handle that.
+    pub skip_cxx_gen: bool,
 }
