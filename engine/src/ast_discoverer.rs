@@ -302,7 +302,7 @@ impl<'b> PerModDiscoveries<'b> {
                 self.search_stmts(exw.body.stmts.iter())?;
             }
             Expr::Yield(exy) => self.search_option_expr(&exy.expr)?,
-            Expr::__TestExhaustive(_) => {}
+            _ => {}
         }
         Ok(())
     }

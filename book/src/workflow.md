@@ -73,6 +73,10 @@ fn main() {
 }
 ```
 
+At the moment, you can refer *from* manual bindings *to* automated bindings,
+not the other way round. So if you specify a type in your manual bindings, any
+functions which use that type will also need to be manually declared.
+
 ## My build entirely failed
 
 `autocxx` should nearly always successfully parse the C++ codebase and
