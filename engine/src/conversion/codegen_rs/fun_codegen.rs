@@ -132,7 +132,8 @@ pub(super) fn gen_function(
                 ..
             } => {
                 // Constructor.
-                impl_entry = Some(fn_generator.generate_constructor_impl(impl_for));
+                impl_entry =
+                    Some(fn_generator.generate_constructor_impl(impl_for, requires_make_unique));
             }
             FnKind::Method {
                 ref impl_for,
@@ -144,7 +145,6 @@ pub(super) fn gen_function(
                     matches!(method_kind, MethodKind::Constructor { .. }),
                     impl_for,
                     &ret_type,
-                    requires_make_unique,
                 ));
             }
             FnKind::TraitMethod { ref details, .. } => {
@@ -265,7 +265,6 @@ impl<'a> FnGenerator<'a> {
         avoid_self: bool,
         impl_block_type_name: &QualifiedName,
         ret_type: &ReturnType,
-        requires_make_unique: bool,
     ) -> Box<ImplBlockDetails> {
         let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(avoid_self);
         let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
@@ -277,11 +276,6 @@ impl<'a> FnGenerator<'a> {
         let rust_name = make_ident(self.rust_name);
         let unsafety = self.unsafety.wrapper_token();
         let doc_attrs = self.doc_attrs;
-        let make_unique_attr = if requires_make_unique {
-            Some(quote! { #[autocxx::derive_make_unique]})
-        } else {
-            None
-        };
         let cxxbridge_name = self.cxxbridge_name;
         let call_body = self.wrap_call_with_unsafe(quote! {
             cxxbridge::#cxxbridge_name ( #(#arg_list),* )
@@ -289,7 +283,6 @@ impl<'a> FnGenerator<'a> {
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
                 #(#doc_attrs)*
-                #make_unique_attr
                 pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                     #local_variables
                     #call_body
@@ -356,6 +349,7 @@ impl<'a> FnGenerator<'a> {
     fn generate_constructor_impl(
         &self,
         impl_block_type_name: &QualifiedName,
+        requires_make_unique: bool,
     ) -> Box<ImplBlockDetails> {
         let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(true);
         let mut wrapper_params: Punctuated<FnArg, Comma> =
@@ -380,9 +374,15 @@ impl<'a> FnGenerator<'a> {
         let body = self.wrap_call_with_unsafe(body);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
+        let make_unique_attr = if requires_make_unique {
+            Some(quote! { #[autocxx::derive_make_unique]})
+        } else {
+            None
+        };
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
                 #(#doc_attrs)*
+                #make_unique_attr
                 pub #unsafety fn #rust_name #lifetime_param ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> #lifetime_addition {
                     #body
                 }
