@@ -28,7 +28,7 @@ resolver = "2"
 autocxx-macro = { path="macro", version="0.17.5" }
 cxx = "1.0.54" # ... also needed because expansion of type_id refers to ::cxx
 aquamarine = "0.1" # docs
-moveit = { version = "0.4", features = [ "cxx" ] }
+moveit = { version = "0.5", features = [ "cxx" ] }
 
 [workspace]
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce", "tools/mdbook-preprocessor", "integration-tests"]
