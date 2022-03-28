@@ -326,6 +326,9 @@ fn main() {
     assert_eq!(ffi::take_A(&amp;a), autocxx::c_int(5));
 }
 </code></pre>
+<p>At the moment, you can refer <em>from</em> manual bindings <em>to</em> automated bindings,
+not the other way round. So if you specify a type in your manual bindings, any
+functions which use that type will also need to be manually declared.</p>
 <h2 id="my-build-entirely-failed"><a class="header" href="#my-build-entirely-failed">My build entirely failed</a></h2>
 <p><code>autocxx</code> should nearly always successfully parse the C++ codebase and
 generate <em>some</em> APIs. It's reliant on <code>bindgen</code>, but <code>bindgen</code> is excellent
