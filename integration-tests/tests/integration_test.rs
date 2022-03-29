@@ -8152,6 +8152,29 @@ fn test_constructor_moveit() {
 }
 
 #[test]
+fn test_move_out_of_uniqueptr() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        A() {}
+        std::string so_we_are_non_trivial;
+    };
+    inline A get_a() {
+        A a;
+        return a;
+    }
+    "};
+    let rs = quote! {
+        let a = ffi::get_a();
+        moveit! {
+            let _stack_obj = autocxx::moveit::new::mov(a);
+        }
+    };
+    run_test("", hdr, rs, &["A", "get_a"], &[]);
+}
+
+#[test]
 fn test_implicit_constructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>

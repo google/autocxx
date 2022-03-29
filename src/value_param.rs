@@ -169,7 +169,7 @@ where
 }
 
 /// Explicitly force a value parameter to be taken usign C++ move semantics.
-pub fn as_mov<P: DerefMove + Deref<Target = T>, T>(ptr: impl Into<Pin<P>>) -> impl ValueParam<T>
+pub fn as_mov<P: DerefMove + Deref<Target = T>, T>(ptr: P) -> impl ValueParam<T>
 where
     P: DerefMove,
     P::Target: MoveNew,
