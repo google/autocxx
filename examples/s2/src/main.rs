@@ -24,7 +24,6 @@ include_cpp! {
 
 // Everything that we care about is inlined, so we don't have to do
 // anything fancy to build or link any external code.
-
 fn main() {
     // Create a couple of R1Intervals using their pre-existing C++
     // constructors. Actually these will be cxx::UniquePtr<R1Interval>s.

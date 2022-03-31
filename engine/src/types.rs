@@ -52,14 +52,6 @@ impl Namespace {
     pub(crate) fn depth(&self) -> usize {
         self.0.len()
     }
-
-    pub(crate) fn to_display_suffix(&self) -> String {
-        if self.is_empty() {
-            String::new()
-        } else {
-            format!(" (in namespace {})", self)
-        }
-    }
 }
 
 impl Display for Namespace {
