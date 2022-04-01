@@ -12,7 +12,8 @@ use crate::{
         SkipCxxGen,
     },
     code_checkers::{
-        make_error_finder, make_string_finder, CppCounter, CppMatcher, NoSystemHeadersChecker,
+        make_error_finder, make_rust_code_finder, make_string_finder, CppCounter, CppMatcher,
+        NoSystemHeadersChecker,
     },
 };
 use autocxx_integration_tests::{
@@ -3810,8 +3811,8 @@ fn test_ulong() {
 #[test]
 fn test_typedef_to_ulong() {
     let hdr = indoc! {"
-        #include <cstddef>
-        inline size_t daft(size_t a) { return a; }
+        typedef unsigned long fiddly;
+        inline fiddly daft(fiddly a) { return a; }
     "};
     let rs = quote! {
         assert_eq!(ffi::daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
@@ -5930,6 +5931,30 @@ fn test_int_vector() {
     };
 
     run_test("", hdr, rs, &["give_vec"], &[]);
+}
+
+#[test]
+fn test_size_t() {
+    let hdr = indoc! {"
+        #include <cstddef>
+        inline size_t get_count() { return 7; }
+    "};
+
+    let rs = quote! {
+        ffi::get_count();
+    };
+
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["get_count"], &[], None),
+        None,
+        Some(make_rust_code_finder(vec![
+            quote! {fn get_count() -> usize},
+        ])),
+        None,
+    );
 }
 
 #[test]
@@ -8796,25 +8821,20 @@ fn size_and_alignment_test(pod: bool) {
     let allowlist_types: Vec<&str> = allowlist_types.iter().map(AsRef::as_ref).collect_vec();
     let allowlist_fns: Vec<&str> = allowlist_fns.iter().map(AsRef::as_ref).collect_vec();
     let allowlist_both: Vec<&str> = allowlist_both.iter().map(AsRef::as_ref).collect_vec();
-    let rs = TYPES.iter().fold(
-        quote! {
-            use std::convert::TryInto;
-        },
-        |mut accumulator, (name, _)| {
-            let get_align_symbol =
-                proc_macro2::Ident::new(&format!("get_alignof_{}", name), Span::call_site());
-            let get_size_symbol =
-                proc_macro2::Ident::new(&format!("get_sizeof_{}", name), Span::call_site());
-            let type_symbol = proc_macro2::Ident::new(name, Span::call_site());
-            accumulator.extend(quote! {
-                let c_size: usize = ffi::#get_size_symbol().0.try_into().unwrap();
-                let c_align: usize = ffi::#get_align_symbol().0.try_into().unwrap();
-                assert_eq!(std::mem::size_of::<ffi::#type_symbol>(), c_size);
-                assert_eq!(std::mem::align_of::<ffi::#type_symbol>(), c_align);
-            });
-            accumulator
-        },
-    );
+    let rs = TYPES.iter().fold(quote! {}, |mut accumulator, (name, _)| {
+        let get_align_symbol =
+            proc_macro2::Ident::new(&format!("get_alignof_{}", name), Span::call_site());
+        let get_size_symbol =
+            proc_macro2::Ident::new(&format!("get_sizeof_{}", name), Span::call_site());
+        let type_symbol = proc_macro2::Ident::new(name, Span::call_site());
+        accumulator.extend(quote! {
+            let c_size = ffi::#get_size_symbol();
+            let c_align = ffi::#get_align_symbol();
+            assert_eq!(std::mem::size_of::<ffi::#type_symbol>(), c_size);
+            assert_eq!(std::mem::align_of::<ffi::#type_symbol>(), c_align);
+        });
+        accumulator
+    });
     if pod {
         run_test("", &hdr, rs, &allowlist_fns, &allowlist_types);
     } else {
@@ -10281,6 +10301,25 @@ fn param_in_copy_constructor() {
         };
     "};
     run_test("", hdr, quote! {}, &["A"], &[]);
+}
+
+#[test]
+fn test_pass_rust_str_and_return_struct() {
+    let cxx = indoc! {"
+        A take_str_return_struct(rust::Str) {
+            A a;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct A {};
+        A take_str_return_struct(rust::Str);
+    "};
+    let rs = quote! {
+        ffi::take_str_return_struct("hi");
+    };
+    run_test(cxx, hdr, rs, &["take_str_return_struct"], &[]);
 }
 
 // Yet to test:

@@ -101,11 +101,14 @@ pub(crate) fn type_to_cpp(ty: &Type, cpp_name_map: &CppNameMap) -> Result<String
                 Some(suffix) => Ok(format!("{}<{}>", root, suffix)),
             }
         }
-        Type::Reference(typr) => Ok(format!(
-            "{}{}&",
-            get_mut_string(&typr.mutability),
-            type_to_cpp(typr.elem.as_ref(), cpp_name_map)?
-        )),
+        Type::Reference(typr) => match &*typr.elem {
+            Type::Path(typ) if typ.path.is_ident("str") => Ok("rust::Str".into()),
+            _ => Ok(format!(
+                "{}{}&",
+                get_mut_string(&typr.mutability),
+                type_to_cpp(typr.elem.as_ref(), cpp_name_map)?
+            )),
+        },
         Type::Ptr(typp) => Ok(format!(
             "{}{}*",
             get_mut_string(&typp.mutability),
