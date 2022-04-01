@@ -18,6 +18,7 @@ use syn::{
     Signature, Token,
 };
 use syn::{Ident, Result as ParseResult};
+use thiserror::Error;
 
 use crate::{
     directives::{EXTERN_RUST_TYPE, SUBCLASS},
@@ -91,8 +92,15 @@ pub enum Allowlist {
     Specific(Vec<AllowlistEntry>),
 }
 
+/// Errors that may be encountered while adding allowlist entries.
+#[derive(Error, Debug)]
+pub enum AllowlistErr {
+    #[error("Conflict between generate/generate_ns! and generate_all! - use one not both")]
+    ConflictingGenerateAndGenerateAll,
+}
+
 impl Allowlist {
-    pub fn push(&mut self, item: AllowlistEntry, span: Span) -> ParseResult<()> {
+    pub fn push(&mut self, item: AllowlistEntry) -> Result<(), AllowlistErr> {
         match self {
             Allowlist::Unspecified(ref mut uncommitted_list) => {
                 let new_list = uncommitted_list
@@ -102,22 +110,16 @@ impl Allowlist {
                 *self = Allowlist::Specific(new_list);
             }
             Allowlist::All => {
-                return Err(syn::Error::new(
-                    span,
-                    "use either generate!/generate_pod!/generate_ns! or generate_all!, not both.",
-                ))
+                return Err(AllowlistErr::ConflictingGenerateAndGenerateAll);
             }
             Allowlist::Specific(list) => list.push(item),
         };
         Ok(())
     }
 
-    pub(crate) fn set_all(&mut self, ident: &Ident) -> ParseResult<()> {
+    pub(crate) fn set_all(&mut self) -> Result<(), AllowlistErr> {
         if matches!(self, Allowlist::Specific(..)) {
-            return Err(syn::Error::new(
-                ident.span(),
-                "use either generate!/generate_pod!/generate_ns! or generate_all!, not both.",
-            ));
+            return Err(AllowlistErr::ConflictingGenerateAndGenerateAll);
         }
         *self = Allowlist::All;
         Ok(())
@@ -171,6 +173,10 @@ pub struct IncludeCppConfig {
     pub concretes: HashMap<String, Ident>,
 }
 
+fn allowlist_err_to_syn_err(err: AllowlistErr, span: Span) -> syn::Error {
+    syn::Error::new(span, format!("{}", err))
+}
+
 impl Parse for IncludeCppConfig {
     fn parse(input: ParseStream) -> ParseResult<Self> {
         // Takes as inputs:
@@ -208,24 +214,24 @@ impl Parse for IncludeCppConfig {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate: syn::LitStr = args.parse()?;
-                    allowlist.push(AllowlistEntry::Item(generate.value()), generate.span())?;
+                    allowlist
+                        .push(AllowlistEntry::Item(generate.value()))
+                        .map_err(|e| allowlist_err_to_syn_err(e, ident.span()))?;
                 } else if ident == "generate_ns" {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate_ns: syn::LitStr = args.parse()?;
-                    allowlist.push(
-                        AllowlistEntry::Namespace(generate_ns.value()),
-                        generate_ns.span(),
-                    )?;
+                    allowlist
+                        .push(AllowlistEntry::Namespace(generate_ns.value()))
+                        .map_err(|e| allowlist_err_to_syn_err(e, ident.span()))?;
                 } else if ident == "generate_pod" {
                     let args;
                     syn::parenthesized!(args in input);
                     let generate_pod: syn::LitStr = args.parse()?;
                     pod_requests.push(generate_pod.value());
-                    allowlist.push(
-                        AllowlistEntry::Item(generate_pod.value()),
-                        generate_pod.span(),
-                    )?;
+                    allowlist
+                        .push(AllowlistEntry::Item(generate_pod.value()))
+                        .map_err(|e| allowlist_err_to_syn_err(e, ident.span()))?;
                 } else if ident == "pod" {
                     let args;
                     syn::parenthesized!(args in input);
@@ -270,7 +276,9 @@ impl Parse for IncludeCppConfig {
                     exclude_impls = true;
                     swallow_parentheses(&input, &ident)?;
                 } else if ident == "generate_all" {
-                    allowlist.set_all(&ident)?;
+                    allowlist
+                        .set_all()
+                        .map_err(|e| allowlist_err_to_syn_err(e, ident.span()))?;
                     swallow_parentheses(&input, &ident)?;
                 } else if ident == "name" {
                     let args;

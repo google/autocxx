@@ -1603,12 +1603,15 @@ impl<'a> FnAnalyzer<'a> {
                                     };
                                     Ok((this_type, receiver_mutability))
                                 }
-                                _ => Err(ConvertError::UnexpectedThisType(
-                                    ns.clone(),
-                                    fn_name.into(),
-                                )),
+                                _ => Err(ConvertError::UnexpectedThisType(QualifiedName::new(
+                                    ns,
+                                    make_ident(fn_name),
+                                ))),
                             },
-                            _ => Err(ConvertError::UnexpectedThisType(ns.clone(), fn_name.into())),
+                            _ => Err(ConvertError::UnexpectedThisType(QualifiedName::new(
+                                ns,
+                                make_ident(fn_name),
+                            ))),
                         }?;
                         self_type = Some(this_type);
                         if treat_this_as_reference {

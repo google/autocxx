@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use std::path::PathBuf;
-fn main() {
+fn main() -> miette::Result<()> {
     let mut b = autocxx_build::Builder::new(
         "src/lib.rs",
         &[
@@ -15,8 +15,9 @@ fn main() {
             PathBuf::from("/usr/include/llvm-c-13"),
         ],
     )
-    .expect_build();
+    .build()?;
 
     b.flag_if_supported("-std=c++14").compile("llvm");
     println!("cargo:rerun-if-changed=src/lib.rs");
+    Ok(())
 }
