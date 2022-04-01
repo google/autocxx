@@ -21,6 +21,7 @@ use syn::{
     PatReference, PatSlice, PatTuple, Path, Receiver, ReturnType, Signature, Stmt, TraitItem, Type,
     TypeArray, TypeGroup, TypeParamBound, TypeParen, TypePtr, TypeReference, TypeSlice,
 };
+use thiserror::Error;
 
 #[derive(Default)]
 pub(super) struct Discoveries {
@@ -29,11 +30,15 @@ pub(super) struct Discoveries {
     pub(super) extern_rust_types: Vec<RustPath>,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum DiscoveryErr {
+    #[error("#[extern_rust_function] was attached to a method in an impl block that was too complex for autocxx. autocxx supports only \"impl X {{...}}\" where X is a single identifier, not a path or more complex type.")]
     FoundExternRustFunOnTypeWithoutClearReceiver,
+    #[error("#[extern_rust_function] was attached to a method taking no parameters.")]
     NonReferenceReceiver,
+    #[error("#[extern_rust_function] was attached to a method taking a receiver by value.")]
     NoParameterOnMethod,
+    #[error("#[extern_rust_function] was in an impl block nested wihtin another block. This is only supported in the outermost mod of a file, alongside the include_cpp!.")]
     FoundExternRustFunWithinMod,
 }
 

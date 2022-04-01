@@ -280,7 +280,9 @@ impl<'a> ParseBindgen<'a> {
                         }
                         _ => {
                             return Err(ConvertErrorWithContext(
-                                ConvertError::UnexpectedUseStatement(segs.into_iter().last()),
+                                ConvertError::UnexpectedUseStatement(
+                                    segs.into_iter().last().map(|i| i.to_string()),
+                                ),
                                 None,
                             ))
                         }

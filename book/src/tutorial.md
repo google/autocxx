@@ -24,19 +24,21 @@ cxx = "1.0"
 
 [build-dependencies]
 autocxx-build = "0.18.0"
+miette = { version="4.3", features=["fancy"] } // optional but gives nicer error messages!
 ```
 
 Now, add a `build.rs` next to your `Cargo.toml` (this is a standard `cargo` [build script](https://doc.rust-lang.org/cargo/reference/build-scripts.html)). This is where you need your include path:
 
 ```rust,ignore
-fn main() {
+fn main() -> miette::Result<()> {
     let path = std::path::PathBuf::from("src"); // include path
-    let mut b = autocxx_build::Builder::new("src/main.rs", &[&path]).expect_build();
+    let mut b = autocxx_build::Builder::new("src/main.rs", &[&path]).build()?;
         // This assumes all your C++ bindings are in main.rs
     b.flag_if_supported("-std=c++14")
      .compile("autocxx-demo"); // arbitrary library name, pick anything
     println!("cargo:rerun-if-changed=src/main.rs");
     // Add instructions to link to any C++ libraries you need.
+    Ok(())
 }
 ```
 

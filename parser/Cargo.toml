@@ -23,6 +23,7 @@ proc-macro2 = "1.0"
 quote = "1.0"
 serde = { version = "1.0", optional = true }
 serde_derive = { version = "1.0", optional = true }
+thiserror = "1.0"
 
 [dependencies.syn]
 version = "1.0.39"

@@ -18,3 +18,4 @@ autocxx = { path = "../..", version="0.17.2" }
 
 [build-dependencies]
 autocxx-build = { path = "../../gen/build", version="0.17.2" }
+miette = { version="4.3", features = [ "fancy" ] }
