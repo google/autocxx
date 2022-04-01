@@ -10284,6 +10284,26 @@ fn test_doc_comments_survive() {
 }
 
 #[test]
+fn optional_param_in_copy_constructor() {
+    let hdr = indoc! {"
+        struct A {
+            A(const A &other, bool optional_arg = false);
+        };
+    "};
+    run_test("", hdr, quote! {}, &["A"], &[]);
+}
+
+#[test]
+fn param_in_copy_constructor() {
+    let hdr = indoc! {"
+        struct A {
+            A(const A &other, bool arg);
+        };
+    "};
+    run_test("", hdr, quote! {}, &["A"], &[]);
+}
+
+#[test]
 fn test_pass_rust_str_and_return_struct() {
     let cxx = indoc! {"
         A take_str_return_struct(rust::Str) {

@@ -1024,6 +1024,9 @@ impl<'a> FnAnalyzer<'a> {
                 if param_details.len() < 2 {
                     set_ignore_reason(ConvertError::ConstructorWithOnlyOneParam);
                 }
+                if param_details.len() > 2 {
+                    set_ignore_reason(ConvertError::ConstructorWithMultipleParams);
+                }
                 self.reanalyze_parameter(
                     0,
                     fun,
@@ -1043,6 +1046,9 @@ impl<'a> FnAnalyzer<'a> {
             } => {
                 if param_details.len() < 2 {
                     set_ignore_reason(ConvertError::ConstructorWithOnlyOneParam);
+                }
+                if param_details.len() > 2 {
+                    set_ignore_reason(ConvertError::ConstructorWithMultipleParams);
                 }
                 self.reanalyze_parameter(
                     0,
