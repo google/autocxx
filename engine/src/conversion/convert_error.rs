@@ -107,6 +107,8 @@ pub enum ConvertError {
         "bindgen generated a move or copy constructor with an unexpected number of parameters."
     )]
     ConstructorWithOnlyOneParam,
+    #[error("A copy or move constructor was found to take extra parameters. These are likely to be parameters with defaults, which are not yet supported by autocxx, so this constructor has been ignored.")]
+    ConstructorWithMultipleParams,
 }
 
 /// Ensures that error contexts are always created using the constructors in this
