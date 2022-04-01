@@ -275,7 +275,7 @@ pub(super) fn create_subclass_destructor(
         synthetic_cpp: None,
         provenance: Provenance::SynthesizedOther,
     });
-    let cpp_name = format!("{}_destructor", sub.cpp().get_final_item().to_string());
+    let cpp_name = format!("{}_destructor", sub.cpp().get_final_item());
     let subclass_destructor_name =
         ApiName::new_with_cpp_name(&Namespace::new(), subclass_destructor_name, Some(cpp_name));
     (maybe_wrap, subclass_destructor_name)

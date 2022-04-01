@@ -47,14 +47,12 @@ pub(crate) fn add_make_uniques(apis: ApiVec<FnPhase>) -> ApiVec<AnnotatedFnPhase
         apis,
         &mut results,
         |name, fun, analysis| {
-            let requires_make_unique = match analysis.kind {
+            let requires_make_unique = matches!(analysis.kind,
                 FnKind::Method {
                     method_kind: MethodKind::Constructor { .. },
                     ref impl_for,
                     ..
-                } if types_with_destructors.contains(impl_for) => true,
-                _ => false,
-            };
+                } if types_with_destructors.contains(impl_for));
             Ok(Box::new(std::iter::once(Api::Function {
                 name,
                 fun,
