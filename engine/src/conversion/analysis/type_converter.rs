@@ -189,15 +189,16 @@ impl<'a> TypeConverter<'a> {
                 self.convert_ptr_to_reference(ptr, ns)?
             }
             Type::Array(mut arr) => {
-                let innerty = self.convert_type(*arr.elem, ns, &TypeConversionContext::CxxInnerType)?;
+                let innerty =
+                    self.convert_type(*arr.elem, ns, &TypeConversionContext::CxxInnerType)?;
                 arr.elem = Box::new(innerty.ty);
                 Annotated::new(
                     Type::Array(arr),
                     innerty.types_encountered,
                     innerty.extra_apis,
-                    TypeKind::Regular
+                    TypeKind::Regular,
                 )
-            },
+            }
             Type::Ptr(mut ptr) => {
                 crate::known_types::ensure_pointee_is_valid(&ptr)?;
                 let innerty =
