@@ -212,7 +212,10 @@ fn get_struct_field_types(
                 if !f
                     .ident
                     .as_ref()
-                    .map(|id| id.to_string().starts_with("_base"))
+                    .map(|id| {
+                        id.to_string().starts_with("_base")
+                            || id.to_string().starts_with("__bindgen_padding")
+                    })
                     .unwrap_or(false)
                 {
                     field_deps.extend(r.types_encountered);

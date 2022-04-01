@@ -4668,6 +4668,24 @@ fn test_take_array() {
 }
 
 #[test]
+fn test_take_array_in_struct() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    struct data {
+        char a[4];
+    };
+    uint32_t take_array(const data a) {
+        return a.a[0] + a.a[2];
+    }
+    "};
+    let rs = quote! {
+        let c = ffi::data { a: [ 10, 20, 30, 40 ] };
+        assert_eq!(ffi::take_array(c), 40);
+    };
+    run_test("", hdr, rs, &["take_array"], &["data"]);
+}
+
+#[test]
 fn test_union_ignored() {
     let hdr = indoc! {"
     #include <cstdint>
