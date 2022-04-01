@@ -8,45 +8,10 @@
 
 #![forbid(unsafe_code)]
 
-use autocxx_engine::{BuilderBuild, BuilderContext, BuilderError, RebuildDependencyRecorder};
+use autocxx_engine::{BuilderContext, RebuildDependencyRecorder};
 use std::{collections::HashSet, io::Write, sync::Mutex};
-use std::{ffi::OsStr, path::Path};
 
 pub type Builder = autocxx_engine::Builder<'static, CargoBuilderContext>;
-
-#[deprecated]
-/// Use [`Builder::new`] instead
-pub fn build<P1, I, T>(
-    rs_file: P1,
-    autocxx_incs: I,
-    extra_clang_args: &[&str],
-) -> Result<BuilderBuild, BuilderError>
-where
-    P1: AsRef<Path>,
-    I: IntoIterator<Item = T>,
-    T: AsRef<OsStr>,
-{
-    Builder::new(rs_file, autocxx_incs)
-        .extra_clang_args(extra_clang_args)
-        .build()
-}
-
-#[deprecated]
-/// Use [`Builder::new`] instead
-pub fn expect_build<P1, I, T>(
-    rs_file: P1,
-    autocxx_incs: I,
-    extra_clang_args: &[&str],
-) -> BuilderBuild
-where
-    P1: AsRef<Path>,
-    I: IntoIterator<Item = T>,
-    T: AsRef<OsStr>,
-{
-    Builder::new(rs_file, autocxx_incs)
-        .extra_clang_args(extra_clang_args)
-        .expect_build()
-}
 
 #[doc(hidden)]
 pub struct CargoBuilderContext;

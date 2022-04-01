@@ -7,117 +7,106 @@
 // except according to those terms.
 
 use std::collections::HashSet;
-use std::fmt::Display;
 
 use itertools::Itertools;
 use syn::Ident;
+use thiserror::Error;
 
 use crate::{
     known_types,
     types::{make_ident, Namespace, QualifiedName},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum ConvertError {
+    #[error("The initial run of 'bindgen' did not generate any content. This might be because none of the requested items for generation could be converted.")]
     NoContent,
+    #[error("An item was requested using 'generate_pod' which was not safe to hold by value in Rust. {0}")]
     UnsafePodType(String),
+    #[error("Bindgen generated some unexpected code in a foreign mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")]
     UnexpectedForeignItem,
+    #[error("Bindgen generated some unexpected code in its outermost mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")]
     UnexpectedOuterItem,
+    #[error("Bindgen generated some unexpected code in an inner namespace mod. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")]
     UnexpectedItemInMod,
+    #[error("autocxx was unable to produce a typdef pointing to the complex type {0}.")]
     ComplexTypedefTarget(String),
-    UnexpectedThisType(Namespace, String),
+    #[error("Unexpected type for 'this' in the function {}.", .0.to_cpp_name())]
+    UnexpectedThisType(QualifiedName),
+    #[error("autocxx does not yet know how to support the built-in C++ type {} - please raise an issue on github", .0.to_cpp_name())]
     UnsupportedBuiltInType(QualifiedName),
+    #[error("Type {} has templated arguments and so does the typedef to which it points", .0.to_cpp_name())]
     ConflictingTemplatedArgsWithTypedef(QualifiedName),
+    #[error("Function {0} has a parameter or return type which is either on the blocklist or a forward declaration")]
     UnacceptableParam(String),
+    #[error("Function {0} has a return reference parameter, but 0 or >1 input reference parameters, so the lifetime of the output reference cannot be deduced.")]
     NotOneInputReference(String),
+    #[error("Encountered type not yet supported by autocxx: {0}")]
     UnsupportedType(String),
+    #[error("Encountered type not yet known by autocxx: {0}")]
     UnknownType(String),
+    #[error("Encountered mutable static data, not yet supported: {0}")]
     StaticData(String),
+    #[error("Encountered typedef to itself - this is a known bindgen bug: {0}")]
     InfinitelyRecursiveTypedef(QualifiedName),
-    UnexpectedUseStatement(Option<Ident>),
+    #[error("Unexpected 'use' statement encountered: {}", .0.as_ref().map(|s| s.as_str()).unwrap_or("<unknown>"))]
+    UnexpectedUseStatement(Option<String>),
+    #[error("Type {} was parameterized over something complex which we don't yet support", .0.to_cpp_name())]
     TemplatedTypeContainingNonPathArg(QualifiedName),
+    #[error("Pointer pointed to something unsupported")]
     InvalidPointee,
+    #[error("The 'generate' or 'generate_pod' directive for '{0}' did not result in any code being generated. Perhaps this was mis-spelled or you didn't qualify the name with any namespaces? Otherwise please report a bug.")]
     DidNotGenerateAnything(String),
+    #[error("Found an attempt at using a forward declaration ({}) inside a templated cxx type such as UniquePtr or CxxVector", .0.to_cpp_name())]
     TypeContainingForwardDeclaration(QualifiedName),
+    #[error("Found an attempt at using a type marked as blocked! ({})", .0.to_cpp_name())]
     Blocked(QualifiedName),
+    #[error("This function or method uses a type where one of the template parameters was incomprehensible to bindgen/autocxx - probably because it uses template specialization.")]
     UnusedTemplateParam,
+    #[error("Names containing __ are reserved by C++ so not acceptable to cxx")]
     TooManyUnderscores,
+    #[error("This item relies on a type not known to autocxx ({})", .0.to_cpp_name())]
     UnknownDependentType(QualifiedName),
+    #[error("This item depends on some other type(s) which autocxx could not generate, some of them are: {}", .0.iter().join(", "))]
     IgnoredDependent(HashSet<QualifiedName>),
+    #[error("The item name '{0}' is a reserved word in Rust.")]
     ReservedName(String),
+    #[error("This item name is used in multiple namespaces. At present, autocxx and cxx allow only one type of a given name. This limitation will be fixed in future. (Items found with this name: {})", .0.iter().join(", "))]
     DuplicateCxxBridgeName(Vec<String>),
+    #[error("This is a method on a type which can't be used as the receiver in Rust (i.e. self/this). This is probably because some type involves template specialization.")]
     UnsupportedReceiver,
+    #[error("A rust::Box<T> was encountered where T was not known to be a Rust type. Use rust_type!(T): {}", .0.to_cpp_name())]
     BoxContainingNonRustType(QualifiedName),
+    #[error("A qualified Rust type was found (i.e. one containing ::): {}. Rust types must always be a simple identifier.", .0.to_cpp_name())]
     RustTypeWithAPath(QualifiedName),
+    #[error("This type is nested within another struct/class, yet is abstract (or is not on the allowlist so we can't be sure). This is not yet supported by autocxx. If you don't believe this type is abstract, add it to the allowlist.")]
     AbstractNestedType,
+    #[error(
+        "This type is nested within another struct/class with protected or private visibility."
+    )]
     NonPublicNestedType,
+    #[error("This function takes an rvalue reference parameter (&&) which is not yet supported.")]
     RValueParam,
+    #[error("This function returns an rvalue reference (&&) which is not yet supported.")]
     RValueReturn,
+    #[error("This method is private")]
     PrivateMethod,
+    #[error("autocxx does not know how to generate bindings to operator=")]
     AssignmentOperator,
+    #[error("This function was marked =delete")]
     Deleted,
+    #[error("This structure has an rvalue reference field (&&) which is not yet supported.")]
     RValueReferenceField,
+    #[error("This type was not on the allowlist, so we are not generating methods for it.")]
     MethodOfNonAllowlistedType,
+    #[error("This type is templated, so we can't generate bindings. We will instead generate bindings for each instantiation.")]
     MethodOfGenericType,
+    #[error("bindgen generated multiple different APIs (functions/types) with this name. autocxx doesn't know how to diambiguate them, so we won't generate bindings for any of them.")]
     DuplicateItemsFoundInParsing,
+    #[error(
+        "bindgen generated a move or copy constructor with an unexpected number of parameters."
+    )]
     ConstructorWithOnlyOneParam,
-}
-
-fn format_maybe_identifier(id: &Option<Ident>) -> String {
-    match id {
-        Some(id) => id.to_string(),
-        None => "<unknown>".into(),
-    }
-}
-
-impl Display for ConvertError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConvertError::NoContent => write!(f, "The initial run of 'bindgen' did not generate any content. This might be because none of the requested items for generation could be converted.")?,
-            ConvertError::UnsafePodType(err) => write!(f, "An item was requested using 'generate_pod' which was not safe to hold by value in Rust. {}", err)?,
-            ConvertError::UnexpectedForeignItem => write!(f, "Bindgen generated some unexpected code in a foreign mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
-            ConvertError::UnexpectedOuterItem => write!(f, "Bindgen generated some unexpected code in its outermost mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
-            ConvertError::UnexpectedItemInMod => write!(f, "Bindgen generated some unexpected code in an inner namespace mod. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")?,
-            ConvertError::ComplexTypedefTarget(ty) => write!(f, "autocxx was unable to produce a typdef pointing to the complex type {}.", ty)?,
-            ConvertError::UnexpectedThisType(ns, fn_name) => write!(f, "Unexpected type for 'this' in the function {}{}.", fn_name, ns.to_display_suffix())?,
-            ConvertError::UnsupportedBuiltInType(ty) => write!(f, "autocxx does not yet know how to support the built-in C++ type {} - please raise an issue on github", ty.to_cpp_name())?,
-            ConvertError::ConflictingTemplatedArgsWithTypedef(tn) => write!(f, "Type {} has templated arguments and so does the typedef to which it points", tn)?,
-            ConvertError::UnacceptableParam(fn_name) => write!(f, "Function {} has a parameter or return type which is either on the blocklist or a forward declaration", fn_name)?,
-            ConvertError::NotOneInputReference(fn_name) => write!(f, "Function {} has a return reference parameter, but 0 or >1 input reference parameters, so the lifetime of the output reference cannot be deduced.", fn_name)?,
-            ConvertError::UnsupportedType(ty_desc) => write!(f, "Encountered type not yet supported by autocxx: {}", ty_desc)?,
-            ConvertError::UnknownType(ty_desc) => write!(f, "Encountered type not yet known by autocxx: {}", ty_desc)?,
-            ConvertError::StaticData(ty_desc) => write!(f, "Encountered mutable static data, not yet supported: {}", ty_desc)?,
-            ConvertError::InfinitelyRecursiveTypedef(tn) => write!(f, "Encountered typedef to itself - this is a known bindgen bug: {}", tn.to_cpp_name())?,
-            ConvertError::UnexpectedUseStatement(maybe_ident) => write!(f, "Unexpected 'use' statement encountered: {}", format_maybe_identifier(maybe_ident))?,
-            ConvertError::TemplatedTypeContainingNonPathArg(tn) => write!(f, "Type {} was parameterized over something complex which we don't yet support", tn)?,
-            ConvertError::InvalidPointee => write!(f, "Pointer pointed to something unsupported")?,
-            ConvertError::DidNotGenerateAnything(directive) => write!(f, "The 'generate' or 'generate_pod' directive for '{}' did not result in any code being generated. Perhaps this was mis-spelled or you didn't qualify the name with any namespaces? Otherwise please report a bug.", directive)?,
-            ConvertError::TypeContainingForwardDeclaration(tn) => write!(f, "Found an attempt at using a forward declaration ({}) inside a templated cxx type such as UniquePtr or CxxVector", tn.to_cpp_name())?,
-            ConvertError::Blocked(tn) => write!(f, "Found an attempt at using a type marked as blocked! ({})", tn.to_cpp_name())?,
-            ConvertError::UnusedTemplateParam => write!(f, "This function or method uses a type where one of the template parameters was incomprehensible to bindgen/autocxx - probably because it uses template specialization.")?,
-            ConvertError::TooManyUnderscores => write!(f, "Names containing __ are reserved by C++ so not acceptable to cxx")?,
-            ConvertError::UnknownDependentType(qn) => write!(f, "This item relies on a type not known to autocxx ({})", qn.to_cpp_name())?,
-            ConvertError::IgnoredDependent(qns) => write!(f, "This item depends on some other type(s) which autocxx could not generate, some of them are: {}", qns.iter().join(", "))?,
-            ConvertError::ReservedName(id) => write!(f, "The item name '{}' is a reserved word in Rust.", id)?,
-            ConvertError::DuplicateCxxBridgeName(items) => write!(f, "This item name is used in multiple namespaces. At present, autocxx and cxx allow only one type of a given name. This limitation will be fixed in future. (Items found with this name: {})", items.iter().join(", "))?,
-            ConvertError::UnsupportedReceiver => write!(f, "This is a method on a type which can't be used as the receiver in Rust (i.e. self/this). This is probably because some type involves template specialization.")?,
-            ConvertError::BoxContainingNonRustType(ty) => write!(f, "A rust::Box<T> was encountered where T was not known to be a Rust type. Use rust_type!(T): {}", ty.to_cpp_name())?,
-            ConvertError::RustTypeWithAPath(ty) => write!(f, "A qualified Rust type was found (i.e. one containing ::): {}. Rust types must always be a simple identifier.", ty.to_cpp_name())?,
-            ConvertError::AbstractNestedType => write!(f, "This type is nested within another struct/class, yet is abstract (or is not on the allowlist so we can't be sure). This is not yet supported by autocxx. If you don't believe this type is abstract, add it to the allowlist.")?,
-            ConvertError::NonPublicNestedType => write!(f, "This type is nested within another struct/class with protected or private visibility.")?,
-            ConvertError::RValueParam => write!(f, "This function takes an rvalue reference parameter (&&) which is not yet supported.")?,
-            ConvertError::RValueReturn => write!(f, "This function returns an rvalue reference (&&) which is not yet supported.")?,
-            ConvertError::PrivateMethod => write!(f, "This method is private")?,
-            ConvertError::AssignmentOperator => write!(f, "autocxx does not know how to generate bindings to operator=")?,
-            ConvertError::Deleted => write!(f, "This function was marked =delete")?,
-            ConvertError::RValueReferenceField => write!(f, "This structure has an rvalue reference field (&&) which is not yet supported.")?,
-            ConvertError::MethodOfNonAllowlistedType => write!(f, "This type was not on the allowlist, so we are not generating methods for it.")?,
-            ConvertError::MethodOfGenericType => write!(f, "This type is templated, so we can't generate bindings. We will instead generate bindings for each instantiation.")?,
-            ConvertError::DuplicateItemsFoundInParsing => write!(f, "bindgen generated multiple different APIs (functions/types) with this name. autocxx doesn't know how to diambiguate them, so we won't generate bindings for any of them.")?,
-            ConvertError::ConstructorWithOnlyOneParam => write!(f, "bindgen generated a move or copy constructor with an unexpected number of parameters.")?,
-        }
-        Ok(())
-    }
 }
 
 /// Ensures that error contexts are always created using the constructors in this

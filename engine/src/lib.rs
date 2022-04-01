@@ -29,10 +29,12 @@ mod builder;
 
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
+use miette::{SourceOffset, SourceSpan};
 use parse_callbacks::AutocxxParseCallbacks;
 use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
-use std::{fmt::Display, path::PathBuf};
+use regex::Regex;
+use std::path::PathBuf;
 use std::{
     fs::File,
     io::prelude::*,
@@ -47,10 +49,12 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_quote, ItemMod, Macro,
 };
+use thiserror::Error;
 
 use itertools::{join, Itertools};
 use known_types::known_types;
 use log::info;
+use miette::Diagnostic;
 
 /// We use a forked version of bindgen - for now.
 /// We hope to unfork.
@@ -79,32 +83,45 @@ pub struct CppFilePair {
 /// All generated C++ content which should be written to disk.
 pub struct GeneratedCpp(pub Vec<CppFilePair>);
 
-/// Errors which may occur in generating bindings for these C++
-/// functions.
-#[derive(Debug)]
-pub enum Error {
-    /// Any error reported by bindgen, generating the C++ bindings.
-    /// Any C++ parsing errors, etc. would be reported this way.
-    Bindgen(()),
-    /// Any problem parsing the Rust file.
-    Parsing(syn::Error),
-    /// No `include_cpp!` macro could be found.
-    NoAutoCxxInc,
-    /// Some error occcurred in converting the bindgen-style
-    /// bindings to safe cxx bindings.
-    Conversion(conversion::ConvertError),
+/// A [`syn::Error`] which also implements [`miette::Diagnostic`] so can be pretty-printed
+/// to show the affected span of code.
+#[derive(Error, Debug, Diagnostic)]
+#[error("{err}")]
+pub struct LocatedSynError {
+    err: syn::Error,
+    #[source_code]
+    file: String,
+    #[label("error here")]
+    span: SourceSpan,
 }
 
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Bindgen(_) => write!(f, "Bindgen was unable to generate the initial .rs bindings for this file. This may indicate a parsing problem with the C++ headers.")?,
-            Error::Parsing(err) => write!(f, "The Rust file could not be parsed: {}", err)?,
-            Error::NoAutoCxxInc => write!(f, "No C++ include directory was provided.")?,
-            Error::Conversion(err) => write!(f, "autocxx could not generate the requested bindings. {}", err)?,
+impl LocatedSynError {
+    fn new(err: syn::Error, file: &str) -> Self {
+        let span = proc_macro_span_to_miette_span(&err.span());
+        Self {
+            err,
+            file: file.to_string(),
+            span,
         }
-        Ok(())
     }
+}
+
+/// Errors which may occur in generating bindings for these C++
+/// functions.
+#[derive(Debug, Error, Diagnostic)]
+pub enum Error {
+    #[error("Bindgen was unable to generate the initial .rs bindings for this file. This may indicate a parsing problem with the C++ headers.")]
+    Bindgen(()),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    MacroParsing(LocatedSynError),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    BindingsParsing(LocatedSynError),
+    #[error("no C++ include directory was provided.")]
+    NoAutoCxxInc,
+    #[error("autocxx could not generate the requested bindings")]
+    Conversion(conversion::ConvertError),
 }
 
 /// Result type.
@@ -248,8 +265,9 @@ impl Parse for IncludeCppEngine {
 }
 
 impl IncludeCppEngine {
-    pub fn new_from_syn(mac: Macro) -> Result<Self> {
-        mac.parse_body::<IncludeCppEngine>().map_err(Error::Parsing)
+    pub fn new_from_syn(mac: Macro, file_contents: &str) -> Result<Self> {
+        mac.parse_body::<IncludeCppEngine>()
+            .map_err(|e| Error::MacroParsing(LocatedSynError::new(e, file_contents)))
     }
 
     pub fn config_mut(&mut self) -> &mut IncludeCppConfig {
@@ -345,7 +363,8 @@ impl IncludeCppEngine {
         // into a single construct.
         let bindings = format!("mod bindgen {{ {} }}", bindings);
         info!("Bindings: {}", bindings);
-        syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)
+        syn::parse_str::<ItemMod>(&bindings)
+            .map_err(|e| Error::BindingsParsing(LocatedSynError::new(e, &bindings)))
     }
 
     /// Actually examine the headers to find out what needs generating.
@@ -658,4 +677,27 @@ pub struct CppCodegenOptions<'a> {
     /// Whether to skip using [`cxx_gen`] to generate the C++ code,
     /// so that some other process can handle that.
     pub skip_cxx_gen: bool,
+}
+
+fn proc_macro_span_to_miette_span(span: &proc_macro2::Span) -> SourceSpan {
+    // A proc_macro2::Span stores its location as a byte offset. But there are
+    // no APIs to get that offset out.
+    // We could use `.start()` and `.end()` to get the line + column numbers, but it appears
+    // they're a little buggy. Hence we do this, to get the offsets directly across into
+    // miette.
+    struct Err;
+    let r: Result<(usize, usize), Err> = (|| {
+        let span_desc = format!("{:?}", span);
+        let re = Regex::new(r"(\d+)..(\d+)").unwrap();
+        let captures = re.captures(&span_desc).ok_or(Err)?;
+        let start = captures.get(1).ok_or(Err)?;
+        let start: usize = start.as_str().parse().map_err(|_| Err)?;
+        let start = start.saturating_sub(1); // proc_macro::Span offsets seem to be off-by-one
+        let end = captures.get(2).ok_or(Err)?;
+        let end: usize = end.as_str().parse().map_err(|_| Err)?;
+        let end = end.saturating_sub(1); // proc_macro::Span offsets seem to be off-by-one
+        Ok((start, end.saturating_sub(start)))
+    })();
+    let (start, end) = r.unwrap_or((0, 0));
+    SourceSpan::new(SourceOffset::from(start), SourceOffset::from(end))
 }

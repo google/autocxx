@@ -7,7 +7,6 @@
 // except according to those terms.
 
 use autocxx::prelude::*;
-
 include_cpp! {
     #include "input.h"
     safety!(unsafe_ffi)

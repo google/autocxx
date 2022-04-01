@@ -6,9 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn main() {
+fn main() -> miette::Result<()> {
     let path = std::path::PathBuf::from("src");
-    let mut b = autocxx_build::Builder::new("src/main.rs", &[&path]).expect_build();
+    let mut b = autocxx_build::Builder::new("src/main.rs", &[&path]).build()?;
     b.flag_if_supported("-std=c++17")       // clang
         .flag_if_supported("/std:c++17")    // msvc
         .file("src/fake-chromium-src.cc")
@@ -16,4 +16,5 @@ fn main() {
     println!("cargo:rerun-if-changed=src/main.rs");
     println!("cargo:rerun-if-changed=src/fake-chromium-src.cc");
     println!("cargo:rerun-if-changed=src/fake-chromium-header.h");
+    Ok(())
 }

@@ -8,7 +8,7 @@
 
 [package]
 name = "autocxx-mdbook-preprocessor"
-version = "0.17.5"
+version = "0.18.0"
 authors = ["adetaylor <adetaylor@chromium.org>"]
 edition = "2021"
 

@@ -6,11 +6,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn main() {
+fn main() -> miette::Result<()> {
     let path = std::path::PathBuf::from("src");
     let mut b = autocxx_build::Builder::new("src/main.rs", &[&path])
         .auto_allowlist(true)
-        .expect_build();
+        .build()?;
     b.flag_if_supported("-std=c++17")
         .file("src/messages.cc")
         .compile("autocxx-subclass-example");
@@ -21,7 +21,8 @@ fn main() {
     // The following line is *unrelated* to autocxx builds and is
     // just designed to ensure that example code doesn't get out of sync
     // from copies in comments.
-    ensure_comments_match_real_code(&std::path::PathBuf::from("src/main.rs"))
+    ensure_comments_match_real_code(&std::path::PathBuf::from("src/main.rs"));
+    Ok(())
 }
 
 use std::fs::File;
