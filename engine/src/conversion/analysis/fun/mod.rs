@@ -310,7 +310,6 @@ impl<'a> FnAnalyzer<'a> {
             Api::typedef_unchanged,
         );
         let mut results = me.add_constructors_present(results);
-        me.add_subclass_constructors(&mut results);
         results.extend(me.extra_apis.into_iter().map(add_analysis));
         results
     }
@@ -448,41 +447,6 @@ impl<'a> FnAnalyzer<'a> {
                 },
             },
         }
-    }
-
-    fn add_subclass_constructors(&mut self, apis: &mut ApiVec<FnPrePhase2>) {
-        let mut results = ApiVec::new();
-        for api in apis.iter() {
-            if let Api::Function {
-                fun,
-                analysis:
-                    analysis @ FnAnalysis {
-                        kind:
-                            FnKind::Method {
-                                impl_for: sup,
-                                method_kind: MethodKind::Constructor { .. },
-                                ..
-                            },
-                        ..
-                    },
-                ..
-            } = api
-            {
-                for sub in self.subclasses_by_superclass(sup) {
-                    // Create a subclass constructor. This is a synthesized function
-                    // which didn't exist in the original C++.
-                    let (subclass_constructor_func, subclass_constructor_name) =
-                        create_subclass_constructor(sub, analysis, sup, fun);
-                    self.analyze_and_add(
-                        subclass_constructor_name.clone(),
-                        subclass_constructor_func.clone(),
-                        &mut results,
-                        TypeConversionSophistication::Regular,
-                    );
-                }
-            }
-        }
-        apis.extend(results.into_iter());
     }
 
     /// Analyze a given function, and any permutations of that function which
