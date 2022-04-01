@@ -232,6 +232,16 @@ pub(crate) struct PodAndDepAnalysis {
     pub(crate) constructors: PublicConstructors,
 }
 
+/// Analysis phase after we've finished analyzing functions and determined
+/// which constructors etc. belong to them.
+pub(crate) struct FnPhase;
+
+impl AnalysisPhase for FnPhase {
+    type TypedefAnalysis = TypedefAnalysis;
+    type StructAnalysis = PodAndDepAnalysis;
+    type FunAnalysis = FnAnalysis;
+}
+
 /// Indicates which kinds of public constructors are known to exist for a type.
 #[derive(Debug, Default, Copy, Clone)]
 pub(crate) struct PublicConstructors {
@@ -246,16 +256,6 @@ impl PublicConstructors {
             destructor: items_found.destructor.callable_any(),
         }
     }
-}
-
-/// Analysis phase after we've finished analyzing functions and determined
-/// which constructors etc. belong to them.
-pub(crate) struct FnPhase;
-
-impl AnalysisPhase for FnPhase {
-    type TypedefAnalysis = TypedefAnalysis;
-    type StructAnalysis = PodAndDepAnalysis;
-    type FunAnalysis = FnAnalysis;
 }
 
 /// Whether to allow highly optimized calls because this is a simple Rust->C++ call,
