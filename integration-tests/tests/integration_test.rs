@@ -3811,8 +3811,8 @@ fn test_ulong() {
 #[test]
 fn test_typedef_to_ulong() {
     let hdr = indoc! {"
-        #include <cstddef>
-        inline size_t daft(size_t a) { return a; }
+        typedef unsigned long fiddly;
+        inline fiddly daft(fiddly a) { return a; }
     "};
     let rs = quote! {
         assert_eq!(ffi::daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
@@ -8823,7 +8823,6 @@ fn size_and_alignment_test(pod: bool) {
     let allowlist_both: Vec<&str> = allowlist_both.iter().map(AsRef::as_ref).collect_vec();
     let rs = TYPES.iter().fold(
         quote! {
-            use std::convert::TryInto;
         },
         |mut accumulator, (name, _)| {
             let get_align_symbol =
@@ -8832,8 +8831,8 @@ fn size_and_alignment_test(pod: bool) {
                 proc_macro2::Ident::new(&format!("get_sizeof_{}", name), Span::call_site());
             let type_symbol = proc_macro2::Ident::new(name, Span::call_site());
             accumulator.extend(quote! {
-                let c_size: usize = ffi::#get_size_symbol().0.try_into().unwrap();
-                let c_align: usize = ffi::#get_align_symbol().0.try_into().unwrap();
+                let c_size = ffi::#get_size_symbol();
+                let c_align = ffi::#get_align_symbol();
                 assert_eq!(std::mem::size_of::<ffi::#type_symbol>(), c_size);
                 assert_eq!(std::mem::align_of::<ffi::#type_symbol>(), c_align);
             });
