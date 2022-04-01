@@ -10283,6 +10283,25 @@ fn test_doc_comments_survive() {
     );
 }
 
+#[test]
+fn test_pass_rust_str_and_return_struct() {
+    let cxx = indoc! {"
+        A take_str_return_struct(rust::Str) {
+            A a;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct A {};
+        A take_str_return_struct(rust::Str);
+    "};
+    let rs = quote! {
+        ffi::take_str_return_struct("hi");
+    };
+    run_test(cxx, hdr, rs, &["take_str_return_struct"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
