@@ -58,8 +58,8 @@ use self::{
     implicit_constructors::{find_constructors_present, ItemsFound},
     overload_tracker::OverloadTracker,
     subclass::{
-        create_subclass_constructor, create_subclass_fn_wrapper, create_subclass_function,
-        create_subclass_trait_item,
+        create_subclass_constructor, create_subclass_destructor, create_subclass_fn_wrapper,
+        create_subclass_function, create_subclass_trait_item,
     },
 };
 
@@ -560,6 +560,22 @@ impl<'a> FnAnalyzer<'a> {
                     self.analyze_and_add(
                         subclass_constructor_name.clone(),
                         subclass_constructor_func.clone(),
+                        &mut results,
+                        TypeConversionSophistication::Regular,
+                    );
+                }
+            }
+            FnKind::TraitMethod {
+                kind: TraitMethodKind::Destructor,
+                impl_for: sup,
+                ..
+            } => {
+                for sub in self.subclasses_by_superclass(sup) {
+                    let (subclass_destructor_func, subclass_destructor_name) =
+                        create_subclass_destructor(sub, &fun);
+                    self.analyze_and_add(
+                        subclass_destructor_name.clone(),
+                        subclass_destructor_func.clone(),
                         &mut results,
                         TypeConversionSophistication::Regular,
                     );

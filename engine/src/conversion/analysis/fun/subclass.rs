@@ -245,3 +245,38 @@ pub(super) fn create_subclass_constructor(
     );
     (maybe_wrap, subclass_constructor_name)
 }
+
+pub(super) fn create_subclass_destructor(
+    sub: SubclassName,
+    fun: &FuncToConvert,
+) -> (Box<FuncToConvert>, ApiName) {
+    let cpp = sub.cpp();
+    let subclass_destructor_name = make_ident(format!(
+        "{}_{}_destructor",
+        cpp.get_final_item(),
+        cpp.get_final_item()
+    ));
+    let maybe_wrap = Box::new(FuncToConvert {
+        ident: subclass_destructor_name.clone(),
+        doc_attrs: fun.doc_attrs.clone(),
+        inputs: fun.inputs.clone(),
+        output: fun.output.clone(),
+        vis: fun.vis.clone(),
+        virtualness: Virtualness::None,
+        cpp_vis: CppVisibility::Public,
+        special_member: fun.special_member.clone(),
+        original_name: None,
+        unused_template_param: fun.unused_template_param,
+        references: fun.references.clone(),
+        synthesized_this_type: Some(cpp.clone()),
+        self_ty: Some(cpp),
+        add_to_trait: None,
+        is_deleted: fun.is_deleted,
+        synthetic_cpp: None,
+        provenance: Provenance::SynthesizedOther,
+    });
+    let cpp_name = format!("{}_destructor", sub.cpp().get_final_item().to_string());
+    let subclass_destructor_name =
+        ApiName::new_with_cpp_name(&Namespace::new(), subclass_destructor_name, Some(cpp_name));
+    (maybe_wrap, subclass_destructor_name)
+}
