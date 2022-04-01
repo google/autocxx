@@ -496,6 +496,14 @@ fn create_type_database() -> TypeDatabase {
         true,
     ));
     db.insert(TypeDetails::new(
+        "usize",
+        "size_t",
+        Behavior::CByValue,
+        None,
+        true,
+        true,
+    ));
+    db.insert(TypeDetails::new(
         "autocxx::c_void",
         "void",
         Behavior::CVoid,

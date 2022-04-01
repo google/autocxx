@@ -12,7 +12,8 @@ use crate::{
         SkipCxxGen,
     },
     code_checkers::{
-        make_error_finder, make_string_finder, CppCounter, CppMatcher, NoSystemHeadersChecker,
+        make_error_finder, make_rust_code_finder, make_string_finder, CppCounter, CppMatcher,
+        NoSystemHeadersChecker,
     },
 };
 use autocxx_integration_tests::{
@@ -5940,7 +5941,7 @@ fn test_size_t() {
     "};
 
     let rs = quote! {
-        ffi::get_count()
+        ffi::get_count();
     };
 
     run_test_ex(
@@ -5949,7 +5950,9 @@ fn test_size_t() {
         rs,
         directives_from_lists(&["get_count"], &[], None),
         None,
-        Some(make_string_finder(vec!["fn get_count() -> usize".into()])),
+        Some(make_rust_code_finder(vec![
+            quote! {fn get_count() -> usize},
+        ])),
         None,
     );
 }

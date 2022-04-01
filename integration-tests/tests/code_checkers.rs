@@ -83,9 +83,7 @@ struct StringFinder(Vec<String>);
 
 impl CodeCheckerFns for StringFinder {
     fn check_rust(&self, rs: syn::File) -> Result<(), TestError> {
-        let mut ts = TokenStream::new();
-        rs.to_tokens(&mut ts);
-        let toks = ts.to_string();
+        let toks = rs.to_token_stream().to_string();
         for msg in &self.0 {
             if !toks.contains(msg) {
                 return Err(TestError::RsCodeExaminationFail(format!(
@@ -101,6 +99,29 @@ impl CodeCheckerFns for StringFinder {
 /// Returns a code checker which simply hunts for a given string in the results
 pub(crate) fn make_string_finder(error_texts: Vec<String>) -> CodeChecker {
     Box::new(StringFinder(error_texts))
+}
+
+struct RustCodeFinder(Vec<TokenStream>);
+
+impl CodeCheckerFns for RustCodeFinder {
+    fn check_rust(&self, rs: syn::File) -> Result<(), TestError> {
+        let haystack = rs.to_token_stream().to_string();
+        for msg in &self.0 {
+            let needle = msg.to_string();
+            if !haystack.contains(&needle) {
+                return Err(TestError::RsCodeExaminationFail(format!(
+                    "Couldn't find tokens '{}'",
+                    needle
+                )));
+            };
+        }
+        Ok(())
+    }
+}
+
+/// Returns a code checker which hunts for the given Rust tokens in the output
+pub(crate) fn make_rust_code_finder(code: Vec<TokenStream>) -> CodeChecker {
+    Box::new(RustCodeFinder(code))
 }
 
 /// Counts the number of generated C++ files.

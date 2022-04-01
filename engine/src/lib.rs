@@ -282,6 +282,7 @@ impl IncludeCppEngine {
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
             })
+            .size_t_is_usize(true)
             .enable_cxx_namespaces()
             .generate_inline_functions(true)
             .respect_cxx_access_specs(true)
