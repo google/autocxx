@@ -5933,6 +5933,28 @@ fn test_int_vector() {
 }
 
 #[test]
+fn test_size_t() {
+    let hdr = indoc! {"
+        #include <cstddef>
+        inline size_t get_count() { return 7; }
+    "};
+
+    let rs = quote! {
+        ffi::get_count()
+    };
+
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["get_count"], &[], None),
+        None,
+        make_string_finder(vec!["pub fn get_count() -> usize".into()]),
+        None,
+    );
+}
+
+#[test]
 fn test_deleted_function() {
     // We shouldn't generate bindings for deleted functions.
     // The test is successful if the bindings compile, i.e. if autocxx doesn't
