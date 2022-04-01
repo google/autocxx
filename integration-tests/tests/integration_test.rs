@@ -5949,7 +5949,7 @@ fn test_size_t() {
         rs,
         directives_from_lists(&["get_count"], &[], None),
         None,
-        make_string_finder(vec!["pub fn get_count() -> usize".into()]),
+        Some(make_string_finder(vec!["fn get_count() -> usize".into()])),
         None,
     );
 }
