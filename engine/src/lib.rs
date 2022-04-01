@@ -684,14 +684,14 @@ fn proc_macro_span_to_miette_span(span: &proc_macro2::Span, source: &str) -> Sou
     // proc_macro spans are 1-indexed, miette is 0-indexed
     let start = SourceOffset::from_location(
         source,
-        start.line.checked_sub(1).unwrap_or(0),
-        start.column.checked_sub(1).unwrap_or(0),
+        start.line.saturating_sub(1),
+        start.column.saturating_sub(1),
     );
     let end = SourceOffset::from_location(
         source,
-        end.line.checked_sub(1).unwrap_or(0),
-        end.column.checked_sub(1).unwrap_or(0),
+        end.line.saturating_sub(1),
+        end.column.saturating_sub(1),
     );
-    let end = SourceOffset::from(end.offset().checked_sub(start.offset()).unwrap_or(0));
+    let end = SourceOffset::from(end.offset().saturating_sub(start.offset()));
     SourceSpan::new(start, end)
 }
