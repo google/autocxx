@@ -47,6 +47,7 @@ strum_macros = "0.24"
 serde_json = { version = "1.0", optional = true }
 miette = "4.3"
 thiserror = "1"
+regex = "1.5"
 
 [dependencies.syn]
 version = "1.0.39"

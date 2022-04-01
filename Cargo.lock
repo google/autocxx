@@ -154,6 +154,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
+ "regex",
  "serde_json",
  "strum_macros",
  "syn",

@@ -30,7 +30,7 @@ pub enum ParseError {
     FileOpen(std::io::Error),
     #[error("the .rs file couldn't be read: {0}")]
     FileRead(std::io::Error),
-    #[error("syntax error interpreting Rust code")]
+    #[error("syntax error interpreting Rust code: {0}")]
     #[diagnostic(transparent)]
     Syntax(LocatedSynError),
     #[error("generate!/generate_ns! was used at the same time as generate_all!")]

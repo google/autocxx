@@ -33,6 +33,7 @@ use miette::{SourceOffset, SourceSpan};
 use parse_callbacks::AutocxxParseCallbacks;
 use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
+use regex::Regex;
 use std::path::PathBuf;
 use std::{
     fs::File,
@@ -85,7 +86,7 @@ pub struct GeneratedCpp(pub Vec<CppFilePair>);
 /// A [`syn::Error`] which also implements [`miette::Diagnostic`] so can be pretty-printed
 /// to show the affected span of code.
 #[derive(Error, Debug, Diagnostic)]
-#[error("syntax error")]
+#[error("{err}")]
 pub struct LocatedSynError {
     err: syn::Error,
     #[source_code]
@@ -96,7 +97,7 @@ pub struct LocatedSynError {
 
 impl LocatedSynError {
     fn new(err: syn::Error, file: &str) -> Self {
-        let span = proc_macro_span_to_miette_span(&err.span(), file);
+        let span = proc_macro_span_to_miette_span(&err.span());
         Self {
             err,
             file: file.to_string(),
@@ -678,20 +679,25 @@ pub struct CppCodegenOptions<'a> {
     pub skip_cxx_gen: bool,
 }
 
-fn proc_macro_span_to_miette_span(span: &proc_macro2::Span, source: &str) -> SourceSpan {
-    let start = span.start();
-    let end = span.end();
-    // proc_macro spans are 1-indexed, miette is 0-indexed
-    let start = SourceOffset::from_location(
-        source,
-        start.line.saturating_sub(1),
-        start.column.saturating_sub(1),
-    );
-    let end = SourceOffset::from_location(
-        source,
-        end.line.saturating_sub(1),
-        end.column.saturating_sub(1),
-    );
-    let end = SourceOffset::from(end.offset().saturating_sub(start.offset()));
-    SourceSpan::new(start, end)
+fn proc_macro_span_to_miette_span(span: &proc_macro2::Span) -> SourceSpan {
+    // A proc_macro2::Span stores its location as a byte offset. But there are
+    // no APIs to get that offset out.
+    // We could use `.start()` and `.end()` to get the line + column numbers, but it appears
+    // they're a little buggy. Hence we do this, to get the offsets directly across into
+    // miette.
+    struct Err;
+    let r: Result<(usize, usize), Err> = (|| {
+        let span_desc = format!("{:?}", span);
+        let re = Regex::new(r"(\d+)..(\d+)").unwrap();
+        let captures = re.captures(&span_desc).ok_or(Err)?;
+        let start = captures.get(1).ok_or(Err)?;
+        let start: usize = start.as_str().parse().map_err(|_| Err)?;
+        let start = start.saturating_sub(1); // proc_macro::Span offsets seem to be off-by-one
+        let end = captures.get(2).ok_or(Err)?;
+        let end: usize = end.as_str().parse().map_err(|_| Err)?;
+        let end = end.saturating_sub(1); // proc_macro::Span offsets seem to be off-by-one
+        Ok((start, end.saturating_sub(start)))
+    })();
+    let (start, end) = r.unwrap_or((0, 0));
+    SourceSpan::new(SourceOffset::from(start), SourceOffset::from(end))
 }
