@@ -37,7 +37,6 @@ where
             None
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
-            eprintln!("Ignored item {}: {}", ctx, err);
             let id = match ctx.get_type() {
                 ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => id,
                 ErrorContextType::Method { self_ty, .. } => self_ty,
@@ -180,7 +179,6 @@ fn api_or_error<T: AnalysisPhase + 'static>(
     match api_or_error {
         Ok(opt) => opt,
         Err(ConvertErrorWithContext(err, ctx)) => {
-            eprintln!("Ignored {}: {}", name.cpp_name(), err);
             Box::new(std::iter::once(Api::IgnoredItem { name, err, ctx }))
         }
     }
