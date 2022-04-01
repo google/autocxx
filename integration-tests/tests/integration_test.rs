@@ -10263,6 +10263,55 @@ fn test_doc_comments_survive() {
     );
 }
 
+#[test]
+fn test_pass_rust_str_and_return_struct() {
+    // we can take a str
+    let cxx = indoc! {"
+        A return_struct() {
+            A a;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        struct A {};
+        A return_struct();
+    "};
+    let rs = quote! {
+        ffi::return_struct();
+    };
+    run_test(cxx, hdr, rs, &["return_struct"], &[]);
+
+    // we can return a struct
+    let cxx = indoc! {"
+        void take_str(rust::Str) {}
+    "};
+    let hdr = indoc! {"
+        #include <cxx.h>
+        void take_str(rust::Str);
+    "};
+    let rs = quote! {
+        ffi::take_str("hi");
+    };
+    run_test(cxx, hdr, rs, &["take_str"], &[]);
+
+    // but we cant do both at the same time
+    let cxx = indoc! {"
+        A take_str_return_struct(rust::Str) {
+            A a;
+            return a;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct A {};
+        A take_str_return_struct(rust::Str);
+    "};
+    let rs = quote! {
+        ffi::take_str_return_struct("hi");
+    };
+    run_test(cxx, hdr, rs, &["take_str_return_struct"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
