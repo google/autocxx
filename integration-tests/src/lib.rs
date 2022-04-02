@@ -101,7 +101,9 @@ impl LinkableTryBuilder {
         let temp_path = self.temp_dir.path().to_str().unwrap();
         let mut rustflags = format!("-L {}", temp_path);
         if std::env::var_os("AUTOCXX_ASAN").is_some() {
-            rustflags.push_str(" -Z sanitizer=address -Clink-arg=-fuse-ld=lld -Clink-arg=-fsanitize=address");
+            rustflags.push_str(
+                " -Z sanitizer=address -Clink-arg=-fuse-ld=lld -Clink-arg=-fsanitize=address",
+            );
         }
         std::env::set_var("RUSTFLAGS", rustflags);
         std::env::set_var("AUTOCXX_RS", temp_path);
