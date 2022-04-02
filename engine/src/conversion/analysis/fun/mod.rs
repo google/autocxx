@@ -1975,7 +1975,7 @@ impl<'a> FnAnalyzer<'a> {
 fn constructor_with_suffix<'a>(rust_name: &'a str, nested_type_ident: &str) -> Option<&'a str> {
     let suffix = rust_name.strip_prefix(nested_type_ident);
     suffix.and_then(|suffix| {
-        if suffix.parse::<u32>().is_ok() {
+        if suffix.is_empty() || suffix.parse::<u32>().is_ok() {
             Some(suffix)
         } else {
             None
