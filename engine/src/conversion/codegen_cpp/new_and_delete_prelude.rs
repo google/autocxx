@@ -35,10 +35,10 @@ pub(super) static NEW_AND_DELETE_PRELUDE: &str = indoc! {"
     template <typename T> void *new_imp(size_t count, long) {
       return ::operator new(count);
     }
-    template <typename T> T *new_appropriately(size_t count) {
+    template <typename T> T *new_appropriately() {
       // 0 is a better match for the first 'delete_imp' so will match
       // preferentially.
-      return static_cast<T *>(new_imp<T>(count, 0));
+      return static_cast<T *>(new_imp<T>(sizeof(T), 0));
     }
     #endif // AUTOCXX_NEW_AND_DELETE_PRELUDE
 "};
