@@ -101,7 +101,7 @@ pub enum ConvertError {
     MethodOfNonAllowlistedType,
     #[error("This type is templated, so we can't generate bindings. We will instead generate bindings for each instantiation.")]
     MethodOfGenericType,
-    #[error("bindgen generated multiple different APIs (functions/types) with this name. autocxx doesn't know how to diambiguate them, so we won't generate bindings for any of them.")]
+    #[error("bindgen generated multiple different APIs (functions/types) with this name. autocxx doesn't know how to disambiguate them, so we won't generate bindings for any of them.")]
     DuplicateItemsFoundInParsing,
     #[error(
         "bindgen generated a move or copy constructor with an unexpected number of parameters."

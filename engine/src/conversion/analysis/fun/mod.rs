@@ -915,7 +915,9 @@ impl<'a> FnAnalyzer<'a> {
                     params = params.into_iter().skip(1).collect();
                     param_details.remove(0);
                     MethodKind::MakeUnique
-                } else if let Some(constructor_suffix) = rust_name.strip_prefix(nested_type_ident) {
+                } else if let Some(constructor_suffix) =
+                    constructor_with_suffix(&rust_name, nested_type_ident)
+                {
                     // It's a constructor. bindgen generates
                     // fn Type(this: *mut Type, ...args)
                     // We want
@@ -1966,6 +1968,19 @@ impl<'a> FnAnalyzer<'a> {
         );
         apis.append(&mut any_errors);
     }
+}
+
+/// Attempts to determine whether this function name is a constructor, and if so,
+/// returns the suffix.
+fn constructor_with_suffix<'a>(rust_name: &'a str, nested_type_ident: &str) -> Option<&'a str> {
+    let suffix = rust_name.strip_prefix(nested_type_ident);
+    suffix.and_then(|suffix| {
+        if suffix.is_empty() || suffix.parse::<u32>().is_ok() {
+            Some(suffix)
+        } else {
+            None
+        }
+    })
 }
 
 fn error_context_for_method(self_ty: &QualifiedName, rust_name: &str) -> ErrorContext {
