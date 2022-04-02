@@ -8704,6 +8704,17 @@ fn test_abstract_private() {
 }
 
 #[test]
+fn test_abstract_issue_979() {
+    let hdr = indoc! {"
+    class Test {
+        virtual void TestBody() = 0;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["Test"], &[]);
+}
+
+#[test]
 fn test_class_having_protected_method() {
     let hdr = indoc! {"
     #include <cstdint>
