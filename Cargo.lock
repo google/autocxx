@@ -87,7 +87,7 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "autocxx"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "aquamarine",
  "autocxx-macro",
@@ -121,7 +121,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-build"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "autocxx-engine",
  "env_logger 0.9.0",
@@ -130,7 +130,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-demo"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "autocxx",
  "autocxx-build",
@@ -140,7 +140,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-engine"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "aquamarine",
  "autocxx-bindgen",
@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-gen"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "assert_cmd",
  "autocxx-engine",
@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-macro"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "autocxx-parser",
  "proc-macro-error",
@@ -213,7 +213,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-mdbook-preprocessor"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "autocxx-integration-tests",
@@ -231,7 +231,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-parser"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "log",
  "proc-macro2",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-reduce"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "assert_cmd",
  "autocxx-engine",

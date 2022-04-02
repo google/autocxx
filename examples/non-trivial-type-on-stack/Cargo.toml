@@ -14,8 +14,8 @@ edition = "2021"
 
 [dependencies]
 cxx = "1.0.54"
-autocxx = { path = "../..", version="0.18.0" }
+autocxx = { path = "../..", version="0.19.0" }
 
 [build-dependencies]
-autocxx-build = { path = "../../gen/build", version="0.18.0" }
+autocxx-build = { path = "../../gen/build", version="0.19.0" }
 miette = { version="4.3", features = [ "fancy" ] }
