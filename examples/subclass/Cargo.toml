@@ -16,12 +16,12 @@ edition = "2021"
 
 [dependencies]
 cxx = "1.0.54"
-autocxx = { path = "../..", version="0.18.0" }
+autocxx = { path = "../..", version="0.19.0" }
 uwuify = "0.2.2"
 textwrap = "0.14"
 fastrand = "1.5.0"
 
 [build-dependencies]
-autocxx-build = { path = "../../gen/build", version="0.18.0" }
+autocxx-build = { path = "../../gen/build", version="0.19.0" }
 regex = "1.5.4"
 miette = { version="4.3", features = [ "fancy" ] }
