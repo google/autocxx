@@ -915,7 +915,9 @@ impl<'a> FnAnalyzer<'a> {
                     params = params.into_iter().skip(1).collect();
                     param_details.remove(0);
                     MethodKind::MakeUnique
-                } else if let Some(constructor_suffix) = constructor_with_suffix(&rust_name, nested_type_ident) {
+                } else if let Some(constructor_suffix) =
+                    constructor_with_suffix(&rust_name, nested_type_ident)
+                {
                     // It's a constructor. bindgen generates
                     // fn Type(this: *mut Type, ...args)
                     // We want
