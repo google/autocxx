@@ -27,14 +27,14 @@ include_cpp! {
 fn main() {
     // Create a couple of R1Intervals using their pre-existing C++
     // constructors. Actually these will be cxx::UniquePtr<R1Interval>s.
-    let i1 = ffi::R1Interval::make_unique(1.0f64, 2.0f64);
-    let i2 = ffi::R1Interval::make_unique(5.0f64, 6.0f64);
+    let i1 = ffi::R1Interval::new(1.0f64, 2.0f64).within_unique_ptr();
+    let i2 = ffi::R1Interval::new(5.0f64, 6.0f64).within_unique_ptr();
     // Create a rect, passing references to the intervals.
     // Note this is 'make_unique1' because R2Rect has multiple
     // overloaded constructors. 'cargo expand' is useful here,
     // and there's work afoot to make this work nicely with
     // rust-analyzer to give IDE autocompletion.
-    let r = ffi::R2Rect::make_unique1(&i1, &i2);
+    let r = ffi::R2Rect::new(&i1, &i2).within_unique_ptr();
     // Call a method on one of these objects. As it happens,
     // this returns a
     // UniquePtr< ... opaque object representing a point ...>.

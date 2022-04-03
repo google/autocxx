@@ -143,6 +143,11 @@ pub(super) fn gen_function(
                     ),
                     impl_for,
                     &ret_type,
+                    if matches!(method_kind, MethodKind::MakeUnique) {
+                        Some("Instead, ensure you have imported autocxx::prelude::* (specifically the Within trait) and then use new().within_unique_ptr()")
+                    } else {
+                        None
+                    }
                 ));
             }
             FnKind::TraitMethod { ref details, .. } => {
@@ -263,6 +268,7 @@ impl<'a> FnGenerator<'a> {
         avoid_self: bool,
         impl_block_type_name: &QualifiedName,
         ret_type: &ReturnType,
+        deprecation: Option<&str>,
     ) -> Box<ImplBlockDetails> {
         let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(avoid_self);
         let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
@@ -278,9 +284,15 @@ impl<'a> FnGenerator<'a> {
         let call_body = self.wrap_call_with_unsafe(quote! {
             cxxbridge::#cxxbridge_name ( #(#arg_list),* )
         });
+        let deprecation = deprecation.map(|reason| {
+            quote! {
+                #[deprecated = #reason]
+            }
+        });
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
                 #(#doc_attrs)*
+                #deprecation
                 pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                     #local_variables
                     #call_body

@@ -219,7 +219,7 @@ include_cpp! {
 }
 
 fn main() {
-    let mut sloth = ffi::Sloth::make_unique();
+    let mut sloth = ffi::Sloth::new().within_unique_ptr();
     sloth.pin_mut().unpeel_from_tree();
     sloth.pin_mut().unpeel_from_tree();
 }

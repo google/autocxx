@@ -90,7 +90,7 @@ include_cpp! {
 }
 
 fn main() {
-    let mut goat = ffi::Goat::make_unique(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
+    let mut goat = ffi::Goat::new().within_unique_ptr(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
     goat.pin_mut().add_a_horn();
     goat.pin_mut().add_a_horn();
     assert_eq!(goat.describe().as_ref().unwrap().to_string_lossy(), "This goat has 2 horns.");
