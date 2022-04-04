@@ -169,15 +169,17 @@ a memcpy. Such self-referential pointers are common - even some implementations 
 <p>By default, <code>autocxx</code> generates non-POD types. You can request a POD type using <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod!</code></a>. Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++. (If you're <em>really</em> sure your type is freely relocatable, because you implemented the move constructor and destructor and you promise they're trivial, you can override these assertions using the C++ trait <code>IsRelocatable</code> per the instructions in <a href="https://github.com/dtolnay/cxx/blob/master/include/cxx.h">cxx.h</a>).</p>
 <p>See <a href="storage.html">the chapter on storage</a> for lots more detail on how you can hold onto non-POD types.</p>
 <h2 id="construction"><a class="header" href="#construction">Construction</a></h2>
-<p>Each constructor results in <em>two</em> Rust functions.</p>
+<p>Each constructor appears in Rust as a <code>new</code> function. But this does not return the object itself</p>
 <ul>
-<li>A <code>new</code> function exists, which
-offers a constructor per the standards of the <code>moveit</code> crate, and thus can be used
-to place the object on the Rust stack (as well as in various containers such as <code>Box</code>
-and <code>UniquePtr</code>)</li>
-<li>A <code>make_unique</code> function is also created, which constructs the item directly into
-a <code>cxx::UniquePtr</code>. This is more commonly what you want.</li>
+<li>it instead returns a <a href="https://docs.rs/moveit/latest/moveit/new/trait.New.html"><code>moveit::new::New</code></a>, which is simply instructions about how to create the object.
+To go ahead and actually create it, you then call either <code>.within_box()</code> or <code>.within_unique_ptr()</code>
+which will emplace the object into a Rust <a href="https://doc.rust-lang.org/std/boxed/struct.Box.html"><code>std::boxed::Box</code></a> or a <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>. You can also
+directly use the <code>New</code> object using <code>moveit</code>'s macros to create the object on the stack.</li>
 </ul>
+<p>Which should you use? For now, use <code>.within_unique_ptr()</code>. In other places, <code>autocxx</code> forces you to use
+<a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>, so this will give the most consistent overall experience. (This may change in future!)</p>
+<p>There is currently an additional <code>make_unique</code> function created, but this is deprecated. Use
+<code>.new().within_box()</code> or <code>new().within_unique_ptr()</code> instead.</p>
 <p>Multiple constructors (aka constructor overloading) follows the same <a href="cpp_functions.html#overloads---and-identifiers-ending-in-digits">rules as other functions</a>.</p>
 <h4 id="c-header"><a class="header" href="#c-header">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;stdint.h&gt;
@@ -207,7 +209,7 @@ fn main() {
     stack_obj.as_mut().set(42);
     assert_eq!(stack_obj.get(), 42);
 
-    let mut heap_obj = ffi::A::make_unique();
+    let mut heap_obj = ffi::A::new().within_unique_ptr();
     heap_obj.pin_mut().set(42);
     assert_eq!(heap_obj.get(), 42);
 }

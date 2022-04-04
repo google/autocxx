@@ -207,7 +207,7 @@ include_cpp! {
 }
 
 fn main() {
-    let mut goat = ffi::Goat::make_unique(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
+    let mut goat = ffi::Goat::new().within_unique_ptr(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
     goat.pin_mut().add_a_horn();
     goat.pin_mut().add_a_horn();
     assert_eq!(goat.describe().as_ref().unwrap().to_string_lossy(), &quot;This goat has 2 horns.&quot;);
@@ -430,7 +430,8 @@ for details on the naming of the generated files.</li>
 <p>Non-POD types can be stored:</p>
 <ul>
 <li>In a <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>. This is cxx's Rust wrapper for <code>std::unique_ptr</code> - so the object is stored in the C++ heap. Most of the time you handle a C++ object from <code>autocxx</code>, it will be stored in one of these.</li>
-<li>In a <a href="https://doc.rust-lang.org/std/boxed/struct.Box.html"><code>Box</code></a> - so the object is stored on the Rust heap. This is kind of pointless. Don't do this.</li>
+<li>In a <a href="https://doc.rust-lang.org/std/boxed/struct.Box.html"><code>Box</code></a> - so the object is stored on the Rust heap. This has the
+advantage that there's no possibility that the object can be NULL.</li>
 <li>On the Rust stack, using the <a href="https://docs.rs/moveit/latest/moveit/macro.moveit.html"><code>autocxx::moveit</code></a> macro.</li>
 </ul>
 <p>If in doubt, use <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>. It's simple and ergonomic.</p>
@@ -620,7 +621,7 @@ include_cpp! {
 }
 
 fn main() {
-    let _turducken = ffi::Turkey_Duck_Hen::make_unique();
+    let _turducken = ffi::Turkey_Duck_Hen::new().within_box();
 }
 
 </code></pre>
@@ -658,15 +659,17 @@ a memcpy. Such self-referential pointers are common - even some implementations 
 <p>By default, <code>autocxx</code> generates non-POD types. You can request a POD type using <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod!</code></a>. Don't worry: you can't mess this up. If the C++ type doesn't in fact comply with the requirements for a POD type, your build will fail thanks to some static assertions generated in the C++. (If you're <em>really</em> sure your type is freely relocatable, because you implemented the move constructor and destructor and you promise they're trivial, you can override these assertions using the C++ trait <code>IsRelocatable</code> per the instructions in <a href="https://github.com/dtolnay/cxx/blob/master/include/cxx.h">cxx.h</a>).</p>
 <p>See <a href="storage.html">the chapter on storage</a> for lots more detail on how you can hold onto non-POD types.</p>
 <h2 id="construction"><a class="header" href="#construction">Construction</a></h2>
-<p>Each constructor results in <em>two</em> Rust functions.</p>
+<p>Each constructor appears in Rust as a <code>new</code> function. But this does not return the object itself</p>
 <ul>
-<li>A <code>new</code> function exists, which
-offers a constructor per the standards of the <code>moveit</code> crate, and thus can be used
-to place the object on the Rust stack (as well as in various containers such as <code>Box</code>
-and <code>UniquePtr</code>)</li>
-<li>A <code>make_unique</code> function is also created, which constructs the item directly into
-a <code>cxx::UniquePtr</code>. This is more commonly what you want.</li>
+<li>it instead returns a <a href="https://docs.rs/moveit/latest/moveit/new/trait.New.html"><code>moveit::new::New</code></a>, which is simply instructions about how to create the object.
+To go ahead and actually create it, you then call either <code>.within_box()</code> or <code>.within_unique_ptr()</code>
+which will emplace the object into a Rust <a href="https://doc.rust-lang.org/std/boxed/struct.Box.html"><code>std::boxed::Box</code></a> or a <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>. You can also
+directly use the <code>New</code> object using <code>moveit</code>'s macros to create the object on the stack.</li>
 </ul>
+<p>Which should you use? For now, use <code>.within_unique_ptr()</code>. In other places, <code>autocxx</code> forces you to use
+<a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>, so this will give the most consistent overall experience. (This may change in future!)</p>
+<p>There is currently an additional <code>make_unique</code> function created, but this is deprecated. Use
+<code>.new().within_box()</code> or <code>new().within_unique_ptr()</code> instead.</p>
 <p>Multiple constructors (aka constructor overloading) follows the same <a href="cpp_functions.html#overloads---and-identifiers-ending-in-digits">rules as other functions</a>.</p>
 <h4 id="c-header-6"><a class="header" href="#c-header-6">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;stdint.h&gt;
@@ -696,7 +699,7 @@ fn main() {
     stack_obj.as_mut().set(42);
     assert_eq!(stack_obj.get(), 42);
 
-    let mut heap_obj = ffi::A::make_unique();
+    let mut heap_obj = ffi::A::new().within_unique_ptr();
     heap_obj.pin_mut().set(42);
     assert_eq!(heap_obj.get(), 42);
 }
@@ -855,7 +858,7 @@ include_cpp! {
 }
 
 fn main() {
-    let goat = ffi::Goat::make_unique(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
+    let goat = ffi::Goat::new().within_unique_ptr(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
     // C++-like semantics...
     ffi::feed_goat(&amp;goat);
     // ... you've still got the goat!
@@ -950,9 +953,9 @@ include_cpp! {
 }
 
 fn main() {
-    let view = ffi::View::make_unique();
+    let view = ffi::View::new().within_unique_ptr();
     ffi::saw(&amp;view);
-    let tree = ffi::Tree::make_unique();
+    let tree = ffi::Tree::new().within_unique_ptr();
     ffi::saw1(&amp;tree); // yuck, overload
 }
 
@@ -982,7 +985,7 @@ include_cpp! {
 }
 
 fn main() {
-    let sloth = ffi::Sloth::make_unique();
+    let sloth = ffi::Sloth::new().within_unique_ptr();
     sloth.sleep();
     sloth.sleep();
 }
@@ -1012,7 +1015,7 @@ include_cpp! {
 }
 
 fn main() {
-    let mut sloth = ffi::Sloth::make_unique();
+    let mut sloth = ffi::Sloth::new().within_unique_ptr();
     sloth.pin_mut().unpeel_from_tree();
     sloth.pin_mut().unpeel_from_tree();
 }
@@ -1284,6 +1287,8 @@ reference:</p>
 <p>Contributions of more examples to the <code>examples</code> directory are much appreciated!</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="credits"><a class="header" href="#credits">Credits</a></h1>
 <p>David Tolnay did much of the hard work here, by inventing the underlying cxx crate, and in fact nearly all of the parsing infrastructure on which this crate depends. <code>bindgen</code> is also awesome. This crate stands on the shoulders of giants!</p>
+<p>Miguel Young also did all the hard thinking about whether non-trivial C++ objects can safely exist on the Rust
+stack. They can! He also draws nifty cartoons. </p>
 <p>Thanks to all the other contributors to cxx, bindgen and autocxx.</p>
 <p>And thanks to <a href="https://www.chromium.org/Home/chromium-security/memory-safety/rust-and-c-interoperability/">all in the Chromium community for inspiring this tool</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-contribute"><a class="header" href="#how-to-contribute">How to Contribute</a></h1>

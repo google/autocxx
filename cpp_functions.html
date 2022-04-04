@@ -166,7 +166,7 @@ include_cpp! {
 }
 
 fn main() {
-    let goat = ffi::Goat::make_unique(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
+    let goat = ffi::Goat::new().within_unique_ptr(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
     // C++-like semantics...
     ffi::feed_goat(&amp;goat);
     // ... you've still got the goat!
@@ -261,9 +261,9 @@ include_cpp! {
 }
 
 fn main() {
-    let view = ffi::View::make_unique();
+    let view = ffi::View::new().within_unique_ptr();
     ffi::saw(&amp;view);
-    let tree = ffi::Tree::make_unique();
+    let tree = ffi::Tree::new().within_unique_ptr();
     ffi::saw1(&amp;tree); // yuck, overload
 }
 
@@ -293,7 +293,7 @@ include_cpp! {
 }
 
 fn main() {
-    let sloth = ffi::Sloth::make_unique();
+    let sloth = ffi::Sloth::new().within_unique_ptr();
     sloth.sleep();
     sloth.sleep();
 }
@@ -323,7 +323,7 @@ include_cpp! {
 }
 
 fn main() {
-    let mut sloth = ffi::Sloth::make_unique();
+    let mut sloth = ffi::Sloth::new().within_unique_ptr();
     sloth.pin_mut().unpeel_from_tree();
     sloth.pin_mut().unpeel_from_tree();
 }
