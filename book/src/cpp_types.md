@@ -37,14 +37,17 @@ See [the chapter on storage](storage.md) for lots more detail on how you can hol
 
 ## Construction
 
-Each constructor results in _two_ Rust functions.
+Each constructor appears in Rust as a `new` function. But this does not return the object itself
+- it instead returns a [`moveit::new::New`](https://docs.rs/moveit/latest/moveit/new/trait.New.html), which is simply instructions about how to create the object.
+To go ahead and actually create it, you then call either `.within_box()` or `.within_unique_ptr()`
+which will emplace the object into a Rust [`std::boxed::Box`](https://doc.rust-lang.org/std/boxed/struct.Box.html) or a [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html). You can also
+directly use the `New` object using `moveit`'s macros to create the object on the stack.
 
-* A `new` function exists, which
-  offers a constructor per the standards of the `moveit` crate, and thus can be used
-  to place the object on the Rust stack (as well as in various containers such as `Box`
-  and `UniquePtr`)
-* A `make_unique` function is also created, which constructs the item directly into
-  a `cxx::UniquePtr`. This is more commonly what you want.
+Which should you use? For now, use `.within_unique_ptr()`. In other places, `autocxx` forces you to use
+[`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html), so this will give the most consistent overall experience. (This may change in future!)
+
+There is currently an additional `make_unique` function created, but this is deprecated. Use
+`.new().within_box()` or `new().within_unique_ptr()` instead.
 
 Multiple constructors (aka constructor overloading) follows the same [rules as other functions](cpp_functions.html#overloads---and-identifiers-ending-in-digits).
 
@@ -77,7 +80,7 @@ fn main() {
     stack_obj.as_mut().set(42);
     assert_eq!(stack_obj.get(), 42);
 
-    let mut heap_obj = ffi::A::make_unique();
+    let mut heap_obj = ffi::A::new().within_unique_ptr();
     heap_obj.pin_mut().set(42);
     assert_eq!(heap_obj.get(), 42);
 }

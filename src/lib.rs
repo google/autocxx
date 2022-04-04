@@ -305,6 +305,8 @@ macro_rules! usage {
     };
 }
 
+use std::pin::Pin;
+
 #[doc(hidden)]
 pub use autocxx_macro::include_cpp_impl;
 
@@ -447,6 +449,35 @@ pub trait PinMut<T>: AsRef<T> {
     fn pin_mut(&mut self) -> std::pin::Pin<&mut T>;
 }
 
+/// Provides utility functions to emplace any [`moveit::New`] into a [`Box`]
+/// or a [`cxx::UniquePtr`]. Automatically imported by the autocxx prelude
+/// and implemented by any (autocxx-related) [`moveit::New`].
+pub trait Within {
+    type Inner: UniquePtrTarget;
+    fn within_box(self) -> Pin<Box<Self::Inner>>;
+    fn within_unique_ptr(self) -> cxx::UniquePtr<Self::Inner>;
+}
+
+use moveit::MakeCppStorage;
+use moveit::{Emplace, EmplaceUnpinned};
+
+impl<N, T> Within for N
+where
+    N: New<Output = T>,
+    T: UniquePtrTarget + MakeCppStorage,
+{
+    type Inner = T;
+    fn within_box(self) -> Pin<Box<T>> {
+        Box::emplace(self)
+    }
+    fn within_unique_ptr(self) -> cxx::UniquePtr<T> {
+        UniquePtr::emplace(self)
+    }
+}
+
+use cxx::memory::UniquePtrTarget;
+use cxx::UniquePtr;
+use moveit::New;
 pub use value_param::as_copy;
 pub use value_param::as_mov;
 pub use value_param::as_new;
@@ -472,6 +503,7 @@ pub mod prelude {
     pub use crate::include_cpp;
     pub use crate::PinMut;
     pub use crate::ValueParam;
+    pub use crate::Within;
     pub use cxx::UniquePtr;
     pub use moveit::moveit;
     pub use moveit::new::New;

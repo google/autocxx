@@ -687,7 +687,8 @@ impl<'a> RsCodeGenerator<'a> {
             bindgen_mod_items.push(parse_quote! {
                 impl autocxx::subclass::CppPeerConstructor<#cpp_id> for super::super::super::#id {
                     fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<#cpp_path> {
-                        #cpp_id :: make_unique(peer_holder)
+                        use autocxx::moveit::EmplaceUnpinned;
+                        cxx::UniquePtr::emplace(#cpp_id :: new(peer_holder))
                     }
                 }
             })
