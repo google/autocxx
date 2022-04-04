@@ -38,15 +38,15 @@ See [the chapter on storage](storage.md) for lots more detail on how you can hol
 ## Construction
 
 Each constructor appears in Rust as a `new` function. But this does not return the object itself
-- it instead returns a [`moveit::New`], which is simply instructions about how to create the object.
+- it instead returns a [`moveit::new::New`](https://docs.rs/moveit/latest/moveit/new/trait.New.html), which is simply instructions about how to create the object.
 To go ahead and actually create it, you then call either `.within_box()` or `.within_unique_ptr()`
-which will emplace the object into a Rust [`std::boxed::Box`] or a [`cxx::UniquePtr`]. You can also
+which will emplace the object into a Rust [`std::boxed::Box`](https://doc.rust-lang.org/std/boxed/struct.Box.html) or a [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html). You can also
 directly use the `New` object using `moveit`'s macros to create the object on the stack.
 
 Which should you use? For now, use `.within_unique_ptr()`. In other places, `autocxx` forces you to use
-[`cxx::UniquePtr`], so this will give the most consistent overall experience. (This may change in future!)
+[`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html), so this will give the most consistent overall experience. (This may change in future!)
 
-There is currently an additional [`make_unique`] function created, but this is deprecated. Use
+There is currently an additional `make_unique` function created, but this is deprecated. Use
 `.new().within_box()` or `new().within_unique_ptr()` instead.
 
 Multiple constructors (aka constructor overloading) follows the same [rules as other functions](cpp_functions.html#overloads---and-identifiers-ending-in-digits).
