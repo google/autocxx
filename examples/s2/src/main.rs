@@ -30,11 +30,10 @@ fn main() {
     let i1 = ffi::R1Interval::new(1.0f64, 2.0f64).within_unique_ptr();
     let i2 = ffi::R1Interval::new(5.0f64, 6.0f64).within_unique_ptr();
     // Create a rect, passing references to the intervals.
-    // Note this is 'make_unique1' because R2Rect has multiple
-    // overloaded constructors. 'cargo expand' is useful here,
-    // and there's work afoot to make this work nicely with
-    // rust-analyzer to give IDE autocompletion.
-    let r = ffi::R2Rect::new(&i1, &i2).within_unique_ptr();
+    // Note this is 'new1' because R2Rect has multiple
+    // overloaded constructors. 'cargo expand', `cargo doc`
+    // or a rust-analyzer IDE is useful here.
+    let r = ffi::R2Rect::new1(&i1, &i2).within_unique_ptr();
     // Call a method on one of these objects. As it happens,
     // this returns a
     // UniquePtr< ... opaque object representing a point ...>.
