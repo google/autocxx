@@ -1,19 +1,14 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
-use crate::conversion::api::{ApiName, Provenance};
-use crate::conversion::doc_attr::get_doc_attr;
+use crate::conversion::api::{ApiName, NullPhase, Provenance};
+use crate::conversion::apivec::ApiVec;
+use crate::conversion::doc_attr::get_doc_attrs;
 use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
     api::{FuncToConvert, UnanalyzedApi},
@@ -44,7 +39,7 @@ pub(crate) struct ParseForeignMod {
     // may actually be methods (static or otherwise). Mapping from
     // function name to type name.
     method_receivers: HashMap<Ident, QualifiedName>,
-    ignored_apis: Vec<UnanalyzedApi>,
+    ignored_apis: ApiVec<NullPhase>,
 }
 
 impl ParseForeignMod {
@@ -53,14 +48,14 @@ impl ParseForeignMod {
             ns,
             funcs_to_convert: Vec::new(),
             method_receivers: HashMap::new(),
-            ignored_apis: Vec::new(),
+            ignored_apis: ApiVec::new(),
         }
     }
 
     /// Record information from foreign mod items encountered
     /// in bindgen output.
     pub(crate) fn convert_foreign_mod_items(&mut self, foreign_mod_items: Vec<ForeignItem>) {
-        let mut extra_apis = Vec::new();
+        let mut extra_apis = ApiVec::new();
         for i in foreign_mod_items {
             report_any_error(&self.ns.clone(), &mut extra_apis, || {
                 self.parse_foreign_item(i)
@@ -73,12 +68,12 @@ impl ParseForeignMod {
         match i {
             ForeignItem::Fn(item) => {
                 let annotations = BindgenSemanticAttributes::new(&item.attrs);
-                let doc_attr = get_doc_attr(&item.attrs);
+                let doc_attrs = get_doc_attrs(&item.attrs);
                 self.funcs_to_convert.push(FuncToConvert {
                     provenance: Provenance::Bindgen,
                     self_ty: None,
                     ident: item.sig.ident,
-                    doc_attr,
+                    doc_attrs,
                     inputs: item.sig.inputs,
                     output: item.sig.output,
                     vis: item.vis,
@@ -86,7 +81,7 @@ impl ParseForeignMod {
                     cpp_vis: annotations.get_cpp_visibility(),
                     special_member: annotations.special_member_kind(),
                     unused_template_param: annotations
-                        .has_attr("unused_template_param_in_arg_or_return"),
+                        .has_attr("incomprehensible_param_in_arg_or_return"),
                     references: annotations.get_reference_parameters_and_return(),
                     original_name: annotations.get_original_name(),
                     synthesized_this_type: None,
@@ -98,7 +93,7 @@ impl ParseForeignMod {
             }
             ForeignItem::Static(item) => Err(ConvertErrorWithContext(
                 ConvertError::StaticData(item.ident.to_string()),
-                Some(ErrorContext::Item(item.ident)),
+                Some(ErrorContext::new_for_item(item.ident)),
             )),
             _ => Err(ConvertErrorWithContext(
                 ConvertError::UnexpectedForeignItem,
@@ -131,7 +126,7 @@ impl ParseForeignMod {
     /// Indicate that all foreign mods and all impl blocks have been
     /// fed into us, and we should process that information to generate
     /// the resulting APIs.
-    pub(crate) fn finished(mut self, apis: &mut Vec<UnanalyzedApi>) {
+    pub(crate) fn finished(mut self, apis: &mut ApiVec<NullPhase>) {
         apis.append(&mut self.ignored_apis);
         while !self.funcs_to_convert.is_empty() {
             let mut fun = self.funcs_to_convert.remove(0);
@@ -144,7 +139,6 @@ impl ParseForeignMod {
                 ),
                 fun: Box::new(fun),
                 analysis: (),
-                name_for_gc: None,
             })
         }
     }

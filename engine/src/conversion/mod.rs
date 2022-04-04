@@ -1,19 +1,14 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 mod analysis;
 mod api;
+mod apivec;
 mod codegen_cpp;
 mod codegen_rs;
 #[cfg(test)]
@@ -48,7 +43,8 @@ use self::{
         remove_ignored::filter_apis_by_ignored_dependents,
         tdef::convert_typedef_targets,
     },
-    api::{AnalysisPhase, Api},
+    api::AnalysisPhase,
+    apivec::ApiVec,
     codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
 };
@@ -86,23 +82,27 @@ impl<'a> BridgeConverter<'a> {
         }
     }
 
-    fn dump_apis<T: AnalysisPhase>(label: &str, apis: &[Api<T>]) {
+    fn dump_apis<T: AnalysisPhase>(label: &str, apis: &ApiVec<T>) {
         if LOG_APIS {
             log::info!(
                 "APIs after {}:\n{}",
                 label,
-                apis.iter().map(|api| { format!("  {:?}", api) }).join("\n")
+                apis.iter()
+                    .map(|api| { format!("  {:?}", api) })
+                    .sorted()
+                    .join("\n")
             )
         }
     }
 
-    fn dump_apis_with_deps(label: &str, apis: &[Api<FnPhase>]) {
+    fn dump_apis_with_deps(label: &str, apis: &ApiVec<FnPhase>) {
         if LOG_APIS {
             log::info!(
                 "APIs after {}:\n{}",
                 label,
                 apis.iter()
                     .map(|api| { format!("  {:?}, deps={}", api, api.format_deps()) })
+                    .sorted()
                     .join("\n")
             )
         }

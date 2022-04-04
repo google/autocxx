@@ -1,16 +1,10 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 #![forbid(unsafe_code)]
 
@@ -19,7 +13,7 @@ pub mod file_locations;
 mod path;
 mod subclass_attrs;
 
-pub use config::{IncludeCppConfig, RustFun, Subclass, UnsafePolicy};
+pub use config::{AllowlistEntry, IncludeCppConfig, RustFun, Subclass, UnsafePolicy};
 use file_locations::FileLocationStrategy;
 pub use path::RustPath;
 use proc_macro2::TokenStream as TokenStream2;
@@ -35,7 +29,7 @@ use syn::{
 /// and the standalone macro discoverer
 pub mod directives {
     pub static EXTERN_RUST_TYPE: &str = "extern_rust_type";
-    pub static EXTERN_RUST_FUN: &str = "extern_rust_fun";
+    pub static EXTERN_RUST_FUN: &str = "extern_rust_function";
     pub static SUBCLASS: &str = "subclass";
 }
 

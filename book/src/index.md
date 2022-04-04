@@ -17,13 +17,13 @@ Use `autocxx` if you have a large existing C++ codebase and you want to use its 
 Not always:
 
 * If you are making bindings to C code, as opposed to C++, use [`bindgen`](https://rust-lang.github.io/rust-bindgen/) instead.
-* If you have can make unrestricted changes to the C++ code, use [`cxx`](https://cxx.rs) instead.
+* If you can make unrestricted changes to the C++ code, use [`cxx`](https://cxx.rs) instead.
 * If your C++ to Rust interface is just a few functions or types, use [`cxx`](https://cxx.rs) instead.
 
 But sometimes:
 
 * If you need to call arbitrary functions and use arbitrary types within an existing C++ codebase, use `autocxx`. You're in the right place!
-* Like `cxx`, but unlike `bindgen`, `autocxx` also allows you to make calls from C++ to Rust.
+* Like `cxx`, but unlike `bindgen`, `autocxx` helps with calls from C++ to Rust, too.
 
 ## Examples to give you a feel for `autocxx`
 
@@ -35,12 +35,13 @@ autocxx_integration_tests::doctest(
 "#include <stdint.h>
 inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }",
 {
+// Use all the autocxx types which might be handy.
 use autocxx::prelude::*;
 
 include_cpp! {
     #include "input.h"
     safety!(unsafe_ffi)
-    generate!("do_math")
+    generate!("do_math") // allowlist a function
 }
 
 fn main() {
@@ -85,11 +86,11 @@ use autocxx::prelude::*;
 include_cpp! {
     #include "input.h"
     safety!(unsafe_ffi)
-    generate!("Goat")
+    generate!("Goat") // allowlist a type and all its methods
 }
 
 fn main() {
-    let mut goat = ffi::Goat::make_unique(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
+    let mut goat = ffi::Goat::new().within_unique_ptr(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
     goat.pin_mut().add_a_horn();
     goat.pin_mut().add_a_horn();
     assert_eq!(goat.describe().as_ref().unwrap().to_string_lossy(), "This goat has 2 horns.");

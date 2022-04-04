@@ -1,16 +1,10 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use proc_macro2::TokenStream;
 use syn::{Pat, Type, TypePtr};
@@ -109,7 +103,7 @@ impl TypeConversionPolicy {
                     panic!("Unexpected non-ident parameter name");
                 };
                 let space_var_name = make_ident(format!("{}_space", var_name));
-                let call = quote! { #space_var_name.populate();  };
+                let call = quote! { #space_var_name.as_mut().populate(#var_name);  };
                 let call = if wrap_in_unsafe {
                     quote! {
                         unsafe {
@@ -121,18 +115,12 @@ impl TypeConversionPolicy {
                 };
                 // This is the usual trick to put something on the stack, then
                 // immediately shadow the variable name so it can't be accessed or moved.
-                // Ideally, the second line here would be
-                //   let #space_var_name = Pin::new_unchecked(&mut #space_var_name);
-                // and then from that point onwards the original value could
-                // only ever be accessed via a pinned reference. This turns
-                // out to be hard.
-                // https://github.com/google/autocxx/issues/856
-                // In practice, as this is generated code we can guarantee
-                // nobody else accesses #space_var_name at all, so this is safe.
                 (
                     Some(quote! {
-                        let mut #space_var_name = autocxx::ValueParamHandler::new(#var_name);
-                        let #space_var_name = &mut #space_var_name;
+                        let mut #space_var_name = autocxx::ValueParamHandler::default();
+                        let mut #space_var_name = unsafe {
+                            std::pin::Pin::new_unchecked(&mut #space_var_name)
+                        };
                         #call
                     }),
                     quote! {

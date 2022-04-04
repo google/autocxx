@@ -1,8 +1,25 @@
 # Building
 
-Building in a `cargo` environment is explained in [the tutorial](tutorial.md).
+## Building if you're using cargo
 
-# Configuring the build - if you're not using cargo
+The basics of building in a `cargo` environment are explained in [the tutorial](tutorial.md).
+
+If your build depends on later editions of the C++ standard library, you will need to ensure that both `libclang` and the compiler are sent the appropriate flag, like this:
+
+```rust,ignore
+fn main() {
+    let path = std::path::PathBuf::from("src"); // include path
+    let mut b = autocxx_build::Builder::new("src/main.rs", &[&path])
+        .extra_clang_args(&["-std=c++17"])
+        .expect_build();
+    b.flag_if_supported("-std=c++17")
+        .compile("autocxx-demo"); // arbitrary library name, pick anything
+    println!("cargo:rerun-if-changed=src/main.rs");
+    // Add instructions to link to any C++ libraries you need.
+}
+```
+
+## Building - if you're not using cargo
 
 See the `autocxx-gen` crate. You'll need to:
 
@@ -40,4 +57,4 @@ flowchart TB
     rsb --> l
 ```
 
-This interop inevitably involves lots of fiddly small functions. It's likely to perform far better if you can achieve cross-language LTO. [This issue](https://github.com/dtolnay/cxx/issues/371) may give some useful hints - see also all the build-related help in [the cxx manual](https://cxx.rs/) which all applies here too.
+This interop inevitably involves lots of fiddly small functions. It's likely to perform far better if you can achieve cross-language link-time-optimization (LTO). [This issue](https://github.com/dtolnay/cxx/issues/371) may give some useful hints - see also all the build-related help in [the cxx manual](https://cxx.rs/) which all applies here too.

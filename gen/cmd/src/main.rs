@@ -1,16 +1,10 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 #![forbid(unsafe_code)]
 
@@ -78,7 +72,7 @@ a single `include_cpp!` section), and we always generate the same number of each
 type of file.
 ";
 
-fn main() {
+fn main() -> miette::Result<()> {
     let matches = App::new("autocxx-gen")
         .version(crate_version!())
         .author(crate_authors!())
@@ -201,8 +195,7 @@ fn main() {
     let mut parsed_file = parse_file(
         matches.value_of("INPUT").unwrap(),
         matches.is_present("auto-allowlist"),
-    )
-    .expect("Unable to parse Rust file and interpret autocxx macro");
+    )?;
     let incs = matches
         .values_of("inc")
         .unwrap_or_default()
@@ -237,9 +230,7 @@ fn main() {
     // In future, we should provide an option to write a .d file here
     // by passing a callback into the dep_recorder parameter here.
     // https://github.com/google/autocxx/issues/56
-    parsed_file
-        .resolve_all(incs, &extra_clang_args, None, &cpp_codegen_options)
-        .expect("Unable to resolve macro");
+    parsed_file.resolve_all(incs, &extra_clang_args, None, &cpp_codegen_options)?;
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
     if matches.is_present("gen-cpp") {
         let cpp = matches.value_of("cpp-extension").unwrap();
@@ -285,6 +276,7 @@ fn main() {
             write_placeholders(&outdir, counter, desired_number, "include.rs");
         }
     }
+    Ok(())
 }
 
 fn get_option_string(option: &str, matches: &clap::ArgMatches) -> Option<String> {

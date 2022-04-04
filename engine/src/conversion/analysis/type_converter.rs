@@ -1,20 +1,15 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiName, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
+        apivec::ApiVec,
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -34,6 +29,7 @@ use syn::{
 use super::tdef::TypedefAnalysis;
 
 /// Certain kinds of type may require special handling by callers.
+#[derive(Debug)]
 pub(crate) enum TypeKind {
     Regular,
     Pointer,
@@ -47,7 +43,7 @@ pub(crate) enum TypeKind {
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<QualifiedName>,
-    pub(crate) extra_apis: Vec<UnanalyzedApi>,
+    pub(crate) extra_apis: ApiVec<NullPhase>,
     pub(crate) kind: TypeKind,
 }
 
@@ -55,7 +51,7 @@ impl<T> Annotated<T> {
     fn new(
         ty: T,
         types_encountered: HashSet<QualifiedName>,
-        extra_apis: Vec<UnanalyzedApi>,
+        extra_apis: ApiVec<NullPhase>,
         kind: TypeKind,
     ) -> Self {
         Self {
@@ -120,7 +116,7 @@ pub(crate) struct TypeConverter<'a> {
 }
 
 impl<'a> TypeConverter<'a> {
-    pub(crate) fn new<A: AnalysisPhase>(config: &'a IncludeCppConfig, apis: &[Api<A>]) -> Self
+    pub(crate) fn new<A: AnalysisPhase>(config: &'a IncludeCppConfig, apis: &ApiVec<A>) -> Self
     where
         A::TypedefAnalysis: TypedefTarget,
     {
@@ -192,6 +188,17 @@ impl<'a> TypeConverter<'a> {
             Type::Ptr(ptr) if ctx.convert_ptrs_to_references() => {
                 self.convert_ptr_to_reference(ptr, ns)?
             }
+            Type::Array(mut arr) => {
+                let innerty =
+                    self.convert_type(*arr.elem, ns, &TypeConversionContext::CxxInnerType)?;
+                arr.elem = Box::new(innerty.ty);
+                Annotated::new(
+                    Type::Array(arr),
+                    innerty.types_encountered,
+                    innerty.extra_apis,
+                    TypeKind::Regular,
+                )
+            }
             Type::Ptr(mut ptr) => {
                 crate::known_types::ensure_pointee_is_valid(&ptr)?;
                 let innerty =
@@ -261,7 +268,7 @@ impl<'a> TypeConverter<'a> {
                 return Ok(Annotated::new(
                     Type::Ptr(resolved_tp.clone()),
                     deps,
-                    Vec::new(),
+                    ApiVec::new(),
                     TypeKind::Pointer,
                 ))
             }
@@ -269,7 +276,7 @@ impl<'a> TypeConverter<'a> {
                 return Ok(Annotated::new(
                     other.clone(),
                     deps,
-                    Vec::new(),
+                    ApiVec::new(),
                     TypeKind::Regular,
                 ))
             }
@@ -290,7 +297,7 @@ impl<'a> TypeConverter<'a> {
             None => typ,
         };
 
-        let mut extra_apis = Vec::new();
+        let mut extra_apis = ApiVec::new();
         let mut kind = TypeKind::Regular;
 
         // Finally let's see if it's generic.
@@ -343,7 +350,7 @@ impl<'a> TypeConverter<'a> {
     {
         let mut new_pun = Punctuated::new();
         let mut types_encountered = HashSet::new();
-        let mut extra_apis = Vec::new();
+        let mut extra_apis = ApiVec::new();
         for arg in pun.into_iter() {
             new_pun.push(match arg {
                 GenericArgument::Type(t) => {
@@ -449,8 +456,8 @@ impl<'a> TypeConverter<'a> {
                 };
                 let api = UnanalyzedApi::ConcreteType {
                     name: ApiName::new_in_root_namespace(make_ident(&synthetic_ident)),
-                    rs_definition: Box::new(rs_definition.clone()),
                     cpp_definition: cpp_definition.clone(),
+                    rs_definition: Some(Box::new(rs_definition.clone())),
                 };
                 self.concrete_templates
                     .insert(cpp_definition, api.name().clone());
@@ -524,7 +531,7 @@ impl<'a> TypeConverter<'a> {
         }
     }
 
-    fn find_typedefs<A: AnalysisPhase>(apis: &[Api<A>]) -> HashMap<QualifiedName, Type>
+    fn find_typedefs<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashMap<QualifiedName, Type>
     where
         A::TypedefAnalysis: TypedefTarget,
     {
@@ -540,7 +547,7 @@ impl<'a> TypeConverter<'a> {
     }
 
     fn find_concrete_templates<A: AnalysisPhase>(
-        apis: &[Api<A>],
+        apis: &ApiVec<A>,
     ) -> HashMap<String, QualifiedName> {
         apis.iter()
             .filter_map(|api| match &api {
@@ -552,7 +559,7 @@ impl<'a> TypeConverter<'a> {
             .collect()
     }
 
-    fn find_incomplete_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+    fn find_incomplete_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::ForwardDeclaration { .. } => Some(api.name()),
@@ -602,7 +609,7 @@ impl TypedefTarget for TypedefAnalysis {
     }
 }
 
-pub(crate) fn find_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+pub(crate) fn find_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
     apis.iter()
         .filter_map(|api| match api {
             Api::ForwardDeclaration { .. }

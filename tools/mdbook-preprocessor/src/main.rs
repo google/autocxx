@@ -1,27 +1,27 @@
 // Copyright 2022 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
-#![forbid(unsafe_code)]
-
-use std::{borrow::Cow, collections::HashSet, fmt::Display, io, path::PathBuf, process};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    fmt::Display,
+    io::{self, Read},
+    path::PathBuf,
+    process,
+};
 
 use anyhow::Error;
 use clap::{crate_authors, crate_version, Arg, ArgMatches, Command};
 use itertools::Itertools;
 use mdbook::{book::Book, preprocess::CmdPreprocessor};
-use proc_macro2::Span;
-use syn::{spanned::Spanned, Expr, __private::ToTokens};
+use proc_macro2::{Span, TokenStream};
+use rayon::prelude::*;
+use syn::{Expr, __private::ToTokens, spanned::Spanned};
 
 static LONG_ABOUT: &str =
     "This is an mdbook preprocessor tailored for autocxx code examples. Autocxx
@@ -48,6 +48,8 @@ autocxx_integration_tests::doctest(
 and will build and run them, while emitting better formatted markdown blocks
 for subsequent preprocessors and renderers.
 ";
+
+static RUST_MDBOOK_SINGLE_TEST: &str = "RUST_MDBOOK_SINGLE_TEST";
 
 fn main() {
     let matches = Command::new("autocxx-mdbook-preprocessor")
@@ -94,6 +96,7 @@ fn calculate_cargo_dir() -> PathBuf {
 fn preprocess(args: &ArgMatches) -> Result<(), Error> {
     let (_, mut book) = CmdPreprocessor::parse_input(io::stdin())?;
 
+    env_logger::builder().init();
     let mut test_cases = Vec::new();
 
     Book::for_each_mut(&mut book, |sec| {
@@ -109,35 +112,67 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
     });
 
     // Now run any test cases we accumulated.
-    let mut any_fails = false;
     if !args.is_present("skip_tests") {
+        let stdout_gag = gag::BufferRedirect::stdout().unwrap();
         let num_tests = test_cases.len();
-        for (counter, case) in test_cases.into_iter().enumerate() {
-            eprintln!(
-                "Running doctest {}/{} at {}",
-                counter + 1,
-                num_tests,
-                &case.location
-            );
-            let passed = autocxx_integration_tests::doctest(
-                &case.cpp,
-                &case.hdr,
-                case.rs.to_token_stream(),
-                args.value_of_os("manifest_dir").unwrap(),
-            )
-            .is_ok();
-            eprintln!(
-                "Doctest {}/{} at {} {}.",
-                counter + 1,
-                num_tests,
-                &case.location,
-                if passed { "passed" } else { "failed" }
-            );
-            any_fails = any_fails || !passed;
+        let fails: Vec<_> = test_cases
+            .into_par_iter()
+            .enumerate()
+            .filter_map(|(counter, case)| {
+                if let Ok(test) = std::env::var(RUST_MDBOOK_SINGLE_TEST) {
+                    let desired_id: usize = test.parse().unwrap();
+                    if desired_id != (counter + 1) {
+                        return None;
+                    }
+                }
+                eprintln!(
+                    "Running doctest {}/{} at {}",
+                    counter + 1,
+                    num_tests,
+                    &case.location
+                );
+                let err = autocxx_integration_tests::doctest(
+                    &case.cpp,
+                    &case.hdr,
+                    case.rs,
+                    args.value_of_os("manifest_dir").unwrap(),
+                );
+                let desc = match err {
+                    Ok(_) => "passed".to_string(),
+                    Err(ref err) => format!("failed: {:?}", err),
+                };
+                eprintln!(
+                    "Doctest {}/{} at {} {}.",
+                    counter + 1,
+                    num_tests,
+                    &case.location,
+                    desc
+                );
+                if err.is_err() {
+                    Some(TestId {
+                        location: case.location,
+                        test_id: counter,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut stdout_str = String::new();
+        stdout_gag
+            .into_inner()
+            .read_to_string(&mut stdout_str)
+            .unwrap();
+        if !stdout_str.is_empty() {
+            eprintln!("Stdout from tests:\n{}", stdout_str);
         }
-    }
-    if any_fails {
-        panic!("One or more tests failed.");
+        if !fails.is_empty() {
+            panic!(
+                "One or more tests failed: {}. To rerun an individual test use {}.",
+                fails.into_iter().sorted().map(|s| s.to_string()).join(", "),
+                RUST_MDBOOK_SINGLE_TEST
+            );
+        }
     }
 
     serde_json::to_writer(io::stdout(), &book)?;
@@ -193,8 +228,21 @@ fn substitute_chapter(chapter: &str, filename: &str, test_cases: &mut Vec<TestCa
     out.join("\n")
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct TestId {
+    location: MiniSpan,
+    test_id: usize,
+}
+
+impl Display for TestId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(ID {}): {}", self.test_id, self.location)
+    }
+}
+
 /// Like `proc_macro2::Span` but only has the starting line. For basic
 /// diagnostics.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct MiniSpan {
     filename: String,
     start_line: usize,
@@ -209,9 +257,11 @@ impl Display for MiniSpan {
 struct TestCase {
     cpp: String,
     hdr: String,
-    rs: syn::File,
+    rs: TokenStream,
     location: MiniSpan,
 }
+
+unsafe impl Send for TestCase {}
 
 enum ChapterParseState {
     Start,
@@ -260,8 +310,8 @@ fn handle_code_block(
         _ => panic!("Parsing unexpected"),
     };
     let mut args_iter = fn_call.args.iter();
-    let cpp = extract_span(&lines, args_iter.next().unwrap().span());
-    let hdr = extract_span(&lines, args_iter.next().unwrap().span());
+    let cpp = unescape_quotes(&extract_span(&lines, args_iter.next().unwrap().span()));
+    let hdr = unescape_quotes(&extract_span(&lines, args_iter.next().unwrap().span()));
     let rs = extract_span(&lines, args_iter.next().unwrap().span());
     let mut output = vec![
         "#### C++ header:".to_string(),
@@ -285,10 +335,11 @@ fn handle_code_block(
     // running tests.
     if !flags.contains("nocompile") {
         test_cases.push(TestCase {
-            cpp: unescape_quotes(&cpp),
-            hdr: unescape_quotes(&hdr),
+            cpp,
+            hdr,
             rs: syn::parse_file(&rs)
-                .unwrap_or_else(|_| panic!("Unable to parse code at {}", location)),
+                .unwrap_or_else(|_| panic!("Unable to parse code at {}", location))
+                .to_token_stream(),
             location,
         });
     }

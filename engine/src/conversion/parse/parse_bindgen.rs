@@ -1,22 +1,17 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use std::collections::HashSet;
 
 use crate::{
     conversion::{
-        api::{Api, ApiName, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
+        api::{Api, ApiName, NullPhase, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
+        apivec::ApiVec,
         ConvertError,
     },
     types::Namespace,
@@ -29,7 +24,7 @@ use crate::{
     },
     types::validate_ident_ok_for_cxx,
 };
-use autocxx_parser::IncludeCppConfig;
+use autocxx_parser::{IncludeCppConfig, RustPath};
 use syn::{parse_quote, Fields, Ident, Item, TypePath, UseTree};
 
 use super::{
@@ -41,7 +36,7 @@ use super::parse_foreign_mod::ParseForeignMod;
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
     config: &'a IncludeCppConfig,
-    apis: Vec<UnanalyzedApi>,
+    apis: ApiVec<NullPhase>,
 }
 
 fn api_name(ns: &Namespace, id: Ident, attrs: &BindgenSemanticAttributes) -> ApiName {
@@ -55,7 +50,7 @@ pub(crate) fn api_name_qualified(
 ) -> Result<ApiName, ConvertErrorWithContext> {
     match validate_ident_ok_for_cxx(&id.to_string()) {
         Err(e) => {
-            let ctx = ErrorContext::Item(id);
+            let ctx = ErrorContext::new_for_item(id);
             Err(ConvertErrorWithContext(e, Some(ctx)))
         }
         Ok(..) => Ok(api_name(ns, id, attrs)),
@@ -66,7 +61,7 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn new(config: &'a IncludeCppConfig) -> Self {
         ParseBindgen {
             config,
-            apis: Vec::new(),
+            apis: ApiVec::new(),
         }
     }
 
@@ -75,7 +70,7 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn parse_items(
         mut self,
         items: Vec<Item>,
-    ) -> Result<Vec<UnanalyzedApi>, ConvertError> {
+    ) -> Result<ApiVec<NullPhase>, ConvertError> {
         let items = Self::find_items_in_root(items)?;
         if !self.config.exclude_utilities() {
             generate_utilities(&mut self.apis, self.config);
@@ -100,17 +95,33 @@ impl<'a> ParseBindgen<'a> {
                 let id = fun.sig.ident.clone();
                 Api::RustFn {
                     name: ApiName::new_in_root_namespace(id),
-                    path: fun.path.clone(),
-                    sig: fun.sig.clone(),
+                    details: fun.clone(),
+                    receiver: fun.receiver.as_ref().map(|receiver_id| {
+                        QualifiedName::new(&Namespace::new(), receiver_id.clone())
+                    }),
                 }
             }));
-        self.apis.extend(self.config.rust_types.iter().map(|path| {
+        let unique_rust_types: HashSet<&RustPath> = self.config.rust_types.iter().collect();
+        self.apis.extend(unique_rust_types.into_iter().map(|path| {
             let id = path.get_final_ident();
             Api::RustType {
                 name: ApiName::new_in_root_namespace(id.clone()),
                 path: path.clone(),
             }
         }));
+        self.apis.extend(
+            self.config
+                .concretes
+                .iter()
+                .map(|(cpp_definition, rust_id)| {
+                    let name = ApiName::new_in_root_namespace(rust_id.clone());
+                    Api::ConcreteType {
+                        name,
+                        cpp_definition: cpp_definition.clone(),
+                        rs_definition: None,
+                    }
+                }),
+        );
     }
 
     fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
@@ -137,7 +148,7 @@ impl<'a> ParseBindgen<'a> {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
         let mut mod_converter = ParseForeignMod::new(ns.clone());
-        let mut more_apis = Vec::new();
+        let mut more_apis = ApiVec::new();
         for item in items {
             report_any_error(&ns, &mut more_apis, || {
                 self.parse_item(item, &mut mod_converter, &ns)
@@ -253,7 +264,7 @@ impl<'a> ParseBindgen<'a> {
                             if new_tyname == old_tyname {
                                 return Err(ConvertErrorWithContext(
                                     ConvertError::InfinitelyRecursiveTypedef(new_tyname),
-                                    Some(ErrorContext::Item(new_id.clone())),
+                                    Some(ErrorContext::new_for_item(new_id.clone())),
                                 ));
                             }
                             let annotations = BindgenSemanticAttributes::new(&use_item.attrs);
@@ -269,7 +280,9 @@ impl<'a> ParseBindgen<'a> {
                         }
                         _ => {
                             return Err(ConvertErrorWithContext(
-                                ConvertError::UnexpectedUseStatement(segs.into_iter().last()),
+                                ConvertError::UnexpectedUseStatement(
+                                    segs.into_iter().last().map(|i| i.to_string()),
+                                ),
                                 None,
                             ))
                         }
@@ -287,6 +300,8 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Type(ity) => {
                 let annotations = BindgenSemanticAttributes::new(&ity.attrs);
+                // It's known that sometimes bindgen will give us duplicate typedefs with the
+                // same name - see test_issue_264.
                 self.apis.push(UnanalyzedApi::Typedef {
                     name: api_name(ns, ity.ident.clone(), &annotations),
                     item: TypedefKind::Type(ity),

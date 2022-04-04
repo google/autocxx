@@ -1,19 +1,13 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use crate::{
-    conversion::{api::Api, AnalysisPhase, ConvertError},
+    conversion::{apivec::ApiVec, AnalysisPhase, ConvertError},
     types::QualifiedName,
 };
 use itertools::Itertools;
@@ -27,7 +21,7 @@ use syn::{Token, Type};
 /// in the QualifiedName.
 pub(crate) type CppNameMap = HashMap<QualifiedName, String>;
 
-pub(crate) fn original_name_map_from_apis<T: AnalysisPhase>(apis: &[Api<T>]) -> CppNameMap {
+pub(crate) fn original_name_map_from_apis<T: AnalysisPhase>(apis: &ApiVec<T>) -> CppNameMap {
     apis.iter()
         .filter_map(|api| {
             api.cpp_name()
@@ -107,11 +101,14 @@ pub(crate) fn type_to_cpp(ty: &Type, cpp_name_map: &CppNameMap) -> Result<String
                 Some(suffix) => Ok(format!("{}<{}>", root, suffix)),
             }
         }
-        Type::Reference(typr) => Ok(format!(
-            "{}{}&",
-            get_mut_string(&typr.mutability),
-            type_to_cpp(typr.elem.as_ref(), cpp_name_map)?
-        )),
+        Type::Reference(typr) => match &*typr.elem {
+            Type::Path(typ) if typ.path.is_ident("str") => Ok("rust::Str".into()),
+            _ => Ok(format!(
+                "{}{}&",
+                get_mut_string(&typr.mutability),
+                type_to_cpp(typr.elem.as_ref(), cpp_name_map)?
+            )),
+        },
         Type::Ptr(typp) => Ok(format!(
             "{}{}*",
             get_mut_string(&typp.mutability),

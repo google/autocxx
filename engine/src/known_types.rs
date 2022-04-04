@@ -1,16 +1,10 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use crate::{
     conversion::ConvertError,
@@ -33,6 +27,7 @@ enum Behavior {
     CByValue,
     CVariableLengthByValue,
     CVoid,
+    CChar16,
     RustContainerByValueSafe,
 }
 
@@ -43,7 +38,7 @@ struct TypeDetails {
     rs_name: String,
     /// C++ equivalent name for a Rust type.
     cpp_name: String,
-    //// The behavior of the type.
+    /// The behavior of the type.
     behavior: Behavior,
     /// Any extra non-canonical names
     extra_non_canonical_name: Option<String>,
@@ -159,6 +154,11 @@ pub enum CxxGenericType {
     Rust,
 }
 
+pub struct KnownTypeConstructorDetails {
+    pub has_move_constructor: bool,
+    pub has_const_copy_constructor: bool,
+}
+
 impl TypeDatabase {
     fn get(&self, ty: &QualifiedName) -> Option<&TypeDetails> {
         // The following line is important. It says that
@@ -206,6 +206,7 @@ impl TypeDatabase {
                         | Behavior::RustByValue
                         | Behavior::CByValue
                         | Behavior::CVariableLengthByValue
+                        | Behavior::CChar16
                         | Behavior::RustContainerByValueSafe => true,
                         Behavior::CxxString
                         | Behavior::CxxContainerNotByValueSafe
@@ -217,28 +218,14 @@ impl TypeDatabase {
         pod_safety.into_iter()
     }
 
-    pub(crate) fn all_types_with_move_constructors(
+    pub(crate) fn get_constructor_details(
         &self,
-    ) -> impl Iterator<Item = QualifiedName> + '_ {
-        self.all_names()
-            .filter(|qn| self.get(qn).unwrap().has_move_constructor)
-            .cloned()
-    }
-
-    pub(crate) fn all_types_with_const_copy_constructors(
-        &self,
-    ) -> impl Iterator<Item = QualifiedName> + '_ {
-        self.all_names()
-            .filter(|qn| self.get(qn).unwrap().has_const_copy_constructor)
-            .cloned()
-    }
-
-    pub(crate) fn all_types_without_copy_constructors(
-        &self,
-    ) -> impl Iterator<Item = QualifiedName> + '_ {
-        self.all_names()
-            .filter(|qn| !self.get(qn).unwrap().has_const_copy_constructor)
-            .cloned()
+        qn: &QualifiedName,
+    ) -> Option<KnownTypeConstructorDetails> {
+        self.get(qn).map(|x| KnownTypeConstructorDetails {
+            has_move_constructor: x.has_move_constructor,
+            has_const_copy_constructor: x.has_const_copy_constructor,
+        })
     }
 
     /// Whether this TypePath should be treated as a value in C++
@@ -247,6 +234,18 @@ impl TypeDatabase {
     pub(crate) fn should_dereference_in_cpp(&self, tn: &QualifiedName) -> bool {
         self.get(tn)
             .map(|td| matches!(td.behavior, Behavior::RustStr))
+            .unwrap_or(false)
+    }
+
+    /// Whether this can only be passed around using `std::move`
+    pub(crate) fn lacks_copy_constructor(&self, tn: &QualifiedName) -> bool {
+        self.get(tn)
+            .map(|td| {
+                matches!(
+                    td.behavior,
+                    Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe
+                )
+            })
             .unwrap_or(false)
     }
 
@@ -286,7 +285,7 @@ impl TypeDatabase {
             .map(|td| {
                 matches!(
                     td.behavior,
-                    Behavior::CVariableLengthByValue | Behavior::CVoid
+                    Behavior::CVariableLengthByValue | Behavior::CVoid | Behavior::CChar16
                 )
             })
             .unwrap_or(false)
@@ -497,10 +496,26 @@ fn create_type_database() -> TypeDatabase {
         true,
     ));
     db.insert(TypeDetails::new(
+        "usize",
+        "size_t",
+        Behavior::CByValue,
+        None,
+        true,
+        true,
+    ));
+    db.insert(TypeDetails::new(
         "autocxx::c_void",
         "void",
         Behavior::CVoid,
         Some("std::os::raw::c_void".into()),
+        false,
+        false,
+    ));
+    db.insert(TypeDetails::new(
+        "autocxx::c_char16_t",
+        "char16_t",
+        Behavior::CChar16,
+        Some("c_char16_t".into()),
         false,
         false,
     ));

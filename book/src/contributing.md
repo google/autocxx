@@ -71,6 +71,8 @@ RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test --all test_cycle_string
 This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
 in `engine/src/conversion`. See [here](https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCppEngine.html) for documentation and diagrams on how the engine works.
 
+You may also wish to set `AUTOCXX_ASAN=1` on Linux when running tests.
+
 ## Reporting bugs
 
 If you've found a problem, and you're reading this, *thank you*! Your diligence
@@ -99,7 +101,7 @@ order of preference here's how we would like to hear about your problem:
 
 ## How to contribute to this manual
 
-More examples in this manual are _very_ welcomed!
+More examples in this manual are _very_ welcome!
 
 Because `autocxx` examples require both Rust and C++ code to be linked together,
 a custom preprocessor is used for this manual. See one of the existing examples

@@ -14,57 +14,11 @@ Some of these have some quirks in the way they're exposed in Rust, described bel
 
 ## Passing between C++ and Rust by value
 
-Rust is free to move data around at any time. That's _not OK_ for some C++ types
-which have non-trivial move constructors or destructors. Such types are common
-in C++ (for example, even C++ `std::string`s) and these types commonly appear
-in API declarations which we want to make available in Rust. Worse still, Rust
-has no visibility into whether a C++ type meets these criteria. What do we do?
+See the section on [C++ types](cpp_types.md) for the distinction between POD and non-POD types.
+POD types can be passed around however you like. Non-POD types can be passed into functions
+in various ways - see [calling C++ functions](cpp_functions.md) for more details.
 
-You have a choice:
-
-* As standard, any C++ type passed by value will be `std::move`d on the C++ side
-  into a `std::unique_ptr` before being passed to Rust, and similarly moved out
-  of a `std::unique_ptr` when passed from Rust to C++.
-* If you know that your C++ type can be safely byte-copied, then you can
-  override this behavior by using [`generate_pod`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html) instead of [`generate`](https://docs.rs/autocxx/latest/autocxx/macro.generate.html).
-
-There's not a significant ergonomic problem from the use of [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html).
-The main negative of the automatic boxing into [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html) is performance:
-specifically, the need to
-allocate heap cells on the C++ side and move data into and out of them.
-You don't want to be doing this inside a tight loop (but if you're calling
-across the C++/Rust boundary in a tight loop, perhaps reconsider that boundary
-anyway).
-
-If you want your type to be transferred between Rust and C++ truly _by value_
-then use [`generate_pod`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html) instead of [`generate`](https://docs.rs/autocxx/latest/autocxx/macro.generate.html).
-
-Specifically, to be compatible with [`generate_pod`](https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html), your C++ type must either:
-* Lack a move constructor _and_ lack a destructor
-* Or contain a human promise that it's relocatable, by implementing
-  the C++ trait `IsRelocatable` per the instructions in
-  [cxx.h](https://github.com/dtolnay/cxx/blob/master/include/cxx.h)
-
-Otherwise, your build will fail.
-
-This doesn't just make a difference to the generated code for the type;
-it also makes a difference to any functions which take or return that type.
-If there's a C++ function which takes a struct by value, but that struct
-is not declared as POD-safe, then we'll generate wrapper functions to move
-that type into and out of [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html)s.
-
-There is one other option under construction. The `moveit` crate replicates
-C++ value move and copying semantics in Rust. There is limited early support
-for `moveit` within autocxx; specifically, you can call C++ constructors
-to emplace even non-trivial objects on the Rust stack using `moveit`, and
-then call methods on them or use references to them in other function calls.
-At present, you can't copy or move such objects - once they're created,
-that's it, until it's dropped. At present therefore such objects can't be
-passed into C++ functions which take non-POD types by value. This facility
-is therefore best avoided for now until it's more complete - but see
-`examples/non-trivial-type-on-stack` if you want to see how to use it.
-
-### References and pointers
+## References and pointers
 
 We follow [`cxx`](https://cxx.rs) norms here. Specifically:
 
@@ -97,19 +51,20 @@ you'll need to figure out the guarantees attached to the C++ object - most
 notably its lifetime. To see some of the decision making process involved
 see the [Steam example](https://github.com/google/autocxx/tree/main/examples/steam-mini/src/main.rs).
 
-### [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html)s
+## [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html)s tips
 
 We use [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html) in completely the normal way, but there are a few
 quirks which you're more likely to run into with `autocxx`.
 
-* Calling methods: you may need to use [`cxx::UniquePtr::pin_mut`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut) to get
-  a reference on which you can call a method.
-* Getting a raw pointer in order to pass to some pre-existing function:
-  at present you need to do:
+* You'll need to use [`.pin_mut()`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut) a lot -
+  see [the example at the bottom of C++ functions](cpp_functions.md).
+* If you need to pass a raw pointer to a function, lots of unsafety is required - something like this:
   ```rust,ignore
      let mut a = ffi::A::make_unique();
      unsafe { ffi::TakePointerToA(std::pin::Pin::<&mut ffi::A>::into_inner_unchecked(a.pin_mut())) };
   ```
   This may be simplified in future.
-// 
 
+## Rvalue references
+
+Currently rvalue references (that is, move parameters) are not supported.

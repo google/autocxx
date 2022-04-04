@@ -1,16 +1,12 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use std::collections::HashSet;
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -33,7 +29,7 @@ use crate::{
             TraitMethodDetails,
         },
         api::UnsafetyNeeded,
-        codegen_rs::lifetime::add_lifetime_to_all_params,
+        codegen_rs::lifetime::add_lifetime_to_all_reference_params,
     },
     types::{Namespace, QualifiedName},
 };
@@ -88,6 +84,7 @@ pub(super) fn gen_function(
     fun: FuncToConvert,
     analysis: FnAnalysis,
     cpp_call_name: String,
+    non_pod_types: &HashSet<QualifiedName>,
 ) -> RsCodegenResult {
     if analysis.ignore_reason.is_err() || !analysis.externally_callable {
         return RsCodegenResult::default();
@@ -100,7 +97,7 @@ pub(super) fn gen_function(
     let params = analysis.params;
     let vis = analysis.vis;
     let kind = analysis.kind;
-    let doc_attr = fun.doc_attr;
+    let doc_attrs = fun.doc_attrs;
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
@@ -116,27 +113,41 @@ pub(super) fn gen_function(
         rust_name,
         unsafety: &analysis.requires_unsafe,
         always_unsafe_due_to_trait_definition,
-        doc_attr: &doc_attr,
+        doc_attrs: &doc_attrs,
+        non_pod_types,
     };
     // In rare occasions, we might need to give an explicit lifetime.
     let (lifetime_tokens, params, ret_type) =
-        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type);
+        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type, non_pod_types);
 
     if analysis.rust_wrapper_needed {
         match kind {
-            FnKind::Method(ref type_name, MethodKind::Constructor) => {
+            FnKind::Method {
+                ref impl_for,
+                method_kind: MethodKind::Constructor { .. },
+                ..
+            } => {
                 // Constructor.
-                impl_entry = Some(fn_generator.generate_constructor_impl(type_name));
+                impl_entry = Some(fn_generator.generate_constructor_impl(impl_for));
             }
-            FnKind::Method(ref type_name, ref method_kind) => {
+            FnKind::Method {
+                ref impl_for,
+                ref method_kind,
+                ..
+            } => {
                 // Method, or static method.
                 impl_entry = Some(fn_generator.generate_method_impl(
                     matches!(
                         method_kind,
-                        MethodKind::MakeUnique | MethodKind::Constructor
+                        MethodKind::MakeUnique | MethodKind::Constructor { .. }
                     ),
-                    type_name,
+                    impl_for,
                     &ret_type,
+                    if matches!(method_kind, MethodKind::MakeUnique) {
+                        Some("Instead, ensure you have imported autocxx::prelude::* (specifically the Within trait) and then use new().within_unique_ptr()")
+                    } else {
+                        None
+                    }
                 ));
             }
             FnKind::TraitMethod { ref details, .. } => {
@@ -150,7 +161,7 @@ pub(super) fn gen_function(
     }
 
     let materialization = match kind {
-        FnKind::Method(..) | FnKind::TraitMethod { .. } => None,
+        FnKind::Method { .. } | FnKind::TraitMethod { .. } => None,
         FnKind::Function => match analysis.rust_rename_strategy {
             _ if analysis.rust_wrapper_needed => {
                 Some(Use::SpecificNameFromBindgen(make_ident(rust_name)))
@@ -196,7 +207,7 @@ pub(super) fn gen_function(
     let extern_c_mod_item = ForeignItem::Fn(parse_quote!(
         #(#namespace_attr)*
         #(#cpp_name_attr)*
-        #doc_attr
+        #(#doc_attrs)*
         #vis #bridge_unsafety fn #cxxbridge_name #lifetime_tokens ( #params ) #ret_type;
     ));
     RsCodegenResult {
@@ -217,14 +228,15 @@ struct FnGenerator<'a> {
     rust_name: &'a str,
     unsafety: &'a UnsafetyNeeded,
     always_unsafe_due_to_trait_definition: bool,
-    doc_attr: &'a Option<Attribute>,
+    doc_attrs: &'a Vec<Attribute>,
+    non_pod_types: &'a HashSet<QualifiedName>,
 }
 
 impl<'a> FnGenerator<'a> {
     fn generate_arg_lists(
         &self,
         avoid_self: bool,
-    ) -> (Punctuated<FnArg, Comma>, Vec<TokenStream>, Vec<TokenStream>) {
+    ) -> (Punctuated<FnArg, Comma>, TokenStream, Vec<TokenStream>) {
         let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
         let mut local_variables = Vec::new();
         let mut arg_list = Vec::new();
@@ -246,6 +258,7 @@ impl<'a> FnGenerator<'a> {
             arg_list.push(actual_arg);
             local_variables.extend(local_variable.into_iter());
         }
+        let local_variables = quote! { #(#local_variables);* };
         (wrapper_params, local_variables, arg_list)
     }
 
@@ -255,22 +268,33 @@ impl<'a> FnGenerator<'a> {
         avoid_self: bool,
         impl_block_type_name: &QualifiedName,
         ret_type: &ReturnType,
+        deprecation: Option<&str>,
     ) -> Box<ImplBlockDetails> {
         let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(avoid_self);
-        let (lifetime_tokens, wrapper_params, ret_type) =
-            add_explicit_lifetime_if_necessary(self.param_details, wrapper_params, ret_type);
+        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
+            self.param_details,
+            wrapper_params,
+            ret_type,
+            self.non_pod_types,
+        );
         let rust_name = make_ident(self.rust_name);
         let unsafety = self.unsafety.wrapper_token();
-        let doc_attr = self.doc_attr;
+        let doc_attrs = self.doc_attrs;
         let cxxbridge_name = self.cxxbridge_name;
         let call_body = self.wrap_call_with_unsafe(quote! {
             cxxbridge::#cxxbridge_name ( #(#arg_list),* )
         });
+        let deprecation = deprecation.map(|reason| {
+            quote! {
+                #[deprecated = #reason]
+            }
+        });
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
-                #doc_attr
+                #(#doc_attrs)*
+                #deprecation
                 pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
-                    #(#local_variables),*
+                    #local_variables
                     #call_body
                 }
             }),
@@ -289,9 +313,13 @@ impl<'a> FnGenerator<'a> {
         if let Some(parameter_reordering) = &details.parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
         }
-        let (lifetime_tokens, wrapper_params, ret_type) =
-            add_explicit_lifetime_if_necessary(self.param_details, wrapper_params, ret_type);
-        let doc_attr = self.doc_attr;
+        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
+            self.param_details,
+            wrapper_params,
+            ret_type,
+            self.non_pod_types,
+        );
+        let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
         let cxxbridge_name = self.cxxbridge_name;
         let key = details.trt.clone();
@@ -300,9 +328,9 @@ impl<'a> FnGenerator<'a> {
             cxxbridge::#cxxbridge_name ( #(#arg_list),* )
         });
         let item = parse_quote! {
-            #doc_attr
+            #(#doc_attrs)*
             #unsafety fn #method_name #lifetime_tokens ( #wrapper_params ) #ret_type {
-                #(#local_variables),*
+                #local_variables
                 #call_body
             }
         };
@@ -339,25 +367,25 @@ impl<'a> FnGenerator<'a> {
         let rust_name = make_ident(&self.rust_name);
         let any_references = self.param_details.iter().any(|pd| pd.was_reference);
         let (lifetime_param, lifetime_addition) = if any_references {
-            add_lifetime_to_all_params(&mut wrapper_params);
+            add_lifetime_to_all_reference_params(&mut wrapper_params);
             (quote! { <'a> }, quote! { + 'a })
         } else {
             (quote! {}, quote! {})
         };
         let cxxbridge_name = self.cxxbridge_name;
         let body = quote! {
-            #(#local_variables),*
+            #local_variables
             autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
                 let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
                 cxxbridge::#cxxbridge_name(#(#arg_list),* )
             })
         };
         let body = self.wrap_call_with_unsafe(body);
-        let doc_attr = self.doc_attr;
+        let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
-                #doc_attr
+                #(#doc_attrs)*
                 pub #unsafety fn #rust_name #lifetime_param ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> #lifetime_addition {
                     #body
                 }
@@ -370,16 +398,16 @@ impl<'a> FnGenerator<'a> {
     fn generate_function_impl(&self, ret_type: &ReturnType) -> Item {
         let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(false);
         let rust_name = make_ident(self.rust_name);
-        let doc_attr = self.doc_attr;
+        let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
         let cxxbridge_name = self.cxxbridge_name;
         let body = self.wrap_call_with_unsafe(quote! {
             cxxbridge::#cxxbridge_name ( #(#arg_list),* )
         });
         Item::Fn(parse_quote! {
-            #doc_attr
+            #(#doc_attrs)*
             pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
-                #(#local_variables),*
+                #local_variables
                 #body
             }
         })

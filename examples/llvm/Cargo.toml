@@ -1,0 +1,21 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+# https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+# <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+# option. This file may not be copied, modified, or distributed
+# except according to those terms.
+
+[package]
+name = "autocxx-llvm-example"
+version = "0.1.0"
+authors = ["Adrian Taylor <adetaylor@chromium.org>"]
+edition = "2021"
+
+[dependencies]
+cxx = "1.0.54"
+autocxx = { path = "../..", version="0.17.2" }
+
+[build-dependencies]
+autocxx-build = { path = "../../gen/build", version="0.17.2" }
+miette = { version="4.3", features = [ "fancy" ] }

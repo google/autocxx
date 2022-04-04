@@ -1,16 +1,10 @@
 // Copyright 2021 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use crate::ParseResult;
 use proc_macro2::Ident;
@@ -19,7 +13,7 @@ use syn::parse::{Parse, ParseStream};
 
 /// A little like [`syn::Path`] but simpler - contains only identifiers,
 /// no path arguments. Guaranteed to always have at least one identifier.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RustPath(Vec<Ident>);
 
 impl RustPath {
@@ -34,6 +28,14 @@ impl RustPath {
 
     pub fn get_final_ident(&self) -> &Ident {
         self.0.last().unwrap()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
