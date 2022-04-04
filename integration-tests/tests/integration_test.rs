@@ -1393,7 +1393,7 @@ fn test_method_pass_pod_by_value() {
     run_test(cxx, hdr, rs, &[], &["Bob", "Anna"]);
 }
 
-fn perform_asan_doom_test(boxifier: TokenStream, box_type: TokenStream) {
+fn perform_asan_doom_test(into_raw: TokenStream, box_type: TokenStream) {
     if std::env::var_os("AUTOCXX_ASAN").is_none() {
         return;
     }
@@ -1409,12 +1409,12 @@ fn perform_asan_doom_test(boxifier: TokenStream, box_type: TokenStream) {
         }
     "};
     let rs = quote! {
-        let a = ffi::A::new().#boxifier();
-        let a_raw = a.into_raw();
+        let a = #box_type::emplace(ffi::A::new());
         unsafe {
+            let a_raw = #into_raw;
             // Intentional memory unsafety. Don't @ me.
-            let a_offset_into_doom = a_raw.offset(ffi::how_big_is_a());
-            *a.as_mut().unwrap() = 0x42;
+            let a_offset_into_doom = a_raw.offset(ffi::how_big_is_a().try_into().unwrap());
+            a_offset_into_doom.write_bytes(0x69, 1);
             #box_type::from_raw(a_raw); // to delete. If we haven't yet crashed.
         }
     };
@@ -1423,12 +1423,15 @@ fn perform_asan_doom_test(boxifier: TokenStream, box_type: TokenStream) {
 
 #[test]
 fn test_asan_working_as_expected_for_cpp_allocations() {
-    perform_asan_doom_test(quote! { within_unique_ptr }, quote! { UniquePtr })
+    perform_asan_doom_test(quote! { a.into_raw() }, quote! { UniquePtr })
 }
 
 #[test]
 fn test_asan_working_as_expected_for_rust_allocations() {
-    perform_asan_doom_test(quote! { within_box }, quote! { Box })
+    perform_asan_doom_test(
+        quote! { Box::into_raw(std::pin::Pin::into_inner_unchecked(a)) },
+        quote! { Box },
+    )
 }
 
 #[test]
