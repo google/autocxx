@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-integration-tests"
-version = "0.1.0"
+version = "0.19.1"
 dependencies = [
  "autocxx",
  "autocxx-engine",
