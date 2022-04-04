@@ -405,21 +405,21 @@ impl<'a> FnGenerator<'a> {
             (quote! {}, quote! {})
         };
         let call_body = self.make_call_body(&arg_list);
-        let body = quote! {
+        let call_body = quote! {
             #local_variables
             autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
                 let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
                 #call_body
             })
         };
-        let body = self.wrap_call_with_unsafe(body);
+        let call_body = self.wrap_call_with_unsafe(call_body);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
                 #(#doc_attrs)*
                 pub #unsafety fn #rust_name #lifetime_param ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> #lifetime_addition {
-                    #body
+                    #call_body
                 }
             }),
             ty: impl_block_type_name.get_final_ident(),
