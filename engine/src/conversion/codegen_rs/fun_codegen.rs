@@ -232,11 +232,14 @@ struct FnGenerator<'a> {
     non_pod_types: &'a HashSet<QualifiedName>,
 }
 
+struct ArgList {
+    wrapper_params: Punctuated<FnArg, Comma>,
+    local_variables: TokenStream,
+    arg_list: Vec<TokenStream>,
+}
+
 impl<'a> FnGenerator<'a> {
-    fn generate_arg_lists(
-        &self,
-        avoid_self: bool,
-    ) -> (Punctuated<FnArg, Comma>, TokenStream, Vec<TokenStream>) {
+    fn generate_arg_lists(&self, avoid_self: bool) -> ArgList {
         let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
         let mut local_variables = Vec::new();
         let mut arg_list = Vec::new();
@@ -259,7 +262,11 @@ impl<'a> FnGenerator<'a> {
             local_variables.extend(local_variable.into_iter());
         }
         let local_variables = quote! { #(#local_variables);* };
-        (wrapper_params, local_variables, arg_list)
+        ArgList {
+            wrapper_params,
+            local_variables,
+            arg_list,
+        }
     }
 
     /// Generate an 'impl Type { methods-go-here }' item
@@ -270,7 +277,11 @@ impl<'a> FnGenerator<'a> {
         ret_type: &ReturnType,
         deprecation: Option<&str>,
     ) -> Box<ImplBlockDetails> {
-        let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(avoid_self);
+        let ArgList {
+            wrapper_params,
+            local_variables,
+            arg_list,
+        } = self.generate_arg_lists(avoid_self);
         let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
             self.param_details,
             wrapper_params,
@@ -305,8 +316,11 @@ impl<'a> FnGenerator<'a> {
         details: &TraitMethodDetails,
         ret_type: &ReturnType,
     ) -> Box<TraitImplBlockDetails> {
-        let (mut wrapper_params, local_variables, arg_list) =
-            self.generate_arg_lists(details.avoid_self);
+        let ArgList {
+            mut wrapper_params,
+            local_variables,
+            arg_list,
+        } = self.generate_arg_lists(details.avoid_self);
         if let Some(parameter_reordering) = &details.parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
         }
@@ -365,7 +379,11 @@ impl<'a> FnGenerator<'a> {
         &self,
         impl_block_type_name: &QualifiedName,
     ) -> Box<ImplBlockDetails> {
-        let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(true);
+        let ArgList {
+            wrapper_params,
+            local_variables,
+            arg_list,
+        } = self.generate_arg_lists(true);
         let mut wrapper_params: Punctuated<FnArg, Comma> =
             wrapper_params.into_iter().skip(1).collect();
         let ptr_arg_name = &arg_list[0];
@@ -401,7 +419,11 @@ impl<'a> FnGenerator<'a> {
 
     /// Generate a function call wrapper
     fn generate_function_impl(&self, ret_type: &ReturnType) -> Item {
-        let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(false);
+        let ArgList {
+            wrapper_params,
+            local_variables,
+            arg_list,
+        } = self.generate_arg_lists(false);
         let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
