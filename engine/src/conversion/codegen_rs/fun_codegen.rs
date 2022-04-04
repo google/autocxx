@@ -280,10 +280,7 @@ impl<'a> FnGenerator<'a> {
         let rust_name = make_ident(self.rust_name);
         let unsafety = self.unsafety.wrapper_token();
         let doc_attrs = self.doc_attrs;
-        let cxxbridge_name = self.cxxbridge_name;
-        let call_body = self.wrap_call_with_unsafe(quote! {
-            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-        });
+        let call_body = self.make_possibly_unsafe_call_body(&arg_list);
         let deprecation = deprecation.map(|reason| {
             quote! {
                 #[deprecated = #reason]
@@ -321,12 +318,9 @@ impl<'a> FnGenerator<'a> {
         );
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
-        let cxxbridge_name = self.cxxbridge_name;
         let key = details.trt.clone();
         let method_name = &details.method_name;
-        let call_body = self.wrap_call_with_unsafe(quote! {
-            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-        });
+        let call_body = self.make_possibly_unsafe_call_body(&arg_list);
         let item = parse_quote! {
             #(#doc_attrs)*
             #unsafety fn #method_name #lifetime_tokens ( #wrapper_params ) #ret_type {
@@ -335,6 +329,17 @@ impl<'a> FnGenerator<'a> {
             }
         };
         Box::new(TraitImplBlockDetails { item, key })
+    }
+
+    fn make_possibly_unsafe_call_body(&self, arg_list: &[TokenStream]) -> TokenStream {
+        self.wrap_call_with_unsafe(self.make_call_body(arg_list))
+    }
+
+    fn make_call_body(&self, arg_list: &[TokenStream]) -> TokenStream {
+        let cxxbridge_name = self.cxxbridge_name;
+        quote! {
+            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+        }
     }
 
     fn should_wrap_unsafe_calls(&self) -> bool {
@@ -372,12 +377,12 @@ impl<'a> FnGenerator<'a> {
         } else {
             (quote! {}, quote! {})
         };
-        let cxxbridge_name = self.cxxbridge_name;
+        let call_body = self.make_call_body(&arg_list);
         let body = quote! {
             #local_variables
             autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
                 let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
-                cxxbridge::#cxxbridge_name(#(#arg_list),* )
+                #call_body
             })
         };
         let body = self.wrap_call_with_unsafe(body);
@@ -400,10 +405,7 @@ impl<'a> FnGenerator<'a> {
         let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
-        let cxxbridge_name = self.cxxbridge_name;
-        let body = self.wrap_call_with_unsafe(quote! {
-            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-        });
+        let body = self.make_possibly_unsafe_call_body(&arg_list);
         Item::Fn(parse_quote! {
             #(#doc_attrs)*
             pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
