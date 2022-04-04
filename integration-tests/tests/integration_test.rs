@@ -22,7 +22,7 @@ use autocxx_integration_tests::{
 };
 use indoc::indoc;
 use itertools::Itertools;
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::Token;
 use test_log::test;
@@ -1391,6 +1391,47 @@ fn test_method_pass_pod_by_value() {
         assert_eq!(b.get_bob(a), 12);
     };
     run_test(cxx, hdr, rs, &[], &["Bob", "Anna"]);
+}
+
+fn perform_asan_doom_test(into_raw: TokenStream, box_type: TokenStream) {
+    if std::env::var_os("AUTOCXX_ASAN").is_none() {
+        return;
+    }
+    // Testing that we get an asan fail when it's enabled.
+    // Really just testing our CI is working to spot ASAN mistakes.
+    let hdr = indoc! {"
+        #include <cstddef>
+        struct A {
+            int a;
+        };
+        inline size_t how_big_is_a() {
+            return sizeof(A);
+        }
+    "};
+    let rs = quote! {
+        let a = #box_type::emplace(ffi::A::new());
+        unsafe {
+            let a_raw = #into_raw;
+            // Intentional memory unsafety. Don't @ me.
+            let a_offset_into_doom = a_raw.offset(ffi::how_big_is_a().try_into().unwrap());
+            a_offset_into_doom.write_bytes(0x69, 1);
+            #box_type::from_raw(a_raw); // to delete. If we haven't yet crashed.
+        }
+    };
+    run_test_expect_fail("", hdr, rs, &["A", "how_big_is_a"], &[]);
+}
+
+#[test]
+fn test_asan_working_as_expected_for_cpp_allocations() {
+    perform_asan_doom_test(quote! { a.into_raw() }, quote! { UniquePtr })
+}
+
+#[test]
+fn test_asan_working_as_expected_for_rust_allocations() {
+    perform_asan_doom_test(
+        quote! { Box::into_raw(std::pin::Pin::into_inner_unchecked(a)) },
+        quote! { Box },
+    )
 }
 
 #[test]

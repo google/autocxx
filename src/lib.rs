@@ -475,6 +475,8 @@ pub mod prelude {
     pub use cxx::UniquePtr;
     pub use moveit::moveit;
     pub use moveit::new::New;
+    pub use moveit::Emplace;
+    pub use moveit::EmplaceUnpinned;
 }
 
 /// Re-export moveit for ease of consumers.

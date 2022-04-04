@@ -99,7 +99,11 @@ impl LinkableTryBuilder {
             );
         }
         let temp_path = self.temp_dir.path().to_str().unwrap();
-        std::env::set_var("RUSTFLAGS", format!("-L {}", temp_path));
+        let mut rustflags = format!("-L {}", temp_path);
+        if std::env::var_os("AUTOCXX_ASAN").is_some() {
+            rustflags.push_str(" -Z sanitizer=address -Clinker=clang++ -Clink-arg=-fuse-ld=lld");
+        }
+        std::env::set_var("RUSTFLAGS", rustflags);
         std::env::set_var("AUTOCXX_RS", temp_path);
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();

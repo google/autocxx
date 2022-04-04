@@ -226,6 +226,9 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         let mut counter = 0;
         let mut builder = cc::Build::new();
         builder.cpp(true);
+        if std::env::var_os("AUTOCXX_ASAN").is_some() {
+            builder.flag_if_supported("-fsanitize=address");
+        }
         let mut generated_rs = Vec::new();
         let mut generated_cpp = Vec::new();
         builder.includes(parsed_file.include_dirs());
