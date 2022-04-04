@@ -1400,6 +1400,7 @@ fn perform_asan_doom_test(boxifier: TokenStream, box_type: TokenStream) {
     // Testing that we get an asan fail when it's enabled.
     // Really just testing our CI is working to spot ASAN mistakes.
     let hdr = indoc! {"
+        #include <cstddef>
         struct A {
             int a;
         };
