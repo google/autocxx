@@ -236,6 +236,9 @@ struct ArgList {
     wrapper_params: Punctuated<FnArg, Comma>,
     local_variables: TokenStream,
     arg_list: Vec<TokenStream>,
+    /// If this function needs to return something on the Rust side, but
+    /// across the C++ boundary this is a placement new into a pointer.
+    ptr_arg_name: Option<TokenStream>,
 }
 
 impl<'a> FnGenerator<'a> {
@@ -243,6 +246,7 @@ impl<'a> FnGenerator<'a> {
         let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
         let mut local_variables = Vec::new();
         let mut arg_list = Vec::new();
+        let mut ptr_arg_name = None;
         let wrap_unsafe_calls = self.should_wrap_unsafe_calls();
         for pd in self.param_details {
             let type_name = pd.conversion.rust_wrapper_unconverted_type();
@@ -251,21 +255,26 @@ impl<'a> FnGenerator<'a> {
             } else {
                 pd.name.clone()
             };
-            let param_mutability = pd.conversion.rust_conversion.requires_mutability();
-            wrapper_params.push(parse_quote!(
-                #param_mutability #wrapper_arg_name: #type_name
-            ));
             let (local_variable, actual_arg) = pd
                 .conversion
-                .rust_conversion(wrapper_arg_name, wrap_unsafe_calls);
-            arg_list.push(actual_arg);
+                .rust_conversion(wrapper_arg_name.clone(), wrap_unsafe_calls);
+            arg_list.push(actual_arg.clone());
             local_variables.extend(local_variable.into_iter());
+            if pd.is_placement_return_destination {
+                ptr_arg_name = Some(actual_arg);
+            } else {
+                let param_mutability = pd.conversion.rust_conversion.requires_mutability();
+                wrapper_params.push(parse_quote!(
+                    #param_mutability #wrapper_arg_name: #type_name
+                ));
+            }
         }
         let local_variables = quote! { #(#local_variables);* };
         ArgList {
             wrapper_params,
             local_variables,
             arg_list,
+            ptr_arg_name,
         }
     }
 
@@ -281,6 +290,7 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             local_variables,
             arg_list,
+            ptr_arg_name: _,
         } = self.generate_arg_list(avoid_self);
         let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
             self.param_details,
@@ -320,6 +330,7 @@ impl<'a> FnGenerator<'a> {
             mut wrapper_params,
             local_variables,
             arg_list,
+            ptr_arg_name: _,
         } = self.generate_arg_list(details.avoid_self);
         if let Some(parameter_reordering) = &details.parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
@@ -380,13 +391,11 @@ impl<'a> FnGenerator<'a> {
         impl_block_type_name: &QualifiedName,
     ) -> Box<ImplBlockDetails> {
         let ArgList {
-            wrapper_params,
+            mut wrapper_params,
             local_variables,
             arg_list,
+            ptr_arg_name,
         } = self.generate_arg_list(true);
-        let mut wrapper_params: Punctuated<FnArg, Comma> =
-            wrapper_params.into_iter().skip(1).collect();
-        let ptr_arg_name = &arg_list[0];
         let rust_name = make_ident(&self.rust_name);
         let any_references = self.param_details.iter().any(|pd| pd.was_reference);
         let (lifetime_param, lifetime_addition) = if any_references {
@@ -423,6 +432,7 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             local_variables,
             arg_list,
+            ptr_arg_name: _,
         } = self.generate_arg_list(false);
         let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
