@@ -12,7 +12,10 @@ use assert_cmd::Command;
 use autocxx_integration_tests::build_from_folder;
 use tempdir::TempDir;
 
-static MAIN_RS: &str = include_str!("../../../demo/src/main.rs");
+static MAIN_RS: &str = concat!(
+    include_str!("../../../demo/src/main.rs"),
+    "#[link(name = \"autocxx-demo\")]\nextern \"C\" {}"
+);
 static INPUT_H: &str = include_str!("../../../demo/src/input.h");
 static BLANK: &str = "// Blank autocxx placeholder";
 

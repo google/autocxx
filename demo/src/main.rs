@@ -14,9 +14,6 @@ include_cpp! {
     generate!("Goat")
 }
 
-#[link(name = "autocxx-demo")]
-extern "C" {}
-
 fn main() {
     println!("Hello, world! - C++ math should say 12={}", ffi::DoMath(4));
     let mut goat = ffi::Goat::new().within_box();
