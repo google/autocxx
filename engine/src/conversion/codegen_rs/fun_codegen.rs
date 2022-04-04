@@ -239,7 +239,7 @@ struct ArgList {
 }
 
 impl<'a> FnGenerator<'a> {
-    fn generate_arg_lists(&self, avoid_self: bool) -> ArgList {
+    fn generate_arg_list(&self, avoid_self: bool) -> ArgList {
         let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
         let mut local_variables = Vec::new();
         let mut arg_list = Vec::new();
@@ -281,7 +281,7 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             local_variables,
             arg_list,
-        } = self.generate_arg_lists(avoid_self);
+        } = self.generate_arg_list(avoid_self);
         let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
             self.param_details,
             wrapper_params,
@@ -320,7 +320,7 @@ impl<'a> FnGenerator<'a> {
             mut wrapper_params,
             local_variables,
             arg_list,
-        } = self.generate_arg_lists(details.avoid_self);
+        } = self.generate_arg_list(details.avoid_self);
         if let Some(parameter_reordering) = &details.parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
         }
@@ -383,7 +383,7 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             local_variables,
             arg_list,
-        } = self.generate_arg_lists(true);
+        } = self.generate_arg_list(true);
         let mut wrapper_params: Punctuated<FnArg, Comma> =
             wrapper_params.into_iter().skip(1).collect();
         let ptr_arg_name = &arg_list[0];
@@ -423,7 +423,7 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             local_variables,
             arg_list,
-        } = self.generate_arg_lists(false);
+        } = self.generate_arg_list(false);
         let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
