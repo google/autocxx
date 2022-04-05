@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashSet;
+use std::{borrow::Cow, collections::HashSet};
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -116,8 +116,13 @@ pub(super) fn gen_function(
         non_pod_types,
     };
     // In rare occasions, we might need to give an explicit lifetime.
-    let (lifetime_tokens, params, ret_type) =
-        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type, non_pod_types, true);
+    let (lifetime_tokens, params, ret_type) = add_explicit_lifetime_if_necessary(
+        &param_details,
+        params,
+        Cow::Borrowed(&ret_type),
+        non_pod_types,
+        true,
+    );
 
     if analysis.rust_wrapper_needed {
         match kind {
@@ -276,7 +281,7 @@ impl<'a> FnGenerator<'a> {
         let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
             self.param_details,
             wrapper_params,
-            ret_type,
+            Cow::Borrowed(ret_type),
             self.non_pod_types,
             false,
         );
