@@ -38,9 +38,10 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     Punctuated<FnArg, Comma>,
     Cow<'r, ReturnType>,
 ) {
-    let has_mutable_receiver = param_details
-        .iter()
-        .any(|pd| matches!(pd.self_type, Some((_, ReceiverMutability::Mutable))));
+    let has_mutable_receiver = param_details.iter().any(|pd| {
+        matches!(pd.self_type, Some((_, ReceiverMutability::Mutable)))
+            && !pd.is_placement_return_destination
+    });
 
     let any_param_is_reference = param_details.iter().any(|pd| pd.was_reference);
     let return_type_is_impl = return_type_is_impl(ret_type);
