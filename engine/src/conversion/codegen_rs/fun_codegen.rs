@@ -374,26 +374,21 @@ impl<'a> FnGenerator<'a> {
         } else {
             call_body
         };
-
-        self.wrap_call_with_unsafe(call_body)
+        if self.should_wrap_unsafe_calls() {
+            quote! {
+                unsafe {
+                    #call_body
+                }
+            }
+        } else {
+            call_body
+        }
     }
 
     fn should_wrap_unsafe_calls(&self) -> bool {
         matches!(self.unsafety, UnsafetyNeeded::JustBridge)
             || self.always_unsafe_due_to_trait_definition
-    }
-
-    fn wrap_call_with_unsafe(&self, call: TokenStream) -> TokenStream {
-        if self.should_wrap_unsafe_calls() {
-            quote! {
-                unsafe {
-                    #call
-                }
-            }
-        } else {
-            call
-        }
-    }
+    }    
 
     /// Generate a 'impl Type { methods-go-here }' item which is a constructor
     /// for use with moveit traits.
