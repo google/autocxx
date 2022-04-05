@@ -458,13 +458,16 @@ pub trait Within {
     fn within_unique_ptr(self) -> cxx::UniquePtr<Self::Inner>;
 }
 
+use cxx::ExternType;
+use cxx::kind::Opaque;
+use cxx::kind::Trivial;
 use moveit::MakeCppStorage;
 use moveit::{Emplace, EmplaceUnpinned};
 
 impl<N, T> Within for N
 where
     N: New<Output = T>,
-    T: UniquePtrTarget + MakeCppStorage,
+    T: UniquePtrTarget + MakeCppStorage + ExternType<Kind = Opaque>
 {
     type Inner = T;
     fn within_box(self) -> Pin<Box<T>> {
@@ -472,6 +475,30 @@ where
     }
     fn within_unique_ptr(self) -> cxx::UniquePtr<T> {
         UniquePtr::emplace(self)
+    }
+}
+
+/// Emulates the [`Within`] trait, but for trivial (plain old data) types.
+/// This allows such types to behave identically if a type is changed from
+/// `generate!` to `generate_pod!`.
+///
+/// (Ideally, this would be the exact same trait as [`Within`] but this runs
+/// the risk of conflicting implementations. Negative trait bounds would solve
+/// this!)
+pub trait WithinTrivial: UniquePtrTarget + Sized + Unpin {
+    fn within_box(self) -> Pin<Box<Self>>;
+    fn within_unique_ptr(self) -> cxx::UniquePtr<Self>;
+}
+
+impl<T> WithinTrivial for T
+where
+    T: UniquePtrTarget + ExternType<Kind = Trivial> + Sized + Unpin
+{
+    fn within_box(self) -> Pin<Box<T>> {
+        Pin::new(Box::new(self))
+    }
+    fn within_unique_ptr(self) -> cxx::UniquePtr<T> {
+        UniquePtr::new(self)
     }
 }
 
@@ -504,6 +531,7 @@ pub mod prelude {
     pub use crate::PinMut;
     pub use crate::ValueParam;
     pub use crate::Within;
+    pub use crate::WithinTrivial;
     pub use cxx::UniquePtr;
     pub use moveit::moveit;
     pub use moveit::new::New;
