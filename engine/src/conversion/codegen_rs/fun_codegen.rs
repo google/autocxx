@@ -287,7 +287,6 @@ impl<'a> FnGenerator<'a> {
         };
         let call_body = if let Some(ptr_arg_name) = ptr_arg_name {
             quote! {
-                #local_variables
                 autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
                     let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
                     #call_body
@@ -295,7 +294,6 @@ impl<'a> FnGenerator<'a> {
             }
         } else {
             quote! {
-                #local_variables
                 #call_body
             }
         };
@@ -307,6 +305,10 @@ impl<'a> FnGenerator<'a> {
             }
         } else {
             call_body
+        };
+        let call_body = quote! {
+            #local_variables
+            #call_body
         };
         (lifetime_tokens, wrapper_params, ret_type, call_body)
     }
