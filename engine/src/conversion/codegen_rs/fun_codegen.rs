@@ -294,7 +294,10 @@ impl<'a> FnGenerator<'a> {
                 })
             }
         } else {
-            call_body
+            quote! {
+                #local_variables
+                #call_body
+            }
         };
         let call_body = if self.should_wrap_unsafe_calls() {
             quote! {
