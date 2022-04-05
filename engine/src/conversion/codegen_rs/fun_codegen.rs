@@ -232,6 +232,81 @@ struct FnGenerator<'a> {
 }
 
 impl<'a> FnGenerator<'a> {
+    fn common_parts<'b>(
+        &self,
+        avoid_self: bool,
+        parameter_reordering: &Option<Vec<usize>>,
+        ret_type: &'b ReturnType,
+    ) -> (
+        Option<TokenStream>,
+        Punctuated<FnArg, Comma>,
+        std::borrow::Cow<'b, ReturnType>,
+        TokenStream,
+    ) {
+        let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
+        let mut local_variables = Vec::new();
+        let mut arg_list = Vec::new();
+        let mut ptr_arg_name = None;
+        let wrap_unsafe_calls = self.should_wrap_unsafe_calls();
+        for pd in self.param_details {
+            let type_name = pd.conversion.rust_wrapper_unconverted_type();
+            let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
+                parse_quote!(self)
+            } else {
+                pd.name.clone()
+            };
+            let (local_variable, actual_arg) = pd
+                .conversion
+                .rust_conversion(wrapper_arg_name.clone(), wrap_unsafe_calls);
+            arg_list.push(actual_arg.clone());
+            local_variables.extend(local_variable.into_iter());
+            if pd.is_placement_return_destination {
+                ptr_arg_name = Some(actual_arg);
+            } else {
+                let param_mutability = pd.conversion.rust_conversion.requires_mutability();
+                wrapper_params.push(parse_quote!(
+                    #param_mutability #wrapper_arg_name: #type_name
+                ));
+            }
+        }
+        let local_variables = quote! { #(#local_variables);* };
+        if let Some(parameter_reordering) = &parameter_reordering {
+            wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
+        }
+        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
+            self.param_details,
+            wrapper_params,
+            ret_type,
+            self.non_pod_types,
+        );
+
+        let cxxbridge_name = self.cxxbridge_name;
+        let call_body = quote! {
+            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+        };
+        let call_body = if let Some(ptr_arg_name) = ptr_arg_name {
+            quote! {
+                #local_variables
+                autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
+                    let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
+                    #call_body
+                })
+            }
+        } else {
+            call_body
+        };
+        let call_body = if self.should_wrap_unsafe_calls() {
+            quote! {
+                unsafe {
+                    #call_body
+                }
+            }
+        } else {
+            call_body
+        };
+        (lifetime_tokens, wrapper_params, ret_type, call_body)
+    }
+
     /// Generate an 'impl Type { methods-go-here }' item
     fn generate_method_impl(
         &self,
@@ -319,81 +394,6 @@ impl<'a> FnGenerator<'a> {
                 #call_body
             }
         })
-    }
-
-    fn common_parts<'b>(
-        &self,
-        avoid_self: bool,
-        parameter_reordering: &Option<Vec<usize>>,
-        ret_type: &'b ReturnType,
-    ) -> (
-        Option<TokenStream>,
-        Punctuated<FnArg, Comma>,
-        std::borrow::Cow<'b, ReturnType>,
-        TokenStream,
-    ) {
-        let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
-        let mut local_variables = Vec::new();
-        let mut arg_list = Vec::new();
-        let mut ptr_arg_name = None;
-        let wrap_unsafe_calls = self.should_wrap_unsafe_calls();
-        for pd in self.param_details {
-            let type_name = pd.conversion.rust_wrapper_unconverted_type();
-            let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
-                parse_quote!(self)
-            } else {
-                pd.name.clone()
-            };
-            let (local_variable, actual_arg) = pd
-                .conversion
-                .rust_conversion(wrapper_arg_name.clone(), wrap_unsafe_calls);
-            arg_list.push(actual_arg.clone());
-            local_variables.extend(local_variable.into_iter());
-            if pd.is_placement_return_destination {
-                ptr_arg_name = Some(actual_arg);
-            } else {
-                let param_mutability = pd.conversion.rust_conversion.requires_mutability();
-                wrapper_params.push(parse_quote!(
-                    #param_mutability #wrapper_arg_name: #type_name
-                ));
-            }
-        }
-        let local_variables = quote! { #(#local_variables);* };
-        if let Some(parameter_reordering) = &parameter_reordering {
-            wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
-        }
-        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
-            self.param_details,
-            wrapper_params,
-            ret_type,
-            self.non_pod_types,
-        );
-
-        let cxxbridge_name = self.cxxbridge_name;
-        let call_body = quote! {
-            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-        };
-        let call_body = if let Some(ptr_arg_name) = ptr_arg_name {
-            quote! {
-                #local_variables
-                autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
-                    let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
-                    #call_body
-                })
-            }
-        } else {
-            call_body
-        };
-        let call_body = if self.should_wrap_unsafe_calls() {
-            quote! {
-                unsafe {
-                    #call_body
-                }
-            }
-        } else {
-            call_body
-        };
-        (lifetime_tokens, wrapper_params, ret_type, call_body)
     }
 
     fn should_wrap_unsafe_calls(&self) -> bool {
