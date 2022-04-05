@@ -407,7 +407,7 @@ impl<'a> FnGenerator<'a> {
         let body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
         Item::Fn(parse_quote! {
             #(#doc_attrs)*
-            pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
+            pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                 #body
             }
         })
