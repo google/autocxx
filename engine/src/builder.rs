@@ -85,7 +85,6 @@ pub struct Builder<'a, BuilderContext> {
 }
 
 impl<CTX: BuilderContext> Builder<'_, CTX> {
-    #[doc(hidden)]
     pub fn new(
         rs_file: impl AsRef<Path>,
         autocxx_incs: impl IntoIterator<Item = impl AsRef<OsStr>>,
