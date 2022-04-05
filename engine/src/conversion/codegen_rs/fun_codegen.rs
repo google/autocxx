@@ -353,43 +353,6 @@ impl<'a> FnGenerator<'a> {
         Box::new(TraitImplBlockDetails { item, key })
     }
 
-    fn make_call_body(
-        &self,
-        arg_list: &[TokenStream],
-        local_variables: TokenStream,
-        ptr_arg_name: Option<TokenStream>,
-    ) -> TokenStream {
-        let cxxbridge_name = self.cxxbridge_name;
-        let call_body = quote! {
-            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-        };
-        let call_body = if let Some(ptr_arg_name) = ptr_arg_name {
-            quote! {
-                #local_variables
-                autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
-                    let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
-                    #call_body
-                })
-            }
-        } else {
-            call_body
-        };
-        if self.should_wrap_unsafe_calls() {
-            quote! {
-                unsafe {
-                    #call_body
-                }
-            }
-        } else {
-            call_body
-        }
-    }
-
-    fn should_wrap_unsafe_calls(&self) -> bool {
-        matches!(self.unsafety, UnsafetyNeeded::JustBridge)
-            || self.always_unsafe_due_to_trait_definition
-    }    
-
     /// Generate a 'impl Type { methods-go-here }' item which is a constructor
     /// for use with moveit traits.
     fn generate_constructor_impl(
@@ -443,6 +406,43 @@ impl<'a> FnGenerator<'a> {
             }
         })
     }
+
+    fn make_call_body(
+        &self,
+        arg_list: &[TokenStream],
+        local_variables: TokenStream,
+        ptr_arg_name: Option<TokenStream>,
+    ) -> TokenStream {
+        let cxxbridge_name = self.cxxbridge_name;
+        let call_body = quote! {
+            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+        };
+        let call_body = if let Some(ptr_arg_name) = ptr_arg_name {
+            quote! {
+                #local_variables
+                autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
+                    let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
+                    #call_body
+                })
+            }
+        } else {
+            call_body
+        };
+        if self.should_wrap_unsafe_calls() {
+            quote! {
+                unsafe {
+                    #call_body
+                }
+            }
+        } else {
+            call_body
+        }
+    }
+
+    fn should_wrap_unsafe_calls(&self) -> bool {
+        matches!(self.unsafety, UnsafetyNeeded::JustBridge)
+            || self.always_unsafe_due_to_trait_definition
+    }    
 
     fn reorder_parameters(
         params: Punctuated<FnArg, Comma>,
