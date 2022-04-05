@@ -1769,20 +1769,6 @@ impl<'a> FnAnalyzer<'a> {
         }
     }
 
-    fn return_type_conversion_details(&self, ty: &Type) -> TypeConversionPolicy {
-        match ty {
-            Type::Path(p) => {
-                let tn = QualifiedName::from_type_path(p);
-                if self.pod_safe_types.contains(&tn) {
-                    TypeConversionPolicy::new_unconverted(ty.clone())
-                } else {
-                    TypeConversionPolicy::new_to_unique_ptr(ty.clone())
-                }
-            }
-            _ => TypeConversionPolicy::new_unconverted(ty.clone()),
-        }
-    }
-
     fn convert_return_type(
         &mut self,
         rt: &ReturnType,
@@ -1802,7 +1788,18 @@ impl<'a> FnAnalyzer<'a> {
                     self.convert_boxed_type(boxed_type.clone(), ns, references.ref_return)?;
                 let boxed_type = annotated_type.ty;
                 let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
-                let conversion = self.return_type_conversion_details(boxed_type.as_ref());
+                let ty: &Type = boxed_type.as_ref();
+                let conversion = match ty {
+                    Type::Path(p) => {
+                        let tn = QualifiedName::from_type_path(p);
+                        if self.pod_safe_types.contains(&tn) {
+                            TypeConversionPolicy::new_unconverted(ty.clone())
+                        } else {
+                            TypeConversionPolicy::new_to_unique_ptr(ty.clone())
+                        }
+                    }
+                    _ => TypeConversionPolicy::new_unconverted(ty.clone()),
+                };
                 ReturnTypeAnalysis {
                     rt: ReturnType::Type(*rarrow, boxed_type),
                     conversion: Some(conversion),
