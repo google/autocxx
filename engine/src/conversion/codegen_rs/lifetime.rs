@@ -10,7 +10,7 @@ use crate::{
     types::QualifiedName,
 };
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 use std::{borrow::Cow, collections::HashSet};
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, GenericArgument, PatType, Path,
@@ -19,13 +19,14 @@ use syn::{
 
 /// Function which can add explicit lifetime parameters to function signatures
 /// where necessary, based on analysis of parameters and return types.
-/// This is necessary only in two cases:
+/// This is necessary in three cases:
 /// 1) where the parameter is a Pin<&mut T>
 ///    and the return type is some kind of reference - because lifetime elision
 ///    is not smart enough to see inside a Pin.
 /// 2) as a workaround for https://github.com/dtolnay/cxx/issues/1024, where the
 ///    input parameter is a non-POD type but the output reference is a POD or
 ///    built-in type
+/// 3) Any parameter is any form of reference, and we're returning an `impl New`
 pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     param_details: &[ArgumentAnalysis],
     mut params: Punctuated<FnArg, Comma>,
@@ -40,10 +41,13 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
         .iter()
         .any(|pd| matches!(pd.self_type, Some((_, ReceiverMutability::Mutable))));
 
+    let any_param_is_reference = param_details.iter().any(|pd| pd.was_reference);
+    let return_type_is_impl = return_type_is_impl(ret_type);
     let non_pod_ref_param = reference_parameter_is_non_pod_reference(&params, non_pod_types);
     let ret_type_pod = return_type_is_pod_or_known_type_reference(ret_type, non_pod_types);
+    let returning_impl_with_a_reference_param = return_type_is_impl && any_param_is_reference;
     let hits_1024_bug = non_pod_ref_param && ret_type_pod;
-    if !(has_mutable_receiver || hits_1024_bug) {
+    if !(has_mutable_receiver || hits_1024_bug || returning_impl_with_a_reference_param) {
         return (None, params, Cow::Borrowed(ret_type));
     }
     let new_return_type = match ret_type {
@@ -61,6 +65,13 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                 add_lifetime_to_pinned_reference(&mut new_path.path.segments)
                     .ok()
                     .map(|_| ReturnType::Type(*rarrow, Box::new(Type::Path(new_path))))
+            }
+            Type::ImplTrait(tyit) => {
+                let old_tyit = tyit.to_token_stream();
+                log::info!("It's {}", old_tyit.to_string());
+                Some(parse_quote! {
+                    #rarrow #old_tyit + 'a
+                })
             }
             _ => None,
         },
@@ -127,6 +138,10 @@ fn return_type_is_pod_or_known_type_reference(
     }
 }
 
+fn return_type_is_impl(ret_type: &ReturnType) -> bool {
+    matches!(ret_type, ReturnType::Type(_, boxed_type) if matches!(boxed_type.as_ref(), Type::ImplTrait(..)))
+}
+
 #[derive(Debug)]
 enum AddLifetimeError {
     WasNotPin,
@@ -162,25 +177,4 @@ fn add_lifetime_to_pinned_reference(
 
 fn add_lifetime_to_reference(tyr: &mut syn::TypeReference) {
     tyr.lifetime = Some(parse_quote! { 'a })
-}
-
-pub(crate) fn add_lifetime_to_all_reference_params(params: &mut Punctuated<FnArg, Comma>) {
-    for mut param in params.iter_mut() {
-        match &mut param {
-            FnArg::Typed(PatType { ty, .. }) => match ty.as_mut() {
-                Type::Path(TypePath {
-                    path: Path { segments, .. },
-                    ..
-                }) => {
-                    // This function will check whether this path is a pinned reference and if
-                    // so, add a lifetime to it. Otherwise, it will return an error - which
-                    // we ignore.
-                    add_lifetime_to_pinned_reference(segments).unwrap_or_default()
-                }
-                Type::Reference(tyr) => add_lifetime_to_reference(tyr),
-                _ => {}
-            },
-            _ => panic!("Unexpected fnarg"),
-        }
-    }
 }

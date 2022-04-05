@@ -29,7 +29,6 @@ use crate::{
             TraitMethodDetails,
         },
         api::UnsafetyNeeded,
-        codegen_rs::lifetime::add_lifetime_to_all_reference_params,
     },
     types::{Namespace, QualifiedName},
 };
@@ -391,19 +390,19 @@ impl<'a> FnGenerator<'a> {
         impl_block_type_name: &QualifiedName,
     ) -> Box<ImplBlockDetails> {
         let ArgList {
-            mut wrapper_params,
+            wrapper_params,
             local_variables,
             arg_list,
             ptr_arg_name,
         } = self.generate_arg_list(true);
         let rust_name = make_ident(&self.rust_name);
-        let any_references = self.param_details.iter().any(|pd| pd.was_reference);
-        let (lifetime_param, lifetime_addition) = if any_references {
-            add_lifetime_to_all_reference_params(&mut wrapper_params);
-            (quote! { <'a> }, quote! { + 'a })
-        } else {
-            (quote! {}, quote! {})
-        };
+        let ret_type: ReturnType = parse_quote! { -> impl autocxx::moveit::new::New<Output=Self> };
+        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
+            self.param_details,
+            wrapper_params,
+            &ret_type,
+            self.non_pod_types,
+        );
         let call_body = self.make_call_body(&arg_list);
         let call_body = quote! {
             #local_variables
@@ -418,7 +417,7 @@ impl<'a> FnGenerator<'a> {
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
                 #(#doc_attrs)*
-                pub #unsafety fn #rust_name #lifetime_param ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> #lifetime_addition {
+                pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                     #call_body
                 }
             }),
