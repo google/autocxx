@@ -180,6 +180,7 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) was_reference: bool,
     pub(crate) deps: HashSet<QualifiedName>,
     pub(crate) requires_unsafe: UnsafetyNeeded,
+    pub(crate) is_placement_return_destination: bool,
 }
 
 struct ReturnTypeAnalysis {
@@ -722,6 +723,7 @@ impl<'a> FnAnalyzer<'a> {
                     true,
                     None,
                     sophistication,
+                    false,
                 )
             })
             .partition(Result::is_ok);
@@ -999,6 +1001,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     None,
                     sophistication,
+                    true,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
             }
@@ -1016,6 +1019,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromTypeToPtr),
                     sophistication,
+                    false,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
             }
@@ -1038,6 +1042,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromPinMaybeUninitToPtr),
                     sophistication,
+                    false,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
             }
@@ -1061,6 +1066,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromPinMaybeUninitToPtr),
                     sophistication,
+                    false,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
                 self.reanalyze_parameter(
@@ -1072,6 +1078,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromPinMoveRefToPtr),
                     sophistication,
+                    false,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
             }
@@ -1410,6 +1417,7 @@ impl<'a> FnAnalyzer<'a> {
         param_details: &mut [ArgumentAnalysis],
         force_rust_conversion: Option<RustConversionType>,
         sophistication: TypeConversionSophistication,
+        construct_into_self: bool,
     ) -> Result<(), ConvertError> {
         self.convert_fn_arg(
             fun.inputs.iter().nth(param_idx).unwrap(),
@@ -1420,6 +1428,7 @@ impl<'a> FnAnalyzer<'a> {
             false,
             force_rust_conversion,
             sophistication,
+            construct_into_self,
         )
         .map(|(new_arg, new_analysis)| {
             param_details[param_idx] = new_analysis;
@@ -1574,6 +1583,7 @@ impl<'a> FnAnalyzer<'a> {
         treat_this_as_reference: bool,
         force_rust_conversion: Option<RustConversionType>,
         sophistication: TypeConversionSophistication,
+        construct_into_self: bool,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
             FnArg::Typed(pt) => {
@@ -1582,6 +1592,7 @@ impl<'a> FnAnalyzer<'a> {
                 let old_pat = *pt.pat;
                 let mut treat_as_reference = false;
                 let mut treat_as_rvalue_reference = false;
+                let mut is_placement_return_destination = false;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
                         let this_type = match pt.ty.as_ref() {
@@ -1622,6 +1633,7 @@ impl<'a> FnAnalyzer<'a> {
                             ))),
                         }?;
                         self_type = Some(this_type);
+                        is_placement_return_destination = construct_into_self;
                         if treat_this_as_reference {
                             pp.ident = Ident::new("self", pp.ident.span());
                             treat_as_reference = true;
@@ -1673,6 +1685,7 @@ impl<'a> FnAnalyzer<'a> {
                         ),
                         deps: annotated_type.types_encountered,
                         requires_unsafe,
+                        is_placement_return_destination,
                     },
                 )
             }
