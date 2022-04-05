@@ -231,52 +231,7 @@ struct FnGenerator<'a> {
     non_pod_types: &'a HashSet<QualifiedName>,
 }
 
-struct ArgList {
-    wrapper_params: Punctuated<FnArg, Comma>,
-    local_variables: TokenStream,
-    arg_list: Vec<TokenStream>,
-    /// If this function needs to return something on the Rust side, but
-    /// across the C++ boundary this is a placement new into a pointer.
-    ptr_arg_name: Option<TokenStream>,
-}
-
 impl<'a> FnGenerator<'a> {
-    fn generate_arg_list(&self, avoid_self: bool) -> ArgList {
-        let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
-        let mut local_variables = Vec::new();
-        let mut arg_list = Vec::new();
-        let mut ptr_arg_name = None;
-        let wrap_unsafe_calls = self.should_wrap_unsafe_calls();
-        for pd in self.param_details {
-            let type_name = pd.conversion.rust_wrapper_unconverted_type();
-            let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
-                parse_quote!(self)
-            } else {
-                pd.name.clone()
-            };
-            let (local_variable, actual_arg) = pd
-                .conversion
-                .rust_conversion(wrapper_arg_name.clone(), wrap_unsafe_calls);
-            arg_list.push(actual_arg.clone());
-            local_variables.extend(local_variable.into_iter());
-            if pd.is_placement_return_destination {
-                ptr_arg_name = Some(actual_arg);
-            } else {
-                let param_mutability = pd.conversion.rust_conversion.requires_mutability();
-                wrapper_params.push(parse_quote!(
-                    #param_mutability #wrapper_arg_name: #type_name
-                ));
-            }
-        }
-        let local_variables = quote! { #(#local_variables);* };
-        ArgList {
-            wrapper_params,
-            local_variables,
-            arg_list,
-            ptr_arg_name,
-        }
-    }
-
     /// Generate an 'impl Type { methods-go-here }' item
     fn generate_method_impl(
         &self,
@@ -377,12 +332,33 @@ impl<'a> FnGenerator<'a> {
         std::borrow::Cow<'b, ReturnType>,
         TokenStream,
     ) {
-        let ArgList {
-            mut wrapper_params,
-            local_variables,
-            arg_list,
-            ptr_arg_name,
-        } = self.generate_arg_list(avoid_self);
+        let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
+        let mut local_variables = Vec::new();
+        let mut arg_list = Vec::new();
+        let mut ptr_arg_name = None;
+        let wrap_unsafe_calls = self.should_wrap_unsafe_calls();
+        for pd in self.param_details {
+            let type_name = pd.conversion.rust_wrapper_unconverted_type();
+            let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
+                parse_quote!(self)
+            } else {
+                pd.name.clone()
+            };
+            let (local_variable, actual_arg) = pd
+                .conversion
+                .rust_conversion(wrapper_arg_name.clone(), wrap_unsafe_calls);
+            arg_list.push(actual_arg.clone());
+            local_variables.extend(local_variable.into_iter());
+            if pd.is_placement_return_destination {
+                ptr_arg_name = Some(actual_arg);
+            } else {
+                let param_mutability = pd.conversion.rust_conversion.requires_mutability();
+                wrapper_params.push(parse_quote!(
+                    #param_mutability #wrapper_arg_name: #type_name
+                ));
+            }
+        }
+        let local_variables = quote! { #(#local_variables);* };
         if let Some(parameter_reordering) = &parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
         }
@@ -392,16 +368,7 @@ impl<'a> FnGenerator<'a> {
             ret_type,
             self.non_pod_types,
         );
-        let call_body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
-        (lifetime_tokens, wrapper_params, ret_type, call_body)
-    }
 
-    fn make_call_body(
-        &self,
-        arg_list: &[TokenStream],
-        local_variables: TokenStream,
-        ptr_arg_name: Option<TokenStream>,
-    ) -> TokenStream {
         let cxxbridge_name = self.cxxbridge_name;
         let call_body = quote! {
             cxxbridge::#cxxbridge_name ( #(#arg_list),* )
@@ -417,7 +384,7 @@ impl<'a> FnGenerator<'a> {
         } else {
             call_body
         };
-        if self.should_wrap_unsafe_calls() {
+        let call_body = if self.should_wrap_unsafe_calls() {
             quote! {
                 unsafe {
                     #call_body
@@ -425,7 +392,8 @@ impl<'a> FnGenerator<'a> {
             }
         } else {
             call_body
-        }
+        };
+        (lifetime_tokens, wrapper_params, ret_type, call_body)
     }
 
     fn should_wrap_unsafe_calls(&self) -> bool {
