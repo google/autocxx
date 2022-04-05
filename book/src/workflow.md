@@ -73,9 +73,31 @@ fn main() {
 }
 ```
 
-At the moment, you can refer *from* manual bindings *to* automated bindings,
-not the other way round. So if you specify a type in your manual bindings, any
-functions which use that type will also need to be manually declared.
+In the example above, we're referring *from* manual bindings *to* automated bindings.
+
+You can also do it the other way round:
+
+```rust,ignore
+autocxx::include_cpp! {
+    #hexathorpe include "input.h"
+    safety!(unsafe_ffi)
+    generate!("handle_a")
+    generate!("create_a")
+    extern_cpp_type!("A", ffi2::A)
+}
+#[cxx::bridge]
+pub mod ffi2 {
+    unsafe extern "C++" {
+        include!("input.h");
+        type A;
+    }
+    impl UniquePtr<A> {}
+}
+fn main() {
+    let a = ffi::create_a();
+    ffi::handle_a(&a);
+}
+```
 
 ## My build entirely failed
 
