@@ -458,16 +458,16 @@ pub trait Within {
     fn within_unique_ptr(self) -> cxx::UniquePtr<Self::Inner>;
 }
 
-use cxx::ExternType;
 use cxx::kind::Opaque;
 use cxx::kind::Trivial;
+use cxx::ExternType;
 use moveit::MakeCppStorage;
 use moveit::{Emplace, EmplaceUnpinned};
 
 impl<N, T> Within for N
 where
     N: New<Output = T>,
-    T: UniquePtrTarget + MakeCppStorage + ExternType<Kind = Opaque>
+    T: UniquePtrTarget + MakeCppStorage + ExternType<Kind = Opaque>,
 {
     type Inner = T;
     fn within_box(self) -> Pin<Box<T>> {
@@ -492,7 +492,7 @@ pub trait WithinTrivial: UniquePtrTarget + Sized + Unpin {
 
 impl<T> WithinTrivial for T
 where
-    T: UniquePtrTarget + ExternType<Kind = Trivial> + Sized + Unpin
+    T: UniquePtrTarget + ExternType<Kind = Trivial> + Sized + Unpin,
 {
     fn within_box(self) -> Pin<Box<T>> {
         Pin::new(Box::new(self))

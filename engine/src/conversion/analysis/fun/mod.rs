@@ -1804,53 +1804,76 @@ impl<'a> FnAnalyzer<'a> {
         ns: &Namespace,
         references: &References,
     ) -> Result<ReturnTypeAnalysis, ConvertError> {
-        let result = match rt {
+        Ok(match rt {
             ReturnType::Default => ReturnTypeAnalysis::default(),
             ReturnType::Type(rarrow, boxed_type) => {
                 let annotated_type =
                     self.convert_boxed_type(boxed_type.clone(), ns, references.ref_return)?;
                 let boxed_type = annotated_type.ty;
                 let ty: &Type = boxed_type.as_ref();
-                let requires_placement_param = matches!(boxed_type.as_ref(),
-                    Type::Path(p) if !self.pod_safe_types.contains(&QualifiedName::from_type_path(p)));
-                if requires_placement_param {
-                    let fnarg = parse_quote! {
-                        placement_return_type: *mut #ty
-                    };
-                    let (fnarg, analysis) = self.convert_fn_arg(
-                        &fnarg,
-                        ns,
-                        "",
-                        &None,
-                        &References::default(),
-                        false,
-                        Some(RustConversionType::FromPlacementParamToNewReturn),
-                        TypeConversionSophistication::Regular,
-                        false,
-                    )?;
-                    ReturnTypeAnalysis {
-                        rt: ReturnType::Default,
-                        conversion: Some(TypeConversionPolicy::new_for_placement_return(
-                            ty.clone(),
-                        )),
-                        was_reference: false,
-                        deps: annotated_type.types_encountered,
-                        placement_param_needed: Some((fnarg, analysis)),
+                match ty {
+                    Type::Path(p)
+                        if !self
+                            .pod_safe_types
+                            .contains(&QualifiedName::from_type_path(p)) =>
+                    {
+                        let tn = QualifiedName::from_type_path(p);
+                        if known_types().can_store_only_in_unique_ptr(&tn) {
+                            // CxxString, largely
+                            let conversion =
+                                Some(TypeConversionPolicy::new_to_unique_ptr(ty.clone()));
+                            ReturnTypeAnalysis {
+                                rt: ReturnType::Type(*rarrow, boxed_type),
+                                conversion,
+                                was_reference: false,
+                                deps: annotated_type.types_encountered,
+                                placement_param_needed: None,
+                            }
+                        } else {
+                            // This is a non-POD type we want to return to Rust as an `impl New` so that callers
+                            // can decide whether to store this on the stack or heap.
+                            // That means, we do not literally _return_ it from C++ to Rust. Instead, our call
+                            // from Rust to C++ will include an extra placement parameter into which the object
+                            // is constructed.
+                            let fnarg = parse_quote! {
+                                placement_return_type: *mut #ty
+                            };
+                            let (fnarg, analysis) = self.convert_fn_arg(
+                                &fnarg,
+                                ns,
+                                "",
+                                &None,
+                                &References::default(),
+                                false,
+                                Some(RustConversionType::FromPlacementParamToNewReturn),
+                                TypeConversionSophistication::Regular,
+                                false,
+                            )?;
+                            ReturnTypeAnalysis {
+                                rt: ReturnType::Default,
+                                conversion: Some(TypeConversionPolicy::new_for_placement_return(
+                                    ty.clone(),
+                                )),
+                                was_reference: false,
+                                deps: annotated_type.types_encountered,
+                                placement_param_needed: Some((fnarg, analysis)),
+                            }
+                        }
                     }
-                } else {
-                    let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
-                    let conversion = Some(TypeConversionPolicy::new_unconverted(ty.clone()));
-                    ReturnTypeAnalysis {
-                        rt: ReturnType::Type(*rarrow, boxed_type),
-                        conversion,
-                        was_reference,
-                        deps: annotated_type.types_encountered,
-                        placement_param_needed: None,
+                    _ => {
+                        let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
+                        let conversion = Some(TypeConversionPolicy::new_unconverted(ty.clone()));
+                        ReturnTypeAnalysis {
+                            rt: ReturnType::Type(*rarrow, boxed_type),
+                            conversion,
+                            was_reference,
+                            deps: annotated_type.types_encountered,
+                            placement_param_needed: None,
+                        }
                     }
                 }
             }
-        };
-        Ok(result)
+        })
     }
 
     /// If a type has explicit constructors, bindgen will generate corresponding

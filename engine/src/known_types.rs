@@ -310,6 +310,10 @@ impl TypeDatabase {
     }
 
     pub(crate) fn convertible_from_strs(&self, ty: &QualifiedName) -> bool {
+        self.is_cxx_string(ty)
+    }
+
+    fn is_cxx_string(&self, ty: &QualifiedName) -> bool {
         self.get(ty)
             .map(|x| matches!(x.behavior, Behavior::CxxString))
             .unwrap_or(false)
@@ -328,6 +332,10 @@ impl TypeDatabase {
             rs_name.clone(),
         );
         self.by_rs_name.insert(rs_name, td);
+    }
+
+    pub(crate) fn can_store_only_in_unique_ptr(&self, ty: &QualifiedName) -> bool {
+        self.is_cxx_string(ty)
     }
 }
 
