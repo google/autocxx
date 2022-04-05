@@ -20,6 +20,9 @@ pub(crate) enum CppConversionType {
     FromPtrToValue,
     FromValueToUniquePtr,
     FromPtrToMove,
+    /// Ignored in the sense that it isn't passed into the C++ function.
+    IgnoredPlacementPtrParameter,
+    FromReturnValueToPlacementPtr,
 }
 
 impl CppConversionType {
@@ -47,6 +50,7 @@ pub(crate) enum RustConversionType {
     FromPinMoveRefToPtr,
     FromTypeToPtr,
     FromValueParamToPtr,
+    FromPlacementParamToNewReturn,
 }
 
 impl RustConversionType {
@@ -89,6 +93,17 @@ impl TypeConversionPolicy {
         TypeConversionPolicy {
             unwrapped_type: ty,
             cpp_conversion: CppConversionType::FromValueToUniquePtr,
+            rust_conversion: RustConversionType::None,
+        }
+    }
+
+    pub(crate) fn new_for_placement_return(ty: Type) -> Self {
+        TypeConversionPolicy {
+            unwrapped_type: ty,
+            cpp_conversion: CppConversionType::FromReturnValueToPlacementPtr,
+            // Rust conversion is marked as none here, since this policy
+            // will be applied to the return value, and the Rust-side
+            // shenanigans applies to the placement new *parameter*
             rust_conversion: RustConversionType::None,
         }
     }
@@ -143,6 +158,21 @@ impl TypeConversionPolicy {
         matches!(
             self.rust_conversion,
             RustConversionType::FromValueParamToPtr
+                | RustConversionType::FromPlacementParamToNewReturn
+        )
+    }
+
+    pub(crate) fn is_placement_parameter(&self) -> bool {
+        matches!(
+            self.cpp_conversion,
+            CppConversionType::IgnoredPlacementPtrParameter
+        )
+    }
+
+    pub(crate) fn populate_return_value(&self) -> bool {
+        !matches!(
+            self.cpp_conversion,
+            CppConversionType::FromReturnValueToPlacementPtr
         )
     }
 }

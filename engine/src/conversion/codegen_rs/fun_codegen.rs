@@ -9,7 +9,7 @@
 use std::{borrow::Cow, collections::HashSet};
 
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{
     parse::Parser,
     parse_quote,
@@ -53,11 +53,13 @@ impl UnsafetyNeeded {
         }
     }
 
-    pub(crate) fn from_param_details(params: &[ArgumentAnalysis], ignore_receiver: bool) -> Self {
+    pub(crate) fn from_param_details(params: &[ArgumentAnalysis], ignore_placements: bool) -> Self {
         params.iter().fold(UnsafetyNeeded::None, |accumulator, pd| {
             if matches!(accumulator, UnsafetyNeeded::Always) {
                 UnsafetyNeeded::Always
-            } else if pd.self_type.is_some() && ignore_receiver {
+            } else if (pd.self_type.is_some() || pd.is_placement_return_destination)
+                && ignore_placements
+            {
                 if matches!(
                     pd.requires_unsafe,
                     UnsafetyNeeded::Always | UnsafetyNeeded::JustBridge
@@ -254,7 +256,7 @@ impl<'a> FnGenerator<'a> {
         let mut arg_list = Vec::new();
         let mut ptr_arg_name = None;
         let wrap_unsafe_calls = self.should_wrap_unsafe_calls();
-        let ret_type = Cow::Borrowed(ret_type);
+        let mut ret_type = Cow::Borrowed(ret_type);
         for pd in self.param_details {
             let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
                 parse_quote!(self)
@@ -264,20 +266,30 @@ impl<'a> FnGenerator<'a> {
             let rust_for_param = pd
                 .conversion
                 .rust_conversion(wrapper_arg_name.clone(), wrap_unsafe_calls);
-            let RustParamConversion {
-                ty,
-                conversion,
-                local_variables: these_local_variables,
-            } = rust_for_param;
-            arg_list.push(conversion.clone());
-            local_variables.extend(these_local_variables.into_iter());
-            if pd.is_placement_return_destination {
-                ptr_arg_name = Some(conversion);
-            } else {
-                let param_mutability = pd.conversion.rust_conversion.requires_mutability();
-                wrapper_params.push(parse_quote!(
-                    #param_mutability #wrapper_arg_name: #ty
-                ));
+            match rust_for_param {
+                RustParamConversion::Param {
+                    ty,
+                    conversion,
+                    local_variables: these_local_variables,
+                } => {
+                    arg_list.push(conversion.clone());
+                    local_variables.extend(these_local_variables.into_iter());
+                    if pd.is_placement_return_destination {
+                        ptr_arg_name = Some(conversion);
+                    } else {
+                        let param_mutability = pd.conversion.rust_conversion.requires_mutability();
+                        wrapper_params.push(parse_quote!(
+                            #param_mutability #wrapper_arg_name: #ty
+                        ));
+                    }
+                }
+                RustParamConversion::ReturnValue { ty } => {
+                    ptr_arg_name = Some(pd.name.to_token_stream());
+                    ret_type = Cow::Owned(parse_quote! {
+                        -> impl autocxx::moveit::new::New<Output = #ty>
+                    });
+                    arg_list.push(pd.name.to_token_stream());
+                }
             }
         }
         let local_variables = quote! { #(#local_variables);* };

@@ -930,7 +930,7 @@ fn test_return_nonpod_by_value() {
         uint32_t take_bob(std::unique_ptr<Bob> a);
     "};
     let rs = quote! {
-        let a = ffi::give_bob(13);
+        let a = ffi::give_bob(13).within_unique_ptr();
         assert_eq!(ffi::take_bob(a), 13);
     };
     run_test(cxx, hdr, rs, &["take_bob", "give_bob", "Bob"], &[]);

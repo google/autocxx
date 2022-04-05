@@ -53,30 +53,31 @@ impl TypeConversionPolicy {
         var_name: &str,
         cpp_name_map: &CppNameMap,
         is_return: bool,
-    ) -> Result<String, ConvertError> {
+    ) -> Result<Option<String>, ConvertError> {
         // If is_return we want to avoid unnecessary std::moves because they
         // make RVO less effective
         Ok(match self.cpp_conversion {
-            CppConversionType::None => var_name.to_string(),
-            CppConversionType::Move => {
-                format!("std::move({})", var_name)
+            CppConversionType::None | CppConversionType::FromReturnValueToPlacementPtr => {
+                Some(var_name.to_string())
             }
+            CppConversionType::Move => Some(format!("std::move({})", var_name)),
             CppConversionType::FromUniquePtrToValue | CppConversionType::FromPtrToMove => {
-                format!("std::move(*{})", var_name)
+                Some(format!("std::move(*{})", var_name))
             }
-            CppConversionType::FromValueToUniquePtr => format!(
+            CppConversionType::FromValueToUniquePtr => Some(format!(
                 "std::make_unique<{}>({})",
                 self.unconverted_type(cpp_name_map)?,
                 var_name
-            ),
+            )),
             CppConversionType::FromPtrToValue => {
                 let dereference = format!("*{}", var_name);
-                if is_return {
+                Some(if is_return {
                     dereference
                 } else {
                     format!("std::move({})", dereference)
-                }
+                })
             }
+            CppConversionType::IgnoredPlacementPtrParameter => None,
         })
     }
 }
