@@ -117,7 +117,7 @@ pub(super) fn gen_function(
     };
     // In rare occasions, we might need to give an explicit lifetime.
     let (lifetime_tokens, params, ret_type) =
-        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type, non_pod_types);
+        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type, non_pod_types, true);
 
     if analysis.rust_wrapper_needed {
         match kind {
@@ -278,6 +278,7 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             ret_type,
             self.non_pod_types,
+            false,
         );
 
         let cxxbridge_name = self.cxxbridge_name;

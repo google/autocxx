@@ -32,6 +32,7 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     mut params: Punctuated<FnArg, Comma>,
     ret_type: &'r ReturnType,
     non_pod_types: &HashSet<QualifiedName>,
+    assert_all_parameters_are_references: bool,
 ) -> (
     Option<TokenStream>,
     Punctuated<FnArg, Comma>,
@@ -87,7 +88,11 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                         Type::Path(TypePath {
                             path: Path { segments, .. },
                             ..
-                        }) => add_lifetime_to_pinned_reference(segments).unwrap(),
+                        }) => add_lifetime_to_pinned_reference(segments).unwrap_or_else(|e| {
+                            if assert_all_parameters_are_references {
+                                panic!("Expected a pinned reference: {:?}", e)
+                            }
+                        }),
                         Type::Reference(tyr) => add_lifetime_to_reference(tyr),
                         _ => panic!("Expected Pin<&mut T> or &T"),
                     },
