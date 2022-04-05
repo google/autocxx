@@ -289,7 +289,7 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             local_variables,
             arg_list,
-            ptr_arg_name: _,
+            ptr_arg_name,
         } = self.generate_arg_list(avoid_self);
         let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
             self.param_details,
@@ -300,7 +300,7 @@ impl<'a> FnGenerator<'a> {
         let rust_name = make_ident(self.rust_name);
         let unsafety = self.unsafety.wrapper_token();
         let doc_attrs = self.doc_attrs;
-        let call_body = self.make_possibly_unsafe_call_body(&arg_list);
+        let call_body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
         let deprecation = deprecation.map(|reason| {
             quote! {
                 #[deprecated = #reason]
@@ -311,7 +311,6 @@ impl<'a> FnGenerator<'a> {
                 #(#doc_attrs)*
                 #deprecation
                 pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
-                    #local_variables
                     #call_body
                 }
             }),
@@ -329,7 +328,7 @@ impl<'a> FnGenerator<'a> {
             mut wrapper_params,
             local_variables,
             arg_list,
-            ptr_arg_name: _,
+            ptr_arg_name,
         } = self.generate_arg_list(details.avoid_self);
         if let Some(parameter_reordering) = &details.parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
@@ -344,26 +343,39 @@ impl<'a> FnGenerator<'a> {
         let unsafety = self.unsafety.wrapper_token();
         let key = details.trt.clone();
         let method_name = &details.method_name;
-        let call_body = self.make_possibly_unsafe_call_body(&arg_list);
+        let call_body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
         let item = parse_quote! {
             #(#doc_attrs)*
             #unsafety fn #method_name #lifetime_tokens ( #wrapper_params ) #ret_type {
-                #local_variables
                 #call_body
             }
         };
         Box::new(TraitImplBlockDetails { item, key })
     }
 
-    fn make_possibly_unsafe_call_body(&self, arg_list: &[TokenStream]) -> TokenStream {
-        self.wrap_call_with_unsafe(self.make_call_body(arg_list))
-    }
-
-    fn make_call_body(&self, arg_list: &[TokenStream]) -> TokenStream {
+    fn make_call_body(
+        &self,
+        arg_list: &[TokenStream],
+        local_variables: TokenStream,
+        ptr_arg_name: Option<TokenStream>,
+    ) -> TokenStream {
         let cxxbridge_name = self.cxxbridge_name;
-        quote! {
+        let call_body = quote! {
             cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-        }
+        };
+        let call_body = if let Some(ptr_arg_name) = ptr_arg_name {
+            quote! {
+                #local_variables
+                autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
+                    let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
+                    #call_body
+                })
+            }
+        } else {
+            call_body
+        };
+
+        self.wrap_call_with_unsafe(call_body)
     }
 
     fn should_wrap_unsafe_calls(&self) -> bool {
@@ -403,15 +415,7 @@ impl<'a> FnGenerator<'a> {
             &ret_type,
             self.non_pod_types,
         );
-        let call_body = self.make_call_body(&arg_list);
-        let call_body = quote! {
-            #local_variables
-            autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
-                let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
-                #call_body
-            })
-        };
-        let call_body = self.wrap_call_with_unsafe(call_body);
+        let call_body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
         Box::new(ImplBlockDetails {
@@ -431,16 +435,15 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             local_variables,
             arg_list,
-            ptr_arg_name: _,
+            ptr_arg_name,
         } = self.generate_arg_list(false);
         let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
-        let body = self.make_possibly_unsafe_call_body(&arg_list);
+        let body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
         Item::Fn(parse_quote! {
             #(#doc_attrs)*
             pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
-                #local_variables
                 #body
             }
         })
