@@ -309,7 +309,7 @@ impl<'a> FnGenerator<'a> {
     /// Generate a function call wrapper
     fn generate_function_impl(&self, ret_type: &ReturnType) -> Item {
         let (lifetime_tokens, wrapper_params, ret_type, call_body) =
-            self.common_parts(false, &None, &ret_type);
+            self.common_parts(false, &None, ret_type);
         let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
