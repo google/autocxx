@@ -285,22 +285,11 @@ impl<'a> FnGenerator<'a> {
         ret_type: &ReturnType,
         deprecation: Option<&str>,
     ) -> Box<ImplBlockDetails> {
-        let ArgList {
-            wrapper_params,
-            local_variables,
-            arg_list,
-            ptr_arg_name,
-        } = self.generate_arg_list(avoid_self);
-        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
-            self.param_details,
-            wrapper_params,
-            ret_type,
-            self.non_pod_types,
-        );
+        let (lifetime_tokens, wrapper_params, ret_type, call_body) =
+            self.common_parts(avoid_self, &None, ret_type);
         let rust_name = make_ident(self.rust_name);
         let unsafety = self.unsafety.wrapper_token();
         let doc_attrs = self.doc_attrs;
-        let call_body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
         let deprecation = deprecation.map(|reason| {
             quote! {
                 #[deprecated = #reason]
@@ -324,26 +313,12 @@ impl<'a> FnGenerator<'a> {
         details: &TraitMethodDetails,
         ret_type: &ReturnType,
     ) -> Box<TraitImplBlockDetails> {
-        let ArgList {
-            mut wrapper_params,
-            local_variables,
-            arg_list,
-            ptr_arg_name,
-        } = self.generate_arg_list(details.avoid_self);
-        if let Some(parameter_reordering) = &details.parameter_reordering {
-            wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
-        }
-        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
-            self.param_details,
-            wrapper_params,
-            ret_type,
-            self.non_pod_types,
-        );
+        let (lifetime_tokens, wrapper_params, ret_type, call_body) =
+            self.common_parts(details.avoid_self, &details.parameter_reordering, ret_type);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
         let key = details.trt.clone();
         let method_name = &details.method_name;
-        let call_body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
         let item = parse_quote! {
             #(#doc_attrs)*
             #unsafety fn #method_name #lifetime_tokens ( #wrapper_params ) #ret_type {
@@ -359,20 +334,9 @@ impl<'a> FnGenerator<'a> {
         &self,
         impl_block_type_name: &QualifiedName,
     ) -> Box<ImplBlockDetails> {
-        let ArgList {
-            wrapper_params,
-            local_variables,
-            arg_list,
-            ptr_arg_name,
-        } = self.generate_arg_list(true);
         let ret_type: ReturnType = parse_quote! { -> impl autocxx::moveit::new::New<Output=Self> };
-        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
-            self.param_details,
-            wrapper_params,
-            &ret_type,
-            self.non_pod_types,
-        );
-        let call_body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
+        let (lifetime_tokens, wrapper_params, ret_type, call_body) =
+            self.common_parts(true, &None, &ret_type);
         let rust_name = make_ident(&self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
@@ -389,28 +353,47 @@ impl<'a> FnGenerator<'a> {
 
     /// Generate a function call wrapper
     fn generate_function_impl(&self, ret_type: &ReturnType) -> Item {
-        let ArgList {
-            wrapper_params,
-            local_variables,
-            arg_list,
-            ptr_arg_name,
-        } = self.generate_arg_list(false);
-        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
-            self.param_details,
-            wrapper_params,
-            &ret_type,
-            self.non_pod_types,
-        );
+        let (lifetime_tokens, wrapper_params, ret_type, call_body) =
+            self.common_parts(false, &None, &ret_type);
         let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
-        let body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
         Item::Fn(parse_quote! {
             #(#doc_attrs)*
             pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
-                #body
+                #call_body
             }
         })
+    }
+
+    fn common_parts<'b>(
+        &self,
+        avoid_self: bool,
+        parameter_reordering: &Option<Vec<usize>>,
+        ret_type: &'b ReturnType,
+    ) -> (
+        Option<TokenStream>,
+        Punctuated<FnArg, Comma>,
+        std::borrow::Cow<'b, ReturnType>,
+        TokenStream,
+    ) {
+        let ArgList {
+            mut wrapper_params,
+            local_variables,
+            arg_list,
+            ptr_arg_name,
+        } = self.generate_arg_list(avoid_self);
+        if let Some(parameter_reordering) = &parameter_reordering {
+            wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
+        }
+        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
+            self.param_details,
+            wrapper_params,
+            ret_type,
+            self.non_pod_types,
+        );
+        let call_body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
+        (lifetime_tokens, wrapper_params, ret_type, call_body)
     }
 
     fn make_call_body(
@@ -448,7 +431,7 @@ impl<'a> FnGenerator<'a> {
     fn should_wrap_unsafe_calls(&self) -> bool {
         matches!(self.unsafety, UnsafetyNeeded::JustBridge)
             || self.always_unsafe_due_to_trait_definition
-    }    
+    }
 
     fn reorder_parameters(
         params: Punctuated<FnArg, Comma>,
