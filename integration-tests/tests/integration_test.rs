@@ -675,7 +675,7 @@ fn test_take_nonpod_by_value() {
         uint32_t take_bob(Bob a);
     "};
     let rs = quote! {
-        let a = ffi::Bob::make_unique(12, 13);
+        let a = ffi::Bob::new(12, 13).within_unique_ptr();
         assert_eq!(ffi::take_bob(a), 12);
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob"], &[]);
@@ -794,7 +794,7 @@ fn test_take_nonpod_by_ptr_in_method() {
 
     "};
     let rs = quote! {
-        let a = ffi::A::make_unique();
+        let a = ffi::A::new().within_unique_ptr();
         let b = a.as_ref().unwrap().make_bob(12);
         let b_ptr = b.into_raw();
         assert_eq!(unsafe { a.as_ref().unwrap().take_bob(b_ptr) }, 12);
@@ -831,8 +831,8 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
 
     "};
     let rs = quote! {
-        let a = ffi::A::make_unique();
-        let c = ffi::C::make_unique();
+        let a = ffi::A::new().within_unique_ptr();
+        let c = ffi::C::new().within_unique_ptr();
         let b = a.as_ref().unwrap().make_bob(12);
         let b_ptr = b.into_raw();
         assert_eq!(unsafe { a.as_ref().unwrap().take_bob(b_ptr, c) }, 12);
@@ -865,9 +865,9 @@ fn test_take_char_by_ptr_in_wrapped_method() {
 
     "};
     let rs = quote! {
-        let a = ffi::A::make_unique();
-        let c1 = ffi::C::make_unique();
-        let c2 = ffi::C::make_unique();
+        let a = ffi::A::new().within_unique_ptr();
+        let c1 = ffi::C::new().within_unique_ptr();
+        let c2 = ffi::C::new().within_unique_ptr();
         let ch = a.as_ref().unwrap().make_char(c1);
         assert_eq!(unsafe { ch.as_ref()}.unwrap(), &104i8);
         assert_eq!(unsafe { a.as_ref().unwrap().take_char(ch, c2) }, 104);
@@ -1021,7 +1021,7 @@ fn test_make_up() {
         uint32_t take_bob(const Bob& a);
     "};
     let rs = quote! {
-        let a = ffi::Bob::make_unique(); // TODO test with all sorts of arguments.
+        let a = ffi::Bob::new().within_unique_ptr(); // TODO test with all sorts of arguments.
         assert_eq!(ffi::take_bob(a.as_ref().unwrap()), 3);
     };
     run_test(cxx, hdr, rs, &["Bob", "take_bob"], &[]);
@@ -1046,7 +1046,7 @@ fn test_make_up_with_args() {
         uint32_t take_bob(const Bob& a);
     "};
     let rs = quote! {
-        let a = ffi::Bob::make_unique(12, 13);
+        let a = ffi::Bob::new(12, 13).within_unique_ptr();
         assert_eq!(ffi::take_bob(a.as_ref().unwrap()), 12);
     };
     run_test(cxx, hdr, rs, &["take_bob", "Bob"], &[]);
@@ -1068,7 +1068,7 @@ fn test_make_up_int() {
         };
     "};
     let rs = quote! {
-        let a = ffi::Bob::make_unique(3);
+        let a = ffi::Bob::new(3).within_unique_ptr();
         assert_eq!(a.as_ref().unwrap().b, 3);
     };
     run_test(cxx, hdr, rs, &["Bob"], &[]);
@@ -1232,7 +1232,7 @@ fn test_constructors_for_specialized_types() {
         typedef B C;
     "};
     let rs = quote! {
-        let a = ffi::C::make_unique();
+        let a = ffi::C::new().within_unique_ptr();
         assert_eq!(a.foo(), 12);
     };
     run_test("", hdr, rs, &["C"], &[]);
@@ -1589,8 +1589,8 @@ fn test_pass_two_nonpod_by_value() {
         void take_a(A, A);
     "};
     let rs = quote! {
-        let a = ffi::A::make_unique();
-        let a2 = ffi::A::make_unique();
+        let a = ffi::A::new().within_unique_ptr();
+        let a2 = ffi::A::new().within_unique_ptr();
         ffi::take_a(a, a2);
     };
     run_test(cxx, hdr, rs, &["A", "take_a"], &[]);
@@ -2212,7 +2212,7 @@ fn test_overload_constructors() {
         };
     "};
     let rs = quote! {
-        ffi::Bob::make_unique();
+        ffi::Bob::new().within_unique_ptr();
         ffi::Bob::make_unique1(32);
     };
     run_test(cxx, hdr, rs, &["Bob"], &[]);
@@ -2250,7 +2250,7 @@ fn test_overload_functions() {
         ffi::daft2("hello".into_cpp());
         let b = ffi::Fred { a: 3 };
         ffi::daft3(b);
-        let c = ffi::Norma::make_unique();
+        let c = ffi::Norma::new().within_unique_ptr();
         ffi::daft4(c);
     };
     run_test(
@@ -2297,7 +2297,7 @@ fn test_overload_numeric_functions() {
         ffi::daft2("hello".into_cpp());
         let b = ffi::Fred { a: 3 };
         ffi::daft3(b);
-        let c = ffi::Norma::make_unique();
+        let c = ffi::Norma::new().within_unique_ptr();
         ffi::daft4(c);
     };
     run_test(
@@ -2345,7 +2345,7 @@ fn test_overload_methods() {
         a.daft2("hello".into_cpp());
         let b = ffi::Fred { a: 3 };
         a.daft3(b);
-        let c = ffi::Norma::make_unique();
+        let c = ffi::Norma::new().within_unique_ptr();
         a.daft4(c);
     };
     run_test(cxx, hdr, rs, &["Norma"], &["Fred", "Bob"]);
@@ -2368,7 +2368,7 @@ fn test_ns_constructor() {
         }
     "};
     let rs = quote! {
-        ffi::A::Bob::make_unique();
+        ffi::A::Bob::new().within_unique_ptr();
     };
     run_test(cxx, hdr, rs, &["A::Bob"], &[]);
 }
@@ -2541,7 +2541,7 @@ fn test_member_return_reference() {
         };
     "};
     let rs = quote! {
-        let mut b = ffi::A::make_unique();
+        let mut b = ffi::A::new().within_unique_ptr();
         b.pin_mut().get_str();
     };
     run_test("", hdr, rs, &["A"], &[]);
@@ -2581,7 +2581,7 @@ fn test_nested_with_destructor() {
         };
     "};
     let rs = quote! {
-        ffi::A_B::make_unique();
+        ffi::A_B::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["A", "A_B"], &[]);
 }
@@ -2805,8 +2805,8 @@ fn test_conflicting_ns_up_functions() {
         };
     "};
     let rs = quote! {
-        let c = ffi::C::make_unique();
-        let c2 = ffi::C::make_unique();
+        let c = ffi::C::new().within_unique_ptr();
+        let c2 = ffi::C::new().within_unique_ptr();
         assert_eq!(ffi::A::create(c), 3);
         assert_eq!(ffi::B::create(c2), 4);
     };
@@ -2870,8 +2870,8 @@ fn test_conflicting_up_wrapper_methods_not_in_ns() {
         };
     "};
     let rs = quote! {
-        let a = ffi::Bob::make_unique();
-        let b = ffi::Fred::make_unique();
+        let a = ffi::Bob::new().within_unique_ptr();
+        let b = ffi::Fred::new().within_unique_ptr();
         assert_eq!(a.get().as_ref().unwrap().to_str().unwrap(), "hello");
         assert_eq!(b.get().as_ref().unwrap().to_str().unwrap(), "goodbye");
     };
@@ -2935,8 +2935,8 @@ fn test_conflicting_up_wrapper_methods_in_ns() {
         }
     "};
     let rs = quote! {
-        let a = ffi::A::Bob::make_unique();
-        let b = ffi::B::Fred::make_unique();
+        let a = ffi::A::Bob::new().within_unique_ptr();
+        let b = ffi::B::Fred::new().within_unique_ptr();
         assert_eq!(a.get().as_ref().unwrap().to_str().unwrap(), "hello");
         assert_eq!(b.get().as_ref().unwrap().to_str().unwrap(), "goodbye");
     };
@@ -3174,7 +3174,7 @@ fn test_templated_typedef() {
         };
     "};
     let rs = quote! {
-        ffi::Origin::make_unique();
+        ffi::Origin::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["Origin"], &[]);
 }
@@ -3201,7 +3201,7 @@ fn test_struct_templated_typedef() {
         };
     "};
     let rs = quote! {
-        ffi::Origin::make_unique();
+        ffi::Origin::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["Origin"], &[]);
 }
@@ -3289,7 +3289,7 @@ fn test_string_templated_typedef() {
         };
     "};
     let rs = quote! {
-        ffi::Origin::make_unique();
+        ffi::Origin::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["Origin"], &[]);
 }
@@ -3350,7 +3350,7 @@ fn test_associated_type_templated_typedef() {
         };
     "};
     let rs = quote! {
-        ffi::Origin::make_unique();
+        ffi::Origin::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["Origin"], &[]);
 }
@@ -3392,7 +3392,7 @@ fn test_foreign_ns_func_arg_nonpod() {
         }
     "};
     let rs = quote! {
-        let a = ffi::A::Bob::make_unique(12);
+        let a = ffi::A::Bob::new(12).within_unique_ptr();
         assert_eq!(ffi::B::daft(a), 12);
     };
     run_test("", hdr, rs, &["B::daft", "A::Bob"], &[]);
@@ -3442,7 +3442,7 @@ fn test_foreign_ns_meth_arg_nonpod() {
         }
     "};
     let rs = quote! {
-        let a = ffi::A::Bob::make_unique(12);
+        let a = ffi::A::Bob::new(12).within_unique_ptr();
         let b = ffi::B::C { a: 12 };
         assert_eq!(b.daft(a), 12);
     };
@@ -3468,7 +3468,7 @@ fn test_foreign_ns_cons_arg_pod() {
     "};
     let rs = quote! {
         let a = ffi::A::Bob { a: 12 };
-        let b = ffi::B::C::make_unique(&a);
+        let b = ffi::B::C::new(&a).within_unique_ptr();
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
     run_test("", hdr, rs, &[], &["B::C", "A::Bob"]);
@@ -3493,8 +3493,8 @@ fn test_foreign_ns_cons_arg_nonpod() {
         }
     "};
     let rs = quote! {
-        let a = ffi::A::Bob::make_unique(12);
-        let b = ffi::B::C::make_unique(&a);
+        let a = ffi::A::Bob::new(12).within_unique_ptr();
+        let b = ffi::B::C::new(&a).within_unique_ptr();
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
     run_test("", hdr, rs, &["A::Bob"], &["B::C"]);
@@ -3621,7 +3621,7 @@ fn test_root_ns_func_arg_nonpod() {
         }
     "};
     let rs = quote! {
-        let a = ffi::Bob::make_unique(12);
+        let a = ffi::Bob::new(12).within_unique_ptr();
         assert_eq!(ffi::B::daft(a), 12);
     };
     run_test("", hdr, rs, &["B::daft", "Bob"], &[]);
@@ -3667,7 +3667,7 @@ fn test_root_ns_meth_arg_nonpod() {
         }
     "};
     let rs = quote! {
-        let a = ffi::Bob::make_unique(12);
+        let a = ffi::Bob::new(12).within_unique_ptr();
         let b = ffi::B::C { a: 12 };
         assert_eq!(b.daft(a), 12);
     };
@@ -3691,7 +3691,7 @@ fn test_root_ns_cons_arg_pod() {
     "};
     let rs = quote! {
         let a = ffi::Bob { a: 12 };
-        let b = ffi::B::C::make_unique(&a);
+        let b = ffi::B::C::new(&a).within_unique_ptr();
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
     run_test("", hdr, rs, &[], &["B::C", "Bob"]);
@@ -3714,8 +3714,8 @@ fn test_root_ns_cons_arg_nonpod() {
         }
     "};
     let rs = quote! {
-        let a = ffi::Bob::make_unique(12);
-        let b = ffi::B::C::make_unique(&a);
+        let a = ffi::Bob::new(12).within_unique_ptr();
+        let b = ffi::B::C::new(&a).within_unique_ptr();
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
@@ -3828,7 +3828,7 @@ fn test_forward_declaration() {
         }
     "};
     let rs = quote! {
-        let b = ffi::B::make_unique();
+        let b = ffi::B::new().within_unique_ptr();
         let a = ffi::get_a();
         b.daft(unsafe { a.as_ref().unwrap() });
         unsafe { ffi::delete_a(a) };
@@ -3883,7 +3883,7 @@ fn test_ulong_method() {
     };
     "};
     let rs = quote! {
-        let a = ffi::A::make_unique();
+        let a = ffi::A::new().within_unique_ptr();
         assert_eq!(a.as_ref().unwrap().daft(autocxx::c_ulong(34)), autocxx::c_ulong(34));
     };
     run_test("", hdr, rs, &["A"], &[]);
@@ -3904,8 +3904,8 @@ fn test_ulong_wrapped_method() {
     };
     "};
     let rs = quote! {
-        let b = ffi::B::make_unique();
-        let a = ffi::A::make_unique();
+        let b = ffi::B::new().within_unique_ptr();
+        let a = ffi::A::new().within_unique_ptr();
         assert_eq!(a.as_ref().unwrap().daft(autocxx::c_ulong(34), b), autocxx::c_ulong(34));
     };
     run_test("", hdr, rs, &["A", "B"], &[]);
@@ -3948,8 +3948,8 @@ fn test_nested_type() {
         void take_A_D(A::D);
     "};
     let rs = quote! {
-        let _ = ffi::A::make_unique();
-        let b = ffi::B::make_unique();
+        let _ = ffi::A::new().within_unique_ptr();
+        let b = ffi::B::new().within_unique_ptr();
         b.as_ref().unwrap().method_on_top_level_type();
     };
     run_test("", hdr, rs, &["A", "B", "take_A_B", "take_A_C"], &[]);
@@ -4031,7 +4031,7 @@ fn test_nested_type_constructor() {
         };
     "};
     let rs = quote! {
-        ffi::A_B::make_unique(&ffi::make_string("Hello"));
+        ffi::A_B::new(&ffi::make_string("Hello")).within_unique_ptr();
     };
     run_test("", hdr, rs, &["A_B"], &[]);
 }
@@ -4055,7 +4055,7 @@ fn test_generic_type() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        let item = ffi::Secondary::make_unique();
+        let item = ffi::Secondary::new().within_unique_ptr();
         assert_eq!(item.take_c("hello".into_cpp()), 15)
     };
     run_test("", hdr, rs, &["Secondary"], &[]);
@@ -4104,9 +4104,9 @@ fn test_virtual_fns() {
         };
     "};
     let rs = quote! {
-        let mut a = ffi::A::make_unique(12);
+        let mut a = ffi::A::new(12).within_unique_ptr();
         assert_eq!(a.pin_mut().foo(2), 3);
-        let mut b = ffi::B::make_unique();
+        let mut b = ffi::B::new().within_unique_ptr();
         assert_eq!(b.pin_mut().foo(2), 4);
     };
     run_test("", hdr, rs, &["A", "B"], &[]);
@@ -4131,9 +4131,9 @@ fn test_const_virtual_fns() {
         };
     "};
     let rs = quote! {
-        let a = ffi::A::make_unique(12);
+        let a = ffi::A::new(12).within_unique_ptr();
         assert_eq!(a.foo(2), 3);
-        let b = ffi::B::make_unique();
+        let b = ffi::B::new().within_unique_ptr();
         assert_eq!(b.foo(2), 4);
     };
     run_test("", hdr, rs, &["A", "B"], &[]);
@@ -4158,7 +4158,7 @@ fn test_virtual_fns_inheritance() {
         };
     "};
     let rs = quote! {
-        let mut b = ffi::B::make_unique();
+        let mut b = ffi::B::new().within_unique_ptr();
         assert_eq!(b.pin_mut().foo(2), 3);
     };
     run_test("", hdr, rs, &["B"], &[]);
@@ -4469,7 +4469,7 @@ fn test_issues_217_222() {
     };
     "};
     let rs = quote! {
-        ffi::GURL::make_unique();
+        ffi::GURL::new().within_unique_ptr();
     };
     // The block! directives here are to avoid running into
     // https://github.com/rust-lang/rust-bindgen/pull/1975
@@ -4574,7 +4574,7 @@ fn test_ignore_dependent_qualified_type() {
     }
     "};
     let rs = quote! {
-        ffi::B::make_unique();
+        ffi::B::new().within_unique_ptr();
     };
     run_test(cpp, hdr, rs, &["B"], &[]);
 }
@@ -4609,7 +4609,7 @@ fn test_ignore_dependent_qualified_type_reference() {
     }
     "};
     let rs = quote! {
-        ffi::B::make_unique();
+        ffi::B::new().within_unique_ptr();
     };
     run_test(cpp, hdr, rs, &["B"], &[]);
 }
@@ -4671,7 +4671,7 @@ fn test_specialization() {
     };
     "};
     let rs = quote! {
-        ffi::B::make_unique();
+        ffi::B::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["B"], &[]);
 }
@@ -4744,7 +4744,7 @@ fn test_union_ignored() {
     };
     "};
     let rs = quote! {
-        let b = ffi::B::make_unique();
+        let b = ffi::B::new().within_unique_ptr();
         assert_eq!(b.get_a(), 2);
     };
     run_test("", hdr, rs, &["B"], &[]);
@@ -4775,7 +4775,7 @@ fn test_double_underscores_ignored() {
     struct __move_operator { __move_operator &operator=(const __move_operator&) = default; };
     "};
     let rs = quote! {
-        let b = ffi::B::make_unique();
+        let b = ffi::B::new().within_unique_ptr();
         assert_eq!(b.get_a(), 2);
     };
     run_test(
@@ -4814,7 +4814,7 @@ fn test_double_underscore_typedef_ignored() {
     };
     "};
     let rs = quote! {
-        let b = ffi::B::make_unique();
+        let b = ffi::B::new().within_unique_ptr();
         assert_eq!(b.get_a(), 2);
     };
     run_test("", hdr, rs, &["B"], &[]);
@@ -4958,7 +4958,7 @@ fn test_unexpected_use() {
         } // namespace content
         "};
     let rs = quote! {
-        let _ = ffi::content::RenderFrameHost::make_unique();
+        let _ = ffi::content::RenderFrameHost::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["content::RenderFrameHost"], &[]);
 }
@@ -4988,7 +4988,7 @@ fn test_get_pure_virtual() {
 
 #[test]
 fn test_abstract_class_no_make_unique() {
-    // We shouldn't generate a make_unique() for abstract classes.
+    // We shouldn't generate a new().within_unique_ptr() for abstract classes.
     // The test is successful if the bindings compile, i.e. if autocxx doesn't
     // attempt to instantiate the class.
     let hdr = indoc! {"
@@ -5229,7 +5229,7 @@ fn test_string_transparent_method() {
         };
     "};
     let rs = quote! {
-        let a = ffi::A::make_unique();
+        let a = ffi::A::new().within_unique_ptr();
         assert_eq!(a.take_string("hello"), 5);
     };
     run_test("", hdr, rs, &["A"], &[]);
@@ -5762,11 +5762,11 @@ fn test_multiply_nested_inner_type() {
         };
         "};
     let rs = quote! {
-        ffi::Turkey_Duck_Hen::make_unique();
-        ffi::Turkey_Duck_HenWithDefault::make_unique();
-        ffi::Turkey_Duck_HenWithDestructor::make_unique();
-        ffi::Turkey_Duck_HenWithCopy::make_unique();
-        ffi::Turkey_Duck_HenWithMove::make_unique();
+        ffi::Turkey_Duck_Hen::new().within_unique_ptr();
+        ffi::Turkey_Duck_HenWithDefault::new().within_unique_ptr();
+        ffi::Turkey_Duck_HenWithDestructor::new().within_unique_ptr();
+        ffi::Turkey_Duck_HenWithCopy::new().within_unique_ptr();
+        ffi::Turkey_Duck_HenWithMove::new().within_unique_ptr();
 
         moveit! {
             let hen = ffi::Turkey_Duck_Hen::new();
@@ -5843,7 +5843,7 @@ fn test_ref_qualified_method() {
         };
     "};
     let rs = quote! {
-        A::make_unique().foo();
+        A::new().within_unique_ptr().foo();
     };
     run_test("", hdr, rs, &["A"], &[]);
 }
@@ -8189,7 +8189,7 @@ fn test_no_constructor_make_unique() {
     };
     "};
     let rs = quote! {
-        ffi::A::make_unique();
+        ffi::A::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["A"], &[]);
 }
@@ -8291,7 +8291,7 @@ fn test_pass_by_value_moveit() {
         ffi::take_a(as_copy(stack_obj.as_ref()));
         // A has no move constructor so we can't consume it.
 
-        let heap_obj = ffi::A::make_unique();
+        let heap_obj = ffi::A::new().within_unique_ptr();
         ffi::take_a(heap_obj.as_ref().unwrap());
         ffi::take_a(&heap_obj);
         ffi::take_a(autocxx::as_copy(heap_obj.as_ref().unwrap()));
@@ -8326,7 +8326,7 @@ fn test_nonconst_reference_parameter() {
     inline void take_a(A&) {}
     "};
     let rs = quote! {
-        let mut heap_obj = ffi::A::make_unique();
+        let mut heap_obj = ffi::A::new().within_unique_ptr();
         ffi::take_a(heap_obj.pin_mut());
     };
     run_test("", hdr, rs, &["NOP", "A", "take_a"], &[]);
@@ -8349,8 +8349,8 @@ fn test_nonconst_reference_method_parameter() {
     };
     "};
     let rs = quote! {
-        let mut a = ffi::A::make_unique();
-        let b = ffi::B::make_unique();
+        let mut a = ffi::A::new().within_unique_ptr();
+        let b = ffi::B::new().within_unique_ptr();
         b.take_a(a.pin_mut());
     };
     run_test("", hdr, rs, &["NOP", "A", "B"], &[]);
@@ -8524,7 +8524,7 @@ fn test_emplace_uses_overridden_new_and_delete() {
     let rs = quote! {
         ffi::reset_flags();
         {
-            let _ = ffi::A::make_unique();
+            let _ = ffi::A::new().within_unique_ptr();
             assert!(ffi::was_new_called());
         }
         assert!(ffi::was_delete_called());
@@ -8562,7 +8562,7 @@ fn test_pass_by_reference_to_value_param() {
     }
     "};
     let rs = quote! {
-        let a = ffi::A::make_unique();
+        let a = ffi::A::new().within_unique_ptr();
         ffi::take_a(a.as_ref().unwrap());
         ffi::take_a(&a); // syntactic sugar
         assert_eq!(ffi::report_on_a(&a), 0); // should have acted upon copies
@@ -8631,7 +8631,7 @@ fn test_no_constructor_make_unique_ns() {
     }
     "};
     let rs = quote! {
-        ffi::B::A::make_unique();
+        ffi::B::A::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["B::A"], &[]);
 }
@@ -8645,7 +8645,7 @@ fn test_no_constructor_pod_make_unique() {
     };
     "};
     let rs = quote! {
-        ffi::A::make_unique();
+        ffi::A::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &[], &["A"]);
 }
@@ -8943,7 +8943,7 @@ fn test_nested_class_methods() {
     };
     "};
     let rs = quote! {
-        let a = ffi::A::make_unique();
+        let a = ffi::A::new().within_unique_ptr();
         a.a();
         a.c();
     };
@@ -9579,7 +9579,7 @@ fn test_implicit_constructor_rules() {
         }
         macro_rules! test_make_unique {
             [$t:ty] => {
-                let _unique_t = <$t>::make_unique();
+                let _unique_t = <$t>::new().within_unique_ptr();
             }
         }
         macro_rules! test_copyable {
@@ -10209,7 +10209,7 @@ fn test_tricky_destructors() {
     let rs = quote! {
         macro_rules! test_type {
             [$t:ty] => {
-                let mut unique_t = <$t>::make_unique();
+                let mut unique_t = <$t>::new().within_unique_ptr();
                 let mut destructor_flag = false;
                 unsafe {
                     unique_t.pin_mut().set_flag(&mut destructor_flag);
