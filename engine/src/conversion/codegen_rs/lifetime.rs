@@ -69,7 +69,6 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
             }
             Type::ImplTrait(tyit) => {
                 let old_tyit = tyit.to_token_stream();
-                log::info!("It's {}", old_tyit.to_string());
                 Some(parse_quote! {
                     #rarrow #old_tyit + 'a
                 })
@@ -94,9 +93,13 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                             }
                         }),
                         Type::Reference(tyr) => add_lifetime_to_reference(tyr),
-                        _ => panic!("Expected Pin<&mut T> or &T"),
+                        _ if assert_all_parameters_are_references => {
+                            panic!("Expected Pin<&mut T> or &T")
+                        }
+                        _ => {}
                     },
-                    _ => panic!("Unexpected fnarg"),
+                    _ if assert_all_parameters_are_references => panic!("Unexpected fnarg"),
+                    _ => {}
                 }
             }
 
