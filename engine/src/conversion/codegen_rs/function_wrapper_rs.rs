@@ -16,24 +16,55 @@ use crate::{
 use quote::quote;
 use syn::parse_quote;
 
+/// Output Rust snippets for how to deal with a given parameter.
+pub(super) struct RustParamConversion {
+    pub(super) ty: Type,
+    pub(super) local_variables: Option<TokenStream>,
+    pub(super) conversion: TokenStream,
+}
+
 impl TypeConversionPolicy {
-    pub(super) fn rust_wrapper_unconverted_type(&self) -> Type {
+    /// If returns `None` then this parameter should be omitted entirely.
+    pub(super) fn rust_conversion(&self, var: Pat, wrap_in_unsafe: bool) -> RustParamConversion {
         match self.rust_conversion {
-            RustConversionType::None => self.converted_rust_type(),
+            RustConversionType::None => RustParamConversion {
+                ty: self.converted_rust_type(),
+                local_variables: None,
+                conversion: quote! { #var },
+            },
+            RustConversionType::FromStr => RustParamConversion {
+                ty: parse_quote! { impl ToCppString },
+                local_variables: None,
+                conversion: quote! ( #var .into_cpp() ),
+            },
             RustConversionType::ToBoxedUpHolder(ref sub) => {
+                let holder_type = sub.holder();
                 let id = sub.id();
-                parse_quote! { autocxx::subclass::CppSubclassRustPeerHolder<
+                let ty = parse_quote! { autocxx::subclass::CppSubclassRustPeerHolder<
                     super::super::super:: #id>
+                };
+                RustParamConversion {
+                    ty,
+                    local_variables: None,
+                    conversion: quote! {
+                        Box::new(#holder_type(#var))
+                    },
                 }
             }
-            RustConversionType::FromStr => parse_quote! { impl ToCppString },
             RustConversionType::FromPinMaybeUninitToPtr => {
                 let ty = match &self.unwrapped_type {
                     Type::Ptr(TypePtr { elem, .. }) => &*elem,
                     _ => panic!("Not a ptr"),
                 };
-                parse_quote! {
+                let ty = parse_quote! {
                     ::std::pin::Pin<&mut ::std::mem::MaybeUninit< #ty >>
+                };
+                RustParamConversion {
+                    ty,
+                    local_variables: None,
+                    conversion: quote! {
+                        #var.get_unchecked_mut().as_mut_ptr()
+                    },
                 }
             }
             RustConversionType::FromPinMoveRefToPtr => {
@@ -41,8 +72,17 @@ impl TypeConversionPolicy {
                     Type::Ptr(TypePtr { elem, .. }) => &*elem,
                     _ => panic!("Not a ptr"),
                 };
-                parse_quote! {
+                let ty = parse_quote! {
                     ::std::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
+                };
+                RustParamConversion {
+                    ty,
+                    local_variables: None,
+                    conversion: quote! {
+                        { let r: &mut _ = ::std::pin::Pin::into_inner_unchecked(#var.as_mut());
+                            r
+                        }
+                    },
                 }
             }
             RustConversionType::FromTypeToPtr => {
@@ -50,52 +90,15 @@ impl TypeConversionPolicy {
                     Type::Ptr(TypePtr { elem, .. }) => &*elem,
                     _ => panic!("Not a ptr"),
                 };
-                parse_quote! { &mut #ty }
-            }
-            RustConversionType::FromValueParamToPtr => {
-                let ty = &self.unwrapped_type;
-                parse_quote! { impl autocxx::ValueParam<#ty> }
-            }
-        }
-    }
-
-    pub(super) fn rust_conversion(
-        &self,
-        var: Pat,
-        wrap_in_unsafe: bool,
-    ) -> (Option<TokenStream>, TokenStream) {
-        match self.rust_conversion {
-            RustConversionType::None => (None, quote! { #var }),
-            RustConversionType::FromStr => (None, quote! ( #var .into_cpp() )),
-            RustConversionType::ToBoxedUpHolder(ref sub) => {
-                let holder_type = sub.holder();
-                (
-                    None,
-                    quote! {
-                        Box::new(#holder_type(#var))
+                let ty = parse_quote! { &mut #ty };
+                RustParamConversion {
+                    ty,
+                    local_variables: None,
+                    conversion: quote! {
+                        #var
                     },
-                )
+                }
             }
-            RustConversionType::FromPinMaybeUninitToPtr => (
-                None,
-                quote! {
-                    #var.get_unchecked_mut().as_mut_ptr()
-                },
-            ),
-            RustConversionType::FromPinMoveRefToPtr => (
-                None,
-                quote! {
-                    { let r: &mut _ = ::std::pin::Pin::into_inner_unchecked(#var.as_mut());
-                    r
-                    }
-                },
-            ),
-            RustConversionType::FromTypeToPtr => (
-                None,
-                quote! {
-                    #var
-                },
-            ),
             RustConversionType::FromValueParamToPtr => {
                 let var_name = if let Pat::Ident(pti) = &var {
                     &pti.ident
@@ -113,20 +116,23 @@ impl TypeConversionPolicy {
                 } else {
                     call
                 };
+                let ty = &self.unwrapped_type;
+                let ty = parse_quote! { impl autocxx::ValueParam<#ty> };
                 // This is the usual trick to put something on the stack, then
                 // immediately shadow the variable name so it can't be accessed or moved.
-                (
-                    Some(quote! {
+                RustParamConversion {
+                    ty,
+                    local_variables: Some(quote! {
                         let mut #space_var_name = autocxx::ValueParamHandler::default();
                         let mut #space_var_name = unsafe {
                             std::pin::Pin::new_unchecked(&mut #space_var_name)
                         };
                         #call
                     }),
-                    quote! {
+                    conversion: quote! {
                         #space_var_name.get_ptr()
                     },
-                )
+                }
             }
         }
     }

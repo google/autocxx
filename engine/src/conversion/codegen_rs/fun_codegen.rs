@@ -19,6 +19,7 @@ use syn::{
 };
 
 use super::{
+    function_wrapper_rs::RustParamConversion,
     unqualify::{unqualify_params, unqualify_ret_type},
     ImplBlockDetails, RsCodegenResult, TraitImplBlockDetails, Use,
 };
@@ -253,24 +254,29 @@ impl<'a> FnGenerator<'a> {
         let mut arg_list = Vec::new();
         let mut ptr_arg_name = None;
         let wrap_unsafe_calls = self.should_wrap_unsafe_calls();
+        let ret_type = Cow::Borrowed(ret_type);
         for pd in self.param_details {
-            let type_name = pd.conversion.rust_wrapper_unconverted_type();
             let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
                 parse_quote!(self)
             } else {
                 pd.name.clone()
             };
-            let (local_variable, actual_arg) = pd
+            let rust_for_param = pd
                 .conversion
                 .rust_conversion(wrapper_arg_name.clone(), wrap_unsafe_calls);
-            arg_list.push(actual_arg.clone());
-            local_variables.extend(local_variable.into_iter());
+            let RustParamConversion {
+                ty,
+                conversion,
+                local_variables: these_local_variables,
+            } = rust_for_param;
+            arg_list.push(conversion.clone());
+            local_variables.extend(these_local_variables.into_iter());
             if pd.is_placement_return_destination {
-                ptr_arg_name = Some(actual_arg);
+                ptr_arg_name = Some(conversion);
             } else {
                 let param_mutability = pd.conversion.rust_conversion.requires_mutability();
                 wrapper_params.push(parse_quote!(
-                    #param_mutability #wrapper_arg_name: #type_name
+                    #param_mutability #wrapper_arg_name: #ty
                 ));
             }
         }
@@ -281,7 +287,7 @@ impl<'a> FnGenerator<'a> {
         let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
             self.param_details,
             wrapper_params,
-            Cow::Borrowed(ret_type),
+            ret_type,
             self.non_pod_types,
             false,
         );
