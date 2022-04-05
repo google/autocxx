@@ -365,7 +365,6 @@ impl<'a> FnGenerator<'a> {
             arg_list,
             ptr_arg_name,
         } = self.generate_arg_list(true);
-        let rust_name = make_ident(&self.rust_name);
         let ret_type: ReturnType = parse_quote! { -> impl autocxx::moveit::new::New<Output=Self> };
         let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
             self.param_details,
@@ -374,6 +373,7 @@ impl<'a> FnGenerator<'a> {
             self.non_pod_types,
         );
         let call_body = self.make_call_body(&arg_list, local_variables, ptr_arg_name);
+        let rust_name = make_ident(&self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
         Box::new(ImplBlockDetails {
@@ -395,6 +395,12 @@ impl<'a> FnGenerator<'a> {
             arg_list,
             ptr_arg_name,
         } = self.generate_arg_list(false);
+        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
+            self.param_details,
+            wrapper_params,
+            &ret_type,
+            self.non_pod_types,
+        );
         let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
