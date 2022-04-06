@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Allowlist and syntax - Rust ♡ Existing C++</title>
+        <title>Large codebases - Rust ♡ Existing C++</title>
         <!-- Custom HTML head -->
         <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
         <meta name="description" content="autocxx — safe interop between Rust and existing C++">
@@ -75,7 +75,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded "><a href="index.html"><strong aria-hidden="true">1.</strong> Rust ❤️  pre-existing C++</a></li><li class="chapter-item expanded "><a href="tutorial.html"><strong aria-hidden="true">2.</strong> Tutorial</a></li><li class="chapter-item expanded "><a href="workflow.html"><strong aria-hidden="true">3.</strong> Workflow</a></li><li class="chapter-item expanded "><a href="allowlist.html" class="active"><strong aria-hidden="true">4.</strong> Allowlist and syntax</a></li><li class="chapter-item expanded "><a href="building.html"><strong aria-hidden="true">5.</strong> Building</a></li><li class="chapter-item expanded "><a href="storage.html"><strong aria-hidden="true">6.</strong> Storage - stack and heaps</a></li><li class="chapter-item expanded "><a href="references_etc.html"><strong aria-hidden="true">7.</strong> Pointers, references, values</a></li><li class="chapter-item expanded "><a href="primitives.html"><strong aria-hidden="true">8.</strong> Built-in types</a></li><li class="chapter-item expanded "><a href="naming.html"><strong aria-hidden="true">9.</strong> C++ type and function names</a></li><li class="chapter-item expanded "><a href="cpp_types.html"><strong aria-hidden="true">10.</strong> C++ structs, enums and classes</a></li><li class="chapter-item expanded "><a href="cpp_functions.html"><strong aria-hidden="true">11.</strong> C++ functions</a></li><li class="chapter-item expanded "><a href="rust_calls.html"><strong aria-hidden="true">12.</strong> Callbacks into Rust</a></li><li class="chapter-item expanded "><a href="other_features.html"><strong aria-hidden="true">13.</strong> Other C++ features</a></li><li class="chapter-item expanded "><a href="safety.html"><strong aria-hidden="true">14.</strong> Safety</a></li><li class="chapter-item expanded "><a href="rustic.html"><strong aria-hidden="true">15.</strong> Rustic bindings</a></li><li class="chapter-item expanded "><a href="large_codebase.html"><strong aria-hidden="true">16.</strong> Large codebases</a></li><li class="chapter-item expanded "><a href="examples.html"><strong aria-hidden="true">17.</strong> Examples</a></li><li class="chapter-item expanded "><a href="credits.html"><strong aria-hidden="true">18.</strong> Credits</a></li><li class="chapter-item expanded "><a href="contributing.html"><strong aria-hidden="true">19.</strong> Contributing</a></li><li class="chapter-item expanded "><a href="code-of-conduct.html"><strong aria-hidden="true">20.</strong> Code of Conduct</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded "><a href="index.html"><strong aria-hidden="true">1.</strong> Rust ❤️  pre-existing C++</a></li><li class="chapter-item expanded "><a href="tutorial.html"><strong aria-hidden="true">2.</strong> Tutorial</a></li><li class="chapter-item expanded "><a href="workflow.html"><strong aria-hidden="true">3.</strong> Workflow</a></li><li class="chapter-item expanded "><a href="allowlist.html"><strong aria-hidden="true">4.</strong> Allowlist and syntax</a></li><li class="chapter-item expanded "><a href="building.html"><strong aria-hidden="true">5.</strong> Building</a></li><li class="chapter-item expanded "><a href="storage.html"><strong aria-hidden="true">6.</strong> Storage - stack and heaps</a></li><li class="chapter-item expanded "><a href="references_etc.html"><strong aria-hidden="true">7.</strong> Pointers, references, values</a></li><li class="chapter-item expanded "><a href="primitives.html"><strong aria-hidden="true">8.</strong> Built-in types</a></li><li class="chapter-item expanded "><a href="naming.html"><strong aria-hidden="true">9.</strong> C++ type and function names</a></li><li class="chapter-item expanded "><a href="cpp_types.html"><strong aria-hidden="true">10.</strong> C++ structs, enums and classes</a></li><li class="chapter-item expanded "><a href="cpp_functions.html"><strong aria-hidden="true">11.</strong> C++ functions</a></li><li class="chapter-item expanded "><a href="rust_calls.html"><strong aria-hidden="true">12.</strong> Callbacks into Rust</a></li><li class="chapter-item expanded "><a href="other_features.html"><strong aria-hidden="true">13.</strong> Other C++ features</a></li><li class="chapter-item expanded "><a href="safety.html"><strong aria-hidden="true">14.</strong> Safety</a></li><li class="chapter-item expanded "><a href="rustic.html"><strong aria-hidden="true">15.</strong> Rustic bindings</a></li><li class="chapter-item expanded "><a href="large_codebase.html" class="active"><strong aria-hidden="true">16.</strong> Large codebases</a></li><li class="chapter-item expanded "><a href="examples.html"><strong aria-hidden="true">17.</strong> Examples</a></li><li class="chapter-item expanded "><a href="credits.html"><strong aria-hidden="true">18.</strong> Credits</a></li><li class="chapter-item expanded "><a href="contributing.html"><strong aria-hidden="true">19.</strong> Contributing</a></li><li class="chapter-item expanded "><a href="code-of-conduct.html"><strong aria-hidden="true">20.</strong> Code of Conduct</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -137,40 +137,62 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="the-allowlist-and-include_cpp-syntax"><a class="header" href="#the-allowlist-and-include_cpp-syntax">The allowlist and <code>include_cpp</code> syntax</a></h1>
-<p>To include C++ in your Rust codebase using <code>autocxx</code>, you will need
-at least one <a href="https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html"><code>include_cpp</code> macro</a>.</p>
-<p>The simplest is:</p>
-<pre><code class="language-rust ignore">use autocxx::prelude::*;
+                        <h1 id="structuring-a-large-codebase"><a class="header" href="#structuring-a-large-codebase">Structuring a large codebase</a></h1>
+<p>If you have multiple modules, it may be inconvenient to generate all bindings in one <code>include_cpp!</code> invocation.
+There is <em>limited</em> support to refer from one set of bindings to another, using the <code>extern_cpp_type!</code> directive.</p>
+<h4 id="c-header"><a class="header" href="#c-header">C++ header:</a></h4>
+<pre><code class="language-cpp">#include &lt;cstdint&gt;
+struct A {
+    int a;
+};
+enum B {
+    VARIANT,
+};
+void handle_a(const A&amp; a);
+A create_a(B);
 
-include_cpp! {
-<span class="boring">    include &quot;my_header.h&quot;
-</span>    generate!(&quot;MyAPIFunction&quot;)
-}
 </code></pre>
-<p>You need to include <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate!</code> directives</a>
-for every <em>type</em> or <em>function</em> you wish to access from Rust. You don't need to specify this for member functions
-of types that you've added - they'll be generated automatically. (If a particular member function can't
-be generated, some placeholder item with explanatory documentation <a href="workflow.html">will be generated instead</a>).</p>
-<p>Various other directives are possible inside this macro, most notably:</p>
-<ul>
-<li>You can ask to generate all the items in a namespace using
-<a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_ns.html"><code>generate_ns!</code></a></li>
-<li>You might sometimes want to ask that a type is generated as 'plain old data' using
-<a href="https://docs.rs/autocxx/latest/autocxx/macro.generate_pod.html"><code>generate_pod!</code></a> instead of <code>generate!</code> -
-see the chapter on <a href="cpp_types.html">C++ types</a>.</li>
-<li>You'll probaly want to specify a <a href="safety.html"><code>safety!</code> policy</a></li>
-</ul>
-<p>See <a href="https://docs.rs/autocxx/latest/autocxx/">the docs.rs documentation for the full list</a>.</p>
+<h4 id="rust"><a class="header" href="#rust">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+pub mod base {
+    autocxx::include_cpp! {
+        #include &quot;input.h&quot;
+        name!(ffi2)
+        safety!(unsafe_ffi)
+        generate!(&quot;A&quot;)
+        generate!(&quot;B&quot;)
+    }
+    pub use ffi2::*;
+}
+pub mod dependent {
+    autocxx::include_cpp! {
+        #include &quot;input.h&quot;
+        safety!(unsafe_ffi)
+        generate!(&quot;handle_a&quot;)
+        generate!(&quot;create_a&quot;)
+        extern_cpp_type!(&quot;A&quot;, crate::base::A)
+        extern_cpp_type!(&quot;B&quot;, super::super::base::B)
+        pod!(&quot;B&quot;)
+    }
+    pub use ffi::*;
+}
+fn main() {
+    let a = dependent::create_a(base::B::VARIANT);
+    dependent::handle_a(&amp;a);
+}
+
+</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="workflow.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="rustic.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
-                            <a rel="next" href="building.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="examples.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
                         <div style="clear: both"></div>
@@ -179,10 +201,10 @@ see the chapter on <a href="cpp_types.html">C++ types</a>.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="workflow.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="rustic.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
-                    <a rel="next" href="building.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="examples.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
