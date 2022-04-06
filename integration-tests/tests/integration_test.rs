@@ -1568,7 +1568,7 @@ fn test_method_pass_nonpod_by_value() {
         };
     "};
     let rs = quote! {
-        let a = ffi::give_anna();
+        let a = ffi::give_anna().within_unique_ptr();
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
@@ -1677,8 +1677,8 @@ fn test_method_pass_nonpod_by_value_with_up() {
         };
     "};
     let rs = quote! {
-        let a = ffi::give_anna();
-        let a2 = ffi::give_anna();
+        let a = ffi::give_anna().within_unique_ptr();
+        let a2 = ffi::give_anna().within_unique_ptr();
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a, a2), 12);
     };
@@ -1745,7 +1745,7 @@ fn test_method_pass_nonpod_by_reference() {
         };
     "};
     let rs = quote! {
-        let a = ffi::give_anna();
+        let a = ffi::give_anna().within_unique_ptr();
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a.as_ref().unwrap()), 12);
     };
@@ -1780,7 +1780,7 @@ fn test_method_pass_nonpod_by_mut_reference() {
         };
     "};
     let rs = quote! {
-        let mut a = ffi::give_anna();
+        let mut a = ffi::give_anna().within_unique_ptr();
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a.as_mut().unwrap()), 12);
     };
@@ -1816,7 +1816,7 @@ fn test_method_pass_nonpod_by_up() {
         };
     "};
     let rs = quote! {
-        let a = ffi::give_anna();
+        let a = ffi::give_anna().within_unique_ptr();
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
@@ -1848,7 +1848,7 @@ fn test_method_return_nonpod_by_value() {
     "};
     let rs = quote! {
         let b = ffi::Bob { a: 12, b: 13 };
-        let a = b.get_anna();
+        let a = b.get_anna().within_unique_ptr();
         assert!(!a.is_null());
     };
     run_test(cxx, hdr, rs, &["Anna"], &["Bob"]);
@@ -2084,12 +2084,12 @@ fn test_multiple_classes_with_methods() {
         assert_eq!(tc.as_mut().inc(), 2);
         assert_eq!(tc.as_mut().inc(), 3);
 
-        let mut os= make_opaque_struct();
+        let mut os= make_opaque_struct().within_unique_ptr();
         assert_eq!(os.get(), 2);
         assert_eq!(os.pin_mut().inc(), 3);
         assert_eq!(os.pin_mut().inc(), 4);
 
-        let mut oc = make_opaque_class();
+        let mut oc = make_opaque_class().within_unique_ptr();
         assert_eq!(oc.get(), 3);
         assert_eq!(oc.pin_mut().inc(), 4);
         assert_eq!(oc.pin_mut().inc(), 5);
@@ -2754,7 +2754,7 @@ fn test_give_nonpod_typedef_by_value() {
         inline uint32_t take_horace(const Horace& horace) { return horace.b; }
     "};
     let rs = quote! {
-        assert_eq!(ffi::take_horace(ffi::give_bob().as_ref().unwrap()), 4);
+        assert_eq!(ffi::take_horace(ffi::give_bob().within_unique_ptr().as_ref().unwrap()), 4);
     };
     run_test(cxx, hdr, rs, &["give_bob", "take_horace"], &[]);
 }
@@ -3468,7 +3468,7 @@ fn test_foreign_ns_cons_arg_pod() {
     "};
     let rs = quote! {
         let a = ffi::A::Bob { a: 12 };
-        let b = ffi::B::C::new(&a).within_unique_ptr();
+        let b = ffi::B::C::new(&a);
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
     run_test("", hdr, rs, &[], &["B::C", "A::Bob"]);
@@ -3494,7 +3494,7 @@ fn test_foreign_ns_cons_arg_nonpod() {
     "};
     let rs = quote! {
         let a = ffi::A::Bob::new(12).within_unique_ptr();
-        let b = ffi::B::C::new(&a).within_unique_ptr();
+        let b = ffi::B::C::new(&a);
         assert_eq!(b.as_ref().unwrap().a, 12);
     };
     run_test("", hdr, rs, &["A::Bob"], &["B::C"]);
@@ -3535,7 +3535,7 @@ fn test_foreign_ns_func_ret_nonpod() {
         }
     "};
     let rs = quote! {
-        ffi::B::daft().as_ref().unwrap();
+        ffi::B::daft().within_unique_ptr().as_ref().unwrap();
     };
     run_test("", hdr, rs, &["B::daft", "A::Bob"], &[]);
 }
@@ -3583,7 +3583,7 @@ fn test_foreign_ns_meth_ret_nonpod() {
     "};
     let rs = quote! {
         let b = ffi::B::C { a: 14 };
-        b.daft().as_ref().unwrap();
+        b.daft().within_unique_ptr().as_ref().unwrap();
     };
     run_test("", hdr, rs, &["A::Bob"], &["B::C"]);
 }
@@ -5762,11 +5762,11 @@ fn test_multiply_nested_inner_type() {
         };
         "};
     let rs = quote! {
-        ffi::Turkey_Duck_Hen::new().within_unique_ptr();
-        ffi::Turkey_Duck_HenWithDefault::new().within_unique_ptr();
-        ffi::Turkey_Duck_HenWithDestructor::new().within_unique_ptr();
-        ffi::Turkey_Duck_HenWithCopy::new().within_unique_ptr();
-        ffi::Turkey_Duck_HenWithMove::new().within_unique_ptr();
+        ffi::Turkey_Duck_Hen::new();
+        ffi::Turkey_Duck_HenWithDefault::new();
+        ffi::Turkey_Duck_HenWithDestructor::new();
+        ffi::Turkey_Duck_HenWithCopy::new();
+        ffi::Turkey_Duck_HenWithMove::new();
 
         moveit! {
             let hen = ffi::Turkey_Duck_Hen::new();
@@ -8232,7 +8232,7 @@ fn test_move_out_of_uniqueptr() {
     }
     "};
     let rs = quote! {
-        let a = ffi::get_a();
+        let a = ffi::get_a().within_unique_ptr();
         moveit! {
             let _stack_obj = autocxx::moveit::new::mov(a);
         }
@@ -8645,7 +8645,7 @@ fn test_no_constructor_pod_make_unique() {
     };
     "};
     let rs = quote! {
-        ffi::A::new().within_unique_ptr();
+        ffi::A::new();
     };
     run_test("", hdr, rs, &[], &["A"]);
 }
