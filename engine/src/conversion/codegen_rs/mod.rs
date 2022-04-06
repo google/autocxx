@@ -22,7 +22,7 @@ use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, TraitItem,
+    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, TraitItem, TypePath,
 };
 
 use crate::{
@@ -597,6 +597,9 @@ impl<'a> RsCodeGenerator<'a> {
                     subclasses_with_a_single_trivial_constructor.contains(&name.0.name);
                 self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
             }
+            Api::ExternCppType { rust_path, .. } => {
+                self.generate_extern_cpp_type(&name, rust_path, name.ns_segment_iter().count())
+            }
             Api::IgnoredItem {
                 err,
                 ctx: Some(ctx),
@@ -964,6 +967,26 @@ impl<'a> RsCodeGenerator<'a> {
                 });
             }
             materializations.push(Use::SpecificNameFromBindgen(methods_name));
+        }
+    }
+
+    fn generate_extern_cpp_type(
+        &self,
+        name: &QualifiedName,
+        rust_path: TypePath,
+        ns_depth: usize,
+    ) -> RsCodegenResult {
+        let id = name.get_final_ident();
+        let super_duper = std::iter::repeat(make_ident("super"));
+        let supers = super_duper.take(ns_depth + 2);
+        let use_statement = parse_quote! {
+            pub use #(#supers)::* :: #id;
+        };
+        RsCodegenResult {
+            bindgen_mod_items: vec![use_statement],
+            extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, Vec::new())],
+            materializations: vec![Use::Custom(Box::new(parse_quote! { pub use #rust_path; }))],
+            ..Default::default()
         }
     }
 

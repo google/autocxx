@@ -27,7 +27,7 @@ thiserror = "1.0"
 
 [dependencies.syn]
 version = "1.0.39"
-features = [ "full" ]
+features = [ "full", "extra-traits" ]
 
 [features]
 reproduction_case = [ "serde_derive", "serde" ]

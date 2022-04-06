@@ -618,6 +618,7 @@ pub(crate) fn find_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<Qualifie
             | Api::Enum { .. }
             | Api::Struct { .. }
             | Api::Subclass { .. }
+            | Api::ExternCppType { .. }
             | Api::RustType { .. } => Some(api.name()),
             Api::StringConstructor { .. }
             | Api::Function { .. }

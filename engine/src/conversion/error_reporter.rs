@@ -149,6 +149,15 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                     details,
                 })))
             }
+            Api::ExternCppType {
+                name,
+                rust_path,
+                pod,
+            } => Ok(Box::new(std::iter::once(Api::ExternCppType {
+                name,
+                rust_path,
+                pod,
+            }))),
             // Apply a mapping to the following
             Api::Enum { name, item } => enum_conversion(name, item),
             Api::Typedef {

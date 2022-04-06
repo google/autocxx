@@ -15,7 +15,7 @@ use proc_macro2::Span;
 use quote::ToTokens;
 use syn::{
     parse::{Parse, ParseStream},
-    Signature, Token,
+    Signature, Token, TypePath,
 };
 use syn::{Ident, Result as ParseResult};
 use thiserror::Error;
@@ -171,6 +171,7 @@ pub struct IncludeCppConfig {
     pub subclasses: Vec<Subclass>,
     pub extern_rust_funs: Vec<RustFun>,
     pub concretes: HashMap<String, Ident>,
+    pub externs: HashMap<String, TypePath>,
 }
 
 fn allowlist_err_to_syn_err(err: AllowlistErr, span: Span) -> syn::Error {
@@ -198,6 +199,7 @@ impl Parse for IncludeCppConfig {
         let mut subclasses = Vec::new();
         let mut extern_rust_funs = Vec::new();
         let mut concretes = HashMap::new();
+        let mut externs = HashMap::new();
 
         while !input.is_empty() {
             let has_hexathorpe = input.parse::<Option<syn::token::Pound>>()?.is_some();
@@ -303,10 +305,17 @@ impl Parse for IncludeCppConfig {
                         sig,
                         receiver: None,
                     });
+                } else if ident == "extern_cpp_type" {
+                    let args;
+                    syn::parenthesized!(args in input);
+                    let definition: syn::LitStr = args.parse()?;
+                    args.parse::<syn::token::Comma>()?;
+                    let rust_id: TypePath = args.parse()?;
+                    externs.insert(definition.value(), rust_id);
                 } else {
                     return Err(syn::Error::new(
                         ident.span(),
-                        "expected generate, generate_pod, nested_type, safety or exclude_utilities",
+                        "expected generate, generate_pod, nested_type, safety or one of the other autocxx directives",
                     ));
                 }
             }
@@ -330,6 +339,7 @@ impl Parse for IncludeCppConfig {
             subclasses,
             extern_rust_funs,
             concretes,
+            externs,
         })
     }
 }
