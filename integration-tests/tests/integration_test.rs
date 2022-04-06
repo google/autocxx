@@ -2563,7 +2563,7 @@ fn test_destructor() {
     "};
     let rs = quote! {
         use ffi::*;
-        let with_dtor: cxx::UniquePtr<WithDtor> = make_with_dtor();
+        let with_dtor: cxx::UniquePtr<WithDtor> = make_with_dtor().within_unique_ptr();
         drop(with_dtor);
     };
     run_test(cxx, hdr, rs, &["WithDtor", "make_with_dtor"], &[]);
