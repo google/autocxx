@@ -71,6 +71,7 @@ pub(crate) fn check_names(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
         | Api::RustSubclassFn { .. }
         | Api::RustFn { .. }
         | Api::SubclassTraitItem { .. }
+        | Api::ExternCppType { .. }
         | Api::IgnoredItem { .. } => Ok(Box::new(std::iter::once(api))),
     });
 

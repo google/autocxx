@@ -15,6 +15,7 @@
 - [Other C++ features](other_features.md)
 - [Safety](safety.md)
 - [Rustic bindings](rustic.md)
+- [Large codebases](large_codebase.md)
 - [Examples](examples.md)
 - [Credits](credits.md)
 - [Contributing](contributing.md)

@@ -6319,6 +6319,138 @@ fn test_manual_bridge_mixed_types() {
 }
 
 #[test]
+fn test_extern_cpp_type_cxx_bridge() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct A {
+            int a;
+        };
+        inline void handle_a(const A& a) {
+        }
+        inline A create_a() {
+            A a;
+            return a;
+        }
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("handle_a")
+            generate!("create_a")
+            extern_cpp_type!("A", crate::ffi2::A)
+        }
+        #[cxx::bridge]
+        pub mod ffi2 {
+            unsafe extern "C++" {
+                include!("input.h");
+                type A;
+            }
+            impl UniquePtr<A> {}
+        }
+        fn main() {
+            let a = ffi::create_a();
+            ffi::handle_a(&a);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
+fn test_extern_cpp_type_two_include_cpp() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct A {
+            int a;
+        };
+        enum B {
+            VARIANT,
+        };
+        inline void handle_a(const A& a) {
+        }
+        inline A create_a(B) {
+            A a;
+            return a;
+        }
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        pub mod base {
+            autocxx::include_cpp! {
+                #hexathorpe include "input.h"
+                name!(ffi2)
+                safety!(unsafe_ffi)
+                generate!("A")
+                generate!("B")
+            }
+            pub use ffi2::*;
+        }
+        pub mod dependent {
+            autocxx::include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                generate!("handle_a")
+                generate!("create_a")
+                extern_cpp_type!("A", crate::base::A)
+                extern_cpp_type!("B", super::super::base::B)
+                pod!("B")
+            }
+            pub use ffi::*;
+        }
+        fn main() {
+            let a = dependent::create_a(base::B::VARIANT);
+            dependent::handle_a(&a);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
+#[ignore] // because we currently require UniquePtrTarget which this can't implement
+fn test_extern_cpp_type_manual() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct A {
+            int a;
+        };
+        inline void handle_a(const A& a) {
+        }
+        inline A create_a() {
+            A a;
+            return a;
+        }
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("handle_a")
+            generate!("create_a")
+            extern_cpp_type!("A", crate::ffi2::A)
+        }
+        pub mod ffi2 {
+            use autocxx::cxx::{type_id, ExternType};
+            #[repr(C)]
+            pub struct A {
+                a: std::os::raw::c_int
+            }
+            unsafe impl ExternType for A {
+                type Kind = autocxx::cxx::kind::Opaque;
+                type Id = type_id!("A");
+            }
+
+        }
+        fn main() {
+            let a = ffi2::A { a: 3 };
+            ffi::handle_a(&a);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
 fn test_issue486() {
     let hdr = indoc! {"
         namespace a {

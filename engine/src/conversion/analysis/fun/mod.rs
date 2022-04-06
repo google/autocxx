@@ -327,6 +327,7 @@ impl<'a> FnAnalyzer<'a> {
                     ..
                 } => Some(api.name().clone()),
                 Api::Enum { .. } => Some(api.name().clone()),
+                Api::ExternCppType { pod: true, .. } => Some(api.name().clone()),
                 _ => None,
             })
             .chain(

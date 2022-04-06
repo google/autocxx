@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     conversion::{
@@ -79,6 +79,7 @@ impl<'a> ParseBindgen<'a> {
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
         self.confirm_all_generate_directives_obeyed()?;
+        self.replace_extern_cpp_types();
         Ok(self.apis)
     }
 
@@ -122,6 +123,32 @@ impl<'a> ParseBindgen<'a> {
                     }
                 }),
         );
+    }
+
+    /// We do this last, _after_ we've parsed all the APIs, because we might want to actually
+    /// replace some of the existing APIs (structs/enums/etc.) with replacements.
+    fn replace_extern_cpp_types(&mut self) {
+        let pod_requests: HashSet<_> = self.config.get_pod_requests().iter().collect();
+        let replacements: HashMap<_, _> = self
+            .config
+            .externs
+            .iter()
+            .map(|(cpp_definition, rust_path)| {
+                let qn = QualifiedName::new_from_cpp_name(cpp_definition);
+                let pod = pod_requests.contains(&qn.to_cpp_name());
+                (
+                    qn.clone(),
+                    Api::ExternCppType {
+                        name: ApiName::new_from_qualified_name(qn),
+                        rust_path: rust_path.clone(),
+                        pod,
+                    },
+                )
+            })
+            .collect();
+        self.apis
+            .retain(|api| !replacements.contains_key(api.name()));
+        self.apis.extend(replacements.into_iter().map(|(_, v)| v));
     }
 
     fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {

@@ -17,7 +17,7 @@ use syn::{
     punctuated::Punctuated,
     token::{Comma, Unsafe},
     Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
-    Pat, ReturnType, Type, Visibility,
+    Pat, ReturnType, Type, TypePath, Visibility,
 };
 
 use super::{
@@ -510,6 +510,13 @@ pub(crate) enum Api<T: AnalysisPhase> {
         name: ApiName,
         details: SuperclassMethod,
     },
+    /// A type which we shouldn't ourselves generate, but can use in functions
+    /// and so-forth by referring to some definition elsewhere.
+    ExternCppType {
+        name: ApiName,
+        rust_path: TypePath,
+        pod: bool,
+    },
 }
 
 pub(crate) struct RustSubclassFnDetails {
@@ -549,6 +556,7 @@ impl<T: AnalysisPhase> Api<T> {
             Api::RustSubclassFn { name, .. } => name,
             Api::Subclass { name, .. } => &name.0,
             Api::SubclassTraitItem { name, .. } => name,
+            Api::ExternCppType { name, .. } => name,
         }
     }
 

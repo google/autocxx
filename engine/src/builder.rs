@@ -85,7 +85,14 @@ pub struct Builder<'a, BuilderContext> {
 }
 
 impl<CTX: BuilderContext> Builder<'_, CTX> {
-    #[doc(hidden)]
+    /// Create a new Builder object. You'll need to pass in the Rust file
+    /// which contains the bindings (typically an `include_cpp!` macro
+    /// though `autocxx` can also handle manually-crafted `cxx::bridge`
+    /// bindings), and a list of include directories which should be searched
+    /// by autocxx as it tries to hunt for the include files specified
+    /// within the `include_cpp!` macro.
+    ///
+    /// Usually after this you'd call [`build`].
     pub fn new(
         rs_file: impl AsRef<Path>,
         autocxx_incs: impl IntoIterator<Item = impl AsRef<OsStr>>,
@@ -182,6 +189,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
 
     /// For use in tests only, this does the build and returns additional information
     /// about the files generated which can subsequently be examined for correctness.
+    /// In production, please use simply [`build`].
     pub fn build_listing_files(self) -> Result<BuilderSuccess, BuilderError> {
         let clang_args = &self
             .extra_clang_args
