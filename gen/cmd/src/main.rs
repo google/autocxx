@@ -8,12 +8,18 @@
 
 #![forbid(unsafe_code)]
 
-use autocxx_engine::{parse_file, HeaderNamer};
+mod depfile;
+
+use autocxx_engine::{parse_file, HeaderNamer, RebuildDependencyRecorder};
 use clap::{crate_authors, crate_version, App, Arg, ArgGroup};
+use depfile::Depfile;
+use miette::IntoDiagnostic;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
+use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::{cell::Cell, fs::File, path::Path};
 
 pub(crate) static BLANK: &str = "// Blank autocxx placeholder";
@@ -184,6 +190,13 @@ fn main() -> miette::Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("depfile")
+                .long("depfile")
+                .value_name("DEPFILE")
+                .help("A .d file to write")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("clang-args")
                 .last(true)
                 .multiple(true)
@@ -227,10 +240,19 @@ fn main() -> miette::Result<()> {
         skip_cxx_gen: matches.is_present("skip-cxx-gen"),
         header_namer,
     };
-    // In future, we should provide an option to write a .d file here
-    // by passing a callback into the dep_recorder parameter here.
-    // https://github.com/google/autocxx/issues/56
-    parsed_file.resolve_all(incs, &extra_clang_args, None, &cpp_codegen_options)?;
+    let depfile = match matches.value_of("depfile") {
+        None => None,
+        Some(depfile_path) => {
+            let depfile_path = PathBuf::from(depfile_path);
+            Some(Rc::new(RefCell::new(
+                Depfile::new(&depfile_path).into_diagnostic()?,
+            )))
+        }
+    };
+    let dep_recorder: Option<Box<dyn RebuildDependencyRecorder>> = depfile
+        .as_ref()
+        .map(|rc| get_dependency_recorder(rc.clone()));
+    parsed_file.resolve_all(incs, &extra_clang_args, dep_recorder, &cpp_codegen_options)?;
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
     if matches.is_present("gen-cpp") {
         let cpp = matches.value_of("cpp-extension").unwrap();
@@ -241,6 +263,8 @@ fn main() -> miette::Result<()> {
                 .expect("Unable to generate header and C++ code");
             for pair in generations.0 {
                 let cppname = format!("gen{}.{}", counter, cpp);
+                add_output(&depfile, &outdir, &cppname);
+                add_output(&depfile, &outdir, &pair.header_name);
                 write_to_file(&outdir, cppname, &pair.implementation.unwrap_or_default());
                 write_to_file(&outdir, pair.header_name, &pair.header);
                 counter += 1;
@@ -269,6 +293,7 @@ fn main() -> miette::Result<()> {
             } else {
                 include_cxx.get_rs_filename()
             };
+            add_output(&depfile, &outdir, &fname);
             write_to_file(&outdir, fname, ts.to_string().as_bytes());
             counter += 1;
         }
@@ -276,7 +301,21 @@ fn main() -> miette::Result<()> {
             write_placeholders(&outdir, counter, desired_number, "include.rs");
         }
     }
+    if let Some(depfile) = depfile {
+        depfile.borrow_mut().write().into_diagnostic()?;
+    }
     Ok(())
+}
+
+fn add_output(depfile: &Option<Rc<RefCell<Depfile>>>, dir: &Path, filename: &str) {
+    if let Some(depfile) = depfile {
+        let pb = dir.join(filename);
+        depfile.borrow_mut().add_output(&pb);
+    }
+}
+
+fn get_dependency_recorder(depfile: Rc<RefCell<Depfile>>) -> Box<dyn RebuildDependencyRecorder> {
+    Box::new(RecordIntoDepfile(depfile))
 }
 
 fn get_option_string(option: &str, matches: &clap::ArgMatches) -> Option<String> {
@@ -316,4 +355,18 @@ fn write_to_file(dir: &Path, filename: String, content: &[u8]) {
     }
     let mut f = File::create(&path).expect("Unable to create file");
     f.write_all(content).expect("Unable to write file");
+}
+
+struct RecordIntoDepfile(Rc<RefCell<Depfile>>);
+
+impl RebuildDependencyRecorder for RecordIntoDepfile {
+    fn record_header_file_dependency(&self, filename: &str) {
+        self.0.borrow_mut().add_dependency(&PathBuf::from(filename))
+    }
+}
+
+impl std::fmt::Debug for RecordIntoDepfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<depfile>")
+    }
 }

@@ -107,10 +107,14 @@ fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
+    let depfile = tmp_dir.path().join("test.d");
     base_test_ex(
         &tmp_dir,
         |cmd| {
-            cmd.arg("--generate-exact").arg("3");
+            cmd.arg("--generate-exact")
+                .arg("3")
+                .arg("--depfile")
+                .arg(depfile);
         },
         true,
     )?;
@@ -124,6 +128,7 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     assert_not_contentful(&tmp_dir, "gen2.h");
     assert_contentful(&tmp_dir, "cxxgen.h");
     assert_contentful(&tmp_dir, "gen.complete.rs");
+    assert_contentful(&tmp_dir, "test.d");
     File::create(tmp_dir.path().join("cxx.h"))
         .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
     let r = build_from_folder(
