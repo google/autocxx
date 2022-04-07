@@ -75,4 +75,4 @@ pre-existing C++ API, call `ffi::make_string("")` which will return
 a blank `UniquePtr<CxxString>`.
 
 If all you need is a _reference_ to a `CxxString`, you can alternatively use
-[`cxx::let_cpp_string`](https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html).
+[`cxx::let_cxx_string`](https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html).
