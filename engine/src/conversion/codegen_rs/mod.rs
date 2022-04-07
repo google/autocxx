@@ -468,7 +468,7 @@ impl<'a> RsCodeGenerator<'a> {
         let cpp_call_name = api.effective_cpp_name().to_string();
         match api {
             Api::StringConstructor { .. } => {
-                let make_string_name = make_ident(self.config.get_makestring_name());
+                let make_string_name = make_ident("make_string");
                 RsCodegenResult {
                     extern_c_mod_items: vec![ForeignItem::Fn(parse_quote!(
                         fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;

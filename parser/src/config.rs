@@ -420,7 +420,7 @@ impl IncludeCppConfig {
         if self.exclude_utilities {
             Vec::new()
         } else {
-            vec![self.get_makestring_name().to_string()]
+            vec!["make_string".into()]
         }
     }
 
@@ -485,10 +485,6 @@ impl IncludeCppConfig {
             None => Cow::Borrowed(name),
             Some(md) => Cow::Owned(format!("{}_{}", name, md)),
         }
-    }
-
-    pub fn get_makestring_name(&self) -> Cow<str> {
-        self.uniquify_name_per_mod("autocxx_make_string")
     }
 
     pub fn is_rust_type(&self, id: &Ident) -> bool {

@@ -318,8 +318,7 @@ impl<'a> CppCodeGenerator<'a> {
     }
 
     fn generate_string_constructor(&mut self) {
-        let makestring_name = self.config.get_makestring_name();
-        let declaration = Some(format!("namespace {{ inline std::unique_ptr<std::string> {}(::rust::Str str) {{ return std::make_unique<std::string>(std::string(str)); }} }}", makestring_name));
+        let declaration = Some("namespace { inline std::unique_ptr<std::string> make_string(::rust::Str str) { return std::make_unique<std::string>(std::string(str)); } }".into());
         self.additional_functions.push(AdditionalFunction {
             type_definition: None,
             declaration,

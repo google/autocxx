@@ -73,7 +73,7 @@ impl<'a> ParseBindgen<'a> {
     ) -> Result<ApiVec<NullPhase>, ConvertError> {
         let items = Self::find_items_in_root(items)?;
         if !self.config.exclude_utilities() {
-            generate_utilities(&mut self.apis, self.config);
+            generate_utilities(&mut self.apis);
         }
         self.add_apis_from_config();
         let root_ns = Namespace::new();
