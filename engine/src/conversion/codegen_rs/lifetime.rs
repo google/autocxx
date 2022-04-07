@@ -30,7 +30,7 @@ use syn::{
 pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     param_details: &[ArgumentAnalysis],
     mut params: Punctuated<FnArg, Comma>,
-    ret_type: &'r ReturnType,
+    ret_type: Cow<'r, ReturnType>,
     non_pod_types: &HashSet<QualifiedName>,
     assert_all_parameters_are_references: bool,
 ) -> (
@@ -44,15 +44,15 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     });
 
     let any_param_is_reference = param_details.iter().any(|pd| pd.was_reference);
-    let return_type_is_impl = return_type_is_impl(ret_type);
+    let return_type_is_impl = return_type_is_impl(&ret_type);
     let non_pod_ref_param = reference_parameter_is_non_pod_reference(&params, non_pod_types);
-    let ret_type_pod = return_type_is_pod_or_known_type_reference(ret_type, non_pod_types);
+    let ret_type_pod = return_type_is_pod_or_known_type_reference(&ret_type, non_pod_types);
     let returning_impl_with_a_reference_param = return_type_is_impl && any_param_is_reference;
     let hits_1024_bug = non_pod_ref_param && ret_type_pod;
     if !(has_mutable_receiver || hits_1024_bug || returning_impl_with_a_reference_param) {
-        return (None, params, Cow::Borrowed(ret_type));
+        return (None, params, ret_type);
     }
-    let new_return_type = match ret_type {
+    let new_return_type = match ret_type.as_ref() {
         ReturnType::Type(rarrow, boxed_type) => match boxed_type.as_ref() {
             Type::Reference(rtr) => {
                 let mut new_rtr = rtr.clone();
@@ -80,7 +80,7 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     };
 
     match new_return_type {
-        None => (None, params, Cow::Borrowed(ret_type)),
+        None => (None, params, ret_type),
         Some(new_return_type) => {
             for mut param in params.iter_mut() {
                 match &mut param {
