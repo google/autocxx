@@ -3025,6 +3025,43 @@ fn test_make_string() {
 }
 
 #[test]
+fn test_make_string_conflict() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+        };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::include_cpp;
+        include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("Bob")
+        }
+        include_cpp! {
+            #hexathorpe include "input.h"
+            name!(ffi2)
+            safety!(unsafe_ffi)
+        }
+        fn main() {
+            {
+                use ffi::ToCppString;
+                let a = "hello".into_cpp();
+                assert_eq!(a.to_str().unwrap(), "hello");
+            }
+            {
+                use ffi2::ToCppString;
+                let a = "hello".into_cpp();
+                assert_eq!(a.to_str().unwrap(), "hello");
+            }
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
 fn test_string_make_unique() {
     let hdr = indoc! {"
         #include <string>
