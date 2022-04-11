@@ -120,7 +120,7 @@ pub enum Error {
     BindingsParsing(LocatedSynError),
     #[error("no C++ include directory was provided.")]
     NoAutoCxxInc,
-    #[error("autocxx could not generate the requested bindings")]
+    #[error(transparent)]
     Conversion(conversion::ConvertError),
 }
 
