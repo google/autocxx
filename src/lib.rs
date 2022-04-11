@@ -474,7 +474,7 @@ pub trait WithinUniquePtr {
 /// [`Box`]. Automatically imported by the autocxx prelude
 /// and implemented by any (autocxx-related) [`moveit::New`].
 pub trait WithinBox {
-    type Inner: MakeCppStorage;
+    type Inner;
     fn within_box(self) -> Pin<Box<Self::Inner>>;
 }
 
@@ -495,7 +495,6 @@ where
 impl<N, T> WithinBox for N
 where
     N: New<Output = T>,
-    T: MakeCppStorage,
 {
     type Inner = T;
     fn within_box(self) -> Pin<Box<T>> {
