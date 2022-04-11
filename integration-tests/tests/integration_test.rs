@@ -8429,6 +8429,11 @@ fn test_pass_by_value_moveit() {
         ffi::take_a(autocxx::as_copy(heap_obj.as_ref().unwrap()));
         ffi::take_a(heap_obj); // consume
 
+        let heap_obj2 = ffi::A::new().within_box();
+        ffi::take_a(heap_obj2.as_ref().get_ref());
+        ffi::take_a(autocxx::as_copy(heap_obj2.as_ref().get_ref()));
+        ffi::take_a(heap_obj2); // consume
+
         moveit! {
             let mut stack_obj = ffi::B::new();
         }
