@@ -13,7 +13,9 @@ pub mod file_locations;
 mod path;
 mod subclass_attrs;
 
-pub use config::{AllowlistEntry, IncludeCppConfig, RustFun, Subclass, UnsafePolicy};
+pub use config::{
+    AllowlistEntry, ExternCppType, IncludeCppConfig, RustFun, Subclass, UnsafePolicy,
+};
 use file_locations::FileLocationStrategy;
 pub use path::RustPath;
 use proc_macro2::TokenStream as TokenStream2;

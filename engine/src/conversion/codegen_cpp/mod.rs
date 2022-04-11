@@ -385,6 +385,8 @@ impl<'a> CppCodeGenerator<'a> {
                 format!("arg{}", counter)
             }
         };
+        // If this returns a non-POD value, we may instead wish to emplace
+        // it into a parameter, let's see.
         let args: Result<Vec<_>, _> = details
             .argument_conversion
             .iter()
@@ -412,11 +414,19 @@ impl<'a> CppCodeGenerator<'a> {
         let ret_type = details
             .return_conversion
             .as_ref()
-            .map(|x| match conversion_direction {
-                ConversionDirection::RustCallsCpp => x.converted_type(&self.original_name_map),
-                ConversionDirection::CppCallsCpp => x.unconverted_type(&self.original_name_map),
+            .and_then(|x| match conversion_direction {
+                ConversionDirection::RustCallsCpp => {
+                    if x.populate_return_value() {
+                        Some(x.converted_type(&self.original_name_map))
+                    } else {
+                        None
+                    }
+                }
+                ConversionDirection::CppCallsCpp => {
+                    Some(x.unconverted_type(&self.original_name_map))
+                }
                 ConversionDirection::CppCallsRust => {
-                    x.inverse().converted_type(&self.original_name_map)
+                    Some(x.inverse().converted_type(&self.original_name_map))
                 }
             })
             .unwrap_or_else(|| Ok(default_return.to_string()))?;
@@ -434,6 +444,20 @@ impl<'a> CppCodeGenerator<'a> {
             "{} {}{}({}){}",
             ret_type, qualification, name, args, constness
         );
+        // Whether there's a placement param in which to put the return value
+        let placement_param = details
+            .argument_conversion
+            .iter()
+            .enumerate()
+            .filter_map(|(counter, conv)| {
+                if conv.is_placement_parameter() {
+                    Some(get_arg_name(counter))
+                } else {
+                    None
+                }
+            })
+            .next();
+        // Arguments to underlying function call
         let arg_list: Result<Vec<_>, _> = details
             .argument_conversion
             .iter()
@@ -442,7 +466,7 @@ impl<'a> CppCodeGenerator<'a> {
                 ConversionDirection::RustCallsCpp => {
                     conv.cpp_conversion(&get_arg_name(counter), &self.original_name_map, false)
                 }
-                ConversionDirection::CppCallsCpp => Ok(get_arg_name(counter)),
+                ConversionDirection::CppCallsCpp => Ok(Some(get_arg_name(counter))),
                 ConversionDirection::CppCallsRust => conv.inverse().cpp_conversion(
                     &get_arg_name(counter),
                     &self.original_name_map,
@@ -450,7 +474,7 @@ impl<'a> CppCodeGenerator<'a> {
                 ),
             })
             .collect();
-        let mut arg_list = arg_list?.into_iter();
+        let mut arg_list = arg_list?.into_iter().flatten();
         let receiver = if is_a_method { arg_list.next() } else { None };
         if matches!(&details.payload, CppFunctionBody::ConstructSuperclass(_)) {
             arg_list.next();
@@ -529,22 +553,31 @@ impl<'a> CppCodeGenerator<'a> {
             ),
         };
         if let Some(ret) = &details.return_conversion {
-            underlying_function_call = format!(
-                "return {}",
-                match conversion_direction {
-                    ConversionDirection::RustCallsCpp => ret.cpp_conversion(
-                        &underlying_function_call,
-                        &self.original_name_map,
-                        true
-                    )?,
-                    ConversionDirection::CppCallsCpp => underlying_function_call,
-                    ConversionDirection::CppCallsRust => ret.inverse().cpp_conversion(
-                        &underlying_function_call,
-                        &self.original_name_map,
-                        true
-                    )?,
+            let call_itself = match conversion_direction {
+                ConversionDirection::RustCallsCpp => {
+                    ret.cpp_conversion(&underlying_function_call, &self.original_name_map, true)?
                 }
+                ConversionDirection::CppCallsCpp => Some(underlying_function_call),
+                ConversionDirection::CppCallsRust => ret.inverse().cpp_conversion(
+                    &underlying_function_call,
+                    &self.original_name_map,
+                    true,
+                )?,
+            }
+            .expect(
+                "Expected some conversion type for return value which resulted in a parameter name",
             );
+
+            underlying_function_call = match placement_param {
+                Some(placement_param) => {
+                    let tyname = type_to_cpp(&ret.unwrapped_type, &self.original_name_map)?;
+                    format!(
+                        "new({}) {}(std::move({}))",
+                        placement_param, tyname, call_itself
+                    )
+                }
+                None => format!("return {}", call_itself),
+            };
         };
         if !underlying_function_call.is_empty() {
             underlying_function_call = format!("{};", underlying_function_call);

@@ -930,7 +930,7 @@ fn test_return_nonpod_by_value() {
         uint32_t take_bob(std::unique_ptr<Bob> a);
     "};
     let rs = quote! {
-        let a = ffi::give_bob(13);
+        let a = ffi::give_bob(13).within_unique_ptr();
         assert_eq!(ffi::take_bob(a), 13);
     };
     run_test(cxx, hdr, rs, &["take_bob", "give_bob", "Bob"], &[]);
@@ -1568,7 +1568,7 @@ fn test_method_pass_nonpod_by_value() {
         };
     "};
     let rs = quote! {
-        let a = ffi::give_anna();
+        let a = ffi::give_anna().within_box();
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
@@ -1677,8 +1677,8 @@ fn test_method_pass_nonpod_by_value_with_up() {
         };
     "};
     let rs = quote! {
-        let a = ffi::give_anna();
-        let a2 = ffi::give_anna();
+        let a = ffi::give_anna().within_unique_ptr();
+        let a2 = ffi::give_anna().within_unique_ptr();
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a, a2), 12);
     };
@@ -1745,9 +1745,9 @@ fn test_method_pass_nonpod_by_reference() {
         };
     "};
     let rs = quote! {
-        let a = ffi::give_anna();
+        let a = ffi::give_anna().within_box();
         let b = ffi::Bob { a: 12, b: 13 };
-        assert_eq!(b.get_bob(a.as_ref().unwrap()), 12);
+        assert_eq!(b.get_bob(a.as_ref().get_ref()), 12);
     };
     run_test(cxx, hdr, rs, &["Anna", "give_anna"], &["Bob"]);
 }
@@ -1780,7 +1780,7 @@ fn test_method_pass_nonpod_by_mut_reference() {
         };
     "};
     let rs = quote! {
-        let mut a = ffi::give_anna();
+        let mut a = ffi::give_anna().within_unique_ptr();
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a.as_mut().unwrap()), 12);
     };
@@ -1816,7 +1816,7 @@ fn test_method_pass_nonpod_by_up() {
         };
     "};
     let rs = quote! {
-        let a = ffi::give_anna();
+        let a = ffi::give_anna().within_unique_ptr();
         let b = ffi::Bob { a: 12, b: 13 };
         assert_eq!(b.get_bob(a), 12);
     };
@@ -1848,7 +1848,7 @@ fn test_method_return_nonpod_by_value() {
     "};
     let rs = quote! {
         let b = ffi::Bob { a: 12, b: 13 };
-        let a = b.get_anna();
+        let a = b.get_anna().within_unique_ptr();
         assert!(!a.is_null());
     };
     run_test(cxx, hdr, rs, &["Anna"], &["Bob"]);
@@ -2084,12 +2084,12 @@ fn test_multiple_classes_with_methods() {
         assert_eq!(tc.as_mut().inc(), 2);
         assert_eq!(tc.as_mut().inc(), 3);
 
-        let mut os= make_opaque_struct();
+        let mut os= make_opaque_struct().within_unique_ptr();
         assert_eq!(os.get(), 2);
         assert_eq!(os.pin_mut().inc(), 3);
         assert_eq!(os.pin_mut().inc(), 4);
 
-        let mut oc = make_opaque_class();
+        let mut oc = make_opaque_class().within_unique_ptr();
         assert_eq!(oc.get(), 3);
         assert_eq!(oc.pin_mut().inc(), 4);
         assert_eq!(oc.pin_mut().inc(), 5);
@@ -2429,7 +2429,7 @@ fn test_ns_up_wrappers() {
         uint32_t give_bob(A::Bob bob);
     "};
     let rs = quote! {
-        assert_eq!(ffi::give_bob(ffi::get_bob()), 2);
+        assert_eq!(ffi::give_bob(as_new(ffi::get_bob())), 2);
     };
     run_test(cxx, hdr, rs, &["give_bob", "get_bob"], &[]);
 }
@@ -2459,7 +2459,7 @@ fn test_ns_up_wrappers_in_up() {
         uint32_t give_bob(A::Bob bob);
     "};
     let rs = quote! {
-        assert_eq!(ffi::give_bob(ffi::A::get_bob()), 2);
+        assert_eq!(ffi::give_bob(as_new(ffi::A::get_bob())), 2);
     };
     run_test(cxx, hdr, rs, &["give_bob", "A::get_bob"], &[]);
 }
@@ -2563,7 +2563,7 @@ fn test_destructor() {
     "};
     let rs = quote! {
         use ffi::*;
-        let with_dtor: cxx::UniquePtr<WithDtor> = make_with_dtor();
+        let with_dtor: cxx::UniquePtr<WithDtor> = make_with_dtor().within_unique_ptr();
         drop(with_dtor);
     };
     run_test(cxx, hdr, rs, &["WithDtor", "make_with_dtor"], &[]);
@@ -2754,7 +2754,7 @@ fn test_give_nonpod_typedef_by_value() {
         inline uint32_t take_horace(const Horace& horace) { return horace.b; }
     "};
     let rs = quote! {
-        assert_eq!(ffi::take_horace(ffi::give_bob().as_ref().unwrap()), 4);
+        assert_eq!(ffi::take_horace(&moveit!(ffi::give_bob())), 4);
     };
     run_test(cxx, hdr, rs, &["give_bob", "take_horace"], &[]);
 }
@@ -3535,7 +3535,7 @@ fn test_foreign_ns_func_ret_nonpod() {
         }
     "};
     let rs = quote! {
-        ffi::B::daft().as_ref().unwrap();
+        ffi::B::daft().within_box().as_ref();
     };
     run_test("", hdr, rs, &["B::daft", "A::Bob"], &[]);
 }
@@ -3583,7 +3583,7 @@ fn test_foreign_ns_meth_ret_nonpod() {
     "};
     let rs = quote! {
         let b = ffi::B::C { a: 14 };
-        b.daft().as_ref().unwrap();
+        b.daft().within_unique_ptr().as_ref().unwrap();
     };
     run_test("", hdr, rs, &["A::Bob"], &["B::C"]);
 }
@@ -3752,7 +3752,7 @@ fn test_root_ns_func_ret_nonpod() {
         }
     "};
     let rs = quote! {
-        ffi::B::daft().as_ref().unwrap();
+        ffi::B::daft().within_unique_ptr().as_ref().unwrap();
     };
     run_test("", hdr, rs, &["B::daft", "Bob"], &[]);
 }
@@ -3796,7 +3796,7 @@ fn test_root_ns_meth_ret_nonpod() {
     "};
     let rs = quote! {
         let b = ffi::B::C { a: 12 };
-        b.daft().as_ref().unwrap();
+        b.daft().within_unique_ptr().as_ref().unwrap();
     };
     run_test("", hdr, rs, &["Bob"], &["B::C"]);
 }
@@ -4308,7 +4308,7 @@ fn test_string_in_struct() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        assert_eq!(ffi::take_a(ffi::make_a("hello".into_cpp())), 5);
+        assert_eq!(ffi::take_a(as_new(ffi::make_a("hello".into_cpp()))), 5);
     };
     run_test("", hdr, rs, &["make_a", "take_a"], &[]);
 }
@@ -4333,7 +4333,7 @@ fn test_up_in_struct() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        assert_eq!(ffi::take_a(ffi::make_a("hello".into_cpp())), 5);
+        assert_eq!(ffi::take_a(as_new(ffi::make_a("hello".into_cpp()))), 5);
     };
     run_test("", hdr, rs, &["make_a", "take_a"], &[]);
 }
@@ -4357,7 +4357,7 @@ fn test_typedef_to_std_in_struct() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        assert_eq!(ffi::take_a(ffi::make_a("hello".into_cpp())), 5);
+        assert_eq!(ffi::take_a(as_new(ffi::make_a("hello".into_cpp()))), 5);
     };
     run_test("", hdr, rs, &["make_a", "take_a"], &[]);
 }
@@ -4383,7 +4383,7 @@ fn test_typedef_to_up_in_struct() {
     "};
     let rs = quote! {
         use ffi::ToCppString;
-        assert_eq!(ffi::take_a(ffi::make_a("hello".into_cpp())), 5);
+        assert_eq!(ffi::take_a(as_new(ffi::make_a("hello".into_cpp()))), 5);
     };
     run_test("", hdr, rs, &["make_a", "take_a"], &[]);
 }
@@ -6223,22 +6223,23 @@ fn test_two_mods() {
     "};
     let hexathorpe = Token![#](Span::call_site());
     let rs = quote! {
-        autocxx::include_cpp! {
+        use autocxx::prelude::*;
+        include_cpp! {
             #hexathorpe include "input.h"
             safety!(unsafe_ffi)
             generate!("give_a")
             generate!("get_a")
         }
-        autocxx::include_cpp! {
+        include_cpp! {
             #hexathorpe include "input.h"
             name!(ffi2)
             generate!("give_b")
             generate!("get_b")
         }
         fn main() {
-            let a = ffi::give_a();
+            let a = ffi::give_a().within_unique_ptr();
             assert_eq!(ffi::get_a(a), 5);
-            let b = unsafe { ffi2::give_b() };
+            let b = unsafe { ffi2::give_b().within_unique_ptr() };
             assert_eq!(unsafe { ffi2::get_b(b) }, 8);
         }
     };
@@ -6335,12 +6336,13 @@ fn test_extern_cpp_type_cxx_bridge() {
     "};
     let hexathorpe = Token![#](Span::call_site());
     let rs = quote! {
-        autocxx::include_cpp! {
+        use autocxx::prelude::*;
+        include_cpp! {
             #hexathorpe include "input.h"
             safety!(unsafe_ffi)
             generate!("handle_a")
             generate!("create_a")
-            extern_cpp_type!("A", crate::ffi2::A)
+            extern_cpp_opaque_type!("A", crate::ffi2::A)
         }
         #[cxx::bridge]
         pub mod ffi2 {
@@ -6400,7 +6402,8 @@ fn test_extern_cpp_type_two_include_cpp() {
             pub use ffi::*;
         }
         fn main() {
-            let a = dependent::create_a(base::B::VARIANT);
+            use autocxx::prelude::*;
+            let a = dependent::create_a(base::B::VARIANT).within_box();
             dependent::handle_a(&a);
         }
     };
@@ -7961,6 +7964,29 @@ fn test_pv_subclass_calls() {
 }
 
 #[test]
+fn test_cycle_nonpod_simple() {
+    let hdr = indoc! {"
+    #include <string>
+    struct NonPod {
+        std::string a;
+    };
+    inline NonPod make_non_pod(std::string a) {
+        NonPod p;
+        p.a = a;
+        return p;
+    }
+    inline NonPod call_n(NonPod param) {
+        return param;
+    }
+    "};
+    let rs = quote! {
+        let nonpod = ffi::make_non_pod("hello").within_unique_ptr();
+        ffi::call_n(nonpod).within_unique_ptr();
+    };
+    run_test("", hdr, rs, &["NonPod", "make_non_pod", "call_n"], &[])
+}
+
+#[test]
 fn test_pv_subclass_types() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -8017,7 +8043,7 @@ fn test_pv_subclass_types() {
             ffi::register_observer(obs.as_ref().borrow_mut().pin_mut());
             ffi::call_p(ffi::Pod { a: 3 });
             ffi::call_s("hello");
-            ffi::call_n(ffi::make_non_pod("goodbye"));
+            ffi::call_n(ffi::make_non_pod("goodbye").within_unique_ptr());
         },
         quote! {
             generate!("register_observer")
@@ -8365,7 +8391,7 @@ fn test_move_out_of_uniqueptr() {
     }
     "};
     let rs = quote! {
-        let a = ffi::get_a();
+        let a = ffi::get_a().within_unique_ptr();
         moveit! {
             let _stack_obj = autocxx::moveit::new::mov(a);
         }

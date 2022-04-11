@@ -9,7 +9,7 @@
 use std::{borrow::Cow, collections::HashSet};
 
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{
     parse::Parser,
     parse_quote,
@@ -20,6 +20,7 @@ use syn::{
 
 use super::{
     function_wrapper_rs::RustParamConversion,
+    maybe_unsafes_to_tokens,
     unqualify::{unqualify_params, unqualify_ret_type},
     ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
 };
@@ -30,7 +31,6 @@ use crate::{
             TraitMethodDetails,
         },
         api::UnsafetyNeeded,
-        codegen_rs::maybe_unsafes_to_tokens,
     },
     types::{Namespace, QualifiedName},
 };
@@ -54,11 +54,13 @@ impl UnsafetyNeeded {
         }
     }
 
-    pub(crate) fn from_param_details(params: &[ArgumentAnalysis], ignore_receiver: bool) -> Self {
+    pub(crate) fn from_param_details(params: &[ArgumentAnalysis], ignore_placements: bool) -> Self {
         params.iter().fold(UnsafetyNeeded::None, |accumulator, pd| {
             if matches!(accumulator, UnsafetyNeeded::Always) {
                 UnsafetyNeeded::Always
-            } else if pd.self_type.is_some() && ignore_receiver {
+            } else if (pd.self_type.is_some() || pd.is_placement_return_destination)
+                && ignore_placements
+            {
                 if matches!(
                     pd.requires_unsafe,
                     UnsafetyNeeded::Always | UnsafetyNeeded::JustBridge
@@ -254,7 +256,8 @@ impl<'a> FnGenerator<'a> {
         let mut local_variables = Vec::new();
         let mut arg_list = Vec::new();
         let mut ptr_arg_name = None;
-        let ret_type = Cow::Borrowed(ret_type);
+        let mut ret_type = Cow::Borrowed(ret_type);
+        let mut any_conversion_requires_unsafe = false;
         for pd in self.param_details {
             let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
                 parse_quote!(self)
@@ -262,20 +265,33 @@ impl<'a> FnGenerator<'a> {
                 pd.name.clone()
             };
             let rust_for_param = pd.conversion.rust_conversion(wrapper_arg_name.clone());
-            let RustParamConversion {
-                ty,
-                conversion,
-                local_variables: mut these_local_variables,
-            } = rust_for_param;
-            arg_list.push(conversion.clone());
-            local_variables.append(&mut these_local_variables);
-            if pd.is_placement_return_destination {
-                ptr_arg_name = Some(conversion);
-            } else {
-                let param_mutability = pd.conversion.rust_conversion.requires_mutability();
-                wrapper_params.push(parse_quote!(
-                    #param_mutability #wrapper_arg_name: #ty
-                ));
+            match rust_for_param {
+                RustParamConversion::Param {
+                    ty,
+                    conversion,
+                    local_variables: mut these_local_variables,
+                    conversion_requires_unsafe,
+                } => {
+                    arg_list.push(conversion.clone());
+                    local_variables.append(&mut these_local_variables);
+                    if pd.is_placement_return_destination {
+                        ptr_arg_name = Some(conversion);
+                    } else {
+                        let param_mutability = pd.conversion.rust_conversion.requires_mutability();
+                        wrapper_params.push(parse_quote!(
+                            #param_mutability #wrapper_arg_name: #ty
+                        ));
+                    }
+                    any_conversion_requires_unsafe =
+                        conversion_requires_unsafe || any_conversion_requires_unsafe;
+                }
+                RustParamConversion::ReturnValue { ty } => {
+                    ptr_arg_name = Some(pd.name.to_token_stream());
+                    ret_type = Cow::Owned(parse_quote! {
+                        -> impl autocxx::moveit::new::New<Output = #ty>
+                    });
+                    arg_list.push(pd.name.to_token_stream());
+                }
             }
         }
         if let Some(parameter_reordering) = &parameter_reordering {
@@ -294,7 +310,7 @@ impl<'a> FnGenerator<'a> {
             quote! {
                 cxxbridge::#cxxbridge_name ( #(#arg_list),* )
             },
-            !matches!(self.unsafety, UnsafetyNeeded::None),
+            any_conversion_requires_unsafe || matches!(self.unsafety, UnsafetyNeeded::JustBridge),
         );
         let call_stmts = if let Some(ptr_arg_name) = ptr_arg_name {
             let mut closure_stmts = local_variables;
@@ -305,7 +321,7 @@ impl<'a> FnGenerator<'a> {
             closure_stmts.push(call_body);
             let closure_stmts = maybe_unsafes_to_tokens(closure_stmts, true);
             vec![MaybeUnsafeStmt::needs_unsafe(parse_quote! {
-               autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
+                autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
                     #closure_stmts
                 })
             })]
@@ -314,7 +330,6 @@ impl<'a> FnGenerator<'a> {
             call_stmts.push(call_body);
             call_stmts
         };
-
         let context_is_unsafe = matches!(self.unsafety, UnsafetyNeeded::Always)
             || self.always_unsafe_due_to_trait_definition;
         let call_body = maybe_unsafes_to_tokens(call_stmts, context_is_unsafe);

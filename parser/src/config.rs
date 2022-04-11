@@ -155,6 +155,12 @@ impl std::fmt::Debug for RustFun {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ExternCppType {
+    pub rust_path: TypePath,
+    pub opaque: bool,
+}
+
 #[derive(Debug)]
 pub struct IncludeCppConfig {
     pub inclusions: Vec<String>,
@@ -171,7 +177,7 @@ pub struct IncludeCppConfig {
     pub subclasses: Vec<Subclass>,
     pub extern_rust_funs: Vec<RustFun>,
     pub concretes: HashMap<String, Ident>,
-    pub externs: HashMap<String, TypePath>,
+    pub externs: HashMap<String, ExternCppType>,
 }
 
 fn allowlist_err_to_syn_err(err: AllowlistErr, span: Span) -> syn::Error {
@@ -305,13 +311,14 @@ impl Parse for IncludeCppConfig {
                         sig,
                         receiver: None,
                     });
-                } else if ident == "extern_cpp_type" {
+                } else if ident == "extern_cpp_type" || ident == "extern_cpp_opaque_type" {
                     let args;
                     syn::parenthesized!(args in input);
                     let definition: syn::LitStr = args.parse()?;
                     args.parse::<syn::token::Comma>()?;
-                    let rust_id: TypePath = args.parse()?;
-                    externs.insert(definition.value(), rust_id);
+                    let rust_path: TypePath = args.parse()?;
+                    let opaque = ident == "extern_cpp_opaque_type";
+                    externs.insert(definition.value(), ExternCppType { rust_path, opaque });
                 } else {
                     return Err(syn::Error::new(
                         ident.span(),

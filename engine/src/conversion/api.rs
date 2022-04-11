@@ -9,7 +9,7 @@
 use std::{collections::HashSet, fmt::Display};
 
 use crate::types::{make_ident, Namespace, QualifiedName};
-use autocxx_parser::{RustFun, RustPath};
+use autocxx_parser::{ExternCppType, RustFun, RustPath};
 use itertools::Itertools;
 use quote::ToTokens;
 use syn::{
@@ -17,7 +17,7 @@ use syn::{
     punctuated::Punctuated,
     token::{Comma, Unsafe},
     Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
-    Pat, ReturnType, Type, TypePath, Visibility,
+    Pat, ReturnType, Type, Visibility,
 };
 
 use super::{
@@ -514,7 +514,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// and so-forth by referring to some definition elsewhere.
     ExternCppType {
         name: ApiName,
-        rust_path: TypePath,
+        details: ExternCppType,
         pod: bool,
     },
 }

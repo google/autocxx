@@ -6,7 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use crate::{
-    conversion::analysis::fun::{ArgumentAnalysis, ReceiverMutability},
+    conversion::analysis::fun::{
+        function_wrapper::RustConversionType, ArgumentAnalysis, ReceiverMutability,
+    },
     types::QualifiedName,
 };
 use proc_macro2::TokenStream;
@@ -27,6 +29,7 @@ use syn::{
 ///    input parameter is a non-POD type but the output reference is a POD or
 ///    built-in type
 /// 3) Any parameter is any form of reference, and we're returning an `impl New`
+///    3a) an 'impl ValueParam' counts as a reference.
 pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     param_details: &[ArgumentAnalysis],
     mut params: Punctuated<FnArg, Comma>,
@@ -43,7 +46,13 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
             && !pd.is_placement_return_destination
     });
 
-    let any_param_is_reference = param_details.iter().any(|pd| pd.was_reference);
+    let any_param_is_reference = param_details.iter().any(|pd| {
+        pd.was_reference
+            || matches!(
+                pd.conversion.rust_conversion,
+                RustConversionType::FromValueParamToPtr
+            )
+    });
     let return_type_is_impl = return_type_is_impl(&ret_type);
     let non_pod_ref_param = reference_parameter_is_non_pod_reference(&params, non_pod_types);
     let ret_type_pod = return_type_is_pod_or_known_type_reference(&ret_type, non_pod_types);
@@ -94,6 +103,7 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                             }
                         }),
                         Type::Reference(tyr) => add_lifetime_to_reference(tyr),
+                        Type::ImplTrait(tyit) => add_lifetime_to_impl_trait(tyit),
                         _ if assert_all_parameters_are_references => {
                             panic!("Expected Pin<&mut T> or &T")
                         }
@@ -186,4 +196,9 @@ fn add_lifetime_to_pinned_reference(
 
 fn add_lifetime_to_reference(tyr: &mut syn::TypeReference) {
     tyr.lifetime = Some(parse_quote! { 'a })
+}
+
+fn add_lifetime_to_impl_trait(tyit: &mut syn::TypeImplTrait) {
+    tyit.bounds
+        .push(syn::TypeParamBound::Lifetime(parse_quote! { 'a }))
 }

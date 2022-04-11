@@ -19,25 +19,33 @@ use syn::parse_quote;
 use super::MaybeUnsafeStmt;
 
 /// Output Rust snippets for how to deal with a given parameter.
-pub(super) struct RustParamConversion {
-    pub(super) ty: Type,
-    pub(super) local_variables: Vec<MaybeUnsafeStmt>,
-    pub(super) conversion: TokenStream,
+pub(super) enum RustParamConversion {
+    Param {
+        ty: Type,
+        local_variables: Vec<MaybeUnsafeStmt>,
+        conversion: TokenStream,
+        conversion_requires_unsafe: bool,
+    },
+    ReturnValue {
+        ty: Type,
+    },
 }
 
 impl TypeConversionPolicy {
     /// If returns `None` then this parameter should be omitted entirely.
     pub(super) fn rust_conversion(&self, var: Pat) -> RustParamConversion {
         match self.rust_conversion {
-            RustConversionType::None => RustParamConversion {
+            RustConversionType::None => RustParamConversion::Param {
                 ty: self.converted_rust_type(),
                 local_variables: Vec::new(),
                 conversion: quote! { #var },
+                conversion_requires_unsafe: false,
             },
-            RustConversionType::FromStr => RustParamConversion {
+            RustConversionType::FromStr => RustParamConversion::Param {
                 ty: parse_quote! { impl ToCppString },
                 local_variables: Vec::new(),
                 conversion: quote! ( #var .into_cpp() ),
+                conversion_requires_unsafe: false,
             },
             RustConversionType::ToBoxedUpHolder(ref sub) => {
                 let holder_type = sub.holder();
@@ -45,12 +53,13 @@ impl TypeConversionPolicy {
                 let ty = parse_quote! { autocxx::subclass::CppSubclassRustPeerHolder<
                     super::super::super:: #id>
                 };
-                RustParamConversion {
+                RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
                         Box::new(#holder_type(#var))
                     },
+                    conversion_requires_unsafe: false,
                 }
             }
             RustConversionType::FromPinMaybeUninitToPtr => {
@@ -61,12 +70,13 @@ impl TypeConversionPolicy {
                 let ty = parse_quote! {
                     ::std::pin::Pin<&mut ::std::mem::MaybeUninit< #ty >>
                 };
-                RustParamConversion {
+                RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
                         #var.get_unchecked_mut().as_mut_ptr()
                     },
+                    conversion_requires_unsafe: true,
                 }
             }
             RustConversionType::FromPinMoveRefToPtr => {
@@ -77,7 +87,7 @@ impl TypeConversionPolicy {
                 let ty = parse_quote! {
                     ::std::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
                 };
-                RustParamConversion {
+                RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
@@ -85,6 +95,7 @@ impl TypeConversionPolicy {
                             r
                         }
                     },
+                    conversion_requires_unsafe: true,
                 }
             }
             RustConversionType::FromTypeToPtr => {
@@ -93,12 +104,13 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! { &mut #ty };
-                RustParamConversion {
+                RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
                         #var
                     },
+                    conversion_requires_unsafe: false,
                 }
             }
             RustConversionType::FromValueParamToPtr => {
@@ -112,7 +124,7 @@ impl TypeConversionPolicy {
                 let ty = parse_quote! { impl autocxx::ValueParam<#ty> };
                 // This is the usual trick to put something on the stack, then
                 // immediately shadow the variable name so it can't be accessed or moved.
-                RustParamConversion {
+                RustParamConversion::Param {
                     ty,
                     local_variables: vec![
                         MaybeUnsafeStmt::new(
@@ -133,7 +145,18 @@ impl TypeConversionPolicy {
                     conversion: quote! {
                         #space_var_name.get_ptr()
                     },
+                    conversion_requires_unsafe: false,
                 }
+            }
+            // This type of conversion means that this function parameter appears in the cxx::bridge
+            // but not in the arguments for the wrapper function, because instead we return an
+            // impl New which uses the cxx::bridge function's pointer parameter.
+            RustConversionType::FromPlacementParamToNewReturn => {
+                let ty = match &self.unwrapped_type {
+                    Type::Ptr(TypePtr { elem, .. }) => *(*elem).clone(),
+                    _ => panic!("Not a ptr"),
+                };
+                RustParamConversion::ReturnValue { ty }
             }
         }
     }
