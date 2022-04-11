@@ -178,9 +178,7 @@ where
     type StackStorage = <&'a T as ValueParam<T>>::StackStorage;
 
     unsafe fn populate_stack_space(self, stack: Pin<&mut Option<Self::StackStorage>>) {
-        self.as_ref()
-            .get_ref()
-            .populate_stack_space(stack)
+        self.as_ref().get_ref().populate_stack_space(stack)
     }
 
     fn get_ptr(stack: Pin<&mut Self::StackStorage>) -> *mut T {
