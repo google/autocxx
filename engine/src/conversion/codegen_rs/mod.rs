@@ -1206,3 +1206,138 @@ struct RsCodegenResult {
     trait_impl_entry: Option<Box<TraitImplBlockDetails>>,
     materializations: Vec<Use>,
 }
+
+/// An [`Item`] that always needs to be in an unsafe block.
+#[derive(Clone)]
+enum MaybeUnsafeStmt {
+    // This could almost be a syn::Stmt, but that doesn't quite work
+    // because the last stmt in a function is actually an expression
+    // thus lacking a semicolon.
+    Normal(TokenStream),
+    NeedsUnsafe(TokenStream),
+    Binary {
+        in_safe_context: TokenStream,
+        in_unsafe_context: TokenStream,
+    },
+}
+
+impl MaybeUnsafeStmt {
+    fn new(stmt: TokenStream) -> Self {
+        Self::Normal(stmt)
+    }
+
+    fn needs_unsafe(stmt: TokenStream) -> Self {
+        Self::NeedsUnsafe(stmt)
+    }
+
+    fn maybe_unsafe(stmt: TokenStream, needs_unsafe: bool) -> Self {
+        if needs_unsafe {
+            Self::NeedsUnsafe(stmt)
+        } else {
+            Self::Normal(stmt)
+        }
+    }
+
+    fn binary(in_safe_context: TokenStream, in_unsafe_context: TokenStream) -> Self {
+        Self::Binary {
+            in_safe_context,
+            in_unsafe_context,
+        }
+    }
+}
+
+fn maybe_unsafes_to_tokens(
+    items: Vec<MaybeUnsafeStmt>,
+    context_is_already_unsafe: bool,
+) -> TokenStream {
+    if context_is_already_unsafe {
+        let items = items.into_iter().map(|item| match item {
+            MaybeUnsafeStmt::Normal(stmt)
+            | MaybeUnsafeStmt::NeedsUnsafe(stmt)
+            | MaybeUnsafeStmt::Binary {
+                in_unsafe_context: stmt,
+                ..
+            } => stmt,
+        });
+        quote! {
+            #(#items)*
+        }
+    } else {
+        let mut currently_unsafe_list = None;
+        let mut output = Vec::new();
+        for item in items {
+            match item {
+                MaybeUnsafeStmt::NeedsUnsafe(stmt) => {
+                    if currently_unsafe_list.is_none() {
+                        currently_unsafe_list = Some(Vec::new());
+                    }
+                    currently_unsafe_list.as_mut().unwrap().push(stmt);
+                }
+                MaybeUnsafeStmt::Normal(stmt)
+                | MaybeUnsafeStmt::Binary {
+                    in_safe_context: stmt,
+                    ..
+                } => {
+                    if let Some(currently_unsafe_list) = currently_unsafe_list.take() {
+                        output.push(quote! {
+                            unsafe {
+                                #(#currently_unsafe_list)*
+                            }
+                        })
+                    }
+                    output.push(stmt);
+                }
+            }
+        }
+        if let Some(currently_unsafe_list) = currently_unsafe_list.take() {
+            output.push(quote! {
+                unsafe {
+                    #(#currently_unsafe_list)*
+                }
+            })
+        }
+        quote! {
+            #(#output)*
+        }
+    }
+}
+
+#[test]
+fn test_maybe_unsafes_to_tokens() {
+    let items = vec![
+        MaybeUnsafeStmt::new(quote! { use A; }),
+        MaybeUnsafeStmt::new(quote! { use B; }),
+        MaybeUnsafeStmt::needs_unsafe(quote! { use C; }),
+        MaybeUnsafeStmt::needs_unsafe(quote! { use D; }),
+        MaybeUnsafeStmt::new(quote! { use E; }),
+        MaybeUnsafeStmt::needs_unsafe(quote! { use F; }),
+    ];
+    assert_eq!(
+        maybe_unsafes_to_tokens(items.clone(), false).to_string(),
+        quote! {
+            use A;
+            use B;
+            unsafe {
+                use C;
+                use D;
+            }
+            use E;
+            unsafe {
+                use F;
+            }
+        }
+        .to_string()
+    );
+    assert_eq!(
+        maybe_unsafes_to_tokens(items, true).to_string(),
+        quote! {
+            use A;
+            use B;
+            use C;
+            use D;
+            use E;
+            use F;
+        }
+        .to_string()
+    );
+}
