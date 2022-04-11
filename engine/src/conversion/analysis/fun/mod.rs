@@ -898,7 +898,7 @@ impl<'a> FnAnalyzer<'a> {
                             avoid_self: false,
                             method_name: make_ident("drop"),
                             parameter_reordering: None,
-                            trait_call_is_unsafe: true,
+                            trait_call_is_unsafe: false,
                         }),
                     },
                     error_context,
