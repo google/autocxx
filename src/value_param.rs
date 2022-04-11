@@ -171,6 +171,27 @@ where
     }
 }
 
+unsafe impl<'a, T: 'a> ValueParam<T> for &'a Pin<Box<T>>
+where
+    T: CopyNew,
+{
+    type StackStorage = <&'a T as ValueParam<T>>::StackStorage;
+
+    unsafe fn populate_stack_space(self, stack: Pin<&mut Option<Self::StackStorage>>) {
+        self.as_ref()
+            .get_ref()
+            .populate_stack_space(stack)
+    }
+
+    fn get_ptr(stack: Pin<&mut Self::StackStorage>) -> *mut T {
+        <&'a T as ValueParam<T>>::get_ptr(stack)
+    }
+
+    fn do_drop(stack: Pin<&mut Self::StackStorage>) {
+        <&'a T as ValueParam<T>>::do_drop(stack)
+    }
+}
+
 /// Explicitly force a value parameter to be taken using any type of [`crate::moveit::new::New`],
 /// i.e. a constructor.
 pub fn as_new<N: New<Output = T>, T>(constructor: N) -> impl ValueParam<T> {
