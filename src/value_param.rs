@@ -133,6 +133,23 @@ where
     }
 }
 
+unsafe impl<T> ValueParam<T> for Pin<Box<T>> {
+    type StackStorage = Pin<Box<T>>;
+
+    unsafe fn populate_stack_space(self, mut stack: Pin<&mut Option<Self::StackStorage>>) {
+        // Safety: we will not move the contents of the pin.
+        *Pin::into_inner_unchecked(stack.as_mut()) = Some(self)
+    }
+
+    fn get_ptr(stack: Pin<&mut Self::StackStorage>) -> *mut T {
+        // Safety: we won't move/swap the contents of the outer pin, nor of the
+        // type stored within the UniquePtr.
+        unsafe {
+            (Pin::into_inner_unchecked((*Pin::into_inner_unchecked(stack)).as_mut())) as *mut T
+        }
+    }
+}
+
 unsafe impl<'a, T: 'a> ValueParam<T> for &'a UniquePtr<T>
 where
     T: UniquePtrTarget + CopyNew,
