@@ -254,8 +254,6 @@ impl<'a> FnGenerator<'a> {
         let mut local_variables = Vec::new();
         let mut arg_list = Vec::new();
         let mut ptr_arg_name = None;
-        let wrap_unsafe_calls = matches!(self.unsafety, UnsafetyNeeded::JustBridge)
-            || self.always_unsafe_due_to_trait_definition;
         let ret_type = Cow::Borrowed(ret_type);
         for pd in self.param_details {
             let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
@@ -263,9 +261,7 @@ impl<'a> FnGenerator<'a> {
             } else {
                 pd.name.clone()
             };
-            let rust_for_param = pd
-                .conversion
-                .rust_conversion(wrapper_arg_name.clone(), wrap_unsafe_calls);
+            let rust_for_param = pd.conversion.rust_conversion(wrapper_arg_name.clone());
             let RustParamConversion {
                 ty,
                 conversion,

@@ -27,7 +27,7 @@ pub(super) struct RustParamConversion {
 
 impl TypeConversionPolicy {
     /// If returns `None` then this parameter should be omitted entirely.
-    pub(super) fn rust_conversion(&self, var: Pat, wrap_in_unsafe: bool) -> RustParamConversion {
+    pub(super) fn rust_conversion(&self, var: Pat) -> RustParamConversion {
         match self.rust_conversion {
             RustConversionType::None => RustParamConversion {
                 ty: self.converted_rust_type(),
@@ -108,7 +108,6 @@ impl TypeConversionPolicy {
                     panic!("Unexpected non-ident parameter name");
                 };
                 let space_var_name = make_ident(format!("{}_space", var_name));
-                let call = quote! { #space_var_name.as_mut().populate(#var_name);  };
                 let ty = &self.unwrapped_type;
                 let ty = parse_quote! { impl autocxx::ValueParam<#ty> };
                 // This is the usual trick to put something on the stack, then
@@ -127,7 +126,9 @@ impl TypeConversionPolicy {
                                 std::pin::Pin::new_unchecked(&mut #space_var_name);
                             },
                         ),
-                        MaybeUnsafeStmt::maybe_unsafe(quote! { #call}, wrap_in_unsafe),
+                        MaybeUnsafeStmt::needs_unsafe(
+                            quote! { #space_var_name.as_mut().populate(#var_name); },
+                        ),
                     ],
                     conversion: quote! {
                         #space_var_name.get_ptr()
