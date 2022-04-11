@@ -6296,24 +6296,25 @@ fn test_manual_bridge_mixed_types() {
     "};
     let hexathorpe = Token![#](Span::call_site());
     let rs = quote! {
-            autocxx::include_cpp! {
-                #hexathorpe include "input.h"
-                safety!(unsafe_ffi)
-                generate!("take_A")
-                generate!("A")
+        use autocxx::prelude::*;
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("take_A")
+            generate!("A")
+        }
+        #[cxx::bridge]
+        mod ffi2 {
+            unsafe extern "C++" {
+                include!("input.h");
+                type A = crate::ffi::A;
+                fn give_A() -> UniquePtr<A>;
             }
-            #[cxx::bridge]
-            mod ffi2 {
-                unsafe extern "C++" {
-                    include!("input.h");
-                    type A = crate::ffi::A;
-                    fn give_A() -> UniquePtr<A>;
-                }
-            }
-            fn main() {
-                let a = ffi2::give_A();
-                assert_eq!(ffi::take_A(&a), autocxx::c_int(5));
-            }
+        }
+        fn main() {
+            let a = ffi2::give_A();
+            assert_eq!(ffi::take_A(&a), autocxx::c_int(5));
+        }
     };
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
