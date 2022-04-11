@@ -466,7 +466,8 @@ impl IncludeCppEngine {
                 inc_dirs,
                 extra_clang_args,
             );
-            let header = std::fs::read_to_string(tf.path()).unwrap();
+            let header = std::fs::read(tf.path()).unwrap();
+            let header = String::from_utf8_lossy(&header);
             let output_path = PathBuf::from(output_path);
             let config = self.config.to_token_stream().to_string();
             let json = serde_json::json!({
