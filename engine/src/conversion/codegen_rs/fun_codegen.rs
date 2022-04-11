@@ -21,7 +21,7 @@ use syn::{
 use super::{
     function_wrapper_rs::RustParamConversion,
     unqualify::{unqualify_params, unqualify_ret_type},
-    ImplBlockDetails, RsCodegenResult, TraitImplBlockDetails, Use,
+    ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
 };
 use crate::{
     conversion::{
@@ -30,6 +30,7 @@ use crate::{
             TraitMethodDetails,
         },
         api::UnsafetyNeeded,
+        codegen_rs::maybe_unsafes_to_tokens,
     },
     types::{Namespace, QualifiedName},
 };
@@ -253,7 +254,6 @@ impl<'a> FnGenerator<'a> {
         let mut local_variables = Vec::new();
         let mut arg_list = Vec::new();
         let mut ptr_arg_name = None;
-        let wrap_unsafe_calls = self.should_wrap_unsafe_calls();
         let ret_type = Cow::Borrowed(ret_type);
         for pd in self.param_details {
             let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
@@ -261,16 +261,14 @@ impl<'a> FnGenerator<'a> {
             } else {
                 pd.name.clone()
             };
-            let rust_for_param = pd
-                .conversion
-                .rust_conversion(wrapper_arg_name.clone(), wrap_unsafe_calls);
+            let rust_for_param = pd.conversion.rust_conversion(wrapper_arg_name.clone());
             let RustParamConversion {
                 ty,
                 conversion,
-                local_variables: these_local_variables,
+                local_variables: mut these_local_variables,
             } = rust_for_param;
             arg_list.push(conversion.clone());
-            local_variables.extend(these_local_variables.into_iter());
+            local_variables.append(&mut these_local_variables);
             if pd.is_placement_return_destination {
                 ptr_arg_name = Some(conversion);
             } else {
@@ -280,7 +278,6 @@ impl<'a> FnGenerator<'a> {
                 ));
             }
         }
-        let local_variables = quote! { #(#local_variables);* };
         if let Some(parameter_reordering) = &parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
         }
@@ -293,34 +290,34 @@ impl<'a> FnGenerator<'a> {
         );
 
         let cxxbridge_name = self.cxxbridge_name;
-        let call_body = quote! {
-            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-        };
-        let call_body = if let Some(ptr_arg_name) = ptr_arg_name {
+        let call_body = MaybeUnsafeStmt::maybe_unsafe(
             quote! {
-                autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
-                    let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
-                    #call_body
+                cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+            },
+            !matches!(self.unsafety, UnsafetyNeeded::None),
+        );
+        let call_stmts = if let Some(ptr_arg_name) = ptr_arg_name {
+            let mut closure_stmts = local_variables;
+            closure_stmts.push(MaybeUnsafeStmt::binary(
+                quote! { let #ptr_arg_name = unsafe { #ptr_arg_name.get_unchecked_mut().as_mut_ptr() };},
+                quote! { let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();},
+            ));
+            closure_stmts.push(call_body);
+            let closure_stmts = maybe_unsafes_to_tokens(closure_stmts, true);
+            vec![MaybeUnsafeStmt::needs_unsafe(parse_quote! {
+               autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
+                    #closure_stmts
                 })
-            }
+            })]
         } else {
-            quote! {
-                #call_body
-            }
+            let mut call_stmts = local_variables;
+            call_stmts.push(call_body);
+            call_stmts
         };
-        let call_body = if self.should_wrap_unsafe_calls() {
-            quote! {
-                unsafe {
-                    #call_body
-                }
-            }
-        } else {
-            call_body
-        };
-        let call_body = quote! {
-            #local_variables
-            #call_body
-        };
+
+        let context_is_unsafe = matches!(self.unsafety, UnsafetyNeeded::Always)
+            || self.always_unsafe_due_to_trait_definition;
+        let call_body = maybe_unsafes_to_tokens(call_stmts, context_is_unsafe);
         (lifetime_tokens, wrapper_params, ret_type, call_body)
     }
 
@@ -411,11 +408,6 @@ impl<'a> FnGenerator<'a> {
                 #call_body
             }
         })
-    }
-
-    fn should_wrap_unsafe_calls(&self) -> bool {
-        matches!(self.unsafety, UnsafetyNeeded::JustBridge)
-            || self.always_unsafe_due_to_trait_definition
     }
 
     fn reorder_parameters(
