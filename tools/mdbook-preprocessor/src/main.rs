@@ -151,7 +151,7 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
                 if err.is_err() {
                     Some(TestId {
                         location: case.location,
-                        test_id: counter,
+                        test_id: counter + 1,
                     })
                 } else {
                     None
