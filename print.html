@@ -329,13 +329,13 @@ fn main() {
 }
 </code></pre>
 <p>In the example above, we're referring <em>from</em> manual bindings <em>to</em> automated bindings.</p>
-<p>You can also do it the other way round:</p>
+<p>You can also do it the other way round using <code>extern_cpp_opaque_type!</code>:</p>
 <pre><code class="language-rust ignore">autocxx::include_cpp! {
 <span class="boring">    hexathorpe include &quot;input.h&quot;
 </span>    safety!(unsafe_ffi)
     generate!(&quot;handle_a&quot;)
     generate!(&quot;create_a&quot;)
-    extern_cpp_type!(&quot;A&quot;, ffi2::A)
+    extern_cpp_opaque_type!(&quot;A&quot;, ffi2::A)
 }
 #[cxx::bridge]
 pub mod ffi2 {
@@ -1342,7 +1342,7 @@ pub mod dependent {
     pub use ffi::*;
 }
 fn main() {
-    let a = dependent::create_a(base::B::VARIANT);
+    let a = dependent::create_a(base::B::VARIANT).within_unique_ptr();
     dependent::handle_a(&amp;a);
 }
 
