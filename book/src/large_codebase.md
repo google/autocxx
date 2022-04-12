@@ -47,7 +47,7 @@ pub mod dependent {
     pub use ffi::*;
 }
 fn main() {
-    let a = dependent::create_a(base::B::VARIANT);
+    let a = dependent::create_a(base::B::VARIANT).within_unique_ptr();
     dependent::handle_a(&a);
 }
 }
