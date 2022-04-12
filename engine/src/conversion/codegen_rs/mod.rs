@@ -16,7 +16,7 @@ pub(crate) mod unqualify;
 
 use std::collections::{HashMap, HashSet};
 
-use autocxx_parser::{IncludeCppConfig, RustFun};
+use autocxx_parser::{ExternCppType, IncludeCppConfig, RustFun};
 
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
@@ -325,7 +325,7 @@ impl<'a> RsCodeGenerator<'a> {
         for (name, codegen) in ns_entries.entries() {
             output_items.extend(codegen.materializations.iter().map(|materialization| {
                 match materialization {
-                    Use::UsedFromCxxBridgeWithAlias(alias) => {
+                    Use::UsedFromCxxBridgeWithAlias(ref alias) => {
                         Self::generate_cxx_use_stmt(name, Some(alias))
                     }
                     Use::UsedFromCxxBridge => Self::generate_cxx_use_stmt(name, None),
@@ -597,9 +597,10 @@ impl<'a> RsCodeGenerator<'a> {
                     subclasses_with_a_single_trivial_constructor.contains(&name.0.name);
                 self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
             }
-            Api::ExternCppType { rust_path, .. } => {
-                self.generate_extern_cpp_type(&name, rust_path, name.ns_segment_iter().count())
-            }
+            Api::ExternCppType {
+                details: ExternCppType { rust_path, .. },
+                ..
+            } => self.generate_extern_cpp_type(&name, rust_path, name.ns_segment_iter().count()),
             Api::IgnoredItem {
                 err,
                 ctx: Some(ctx),

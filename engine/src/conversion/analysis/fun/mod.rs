@@ -33,7 +33,7 @@ use crate::{
 };
 use std::collections::{HashMap, HashSet};
 
-use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
+use autocxx_parser::{ExternCppType, IncludeCppConfig, UnsafePolicy};
 use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
 use itertools::Itertools;
 use proc_macro2::Span;
@@ -188,15 +188,17 @@ struct ReturnTypeAnalysis {
     conversion: Option<TypeConversionPolicy>,
     was_reference: bool,
     deps: HashSet<QualifiedName>,
+    placement_param_needed: Option<(FnArg, ArgumentAnalysis)>,
 }
 
 impl Default for ReturnTypeAnalysis {
     fn default() -> Self {
         Self {
             rt: parse_quote! {},
-            conversion: Default::default(),
-            was_reference: Default::default(),
+            conversion: None,
+            was_reference: false,
             deps: Default::default(),
+            placement_param_needed: None,
         }
     }
 }
@@ -273,6 +275,7 @@ pub(crate) struct FnAnalyzer<'a> {
     type_converter: TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
     pod_safe_types: HashSet<QualifiedName>,
+    moveit_safe_types: HashSet<QualifiedName>,
     config: &'a IncludeCppConfig,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
@@ -295,6 +298,7 @@ impl<'a> FnAnalyzer<'a> {
             config,
             overload_trackers_by_mod: HashMap::new(),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
+            moveit_safe_types: Self::build_correctly_sized_type_set(&apis),
             subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
             nested_type_name_map: Self::build_nested_type_map(&apis),
             generic_types: Self::build_generic_type_set(&apis),
@@ -343,6 +347,26 @@ impl<'a> FnAnalyzer<'a> {
                         },
                     ),
             )
+            .collect()
+    }
+
+    /// Return the set of 'moveit safe' types. That must include only types where
+    /// the size is known to be correct.
+    fn build_correctly_sized_type_set(apis: &ApiVec<PodPhase>) -> HashSet<QualifiedName> {
+        apis.iter()
+            .filter(|api| {
+                matches!(
+                    api,
+                    Api::Struct { .. }
+                        | Api::Enum { .. }
+                        | Api::ExternCppType {
+                            details: ExternCppType { opaque: false, .. },
+                            ..
+                        }
+                )
+            })
+            .map(|api| api.name().clone())
+            .chain(known_types().get_moveit_safe_types())
             .collect()
     }
 
@@ -419,7 +443,7 @@ impl<'a> FnAnalyzer<'a> {
         param_details: &[ArgumentAnalysis],
         kind: &FnKind,
     ) -> UnsafetyNeeded {
-        let unsafest_non_self_param = UnsafetyNeeded::from_param_details(param_details, true);
+        let unsafest_non_placement_param = UnsafetyNeeded::from_param_details(param_details, true);
         let unsafest_param = UnsafetyNeeded::from_param_details(param_details, false);
         match kind {
             // Trait unsafety must always correspond to the norms for the
@@ -437,11 +461,11 @@ impl<'a> FnAnalyzer<'a> {
                 _ => unsafest_param,
             },
             _ if self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe => UnsafetyNeeded::Always,
-            _ => match unsafest_non_self_param {
+            _ => match unsafest_non_placement_param {
                 UnsafetyNeeded::Always => UnsafetyNeeded::Always,
                 UnsafetyNeeded::JustBridge => match unsafest_param {
                     UnsafetyNeeded::Always => UnsafetyNeeded::JustBridge,
-                    _ => unsafest_non_self_param,
+                    _ => unsafest_non_placement_param,
                 },
                 UnsafetyNeeded::None => match unsafest_param {
                     UnsafetyNeeded::Always => UnsafetyNeeded::JustBridge,
@@ -1086,8 +1110,6 @@ impl<'a> FnAnalyzer<'a> {
             _ => {}
         }
 
-        let requires_unsafe = self.should_be_unsafe(&param_details, &kind);
-
         // Now we can add context to the error, check for a variety of error
         // cases. In each case, we continue to record the API, because it might
         // influence our later decisions to generate synthetic constructors
@@ -1196,9 +1218,10 @@ impl<'a> FnAnalyzer<'a> {
                 })),
                 was_reference: false,
                 deps: std::iter::once(impl_for).cloned().collect(),
+                placement_param_needed: None,
             }
         } else {
-            self.convert_return_type(&fun.output, ns, &fun.references)
+            self.convert_return_type(&fun.output, ns, &fun.references, sophistication)
                 .unwrap_or_else(|err| {
                     set_ignore_reason(err);
                     ReturnTypeAnalysis::default()
@@ -1206,6 +1229,16 @@ impl<'a> FnAnalyzer<'a> {
         };
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
+
+        // Sometimes, the return type will actually be a value type
+        // for which we instead want to _pass_ a pointer into which the value
+        // can be constructed. Handle that case here.
+        if let Some((extra_param, extra_param_details)) = return_analysis.placement_param_needed {
+            param_details.push(extra_param_details);
+            params.push(extra_param);
+        }
+
+        let requires_unsafe = self.should_be_unsafe(&param_details, &kind);
 
         let num_input_references = param_details.iter().filter(|pd| pd.was_reference).count();
         if num_input_references != 1 && return_analysis.was_reference {
@@ -1316,10 +1349,12 @@ impl<'a> FnAnalyzer<'a> {
             };
             // Now modify the cxx::bridge entry we're going to make.
             if let Some(ref conversion) = ret_type_conversion {
-                let new_ret_type = conversion.unconverted_rust_type();
-                ret_type = parse_quote!(
-                    -> #new_ret_type
-                );
+                if conversion.populate_return_value() {
+                    let new_ret_type = conversion.unconverted_rust_type();
+                    ret_type = parse_quote!(
+                        -> #new_ret_type
+                    );
+                }
             }
 
             // Amend parameters for the function which we're asking cxx to generate.
@@ -1656,6 +1691,11 @@ impl<'a> FnAnalyzer<'a> {
                     type_converter::TypeKind::SubclassHolder(holder) => Some(holder),
                     _ => None,
                 };
+                let is_placement_return_destination = is_placement_return_destination
+                    || matches!(
+                        force_rust_conversion,
+                        Some(RustConversionType::FromPlacementParamToNewReturn)
+                    );
                 let conversion = self.argument_conversion_details(
                     &new_ty,
                     &subclass_holder.cloned(),
@@ -1666,9 +1706,11 @@ impl<'a> FnAnalyzer<'a> {
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
                 let requires_unsafe =
-                    if matches!(annotated_type.kind, type_converter::TypeKind::Pointer) {
+                    if matches!(annotated_type.kind, type_converter::TypeKind::Pointer)
+                        && !is_placement_return_destination
+                    {
                         UnsafetyNeeded::Always
-                    } else if conversion.bridge_unsafe_needed() {
+                    } else if conversion.bridge_unsafe_needed() || is_placement_return_destination {
                         UnsafetyNeeded::JustBridge
                     } else {
                         UnsafetyNeeded::None
@@ -1713,6 +1755,16 @@ impl<'a> FnAnalyzer<'a> {
                     cpp_conversion: CppConversionType::Move,
                     rust_conversion: RustConversionType::ToBoxedUpHolder(subclass),
                 }
+            };
+        } else if matches!(
+            force_rust_conversion,
+            Some(RustConversionType::FromPlacementParamToNewReturn)
+        ) && matches!(sophistication, TypeConversionSophistication::Regular)
+        {
+            return TypeConversionPolicy {
+                unwrapped_type: ty.clone(),
+                cpp_conversion: CppConversionType::IgnoredPlacementPtrParameter,
+                rust_conversion: RustConversionType::FromPlacementParamToNewReturn,
             };
         }
         match ty {
@@ -1775,41 +1827,84 @@ impl<'a> FnAnalyzer<'a> {
         rt: &ReturnType,
         ns: &Namespace,
         references: &References,
+        sophistication: TypeConversionSophistication,
     ) -> Result<ReturnTypeAnalysis, ConvertError> {
-        let result = match rt {
-            ReturnType::Default => ReturnTypeAnalysis {
-                rt: ReturnType::Default,
-                was_reference: false,
-                conversion: None,
-                deps: HashSet::new(),
-            },
+        Ok(match rt {
+            ReturnType::Default => ReturnTypeAnalysis::default(),
             ReturnType::Type(rarrow, boxed_type) => {
-                // TODO remove the below clone
                 let annotated_type =
                     self.convert_boxed_type(boxed_type.clone(), ns, references.ref_return)?;
                 let boxed_type = annotated_type.ty;
-                let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
                 let ty: &Type = boxed_type.as_ref();
-                let conversion = match ty {
-                    Type::Path(p) => {
+                match ty {
+                    Type::Path(p)
+                        if !self
+                            .pod_safe_types
+                            .contains(&QualifiedName::from_type_path(p)) =>
+                    {
                         let tn = QualifiedName::from_type_path(p);
-                        if self.pod_safe_types.contains(&tn) {
-                            TypeConversionPolicy::new_unconverted(ty.clone())
+                        if self.moveit_safe_types.contains(&tn)
+                            && matches!(sophistication, TypeConversionSophistication::Regular)
+                        {
+                            // This is a non-POD type we want to return to Rust as an `impl New` so that callers
+                            // can decide whether to store this on the stack or heap.
+                            // That means, we do not literally _return_ it from C++ to Rust. Instead, our call
+                            // from Rust to C++ will include an extra placement parameter into which the object
+                            // is constructed.
+                            let fnarg = parse_quote! {
+                                placement_return_type: *mut #ty
+                            };
+                            let (fnarg, analysis) = self.convert_fn_arg(
+                                &fnarg,
+                                ns,
+                                "",
+                                &None,
+                                &References::default(),
+                                false,
+                                Some(RustConversionType::FromPlacementParamToNewReturn),
+                                TypeConversionSophistication::Regular,
+                                false,
+                            )?;
+                            ReturnTypeAnalysis {
+                                rt: ReturnType::Default,
+                                conversion: Some(TypeConversionPolicy::new_for_placement_return(
+                                    ty.clone(),
+                                )),
+                                was_reference: false,
+                                deps: annotated_type.types_encountered,
+                                placement_param_needed: Some((fnarg, analysis)),
+                            }
                         } else {
-                            TypeConversionPolicy::new_to_unique_ptr(ty.clone())
+                            // There are some types which we can't currently represent within a moveit::new::New.
+                            // That's either because we are obliged to stick to existing protocols for compatibility
+                            // (CxxString) or because they're a concrete type where we haven't attempted to do
+                            // the analysis to work out the type's size. For these, we always return a plain old
+                            // UniquePtr<T>. These restrictions may be fixed in future.
+                            let conversion =
+                                Some(TypeConversionPolicy::new_to_unique_ptr(ty.clone()));
+                            ReturnTypeAnalysis {
+                                rt: ReturnType::Type(*rarrow, boxed_type),
+                                conversion,
+                                was_reference: false,
+                                deps: annotated_type.types_encountered,
+                                placement_param_needed: None,
+                            }
                         }
                     }
-                    _ => TypeConversionPolicy::new_unconverted(ty.clone()),
-                };
-                ReturnTypeAnalysis {
-                    rt: ReturnType::Type(*rarrow, boxed_type),
-                    conversion: Some(conversion),
-                    was_reference,
-                    deps: annotated_type.types_encountered,
+                    _ => {
+                        let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
+                        let conversion = Some(TypeConversionPolicy::new_unconverted(ty.clone()));
+                        ReturnTypeAnalysis {
+                            rt: ReturnType::Type(*rarrow, boxed_type),
+                            conversion,
+                            was_reference,
+                            deps: annotated_type.types_encountered,
+                            placement_param_needed: None,
+                        }
+                    }
                 }
             }
-        };
-        Ok(result)
+        })
     }
 
     /// If a type has explicit constructors, bindgen will generate corresponding

@@ -329,6 +329,17 @@ impl TypeDatabase {
         );
         self.by_rs_name.insert(rs_name, td);
     }
+
+    pub(crate) fn get_moveit_safe_types(&self) -> impl Iterator<Item = QualifiedName> + '_ {
+        self.all_names()
+            .filter(|tn| {
+                !matches!(
+                    self.get(tn).unwrap().behavior,
+                    Behavior::CxxString | Behavior::CxxContainerNotByValueSafe
+                )
+            })
+            .cloned()
+    }
 }
 
 fn create_type_database() -> TypeDatabase {

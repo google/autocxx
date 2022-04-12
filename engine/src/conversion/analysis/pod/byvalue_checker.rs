@@ -115,11 +115,10 @@ impl ByValueChecker {
                         .results
                         .insert(api.name().clone(), StructDetails::new(PodState::IsPod));
                 }
-                Api::ExternCppType { .. } => {
-                    byvalue_checker.results.insert(
-                        api.name().clone(),
-                        StructDetails::new(PodState::SafeToBePod),
-                    );
+                Api::ExternCppType { pod: true, .. } => {
+                    byvalue_checker
+                        .results
+                        .insert(api.name().clone(), StructDetails::new(PodState::IsPod));
                 }
                 _ => {}
             }

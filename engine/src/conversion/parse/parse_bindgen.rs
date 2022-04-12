@@ -133,14 +133,14 @@ impl<'a> ParseBindgen<'a> {
             .config
             .externs
             .iter()
-            .map(|(cpp_definition, rust_path)| {
+            .map(|(cpp_definition, details)| {
                 let qn = QualifiedName::new_from_cpp_name(cpp_definition);
                 let pod = pod_requests.contains(&qn.to_cpp_name());
                 (
                     qn.clone(),
                     Api::ExternCppType {
                         name: ApiName::new_from_qualified_name(qn),
-                        rust_path: rust_path.clone(),
+                        details: details.clone(),
                         pod,
                     },
                 )

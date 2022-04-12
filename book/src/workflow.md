@@ -75,7 +75,7 @@ fn main() {
 
 In the example above, we're referring *from* manual bindings *to* automated bindings.
 
-You can also do it the other way round:
+You can also do it the other way round using `extern_cpp_opaque_type!`:
 
 ```rust,ignore
 autocxx::include_cpp! {
@@ -83,7 +83,7 @@ autocxx::include_cpp! {
     safety!(unsafe_ffi)
     generate!("handle_a")
     generate!("create_a")
-    extern_cpp_type!("A", ffi2::A)
+    extern_cpp_opaque_type!("A", ffi2::A)
 }
 #[cxx::bridge]
 pub mod ffi2 {
