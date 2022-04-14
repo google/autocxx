@@ -17,7 +17,7 @@ advantage that there's no possibility that the object can be NULL.
 
 If in doubt, use [`cxx::UniquePtr`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html). It's simple and ergonomic.
 
-See [C++ types](cpp_types.md) for a code example showing a type existing on both the stack and the heap.
+See [C++ types](cpp_types.md#construction-sounds-complicated-do-you-have-a-code-example) for a code example showing a type existing on both the stack and the heap.
 
 ## Whose heap is it anyway?
 

@@ -8,7 +8,6 @@ Functions taking [non-POD](cpp_types.md) value parameters can take a `cxx::Uniqu
 or a `&T`. This gives you the choice of Rust semantics - where a parameter
 is absorbed and destroyed - or C++ semantics where the parameter is copied.
 
-
 ```rust,ignore,autocxx,hidecpp
 autocxx_integration_tests::doctest(
 "
@@ -52,8 +51,7 @@ fn main() {
 
 Specifically, you can pass anything which implements [`ValueParam<T>`](https://docs.rs/autocxx/latest/autocxx/trait.ValueParam.html).
 
-If you're keeping non-POD values on the Rust stack, you need to explicitly use [`as_mov`](https://docs.rs/autocxx/latest/autocxx/prelude/fn.as_mov.html) to indicate that you want to
-consume the object using move semantics:
+If you're keeping non-POD values on the Rust stack, you need to explicitly use [`as_mov`](https://docs.rs/autocxx/latest/autocxx/prelude/fn.as_mov.html) to indicate that you want to consume the object using move semantics:
 
 ```rust,ignore,autocxx,hidecpp
 autocxx_integration_tests::doctest(
@@ -94,7 +92,50 @@ fn main() {
 )
 ```
 
-Rvalue parameters are not yet supported.
+RValue parameters are a little simpler, because (as you'd hope) they consume
+the object you're passing in.
+
+```rust,ignore,autocxx,hidecpp
+autocxx_integration_tests::doctest(
+"
+#include <strstream>
+Cake::Cake() {}
+void eat(Cake&& c) {}
+",
+"#include <cstdint>
+
+struct Cake {
+    Cake();
+    uint32_t tons_of_sugar;
+};
+
+void eat(Cake&& c); // consumes the cake. You can't have your cake and eat it.
+",
+{
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include "input.h"
+    safety!(unsafe_ffi)
+    generate!("Cake")
+    generate!("eat")
+}
+
+fn main() {
+    moveit! {
+        let mut stack_cake = ffi::Cake::new();
+    }
+    ffi::eat(stack_cake);
+    // No more cake.
+
+    // Still peckish.
+    let heap_cake = ffi::Cake::new().within_unique_ptr();
+    ffi::eat(heap_cake);
+    // Really no more cake now.
+}
+}
+)
+```
 
 ## Default parameters
 
@@ -104,11 +145,11 @@ Are not yet supported[^default].
 
 ## Return values
 
-At present, return values for [non-POD](cpp_types.md) types are always
-a `cxx::UniquePtr<T>`. This is likely to change in future, at least to a type
-which is guaranteed not to be null[^not-null.]
-
-[^not-null]: [plans here](https://github.com/google/autocxx/issues/845)
+Any C++ function which returns a [non-POD](cpp_types.md) type to Rust in fact gives you an opaque
+object implementing [`moveit::New`](https://docs.rs/moveit/latest/moveit/new/trait.New.html).
+This enables you to "emplace" the resulting object either on the stack or heap,
+in exactly the same way as if you're constructying an object. See [the section on construction](cpp_types.md#construction)
+for how to turn this opaque object into something useful (spoiler: just append `.within_unique_ptr()`).
 
 ## Overloads - and identifiers ending in digits
 

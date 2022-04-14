@@ -7,7 +7,7 @@
 * By `std::unique_ptr`
 * By `std::shared_ptr`
 * By `std::weak_ptr`
-* (Soon to come) By rvalue reference (that is, as a move parameter)
+* By rvalue reference (that is, as a move parameter)
 
 (all of this is because the underlying [`cxx`](https://cxx.rs) crate has such versatility).
 Some of these have some quirks in the way they're exposed in Rust, described below.
@@ -64,7 +64,3 @@ quirks which you're more likely to run into with `autocxx`.
      unsafe { ffi::TakePointerToA(std::pin::Pin::<&mut ffi::A>::into_inner_unchecked(a.pin_mut())) };
   ```
   This may be simplified in future.
-
-## Rvalue references
-
-Currently rvalue references (that is, move parameters) are not supported.

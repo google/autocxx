@@ -43,8 +43,8 @@ Multiple constructors (aka constructor overloading) follows the same [rules as o
 
 Constructing a non-POD object requires two steps.
 
-* Call the `new` associated function in the same way.
-* Use its return value to make the object on the heap or stack, in any of the following ways:
+* Call the `new` associated function in the same way. This will give you something implementing [`moveit::New`](https://docs.rs/moveit/latest/moveit/new/trait.New.html)/
+* Use this to make the object on the heap or stack, in any of the following ways:
 
 | Where you want to create it | How to create it | What you get | Example |
 | --------------------------- | ---------------- | ------------ | ------- |
