@@ -85,8 +85,6 @@ pub enum ConvertError {
         "This type is nested within another struct/class with protected or private visibility."
     )]
     NonPublicNestedType,
-    #[error("This function takes an rvalue reference parameter (&&) which is not yet supported.")]
-    RValueParam,
     #[error("This function returns an rvalue reference (&&) which is not yet supported.")]
     RValueReturn,
     #[error("This method is private")]

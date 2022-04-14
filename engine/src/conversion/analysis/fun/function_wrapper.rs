@@ -51,6 +51,7 @@ pub(crate) enum RustConversionType {
     FromTypeToPtr,
     FromValueParamToPtr,
     FromPlacementParamToNewReturn,
+    FromRValueParamToPtr,
 }
 
 impl RustConversionType {
@@ -158,6 +159,7 @@ impl TypeConversionPolicy {
         matches!(
             self.rust_conversion,
             RustConversionType::FromValueParamToPtr
+                | RustConversionType::FromRValueParamToPtr
                 | RustConversionType::FromPlacementParamToNewReturn
         )
     }

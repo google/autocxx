@@ -6056,6 +6056,41 @@ fn test_ignore_function_with_rvalue_ref() {
 }
 
 #[test]
+fn test_take_nonpod_rvalue_from_up() {
+    let hdr = indoc! {"
+        #include <string>
+        struct A {
+            std::string a;
+        };
+        inline void take_a(A&& a) {};
+    "};
+    let rs = quote! {
+        let a = ffi::A::new().within_unique_ptr();
+        ffi::take_a(a);
+
+        let a2 = ffi::A::new().within_box();
+        ffi::take_a(a2);
+    };
+    run_test("", hdr, rs, &["A", "take_a"], &[]);
+}
+
+#[test]
+fn test_take_nonpod_rvalue_from_stack() {
+    let hdr = indoc! {"
+        #include <string>
+        struct A {
+            std::string a;
+        };
+        inline void take_a(A&& a) {};
+    "};
+    let rs = quote! {
+        moveit! { let a = ffi::A::new() };
+        ffi::take_a(a);
+    };
+    run_test("", hdr, rs, &["A", "take_a"], &[]);
+}
+
+#[test]
 fn test_overloaded_ignored_function() {
     // When overloaded functions are ignored during import, the placeholder
     // functions generated for them should have unique names, just as they

@@ -222,16 +222,17 @@ pub(super) fn find_constructors_present(
                     // TODO: https://github.com/google/autocxx/issues/865 Figure out how to
                     // differentiate between pointers and references coming from C++. Pointers
                     // have a default constructor.
-                    TypeKind::Pointer | TypeKind::Reference | TypeKind::MutableReference => {
-                        Some(ItemsFound {
-                            default_constructor: SpecialMemberFound::NotPresent,
-                            destructor: SpecialMemberFound::Implicit,
-                            const_copy_constructor: SpecialMemberFound::Implicit,
-                            non_const_copy_constructor: SpecialMemberFound::NotPresent,
-                            move_constructor: SpecialMemberFound::Implicit,
-                            name: Some(name.clone()),
-                        })
-                    }
+                    TypeKind::Pointer
+                    | TypeKind::Reference
+                    | TypeKind::MutableReference
+                    | TypeKind::RValueReference => Some(ItemsFound {
+                        default_constructor: SpecialMemberFound::NotPresent,
+                        destructor: SpecialMemberFound::Implicit,
+                        const_copy_constructor: SpecialMemberFound::Implicit,
+                        non_const_copy_constructor: SpecialMemberFound::NotPresent,
+                        move_constructor: SpecialMemberFound::Implicit,
+                        name: Some(name.clone()),
+                    }),
                 })
                 .collect();
             let has_rvalue_reference_fields = details.has_rvalue_reference_fields;

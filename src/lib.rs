@@ -14,6 +14,7 @@
 // do anything - all the magic is handled entirely by
 // autocxx_macro::include_cpp_impl.
 
+mod rvalue_param;
 pub mod subclass;
 mod value_param;
 
@@ -564,6 +565,8 @@ where
 use cxx::memory::UniquePtrTarget;
 use cxx::UniquePtr;
 use moveit::New;
+pub use rvalue_param::RValueParam;
+pub use rvalue_param::RValueParamHandler;
 pub use value_param::as_copy;
 pub use value_param::as_mov;
 pub use value_param::as_new;
@@ -588,6 +591,7 @@ pub mod prelude {
     pub use crate::cpp_semantics;
     pub use crate::include_cpp;
     pub use crate::PinMut;
+    pub use crate::RValueParam;
     pub use crate::ValueParam;
     pub use crate::WithinBox;
     pub use crate::WithinBoxTrivial;

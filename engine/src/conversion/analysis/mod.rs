@@ -23,3 +23,4 @@ pub(crate) mod tdef;
 mod type_converter;
 
 pub(crate) use name_check::check_names;
+pub(crate) use type_converter::PointerTreatment;

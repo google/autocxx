@@ -66,7 +66,7 @@ use super::{
     doc_label::make_doc_attrs,
     pod::{PodAnalysis, PodPhase},
     tdef::TypedefAnalysis,
-    type_converter::Annotated,
+    type_converter::{Annotated, PointerTreatment},
 };
 
 #[derive(Clone, Debug)]
@@ -177,7 +177,7 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) conversion: TypeConversionPolicy,
     pub(crate) name: Pat,
     pub(crate) self_type: Option<(QualifiedName, ReceiverMutability)>,
-    pub(crate) was_reference: bool,
+    pub(crate) has_lifetime: bool,
     pub(crate) deps: HashSet<QualifiedName>,
     pub(crate) requires_unsafe: UnsafetyNeeded,
     pub(crate) is_placement_return_destination: bool,
@@ -408,11 +408,9 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         ty: Box<Type>,
         ns: &Namespace,
-        convert_ptrs_to_references: bool,
+        pointer_treatment: PointerTreatment,
     ) -> Result<Annotated<Box<Type>>, ConvertError> {
-        let ctx = TypeConversionContext::CxxOuterType {
-            convert_ptrs_to_references,
-        };
+        let ctx = TypeConversionContext::CxxOuterType { pointer_treatment };
         let mut annotated = self.type_converter.convert_boxed_type(ty, ns, &ctx)?;
         self.extra_apis.append(&mut annotated.extra_apis);
         Ok(annotated)
@@ -746,6 +744,7 @@ impl<'a> FnAnalyzer<'a> {
                     &fun.synthesized_this_type,
                     &fun.references,
                     true,
+                    false,
                     None,
                     sophistication,
                     false,
@@ -1027,6 +1026,7 @@ impl<'a> FnAnalyzer<'a> {
                     None,
                     sophistication,
                     true,
+                    false,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
             }
@@ -1044,6 +1044,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromTypeToPtr),
                     sophistication,
+                    false,
                     false,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
@@ -1067,6 +1068,7 @@ impl<'a> FnAnalyzer<'a> {
                     &mut param_details,
                     Some(RustConversionType::FromPinMaybeUninitToPtr),
                     sophistication,
+                    false,
                     false,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
@@ -1092,6 +1094,7 @@ impl<'a> FnAnalyzer<'a> {
                     Some(RustConversionType::FromPinMaybeUninitToPtr),
                     sophistication,
                     false,
+                    false,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
                 self.reanalyze_parameter(
@@ -1104,6 +1107,7 @@ impl<'a> FnAnalyzer<'a> {
                     Some(RustConversionType::FromPinMoveRefToPtr),
                     sophistication,
                     false,
+                    true,
                 )
                 .unwrap_or_else(&mut set_ignore_reason);
             }
@@ -1143,16 +1147,6 @@ impl<'a> FnAnalyzer<'a> {
             set_ignore_reason(ConvertError::RValueReturn)
         } else if fun.is_deleted {
             set_ignore_reason(ConvertError::Deleted)
-        } else if !fun.references.rvalue_ref_params.is_empty()
-            && !matches!(
-                kind,
-                FnKind::TraitMethod {
-                    kind: TraitMethodKind::MoveConstructor,
-                    ..
-                }
-            )
-        {
-            set_ignore_reason(ConvertError::RValueParam)
         } else {
             match kind {
                 FnKind::Method {
@@ -1240,7 +1234,7 @@ impl<'a> FnAnalyzer<'a> {
 
         let requires_unsafe = self.should_be_unsafe(&param_details, &kind);
 
-        let num_input_references = param_details.iter().filter(|pd| pd.was_reference).count();
+        let num_input_references = param_details.iter().filter(|pd| pd.has_lifetime).count();
         if num_input_references != 1 && return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
             // one reference as a parameter. Let's see...
@@ -1454,6 +1448,7 @@ impl<'a> FnAnalyzer<'a> {
         force_rust_conversion: Option<RustConversionType>,
         sophistication: TypeConversionSophistication,
         construct_into_self: bool,
+        is_move_constructor: bool,
     ) -> Result<(), ConvertError> {
         self.convert_fn_arg(
             fun.inputs.iter().nth(param_idx).unwrap(),
@@ -1462,6 +1457,7 @@ impl<'a> FnAnalyzer<'a> {
             &fun.synthesized_this_type,
             &fun.references,
             false,
+            is_move_constructor,
             force_rust_conversion,
             sophistication,
             construct_into_self,
@@ -1617,6 +1613,7 @@ impl<'a> FnAnalyzer<'a> {
         virtual_this: &Option<QualifiedName>,
         references: &References,
         treat_this_as_reference: bool,
+        is_move_constructor: bool,
         force_rust_conversion: Option<RustConversionType>,
         sophistication: TypeConversionSophistication,
         construct_into_self: bool,
@@ -1626,8 +1623,7 @@ impl<'a> FnAnalyzer<'a> {
                 let mut pt = pt.clone();
                 let mut self_type = None;
                 let old_pat = *pt.pat;
-                let mut treat_as_reference = false;
-                let mut treat_as_rvalue_reference = false;
+                let mut pointer_treatment = PointerTreatment::Pointer;
                 let mut is_placement_return_destination = false;
                 let new_pat = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
@@ -1672,37 +1668,30 @@ impl<'a> FnAnalyzer<'a> {
                         is_placement_return_destination = construct_into_self;
                         if treat_this_as_reference {
                             pp.ident = Ident::new("self", pp.ident.span());
-                            treat_as_reference = true;
+                            pointer_treatment = PointerTreatment::Reference;
                         }
                         syn::Pat::Ident(pp)
                     }
                     syn::Pat::Ident(pp) => {
                         validate_ident_ok_for_cxx(&pp.ident.to_string())?;
-                        treat_as_reference = references.ref_params.contains(&pp.ident);
-                        treat_as_rvalue_reference =
-                            references.rvalue_ref_params.contains(&pp.ident);
+                        pointer_treatment = references.param_treatment(&pp.ident);
                         syn::Pat::Ident(pp)
                     }
                     _ => old_pat,
-                };
-                let annotated_type = self.convert_boxed_type(pt.ty, ns, treat_as_reference)?;
-                let new_ty = annotated_type.ty;
-                let subclass_holder = match &annotated_type.kind {
-                    type_converter::TypeKind::SubclassHolder(holder) => Some(holder),
-                    _ => None,
                 };
                 let is_placement_return_destination = is_placement_return_destination
                     || matches!(
                         force_rust_conversion,
                         Some(RustConversionType::FromPlacementParamToNewReturn)
                     );
+                let annotated_type = self.convert_boxed_type(pt.ty, ns, pointer_treatment)?;
                 let conversion = self.argument_conversion_details(
-                    &new_ty,
-                    &subclass_holder.cloned(),
-                    treat_as_rvalue_reference,
+                    &annotated_type,
+                    is_move_constructor,
                     force_rust_conversion,
                     sophistication,
                 );
+                let new_ty = annotated_type.ty;
                 pt.pat = Box::new(new_pat.clone());
                 pt.ty = new_ty;
                 let requires_unsafe =
@@ -1721,7 +1710,7 @@ impl<'a> FnAnalyzer<'a> {
                         self_type,
                         name: new_pat,
                         conversion,
-                        was_reference: matches!(
+                        has_lifetime: matches!(
                             annotated_type.kind,
                             type_converter::TypeKind::Reference
                                 | type_converter::TypeKind::MutableReference
@@ -1738,12 +1727,20 @@ impl<'a> FnAnalyzer<'a> {
 
     fn argument_conversion_details(
         &self,
-        ty: &Type,
-        is_subclass_holder: &Option<Ident>,
-        is_rvalue_ref: bool,
+        annotated_type: &Annotated<Box<Type>>,
+        is_move_constructor: bool,
         force_rust_conversion: Option<RustConversionType>,
         sophistication: TypeConversionSophistication,
     ) -> TypeConversionPolicy {
+        let is_subclass_holder = match &annotated_type.kind {
+            type_converter::TypeKind::SubclassHolder(holder) => Some(holder),
+            _ => None,
+        };
+        let is_rvalue_ref = matches!(
+            annotated_type.kind,
+            type_converter::TypeKind::RValueReference
+        );
+        let ty = &*annotated_type.ty;
         if let Some(holder_id) = is_subclass_holder {
             let subclass = SubclassName::from_holder_name(holder_id);
             return {
@@ -1806,16 +1803,33 @@ impl<'a> FnAnalyzer<'a> {
                     }
                 }
             }
-            _ => {
-                let cpp_conversion = if is_rvalue_ref {
-                    CppConversionType::FromPtrToMove
+            Type::Ptr(tp) => {
+                let rust_conversion = force_rust_conversion.unwrap_or(RustConversionType::None);
+                if is_move_constructor {
+                    TypeConversionPolicy {
+                        unwrapped_type: ty.clone(),
+                        cpp_conversion: CppConversionType::FromPtrToMove,
+                        rust_conversion,
+                    }
+                } else if is_rvalue_ref {
+                    TypeConversionPolicy {
+                        unwrapped_type: *tp.elem.clone(),
+                        cpp_conversion: CppConversionType::FromPtrToValue,
+                        rust_conversion: RustConversionType::FromRValueParamToPtr,
+                    }
                 } else {
-                    CppConversionType::None
-                };
+                    TypeConversionPolicy {
+                        unwrapped_type: ty.clone(),
+                        cpp_conversion: CppConversionType::None,
+                        rust_conversion,
+                    }
+                }
+            }
+            _ => {
                 let rust_conversion = force_rust_conversion.unwrap_or(RustConversionType::None);
                 TypeConversionPolicy {
                     unwrapped_type: ty.clone(),
-                    cpp_conversion,
+                    cpp_conversion: CppConversionType::None,
                     rust_conversion,
                 }
             }
@@ -1833,7 +1847,7 @@ impl<'a> FnAnalyzer<'a> {
             ReturnType::Default => ReturnTypeAnalysis::default(),
             ReturnType::Type(rarrow, boxed_type) => {
                 let annotated_type =
-                    self.convert_boxed_type(boxed_type.clone(), ns, references.ref_return)?;
+                    self.convert_boxed_type(boxed_type.clone(), ns, references.return_treatment())?;
                 let boxed_type = annotated_type.ty;
                 let ty: &Type = boxed_type.as_ref();
                 match ty {
@@ -1860,6 +1874,7 @@ impl<'a> FnAnalyzer<'a> {
                                 "",
                                 &None,
                                 &References::default(),
+                                false,
                                 false,
                                 Some(RustConversionType::FromPlacementParamToNewReturn),
                                 TypeConversionSophistication::Regular,

@@ -113,7 +113,16 @@ impl TypeConversionPolicy {
                     conversion_requires_unsafe: false,
                 }
             }
-            RustConversionType::FromValueParamToPtr => {
+            RustConversionType::FromValueParamToPtr | RustConversionType::FromRValueParamToPtr => {
+                let (handler_type, param_trait) = match self.rust_conversion {
+                    RustConversionType::FromValueParamToPtr => ("ValueParamHandler", "ValueParam"),
+                    RustConversionType::FromRValueParamToPtr => {
+                        ("RValueParamHandler", "RValueParam")
+                    }
+                    _ => unreachable!(),
+                };
+                let handler_type = make_ident(handler_type);
+                let param_trait = make_ident(param_trait);
                 let var_name = if let Pat::Ident(pti) = &var {
                     &pti.ident
                 } else {
@@ -121,14 +130,14 @@ impl TypeConversionPolicy {
                 };
                 let space_var_name = make_ident(format!("{}_space", var_name));
                 let ty = &self.unwrapped_type;
-                let ty = parse_quote! { impl autocxx::ValueParam<#ty> };
+                let ty = parse_quote! { impl autocxx::#param_trait<#ty> };
                 // This is the usual trick to put something on the stack, then
                 // immediately shadow the variable name so it can't be accessed or moved.
                 RustParamConversion::Param {
                     ty,
                     local_variables: vec![
                         MaybeUnsafeStmt::new(
-                            quote! { let mut #space_var_name = autocxx::ValueParamHandler::default(); },
+                            quote! { let mut #space_var_name = autocxx::#handler_type::default(); },
                         ),
                         MaybeUnsafeStmt::binary(
                             quote! { let mut #space_var_name =
