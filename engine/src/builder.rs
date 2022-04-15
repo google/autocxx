@@ -221,7 +221,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         let autocxx_inc = build_autocxx_inc(self.autocxx_incs, &incdir);
         gen_location_strategy.set_cargo_env_vars_for_build();
 
-        let mut parsed_file = crate::parse_file(self.rs_file, self.auto_allowlist)
+        let mut parsed_file = crate::parse_file(self.rs_file, self.auto_allowlist, Vec::new())
             .map_err(BuilderError::ParseError)?;
         parsed_file
             .resolve_all(

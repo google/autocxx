@@ -197,6 +197,11 @@ fn main() -> miette::Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("directive")
+                .multiple(true)
+                .help("Extra directives to include in every include_cpp! macro"),
+        )
+        .arg(
             Arg::with_name("clang-args")
                 .last(true)
                 .multiple(true)
@@ -208,6 +213,7 @@ fn main() -> miette::Result<()> {
     let mut parsed_file = parse_file(
         matches.value_of("INPUT").unwrap(),
         matches.is_present("auto-allowlist"),
+        matches.values_of("directive")
     )?;
     let incs = matches
         .values_of("inc")
