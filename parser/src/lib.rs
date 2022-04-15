@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 mod config;
+mod directives;
 pub mod file_locations;
 mod path;
 mod subclass_attrs;
@@ -29,7 +30,7 @@ use syn::{
 #[doc(hidden)]
 /// Ensure consistency between the `include_cpp!` parser
 /// and the standalone macro discoverer
-pub mod directives {
+pub mod directive_names {
     pub static EXTERN_RUST_TYPE: &str = "extern_rust_type";
     pub static EXTERN_RUST_FUN: &str = "extern_rust_function";
     pub static SUBCLASS: &str = "subclass";
