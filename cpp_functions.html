@@ -75,7 +75,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded "><a href="index.html"><strong aria-hidden="true">1.</strong> Rust ❤️  pre-existing C++</a></li><li class="chapter-item expanded "><a href="tutorial.html"><strong aria-hidden="true">2.</strong> Tutorial</a></li><li class="chapter-item expanded "><a href="workflow.html"><strong aria-hidden="true">3.</strong> Workflow</a></li><li class="chapter-item expanded "><a href="allowlist.html"><strong aria-hidden="true">4.</strong> Allowlist and syntax</a></li><li class="chapter-item expanded "><a href="building.html"><strong aria-hidden="true">5.</strong> Building</a></li><li class="chapter-item expanded "><a href="storage.html"><strong aria-hidden="true">6.</strong> Storage - stack and heaps</a></li><li class="chapter-item expanded "><a href="references_etc.html"><strong aria-hidden="true">7.</strong> Pointers, references, values</a></li><li class="chapter-item expanded "><a href="primitives.html"><strong aria-hidden="true">8.</strong> Built-in types</a></li><li class="chapter-item expanded "><a href="naming.html"><strong aria-hidden="true">9.</strong> C++ type and function names</a></li><li class="chapter-item expanded "><a href="cpp_types.html"><strong aria-hidden="true">10.</strong> C++ structs, enums and classes</a></li><li class="chapter-item expanded "><a href="cpp_functions.html" class="active"><strong aria-hidden="true">11.</strong> C++ functions</a></li><li class="chapter-item expanded "><a href="rust_calls.html"><strong aria-hidden="true">12.</strong> Callbacks into Rust</a></li><li class="chapter-item expanded "><a href="other_features.html"><strong aria-hidden="true">13.</strong> Other C++ features</a></li><li class="chapter-item expanded "><a href="safety.html"><strong aria-hidden="true">14.</strong> Safety</a></li><li class="chapter-item expanded "><a href="rustic.html"><strong aria-hidden="true">15.</strong> Rustic bindings</a></li><li class="chapter-item expanded "><a href="large_codebase.html"><strong aria-hidden="true">16.</strong> Large codebases</a></li><li class="chapter-item expanded "><a href="examples.html"><strong aria-hidden="true">17.</strong> Examples</a></li><li class="chapter-item expanded "><a href="credits.html"><strong aria-hidden="true">18.</strong> Credits</a></li><li class="chapter-item expanded "><a href="contributing.html"><strong aria-hidden="true">19.</strong> Contributing</a></li><li class="chapter-item expanded "><a href="code-of-conduct.html"><strong aria-hidden="true">20.</strong> Code of Conduct</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded "><a href="index.html"><strong aria-hidden="true">1.</strong> Rust ❤️  pre-existing C++</a></li><li class="chapter-item expanded "><a href="tutorial.html"><strong aria-hidden="true">2.</strong> Tutorial</a></li><li class="chapter-item expanded "><a href="workflow.html"><strong aria-hidden="true">3.</strong> Workflow</a></li><li class="chapter-item expanded "><a href="allowlist.html"><strong aria-hidden="true">4.</strong> Allowlist and syntax</a></li><li class="chapter-item expanded "><a href="building.html"><strong aria-hidden="true">5.</strong> Building</a></li><li class="chapter-item expanded "><a href="cpp_types.html"><strong aria-hidden="true">6.</strong> C++ structs, enums and classes</a></li><li class="chapter-item expanded "><a href="references_etc.html"><strong aria-hidden="true">7.</strong> Pointers, references, values</a></li><li class="chapter-item expanded "><a href="storage.html"><strong aria-hidden="true">8.</strong> Storage - stack and heaps</a></li><li class="chapter-item expanded "><a href="primitives.html"><strong aria-hidden="true">9.</strong> Built-in types</a></li><li class="chapter-item expanded "><a href="naming.html"><strong aria-hidden="true">10.</strong> C++ type and function names</a></li><li class="chapter-item expanded "><a href="cpp_functions.html" class="active"><strong aria-hidden="true">11.</strong> C++ functions</a></li><li class="chapter-item expanded "><a href="rust_calls.html"><strong aria-hidden="true">12.</strong> Callbacks into Rust</a></li><li class="chapter-item expanded "><a href="other_features.html"><strong aria-hidden="true">13.</strong> Other C++ features</a></li><li class="chapter-item expanded "><a href="safety.html"><strong aria-hidden="true">14.</strong> Safety</a></li><li class="chapter-item expanded "><a href="rustic.html"><strong aria-hidden="true">15.</strong> Rustic bindings</a></li><li class="chapter-item expanded "><a href="large_codebase.html"><strong aria-hidden="true">16.</strong> Large codebases</a></li><li class="chapter-item expanded "><a href="examples.html"><strong aria-hidden="true">17.</strong> Examples</a></li><li class="chapter-item expanded "><a href="credits.html"><strong aria-hidden="true">18.</strong> Credits</a></li><li class="chapter-item expanded "><a href="contributing.html"><strong aria-hidden="true">19.</strong> Contributing</a></li><li class="chapter-item expanded "><a href="code-of-conduct.html"><strong aria-hidden="true">20.</strong> Code of Conduct</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -179,8 +179,7 @@ fn main() {
 
 </code></pre>
 <p>Specifically, you can pass anything which implements <a href="https://docs.rs/autocxx/latest/autocxx/trait.ValueParam.html"><code>ValueParam&lt;T&gt;</code></a>.</p>
-<p>If you're keeping non-POD values on the Rust stack, you need to explicitly use <a href="https://docs.rs/autocxx/latest/autocxx/prelude/fn.as_mov.html"><code>as_mov</code></a> to indicate that you want to
-consume the object using move semantics:</p>
+<p>If you're keeping non-POD values on the Rust stack, you need to explicitly use <a href="https://docs.rs/autocxx/latest/autocxx/prelude/fn.as_mov.html"><code>as_mov</code></a> to indicate that you want to consume the object using move semantics:</p>
 <h4 id="c-header-1"><a class="header" href="#c-header-1">C++ header:</a></h4>
 <pre><code class="language-cpp">#include &lt;cstdint&gt;
 
@@ -214,25 +213,61 @@ fn main() {
 }
 
 </code></pre>
-<p>Rvalue parameters are not yet supported.</p>
+<p>RValue parameters are a little simpler, because (as you'd hope) they consume
+the object you're passing in.</p>
+<h4 id="c-header-2"><a class="header" href="#c-header-2">C++ header:</a></h4>
+<pre><code class="language-cpp">#include &lt;cstdint&gt;
+
+struct Cake {
+    Cake();
+    uint32_t tons_of_sugar;
+};
+
+void eat(Cake&amp;&amp; c); // consumes the cake. You can't have your cake and eat it.
+
+</code></pre>
+<h4 id="rust-2"><a class="header" href="#rust-2">Rust:</a></h4>
+<pre><code class="language-rust noplayground">
+use autocxx::prelude::*;
+
+include_cpp! {
+    #include &quot;input.h&quot;
+    safety!(unsafe_ffi)
+    generate!(&quot;Cake&quot;)
+    generate!(&quot;eat&quot;)
+}
+
+fn main() {
+    moveit! {
+        let mut stack_cake = ffi::Cake::new();
+    }
+    ffi::eat(stack_cake);
+    // No more cake.
+
+    // Still peckish.
+    let heap_cake = ffi::Cake::new().within_unique_ptr();
+    ffi::eat(heap_cake);
+    // Really no more cake now.
+}
+
+</code></pre>
 <h2 id="default-parameters"><a class="header" href="#default-parameters">Default parameters</a></h2>
 <p>Are not yet supported<sup class="footnote-reference"><a href="#default">1</a></sup>.</p>
 <div class="footnote-definition" id="default"><sup class="footnote-definition-label">1</sup>
 <p>the work is <a href="https://github.com/google/autocxx/issues/563">planned here</a>.</p>
 </div>
 <h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
-<p>At present, return values for <a href="cpp_types.html">non-POD</a> types are always
-a <code>cxx::UniquePtr&lt;T&gt;</code>. This is likely to change in future, at least to a type
-which is guaranteed not to be null<sup class="footnote-reference"><a href="#not-null.">2</a></sup></p>
-<div class="footnote-definition" id="not-null"><sup class="footnote-definition-label">3</sup>
-<p><a href="https://github.com/google/autocxx/issues/845">plans here</a></p>
-</div>
+<p>Any C++ function which returns a <a href="cpp_types.html">non-POD</a> type to Rust in fact gives you an opaque
+object implementing <a href="https://docs.rs/moveit/latest/moveit/new/trait.New.html"><code>moveit::New</code></a>.
+This enables you to &quot;emplace&quot; the resulting object either on the stack or heap,
+in exactly the same way as if you're constructying an object. See <a href="cpp_types.html#construction">the section on construction</a>
+for how to turn this opaque object into something useful (spoiler: just append <code>.within_unique_ptr()</code>).</p>
 <h2 id="overloads---and-identifiers-ending-in-digits"><a class="header" href="#overloads---and-identifiers-ending-in-digits">Overloads - and identifiers ending in digits</a></h2>
 <p>C++ allows function overloads; Rust doesn't. <code>autocxx</code> follows the lead
 of <code>bindgen</code> here and generating overloads as <code>func</code>, <code>func1</code>, <code>func2</code> etc.
 This is essentially awful without <code>rust-analyzer</code> IDE support - see the
 <a href="workflow.html">workflows chapter</a> for why you should be using an IDE.</p>
-<h4 id="c-header-2"><a class="header" href="#c-header-2">C++ header:</a></h4>
+<h4 id="c-header-3"><a class="header" href="#c-header-3">C++ header:</a></h4>
 <pre><code class="language-cpp">
 #include &lt;string&gt;
 struct View {
@@ -247,7 +282,7 @@ void saw(const View&amp;);
 void saw(const Tree&amp;);
 
 </code></pre>
-<h4 id="rust-2"><a class="header" href="#rust-2">Rust:</a></h4>
+<h4 id="rust-3"><a class="header" href="#rust-3">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -274,7 +309,7 @@ we can pass tuples of different parameter types into a single function
 implementation.</p>
 <h2 id="methods"><a class="header" href="#methods">Methods</a></h2>
 <p>Calling a <em>const</em> method is simple:</p>
-<h4 id="c-header-3"><a class="header" href="#c-header-3">C++ header:</a></h4>
+<h4 id="c-header-4"><a class="header" href="#c-header-4">C++ header:</a></h4>
 <pre><code class="language-cpp">
 class Sloth {
 public:
@@ -282,7 +317,7 @@ public:
 };
 
 </code></pre>
-<h4 id="rust-3"><a class="header" href="#rust-3">Rust:</a></h4>
+<h4 id="rust-4"><a class="header" href="#rust-4">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -303,7 +338,7 @@ fn main() {
 references to C++ objects must be <a href="https://doc.rust-lang.org/std/pin/">pinned</a>.
 In practice, this means you must call <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html#method.pin_mut"><code>.pin_mut()</code></a>
 every time you call a method:</p>
-<h4 id="c-header-4"><a class="header" href="#c-header-4">C++ header:</a></h4>
+<h4 id="c-header-5"><a class="header" href="#c-header-5">C++ header:</a></h4>
 <pre><code class="language-cpp">
 class Sloth {
 public:
@@ -312,7 +347,7 @@ public:
 };
 
 </code></pre>
-<h4 id="rust-4"><a class="header" href="#rust-4">Rust:</a></h4>
+<h4 id="rust-5"><a class="header" href="#rust-5">Rust:</a></h4>
 <pre><code class="language-rust noplayground">
 use autocxx::prelude::*;
 
@@ -334,7 +369,7 @@ fn main() {
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="cpp_types.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="naming.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
                             <a rel="next" href="rust_calls.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
@@ -346,7 +381,7 @@ fn main() {
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="cpp_types.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="naming.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
                     <a rel="next" href="rust_calls.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
