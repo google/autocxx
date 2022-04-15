@@ -12,7 +12,7 @@ use crate::{
     RebuildDependencyRecorder,
 };
 use crate::{CppCodegenOptions, LocatedSynError};
-use autocxx_parser::directives::SUBCLASS;
+use autocxx_parser::directive_names::SUBCLASS;
 use autocxx_parser::{AllowlistEntry, RustPath, Subclass, SubclassAttrs};
 use miette::Diagnostic;
 use proc_macro2::TokenStream;

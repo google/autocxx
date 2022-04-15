@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 
 use autocxx_parser::{
-    directives::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE},
+    directive_names::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE},
     RustFun, RustPath,
 };
 use itertools::Itertools;
