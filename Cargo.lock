@@ -98,6 +98,7 @@ dependencies = [
 [[package]]
 name = "autocxx-bindgen"
 version = "0.59.15"
+source = "git+https://github.com/adetaylor/rust-bindgen?branch=pollute-fewer-typedefs#5835b7ff5864c94a64668ecc3b360f1f0f90b73c"
 dependencies = [
  "bitflags",
  "cexpr",
