@@ -63,6 +63,7 @@ pub enum ParseError {
 pub fn parse_file<P1: AsRef<Path>>(
     rs_file: P1,
     auto_allowlist: bool,
+    extra_directives: Vec<String>,
 ) -> Result<ParsedFile, ParseError> {
     let mut source_code = String::new();
     let mut file = std::fs::File::open(rs_file).map_err(ParseError::FileOpen)?;
@@ -71,13 +72,14 @@ pub fn parse_file<P1: AsRef<Path>>(
     proc_macro2::fallback::force();
     let source = syn::parse_file(&source_code)
         .map_err(|e| ParseError::Syntax(LocatedSynError::new(e, &source_code)))?;
-    parse_file_contents(source, auto_allowlist, &source_code)
+    parse_file_contents(source, auto_allowlist, &source_code, extra_directives)
 }
 
 fn parse_file_contents(
     source: syn::File,
     auto_allowlist: bool,
     file_contents: &str,
+    extra_directives: Vec<String>,
 ) -> Result<ParsedFile, ParseError> {
     #[derive(Default)]
     struct State {
@@ -105,7 +107,8 @@ fn parse_file_contents(
                 {
                     Segment::Autocxx(
                         crate::IncludeCppEngine::new_from_syn(mac.mac, file_contents)
-                            .map_err(ParseError::AutocxxCodegenError)?,
+                            .map_err(ParseError::AutocxxCodegenError)?
+                            .config_mut().handle_extra_directives(extra_directives),
                     )
                 }
                 Item::Mod(itm)

@@ -12,11 +12,11 @@ use std::{
 };
 
 use itertools::Itertools;
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, ToTokens};
 use syn::{
-    parse::{Parse, ParseStream},
-    Signature, Token, TypePath,
+    parse::{Parse, ParseStream, Parser},
+    Signature, Token, TypePath, parse_str,
 };
 use syn::{Ident, Result as ParseResult};
 use thiserror::Error;
@@ -187,49 +187,7 @@ impl Parse for IncludeCppConfig {
         let mut config = IncludeCppConfig::default();
 
         while !input.is_empty() {
-            let has_hexathorpe = input.parse::<Option<syn::token::Pound>>()?.is_some();
-            let ident: syn::Ident = input.parse()?;
-            let args;
-            let (possible_directives, to_parse, parse_completely) = if has_hexathorpe {
-                (&get_directives().need_hexathorpe, input, false)
-            } else {
-                input.parse::<Option<syn::token::Bang>>()?;
-                syn::parenthesized!(args in input);
-                (&get_directives().need_exclamation, &args, true)
-            };
-            let all_possible = possible_directives.keys().join(", ");
-            let ident_str = ident.to_string();
-            match possible_directives.get(&ident_str) {
-                None => {
-                    return Err(syn::Error::new(
-                        ident.span(),
-                        format!("expected {}", all_possible),
-                    ));
-                }
-                Some(directive) => directive.parse(to_parse, &mut config, &ident.span())?,
-            }
-            if parse_completely && !to_parse.is_empty() {
-                return Err(syn::Error::new(
-                    ident.span(),
-                    format!("found unexpected input within the directive {}", ident_str),
-                ));
-            }
-
-            //     } else if ident == "extern_cpp_type" || ident == "extern_cpp_opaque_type" {
-            //         let args;
-            //         syn::parenthesized!(args in input);
-            //         let definition: syn::LitStr = args.parse()?;
-            //         args.parse::<syn::token::Comma>()?;
-            //         let rust_path: TypePath = args.parse()?;
-            //         let opaque = ident == "extern_cpp_opaque_type";
-            //         externs.insert(definition.value(), ExternCppType { rust_path, opaque });
-            //     } else {
-            //         return Err(syn::Error::new(
-            //             ident.span(),
-            //             "expected generate, generate_pod, nested_type, safety or one of the other autocxx directives",
-            //         ));
-            //     }
-            // }
+            parse_directive(input, &mut config)?;
             if input.is_empty() {
                 break;
             }
@@ -238,7 +196,52 @@ impl Parse for IncludeCppConfig {
     }
 }
 
+fn parse_directive(input: ParseStream, config: &mut IncludeCppConfig) -> ParseResult<()> {
+    let has_hexathorpe = input.parse::<Option<syn::token::Pound>>()?.is_some();
+    let ident: syn::Ident = input.parse()?;
+    let args;
+    let (possible_directives, to_parse, parse_completely) = if has_hexathorpe {
+        (&get_directives().need_hexathorpe, input, false)
+    } else {
+        input.parse::<Option<syn::token::Bang>>()?;
+        syn::parenthesized!(args in input);
+        (&get_directives().need_exclamation, &args, true)
+    };
+    let all_possible = possible_directives.keys().join(", ");
+    let ident_str = ident.to_string();
+    match possible_directives.get(&ident_str) {
+        None => {
+            return Err(syn::Error::new(
+                ident.span(),
+                format!("expected {}", all_possible),
+            ));
+        }
+        Some(directive) => directive.parse(to_parse, &mut config, &ident.span())?,
+    }
+    if parse_completely && !to_parse.is_empty() {
+        return Err(syn::Error::new(
+            ident.span(),
+            format!("found unexpected input within the directive {}", ident_str),
+        ));
+    }
+    Ok(())
+}
+
 impl IncludeCppConfig {
+    /// Inject extra directives as if they'd been typed within the `include_cpp!` macro itself.
+    pub fn handle_extra_directives(&mut self, directives: Vec<String>) {
+        for d in directives.into_iter() {
+            let handle = || -> ParseResult<()> {
+                let parser = |parse_stream| -> ParseResult<()> {
+                    parse_directive(parse_stream, self)
+                };
+                parser.parse_str(d)?;
+                Ok(())
+            };
+            handle().unwrap_or_else(|err| panic!("Parse error handling directive '{}' - {}", d, err));
+        }
+    }
+
     pub fn get_pod_requests(&self) -> &[String] {
         &self.pod_requests
     }
