@@ -30,7 +30,7 @@ _This_ is why it's crucial to use an IDE with `autocxx`.
 Options:
 
 * Use an IDE. (Did we mention, you should use an IDE?)
-* `pub use ffi::*` in your code, then run `cargo doc`.
+* Run `cargo doc --document-private-items`.
 * Use `cargo expand`.
 
 ## How to work around cases where `autocxx` can't generate bindings
@@ -40,6 +40,15 @@ Your options are:
 * Write extra C++ functions with simpler parameters or return types, and generate
   bindings to them, instead.
 * Write some manual `#[cxx::bridge]` bindings - see below.
+
+Usually, you can solve problems by writing a bit of additional C++ code. For example,
+supposing autocxx can't understand your type `Sandwich<Ham>`. Instead it will give
+you a fairly useless opaque type such as `Sandwich_Ham`. You can write additional
+C++ functions to unpack the opaque type into something useful:
+
+```cpp
+const Ham& get_filling(const Sandwich<Ham>& ham_sandwich);
+```
 
 ## Mixing manual and automated bindings
 
@@ -108,7 +117,6 @@ and rarely bails out entirely.
 If it does, you may be able to use the [`block!` macro](https://docs.rs/autocxx/latest/autocxx/macro.block.html).
 
 We'd appreciate a minimized bug report of the troublesome code - see [contributing](contributing.md).
-
 
 ## Enabling autocompletion in a rust-analyzer IDE
 
