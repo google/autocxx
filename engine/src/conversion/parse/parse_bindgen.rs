@@ -200,15 +200,23 @@ impl<'a> ParseBindgen<'a> {
                 if s.ident.to_string().ends_with("__bindgen_vtable") {
                     return Ok(());
                 }
-                let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
                 let annotations = BindgenSemanticAttributes::new(&s.attrs);
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
                 let name = api_name_qualified(ns, s.ident.clone(), &annotations)?;
+                let err = annotations.check_for_fatal_attrs(&s.ident).err();
                 let api = if ns.is_empty() && self.config.is_rust_type(&s.ident) {
                     None
-                } else if is_forward_declaration {
-                    Some(UnanalyzedApi::ForwardDeclaration { name })
+                } else if Self::spot_forward_declaration(&s.fields)
+                    || (Self::spot_zero_length_struct(&s.fields) && err.is_some())
+                {
+                    // Forward declarations are recorded especially because we can't
+                    // store them in UniquePtr or similar.
+                    // Templated forward declarations don't appear with an _unused field (which is what
+                    // we spot in the previous clause) but instead with an _address field.
+                    // So, solely in the case where we're storing up an error about such
+                    // a templated type, we'll also treat such cases as forward declarations.
+                    Some(UnanalyzedApi::ForwardDeclaration { name, err })
                 } else {
                     let has_rvalue_reference_fields = s.fields.iter().any(|f| {
                         BindgenSemanticAttributes::new(&f.attrs).has_attr("rvalue_reference")
@@ -345,9 +353,17 @@ impl<'a> ParseBindgen<'a> {
     }
 
     fn spot_forward_declaration(s: &Fields) -> bool {
+        Self::spot_field(s, "_unused")
+    }
+
+    fn spot_zero_length_struct(s: &Fields) -> bool {
+        Self::spot_field(s, "_address")
+    }
+
+    fn spot_field(s: &Fields, desired_id: &str) -> bool {
         s.iter()
             .filter_map(|f| f.ident.as_ref())
-            .any(|id| id == "_unused")
+            .any(|id| id == desired_id)
     }
 
     fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertError> {
