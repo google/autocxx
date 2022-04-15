@@ -269,7 +269,7 @@ impl Directive for Safety {
 }
 
 fn allowlist_err_to_syn_err(err: AllowlistErr, span: &Span) -> syn::Error {
-    syn::Error::new(span.clone(), format!("{}", err))
+    syn::Error::new(*span, format!("{}", err))
 }
 
 struct StringList<SET, GET>(SET, GET)
