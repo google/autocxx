@@ -208,7 +208,7 @@ impl<'a> ParseBindgen<'a> {
                 let api = if ns.is_empty() && self.config.is_rust_type(&s.ident) {
                     None
                 } else if is_forward_declaration {
-                    Some(UnanalyzedApi::ForwardDeclaration { name })
+                    Some(UnanalyzedApi::OpaqueType { name })
                 } else {
                     let has_rvalue_reference_fields = s.fields.iter().any(|f| {
                         BindgenSemanticAttributes::new(&f.attrs).has_attr("rvalue_reference")

@@ -451,8 +451,10 @@ impl SubclassName {
 /// (Specifically, allowing `syn` Types to be `Debug` requires
 /// enabling syn's `extra-traits` feature which increases compile time.)
 pub(crate) enum Api<T: AnalysisPhase> {
-    /// A forward declared type for which no definition is available.
-    ForwardDeclaration { name: ApiName },
+    /// An opaque type for which no definition is available.
+    /// This may be a forward declaration or it might be a typedef whose
+    /// definition we can't understand.
+    OpaqueType { name: ApiName },
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
     ConcreteType {
@@ -562,7 +564,7 @@ pub(crate) enum UnsafetyNeeded {
 impl<T: AnalysisPhase> Api<T> {
     pub(crate) fn name_info(&self) -> &ApiName {
         match self {
-            Api::ForwardDeclaration { name } => name,
+            Api::OpaqueType { name } => name,
             Api::ConcreteType { name, .. } => name,
             Api::StringConstructor { name } => name,
             Api::Function { name, .. } => name,

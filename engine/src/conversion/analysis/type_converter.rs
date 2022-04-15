@@ -634,7 +634,7 @@ impl TypedefTarget for TypedefAnalysis {
 pub(crate) fn find_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
     apis.iter()
         .filter_map(|api| match api {
-            Api::ForwardDeclaration { .. }
+            Api::OpaqueType { .. }
             | Api::ConcreteType { .. }
             | Api::Typedef { .. }
             | Api::Enum { .. }

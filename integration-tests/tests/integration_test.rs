@@ -3329,7 +3329,7 @@ fn test_two_type_constructors() {
 
 #[ignore] // https://github.com/rust-lang/rust-bindgen/issues/1924
 #[test]
-fn test_associated_type_templated_typedef() {
+fn test_associated_type_templated_typedef_in_struct() {
     let hdr = indoc! {"
         #include <string>
         #include <cstdint>
@@ -3353,6 +3353,41 @@ fn test_associated_type_templated_typedef() {
         ffi::Origin::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["Origin"], &[]);
+}
+
+#[test]
+fn test_associated_type_templated_typedef() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        struct Container {
+            Container() {}
+            const StringPiece& get_string_piece() const { return sp; }
+            StringPiece sp;
+        };
+
+        inline StringPiece give_string_piece() {
+            StringPiece s;
+            return s;
+        }
+        inline void take_string_piece(const StringPiece& string_piece) {}
+    "};
+    let rs = quote! {
+        let sp = ffi::Container::new().within_box();
+        ffi::take_string_piece(sp.get_string_piece());
+    };
+    run_test("", hdr, rs, &["take_string_piece", "Container"], &[]);
 }
 
 #[test]

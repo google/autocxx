@@ -529,7 +529,7 @@ impl<'a> RsCodeGenerator<'a> {
                     None,
                 )
             }
-            Api::ForwardDeclaration { .. } | Api::ConcreteType { .. } => self.generate_type(
+            Api::OpaqueType { .. } | Api::ConcreteType { .. } => self.generate_type(
                 &name,
                 id,
                 TypeKind::Abstract,
