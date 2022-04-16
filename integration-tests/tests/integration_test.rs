@@ -3377,10 +3377,6 @@ fn test_associated_type_templated_typedef() {
             StringPiece sp;
         };
 
-        inline StringPiece give_string_piece() {
-            StringPiece s;
-            return s;
-        }
         inline void take_string_piece(const StringPiece& string_piece) {}
     "};
     let rs = quote! {
@@ -3388,6 +3384,36 @@ fn test_associated_type_templated_typedef() {
         ffi::take_string_piece(sp.get_string_piece());
     };
     run_test("", hdr, rs, &["take_string_piece", "Container"], &[]);
+}
+
+#[test]
+#[ignore]
+fn test_associated_type_templated_typedef_by_value() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        inline StringPiece give_string_piece() {
+            StringPiece s;
+            return s;
+        }
+        inline void take_string_piece(StringPiece string_piece) {}
+    "};
+    let rs = quote! {
+        let sp = ffi::give_string_piece().within_unique_ptr();
+        ffi::take_string_piece(sp);
+    };
+    run_test("", hdr, rs, &["take_string_piece", "give_string_piece"], &[]);
 }
 
 #[test]
