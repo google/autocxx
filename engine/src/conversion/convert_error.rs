@@ -57,8 +57,6 @@ pub enum ConvertError {
     InvalidPointee,
     #[error("The 'generate' or 'generate_pod' directive for '{0}' did not result in any code being generated. Perhaps this was mis-spelled or you didn't qualify the name with any namespaces? Otherwise please report a bug.")]
     DidNotGenerateAnything(String),
-    #[error("Found an attempt at using a forward declaration ({}) inside a templated cxx type such as UniquePtr or CxxVector", .0.to_cpp_name())]
-    TypeContainingForwardDeclaration(QualifiedName),
     #[error("Found an attempt at using a type marked as blocked! ({})", .0.to_cpp_name())]
     Blocked(QualifiedName),
     #[error("This function or method uses a type where one of the template parameters was incomprehensible to bindgen/autocxx - probably because it uses template specialization.")]

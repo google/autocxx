@@ -111,7 +111,6 @@ pub(crate) struct TypeConverter<'a> {
     types_found: HashSet<QualifiedName>,
     typedefs: HashMap<QualifiedName, Type>,
     concrete_templates: HashMap<String, QualifiedName>,
-    forward_declarations: HashSet<QualifiedName>,
     config: &'a IncludeCppConfig,
 }
 
@@ -124,7 +123,6 @@ impl<'a> TypeConverter<'a> {
             types_found: find_types(apis),
             typedefs: Self::find_typedefs(apis),
             concrete_templates: Self::find_concrete_templates(apis),
-            forward_declarations: Self::find_incomplete_types(apis),
             config,
         }
     }
@@ -149,11 +147,6 @@ impl<'a> TypeConverter<'a> {
                 let newp = self.convert_type_path(p, ns, ctx)?;
                 if let Type::Path(newpp) = &newp.ty {
                     let qn = QualifiedName::from_type_path(newpp);
-                    if !ctx.allow_instantiation_of_forward_declaration()
-                        && self.forward_declarations.contains(&qn)
-                    {
-                        return Err(ConvertError::TypeContainingForwardDeclaration(qn));
-                    }
                     // Special handling because rust_Str (as emitted by bindgen)
                     // doesn't simply get renamed to a different type _identifier_.
                     // This plain type-by-value (as far as bindgen is concerned)
@@ -485,13 +478,6 @@ impl<'a> TypeConverter<'a> {
                     match inner {
                         GenericArgument::Type(Type::Path(typ)) => {
                             let inner_qn = QualifiedName::from_type_path(typ);
-                            if !forward_declarations_ok
-                                && self.forward_declarations.contains(&inner_qn)
-                            {
-                                return Err(ConvertError::TypeContainingForwardDeclaration(
-                                    inner_qn,
-                                ));
-                            }
                             if generic_behavior == CxxGenericType::Rust {
                                 if !inner_qn.get_namespace().is_empty() {
                                     return Err(ConvertError::RustTypeWithAPath(inner_qn));
@@ -556,16 +542,6 @@ impl<'a> TypeConverter<'a> {
                 }
                 _ => None,
             })
-            .collect()
-    }
-
-    fn find_incomplete_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
-        apis.iter()
-            .filter_map(|api| match api {
-                Api::ForwardDeclaration { .. } => Some(api.name()),
-                _ => None,
-            })
-            .cloned()
             .collect()
     }
 }
