@@ -141,10 +141,10 @@ impl TypeConversionPolicy {
                         ),
                         MaybeUnsafeStmt::binary(
                             quote! { let mut #space_var_name =
-                                unsafe { std::pin::Pin::new_unchecked(&mut #space_var_name) };
+                                unsafe { ::std::pin::Pin::new_unchecked(&mut #space_var_name) };
                             },
                             quote! { let mut #space_var_name =
-                                std::pin::Pin::new_unchecked(&mut #space_var_name);
+                                ::std::pin::Pin::new_unchecked(&mut #space_var_name);
                             },
                         ),
                         MaybeUnsafeStmt::needs_unsafe(
