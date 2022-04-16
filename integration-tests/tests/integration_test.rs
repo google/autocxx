@@ -3387,7 +3387,6 @@ fn test_associated_type_templated_typedef() {
 }
 
 #[test]
-#[ignore]
 fn test_associated_type_templated_typedef_by_value() {
     let hdr = indoc! {"
         #include <string>
@@ -3410,7 +3409,7 @@ fn test_associated_type_templated_typedef_by_value() {
         inline void take_string_piece(StringPiece string_piece) {}
     "};
     let rs = quote! {
-        let sp = ffi::give_string_piece().within_unique_ptr();
+        let sp = ffi::give_string_piece();
         ffi::take_string_piece(sp);
     };
     run_test("", hdr, rs, &["take_string_piece", "give_string_piece"], &[]);
