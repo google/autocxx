@@ -11,7 +11,7 @@
 mod depfile;
 
 use autocxx_engine::{parse_file, HeaderNamer, RebuildDependencyRecorder};
-use clap::{crate_authors, crate_version, Command, Arg, ArgGroup};
+use clap::{crate_authors, crate_version, Arg, ArgGroup, Command};
 use depfile::Depfile;
 use miette::IntoDiagnostic;
 use proc_macro2::TokenStream;
@@ -88,12 +88,12 @@ fn main() -> miette::Result<()> {
             Arg::new("INPUT")
                 .help("Sets the input .rs file to use")
                 .required(true)
-                .index(1),
         )
         .arg(
             Arg::new("outdir")
                 .short('o')
                 .long("outdir")
+                .allow_invalid_utf8(true)
                 .value_name("PATH")
                 .help("output directory path")
                 .takes_value(true)
@@ -190,7 +190,7 @@ fn main() -> miette::Result<()> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("depfile")
+            Arg::new("depfile")
                 .long("depfile")
                 .value_name("DEPFILE")
                 .help("A .d file to write")

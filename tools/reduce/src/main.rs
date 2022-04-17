@@ -12,12 +12,12 @@ use std::{
     fs::File,
     io::Write,
     os::unix::prelude::PermissionsExt,
-    path::{Path, PathBuf}
+    path::{Path, PathBuf},
 };
 
 use autocxx_engine::{get_clang_path, make_clang_args, preprocess};
 use autocxx_parser::IncludeCppConfig;
-use clap::{crate_authors, crate_version, Arg, ArgMatches, Command };
+use clap::{crate_authors, crate_version, Arg, ArgMatches, Command};
 use indoc::indoc;
 use itertools::Itertools;
 use quote::ToTokens;
@@ -97,7 +97,6 @@ fn main() {
                                             )
                                             .arg(
                                         Arg::new("header")
-                                            .short('h')
                                             .long("header")
                                             .multiple_occurrences(true)
                                             .number_of_values(1)
@@ -118,7 +117,6 @@ fn main() {
         .arg(
             Arg::new("creduce")
                 .long("creduce")
-                .required(true)
                 .value_name("PATH")
                 .help("creduce binary location")
                 .default_value("creduce")
@@ -310,7 +308,9 @@ const REMOVE_PASS_LINE_MARKERS: &[&str] = &["--remove-pass", "pass_line_markers"
 const SKIP_INITIAL_PASSES: &[&str] = &["--skip-initial-passes"];
 
 fn creduce_supports_remove_pass(creduce_cmd: &str) -> bool {
-    let cmd = std::process::Command::new(creduce_cmd).arg("--help").output();
+    let cmd = std::process::Command::new(creduce_cmd)
+        .arg("--help")
+        .output();
     let msg = match cmd {
         Err(error) => panic!("failed to run creduce. creduce_cmd = {}. hint: autocxx-reduce --creduce /path/to/creduce. error = {}", creduce_cmd, error),
         Ok(result) => result.stdout
