@@ -3412,7 +3412,13 @@ fn test_associated_type_templated_typedef_by_value() {
         let sp = ffi::give_string_piece();
         ffi::take_string_piece(sp);
     };
-    run_test("", hdr, rs, &["take_string_piece", "give_string_piece"], &[]);
+    run_test(
+        "",
+        hdr,
+        rs,
+        &["take_string_piece", "give_string_piece"],
+        &[],
+    );
 }
 
 #[test]
