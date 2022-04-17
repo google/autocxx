@@ -15,8 +15,7 @@
 
 class Goat {
 public:
-    Goat();
-    ~Goat();
+    Goat() : horns(0) {}
     void add_a_horn();
     std::string describe() const;
 private:
@@ -27,10 +26,8 @@ inline uint32_t DoMath(uint32_t a) {
     return a * 3;
 }
 
-Goat::Goat() : horns(0) {}
-Goat::~Goat() {}
-void Goat::add_a_horn() { horns++; }
-std::string Goat::describe() const {
+inline void Goat::add_a_horn() { horns++; }
+inline std::string Goat::describe() const {
     std::ostringstream oss;
     std::string plural = horns == 1 ? "" : "s";
     oss << "This goat has " << horns << " horn" << plural << ".";
