@@ -3422,6 +3422,46 @@ fn test_associated_type_templated_typedef_by_value() {
 }
 
 #[test]
+fn test_associated_type_templated_typedef_by_value_forward_declaration() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece;
+
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        StringPiece give_string_piece();
+        void take_string_piece(StringPiece string_piece);
+    "};
+    let cpp = indoc! {"
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+
+        StringPiece give_string_piece() {
+            StringPiece s;
+            return s;
+        }
+        void take_string_piece(StringPiece string_piece) {}
+    "};
+    // As this template is forward declared we don't expect to generate any functions.
+    let rs = quote! {
+    };
+    run_test(
+        cpp,
+        hdr,
+        rs,
+        &["take_string_piece", "give_string_piece"],
+        &[],
+    );
+}
+
+#[test]
 fn test_foreign_ns_func_arg_pod() {
     let hdr = indoc! {"
         #include <cstdint>
