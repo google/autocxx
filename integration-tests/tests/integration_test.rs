@@ -24,7 +24,7 @@ use indoc::indoc;
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::Token;
+use syn::{parse_quote, Token};
 use test_log::test;
 
 #[test]
@@ -8556,21 +8556,23 @@ fn test_nonconst_reference_method_parameter() {
     run_test("", hdr, rs, &["NOP", "A", "B"], &[]);
 }
 
-#[test]
-fn test_destructor_moveit() {
+fn destruction_test(ident: proc_macro2::Ident, extra_bit: Option<TokenStream>) {
     let hdr = indoc! {"
     #include <stdint.h>
     #include <string>
     extern bool gConstructed;
     struct A {
         A() { gConstructed = true; }
-        ~A() { gConstructed = false; }
+        virtual ~A() { gConstructed = false; }
         void set(uint32_t val) { a = val; }
         uint32_t get() const { return a; }
         uint32_t a;
         std::string so_we_are_non_trivial;
     };
     inline bool is_constructed() { return gConstructed; }
+    struct B: public A {
+        uint32_t b;
+    };
     "};
     let cpp = indoc! {"
         bool gConstructed = false;
@@ -8579,15 +8581,30 @@ fn test_destructor_moveit() {
         assert!(!ffi::is_constructed());
         {
             moveit! {
-                let mut stack_obj = ffi::A::new();
+                let mut _stack_obj = ffi::#ident::new();
             }
             assert!(ffi::is_constructed());
-            stack_obj.as_mut().set(42);
-            assert_eq!(stack_obj.get(), 42);
+            #extra_bit
         }
         assert!(!ffi::is_constructed());
     };
-    run_test(cpp, hdr, rs, &["A", "is_constructed"], &[]);
+    run_test(cpp, hdr, rs, &[&ident.to_string(), "is_constructed"], &[]);
+}
+
+#[test]
+fn test_destructor_moveit() {
+    destruction_test(
+        parse_quote! { A },
+        Some(quote! {
+            _stack_obj.as_mut().set(42);
+            assert_eq!(_stack_obj.get(), 42);
+        }),
+    );
+}
+
+#[test]
+fn test_destructor_derived_moveit() {
+    destruction_test(parse_quote! { B }, None);
 }
 
 #[test]
