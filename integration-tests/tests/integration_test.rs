@@ -24,7 +24,7 @@ use indoc::indoc;
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{Token, parse_quote};
+use syn::{parse_quote, Token};
 use test_log::test;
 
 #[test]
@@ -8593,10 +8593,13 @@ fn destruction_test(ident: proc_macro2::Ident, extra_bit: Option<TokenStream>) {
 
 #[test]
 fn test_destructor_moveit() {
-    destruction_test(parse_quote! { A }, Some(quote! {
-        _stack_obj.as_mut().set(42);
-        assert_eq!(_stack_obj.get(), 42);
-    }));
+    destruction_test(
+        parse_quote! { A },
+        Some(quote! {
+            _stack_obj.as_mut().set(42);
+            assert_eq!(_stack_obj.get(), 42);
+        }),
+    );
 }
 
 #[test]
