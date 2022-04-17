@@ -1,16 +1,10 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 mod function_wrapper_cpp;
 mod new_and_delete_prelude;
@@ -23,7 +17,10 @@ use crate::{
 };
 use autocxx_parser::IncludeCppConfig;
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
 use self::type_to_cpp::{
@@ -39,6 +36,7 @@ use super::{
         pod::PodAnalysis,
     },
     api::{Api, Provenance, SubclassName, TypeKind},
+    apivec::ApiVec,
     ConvertError,
 };
 
@@ -100,7 +98,7 @@ pub(crate) struct CppCodeGenerator<'a> {
     inclusions: String,
     original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
-    cpp_codegen_options: &'a CppCodegenOptions,
+    cpp_codegen_options: &'a CppCodegenOptions<'a>,
 }
 
 struct SubclassFunction<'a> {
@@ -111,7 +109,7 @@ struct SubclassFunction<'a> {
 impl<'a> CppCodeGenerator<'a> {
     pub(crate) fn generate_cpp_code(
         inclusions: String,
-        apis: &[Api<FnPhase>],
+        apis: &ApiVec<FnPhase>,
         config: &'a IncludeCppConfig,
         cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<Option<CppFilePair>, ConvertError> {
@@ -172,10 +170,20 @@ impl<'a> CppCodeGenerator<'a> {
                     }
                     self.generate_cpp_function(cpp_wrapper)?
                 }
-                Api::ConcreteType { rs_definition, .. } => self.generate_typedef(
-                    api.name(),
-                    type_to_cpp(rs_definition, &self.original_name_map)?,
-                ),
+                Api::ConcreteType {
+                    rs_definition,
+                    cpp_definition,
+                    ..
+                } => {
+                    let effective_cpp_definition = match rs_definition {
+                        Some(rs_definition) => {
+                            Cow::Owned(type_to_cpp(rs_definition, &self.original_name_map)?)
+                        }
+                        None => Cow::Borrowed(cpp_definition),
+                    };
+
+                    self.generate_typedef(api.name(), &effective_cpp_definition)
+                }
                 Api::CType { typename, .. } => self.generate_ctype_typedef(typename),
                 Api::Subclass { .. } => deferred_apis.push(api),
                 Api::RustSubclassFn {
@@ -235,7 +243,10 @@ impl<'a> CppCodeGenerator<'a> {
                 headers, self.inclusions, type_definitions, declarations
             );
             log::info!("Additional C++ decls:\n{}", declarations);
-            let header_name = format!("autocxxgen_{}.h", self.config.get_mod_name());
+            let header_name = self
+                .cpp_codegen_options
+                .header_namer
+                .name_header(self.config.get_mod_name().to_string());
             let implementation = if self
                 .additional_functions
                 .iter()
@@ -374,6 +385,8 @@ impl<'a> CppCodeGenerator<'a> {
                 format!("arg{}", counter)
             }
         };
+        // If this returns a non-POD value, we may instead wish to emplace
+        // it into a parameter, let's see.
         let args: Result<Vec<_>, _> = details
             .argument_conversion
             .iter()
@@ -401,11 +414,19 @@ impl<'a> CppCodeGenerator<'a> {
         let ret_type = details
             .return_conversion
             .as_ref()
-            .map(|x| match conversion_direction {
-                ConversionDirection::RustCallsCpp => x.converted_type(&self.original_name_map),
-                ConversionDirection::CppCallsCpp => x.unconverted_type(&self.original_name_map),
+            .and_then(|x| match conversion_direction {
+                ConversionDirection::RustCallsCpp => {
+                    if x.populate_return_value() {
+                        Some(x.converted_type(&self.original_name_map))
+                    } else {
+                        None
+                    }
+                }
+                ConversionDirection::CppCallsCpp => {
+                    Some(x.unconverted_type(&self.original_name_map))
+                }
                 ConversionDirection::CppCallsRust => {
-                    x.inverse().converted_type(&self.original_name_map)
+                    Some(x.inverse().converted_type(&self.original_name_map))
                 }
             })
             .unwrap_or_else(|| Ok(default_return.to_string()))?;
@@ -423,6 +444,20 @@ impl<'a> CppCodeGenerator<'a> {
             "{} {}{}({}){}",
             ret_type, qualification, name, args, constness
         );
+        // Whether there's a placement param in which to put the return value
+        let placement_param = details
+            .argument_conversion
+            .iter()
+            .enumerate()
+            .filter_map(|(counter, conv)| {
+                if conv.is_placement_parameter() {
+                    Some(get_arg_name(counter))
+                } else {
+                    None
+                }
+            })
+            .next();
+        // Arguments to underlying function call
         let arg_list: Result<Vec<_>, _> = details
             .argument_conversion
             .iter()
@@ -431,7 +466,7 @@ impl<'a> CppCodeGenerator<'a> {
                 ConversionDirection::RustCallsCpp => {
                     conv.cpp_conversion(&get_arg_name(counter), &self.original_name_map, false)
                 }
-                ConversionDirection::CppCallsCpp => Ok(get_arg_name(counter)),
+                ConversionDirection::CppCallsCpp => Ok(Some(get_arg_name(counter))),
                 ConversionDirection::CppCallsRust => conv.inverse().cpp_conversion(
                     &get_arg_name(counter),
                     &self.original_name_map,
@@ -439,7 +474,7 @@ impl<'a> CppCodeGenerator<'a> {
                 ),
             })
             .collect();
-        let mut arg_list = arg_list?.into_iter();
+        let mut arg_list = arg_list?.into_iter().flatten();
         let receiver = if is_a_method { arg_list.next() } else { None };
         if matches!(&details.payload, CppFunctionBody::ConstructSuperclass(_)) {
             arg_list.next();
@@ -506,7 +541,7 @@ impl<'a> CppCodeGenerator<'a> {
             CppFunctionBody::AllocUninitialized(ty) => {
                 let namespaced_ty = self.namespaced_name(ty);
                 (
-                    format!("new_appropriately<{}>(1);", namespaced_ty,),
+                    format!("new_appropriately<{}>();", namespaced_ty,),
                     "".to_string(),
                     true,
                 )
@@ -518,22 +553,31 @@ impl<'a> CppCodeGenerator<'a> {
             ),
         };
         if let Some(ret) = &details.return_conversion {
-            underlying_function_call = format!(
-                "return {}",
-                match conversion_direction {
-                    ConversionDirection::RustCallsCpp => ret.cpp_conversion(
-                        &underlying_function_call,
-                        &self.original_name_map,
-                        true
-                    )?,
-                    ConversionDirection::CppCallsCpp => underlying_function_call,
-                    ConversionDirection::CppCallsRust => ret.inverse().cpp_conversion(
-                        &underlying_function_call,
-                        &self.original_name_map,
-                        true
-                    )?,
+            let call_itself = match conversion_direction {
+                ConversionDirection::RustCallsCpp => {
+                    ret.cpp_conversion(&underlying_function_call, &self.original_name_map, true)?
                 }
+                ConversionDirection::CppCallsCpp => Some(underlying_function_call),
+                ConversionDirection::CppCallsRust => ret.inverse().cpp_conversion(
+                    &underlying_function_call,
+                    &self.original_name_map,
+                    true,
+                )?,
+            }
+            .expect(
+                "Expected some conversion type for return value which resulted in a parameter name",
             );
+
+            underlying_function_call = match placement_param {
+                Some(placement_param) => {
+                    let tyname = type_to_cpp(&ret.unwrapped_type, &self.original_name_map)?;
+                    format!(
+                        "new({}) {}(std::move({}))",
+                        placement_param, tyname, call_itself
+                    )
+                }
+                None => format!("return {}", call_itself),
+            };
         };
         if !underlying_function_call.is_empty() {
             underlying_function_call = format!("{};", underlying_function_call);
@@ -584,10 +628,10 @@ impl<'a> CppCodeGenerator<'a> {
 
     fn generate_ctype_typedef(&mut self, tn: &QualifiedName) {
         let cpp_name = tn.to_cpp_name();
-        self.generate_typedef(tn, cpp_name)
+        self.generate_typedef(tn, &cpp_name)
     }
 
-    fn generate_typedef(&mut self, tn: &QualifiedName, definition: String) {
+    fn generate_typedef(&mut self, tn: &QualifiedName, definition: &str) {
         let our_name = tn.get_final_item();
         self.additional_functions.push(AdditionalFunction {
             type_definition: Some(format!("typedef {} {};", definition, our_name)),

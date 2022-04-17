@@ -1,20 +1,18 @@
 // Copyright 2021 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use autocxx_engine::Builder;
 
 use autocxx_integration_tests::{BuilderModifier, BuilderModifierFns, TestBuilderContext};
+
+pub(crate) fn make_cpp17_adder() -> Option<BuilderModifier> {
+    make_clang_arg_adder(&["-std=c++17"])
+}
 
 struct ClangArgAdder(Vec<String>);
 
@@ -24,10 +22,10 @@ pub(crate) fn make_clang_arg_adder(args: &[&str]) -> Option<BuilderModifier> {
 }
 
 impl BuilderModifierFns for ClangArgAdder {
-    fn modify_autocxx_builder(
+    fn modify_autocxx_builder<'a>(
         &self,
-        builder: Builder<TestBuilderContext>,
-    ) -> Builder<TestBuilderContext> {
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
         let refs: Vec<_> = self.0.iter().map(|s| s.as_str()).collect();
         builder.extra_clang_args(&refs)
     }
@@ -43,10 +41,10 @@ impl BuilderModifierFns for ClangArgAdder {
 pub(crate) struct SetSuppressSystemHeaders;
 
 impl BuilderModifierFns for SetSuppressSystemHeaders {
-    fn modify_autocxx_builder(
+    fn modify_autocxx_builder<'a>(
         &self,
-        builder: Builder<TestBuilderContext>,
-    ) -> Builder<TestBuilderContext> {
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
         builder.suppress_system_headers(true)
     }
 }
@@ -54,10 +52,10 @@ impl BuilderModifierFns for SetSuppressSystemHeaders {
 pub(crate) struct EnableAutodiscover;
 
 impl BuilderModifierFns for EnableAutodiscover {
-    fn modify_autocxx_builder(
+    fn modify_autocxx_builder<'a>(
         &self,
-        builder: Builder<TestBuilderContext>,
-    ) -> Builder<TestBuilderContext> {
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
         builder.auto_allowlist(true)
     }
 }
@@ -65,10 +63,10 @@ impl BuilderModifierFns for EnableAutodiscover {
 pub(crate) struct SkipCxxGen;
 
 impl BuilderModifierFns for SkipCxxGen {
-    fn modify_autocxx_builder(
+    fn modify_autocxx_builder<'a>(
         &self,
-        builder: Builder<TestBuilderContext>,
-    ) -> Builder<TestBuilderContext> {
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
         builder.skip_cxx_gen(true)
     }
 }

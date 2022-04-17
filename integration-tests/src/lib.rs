@@ -1,16 +1,10 @@
 // Copyright 2022 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use std::{
     ffi::OsStr,
@@ -21,7 +15,9 @@ use std::{
     sync::Mutex,
 };
 
-use autocxx_engine::{Builder, BuilderContext, BuilderError, RebuildDependencyRecorder, HEADER};
+use autocxx_engine::{
+    Builder, BuilderBuild, BuilderContext, BuilderError, RebuildDependencyRecorder, HEADER,
+};
 use log::info;
 use once_cell::sync::OnceCell;
 use proc_macro2::{Span, TokenStream};
@@ -39,19 +35,53 @@ pub fn doctest(
     rust_code: TokenStream,
     manifest_dir: &OsStr,
 ) -> Result<(), TestError> {
-    let stdout_gag = gag::BufferRedirect::stdout().unwrap();
     std::env::set_var("CARGO_PKG_NAME", "autocxx-integration-tests");
     std::env::set_var("CARGO_MANIFEST_DIR", manifest_dir);
-    let r = do_run_test_manual(cxx_code, header_code, rust_code, None, None);
-    let mut stdout_str = String::new();
-    stdout_gag
-        .into_inner()
-        .read_to_string(&mut stdout_str)
-        .unwrap();
-    if !stdout_str.is_empty() {
-        eprintln!("Stdout from test:\n{}", stdout_str);
+    do_run_test_manual(cxx_code, header_code, rust_code, None, None)
+}
+
+fn configure_builder(b: &mut BuilderBuild) -> &mut BuilderBuild {
+    let target = rust_info::get().target_triple.unwrap();
+    b.host(&target)
+        .target(&target)
+        .opt_level(1)
+        .flag("-std=c++14") // For clang
+        .flag_if_supported("/GX") // Enable C++ exceptions for msvc
+}
+
+/// API to test building pre-generated files.
+pub fn build_from_folder(
+    folder: &Path,
+    main_rs_file: &Path,
+    generated_rs_files: Vec<PathBuf>,
+    cpp_files: &[&str],
+) -> Result<(), TestError> {
+    let target_dir = folder.join("target");
+    std::fs::create_dir(&target_dir).unwrap();
+    let mut b = BuilderBuild::new();
+    for cpp_file in cpp_files.iter() {
+        b.file(folder.join(cpp_file));
     }
-    r
+    configure_builder(&mut b)
+        .out_dir(&target_dir)
+        .include(folder)
+        .include(folder.join("demo"))
+        .try_compile("autocxx-demo")
+        .map_err(TestError::CppBuild)?;
+    // use the trybuild crate to build the Rust file.
+    let r = get_builder().lock().unwrap().build(
+        &target_dir,
+        "autocxx-demo",
+        &folder,
+        &["input.h", "cxx.h"],
+        &main_rs_file,
+        generated_rs_files,
+    );
+    if r.is_err() {
+        return Err(TestError::RsBuild); // details of Rust panic are a bit messy to include, and
+                                        // not important at the moment.
+    }
+    Ok(())
 }
 
 fn get_builder() -> &'static Mutex<LinkableTryBuilder> {
@@ -115,7 +145,11 @@ impl LinkableTryBuilder {
             );
         }
         let temp_path = self.temp_dir.path().to_str().unwrap();
-        std::env::set_var("RUSTFLAGS", format!("-L {}", temp_path));
+        let mut rustflags = format!("-L {}", temp_path);
+        if std::env::var_os("AUTOCXX_ASAN").is_some() {
+            rustflags.push_str(" -Z sanitizer=address -Clinker=clang++ -Clink-arg=-fuse-ld=lld");
+        }
+        std::env::set_var("RUSTFLAGS", rustflags);
         std::env::set_var("AUTOCXX_RS", temp_path);
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();
@@ -171,10 +205,10 @@ pub type CodeChecker = Box<dyn CodeCheckerFns>;
 
 // A trait for objects which can modify builders for testing purposes.
 pub trait BuilderModifierFns {
-    fn modify_autocxx_builder(
+    fn modify_autocxx_builder<'a>(
         &self,
-        builder: Builder<TestBuilderContext>,
-    ) -> Builder<TestBuilderContext>;
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext>;
     fn modify_cc_builder<'a>(&self, builder: &'a mut cc::Build) -> &'a mut cc::Build {
         builder
     }
@@ -255,7 +289,7 @@ pub enum TestError {
     RsFileOpen(std::io::Error),
     RsFileRead(std::io::Error),
     RsFileParse(syn::Error),
-    RsCodeExaminationFail,
+    RsCodeExaminationFail(String),
     CppCodeExaminationFail,
 }
 
@@ -387,8 +421,6 @@ pub fn do_run_test_manual(
         }
     }
 
-    let target = rust_info::get().target_triple.unwrap();
-
     if !cxx_code.is_empty() {
         // Step 4: Write the C++ code snippet to a .cc file, along with a #include
         //         of the header emitted in step 5.
@@ -397,13 +429,7 @@ pub fn do_run_test_manual(
         b.file(cxx_path);
     }
 
-    let b = b
-        .out_dir(&target_dir)
-        .host(&target)
-        .target(&target)
-        .opt_level(1)
-        .flag("-std=c++14") // For clang
-        .flag_if_supported("/GX"); // Enable C++ exceptions for msvc
+    let b = configure_builder(&mut b).out_dir(&target_dir);
     let b = if let Some(builder_modifier) = builder_modifier {
         builder_modifier.modify_cc_builder(b)
     } else {

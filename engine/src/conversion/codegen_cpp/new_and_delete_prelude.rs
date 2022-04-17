@@ -1,16 +1,10 @@
 // Copyright 2022 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use indoc::indoc;
 
@@ -41,10 +35,10 @@ pub(super) static NEW_AND_DELETE_PRELUDE: &str = indoc! {"
     template <typename T> void *new_imp(size_t count, long) {
       return ::operator new(count);
     }
-    template <typename T> T *new_appropriately(size_t count) {
+    template <typename T> T *new_appropriately() {
       // 0 is a better match for the first 'delete_imp' so will match
       // preferentially.
-      return static_cast<T *>(new_imp<T>(count, 0));
+      return static_cast<T *>(new_imp<T>(sizeof(T), 0));
     }
     #endif // AUTOCXX_NEW_AND_DELETE_PRELUDE
 "};

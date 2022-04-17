@@ -1,31 +1,26 @@
 // Copyright 2022 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use std::collections::HashMap;
 
 use crate::{
     conversion::{
         api::{Api, ApiName, StructDetails, TypeKind},
+        apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
         error_reporter::convert_apis,
     },
     types::QualifiedName,
 };
 
-use super::{
-    fun::{FnAnalysis, FnKind, FnPhase, FnPrePhase, PodAndDepAnalysis, TraitMethodKind},
-    pod::PodAnalysis,
+use super::fun::{
+    FnAnalysis, FnKind, FnPhase, FnPrePhase2, PodAndConstructorAnalysis, PodAndDepAnalysis,
+    TraitMethodKind,
 };
 
 /// We've now analyzed all functions (including both implicit and explicit
@@ -33,11 +28,9 @@ use super::{
 /// which will later be used as edges in the garbage collection, because
 /// typically any use of a type will require us to call its copy or move
 /// constructor. The same applies to its alloc/free functions.
-pub(crate) fn decorate_types_with_constructor_deps(
-    apis: Vec<Api<FnPrePhase>>,
-) -> Vec<Api<FnPhase>> {
+pub(crate) fn decorate_types_with_constructor_deps(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPhase> {
     let mut constructors_and_allocators_by_type = find_important_constructors(&apis);
-    let mut results = Vec::new();
+    let mut results = ApiVec::new();
     convert_apis(
         apis,
         &mut results,
@@ -54,9 +47,10 @@ pub(crate) fn decorate_types_with_constructor_deps(
 fn decorate_struct(
     name: ApiName,
     details: Box<StructDetails>,
-    pod: PodAnalysis,
+    fn_struct: PodAndConstructorAnalysis,
     constructors_and_allocators_by_type: &mut HashMap<QualifiedName, Vec<QualifiedName>>,
 ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
+    let pod = fn_struct.pod;
     let is_abstract = matches!(pod.kind, TypeKind::Abstract);
     let constructor_and_allocator_deps = if is_abstract || pod.is_generic {
         Vec::new()
@@ -71,15 +65,16 @@ fn decorate_struct(
         analysis: PodAndDepAnalysis {
             pod,
             constructor_and_allocator_deps,
+            constructors: fn_struct.constructors,
         },
     })))
 }
 
 fn find_important_constructors(
-    apis: &[Api<FnPrePhase>],
+    apis: &ApiVec<FnPrePhase2>,
 ) -> HashMap<QualifiedName, Vec<QualifiedName>> {
     let mut results: HashMap<QualifiedName, Vec<QualifiedName>> = HashMap::new();
-    for api in apis {
+    for api in apis.iter() {
         if let Api::Function {
             name,
             analysis:

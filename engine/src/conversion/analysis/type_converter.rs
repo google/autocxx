@@ -1,20 +1,15 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiName, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
+        apivec::ApiVec,
         codegen_cpp::type_to_cpp::type_to_cpp,
         ConvertError,
     },
@@ -34,11 +29,13 @@ use syn::{
 use super::tdef::TypedefAnalysis;
 
 /// Certain kinds of type may require special handling by callers.
+#[derive(Debug)]
 pub(crate) enum TypeKind {
     Regular,
     Pointer,
     SubclassHolder(Ident),
     Reference,
+    RValueReference,
     MutableReference,
 }
 
@@ -47,7 +44,7 @@ pub(crate) enum TypeKind {
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<QualifiedName>,
-    pub(crate) extra_apis: Vec<UnanalyzedApi>,
+    pub(crate) extra_apis: ApiVec<NullPhase>,
     pub(crate) kind: TypeKind,
 }
 
@@ -55,7 +52,7 @@ impl<T> Annotated<T> {
     fn new(
         ty: T,
         types_encountered: HashSet<QualifiedName>,
-        extra_apis: Vec<UnanalyzedApi>,
+        extra_apis: ApiVec<NullPhase>,
         kind: TypeKind,
     ) -> Self {
         Self {
@@ -76,6 +73,14 @@ impl<T> Annotated<T> {
     }
 }
 
+/// How to interpret a pointer which we encounter during type conversion.
+#[derive(Clone, Copy)]
+pub(crate) enum PointerTreatment {
+    Pointer,
+    Reference,
+    RValueReference,
+}
+
 /// Options when converting a type.
 /// It's possible we could add more policies here in future.
 /// For example, Rust in general allows type names containing
@@ -85,18 +90,15 @@ impl<T> Annotated<T> {
 /// from [TypeConverter] _might_ be used in the [cxx::bridge].
 pub(crate) enum TypeConversionContext {
     CxxInnerType,
-    CxxOuterType { convert_ptrs_to_references: bool },
+    CxxOuterType { pointer_treatment: PointerTreatment },
 }
 
 impl TypeConversionContext {
-    fn convert_ptrs_to_references(&self) -> bool {
-        matches!(
-            self,
-            TypeConversionContext::CxxOuterType {
-                convert_ptrs_to_references: true,
-                ..
-            }
-        )
+    fn pointer_treatment(&self) -> PointerTreatment {
+        match self {
+            TypeConversionContext::CxxInnerType => PointerTreatment::Pointer,
+            TypeConversionContext::CxxOuterType { pointer_treatment } => *pointer_treatment,
+        }
     }
     fn allow_instantiation_of_forward_declaration(&self) -> bool {
         matches!(self, TypeConversionContext::CxxInnerType)
@@ -120,7 +122,7 @@ pub(crate) struct TypeConverter<'a> {
 }
 
 impl<'a> TypeConverter<'a> {
-    pub(crate) fn new<A: AnalysisPhase>(config: &'a IncludeCppConfig, apis: &[Api<A>]) -> Self
+    pub(crate) fn new<A: AnalysisPhase>(config: &'a IncludeCppConfig, apis: &ApiVec<A>) -> Self
     where
         A::TypedefAnalysis: TypedefTarget,
     {
@@ -189,21 +191,18 @@ impl<'a> TypeConverter<'a> {
                     TypeKind::Reference,
                 )
             }
-            Type::Ptr(ptr) if ctx.convert_ptrs_to_references() => {
-                self.convert_ptr_to_reference(ptr, ns)?
-            }
-            Type::Ptr(mut ptr) => {
-                crate::known_types::ensure_pointee_is_valid(&ptr)?;
+            Type::Array(mut arr) => {
                 let innerty =
-                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
-                ptr.elem = innerty.ty;
+                    self.convert_type(*arr.elem, ns, &TypeConversionContext::CxxInnerType)?;
+                arr.elem = Box::new(innerty.ty);
                 Annotated::new(
-                    Type::Ptr(ptr),
+                    Type::Array(arr),
                     innerty.types_encountered,
                     innerty.extra_apis,
-                    TypeKind::Pointer,
+                    TypeKind::Regular,
                 )
             }
+            Type::Ptr(ptr) => self.convert_ptr(ptr, ns, ctx.pointer_treatment())?,
             _ => return Err(ConvertError::UnknownType(ty.to_token_stream().to_string())),
         };
         Ok(result)
@@ -261,7 +260,7 @@ impl<'a> TypeConverter<'a> {
                 return Ok(Annotated::new(
                     Type::Ptr(resolved_tp.clone()),
                     deps,
-                    Vec::new(),
+                    ApiVec::new(),
                     TypeKind::Pointer,
                 ))
             }
@@ -269,7 +268,7 @@ impl<'a> TypeConverter<'a> {
                 return Ok(Annotated::new(
                     other.clone(),
                     deps,
-                    Vec::new(),
+                    ApiVec::new(),
                     TypeKind::Regular,
                 ))
             }
@@ -290,7 +289,7 @@ impl<'a> TypeConverter<'a> {
             None => typ,
         };
 
-        let mut extra_apis = Vec::new();
+        let mut extra_apis = ApiVec::new();
         let mut kind = TypeKind::Regular;
 
         // Finally let's see if it's generic.
@@ -343,7 +342,7 @@ impl<'a> TypeConverter<'a> {
     {
         let mut new_pun = Punctuated::new();
         let mut types_encountered = HashSet::new();
-        let mut extra_apis = Vec::new();
+        let mut extra_apis = ApiVec::new();
         for arg in pun.into_iter() {
             new_pun.push(match arg {
                 GenericArgument::Type(t) => {
@@ -386,31 +385,61 @@ impl<'a> TypeConverter<'a> {
         }
     }
 
-    fn convert_ptr_to_reference(
+    fn convert_ptr(
         &mut self,
-        ptr: TypePtr,
+        mut ptr: TypePtr,
         ns: &Namespace,
+        pointer_treatment: PointerTreatment,
     ) -> Result<Annotated<Type>, ConvertError> {
-        let mutability = ptr.mutability;
-        let elem = self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
-        // TODO - in the future, we should check if this is a rust::Str and throw
-        // a wobbler if not. rust::Str should only be seen _by value_ in C++
-        // headers; it manifests as &str in Rust but on the C++ side it must
-        // be a plain value. We should detect and abort.
-        let mut outer = elem.map(|elem| match mutability {
-            Some(_) => Type::Path(parse_quote! {
-                ::std::pin::Pin < & #mutability #elem >
-            }),
-            None => Type::Reference(parse_quote! {
-                & #elem
-            }),
-        });
-        outer.kind = if mutability.is_some() {
-            TypeKind::MutableReference
-        } else {
-            TypeKind::Reference
-        };
-        Ok(outer)
+        match pointer_treatment {
+            PointerTreatment::Pointer => {
+                crate::known_types::ensure_pointee_is_valid(&ptr)?;
+                let innerty =
+                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
+                ptr.elem = innerty.ty;
+                Ok(Annotated::new(
+                    Type::Ptr(ptr),
+                    innerty.types_encountered,
+                    innerty.extra_apis,
+                    TypeKind::Pointer,
+                ))
+            }
+            PointerTreatment::Reference => {
+                let mutability = ptr.mutability;
+                let elem =
+                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
+                // TODO - in the future, we should check if this is a rust::Str and throw
+                // a wobbler if not. rust::Str should only be seen _by value_ in C++
+                // headers; it manifests as &str in Rust but on the C++ side it must
+                // be a plain value. We should detect and abort.
+                let mut outer = elem.map(|elem| match mutability {
+                    Some(_) => Type::Path(parse_quote! {
+                        ::std::pin::Pin < & #mutability #elem >
+                    }),
+                    None => Type::Reference(parse_quote! {
+                        & #elem
+                    }),
+                });
+                outer.kind = if mutability.is_some() {
+                    TypeKind::MutableReference
+                } else {
+                    TypeKind::Reference
+                };
+                Ok(outer)
+            }
+            PointerTreatment::RValueReference => {
+                crate::known_types::ensure_pointee_is_valid(&ptr)?;
+                let innerty =
+                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::CxxInnerType)?;
+                ptr.elem = innerty.ty;
+                Ok(Annotated::new(
+                    Type::Ptr(ptr),
+                    innerty.types_encountered,
+                    innerty.extra_apis,
+                    TypeKind::RValueReference,
+                ))
+            }
+        }
     }
 
     fn get_templated_typename(
@@ -449,8 +478,8 @@ impl<'a> TypeConverter<'a> {
                 };
                 let api = UnanalyzedApi::ConcreteType {
                     name: ApiName::new_in_root_namespace(make_ident(&synthetic_ident)),
-                    rs_definition: Box::new(rs_definition.clone()),
                     cpp_definition: cpp_definition.clone(),
+                    rs_definition: Some(Box::new(rs_definition.clone())),
                 };
                 self.concrete_templates
                     .insert(cpp_definition, api.name().clone());
@@ -524,7 +553,7 @@ impl<'a> TypeConverter<'a> {
         }
     }
 
-    fn find_typedefs<A: AnalysisPhase>(apis: &[Api<A>]) -> HashMap<QualifiedName, Type>
+    fn find_typedefs<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashMap<QualifiedName, Type>
     where
         A::TypedefAnalysis: TypedefTarget,
     {
@@ -540,7 +569,7 @@ impl<'a> TypeConverter<'a> {
     }
 
     fn find_concrete_templates<A: AnalysisPhase>(
-        apis: &[Api<A>],
+        apis: &ApiVec<A>,
     ) -> HashMap<String, QualifiedName> {
         apis.iter()
             .filter_map(|api| match &api {
@@ -552,7 +581,7 @@ impl<'a> TypeConverter<'a> {
             .collect()
     }
 
-    fn find_incomplete_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+    fn find_incomplete_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::ForwardDeclaration { .. } => Some(api.name()),
@@ -602,7 +631,7 @@ impl TypedefTarget for TypedefAnalysis {
     }
 }
 
-pub(crate) fn find_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<QualifiedName> {
+pub(crate) fn find_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
     apis.iter()
         .filter_map(|api| match api {
             Api::ForwardDeclaration { .. }
@@ -611,6 +640,7 @@ pub(crate) fn find_types<A: AnalysisPhase>(apis: &[Api<A>]) -> HashSet<Qualified
             | Api::Enum { .. }
             | Api::Struct { .. }
             | Api::Subclass { .. }
+            | Api::ExternCppType { .. }
             | Api::RustType { .. } => Some(api.name()),
             Api::StringConstructor { .. }
             | Api::Function { .. }

@@ -1,16 +1,10 @@
 // Copyright 2022 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use itertools::Itertools;
 
@@ -20,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    fun::{FnPhase, FnPrePhase, PodAndDepAnalysis},
+    fun::{FnPhase, FnPrePhase1, PodAndDepAnalysis},
     pod::PodAnalysis,
     tdef::TypedefAnalysis,
 };
@@ -34,7 +28,7 @@ pub(crate) trait HasDependencies {
     }
 }
 
-impl HasDependencies for Api<FnPrePhase> {
+impl HasDependencies for Api<FnPrePhase1> {
     fn deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
         match self {
             Api::Typedef {
@@ -46,17 +40,19 @@ impl HasDependencies for Api<FnPrePhase> {
                 analysis:
                     PodAnalysis {
                         kind: TypeKind::Pod,
-                        field_types,
+                        bases,
+                        field_deps,
                         ..
                     },
                 ..
-            } => Box::new(field_types.iter()),
+            } => Box::new(field_deps.iter().chain(bases.iter())),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter()),
             Api::Subclass {
                 name: _,
                 superclass,
             } => Box::new(std::iter::once(superclass)),
             Api::RustSubclassFn { details, .. } => Box::new(details.dependencies.iter()),
+            Api::RustFn { receiver, .. } => Box::new(receiver.iter()),
             _ => Box::new(std::iter::empty()),
         }
     }
@@ -81,15 +77,18 @@ impl HasDependencies for Api<FnPhase> {
                         pod:
                             PodAnalysis {
                                 kind: TypeKind::Pod,
-                                field_types,
+                                bases,
+                                field_deps,
                                 ..
                             },
                         constructor_and_allocator_deps,
+                        ..
                     },
                 ..
             } => Box::new(
-                field_types
+                field_deps
                     .iter()
+                    .chain(bases.iter())
                     .chain(constructor_and_allocator_deps.iter()),
             ),
             Api::Struct {
@@ -106,6 +105,7 @@ impl HasDependencies for Api<FnPhase> {
                 superclass,
             } => Box::new(std::iter::once(superclass)),
             Api::RustSubclassFn { details, .. } => Box::new(details.dependencies.iter()),
+            Api::RustFn { receiver, .. } => Box::new(receiver.iter()),
             _ => Box::new(std::iter::empty()),
         }
     }
