@@ -8458,6 +8458,25 @@ fn test_implicit_constructor_with_typedef_field() {
 }
 
 #[test]
+fn test_implicit_constructor_with_array_field() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        uint32_t a[3];
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut stack_obj = ffi::A::new();
+        }
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+
+#[test]
 fn test_implicit_constructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
