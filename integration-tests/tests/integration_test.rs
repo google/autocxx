@@ -8469,12 +8469,11 @@ fn test_implicit_constructor_with_array_field() {
     "};
     let rs = quote! {
         moveit! {
-            let mut stack_obj = ffi::A::new();
+            let mut _stack_obj = ffi::A::new();
         }
     };
     run_test("", hdr, rs, &["A"], &[]);
 }
-
 
 #[test]
 fn test_implicit_constructor_moveit() {
