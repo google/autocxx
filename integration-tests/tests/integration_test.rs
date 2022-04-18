@@ -3387,7 +3387,7 @@ fn test_associated_type_templated_typedef() {
 }
 
 #[test]
-fn test_associated_type_templated_typedef_by_value() {
+fn test_associated_type_templated_typedef_by_value_regular() {
     let hdr = indoc! {"
         #include <string>
         #include <cstdint>
@@ -3431,8 +3431,14 @@ fn test_associated_type_templated_typedef_by_value_forward_declaration() {
 
         typedef BasicStringPiece<std::string> StringPiece;
 
-        StringPiece give_string_piece();
-        void take_string_piece(StringPiece string_piece);
+        struct Container {
+            StringPiece give_string_piece() const;
+            void take_string_piece(StringPiece string_piece) const;
+            const StringPiece& get_string_piece() const;
+            uint32_t b;
+        };
+
+        inline void take_string_piece_by_ref(const StringPiece& string_piece) {}
     "};
     let cpp = indoc! {"
         template <typename STRING_TYPE> class BasicStringPiece {
@@ -3443,19 +3449,29 @@ fn test_associated_type_templated_typedef_by_value_forward_declaration() {
             size_type length_;
         };
 
-        StringPiece give_string_piece() {
+        StringPiece Container::give_string_piece() const {
             StringPiece s;
             return s;
         }
-        void take_string_piece(StringPiece string_piece) {}
+        void Container::take_string_piece(StringPiece string_piece) const {}
+
+        StringPiece a;
+
+        const StringPiece& Container::get_string_piece() const {
+            return a;
+        }
     "};
-    // As this template is forward declared we don't expect to generate any functions.
-    let rs = quote! {};
+    // As this template is forward declared we shouldn't be able to pass it by
+    // value, but we still want to be able to use it by reference.
+    let rs = quote! {
+        let cont = ffi::Container::new().within_box();
+        ffi::take_string_piece_by_ref(cont.as_ref().get_string_piece());
+    };
     run_test(
         cpp,
         hdr,
         rs,
-        &["take_string_piece", "give_string_piece"],
+        &["take_string_piece_by_ref", "Container"],
         &[],
     );
 }

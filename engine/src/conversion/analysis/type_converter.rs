@@ -584,7 +584,11 @@ impl<'a> TypeConverter<'a> {
     fn find_incomplete_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
-                Api::ForwardDeclaration { .. } => Some(api.name()),
+                Api::ForwardDeclaration { .. }
+                | Api::OpaqueTypedef {
+                    forward_declaration: true,
+                    ..
+                } => Some(api.name()),
                 _ => None,
             })
             .cloned()

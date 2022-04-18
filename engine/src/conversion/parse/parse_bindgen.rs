@@ -208,7 +208,8 @@ impl<'a> ParseBindgen<'a> {
                 let api = if ns.is_empty() && self.config.is_rust_type(&s.ident) {
                     None
                 } else if is_forward_declaration {
-                    Some(UnanalyzedApi::ForwardDeclaration { name })
+                    let err = annotations.check_for_fatal_attrs(&s.ident).err();
+                    Some(UnanalyzedApi::ForwardDeclaration { name, err })
                 } else {
                     let has_rvalue_reference_fields = s.fields.iter().any(|f| {
                         BindgenSemanticAttributes::new(&f.attrs).has_attr("rvalue_reference")
@@ -347,7 +348,7 @@ impl<'a> ParseBindgen<'a> {
     fn spot_forward_declaration(s: &Fields) -> bool {
         s.iter()
             .filter_map(|f| f.ident.as_ref())
-            .any(|id| id == "_unused")
+            .any(|id| id == "_unused" || id == "_address")
     }
 
     fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertError> {

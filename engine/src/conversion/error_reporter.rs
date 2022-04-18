@@ -99,12 +99,19 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                 rs_definition,
                 cpp_definition,
             }))),
-            Api::ForwardDeclaration { name } => {
-                Ok(Box::new(std::iter::once(Api::ForwardDeclaration { name })))
+            Api::ForwardDeclaration { name, err } => {
+                Ok(Box::new(std::iter::once(Api::ForwardDeclaration {
+                    name,
+                    err,
+                })))
             }
-            Api::OpaqueTypedef { name } => {
-                Ok(Box::new(std::iter::once(Api::OpaqueTypedef { name })))
-            }
+            Api::OpaqueTypedef {
+                name,
+                forward_declaration,
+            } => Ok(Box::new(std::iter::once(Api::OpaqueTypedef {
+                name,
+                forward_declaration,
+            }))),
             Api::StringConstructor { name } => {
                 Ok(Box::new(std::iter::once(Api::StringConstructor { name })))
             }
