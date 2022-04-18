@@ -3450,8 +3450,7 @@ fn test_associated_type_templated_typedef_by_value_forward_declaration() {
         void take_string_piece(StringPiece string_piece) {}
     "};
     // As this template is forward declared we don't expect to generate any functions.
-    let rs = quote! {
-    };
+    let rs = quote! {};
     run_test(
         cpp,
         hdr,

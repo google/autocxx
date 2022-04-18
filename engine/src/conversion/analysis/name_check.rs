@@ -34,7 +34,8 @@ pub(crate) fn check_names(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
     let mut intermediate = ApiVec::new();
     convert_item_apis(apis, &mut intermediate, |api| match api {
         Api::Typedef { ref name, .. }
-        | Api::OpaqueType { ref name, .. }
+        | Api::ForwardDeclaration { ref name, .. }
+        | Api::OpaqueTypedef { ref name, .. }
         | Api::Const { ref name, .. }
         | Api::Enum { ref name, .. }
         | Api::Struct { ref name, .. } => {

@@ -584,7 +584,7 @@ impl<'a> TypeConverter<'a> {
     fn find_incomplete_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
-                Api::OpaqueType { .. } => Some(api.name()),
+                Api::ForwardDeclaration { .. } => Some(api.name()),
                 _ => None,
             })
             .cloned()
@@ -634,7 +634,8 @@ impl TypedefTarget for TypedefAnalysis {
 pub(crate) fn find_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
     apis.iter()
         .filter_map(|api| match api {
-            Api::OpaqueType { .. }
+            Api::ForwardDeclaration { .. }
+            | Api::OpaqueTypedef { .. }
             | Api::ConcreteType { .. }
             | Api::Typedef { .. }
             | Api::Enum { .. }

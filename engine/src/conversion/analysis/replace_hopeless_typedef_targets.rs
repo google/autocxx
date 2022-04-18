@@ -31,7 +31,7 @@ pub(crate) fn replace_hopeless_typedef_targets(apis: ApiVec<PodPhase>) -> ApiVec
             Api::Typedef {
                 analysis: TypedefAnalysis { ref deps, .. },
                 ..
-            } if !ignored_types.is_disjoint(deps) => Api::OpaqueType {
+            } if !ignored_types.is_disjoint(deps) => Api::OpaqueTypedef {
                 name: api.name_info().clone(),
             },
             _ => api,
