@@ -75,9 +75,10 @@ jobs:
           # non-linux failures https://github.com/google/autocxx/issues/819
           # beta failing tests https://github.com/google/autocxx/issues/818
           RUSTFLAGS: ${{matrix.name == 'Windows (msvc)' && '--cfg skip_windows_msvc_failing_tests' || ''}} ${{matrix.name == 'Windows (gnu)' && '--cfg skip_windows_gnu_failing_tests' || ''}}
+          RUST_LOG: autocxx_engine=info
         id: testsuite
         shell: bash
-      - run: cargo test --workspace ${{steps.testsuite.outputs.exclude}}
+      - run: cargo test --workspace ${{steps.testsuite.outputs.exclude}} test_bitset
 
   examples:
     name: Examples ${{matrix.name || format('Rust {0}', matrix.rust)}}
