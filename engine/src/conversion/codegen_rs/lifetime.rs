@@ -11,9 +11,10 @@ use crate::{
     },
     types::QualifiedName,
 };
+use indexmap::set::IndexSet as HashSet;
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
-use std::{borrow::Cow, collections::HashSet};
+use std::borrow::Cow;
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, GenericArgument, PatType, Path,
     PathSegment, ReturnType, Type, TypePath, TypeReference,

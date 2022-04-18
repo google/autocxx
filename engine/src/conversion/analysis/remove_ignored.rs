@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashSet;
+use indexmap::set::IndexSet as HashSet;
 
 use super::deps::HasDependencies;
 use super::fun::{FnAnalysis, FnKind, FnPhase};
@@ -38,7 +38,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: ApiVec<FnPhase>) -> Ap
             .map(|api| {
                 let ignored_dependents: HashSet<_> = api
                     .deps()
-                    .filter(|dep| ignored_items.contains(dep))
+                    .filter(|dep| ignored_items.contains(*dep))
                     .cloned()
                     .collect();
                 if !ignored_dependents.is_empty() {
@@ -47,7 +47,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: ApiVec<FnPhase>) -> Ap
                     create_ignore_item(api, ConvertError::IgnoredDependent(ignored_dependents))
                 } else {
                     let mut missing_deps = api.deps().filter(|dep| {
-                        !valid_types.contains(dep) && !known_types().is_known_type(dep)
+                        !valid_types.contains(*dep) && !known_types().is_known_type(dep)
                     });
                     let first = missing_deps.next();
                     std::mem::drop(missing_deps);

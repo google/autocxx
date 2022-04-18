@@ -31,7 +31,8 @@ use crate::{
     known_types::known_types,
     types::validate_ident_ok_for_rust,
 };
-use std::collections::{HashMap, HashSet};
+use indexmap::map::IndexMap as HashMap;
+use indexmap::set::IndexSet as HashSet;
 
 use autocxx_parser::{ExternCppType, IncludeCppConfig, UnsafePolicy};
 use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
@@ -1222,7 +1223,7 @@ impl<'a> FnAnalyzer<'a> {
                 })
         };
         let mut deps = params_deps;
-        deps.extend(return_analysis.deps.drain());
+        deps.extend(return_analysis.deps.drain(..));
 
         // Sometimes, the return type will actually be a value type
         // for which we instead want to _pass_ a pointer into which the value

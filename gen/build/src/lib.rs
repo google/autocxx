@@ -9,7 +9,8 @@
 #![forbid(unsafe_code)]
 
 use autocxx_engine::{BuilderContext, RebuildDependencyRecorder};
-use std::{collections::HashSet, io::Write, sync::Mutex};
+use indexmap::set::IndexSet as HashSet;
+use std::{io::Write, sync::Mutex};
 
 pub type Builder = autocxx_engine::Builder<'static, CargoBuilderContext>;
 
