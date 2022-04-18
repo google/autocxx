@@ -8,7 +8,7 @@
 
 use std::collections::{hash_map, HashMap, HashSet};
 
-use syn::Type;
+use syn::{Type, TypeArray};
 
 use crate::{
     conversion::{
@@ -217,6 +217,12 @@ pub(super) fn find_constructors_present(
                 .filter_map(|field_info| match field_info.type_kind {
                     TypeKind::Regular | TypeKind::SubclassHolder(_) => match field_info.ty {
                         Type::Path(ref qn) => get_items_found(&QualifiedName::from_type_path(qn)),
+                        Type::Array(TypeArray { ref elem, .. }) => match elem.as_ref() {
+                            Type::Path(ref qn) => {
+                                get_items_found(&QualifiedName::from_type_path(qn))
+                            }
+                            _ => None,
+                        },
                         _ => None,
                     },
                     // TODO: https://github.com/google/autocxx/issues/865 Figure out how to
