@@ -47,6 +47,8 @@ fn configure_builder(b: &mut BuilderBuild) -> &mut BuilderBuild {
         .opt_level(1)
         .flag("-std=c++14") // For clang
         .flag_if_supported("/GX") // Enable C++ exceptions for msvc
+        .flag_if_supported("-Wall")
+        .flag_if_supported("-Werror")
 }
 
 /// API to test building pre-generated files.

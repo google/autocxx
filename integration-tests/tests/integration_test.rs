@@ -1604,19 +1604,17 @@ fn test_issue_931() {
         struct __cow_string {
           __cow_string();
         };
-        namespace {
         class b {
+        public:
           __cow_string c;
         };
-        } // namespace
         class j {
+        public:
           b d;
         };
         template <typename> class e;
         } // namespace a
-        namespace {
         template <typename> struct f {};
-        } // namespace
         namespace llvm {
         template <class> class g {
           union {
@@ -1624,6 +1622,7 @@ fn test_issue_931() {
           };
         };
         class MemoryBuffer {
+        public:
           g<a::e<MemoryBuffer>> i;
         };
         } // namespace llvm
@@ -3302,6 +3301,7 @@ fn test_associated_type_problem() {
         template <typename> class b {};
         } // namespace a
         class bl {
+        public:
           a::b<bl> bm;
         };
         struct B {
@@ -3377,7 +3377,7 @@ fn test_associated_type_templated_typedef() {
             StringPiece sp;
         };
 
-        inline void take_string_piece(const StringPiece& string_piece) {}
+        inline void take_string_piece(const StringPiece&) {}
     "};
     let rs = quote! {
         let sp = ffi::Container::new().within_box();
@@ -3394,6 +3394,7 @@ fn test_associated_type_templated_typedef_by_value_regular() {
 
         template <typename STRING_TYPE> class BasicStringPiece {
         public:
+            BasicStringPiece() : ptr_(nullptr), length_(0) {}
             typedef size_t size_type;
             typedef typename STRING_TYPE::value_type value_type;
             const value_type* ptr_;
@@ -3406,7 +3407,7 @@ fn test_associated_type_templated_typedef_by_value_regular() {
             StringPiece s;
             return s;
         }
-        inline void take_string_piece(StringPiece string_piece) {}
+        inline void take_string_piece(StringPiece) {}
     "};
     let rs = quote! {
         let sp = ffi::give_string_piece();
@@ -3438,11 +3439,12 @@ fn test_associated_type_templated_typedef_by_value_forward_declaration() {
             uint32_t b;
         };
 
-        inline void take_string_piece_by_ref(const StringPiece& string_piece) {}
+        inline void take_string_piece_by_ref(const StringPiece&) {}
     "};
     let cpp = indoc! {"
         template <typename STRING_TYPE> class BasicStringPiece {
         public:
+            BasicStringPiece() : ptr_(nullptr), length_(0) {}
             typedef size_t size_type;
             typedef typename STRING_TYPE::value_type value_type;
             const value_type* ptr_;
@@ -3453,7 +3455,7 @@ fn test_associated_type_templated_typedef_by_value_forward_declaration() {
             StringPiece s;
             return s;
         }
-        void Container::take_string_piece(StringPiece string_piece) const {}
+        void Container::take_string_piece(StringPiece) const {}
 
         StringPiece a;
 
@@ -4003,7 +4005,7 @@ fn test_forward_declaration() {
         #include <memory>
         struct A;
         struct B {
-            B() {}
+            B() : a(0) {}
             uint32_t a;
             void daft(const A&) const {}
             static B daft3(const A&) { B b; return b; }
@@ -4015,6 +4017,7 @@ fn test_forward_declaration() {
     "};
     let cpp = indoc! {"
         struct A {
+            A() : a(0) {}
             uint32_t a;
         };
         A* get_a() {
@@ -4963,7 +4966,7 @@ fn test_double_underscores_ignored() {
     };
     struct B {
         B() :a(1) {}
-        uint32_t take_foo(__FOO a) const {
+        uint32_t take_foo(__FOO) const {
             return 3;
         }
         void do__something() const { }
@@ -5060,9 +5063,9 @@ fn test_issue_264() {
     let hdr = indoc! {"
     namespace a {
         typedef int b;
-        inline namespace c {}
+        //inline namespace c {}
         template <typename> class aa;
-        namespace c {
+        inline namespace c {
         template <typename d, typename = d, typename = aa<d>> class e;
         }
         typedef e<char> f;
@@ -5091,7 +5094,7 @@ fn test_issue_264() {
         template <typename ad> struct w : a::u<ad> {};
         } // namespace q
         namespace a {
-        namespace c {
+        inline namespace c {
         template <typename, typename, typename ad> class e {
           typedef q::w<ad> s;
         public:
@@ -5103,6 +5106,7 @@ fn test_issue_264() {
         namespace ah {
         typedef a::f::ab t;
         class ai {
+        public:
           t aj;
         };
         class al;
@@ -5117,9 +5121,11 @@ fn test_issue_264() {
           al aq();
         };
         class ar {
+        public:
           am::an as;
         };
         class al {
+        public:
           ar at;
         };
         struct au {
@@ -5129,15 +5135,25 @@ fn test_issue_264() {
         } // namespace ag
         namespace operations_research {
         class aw {
+        public:
           ag::ah::au ax;
         };
         class Solver {
+        public:
           aw ay;
         };
         } // namespace operations_research
     "};
     let rs = quote! {};
-    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["operations_research::Solver"], &[], None),
+        make_cpp17_adder(),
+        None,
+        None,
+    );
 }
 
 #[test]
@@ -5173,6 +5189,7 @@ fn test_get_pure_virtual() {
         #include <cstdint>
         class A {
         public:
+            virtual ~A() {}
             virtual uint32_t get_val() const = 0;
         };
         class B : public A {
@@ -5198,7 +5215,8 @@ fn test_abstract_class_no_make_unique() {
     let hdr = indoc! {"
         class A {
         public:
-            A();
+            A() {}
+            virtual ~A() {}
             virtual void foo() const = 0;
         };
     "};
@@ -5212,6 +5230,7 @@ fn test_derived_abstract_class_no_make_unique() {
         class A {
         public:
             A();
+            virtual ~A() {}
             virtual void foo() const = 0;
         };
 
@@ -5229,7 +5248,8 @@ fn test_recursive_derived_abstract_class_no_make_unique() {
     let hdr = indoc! {"
         class A {
         public:
-            A() {};
+            A() {}
+            virtual ~A() {}
             virtual void foo() const = 0;
         };
 
@@ -5253,6 +5273,7 @@ fn test_derived_abstract_class_with_no_allowlisting_no_make_unique() {
         class A {
         public:
             A();
+            virtual ~A() {}
             virtual void foo() const = 0;
         };
 
@@ -5867,7 +5888,7 @@ fn test_double_destruction() {
 #[test]
 fn test_keyword_function() {
     let hdr = indoc! {"
-        inline void move(int a) {};
+        inline void move(int) {};
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["move_"], &[]);
@@ -6061,7 +6082,7 @@ fn test_stringview() {
         #include <string_view>
         #include <string>
         void take_string_view(std::string_view) {}
-        std::string_view return_string_view(std::string a) { return std::string_view(a); }
+        std::string_view return_string_view(const std::string& a) { return std::string_view(a); }
     "};
     let rs = quote! {};
     run_test_ex(
@@ -6130,7 +6151,9 @@ fn test_bitset() {
         public:
             typedef size_t              __storage_type;
             __storage_type __first_[_N_words];
-            inline bool all() {}
+            inline bool all() {
+                return false;
+            }
         };
 
         template <size_t _Size>
@@ -6266,7 +6289,7 @@ fn test_take_nonpod_rvalue_from_up() {
         struct A {
             std::string a;
         };
-        inline void take_a(A&& a) {};
+        inline void take_a(A&&) {};
     "};
     let rs = quote! {
         let a = ffi::A::new().within_unique_ptr();
@@ -6285,7 +6308,7 @@ fn test_take_nonpod_rvalue_from_stack() {
         struct A {
             std::string a;
         };
-        inline void take_a(A&& a) {};
+        inline void take_a(A&&) {};
     "};
     let rs = quote! {
         moveit! { let a = ffi::A::new() };
@@ -6564,9 +6587,10 @@ fn test_extern_cpp_type_cxx_bridge() {
     let hdr = indoc! {"
         #include <cstdint>
         struct A {
+            A() : a(0) {}
             int a;
         };
-        inline void handle_a(const A& a) {
+        inline void handle_a(const A&) {
         }
         inline A create_a() {
             A a;
@@ -6604,12 +6628,13 @@ fn test_extern_cpp_type_two_include_cpp() {
     let hdr = indoc! {"
         #include <cstdint>
         struct A {
+            A() : a(0) {}
             int a;
         };
         enum B {
             VARIANT,
         };
-        inline void handle_a(const A& a) {
+        inline void handle_a(const A&) {
         }
         inline A create_a(B) {
             A a;
@@ -8711,14 +8736,14 @@ fn test_pass_by_value_moveit() {
         uint32_t a;
         std::string so_we_are_non_trivial;
     };
-    inline void take_a(A a) {}
+    inline void take_a(A) {}
     struct B {
         B() {}
         B(const B&) {}
         B(B&&) {}
         std::string so_we_are_non_trivial;
     };
-    inline void take_b(B b) {}
+    inline void take_b(B) {}
     "};
     let rs = quote! {
         moveit! {
@@ -9118,6 +9143,7 @@ fn test_no_constructor_pv() {
     #include <stdint.h>
     class A {
     public:
+        virtual ~A() {}
         virtual void foo() = 0;
     };
     "};
@@ -9210,6 +9236,7 @@ fn test_abstract_private() {
 fn test_abstract_issue_979() {
     let hdr = indoc! {"
     class Test {
+        virtual ~Test() {}
         virtual void TestBody() = 0;
     };
     "};

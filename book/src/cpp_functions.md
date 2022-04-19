@@ -11,9 +11,8 @@ is absorbed and destroyed - or C++ semantics where the parameter is copied.
 ```rust,ignore,autocxx,hidecpp
 autocxx_integration_tests::doctest(
 "
-#include <strstream>
-Goat::Goat() {}
-void feed_goat(Goat g) {}
+Goat::Goat() : horn_count(0) {}
+void feed_goat(Goat) {}
 ",
 "#include <cstdint>
 
@@ -56,9 +55,8 @@ If you're keeping non-POD values on the Rust stack, you need to explicitly use [
 ```rust,ignore,autocxx,hidecpp
 autocxx_integration_tests::doctest(
 "
-#include <strstream>
-Blimp::Blimp() {}
-void burst(Blimp g) {}
+Blimp::Blimp() : tons_of_helium(3) {}
+void burst(Blimp) {}
 ",
 "#include <cstdint>
 
@@ -98,9 +96,8 @@ the object you're passing in.
 ```rust,ignore,autocxx,hidecpp
 autocxx_integration_tests::doctest(
 "
-#include <strstream>
 Cake::Cake() {}
-void eat(Cake&& c) {}
+void eat(Cake&&) {}
 ",
 "#include <cstdint>
 
