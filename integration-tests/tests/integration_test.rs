@@ -3394,7 +3394,7 @@ fn test_associated_type_templated_typedef_by_value_regular() {
 
         template <typename STRING_TYPE> class BasicStringPiece {
         public:
-            BasicStringPiece() {}
+            BasicStringPiece() : ptr_(nullptr), length_(0) {}
             typedef size_t size_type;
             typedef typename STRING_TYPE::value_type value_type;
             const value_type* ptr_;
@@ -3444,7 +3444,7 @@ fn test_associated_type_templated_typedef_by_value_forward_declaration() {
     let cpp = indoc! {"
         template <typename STRING_TYPE> class BasicStringPiece {
         public:
-            BasicStringPiece() {}
+            BasicStringPiece() : ptr_(nullptr), length_(0) {}
             typedef size_t size_type;
             typedef typename STRING_TYPE::value_type value_type;
             const value_type* ptr_;
