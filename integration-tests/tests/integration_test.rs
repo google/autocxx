@@ -4017,6 +4017,7 @@ fn test_forward_declaration() {
     "};
     let cpp = indoc! {"
         struct A {
+            A() : a(0) {}
             uint32_t a;
         };
         A* get_a() {
@@ -6586,7 +6587,7 @@ fn test_extern_cpp_type_cxx_bridge() {
     let hdr = indoc! {"
         #include <cstdint>
         struct A {
-            A() {}
+            A() : a(0) {}
             int a;
         };
         inline void handle_a(const A&) {
@@ -6627,7 +6628,7 @@ fn test_extern_cpp_type_two_include_cpp() {
     let hdr = indoc! {"
         #include <cstdint>
         struct A {
-            A() {}
+            A() : a(0) {}
             int a;
         };
         enum B {

@@ -56,12 +56,12 @@ A more complex example:
 ```rust,ignore,autocxx,hidecpp
 autocxx_integration_tests::doctest(
 "
-#include <strstream>
+#include <sstream>
 void Goat::add_a_horn() { horns++; }
 Goat::Goat() : horns(0) {}
 Goat::~Goat() {}
 std::string Goat::describe() const {
-    std::ostrstream oss;
+    std::ostringstream oss;
     std::string plural = horns == 1 ? \"\" : \"s\";
     oss << \"This goat has \" << horns << \" horn\" << plural << \".\";
     return oss.str();
