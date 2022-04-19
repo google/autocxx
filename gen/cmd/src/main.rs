@@ -9,20 +9,22 @@
 #![forbid(unsafe_code)]
 
 mod depfile;
+mod output;
+mod output_regular;
+mod output_single;
 
 use autocxx_engine::{parse_file, HeaderNamer, RebuildDependencyRecorder};
 use clap::{crate_authors, crate_version, App, Arg, ArgGroup};
 use depfile::Depfile;
 use miette::IntoDiagnostic;
+use output::Output;
+use output_regular::RegularOutput;
+use output_single::SingleFileOutput;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::cell::RefCell;
-use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::{cell::Cell, fs::File, path::Path};
-
-pub(crate) static BLANK: &str = "// Blank autocxx placeholder";
 
 static LONG_HELP: &str = "
 Command line utility to expand the Rust 'autocxx' include_cpp! directive.
@@ -61,21 +63,8 @@ a) set AUTOCXX_RS when using autocxx_macro
 b) build all *.cc files produced by this tool.
 
 If your build system requires each build rule to make precise filenames
-known in advance, then you will need to:
-a) Use `--generate-exact <N> --gen-rs-complete`
-b) Teach your build system that the C++ files to compile are named `gen0.h`,
-   `gen0.cc`, `gen1.h`, `gen1.cc`, etc (through `N`), corresponding
-   to each `include_cpp!` section, plus 'cxxgen.h`. `gen.complete.rs` will also
-   be generated and should be compiled _instead of_ the original Rust file.
-c) If `N` is bigger than the number of files needed, extra no-op files will
-   be emitted. These may still be compiled normally, but won't do anything. If
-   `N` is smaller than the number of files needed, generation will fail.
-
-Note that there is currently no way to teach each `include_cpp!` section
-which `.include.rs` file to use, so the only way to get fixed output paths is
-with `--gen-rs-complete`. There are always multiple `.cc` files (even with just
-a single `include_cpp!` section), and we always generate the same number of each
-type of file.
+known in advance, then you will need to use --single, in which case output
+filenames are completely deterministic.
 ";
 
 fn main() -> miette::Result<()> {
@@ -140,17 +129,9 @@ fn main() -> miette::Result<()> {
             .arg("gen-rs-include")
         )
         .arg(
-            Arg::with_name("generate-exact")
-                .long("generate-exact")
-                .value_name("NUM")
-                .help("assume and ensure there are exactly NUM bridge blocks in the file. Only applies for --gen-cpp or --gen-rs-include")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("fix-rs-include-name")
-                .long("fix-rs-include-name")
-                .help("Make the name of the .rs file predictable. You must set AUTOCXX_RS_FILE during Rust build time to educate autocxx_macro about your choice.")
-                .requires("gen-rs-include")
+            Arg::with_name("single")
+                .long("single")
+                .help("Do not generate multiple files of each type. Generate a single .cc, and/or single .h and/or a single .rs.json file for all the inputs")
         )
         .arg(
             Arg::with_name("auto-allowlist")
@@ -213,16 +194,9 @@ fn main() -> miette::Result<()> {
         .unwrap_or_default()
         .collect();
     let suppress_system_headers = matches.is_present("suppress-system-headers");
-    let desired_number = matches
-        .value_of("generate-exact")
-        .map(|s| s.parse::<usize>().unwrap());
-    let header_counter = Cell::new(0);
-    let header_namer = if desired_number.is_some() {
-        HeaderNamer(Box::new(|_| {
-            let r = format!("gen{}.h", header_counter.get());
-            header_counter.set(header_counter.get() + 1);
-            r
-        }))
+    let single_file_mode = matches.is_present("single");
+    let header_namer = if single_file_mode {
+        HeaderNamer(Box::new(|_| "autocxx_gen.h".to_string()))
     } else {
         Default::default()
     };
@@ -246,7 +220,13 @@ fn main() -> miette::Result<()> {
         .as_ref()
         .map(|rc| get_dependency_recorder(rc.clone()));
     parsed_file.resolve_all(incs, &extra_clang_args, dep_recorder, &cpp_codegen_options)?;
+
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
+    let mut output: Box<dyn Output> = if single_file_mode {
+        Box::new(SingleFileOutput::new(depfile.clone(), &outdir))
+    } else {
+        Box::new(RegularOutput::new(depfile.clone(), &outdir))
+    };
     if matches.is_present("gen-cpp") {
         let cpp = matches.value_of("cpp-extension").unwrap();
         let mut counter = 0usize;
@@ -256,53 +236,27 @@ fn main() -> miette::Result<()> {
                 .expect("Unable to generate header and C++ code");
             for pair in generations.0 {
                 let cppname = format!("gen{}.{}", counter, cpp);
-                write_to_file(
-                    &depfile,
-                    &outdir,
-                    cppname,
-                    &pair.implementation.unwrap_or_default(),
-                );
-                write_to_file(&depfile, &outdir, pair.header_name, &pair.header);
+                output.write_cpp(cppname, &pair.implementation.unwrap_or_default());
+                output.write_cpp(pair.header_name, &pair.header);
                 counter += 1;
             }
         }
-        write_placeholders(&depfile, &outdir, counter, desired_number, cpp);
     }
     drop(cpp_codegen_options);
-    write_placeholders(
-        &depfile,
-        &outdir,
-        header_counter.into_inner(),
-        desired_number,
-        "h",
-    );
     if matches.is_present("gen-rs-complete") {
         let mut ts = TokenStream::new();
         parsed_file.to_tokens(&mut ts);
-        write_to_file(
-            &depfile,
-            &outdir,
-            "gen.complete.rs".to_string(),
-            ts.to_string().as_bytes(),
-        );
+        output.write_rs("gen.complete.rs".to_string(), ts.to_string().as_bytes());
     }
     if matches.is_present("gen-rs-include") {
         let autocxxes = parsed_file.get_rs_buildables();
-        let mut counter = 0usize;
         for include_cxx in autocxxes {
             let ts = include_cxx.generate_rs();
-            let fname = if matches.is_present("fix-rs-include-name") {
-                format!("gen{}.include.rs", counter)
-            } else {
-                include_cxx.get_rs_filename()
-            };
-            write_to_file(&depfile, &outdir, fname, ts.to_string().as_bytes());
-            counter += 1;
-        }
-        if matches.is_present("fix-rs-include-name") {
-            write_placeholders(&depfile, &outdir, counter, desired_number, "include.rs");
+            let fname = include_cxx.get_rs_filename();
+            output.write_rs(fname, ts.to_string().as_bytes());
         }
     }
+    output.finalize();
     if let Some(depfile) = depfile {
         depfile.borrow_mut().write().into_diagnostic()?;
     }
@@ -316,49 +270,6 @@ fn get_dependency_recorder(depfile: Rc<RefCell<Depfile>>) -> Box<dyn RebuildDepe
 fn get_option_string(option: &str, matches: &clap::ArgMatches) -> Option<String> {
     let cxx_impl_annotations = matches.value_of(option).map(|s| s.to_string());
     cxx_impl_annotations
-}
-
-fn write_placeholders(
-    depfile: &Option<Rc<RefCell<Depfile>>>,
-    outdir: &Path,
-    mut counter: usize,
-    desired_number: Option<usize>,
-    extension: &str,
-) {
-    if let Some(desired_number) = desired_number {
-        if counter > desired_number {
-            panic!("More .{} files were generated than expected. Increase the value passed to --generate-exact or reduce the number of include_cpp! sections.", extension);
-        }
-        while counter < desired_number {
-            let fname = format!("gen{}.{}", counter, extension);
-            write_to_file(depfile, outdir, fname, BLANK.as_bytes());
-            counter += 1;
-        }
-    }
-}
-
-fn write_to_file(
-    depfile: &Option<Rc<RefCell<Depfile>>>,
-    dir: &Path,
-    filename: String,
-    content: &[u8],
-) {
-    let path = dir.join(filename);
-    if let Some(depfile) = depfile {
-        depfile.borrow_mut().add_output(&path);
-    }
-    {
-        let f = File::open(&path);
-        if let Ok(mut f) = f {
-            let mut existing_content = Vec::new();
-            let r = f.read_to_end(&mut existing_content);
-            if r.is_ok() && existing_content == content {
-                return; // don't change timestamp on existing file unnecessarily
-            }
-        }
-    }
-    let mut f = File::create(&path).expect("Unable to create file");
-    f.write_all(content).expect("Unable to write file");
 }
 
 struct RecordIntoDepfile(Rc<RefCell<Depfile>>);

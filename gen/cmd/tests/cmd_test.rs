@@ -32,16 +32,12 @@ fn base_test<F>(tmp_dir: &TempDir, arg_modifier: F) -> Result<(), Box<dyn std::e
 where
     F: FnOnce(&mut Command),
 {
-    let result = base_test_ex(tmp_dir, arg_modifier, false);
+    let result = base_test_ex(tmp_dir, arg_modifier);
     assert_contentful(tmp_dir, "gen0.cc");
     result
 }
 
-fn base_test_ex<F>(
-    tmp_dir: &TempDir,
-    arg_modifier: F,
-    use_complete_rs: bool,
-) -> Result<(), Box<dyn std::error::Error>>
+fn base_test_ex<F>(tmp_dir: &TempDir, arg_modifier: F) -> Result<(), Box<dyn std::error::Error>>
 where
     F: FnOnce(&mut Command),
 {
@@ -57,13 +53,12 @@ where
         .arg(demo_rs)
         .arg("--outdir")
         .arg(tmp_dir.path().to_str().unwrap())
-        .arg("--gen-cpp");
-    if use_complete_rs {
-        cmd.arg("--gen-rs-complete");
-    } else {
-        cmd.arg("--gen-rs-include");
-    }
+        .arg("--gen-cpp")
+        .arg("--gen-rs-include");
     cmd.assert().success();
+    if let Ok(output) = cmd.output() {
+        eprintln!("Cmd output={:?}", output);
+    }
     Ok(())
 }
 
@@ -94,48 +89,33 @@ fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
         cmd.arg("--cxx-h-path")
             .arg("foo/")
             .arg("--cxxgen-h-path")
-            .arg("bar/")
-            .arg("--generate-exact")
-            .arg("3");
+            .arg("bar/");
     })?;
-    assert_contains(&tmp_dir, "gen0.h", "foo/cxx.h");
+    assert_contains(&tmp_dir, "autocxxgen_ffi.h", "foo/cxx.h");
     // Currently we don't test cxxgen-h-path because we build the demo code
     // which doesn't refer to generated cxx header code.
     Ok(())
 }
 
 #[test]
-fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
+fn test_gen_single() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
     let depfile = tmp_dir.path().join("test.d");
-    base_test_ex(
-        &tmp_dir,
-        |cmd| {
-            cmd.arg("--generate-exact")
-                .arg("3")
-                .arg("--depfile")
-                .arg(depfile);
-        },
-        true,
-    )?;
-    assert_contentful(&tmp_dir, "gen0.cc");
-    assert_contentful(&tmp_dir, "gen0.h");
-    // TODO: This file will actually try #including one of our .h files if there's anything to put
-    // in it. Figure out how to make that happen to test that it works.
-    assert_not_contentful(&tmp_dir, "gen1.cc");
-    assert_not_contentful(&tmp_dir, "gen1.h");
-    assert_not_contentful(&tmp_dir, "gen2.cc");
-    assert_not_contentful(&tmp_dir, "gen2.h");
-    assert_contentful(&tmp_dir, "cxxgen.h");
-    assert_contentful(&tmp_dir, "gen.complete.rs");
+    base_test_ex(&tmp_dir, |cmd| {
+        cmd.arg("--single").arg("--depfile").arg(depfile);
+    })?;
+    assert_contentful(&tmp_dir, "autocxx_gen_combined.cc");
+    assert_contentful(&tmp_dir, "autocxx_gen_combined.h");
+    assert_contentful(&tmp_dir, "autocxx_gen_combined.rs.json");
     assert_contentful(&tmp_dir, "test.d");
     File::create(tmp_dir.path().join("cxx.h"))
         .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
+    std::env::set_var("OUT_DIR", tmp_dir.path().to_str().unwrap());
     let r = build_from_folder(
         tmp_dir.path(),
-        &tmp_dir.path().join("gen.complete.rs"),
-        vec![],
-        &["gen0.cc"],
+        &tmp_dir.path().join("demo/main.rs"),
+        vec![tmp_dir.path().join("autocxx_gen_combined.rs.json")],
+        &["autocxx_gen_combined.cc"],
     );
     if KEEP_TEMPDIRS {
         println!("Tempdir: {:?}", tmp_dir.into_path().to_str());
@@ -186,18 +166,6 @@ fn assert_contentful(outdir: &TempDir, fname: &str) {
     assert!(
         p.metadata().unwrap().len() > BLANK.len().try_into().unwrap(),
         "File {} is empty",
-        fname
-    );
-}
-
-fn assert_not_contentful(outdir: &TempDir, fname: &str) {
-    let p = outdir.path().join(fname);
-    if !p.exists() {
-        panic!("File {} didn't exist", p.to_string_lossy());
-    }
-    assert!(
-        p.metadata().unwrap().len() <= BLANK.len().try_into().unwrap(),
-        "File {} is not empty",
         fname
     );
 }
