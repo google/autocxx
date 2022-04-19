@@ -79,7 +79,10 @@ enum ConversionDirection {
     CppCallsRust,
 }
 
-struct AdditionalFunction {
+/// Some extra snippet of C++ which we (autocxx) need to generate, beyond
+/// that which cxx itself generates.
+#[derive(Default)]
+struct ExtraCpp {
     type_definition: Option<String>, // are output before main declarations
     declaration: Option<String>,
     definition: Option<String>,
@@ -94,7 +97,7 @@ struct AdditionalFunction {
 /// autocxx generates its own _additional_ C++ files which therefore
 /// need to be built and included in linking procedures.
 pub(crate) struct CppCodeGenerator<'a> {
-    additional_functions: Vec<AdditionalFunction>,
+    additional_functions: Vec<ExtraCpp>,
     inclusions: String,
     original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
@@ -272,7 +275,7 @@ impl<'a> CppCodeGenerator<'a> {
 
     fn collect_headers<F>(&self, filter: F) -> String
     where
-        F: Fn(&AdditionalFunction) -> &[Header],
+        F: Fn(&ExtraCpp) -> &[Header],
     {
         let cpp_headers: HashSet<_> = self
             .additional_functions
@@ -288,7 +291,7 @@ impl<'a> CppCodeGenerator<'a> {
 
     fn concat_additional_items<F>(&self, field_access: F) -> String
     where
-        F: FnMut(&AdditionalFunction) -> Option<&String>,
+        F: FnMut(&ExtraCpp) -> Option<&String>,
     {
         let mut s = self
             .additional_functions
@@ -308,28 +311,24 @@ impl<'a> CppCodeGenerator<'a> {
         // if we represent them as trivial types. So generate an extra
         // assertion to make sure.
         let declaration = Some(format!("static_assert(::rust::IsRelocatable<{}>::value, \"type {} should be trivially move constructible and trivially destructible to be used with generate_pod! in autocxx\");", name, name));
-        self.additional_functions.push(AdditionalFunction {
-            type_definition: None,
+        self.additional_functions.push(ExtraCpp {
             declaration,
-            definition: None,
             headers: vec![Header::CxxH],
-            cpp_headers: Vec::new(),
+            ..Default::default()
         })
     }
 
     fn generate_string_constructor(&mut self) {
         let makestring_name = self.config.get_makestring_name();
         let declaration = Some(format!("inline std::unique_ptr<std::string> {}(::rust::Str str) {{ return std::make_unique<std::string>(std::string(str)); }}", makestring_name));
-        self.additional_functions.push(AdditionalFunction {
-            type_definition: None,
+        self.additional_functions.push(ExtraCpp {
             declaration,
-            definition: None,
             headers: vec![
                 Header::System("memory"),
                 Header::System("string"),
                 Header::CxxH,
             ],
-            cpp_headers: Vec::new(),
+            ..Default::default()
         })
     }
 
@@ -352,7 +351,7 @@ impl<'a> CppCodeGenerator<'a> {
         conversion_direction: ConversionDirection,
         requires_rust_declarations: bool,
         force_name: Option<&str>,
-    ) -> Result<AdditionalFunction, ConvertError> {
+    ) -> Result<ExtraCpp, ConvertError> {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
         // We could easily do this the other way round, and when
@@ -610,12 +609,11 @@ impl<'a> CppCodeGenerator<'a> {
         if need_allocators {
             headers.push(Header::NewDeletePrelude);
         }
-        Ok(AdditionalFunction {
-            type_definition: None,
+        Ok(ExtraCpp {
             declaration,
             definition,
             headers,
-            cpp_headers: Vec::new(),
+            ..Default::default()
         })
     }
 
@@ -630,12 +628,9 @@ impl<'a> CppCodeGenerator<'a> {
 
     fn generate_typedef(&mut self, tn: &QualifiedName, definition: &str) {
         let our_name = tn.get_final_item();
-        self.additional_functions.push(AdditionalFunction {
+        self.additional_functions.push(ExtraCpp {
             type_definition: Some(format!("typedef {} {};", definition, our_name)),
-            declaration: None,
-            definition: None,
-            headers: Vec::new(),
-            cpp_headers: Vec::new(),
+            ..Default::default()
         })
     }
 
@@ -647,12 +642,9 @@ impl<'a> CppCodeGenerator<'a> {
         methods: Vec<SubclassFunction>,
     ) -> Result<(), ConvertError> {
         let holder = subclass.holder();
-        self.additional_functions.push(AdditionalFunction {
+        self.additional_functions.push(ExtraCpp {
             type_definition: Some(format!("struct {};", holder)),
-            declaration: None,
-            definition: None,
-            headers: Vec::new(),
-            cpp_headers: Vec::new(),
+            ..Default::default()
         });
         let mut method_decls = Vec::new();
         for method in methods {
@@ -715,7 +707,7 @@ impl<'a> CppCodeGenerator<'a> {
             constructor_decls.push(decl);
             self.additional_functions.push(fn_impl);
         }
-        self.additional_functions.push(AdditionalFunction {
+        self.additional_functions.push(ExtraCpp {
             type_definition: Some(format!(
                 "class {} : {}\n{{\npublic:\n{}\n{}\nvoid {}() const;\nprivate:rust::Box<{}> obs;\nvoid really_remove_ownership();\n\n}};",
                 subclass.cpp(),
@@ -733,9 +725,8 @@ impl<'a> CppCodeGenerator<'a> {
                 subclass.cpp(),
                 subclass.remove_ownership()
             )),
-            declaration: None,
-            headers: Vec::new(),
             cpp_headers: vec![Header::CxxgenH],
+            ..Default::default()
         });
         Ok(())
     }
