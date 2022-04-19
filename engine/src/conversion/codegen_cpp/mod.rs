@@ -79,6 +79,7 @@ enum ConversionDirection {
     CppCallsRust,
 }
 
+#[derive(Default)]
 struct AdditionalFunction {
     type_definition: Option<String>, // are output before main declarations
     declaration: Option<String>,
@@ -309,11 +310,9 @@ impl<'a> CppCodeGenerator<'a> {
         // assertion to make sure.
         let declaration = Some(format!("static_assert(::rust::IsRelocatable<{}>::value, \"type {} should be trivially move constructible and trivially destructible to be used with generate_pod! in autocxx\");", name, name));
         self.additional_functions.push(AdditionalFunction {
-            type_definition: None,
             declaration,
-            definition: None,
             headers: vec![Header::CxxH],
-            cpp_headers: Vec::new(),
+            ..Default::default()
         })
     }
 
@@ -321,15 +320,13 @@ impl<'a> CppCodeGenerator<'a> {
         let makestring_name = self.config.get_makestring_name();
         let declaration = Some(format!("inline std::unique_ptr<std::string> {}(::rust::Str str) {{ return std::make_unique<std::string>(std::string(str)); }}", makestring_name));
         self.additional_functions.push(AdditionalFunction {
-            type_definition: None,
             declaration,
-            definition: None,
             headers: vec![
                 Header::System("memory"),
                 Header::System("string"),
                 Header::CxxH,
             ],
-            cpp_headers: Vec::new(),
+            ..Default::default()
         })
     }
 
@@ -611,11 +608,10 @@ impl<'a> CppCodeGenerator<'a> {
             headers.push(Header::NewDeletePrelude);
         }
         Ok(AdditionalFunction {
-            type_definition: None,
             declaration,
             definition,
             headers,
-            cpp_headers: Vec::new(),
+            ..Default::default()
         })
     }
 
@@ -632,10 +628,7 @@ impl<'a> CppCodeGenerator<'a> {
         let our_name = tn.get_final_item();
         self.additional_functions.push(AdditionalFunction {
             type_definition: Some(format!("typedef {} {};", definition, our_name)),
-            declaration: None,
-            definition: None,
-            headers: Vec::new(),
-            cpp_headers: Vec::new(),
+            ..Default::default()
         })
     }
 
@@ -649,10 +642,7 @@ impl<'a> CppCodeGenerator<'a> {
         let holder = subclass.holder();
         self.additional_functions.push(AdditionalFunction {
             type_definition: Some(format!("struct {};", holder)),
-            declaration: None,
-            definition: None,
-            headers: Vec::new(),
-            cpp_headers: Vec::new(),
+            ..Default::default()
         });
         let mut method_decls = Vec::new();
         for method in methods {
@@ -733,9 +723,8 @@ impl<'a> CppCodeGenerator<'a> {
                 subclass.cpp(),
                 subclass.remove_ownership()
             )),
-            declaration: None,
-            headers: Vec::new(),
             cpp_headers: vec![Header::CxxgenH],
+            ..Default::default()
         });
         Ok(())
     }
