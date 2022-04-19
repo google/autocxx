@@ -41,6 +41,7 @@ use self::{
         gc::filter_apis_by_following_edges_from_allowlist,
         pod::analyze_pod_apis,
         remove_ignored::filter_apis_by_ignored_dependents,
+        replace_hopeless_typedef_targets,
         tdef::convert_typedef_targets,
     },
     api::AnalysisPhase,
@@ -145,6 +146,7 @@ impl<'a> BridgeConverter<'a> {
                 // by subsequent phases to work out which objects are POD.
                 let analyzed_apis = analyze_pod_apis(apis, self.config)?;
                 Self::dump_apis("pod analysis", &analyzed_apis);
+                let analyzed_apis = replace_hopeless_typedef_targets(analyzed_apis);
                 let analyzed_apis = add_casts(analyzed_apis);
                 let analyzed_apis = create_alloc_and_frees(analyzed_apis);
                 // Next, figure out how we materialize different functions.

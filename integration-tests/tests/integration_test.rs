@@ -3329,7 +3329,7 @@ fn test_two_type_constructors() {
 
 #[ignore] // https://github.com/rust-lang/rust-bindgen/issues/1924
 #[test]
-fn test_associated_type_templated_typedef() {
+fn test_associated_type_templated_typedef_in_struct() {
     let hdr = indoc! {"
         #include <string>
         #include <cstdint>
@@ -3353,6 +3353,201 @@ fn test_associated_type_templated_typedef() {
         ffi::Origin::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["Origin"], &[]);
+}
+
+#[test]
+fn test_associated_type_templated_typedef() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        struct Container {
+            Container() {}
+            const StringPiece& get_string_piece() const { return sp; }
+            StringPiece sp;
+        };
+
+        inline void take_string_piece(const StringPiece& string_piece) {}
+    "};
+    let rs = quote! {
+        let sp = ffi::Container::new().within_box();
+        ffi::take_string_piece(sp.get_string_piece());
+    };
+    run_test("", hdr, rs, &["take_string_piece", "Container"], &[]);
+}
+
+#[test]
+fn test_associated_type_templated_typedef_by_value_regular() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        inline StringPiece give_string_piece() {
+            StringPiece s;
+            return s;
+        }
+        inline void take_string_piece(StringPiece string_piece) {}
+    "};
+    let rs = quote! {
+        let sp = ffi::give_string_piece();
+        ffi::take_string_piece(sp);
+    };
+    run_test(
+        "",
+        hdr,
+        rs,
+        &["take_string_piece", "give_string_piece"],
+        &[],
+    );
+}
+
+#[test]
+fn test_associated_type_templated_typedef_by_value_forward_declaration() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece;
+
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        struct Container {
+            StringPiece give_string_piece() const;
+            void take_string_piece(StringPiece string_piece) const;
+            const StringPiece& get_string_piece() const;
+            uint32_t b;
+        };
+
+        inline void take_string_piece_by_ref(const StringPiece& string_piece) {}
+    "};
+    let cpp = indoc! {"
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+
+        StringPiece Container::give_string_piece() const {
+            StringPiece s;
+            return s;
+        }
+        void Container::take_string_piece(StringPiece string_piece) const {}
+
+        StringPiece a;
+
+        const StringPiece& Container::get_string_piece() const {
+            return a;
+        }
+    "};
+    // As this template is forward declared we shouldn't be able to pass it by
+    // value, but we still want to be able to use it by reference.
+    let rs = quote! {
+        let cont = ffi::Container::new().within_box();
+        ffi::take_string_piece_by_ref(cont.as_ref().get_string_piece());
+    };
+    run_test(
+        cpp,
+        hdr,
+        rs,
+        &["take_string_piece_by_ref", "Container"],
+        &[],
+    );
+}
+
+#[test]
+fn test_remove_cv_t_pathological() {
+    let hdr = indoc! {"
+        template <class _Ty>
+        struct remove_cv {
+            using type = _Ty;
+            template <template <class> class _Fn>
+            using _Apply = _Fn<_Ty>;
+        };
+
+        template <class _Ty>
+        struct remove_cv<const _Ty> {
+            using type = _Ty;
+            template <template <class> class _Fn>
+            using _Apply = const _Fn<_Ty>;
+        };
+
+        template <class _Ty>
+        struct remove_cv<volatile _Ty> {
+            using type = _Ty;
+            template <template <class> class _Fn>
+            using _Apply = volatile _Fn<_Ty>;
+        };
+
+        template <class _Ty>
+        struct remove_cv<const volatile _Ty> {
+            using type = _Ty;
+            template <template <class> class _Fn>
+            using _Apply = const volatile _Fn<_Ty>;
+        };
+
+        template <class _Ty>
+        using remove_cv_t = typename remove_cv<_Ty>::type;
+
+        template <class _Ty>
+        struct remove_reference {
+            using type                 = _Ty;
+            using _Const_thru_ref_type = const _Ty;
+        };
+
+        template <class _Ty>
+        struct remove_reference<_Ty&> {
+            using type                 = _Ty;
+            using _Const_thru_ref_type = const _Ty&;
+        };
+
+        template <class _Ty>
+        struct remove_reference<_Ty&&> {
+            using type                 = _Ty;
+            using _Const_thru_ref_type = const _Ty&&;
+        };
+
+        template <class _Ty>
+        using remove_reference_t = typename remove_reference<_Ty>::type;
+
+        template <class _Ty>
+        using _Remove_cvref_t = remove_cv_t<remove_reference_t<_Ty>>;
+    "};
+
+    let rs = quote! {};
+
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! {
+            generate_all!()
+        },
+        None,
+        None,
+        None,
+    );
 }
 
 #[test]
