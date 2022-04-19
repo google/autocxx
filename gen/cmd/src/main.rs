@@ -263,21 +263,31 @@ fn main() -> miette::Result<()> {
                 .expect("Unable to generate header and C++ code");
             for pair in generations.0 {
                 let cppname = format!("gen{}.{}", counter, cpp);
-                add_output(&depfile, &outdir, &cppname);
-                add_output(&depfile, &outdir, &pair.header_name);
-                write_to_file(&outdir, cppname, &pair.implementation.unwrap_or_default());
-                write_to_file(&outdir, pair.header_name, &pair.header);
+                write_to_file(
+                    &depfile,
+                    &outdir,
+                    cppname,
+                    &pair.implementation.unwrap_or_default(),
+                );
+                write_to_file(&depfile, &outdir, pair.header_name, &pair.header);
                 counter += 1;
             }
         }
-        write_placeholders(&outdir, counter, desired_number, cpp);
+        write_placeholders(&depfile, &outdir, counter, desired_number, cpp);
     }
     drop(cpp_codegen_options);
-    write_placeholders(&outdir, header_counter.into_inner(), desired_number, "h");
+    write_placeholders(
+        &depfile,
+        &outdir,
+        header_counter.into_inner(),
+        desired_number,
+        "h",
+    );
     if matches.is_present("gen-rs-complete") {
         let mut ts = TokenStream::new();
         parsed_file.to_tokens(&mut ts);
         write_to_file(
+            &depfile,
             &outdir,
             "gen.complete.rs".to_string(),
             ts.to_string().as_bytes(),
@@ -293,25 +303,17 @@ fn main() -> miette::Result<()> {
             } else {
                 include_cxx.get_rs_filename()
             };
-            add_output(&depfile, &outdir, &fname);
-            write_to_file(&outdir, fname, ts.to_string().as_bytes());
+            write_to_file(&depfile, &outdir, fname, ts.to_string().as_bytes());
             counter += 1;
         }
         if matches.is_present("fix-rs-include-name") {
-            write_placeholders(&outdir, counter, desired_number, "include.rs");
+            write_placeholders(&depfile, &outdir, counter, desired_number, "include.rs");
         }
     }
     if let Some(depfile) = depfile {
         depfile.borrow_mut().write().into_diagnostic()?;
     }
     Ok(())
-}
-
-fn add_output(depfile: &Option<Rc<RefCell<Depfile>>>, dir: &Path, filename: &str) {
-    if let Some(depfile) = depfile {
-        let pb = dir.join(filename);
-        depfile.borrow_mut().add_output(&pb);
-    }
 }
 
 fn get_dependency_recorder(depfile: Rc<RefCell<Depfile>>) -> Box<dyn RebuildDependencyRecorder> {
@@ -324,6 +326,7 @@ fn get_option_string(option: &str, matches: &clap::ArgMatches) -> Option<String>
 }
 
 fn write_placeholders(
+    depfile: &Option<Rc<RefCell<Depfile>>>,
     outdir: &Path,
     mut counter: usize,
     desired_number: Option<usize>,
@@ -335,14 +338,22 @@ fn write_placeholders(
         }
         while counter < desired_number {
             let fname = format!("gen{}.{}", counter, extension);
-            write_to_file(outdir, fname, BLANK.as_bytes());
+            write_to_file(depfile, outdir, fname, BLANK.as_bytes());
             counter += 1;
         }
     }
 }
 
-fn write_to_file(dir: &Path, filename: String, content: &[u8]) {
+fn write_to_file(
+    depfile: &Option<Rc<RefCell<Depfile>>>,
+    dir: &Path,
+    filename: String,
+    content: &[u8],
+) {
     let path = dir.join(filename);
+    if let Some(depfile) = depfile {
+        depfile.borrow_mut().add_output(&path);
+    }
     {
         let f = File::open(&path);
         if let Ok(mut f) = f {
