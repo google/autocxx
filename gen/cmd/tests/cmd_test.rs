@@ -172,31 +172,6 @@ fn test_gen_repro() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[test]
-fn test_skip_cxx_gen() -> Result<(), Box<dyn std::error::Error>> {
-    let tmp_dir = TempDir::new("example")?;
-    base_test_ex(
-        &tmp_dir,
-        |cmd| {
-            cmd.arg("--generate-exact")
-                .arg("3")
-                .arg("--fix-rs-include-name")
-                .arg("--skip-cxx-gen");
-        },
-        false,
-    )?;
-    assert_contentful(&tmp_dir, "gen0.h");
-    assert_not_contentful(&tmp_dir, "gen0.cc");
-    assert_exists(&tmp_dir, "gen1.cc");
-    assert_exists(&tmp_dir, "gen1.h");
-    assert_exists(&tmp_dir, "gen2.cc");
-    assert_exists(&tmp_dir, "gen2.h");
-    assert_contentful(&tmp_dir, "gen0.include.rs");
-    assert_exists(&tmp_dir, "gen1.include.rs");
-    assert_exists(&tmp_dir, "gen2.include.rs");
-    Ok(())
-}
-
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) {
     let path = dir.join(filename);
     let mut f = File::create(&path).expect("Unable to create file");
@@ -225,13 +200,6 @@ fn assert_not_contentful(outdir: &TempDir, fname: &str) {
         "File {} is not empty",
         fname
     );
-}
-
-fn assert_exists(outdir: &TempDir, fname: &str) {
-    let p = outdir.path().join(fname);
-    if !p.exists() {
-        panic!("File {} didn't exist", p.to_string_lossy());
-    }
 }
 
 fn assert_contains(outdir: &TempDir, fname: &str, pattern: &str) {

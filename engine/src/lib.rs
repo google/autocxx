@@ -580,9 +580,7 @@ impl CppBuildable for IncludeCppEngine {
             State::NotGenerated => panic!("Call generate() first"),
             State::Generated(gen_results) => {
                 let rs = gen_results.item_mod.to_token_stream();
-                if !cpp_codegen_options.skip_cxx_gen {
-                    files.push(do_cxx_cpp_generation(rs, cpp_codegen_options)?);
-                }
+                files.push(do_cxx_cpp_generation(rs, cpp_codegen_options)?);
                 if let Some(cpp_file_pair) = &gen_results.cpp {
                     files.push(cpp_file_pair.clone());
                 }
@@ -676,9 +674,6 @@ pub struct CppCodegenOptions<'a> {
     /// An annotation optionally to include on each C++ function.
     /// For example to export the symbol from a library.
     pub cxx_impl_annotations: Option<String>,
-    /// Whether to skip using [`cxx_gen`] to generate the C++ code,
-    /// so that some other process can handle that.
-    pub skip_cxx_gen: bool,
 }
 
 fn proc_macro_span_to_miette_span(span: &proc_macro2::Span) -> SourceSpan {

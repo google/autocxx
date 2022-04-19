@@ -9,10 +9,9 @@
 use crate::{
     builder_modifiers::{
         make_clang_arg_adder, make_cpp17_adder, EnableAutodiscover, SetSuppressSystemHeaders,
-        SkipCxxGen,
     },
     code_checkers::{
-        make_error_finder, make_rust_code_finder, make_string_finder, CppCounter, CppMatcher,
+        make_error_finder, make_rust_code_finder, make_string_finder, CppMatcher,
         NoSystemHeadersChecker,
     },
 };
@@ -9518,27 +9517,6 @@ fn test_issue486_multi_types() {
         rs,
         &["spanner::Key", "a::spanner::Key", "b::spanner::Key"],
         &[],
-    );
-}
-
-#[test]
-fn test_skip_cxx_gen() {
-    let cxx = indoc! {"
-        void do_nothing() {
-        }
-    "};
-    let hdr = indoc! {"
-        void do_nothing();
-    "};
-    let rs = quote! {};
-    run_test_ex(
-        cxx,
-        hdr,
-        rs,
-        directives_from_lists(&["do_nothing"], &[], None),
-        Some(Box::new(SkipCxxGen)),
-        Some(Box::new(CppCounter::new(1))),
-        None,
     );
 }
 
