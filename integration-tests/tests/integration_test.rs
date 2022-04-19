@@ -1604,21 +1604,17 @@ fn test_issue_931() {
         struct __cow_string {
           __cow_string();
         };
-        namespace {
         class b {
         public:
           __cow_string c;
         };
-        } // namespace
         class j {
         public:
           b d;
         };
         template <typename> class e;
         } // namespace a
-        namespace {
         template <typename> struct f {};
-        } // namespace
         namespace llvm {
         template <class> class g {
           union {
@@ -3398,6 +3394,7 @@ fn test_associated_type_templated_typedef_by_value_regular() {
 
         template <typename STRING_TYPE> class BasicStringPiece {
         public:
+            BasicStringPiece() {}
             typedef size_t size_type;
             typedef typename STRING_TYPE::value_type value_type;
             const value_type* ptr_;
@@ -3447,6 +3444,7 @@ fn test_associated_type_templated_typedef_by_value_forward_declaration() {
     let cpp = indoc! {"
         template <typename STRING_TYPE> class BasicStringPiece {
         public:
+            BasicStringPiece() {}
             typedef size_t size_type;
             typedef typename STRING_TYPE::value_type value_type;
             const value_type* ptr_;
@@ -4007,7 +4005,7 @@ fn test_forward_declaration() {
         #include <memory>
         struct A;
         struct B {
-            B() {}
+            B() : a(0) {}
             uint32_t a;
             void daft(const A&) const {}
             static B daft3(const A&) { B b; return b; }
@@ -6152,7 +6150,9 @@ fn test_bitset() {
         public:
             typedef size_t              __storage_type;
             __storage_type __first_[_N_words];
-            inline bool all() {}
+            inline bool all() {
+                return false;
+            }
         };
 
         template <size_t _Size>
@@ -6586,6 +6586,7 @@ fn test_extern_cpp_type_cxx_bridge() {
     let hdr = indoc! {"
         #include <cstdint>
         struct A {
+            A() {}
             int a;
         };
         inline void handle_a(const A&) {
@@ -6626,6 +6627,7 @@ fn test_extern_cpp_type_two_include_cpp() {
     let hdr = indoc! {"
         #include <cstdint>
         struct A {
+            A() {}
             int a;
         };
         enum B {
