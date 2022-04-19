@@ -572,7 +572,7 @@ impl<'a> CppCodeGenerator<'a> {
                 Some(placement_param) => {
                     let tyname = type_to_cpp(&ret.unwrapped_type, &self.original_name_map)?;
                     format!(
-                        "new({}) {}(std::move({}))",
+                        "new({}) {}({})",
                         placement_param, tyname, call_itself
                     )
                 }
