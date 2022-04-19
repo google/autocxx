@@ -5146,7 +5146,6 @@ fn test_issue_264() {
         } // namespace operations_research
     "};
     let rs = quote! {};
-    // run_test("", hdr, rs, &["operations_research::Solver"], &[]);
     run_test_ex(
         "",
         hdr,
