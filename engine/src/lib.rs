@@ -19,6 +19,7 @@ mod ast_discoverer;
 mod conversion;
 mod cxxbridge;
 mod known_types;
+mod output_generators;
 mod parse_callbacks;
 mod parse_file;
 mod rust_pretty_printer;
@@ -28,10 +29,9 @@ mod types;
 mod builder;
 
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
-use conversion::BridgeConverter;
+use conversion::{BridgeConverter, ExtraCpp, Header};
 use miette::{SourceOffset, SourceSpan};
 use parse_callbacks::AutocxxParseCallbacks;
-use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
 use regex::Regex;
 use std::path::PathBuf;
@@ -64,6 +64,9 @@ use autocxx_bindgen as bindgen;
 pub use builder::{
     Builder, BuilderBuild, BuilderContext, BuilderError, BuilderResult, BuilderSuccess,
 };
+pub use output_generators::generate_cpp;
+pub use output_generators::{generate_rs_archive, generate_rs_single};
+pub use output_generators::{CppCodegenOptions, RsOutput};
 pub use parse_file::{parse_file, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
@@ -81,7 +84,22 @@ pub struct CppFilePair {
 }
 
 /// All generated C++ content which should be written to disk.
-pub struct GeneratedCpp(pub Vec<CppFilePair>);
+pub struct GeneratedCpp {
+    /// We always generate at least one pair of cc/h files
+    pub first: CppFilePair,
+    /// Sometimes we generate an additional pair.
+    pub second: Option<CppFilePair>,
+}
+
+impl IntoIterator for GeneratedCpp {
+    type IntoIter =
+        std::iter::Chain<std::iter::Once<CppFilePair>, std::option::IntoIter<CppFilePair>>;
+    type Item = CppFilePair;
+
+    fn into_iter(self) -> Self::IntoIter {
+        std::iter::once(self.first).chain(self.second.into_iter())
+    }
+}
 
 /// A [`syn::Error`] which also implements [`miette::Diagnostic`] so can be pretty-printed
 /// to show the affected span of code.
@@ -129,7 +147,8 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 struct GenerationResults {
     item_mod: ItemMod,
-    cpp: Option<CppFilePair>,
+    cpp: Vec<ExtraCpp>,
+    #[allow(dead_code)]
     inc_dirs: Vec<PathBuf>,
 }
 enum State {
@@ -341,11 +360,14 @@ impl IncludeCppEngine {
     }
 
     /// Generate the Rust bindings. Call `generate` first.
-    pub fn generate_rs(&self) -> TokenStream2 {
-        match &self.state {
-            State::NotGenerated => panic!("Generate first"),
-            State::Generated(gen_results) => gen_results.item_mod.to_token_stream(),
-            State::ParseOnly => TokenStream2::new(),
+    pub fn get_rs_output(&self) -> RsOutput {
+        RsOutput {
+            config: &self.config,
+            rs: match &self.state {
+                State::NotGenerated => panic!("Generate first"),
+                State::Generated(gen_results) => gen_results.item_mod.to_token_stream(),
+                State::ParseOnly => TokenStream2::new(),
+            },
         }
     }
 
@@ -373,12 +395,11 @@ impl IncludeCppEngine {
     /// headers properly.
     ///
     /// See documentation for this type for flow diagrams and more details.
-    pub fn generate(
+    pub fn resolve(
         &mut self,
         inc_dirs: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-        cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -406,12 +427,7 @@ impl IncludeCppEngine {
         let converter = BridgeConverter::new(&self.config.inclusions, &self.config);
 
         let conversion = converter
-            .convert(
-                bindings,
-                self.config.unsafe_policy.clone(),
-                header_contents,
-                cpp_codegen_options,
-            )
+            .convert(bindings, self.config.unsafe_policy.clone())
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;
         let mut new_bindings: ItemMod = parse_quote! {
@@ -429,13 +445,33 @@ impl IncludeCppEngine {
         );
         self.state = State::Generated(Box::new(GenerationResults {
             item_mod: new_bindings,
-            cpp: conversion.cpp,
+            cpp: self.add_headers_if_necessary(conversion.cpp),
             inc_dirs,
         }));
         Ok(())
     }
 
+    fn add_headers_if_necessary(&self, extra_cpp: Vec<ExtraCpp>) -> Vec<ExtraCpp> {
+        if extra_cpp.is_empty() {
+            extra_cpp
+        } else {
+            extra_cpp
+                .into_iter()
+                .chain(std::iter::once(ExtraCpp {
+                    headers: self
+                        .config
+                        .inclusions
+                        .iter()
+                        .map(|path| Header::User(path.clone()))
+                        .collect(),
+                    ..Default::default()
+                }))
+                .collect()
+        }
+    }
+
     /// Return the include directories used for this include_cpp invocation.
+    #[cfg(any(test, feature = "build"))]
     fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
         match &self.state {
             State::Generated(gen_results) => gen_results.inc_dirs.iter(),
@@ -534,26 +570,6 @@ static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
     "sys/types.h",
 ];
 
-pub fn do_cxx_cpp_generation(
-    rs: TokenStream2,
-    cpp_codegen_options: &CppCodegenOptions,
-) -> Result<CppFilePair, cxx_gen::Error> {
-    let mut opt = cxx_gen::Opt::default();
-    opt.cxx_impl_annotations = cpp_codegen_options.cxx_impl_annotations.clone();
-    let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
-    Ok(CppFilePair {
-        header: strip_system_headers(
-            cxx_generated.header,
-            cpp_codegen_options.suppress_system_headers,
-        ),
-        header_name: "cxxgen.h".into(),
-        implementation: Some(strip_system_headers(
-            cxx_generated.implementation,
-            cpp_codegen_options.suppress_system_headers,
-        )),
-    })
-}
-
 pub(crate) fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool) -> Vec<u8> {
     if suppress_system_headers {
         std::str::from_utf8(&input)
@@ -565,28 +581,6 @@ pub(crate) fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool
             .to_vec()
     } else {
         input
-    }
-}
-
-impl CppBuildable for IncludeCppEngine {
-    /// Generate C++-side bindings for these APIs. Call `generate` first.
-    fn generate_h_and_cxx(
-        &self,
-        cpp_codegen_options: &CppCodegenOptions,
-    ) -> Result<GeneratedCpp, cxx_gen::Error> {
-        let mut files = Vec::new();
-        match &self.state {
-            State::ParseOnly => panic!("Cannot generate C++ in parse-only mode"),
-            State::NotGenerated => panic!("Call generate() first"),
-            State::Generated(gen_results) => {
-                let rs = gen_results.item_mod.to_token_stream();
-                files.push(do_cxx_cpp_generation(rs, cpp_codegen_options)?);
-                if let Some(cpp_file_pair) = &gen_results.cpp {
-                    files.push(cpp_file_pair.clone());
-                }
-            }
-        };
-        Ok(GeneratedCpp(files))
     }
 }
 
@@ -636,44 +630,6 @@ pub fn get_clang_path() -> String {
     std::env::var("CLANG_PATH")
         .or_else(|_| std::env::var("CXX"))
         .unwrap_or_else(|_| "clang++".to_string())
-}
-
-/// Newtype wrapper so we can give it a [`Default`].
-pub struct HeaderNamer<'a>(pub Box<dyn 'a + Fn(String) -> String>);
-
-impl Default for HeaderNamer<'static> {
-    fn default() -> Self {
-        Self(Box::new(|mod_name| format!("autocxxgen_{}.h", mod_name)))
-    }
-}
-
-impl HeaderNamer<'_> {
-    fn name_header(&self, mod_name: String) -> String {
-        self.0(mod_name)
-    }
-}
-
-/// Options for C++ codegen
-#[derive(Default)]
-pub struct CppCodegenOptions<'a> {
-    /// Whether to avoid generating `#include <some-system-header>`.
-    /// You may wish to do this to make a hermetic test case with no
-    /// external dependencies.
-    pub suppress_system_headers: bool,
-    /// Optionally, a prefix to go at `#include "<here>cxx.h". This is a header file from the `cxx`
-    /// crate.
-    pub path_to_cxx_h: Option<String>,
-    /// Optionally, a prefix to go at `#include "<here>cxxgen.h". This is a header file which we
-    /// generate.
-    pub path_to_cxxgen_h: Option<String>,
-    /// Optionally, a function called to generate each of the per-section header files. The default
-    /// names are subject to change.
-    /// The function is passed the name of the module generated by each `include_cpp`,
-    /// configured via `name`. These will be unique.
-    pub header_namer: HeaderNamer<'a>,
-    /// An annotation optionally to include on each C++ function.
-    /// For example to export the symbol from a library.
-    pub cxx_impl_annotations: Option<String>,
 }
 
 fn proc_macro_span_to_miette_span(span: &proc_macro2::Span) -> SourceSpan {

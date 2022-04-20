@@ -8,7 +8,9 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use std::path::PathBuf;
+use std::{fs::File, path::PathBuf};
+
+use crate::{multi_bindings::MultiBindings, IncludeCppConfig};
 
 /// The strategy used to generate, and to find generated, files.
 /// As standard, these are based off the OUT_DIR set by Cargo,
@@ -29,6 +31,7 @@ pub enum FileLocationStrategy {
     FromAutocxxRsFile(PathBuf),
     FromAutocxxRs(PathBuf),
     FromOutDir(PathBuf),
+    FromAutocxxRsJsonArchive(PathBuf),
     UnknownMaybeFromOutdir,
 }
 
@@ -36,17 +39,21 @@ static BUILD_DIR_NAME: &str = "autocxx-build-dir";
 static RS_DIR_NAME: &str = "rs";
 static AUTOCXX_RS: &str = "AUTOCXX_RS";
 static AUTOCXX_RS_FILE: &str = "AUTOCXX_RS_FILE";
+static AUTOCXX_RS_JSON_ARCHIVE: &str = "AUTOCXX_RS_JSON_ARCHIVE";
 
 impl FileLocationStrategy {
     pub fn new() -> Self {
-        match std::env::var_os(AUTOCXX_RS_FILE) {
-            Some(of) => FileLocationStrategy::FromAutocxxRsFile(PathBuf::from(of)),
-            None => match std::env::var_os(AUTOCXX_RS) {
-                None => match std::env::var_os("OUT_DIR") {
-                    None => FileLocationStrategy::UnknownMaybeFromOutdir,
-                    Some(od) => FileLocationStrategy::FromOutDir(PathBuf::from(od)),
+        match std::env::var_os(AUTOCXX_RS_JSON_ARCHIVE) {
+            Some(of) => FileLocationStrategy::FromAutocxxRsJsonArchive(PathBuf::from(of)),
+            None => match std::env::var_os(AUTOCXX_RS_FILE) {
+                Some(of) => FileLocationStrategy::FromAutocxxRsFile(PathBuf::from(of)),
+                None => match std::env::var_os(AUTOCXX_RS) {
+                    None => match std::env::var_os("OUT_DIR") {
+                        None => FileLocationStrategy::UnknownMaybeFromOutdir,
+                        Some(od) => FileLocationStrategy::FromOutDir(PathBuf::from(od)),
+                    },
+                    Some(acrs) => FileLocationStrategy::FromAutocxxRs(PathBuf::from(acrs)),
                 },
-                Some(acrs) => FileLocationStrategy::FromAutocxxRs(PathBuf::from(acrs)),
             },
         }
     }
@@ -58,9 +65,10 @@ impl FileLocationStrategy {
     /// Make a macro to include a given generated Rust file name.
     /// This can't simply be calculated from `get_rs_dir` because
     /// of limitations in rust-analyzer.
-    pub fn make_include(&self, fname: &str) -> TokenStream {
+    pub fn make_include(&self, config: &IncludeCppConfig) -> TokenStream {
         match self {
             FileLocationStrategy::FromAutocxxRs(custom_dir) => {
+                let fname = config.get_rs_filename();
                 let fname = custom_dir.join(fname).to_str().unwrap().to_string();
                 quote! {
                     include!( #fname );
@@ -68,6 +76,7 @@ impl FileLocationStrategy {
             }
             FileLocationStrategy::Custom(_) => panic!("Should never happen in the macro"),
             FileLocationStrategy::UnknownMaybeFromOutdir | FileLocationStrategy::FromOutDir(_) => {
+                let fname = config.get_rs_filename();
                 let fname = format!("/{}/{}/{}", BUILD_DIR_NAME, RS_DIR_NAME, fname);
                 // rust-analyzer works better if we ask Rust to do the path
                 // concatenation rather than doing it in proc-macro code.
@@ -86,6 +95,14 @@ impl FileLocationStrategy {
                     include!( #fname );
                 }
             }
+            FileLocationStrategy::FromAutocxxRsJsonArchive(fname) => {
+                let archive = File::open(fname).unwrap_or_else(|_| panic!("Unable to open {}. This may mean you didn't run the codegen tool (autocxx_gen) before building the Rust code.", fname.to_string_lossy()));
+                let multi_bindings: MultiBindings = serde_json::from_reader(archive)
+                    .unwrap_or_else(|_| {
+                        panic!("Unable to interpret {} as JSON", fname.to_string_lossy())
+                    });
+                multi_bindings.get(config).unwrap_or_else(|err| panic!("Unable to find a suitable set of bindings within the JSON archive {} ({}). This likely means that the codegen tool hasn't been rerun since some changes in your include_cpp! macro.", fname.to_string_lossy(), err))
+            }
         }
     }
 
@@ -99,6 +116,9 @@ impl FileLocationStrategy {
             }
             FileLocationStrategy::FromAutocxxRsFile(_) => {
                 panic!("It's invalid to set AUTOCXX_RS_FILE during the codegen phase.")
+            }
+            FileLocationStrategy::FromAutocxxRsJsonArchive(_) => {
+                panic!("It's invalid to set AUTOCXX_RS_JSON_ARCHIVE during the codegen phase.")
             }
         };
         root.join(suffix)

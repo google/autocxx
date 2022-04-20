@@ -8,10 +8,13 @@
 
 use autocxx_parser::file_locations::FileLocationStrategy;
 use miette::Diagnostic;
-use proc_macro2::TokenStream;
 use thiserror::Error;
 
-use crate::{strip_system_headers, CppCodegenOptions, ParseError, RebuildDependencyRecorder};
+use crate::output_generators::generate_cpp;
+use crate::{
+    generate_rs_single, strip_system_headers, CppCodegenOptions, ParseError,
+    RebuildDependencyRecorder,
+};
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fs::File;
@@ -66,14 +69,14 @@ pub trait BuilderContext {
 /// It would be unusual to use this directly - see the `autocxx_build` or
 /// `autocxx_gen` crates.
 #[cfg_attr(feature = "nightly", doc(cfg(feature = "build")))]
-pub struct Builder<'a, BuilderContext> {
+pub struct Builder<BuilderContext> {
     rs_file: PathBuf,
     autocxx_incs: Vec<OsString>,
     extra_clang_args: Vec<String>,
     dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     custom_gendir: Option<PathBuf>,
     auto_allowlist: bool,
-    cpp_codegen_options: CppCodegenOptions<'a>,
+    cpp_codegen_options: CppCodegenOptions,
     // This member is to ensure that this type is parameterized
     // by a BuilderContext. The goal is to balance three needs:
     // (1) have most of the functionality over in autocxx_engine,
@@ -84,7 +87,7 @@ pub struct Builder<'a, BuilderContext> {
     ctx: PhantomData<BuilderContext>,
 }
 
-impl<CTX: BuilderContext> Builder<'_, CTX> {
+impl<CTX: BuilderContext> Builder<CTX> {
     /// Create a new Builder object. You'll need to pass in the Rust file
     /// which contains the bindings (typically an `include_cpp!` macro
     /// though `autocxx` can also handle manually-crafted `cxx::bridge`
@@ -217,12 +220,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         let mut parsed_file = crate::parse_file(self.rs_file, self.auto_allowlist)
             .map_err(BuilderError::ParseError)?;
         parsed_file
-            .resolve_all(
-                autocxx_inc,
-                clang_args,
-                self.dependency_recorder,
-                &self.cpp_codegen_options,
-            )
+            .resolve_all(autocxx_inc, clang_args, self.dependency_recorder)
             .map_err(BuilderError::ParseError)?;
         let mut counter = 0;
         let mut builder = cc::Build::new();
@@ -233,30 +231,24 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         let mut generated_rs = Vec::new();
         let mut generated_cpp = Vec::new();
         builder.includes(parsed_file.include_dirs());
-        for include_cpp in parsed_file.get_cpp_buildables() {
-            let generated_code = include_cpp
-                .generate_h_and_cxx(&self.cpp_codegen_options)
-                .map_err(BuilderError::InvalidCxx)?;
-            for filepair in generated_code.0 {
-                let fname = format!("gen{}.cxx", counter);
-                counter += 1;
-                if let Some(implementation) = &filepair.implementation {
-                    let gen_cxx_path = write_to_file(&cxxdir, &fname, implementation)?;
-                    builder.file(&gen_cxx_path);
-                    generated_cpp.push(gen_cxx_path);
-                }
-                write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
-                generated_cpp.push(incdir.join(filepair.header_name));
+        let cpp_buildables = parsed_file.get_cpp_outputs();
+        let filepairs = generate_cpp(cpp_buildables, &self.cpp_codegen_options)
+            .map_err(BuilderError::InvalidCxx)?;
+        for filepair in filepairs.into_iter() {
+            let fname = format!("gen{}.cxx", counter);
+            counter += 1;
+            if let Some(implementation) = &filepair.implementation {
+                let gen_cxx_path = write_to_file(&cxxdir, &fname, implementation)?;
+                builder.file(&gen_cxx_path);
+                generated_cpp.push(gen_cxx_path);
             }
+            write_to_file(&incdir, &filepair.header_name, &filepair.header)?;
+            generated_cpp.push(incdir.join(filepair.header_name));
         }
 
-        for include_cpp in parsed_file.get_rs_buildables() {
-            let rs = include_cpp.generate_rs();
-            generated_rs.push(write_rs_to_file(
-                &rsdir,
-                &include_cpp.config.get_rs_filename(),
-                rs,
-            )?);
+        for rs_output in parsed_file.get_rs_outputs() {
+            let rs = generate_rs_single(rs_output);
+            generated_rs.push(write_to_file(&rsdir, &rs.filename, rs.code.as_bytes())?);
         }
         if counter == 0 {
             Err(BuilderError::NoIncludeCxxMacrosFound)
@@ -296,14 +288,6 @@ fn write_to_file(dir: &Path, filename: &str, content: &[u8]) -> Result<PathBuf, 
 fn try_write_to_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
     let mut f = File::create(path)?;
     f.write_all(content)
-}
-
-fn write_rs_to_file(
-    dir: &Path,
-    filename: &str,
-    content: TokenStream,
-) -> Result<PathBuf, BuilderError> {
-    write_to_file(dir, filename, content.to_string().as_bytes())
 }
 
 fn rust_version_check() {

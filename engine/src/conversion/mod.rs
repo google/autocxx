@@ -21,14 +21,12 @@ mod utilities;
 
 use analysis::fun::FnAnalyzer;
 use autocxx_parser::IncludeCppConfig;
-pub(crate) use codegen_cpp::CppCodeGenerator;
+pub(crate) use codegen_cpp::{CppCodeGenerator, ExtraCpp, Header};
 pub(crate) use convert_error::ConvertError;
 use itertools::Itertools;
 use syn::{Item, ItemMod};
 
-use crate::{
-    conversion::analysis::deps::HasDependencies, CppCodegenOptions, CppFilePair, UnsafePolicy,
-};
+use crate::{conversion::analysis::deps::HasDependencies, UnsafePolicy};
 
 use self::{
     analysis::{
@@ -72,7 +70,7 @@ pub(crate) struct BridgeConverter<'a> {
 /// C++ and Rust code generation output.
 pub(crate) struct CodegenResults {
     pub(crate) rs: Vec<Item>,
-    pub(crate) cpp: Option<CppFilePair>,
+    pub(crate) cpp: Vec<ExtraCpp>,
 }
 
 impl<'a> BridgeConverter<'a> {
@@ -119,8 +117,6 @@ impl<'a> BridgeConverter<'a> {
         &self,
         mut bindgen_mod: ItemMod,
         unsafe_policy: UnsafePolicy,
-        inclusions: String,
-        cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<CodegenResults, ConvertError> {
         match &mut bindgen_mod.content {
             None => Err(ConvertError::NoContent),
@@ -186,18 +182,18 @@ impl<'a> BridgeConverter<'a> {
                 Self::dump_apis_with_deps("GC", &analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
-                let cpp = CppCodeGenerator::generate_cpp_code(
-                    inclusions,
-                    &analyzed_apis,
-                    self.config,
-                    cpp_codegen_options,
-                )?;
+                let cpp = CppCodeGenerator::generate_cpp_code(&analyzed_apis, self.config)?;
+                let header_name = if cpp.is_empty() {
+                    None
+                } else {
+                    Some("autocxxgen.h".into())
+                };
                 let rs = RsCodeGenerator::generate_rs_code(
                     analyzed_apis,
                     self.include_list,
                     bindgen_mod,
                     self.config,
-                    cpp.as_ref().map(|file_pair| file_pair.header_name.clone()),
+                    header_name,
                 );
                 Ok(CodegenResults { rs, cpp })
             }

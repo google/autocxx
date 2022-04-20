@@ -13,14 +13,11 @@ pub(crate) mod type_to_cpp;
 use crate::{
     conversion::analysis::fun::{function_wrapper::CppFunctionKind, FnAnalysis},
     types::{make_ident, QualifiedName},
-    CppCodegenOptions, CppFilePair,
+    CppCodegenOptions,
 };
 use autocxx_parser::IncludeCppConfig;
 use itertools::Itertools;
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-};
+use std::{borrow::Cow, collections::HashMap};
 use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
 use self::type_to_cpp::{
@@ -41,15 +38,16 @@ use super::{
 };
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
-enum Header {
+pub(crate) enum Header {
     System(&'static str),
     CxxH,
     CxxgenH,
     NewDeletePrelude,
+    User(String),
 }
 
 impl Header {
-    fn include_stmt(&self, cpp_codegen_options: &CppCodegenOptions) -> String {
+    pub(crate) fn include_stmt(&self, cpp_codegen_options: &CppCodegenOptions) -> String {
         let blank = "".to_string();
         match self {
             Self::System(name) => format!("#include <{}>", name),
@@ -64,11 +62,12 @@ impl Header {
                     .unwrap_or(&blank);
                 format!("#include \"{}cxxgen.h\"", prefix)
             }
-            Header::NewDeletePrelude => new_and_delete_prelude::NEW_AND_DELETE_PRELUDE.to_string(),
+            Self::NewDeletePrelude => new_and_delete_prelude::NEW_AND_DELETE_PRELUDE.to_string(),
+            Self::User(name) => format!("#include \"{}\"", name),
         }
     }
 
-    fn is_system(&self) -> bool {
+    pub(crate) fn is_system(&self) -> bool {
         matches!(self, Header::System(_) | Header::CxxH)
     }
 }
@@ -81,13 +80,13 @@ enum ConversionDirection {
 
 /// Some extra snippet of C++ which we (autocxx) need to generate, beyond
 /// that which cxx itself generates.
-#[derive(Default)]
-struct ExtraCpp {
-    type_definition: Option<String>, // are output before main declarations
-    declaration: Option<String>,
-    definition: Option<String>,
-    headers: Vec<Header>,
-    cpp_headers: Vec<Header>,
+#[derive(Default, Clone)]
+pub(crate) struct ExtraCpp {
+    pub(crate) type_definition: Option<String>, // are output before main declarations
+    pub(crate) declaration: Option<String>,
+    pub(crate) definition: Option<String>,
+    pub(crate) headers: Vec<Header>,
+    pub(crate) cpp_headers: Vec<Header>,
 }
 
 /// Generates additional C++ glue functions needed by autocxx.
@@ -98,10 +97,8 @@ struct ExtraCpp {
 /// need to be built and included in linking procedures.
 pub(crate) struct CppCodeGenerator<'a> {
     additional_functions: Vec<ExtraCpp>,
-    inclusions: String,
     original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
-    cpp_codegen_options: &'a CppCodegenOptions<'a>,
 }
 
 struct SubclassFunction<'a> {
@@ -111,35 +108,21 @@ struct SubclassFunction<'a> {
 
 impl<'a> CppCodeGenerator<'a> {
     pub(crate) fn generate_cpp_code(
-        inclusions: String,
         apis: &ApiVec<FnPhase>,
         config: &'a IncludeCppConfig,
-        cpp_codegen_options: &CppCodegenOptions,
-    ) -> Result<Option<CppFilePair>, ConvertError> {
-        let mut gen = CppCodeGenerator::new(
-            inclusions,
-            original_name_map_from_apis(apis),
-            config,
-            cpp_codegen_options,
-        );
+    ) -> Result<Vec<ExtraCpp>, ConvertError> {
+        let mut gen = CppCodeGenerator::new(original_name_map_from_apis(apis), config);
         // The 'filter' on the following line is designed to ensure we don't accidentally
         // end up out of sync with needs_cpp_codegen
         gen.add_needs(apis.iter().filter(|api| api.needs_cpp_codegen()))?;
-        Ok(gen.generate())
+        Ok(gen.additional_functions)
     }
 
-    fn new(
-        inclusions: String,
-        original_name_map: CppNameMap,
-        config: &'a IncludeCppConfig,
-        cpp_codegen_options: &'a CppCodegenOptions,
-    ) -> Self {
+    fn new(original_name_map: CppNameMap, config: &'a IncludeCppConfig) -> Self {
         CppCodeGenerator {
             additional_functions: Vec::new(),
-            inclusions,
             original_name_map,
             config,
-            cpp_codegen_options,
         }
     }
 
@@ -231,75 +214,6 @@ impl<'a> CppCodeGenerator<'a> {
             }
         }
         Ok(())
-    }
-
-    fn generate(&self) -> Option<CppFilePair> {
-        if self.additional_functions.is_empty() {
-            None
-        } else {
-            let headers = self.collect_headers(|additional_need| &additional_need.headers);
-            let cpp_headers = self.collect_headers(|additional_need| &additional_need.cpp_headers);
-            let type_definitions = self.concat_additional_items(|x| x.type_definition.as_ref());
-            let declarations = self.concat_additional_items(|x| x.declaration.as_ref());
-            let declarations = format!(
-                "#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
-                headers, self.inclusions, type_definitions, declarations
-            );
-            log::info!("Additional C++ decls:\n{}", declarations);
-            let header_name = self
-                .cpp_codegen_options
-                .header_namer
-                .name_header(self.config.get_mod_name().to_string());
-            let implementation = if self
-                .additional_functions
-                .iter()
-                .any(|x| x.definition.is_some())
-            {
-                let definitions = self.concat_additional_items(|x| x.definition.as_ref());
-                let definitions = format!(
-                    "#include \"{}\"\n{}\n{}",
-                    header_name, cpp_headers, definitions
-                );
-                log::info!("Additional C++ defs:\n{}", definitions);
-                Some(definitions.into_bytes())
-            } else {
-                None
-            };
-            Some(CppFilePair {
-                header: declarations.into_bytes(),
-                implementation,
-                header_name,
-            })
-        }
-    }
-
-    fn collect_headers<F>(&self, filter: F) -> String
-    where
-        F: Fn(&ExtraCpp) -> &[Header],
-    {
-        let cpp_headers: HashSet<_> = self
-            .additional_functions
-            .iter()
-            .flat_map(|x| filter(x).iter())
-            .filter(|x| !self.cpp_codegen_options.suppress_system_headers || !x.is_system())
-            .collect(); // uniqify
-        cpp_headers
-            .iter()
-            .map(|x| x.include_stmt(self.cpp_codegen_options))
-            .join("\n")
-    }
-
-    fn concat_additional_items<F>(&self, field_access: F) -> String
-    where
-        F: FnMut(&ExtraCpp) -> Option<&String>,
-    {
-        let mut s = self
-            .additional_functions
-            .iter()
-            .flat_map(field_access)
-            .join("\n");
-        s.push('\n');
-        s
     }
 
     fn generate_pod_assertion(&mut self, name: String) {

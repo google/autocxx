@@ -375,7 +375,7 @@ impl Directive for Concrete {
         let definition: syn::LitStr = args.parse()?;
         args.parse::<syn::token::Comma>()?;
         let rust_id: syn::Ident = args.parse()?;
-        config.concretes.insert(definition.value(), rust_id);
+        config.concretes.0.insert(definition.value(), rust_id);
         Ok(())
     }
 
@@ -383,7 +383,7 @@ impl Directive for Concrete {
         &self,
         config: &'a IncludeCppConfig,
     ) -> Box<dyn Iterator<Item = TokenStream> + 'a> {
-        Box::new(config.concretes.iter().map(|(k, v)| {
+        Box::new(config.concretes.0.iter().map(|(k, v)| {
             quote! {
                 #k,#v
             }
@@ -498,7 +498,7 @@ impl Directive for ExternCppType {
         let definition: syn::LitStr = args.parse()?;
         args.parse::<syn::token::Comma>()?;
         let rust_path: syn::TypePath = args.parse()?;
-        config.externs.insert(
+        config.externs.0.insert(
             definition.value(),
             crate::config::ExternCppType {
                 rust_path,
@@ -516,6 +516,7 @@ impl Directive for ExternCppType {
         Box::new(
             config
                 .externs
+                .0
                 .iter()
                 .filter_map(move |(definition, details)| {
                     if details.opaque == opaque_needed {
