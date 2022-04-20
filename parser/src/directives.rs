@@ -136,6 +136,7 @@ impl Directive for Inclusion {
     }
 }
 
+/// Directive for either `generate!` (false) or `generate_pod!` (true).
 struct Generate(bool);
 
 impl Directive for Generate {
@@ -161,7 +162,7 @@ impl Directive for Generate {
         config: &'a IncludeCppConfig,
     ) -> Box<dyn Iterator<Item = TokenStream> + 'a> {
         match &config.allowlist {
-            Allowlist::Specific(items) => Box::new(
+            Allowlist::Specific(items) if !self.0 => Box::new(
                 items
                     .iter()
                     .flat_map(|i| match i {
