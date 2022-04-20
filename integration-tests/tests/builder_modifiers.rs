@@ -59,14 +59,3 @@ impl BuilderModifierFns for EnableAutodiscover {
         builder.auto_allowlist(true)
     }
 }
-
-pub(crate) struct SkipCxxGen;
-
-impl BuilderModifierFns for SkipCxxGen {
-    fn modify_autocxx_builder<'a>(
-        &self,
-        builder: Builder<'a, TestBuilderContext>,
-    ) -> Builder<'a, TestBuilderContext> {
-        builder.skip_cxx_gen(true)
-    }
-}

@@ -124,31 +124,6 @@ pub(crate) fn make_rust_code_finder(code: Vec<TokenStream>) -> CodeChecker {
     Box::new(RustCodeFinder(code))
 }
 
-/// Counts the number of generated C++ files.
-pub(crate) struct CppCounter {
-    cpp_count: usize,
-}
-
-impl CppCounter {
-    pub(crate) fn new(cpp_count: usize) -> Self {
-        Self { cpp_count }
-    }
-}
-
-impl CodeCheckerFns for CppCounter {
-    fn check_cpp(&self, cpp: &[PathBuf]) -> Result<(), TestError> {
-        if cpp.len() == self.cpp_count {
-            Ok(())
-        } else {
-            Err(TestError::CppCodeExaminationFail)
-        }
-    }
-
-    fn skip_build(&self) -> bool {
-        true
-    }
-}
-
 /// Searches generated C++ for strings we want to find, or want _not_ to find,
 /// or both.
 pub(crate) struct CppMatcher<'a> {
