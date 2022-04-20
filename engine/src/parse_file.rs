@@ -16,7 +16,6 @@ use autocxx_parser::directive_names::SUBCLASS;
 use autocxx_parser::{AllowlistEntry, RustPath, Subclass, SubclassAttrs};
 use indexmap::set::IndexSet as HashSet;
 use miette::Diagnostic;
-use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::{io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
@@ -334,7 +333,9 @@ impl ParsedFile {
         do_get_autocxxes_mut(&mut self.0)
     }
 
-    pub fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
+    /// Determines the include dirs that were set for each include_cpp, so they can be
+    /// used as input to a `cc::Build`.
+    pub(crate) fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
         fn do_get_include_dirs(segments: &[Segment]) -> impl Iterator<Item = &PathBuf> {
             segments
                 .iter()
@@ -350,6 +351,7 @@ impl ParsedFile {
         do_get_include_dirs(&self.0)
     }
 
+    /// Interpret all the autocxx directives within this file, including parsing the C++.
     pub fn resolve_all(
         &mut self,
         autocxx_inc: Vec<PathBuf>,
@@ -382,38 +384,6 @@ impl ParsedFile {
                 .map_err(ParseError::AutocxxCodegenError)?
         }
         Ok(())
-    }
-}
-
-impl ToTokens for ParsedFile {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        for seg in &self.0 {
-            seg.to_tokens(tokens)
-        }
-    }
-}
-
-impl ToTokens for Segment {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            Segment::Other(item) => item.to_tokens(tokens),
-            Segment::Autocxx(autocxx) => {
-                let these_tokens = autocxx.generate_rs();
-                tokens.extend(these_tokens);
-            }
-            Segment::Cxx(cxxbridge) => cxxbridge.to_tokens(tokens),
-            Segment::Mod(segments, (brace, itemmod)) => {
-                let mod_items = segments
-                    .iter()
-                    .map(|segment| syn::parse2::<Item>(segment.to_token_stream()).unwrap())
-                    .collect();
-                let itemmod = ItemMod {
-                    content: Some((*brace, mod_items)),
-                    ..itemmod.clone()
-                };
-                Item::Mod(itemmod).to_tokens(tokens)
-            }
-        }
     }
 }
 

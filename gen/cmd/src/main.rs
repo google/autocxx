@@ -14,8 +14,6 @@ use autocxx_engine::{parse_file, HeaderNamer, RebuildDependencyRecorder};
 use clap::{crate_authors, crate_version, App, Arg, ArgGroup};
 use depfile::Depfile;
 use miette::IntoDiagnostic;
-use proc_macro2::TokenStream;
-use quote::ToTokens;
 use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -35,24 +33,12 @@ which is much easier to include in build.rs build scripts. You'd likely
 use this tool only if you're using some non-Cargo build system. If
 that's you, read on.
 
-This tool has three modes: generate the C++; generate a new Rust file where
-the include_cpp! directive is *replaced* with bindings, or generate
+This tool has two modes: generate the C++; or generate
 a Rust file which can be included by the autocxx_macro. You may specify
 multiple modes, or of course, invoke the tool multiple times.
 
 In any mode, you'll need to pass the source Rust file name and the C++
 include path.
-
-For generation of the Rust side bindings, here's how to choose between
-the two modes. If you're copying the entire Rust crate to a different
-location during your build process, you may as well use --gen-rs-complete
-to generate a whole new replacement .rs file with the autocxx
-include_cpp! macro expanded.
-
-But in most build systems, you won't be copying all the crate source
-to a new location. In such a case, you should use --gen-rs-include
-which will generate a file that will be included by the autocxx_macro
-crate.
 
 The second decision you must make is naming of the output files.
 If your build system is able to cope with autocxx_gen building
@@ -123,11 +109,6 @@ fn main() -> miette::Result<()> {
                 .help("whether to generate C++ implementation and header files")
         )
         .arg(
-            Arg::with_name("gen-rs-complete")
-                .long("gen-rs-complete")
-                .help("whether to generate a Rust file replacing the original file (suffix will be .complete.rs)")
-        )
-        .arg(
             Arg::with_name("gen-rs-include")
                 .long("gen-rs-include")
                 .help("whether to generate Rust files for inclusion using autocxx_macro (suffix will be .include.rs)")
@@ -136,7 +117,6 @@ fn main() -> miette::Result<()> {
             .required(true)
             .multiple(true)
             .arg("gen-cpp")
-            .arg("gen-rs-complete")
             .arg("gen-rs-include")
         )
         .arg(
@@ -276,16 +256,6 @@ fn main() -> miette::Result<()> {
         desired_number,
         "h",
     );
-    if matches.is_present("gen-rs-complete") {
-        let mut ts = TokenStream::new();
-        parsed_file.to_tokens(&mut ts);
-        write_to_file(
-            &depfile,
-            &outdir,
-            "gen.complete.rs".to_string(),
-            ts.to_string().as_bytes(),
-        );
-    }
     if matches.is_present("gen-rs-include") {
         let autocxxes = parsed_file.get_rs_buildables();
         let mut counter = 0usize;
