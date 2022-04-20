@@ -10,9 +10,9 @@ use crate::{
     conversion::{apivec::ApiVec, AnalysisPhase, ConvertError},
     types::QualifiedName,
 };
+use indexmap::map::IndexMap as HashMap;
 use itertools::Itertools;
 use quote::ToTokens;
-use std::collections::HashMap;
 use std::iter::once;
 use syn::{Token, Type};
 

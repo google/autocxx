@@ -17,10 +17,11 @@ use crate::{
     types::{make_ident, Namespace, QualifiedName},
 };
 use autocxx_parser::IncludeCppConfig;
+use indexmap::map::IndexMap as HashMap;
+use indexmap::set::IndexSet as HashSet;
 use itertools::Itertools;
 use proc_macro2::Ident;
 use quote::ToTokens;
-use std::collections::{HashMap, HashSet};
 use syn::{
     parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
     TypePath, TypePtr,
@@ -309,7 +310,7 @@ impl<'a> TypeConverter<'a> {
                 if let PathArguments::AngleBracketed(ref mut ab) = last_seg.arguments {
                     let mut innerty = self.convert_punctuated(ab.args.clone(), ns)?;
                     ab.args = innerty.ty;
-                    deps.extend(innerty.types_encountered.drain());
+                    deps.extend(innerty.types_encountered.drain(..));
                 }
             } else {
                 // Oh poop. It's a generic type which cxx won't be able to handle.
@@ -348,7 +349,7 @@ impl<'a> TypeConverter<'a> {
                 GenericArgument::Type(t) => {
                     let mut innerty =
                         self.convert_type(t, ns, &TypeConversionContext::CxxInnerType)?;
-                    types_encountered.extend(innerty.types_encountered.drain());
+                    types_encountered.extend(innerty.types_encountered.drain(..));
                     extra_apis.append(&mut innerty.extra_apis);
                     GenericArgument::Type(innerty.ty)
                 }

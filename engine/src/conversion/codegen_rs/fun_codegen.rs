@@ -6,7 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{borrow::Cow, collections::HashSet};
+use indexmap::set::IndexSet as HashSet;
+use std::borrow::Cow;
 
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};

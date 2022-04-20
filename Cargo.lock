@@ -125,6 +125,7 @@ version = "0.21.2"
 dependencies = [
  "autocxx-engine",
  "env_logger 0.9.0",
+ "indexmap",
  "syn",
 ]
 
@@ -147,6 +148,7 @@ dependencies = [
  "autocxx-parser",
  "cc",
  "cxx-gen",
+ "indexmap",
  "indoc",
  "itertools 0.10.3",
  "log",
@@ -237,6 +239,7 @@ dependencies = [
 name = "autocxx-parser"
 version = "0.21.2"
 dependencies = [
+ "indexmap",
  "itertools 0.10.3",
  "log",
  "once_cell",

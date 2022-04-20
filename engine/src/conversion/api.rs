@@ -6,7 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{collections::HashSet, fmt::Display};
+use indexmap::set::IndexSet as HashSet;
+use std::fmt::Display;
 
 use crate::types::{make_ident, Namespace, QualifiedName};
 use autocxx_parser::{ExternCppType, RustFun, RustPath};

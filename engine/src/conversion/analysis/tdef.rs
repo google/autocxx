@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashSet;
+use indexmap::set::IndexSet as HashSet;
 
 use autocxx_parser::IncludeCppConfig;
 use syn::ItemType;
