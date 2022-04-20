@@ -148,7 +148,7 @@ where
                 .arg("file")
                 .arg("--inc")
                 .arg(demo_code_dir.to_str().unwrap())
-                .arg("-h")
+                .arg("--header")
                 .arg(header_name)
                 .arg("-d")
                 .arg("generate_all!()")

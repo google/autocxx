@@ -11,7 +11,7 @@
 mod depfile;
 
 use autocxx_engine::{parse_file, HeaderNamer, RebuildDependencyRecorder};
-use clap::{crate_authors, crate_version, App, Arg, ArgGroup};
+use clap::{crate_authors, crate_version, Arg, ArgGroup, Command};
 use depfile::Depfile;
 use miette::IntoDiagnostic;
 use proc_macro2::TokenStream;
@@ -79,38 +79,38 @@ type of file.
 ";
 
 fn main() -> miette::Result<()> {
-    let matches = App::new("autocxx-gen")
+    let matches = Command::new("autocxx-gen")
         .version(crate_version!())
         .author(crate_authors!())
         .about("Generates bindings files from Rust files that contain include_cpp! macros")
         .long_about(LONG_HELP)
         .arg(
-            Arg::with_name("INPUT")
+            Arg::new("INPUT")
                 .help("Sets the input .rs file to use")
                 .required(true)
-                .index(1),
         )
         .arg(
-            Arg::with_name("outdir")
-                .short("o")
+            Arg::new("outdir")
+                .short('o')
                 .long("outdir")
+                .allow_invalid_utf8(true)
                 .value_name("PATH")
                 .help("output directory path")
                 .takes_value(true)
                 .required(true),
         )
         .arg(
-            Arg::with_name("inc")
-                .short("I")
+            Arg::new("inc")
+                .short('I')
                 .long("inc")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .number_of_values(1)
                 .value_name("INCLUDE DIRS")
                 .help("include path")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("cpp-extension")
+            Arg::new("cpp-extension")
                 .long("cpp-extension")
                 .value_name("EXTENSION")
                 .default_value("cc")
@@ -118,21 +118,21 @@ fn main() -> miette::Result<()> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("gen-cpp")
+            Arg::new("gen-cpp")
                 .long("gen-cpp")
                 .help("whether to generate C++ implementation and header files")
         )
         .arg(
-            Arg::with_name("gen-rs-complete")
+            Arg::new("gen-rs-complete")
                 .long("gen-rs-complete")
                 .help("whether to generate a Rust file replacing the original file (suffix will be .complete.rs)")
         )
         .arg(
-            Arg::with_name("gen-rs-include")
+            Arg::new("gen-rs-include")
                 .long("gen-rs-include")
                 .help("whether to generate Rust files for inclusion using autocxx_macro (suffix will be .include.rs)")
         )
-        .group(ArgGroup::with_name("mode")
+        .group(ArgGroup::new("mode")
             .required(true)
             .multiple(true)
             .arg("gen-cpp")
@@ -140,60 +140,60 @@ fn main() -> miette::Result<()> {
             .arg("gen-rs-include")
         )
         .arg(
-            Arg::with_name("generate-exact")
+            Arg::new("generate-exact")
                 .long("generate-exact")
                 .value_name("NUM")
                 .help("assume and ensure there are exactly NUM bridge blocks in the file. Only applies for --gen-cpp or --gen-rs-include")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("fix-rs-include-name")
+            Arg::new("fix-rs-include-name")
                 .long("fix-rs-include-name")
                 .help("Make the name of the .rs file predictable. You must set AUTOCXX_RS_FILE during Rust build time to educate autocxx_macro about your choice.")
                 .requires("gen-rs-include")
         )
         .arg(
-            Arg::with_name("auto-allowlist")
+            Arg::new("auto-allowlist")
                 .long("auto-allowlist")
                 .help("Dynamically construct allowlist from real uses of APIs.")
         )
         .arg(
-            Arg::with_name("suppress-system-headers")
+            Arg::new("suppress-system-headers")
                 .long("suppress-system-headers")
                 .help("Do not refer to any system headers from generated code. May be useful for minimization.")
         )
         .arg(
-            Arg::with_name("cxx-impl-annotations")
+            Arg::new("cxx-impl-annotations")
                 .long("cxx-impl-annotations")
                 .value_name("ANNOTATION")
                 .help("prefix for symbols to be exported from C++ bindings, e.g. __attribute__ ((visibility (\"default\")))")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("cxx-h-path")
+            Arg::new("cxx-h-path")
                 .long("cxx-h-path")
                 .value_name("PREFIX")
                 .help("prefix for path to cxx.h (from the cxx crate) within #include statements. Must end in /")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("cxxgen-h-path")
+            Arg::new("cxxgen-h-path")
                 .long("cxxgen-h-path")
                 .value_name("PREFIX")
                 .help("prefix for path to cxxgen.h (which we generate into the output directory) within #include statements. Must end in /")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("depfile")
+            Arg::new("depfile")
                 .long("depfile")
                 .value_name("DEPFILE")
                 .help("A .d file to write")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("clang-args")
+            Arg::new("clang-args")
                 .last(true)
-                .multiple(true)
+                .multiple_occurrences(true)
                 .help("Extra arguments to pass to Clang"),
         )
         .get_matches();
