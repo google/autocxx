@@ -63,7 +63,6 @@ fn main() {
                                     )
                                     .arg(
                                         Arg::new("header")
-                                            .short('h')
                                             .long("header")
                                             .multiple_occurrences(true)
                                             .number_of_values(1)
