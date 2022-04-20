@@ -146,17 +146,9 @@ pub(super) fn gen_function(
             } => {
                 // Method, or static method.
                 impl_entry = Some(fn_generator.generate_method_impl(
-                    matches!(
-                        method_kind,
-                        MethodKind::MakeUnique | MethodKind::Constructor { .. }
-                    ),
+                    matches!(method_kind, MethodKind::Constructor { .. }),
                     impl_for,
                     &ret_type,
-                    if matches!(method_kind, MethodKind::MakeUnique) {
-                        Some("Instead, ensure you have imported autocxx::prelude::* (specifically the Within trait) and then use new().within_unique_ptr()")
-                    } else {
-                        None
-                    }
                 ));
             }
             FnKind::TraitMethod { ref details, .. } => {
@@ -343,22 +335,15 @@ impl<'a> FnGenerator<'a> {
         avoid_self: bool,
         impl_block_type_name: &QualifiedName,
         ret_type: &ReturnType,
-        deprecation: Option<&str>,
     ) -> Box<ImplBlockDetails> {
         let (lifetime_tokens, wrapper_params, ret_type, call_body) =
             self.common_parts(avoid_self, &None, ret_type);
         let rust_name = make_ident(self.rust_name);
         let unsafety = self.unsafety.wrapper_token();
         let doc_attrs = self.doc_attrs;
-        let deprecation = deprecation.map(|reason| {
-            quote! {
-                #[deprecated = #reason]
-            }
-        });
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
                 #(#doc_attrs)*
-                #deprecation
                 pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                     #call_body
                 }

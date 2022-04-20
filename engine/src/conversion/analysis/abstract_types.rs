@@ -105,7 +105,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
         Api::Function {
             analysis:
                 FnAnalysis {
-                    kind: FnKind::Method{impl_for: self_ty, method_kind: MethodKind::MakeUnique | MethodKind::Constructor{..}, ..}
+                    kind: FnKind::Method{impl_for: self_ty, method_kind: MethodKind::Constructor{..}, ..}
                         | FnKind::TraitMethod{ kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor, impl_for: self_ty, ..},
                     ..
                 },

@@ -2212,7 +2212,7 @@ fn test_overload_constructors() {
     "};
     let rs = quote! {
         ffi::Bob::new().within_unique_ptr();
-        ffi::Bob::make_unique1(32);
+        ffi::Bob::new1(32).within_unique_ptr();
     };
     run_test(cxx, hdr, rs, &["Bob"], &[]);
 }
@@ -8399,7 +8399,7 @@ fn test_pv_subclass_constructors() {
             }
             impl CppPeerConstructor<ffi::MyTestObserverCpp> for MyTestObserver {
                 fn make_peer(&mut self, peer_holder: CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<ffi::MyTestObserverCpp> {
-                    ffi::MyTestObserverCpp::make_unique1(peer_holder, 3u8)
+                    ffi::MyTestObserverCpp::new1(peer_holder, 3u8).within_unique_ptr()
                 }
             }
         }),

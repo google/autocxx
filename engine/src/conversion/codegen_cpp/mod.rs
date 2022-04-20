@@ -488,9 +488,7 @@ impl<'a> CppCodeGenerator<'a> {
         let (mut underlying_function_call, field_assignments, need_allocators) = match &details
             .payload
         {
-            CppFunctionBody::MakeUnique | CppFunctionBody::Cast => {
-                (arg_list, "".to_string(), false)
-            }
+            CppFunctionBody::Cast => (arg_list, "".to_string(), false),
             CppFunctionBody::PlacementNew(ns, id) => {
                 let ty_id = QualifiedName::new(ns, id.clone());
                 let ty_id = self.namespaced_name(&ty_id);

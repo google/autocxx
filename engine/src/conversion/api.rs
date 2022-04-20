@@ -244,7 +244,6 @@ impl Display for SpecialMemberKind {
 pub(crate) enum Provenance {
     Bindgen,
     SynthesizedOther,
-    SynthesizedMakeUnique,
     SynthesizedSubclassConstructor(Box<SubclassConstructorDetails>),
 }
 
