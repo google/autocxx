@@ -140,12 +140,6 @@ fn main() -> miette::Result<()> {
             .arg("gen-rs-include")
         )
         .arg(
-            Arg::with_name("skip-cxx-gen")
-                .long("skip-cxx-gen")
-                .help("Skip performing C++ codegen for #[cxx::bridge] blocks. Only applies for --gen-cpp")
-                .requires("gen-cpp")
-        )
-        .arg(
             Arg::with_name("generate-exact")
                 .long("generate-exact")
                 .value_name("NUM")
@@ -237,7 +231,6 @@ fn main() -> miette::Result<()> {
         cxx_impl_annotations: get_option_string("cxx-impl-annotations", &matches),
         path_to_cxx_h: get_option_string("cxx-h-path", &matches),
         path_to_cxxgen_h: get_option_string("cxxgen-h-path", &matches),
-        skip_cxx_gen: matches.is_present("skip-cxx-gen"),
         header_namer,
     };
     let depfile = match matches.value_of("depfile") {
