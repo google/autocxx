@@ -32,16 +32,12 @@ fn base_test<F>(tmp_dir: &TempDir, arg_modifier: F) -> Result<(), Box<dyn std::e
 where
     F: FnOnce(&mut Command),
 {
-    let result = base_test_ex(tmp_dir, arg_modifier, false);
+    let result = base_test_ex(tmp_dir, arg_modifier);
     assert_contentful(tmp_dir, "gen0.cc");
     result
 }
 
-fn base_test_ex<F>(
-    tmp_dir: &TempDir,
-    arg_modifier: F,
-    use_complete_rs: bool,
-) -> Result<(), Box<dyn std::error::Error>>
+fn base_test_ex<F>(tmp_dir: &TempDir, arg_modifier: F) -> Result<(), Box<dyn std::error::Error>>
 where
     F: FnOnce(&mut Command),
 {
@@ -57,12 +53,8 @@ where
         .arg(demo_rs)
         .arg("--outdir")
         .arg(tmp_dir.path().to_str().unwrap())
-        .arg("--gen-cpp");
-    if use_complete_rs {
-        cmd.arg("--gen-rs-complete");
-    } else {
-        cmd.arg("--gen-rs-include");
-    }
+        .arg("--gen-cpp")
+        .arg("--gen-rs-include");
     cmd.assert().success();
     Ok(())
 }
@@ -108,16 +100,12 @@ fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
 fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
     let depfile = tmp_dir.path().join("test.d");
-    base_test_ex(
-        &tmp_dir,
-        |cmd| {
-            cmd.arg("--generate-exact")
-                .arg("3")
-                .arg("--depfile")
-                .arg(depfile);
-        },
-        true,
-    )?;
+    base_test_ex(&tmp_dir, |cmd| {
+        cmd.arg("--generate-exact")
+            .arg("3")
+            .arg("--depfile")
+            .arg(depfile);
+    })?;
     assert_contentful(&tmp_dir, "gen0.cc");
     assert_contentful(&tmp_dir, "gen0.h");
     // TODO: This file will actually try #including one of our .h files if there's anything to put

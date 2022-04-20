@@ -48,20 +48,16 @@ b) build all *.cc files produced by this tool.
 
 If your build system requires each build rule to make precise filenames
 known in advance, then you will need to:
-a) Use `--generate-exact <N> --gen-rs-complete`
+a) Use `--generate-exact <N>`
 b) Teach your build system that the C++ files to compile are named `gen0.h`,
    `gen0.cc`, `gen1.h`, `gen1.cc`, etc (through `N`), corresponding
-   to each `include_cpp!` section, plus 'cxxgen.h`. `gen.complete.rs` will also
-   be generated and should be compiled _instead of_ the original Rust file.
+   to each `include_cpp!` section, plus 'cxxgen.h`.
 c) If `N` is bigger than the number of files needed, extra no-op files will
    be emitted. These may still be compiled normally, but won't do anything. If
    `N` is smaller than the number of files needed, generation will fail.
 
-Note that there is currently no way to teach each `include_cpp!` section
-which `.include.rs` file to use, so the only way to get fixed output paths is
-with `--gen-rs-complete`. There are always multiple `.cc` files (even with just
-a single `include_cpp!` section), and we always generate the same number of each
-type of file.
+At present, N must be 2, which means each invocation must be processing
+exactly one include_cpp! macro. This will improve in future.
 ";
 
 fn main() -> miette::Result<()> {
