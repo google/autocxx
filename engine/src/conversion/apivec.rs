@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
+use indexmap::set::IndexSet as HashSet;
 
 use crate::{
     conversion::{api::ApiName, convert_error::ErrorContext, ConvertError},

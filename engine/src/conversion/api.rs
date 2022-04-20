@@ -6,7 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{collections::HashSet, fmt::Display};
+use indexmap::set::IndexSet as HashSet;
+use std::fmt::Display;
 
 use crate::types::{make_ident, Namespace, QualifiedName};
 use autocxx_parser::{ExternCppType, RustFun, RustPath};
@@ -243,7 +244,6 @@ impl Display for SpecialMemberKind {
 pub(crate) enum Provenance {
     Bindgen,
     SynthesizedOther,
-    SynthesizedMakeUnique,
     SynthesizedSubclassConstructor(Box<SubclassConstructorDetails>),
 }
 
@@ -451,8 +451,27 @@ impl SubclassName {
 /// (Specifically, allowing `syn` Types to be `Debug` requires
 /// enabling syn's `extra-traits` feature which increases compile time.)
 pub(crate) enum Api<T: AnalysisPhase> {
-    /// A forward declared type for which no definition is available.
-    ForwardDeclaration { name: ApiName },
+    /// A forward declaration, which we mustn't store in a UniquePtr.
+    ForwardDeclaration {
+        name: ApiName,
+        /// If we found a problem parsing this forward declaration, we'll
+        /// ephemerally store the error here, as opposed to immediately
+        /// converting it to an `IgnoredItem`. That's because the
+        /// 'replace_hopeless_typedef_targets' analysis phase needs to spot
+        /// cases where there was an error which was _also_ a forward declaration.
+        /// That phase will then discard such Api::ForwardDeclarations
+        /// and replace them with normal Api::IgnoredItems.
+        err: Option<ConvertErrorWithContext>,
+    },
+    /// We found a typedef to something that we didn't fully understand.
+    /// We'll treat it as an opaque unsized type.
+    OpaqueTypedef {
+        name: ApiName,
+        /// Further store whether this was a typedef to a forward declaration.
+        /// If so we can't allow it to live in a UniquePtr, just like a regular
+        /// Api::ForwardDeclaration.
+        forward_declaration: bool,
+    },
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
     ConcreteType {
@@ -562,7 +581,8 @@ pub(crate) enum UnsafetyNeeded {
 impl<T: AnalysisPhase> Api<T> {
     pub(crate) fn name_info(&self) -> &ApiName {
         match self {
-            Api::ForwardDeclaration { name } => name,
+            Api::ForwardDeclaration { name, .. } => name,
+            Api::OpaqueTypedef { name, .. } => name,
             Api::ConcreteType { name, .. } => name,
             Api::StringConstructor { name } => name,
             Api::Function { name, .. } => name,

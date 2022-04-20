@@ -87,7 +87,7 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "autocxx"
-version = "0.21.0"
+version = "0.21.2"
 dependencies = [
  "aquamarine",
  "autocxx-macro",
@@ -97,9 +97,9 @@ dependencies = [
 
 [[package]]
 name = "autocxx-bindgen"
-version = "0.59.15"
+version = "0.59.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c489e3a7c88e42bd4c9a7c7298853084840bf56de5ea1fff355db14208d6175"
+checksum = "435723e14bf88f198322f8555a4fdb108363021d97a47bb6492891ca86055e79"
 dependencies = [
  "bitflags",
  "cexpr",
@@ -121,16 +121,17 @@ dependencies = [
 
 [[package]]
 name = "autocxx-build"
-version = "0.21.0"
+version = "0.21.2"
 dependencies = [
  "autocxx-engine",
  "env_logger 0.9.0",
+ "indexmap",
  "syn",
 ]
 
 [[package]]
 name = "autocxx-demo"
-version = "0.21.0"
+version = "0.21.2"
 dependencies = [
  "autocxx",
  "autocxx-build",
@@ -140,13 +141,14 @@ dependencies = [
 
 [[package]]
 name = "autocxx-engine"
-version = "0.21.0"
+version = "0.21.2"
 dependencies = [
  "aquamarine",
  "autocxx-bindgen",
  "autocxx-parser",
  "cc",
  "cxx-gen",
+ "indexmap",
  "indoc",
  "itertools 0.10.3",
  "log",
@@ -165,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-gen"
-version = "0.21.0"
+version = "0.21.2"
 dependencies = [
  "assert_cmd",
  "autocxx",
@@ -183,7 +185,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-integration-tests"
-version = "0.21.0"
+version = "0.21.2"
 dependencies = [
  "autocxx",
  "autocxx-engine",
@@ -206,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-macro"
-version = "0.21.0"
+version = "0.21.2"
 dependencies = [
  "autocxx-parser",
  "proc-macro-error",
@@ -217,7 +219,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-mdbook-preprocessor"
-version = "0.21.0"
+version = "0.21.2"
 dependencies = [
  "anyhow",
  "autocxx-integration-tests",
@@ -235,8 +237,9 @@ dependencies = [
 
 [[package]]
 name = "autocxx-parser"
-version = "0.21.0"
+version = "0.21.2"
 dependencies = [
+ "indexmap",
  "itertools 0.10.3",
  "log",
  "once_cell",
@@ -250,7 +253,7 @@ dependencies = [
 
 [[package]]
 name = "autocxx-reduce"
-version = "0.21.0"
+version = "0.21.2"
 dependencies = [
  "assert_cmd",
  "autocxx-engine",

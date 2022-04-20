@@ -24,7 +24,7 @@ use indoc::indoc;
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::Token;
+use syn::{parse_quote, Token};
 use test_log::test;
 
 #[test]
@@ -1604,19 +1604,17 @@ fn test_issue_931() {
         struct __cow_string {
           __cow_string();
         };
-        namespace {
         class b {
+        public:
           __cow_string c;
         };
-        } // namespace
         class j {
+        public:
           b d;
         };
         template <typename> class e;
         } // namespace a
-        namespace {
         template <typename> struct f {};
-        } // namespace
         namespace llvm {
         template <class> class g {
           union {
@@ -1624,6 +1622,7 @@ fn test_issue_931() {
           };
         };
         class MemoryBuffer {
+        public:
           g<a::e<MemoryBuffer>> i;
         };
         } // namespace llvm
@@ -2213,7 +2212,7 @@ fn test_overload_constructors() {
     "};
     let rs = quote! {
         ffi::Bob::new().within_unique_ptr();
-        ffi::Bob::make_unique1(32);
+        ffi::Bob::new1(32).within_unique_ptr();
     };
     run_test(cxx, hdr, rs, &["Bob"], &[]);
 }
@@ -3302,6 +3301,7 @@ fn test_associated_type_problem() {
         template <typename> class b {};
         } // namespace a
         class bl {
+        public:
           a::b<bl> bm;
         };
         struct B {
@@ -3329,7 +3329,7 @@ fn test_two_type_constructors() {
 
 #[ignore] // https://github.com/rust-lang/rust-bindgen/issues/1924
 #[test]
-fn test_associated_type_templated_typedef() {
+fn test_associated_type_templated_typedef_in_struct() {
     let hdr = indoc! {"
         #include <string>
         #include <cstdint>
@@ -3353,6 +3353,203 @@ fn test_associated_type_templated_typedef() {
         ffi::Origin::new().within_unique_ptr();
     };
     run_test("", hdr, rs, &["Origin"], &[]);
+}
+
+#[test]
+fn test_associated_type_templated_typedef() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        struct Container {
+            Container() {}
+            const StringPiece& get_string_piece() const { return sp; }
+            StringPiece sp;
+        };
+
+        inline void take_string_piece(const StringPiece&) {}
+    "};
+    let rs = quote! {
+        let sp = ffi::Container::new().within_box();
+        ffi::take_string_piece(sp.get_string_piece());
+    };
+    run_test("", hdr, rs, &["take_string_piece", "Container"], &[]);
+}
+
+#[test]
+fn test_associated_type_templated_typedef_by_value_regular() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            BasicStringPiece() : ptr_(nullptr), length_(0) {}
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        inline StringPiece give_string_piece() {
+            StringPiece s;
+            return s;
+        }
+        inline void take_string_piece(StringPiece) {}
+    "};
+    let rs = quote! {
+        let sp = ffi::give_string_piece();
+        ffi::take_string_piece(sp);
+    };
+    run_test(
+        "",
+        hdr,
+        rs,
+        &["take_string_piece", "give_string_piece"],
+        &[],
+    );
+}
+
+#[test]
+fn test_associated_type_templated_typedef_by_value_forward_declaration() {
+    let hdr = indoc! {"
+        #include <string>
+        #include <cstdint>
+
+        template <typename STRING_TYPE> class BasicStringPiece;
+
+        typedef BasicStringPiece<std::string> StringPiece;
+
+        struct Container {
+            StringPiece give_string_piece() const;
+            void take_string_piece(StringPiece string_piece) const;
+            const StringPiece& get_string_piece() const;
+            uint32_t b;
+        };
+
+        inline void take_string_piece_by_ref(const StringPiece&) {}
+    "};
+    let cpp = indoc! {"
+        template <typename STRING_TYPE> class BasicStringPiece {
+        public:
+            BasicStringPiece() : ptr_(nullptr), length_(0) {}
+            typedef size_t size_type;
+            typedef typename STRING_TYPE::value_type value_type;
+            const value_type* ptr_;
+            size_type length_;
+        };
+
+        StringPiece Container::give_string_piece() const {
+            StringPiece s;
+            return s;
+        }
+        void Container::take_string_piece(StringPiece) const {}
+
+        StringPiece a;
+
+        const StringPiece& Container::get_string_piece() const {
+            return a;
+        }
+    "};
+    // As this template is forward declared we shouldn't be able to pass it by
+    // value, but we still want to be able to use it by reference.
+    let rs = quote! {
+        let cont = ffi::Container::new().within_box();
+        ffi::take_string_piece_by_ref(cont.as_ref().get_string_piece());
+    };
+    run_test(
+        cpp,
+        hdr,
+        rs,
+        &["take_string_piece_by_ref", "Container"],
+        &[],
+    );
+}
+
+#[test]
+fn test_remove_cv_t_pathological() {
+    let hdr = indoc! {"
+        template <class _Ty>
+        struct remove_cv {
+            using type = _Ty;
+            template <template <class> class _Fn>
+            using _Apply = _Fn<_Ty>;
+        };
+
+        template <class _Ty>
+        struct remove_cv<const _Ty> {
+            using type = _Ty;
+            template <template <class> class _Fn>
+            using _Apply = const _Fn<_Ty>;
+        };
+
+        template <class _Ty>
+        struct remove_cv<volatile _Ty> {
+            using type = _Ty;
+            template <template <class> class _Fn>
+            using _Apply = volatile _Fn<_Ty>;
+        };
+
+        template <class _Ty>
+        struct remove_cv<const volatile _Ty> {
+            using type = _Ty;
+            template <template <class> class _Fn>
+            using _Apply = const volatile _Fn<_Ty>;
+        };
+
+        template <class _Ty>
+        using remove_cv_t = typename remove_cv<_Ty>::type;
+
+        template <class _Ty>
+        struct remove_reference {
+            using type                 = _Ty;
+            using _Const_thru_ref_type = const _Ty;
+        };
+
+        template <class _Ty>
+        struct remove_reference<_Ty&> {
+            using type                 = _Ty;
+            using _Const_thru_ref_type = const _Ty&;
+        };
+
+        template <class _Ty>
+        struct remove_reference<_Ty&&> {
+            using type                 = _Ty;
+            using _Const_thru_ref_type = const _Ty&&;
+        };
+
+        template <class _Ty>
+        using remove_reference_t = typename remove_reference<_Ty>::type;
+
+        template <class _Ty>
+        using _Remove_cvref_t = remove_cv_t<remove_reference_t<_Ty>>;
+    "};
+
+    let rs = quote! {};
+
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! {
+            generate_all!()
+        },
+        None,
+        None,
+        None,
+    );
 }
 
 #[test]
@@ -3808,16 +4005,19 @@ fn test_forward_declaration() {
         #include <memory>
         struct A;
         struct B {
-            B() {}
+            B() : a(0) {}
             uint32_t a;
             void daft(const A&) const {}
             static B daft3(const A&) { B b; return b; }
+            A daft4();
+            std::unique_ptr<A> daft5();
         };
         A* get_a();
         void delete_a(A*);
     "};
     let cpp = indoc! {"
         struct A {
+            A() : a(0) {}
             uint32_t a;
         };
         A* get_a() {
@@ -3825,6 +4025,13 @@ fn test_forward_declaration() {
         }
         void delete_a(A* a) {
             delete a;
+        }
+        A B::daft4() {
+            A a;
+            return a;
+        }
+        std::unique_ptr<A> B::daft5() {
+            return std::make_unique<A>();
         }
     "};
     let rs = quote! {
@@ -4759,7 +4966,7 @@ fn test_double_underscores_ignored() {
     };
     struct B {
         B() :a(1) {}
-        uint32_t take_foo(__FOO a) const {
+        uint32_t take_foo(__FOO) const {
             return 3;
         }
         void do__something() const { }
@@ -4856,9 +5063,9 @@ fn test_issue_264() {
     let hdr = indoc! {"
     namespace a {
         typedef int b;
-        inline namespace c {}
+        //inline namespace c {}
         template <typename> class aa;
-        namespace c {
+        inline namespace c {
         template <typename d, typename = d, typename = aa<d>> class e;
         }
         typedef e<char> f;
@@ -4887,7 +5094,7 @@ fn test_issue_264() {
         template <typename ad> struct w : a::u<ad> {};
         } // namespace q
         namespace a {
-        namespace c {
+        inline namespace c {
         template <typename, typename, typename ad> class e {
           typedef q::w<ad> s;
         public:
@@ -4899,6 +5106,7 @@ fn test_issue_264() {
         namespace ah {
         typedef a::f::ab t;
         class ai {
+        public:
           t aj;
         };
         class al;
@@ -4913,9 +5121,11 @@ fn test_issue_264() {
           al aq();
         };
         class ar {
+        public:
           am::an as;
         };
         class al {
+        public:
           ar at;
         };
         struct au {
@@ -4925,15 +5135,25 @@ fn test_issue_264() {
         } // namespace ag
         namespace operations_research {
         class aw {
+        public:
           ag::ah::au ax;
         };
         class Solver {
+        public:
           aw ay;
         };
         } // namespace operations_research
     "};
     let rs = quote! {};
-    run_test("", hdr, rs, &["operations_research::Solver"], &[]);
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["operations_research::Solver"], &[], None),
+        make_cpp17_adder(),
+        None,
+        None,
+    );
 }
 
 #[test]
@@ -4969,6 +5189,7 @@ fn test_get_pure_virtual() {
         #include <cstdint>
         class A {
         public:
+            virtual ~A() {}
             virtual uint32_t get_val() const = 0;
         };
         class B : public A {
@@ -4994,7 +5215,8 @@ fn test_abstract_class_no_make_unique() {
     let hdr = indoc! {"
         class A {
         public:
-            A();
+            A() {}
+            virtual ~A() {}
             virtual void foo() const = 0;
         };
     "};
@@ -5008,6 +5230,7 @@ fn test_derived_abstract_class_no_make_unique() {
         class A {
         public:
             A();
+            virtual ~A() {}
             virtual void foo() const = 0;
         };
 
@@ -5025,7 +5248,8 @@ fn test_recursive_derived_abstract_class_no_make_unique() {
     let hdr = indoc! {"
         class A {
         public:
-            A() {};
+            A() {}
+            virtual ~A() {}
             virtual void foo() const = 0;
         };
 
@@ -5049,6 +5273,7 @@ fn test_derived_abstract_class_with_no_allowlisting_no_make_unique() {
         class A {
         public:
             A();
+            virtual ~A() {}
             virtual void foo() const = 0;
         };
 
@@ -5663,7 +5888,7 @@ fn test_double_destruction() {
 #[test]
 fn test_keyword_function() {
     let hdr = indoc! {"
-        inline void move(int a) {};
+        inline void move(int) {};
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["move_"], &[]);
@@ -5857,7 +6082,7 @@ fn test_stringview() {
         #include <string_view>
         #include <string>
         void take_string_view(std::string_view) {}
-        std::string_view return_string_view(std::string a) { return std::string_view(a); }
+        std::string_view return_string_view(const std::string& a) { return std::string_view(a); }
     "};
     let rs = quote! {};
     run_test_ex(
@@ -5926,7 +6151,9 @@ fn test_bitset() {
         public:
             typedef size_t              __storage_type;
             __storage_type __first_[_N_words];
-            inline bool all() {}
+            inline bool all() {
+                return false;
+            }
         };
 
         template <size_t _Size>
@@ -6062,7 +6289,7 @@ fn test_take_nonpod_rvalue_from_up() {
         struct A {
             std::string a;
         };
-        inline void take_a(A&& a) {};
+        inline void take_a(A&&) {};
     "};
     let rs = quote! {
         let a = ffi::A::new().within_unique_ptr();
@@ -6081,7 +6308,7 @@ fn test_take_nonpod_rvalue_from_stack() {
         struct A {
             std::string a;
         };
-        inline void take_a(A&& a) {};
+        inline void take_a(A&&) {};
     "};
     let rs = quote! {
         moveit! { let a = ffi::A::new() };
@@ -6360,9 +6587,10 @@ fn test_extern_cpp_type_cxx_bridge() {
     let hdr = indoc! {"
         #include <cstdint>
         struct A {
+            A() : a(0) {}
             int a;
         };
-        inline void handle_a(const A& a) {
+        inline void handle_a(const A&) {
         }
         inline A create_a() {
             A a;
@@ -6400,12 +6628,13 @@ fn test_extern_cpp_type_two_include_cpp() {
     let hdr = indoc! {"
         #include <cstdint>
         struct A {
+            A() : a(0) {}
             int a;
         };
         enum B {
             VARIANT,
         };
-        inline void handle_a(const A& a) {
+        inline void handle_a(const A&) {
         }
         inline A create_a(B) {
             A a;
@@ -8170,7 +8399,7 @@ fn test_pv_subclass_constructors() {
             }
             impl CppPeerConstructor<ffi::MyTestObserverCpp> for MyTestObserver {
                 fn make_peer(&mut self, peer_holder: CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<ffi::MyTestObserverCpp> {
-                    ffi::MyTestObserverCpp::make_unique1(peer_holder, 3u8)
+                    ffi::MyTestObserverCpp::new1(peer_holder, 3u8).within_unique_ptr()
                 }
             }
         }),
@@ -8435,6 +8664,47 @@ fn test_move_out_of_uniqueptr() {
 }
 
 #[test]
+fn test_implicit_constructor_with_typedef_field() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct B {
+        uint32_t b;
+    };
+    typedef struct B C;
+    struct A {
+        B field;
+        uint32_t a;
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut stack_obj = ffi::A::new();
+        }
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_implicit_constructor_with_array_field() {
+    let hdr = indoc! {"
+    #include <stdint.h>
+    #include <string>
+    struct A {
+        uint32_t a[3];
+        std::string so_we_are_non_trivial;
+    };
+    "};
+    let rs = quote! {
+        moveit! {
+            let mut _stack_obj = ffi::A::new();
+        }
+    };
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_implicit_constructor_moveit() {
     let hdr = indoc! {"
     #include <stdint.h>
@@ -8466,14 +8736,14 @@ fn test_pass_by_value_moveit() {
         uint32_t a;
         std::string so_we_are_non_trivial;
     };
-    inline void take_a(A a) {}
+    inline void take_a(A) {}
     struct B {
         B() {}
         B(const B&) {}
         B(B&&) {}
         std::string so_we_are_non_trivial;
     };
-    inline void take_b(B b) {}
+    inline void take_b(B) {}
     "};
     let rs = quote! {
         moveit! {
@@ -8556,21 +8826,23 @@ fn test_nonconst_reference_method_parameter() {
     run_test("", hdr, rs, &["NOP", "A", "B"], &[]);
 }
 
-#[test]
-fn test_destructor_moveit() {
+fn destruction_test(ident: proc_macro2::Ident, extra_bit: Option<TokenStream>) {
     let hdr = indoc! {"
     #include <stdint.h>
     #include <string>
     extern bool gConstructed;
     struct A {
         A() { gConstructed = true; }
-        ~A() { gConstructed = false; }
+        virtual ~A() { gConstructed = false; }
         void set(uint32_t val) { a = val; }
         uint32_t get() const { return a; }
         uint32_t a;
         std::string so_we_are_non_trivial;
     };
     inline bool is_constructed() { return gConstructed; }
+    struct B: public A {
+        uint32_t b;
+    };
     "};
     let cpp = indoc! {"
         bool gConstructed = false;
@@ -8579,15 +8851,30 @@ fn test_destructor_moveit() {
         assert!(!ffi::is_constructed());
         {
             moveit! {
-                let mut stack_obj = ffi::A::new();
+                let mut _stack_obj = ffi::#ident::new();
             }
             assert!(ffi::is_constructed());
-            stack_obj.as_mut().set(42);
-            assert_eq!(stack_obj.get(), 42);
+            #extra_bit
         }
         assert!(!ffi::is_constructed());
     };
-    run_test(cpp, hdr, rs, &["A", "is_constructed"], &[]);
+    run_test(cpp, hdr, rs, &[&ident.to_string(), "is_constructed"], &[]);
+}
+
+#[test]
+fn test_destructor_moveit() {
+    destruction_test(
+        parse_quote! { A },
+        Some(quote! {
+            _stack_obj.as_mut().set(42);
+            assert_eq!(_stack_obj.get(), 42);
+        }),
+    );
+}
+
+#[test]
+fn test_destructor_derived_moveit() {
+    destruction_test(parse_quote! { B }, None);
 }
 
 #[test]
@@ -8856,6 +9143,7 @@ fn test_no_constructor_pv() {
     #include <stdint.h>
     class A {
     public:
+        virtual ~A() {}
         virtual void foo() = 0;
     };
     "};
@@ -8948,6 +9236,7 @@ fn test_abstract_private() {
 fn test_abstract_issue_979() {
     let hdr = indoc! {"
     class Test {
+        virtual ~Test() {}
         virtual void TestBody() = 0;
     };
     "};

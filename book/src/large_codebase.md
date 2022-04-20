@@ -5,7 +5,7 @@ There is _limited_ support to refer from one set of bindings to another, using t
 
 ```rust,ignore,autocxx,hidecpp
 autocxx_integration_tests::doctest(
-"void handle_a(const A& a) {
+"void handle_a(const A&) {
 }
 A create_a(B) {
     A a;
@@ -13,6 +13,7 @@ A create_a(B) {
 }",
 "#include <cstdint>
 struct A {
+    A() : a(0) {}
     int a;
 };
 enum B {

@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashMap;
+use indexmap::map::IndexMap as HashMap;
 
 use syn::Ident;
 
@@ -35,6 +35,7 @@ pub(crate) fn check_names(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
     convert_item_apis(apis, &mut intermediate, |api| match api {
         Api::Typedef { ref name, .. }
         | Api::ForwardDeclaration { ref name, .. }
+        | Api::OpaqueTypedef { ref name, .. }
         | Api::Const { ref name, .. }
         | Api::Enum { ref name, .. }
         | Api::Struct { ref name, .. } => {

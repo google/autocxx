@@ -10,9 +10,9 @@ use crate::{
     conversion::ConvertError,
     types::{make_ident, QualifiedName},
 };
+use indexmap::map::IndexMap as HashMap;
 use indoc::indoc;
 use once_cell::sync::OnceCell;
-use std::collections::HashMap;
 use syn::{parse_quote, Type, TypePath, TypePtr};
 
 //// The behavior of the type.

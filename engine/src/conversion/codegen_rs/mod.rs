@@ -14,7 +14,8 @@ mod namespace_organizer;
 mod non_pod_struct;
 pub(crate) mod unqualify;
 
-use std::collections::{HashMap, HashSet};
+use indexmap::map::IndexMap as HashMap;
+use indexmap::set::IndexSet as HashSet;
 
 use autocxx_parser::{ExternCppType, IncludeCppConfig, RustFun};
 
@@ -529,7 +530,9 @@ impl<'a> RsCodeGenerator<'a> {
                     None,
                 )
             }
-            Api::ForwardDeclaration { .. } | Api::ConcreteType { .. } => self.generate_type(
+            Api::ForwardDeclaration { .. }
+            | Api::ConcreteType { .. }
+            | Api::OpaqueTypedef { .. } => self.generate_type(
                 &name,
                 id,
                 TypeKind::Abstract,

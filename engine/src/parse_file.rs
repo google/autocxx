@@ -14,10 +14,11 @@ use crate::{
 use crate::{CppCodegenOptions, LocatedSynError};
 use autocxx_parser::directive_names::SUBCLASS;
 use autocxx_parser::{AllowlistEntry, RustPath, Subclass, SubclassAttrs};
+use indexmap::set::IndexSet as HashSet;
 use miette::Diagnostic;
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use std::{collections::HashSet, io::Read, path::PathBuf};
+use std::{io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
 use syn::{token::Brace, Item, ItemMod};
 use thiserror::Error;
