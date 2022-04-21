@@ -4292,6 +4292,7 @@ fn test_cycle_generic_type() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/774
 fn test_virtual_fns() {
     let hdr = indoc! {"
         #include <cstdint>
