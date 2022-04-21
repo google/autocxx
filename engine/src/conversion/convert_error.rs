@@ -107,6 +107,10 @@ pub enum ConvertError {
     ConstructorWithOnlyOneParam,
     #[error("A copy or move constructor was found to take extra parameters. These are likely to be parameters with defaults, which are not yet supported by autocxx, so this constructor has been ignored.")]
     ConstructorWithMultipleParams,
+    #[error("A C++ unique_ptr, shared_ptr or weak_ptr was found containing some type that cxx can't accommodate in that position ({})", .0.to_cpp_name())]
+    InvalidTypeForCppPtr(QualifiedName),
+    #[error("A C++ std::vector was found containing some type that cxx can't accommodate as a vector element ({})", .0.to_cpp_name())]
+    InvalidTypeForCppVector(QualifiedName),
 }
 
 /// Ensures that error contexts are always created using the constructors in this

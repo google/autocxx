@@ -515,23 +515,40 @@ impl<'a> TypeConverter<'a> {
                                     inner_qn,
                                 ));
                             }
-                            if generic_behavior == CxxGenericType::Rust {
-                                if !inner_qn.get_namespace().is_empty() {
-                                    return Err(ConvertError::RustTypeWithAPath(inner_qn));
+                            match generic_behavior {
+                                CxxGenericType::Rust => {
+                                    if !inner_qn.get_namespace().is_empty() {
+                                        return Err(ConvertError::RustTypeWithAPath(inner_qn));
+                                    }
+                                    if !self.config.is_rust_type(&inner_qn.get_final_ident()) {
+                                        return Err(ConvertError::BoxContainingNonRustType(
+                                            inner_qn,
+                                        ));
+                                    }
+                                    if self
+                                        .config
+                                        .is_subclass_holder(&inner_qn.get_final_ident().to_string())
+                                    {
+                                        return Ok(TypeKind::SubclassHolder(
+                                            inner_qn.get_final_ident(),
+                                        ));
+                                    } else {
+                                        return Ok(TypeKind::Regular);
+                                    }
                                 }
-                                if !self.config.is_rust_type(&inner_qn.get_final_ident()) {
-                                    return Err(ConvertError::BoxContainingNonRustType(inner_qn));
+                                CxxGenericType::CppPtr => {
+                                    if !known_types().permissible_within_unique_ptr(&inner_qn) {
+                                        return Err(ConvertError::InvalidTypeForCppPtr(inner_qn));
+                                    }
                                 }
-                                if self
-                                    .config
-                                    .is_subclass_holder(&inner_qn.get_final_ident().to_string())
-                                {
-                                    return Ok(TypeKind::SubclassHolder(
-                                        inner_qn.get_final_ident(),
-                                    ));
-                                } else {
-                                    return Ok(TypeKind::Regular);
+                                CxxGenericType::CppVector => {
+                                    if !known_types().permissible_within_vector(&inner_qn) {
+                                        return Err(ConvertError::InvalidTypeForCppVector(
+                                            inner_qn,
+                                        ));
+                                    }
                                 }
+                                _ => {}
                             }
                             if let Some(more_generics) = typ.path.segments.last() {
                                 self.confirm_inner_type_is_acceptable_generic_payload(
