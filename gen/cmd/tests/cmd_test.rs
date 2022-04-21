@@ -183,11 +183,9 @@ fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
         cmd.arg("--cxx-h-path")
             .arg("foo/")
             .arg("--cxxgen-h-path")
-            .arg("bar/")
-            .arg("--generate-exact")
-            .arg("3");
+            .arg("bar/");
     })?;
-    assert_contains(&tmp_dir, "gen0.h", "foo/cxx.h");
+    assert_contains(&tmp_dir, "autocxxgen.h", "foo/cxx.h");
     // Currently we don't test cxxgen-h-path because we build the demo code
     // which doesn't refer to generated cxx header code.
     Ok(())
