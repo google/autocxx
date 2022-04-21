@@ -1,0 +1,23 @@
+# Summary
+
+- [Rust ❤️  pre-existing C++](index.md)
+- [Tutorial](tutorial.md)
+- [Workflow](workflow.md)
+- [Allowlist and syntax](allowlist.md)
+- [Building](building.md)
+- [C++ structs, enums and classes](cpp_types.md)
+- [Pointers, references, values](references_etc.md)
+- [Storage - stack and heaps](storage.md)
+- [Built-in types](primitives.md)
+- [C++ type and function names](naming.md)
+- [C++ functions](cpp_functions.md)
+- [Callbacks into Rust](rust_calls.md)
+- [Other C++ features](other_features.md)
+- [Safety](safety.md)
+- [Rustic bindings](rustic.md)
+- [Large codebases](large_codebase.md)
+- [Examples](examples.md)
+- [Credits](credits.md)
+- [Contributing](contributing.md)
+- [Code of Conduct](code-of-conduct.md)
+

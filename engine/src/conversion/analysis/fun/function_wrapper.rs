@@ -1,16 +1,10 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use crate::{
     conversion::api::SubclassName,
@@ -21,18 +15,28 @@ use syn::{parse_quote, Ident, Type};
 #[derive(Clone, Debug)]
 pub(crate) enum CppConversionType {
     None,
+    Move,
     FromUniquePtrToValue,
+    FromPtrToValue,
     FromValueToUniquePtr,
     FromPtrToMove,
+    /// Ignored in the sense that it isn't passed into the C++ function.
+    IgnoredPlacementPtrParameter,
+    FromReturnValueToPlacementPtr,
 }
 
 impl CppConversionType {
+    /// If we've found a function which does X to its parameter, what
+    /// is the opposite of X? This is used for subclasses where calls
+    /// from Rust to C++ might also involve calls from C++ to Rust.
     fn inverse(&self) -> Self {
         match self {
             CppConversionType::None => CppConversionType::None,
-            CppConversionType::FromUniquePtrToValue => CppConversionType::FromValueToUniquePtr,
+            CppConversionType::FromUniquePtrToValue | CppConversionType::FromPtrToValue => {
+                CppConversionType::FromValueToUniquePtr
+            }
             CppConversionType::FromValueToUniquePtr => CppConversionType::FromUniquePtrToValue,
-            CppConversionType::FromPtrToMove => panic!("Did not expect to have to invert move"),
+            _ => panic!("Did not expect to have to invert this conversion"),
         }
     }
 }
@@ -45,6 +49,9 @@ pub(crate) enum RustConversionType {
     FromPinMaybeUninitToPtr,
     FromPinMoveRefToPtr,
     FromTypeToPtr,
+    FromValueParamToPtr,
+    FromPlacementParamToNewReturn,
+    FromRValueParamToPtr,
 }
 
 impl RustConversionType {
@@ -91,6 +98,17 @@ impl TypeConversionPolicy {
         }
     }
 
+    pub(crate) fn new_for_placement_return(ty: Type) -> Self {
+        TypeConversionPolicy {
+            unwrapped_type: ty,
+            cpp_conversion: CppConversionType::FromReturnValueToPlacementPtr,
+            // Rust conversion is marked as none here, since this policy
+            // will be applied to the return value, and the Rust-side
+            // shenanigans applies to the placement new *parameter*
+            rust_conversion: RustConversionType::None,
+        }
+    }
+
     pub(crate) fn cpp_work_needed(&self) -> bool {
         !matches!(self.cpp_conversion, CppConversionType::None)
     }
@@ -105,6 +123,12 @@ impl TypeConversionPolicy {
     pub(crate) fn converted_rust_type(&self) -> Type {
         match self.cpp_conversion {
             CppConversionType::FromUniquePtrToValue => self.make_unique_ptr_type(),
+            CppConversionType::FromPtrToValue => {
+                let innerty = &self.unwrapped_type;
+                parse_quote! {
+                    *mut #innerty
+                }
+            }
             _ => self.unwrapped_type.clone(),
         }
     }
@@ -120,6 +144,9 @@ impl TypeConversionPolicy {
         !matches!(self.rust_conversion, RustConversionType::None)
     }
 
+    /// Subclass support involves calls from Rust -> C++, but
+    /// also from C++ -> Rust. Work out the correct argument conversion
+    /// type for the latter call, when given the former.
     pub(crate) fn inverse(&self) -> Self {
         Self {
             unwrapped_type: self.unwrapped_type.clone(),
@@ -127,22 +154,44 @@ impl TypeConversionPolicy {
             rust_conversion: self.rust_conversion.clone(),
         }
     }
+
+    pub(crate) fn bridge_unsafe_needed(&self) -> bool {
+        matches!(
+            self.rust_conversion,
+            RustConversionType::FromValueParamToPtr
+                | RustConversionType::FromRValueParamToPtr
+                | RustConversionType::FromPlacementParamToNewReturn
+        )
+    }
+
+    pub(crate) fn is_placement_parameter(&self) -> bool {
+        matches!(
+            self.cpp_conversion,
+            CppConversionType::IgnoredPlacementPtrParameter
+        )
+    }
+
+    pub(crate) fn populate_return_value(&self) -> bool {
+        !matches!(
+            self.cpp_conversion,
+            CppConversionType::FromReturnValueToPlacementPtr
+        )
+    }
 }
 
 #[derive(Clone)]
-
 pub(crate) enum CppFunctionBody {
     FunctionCall(Namespace, Ident),
     StaticMethodCall(Namespace, Ident, Ident),
     PlacementNew(Namespace, Ident),
-    MakeUnique,
     ConstructSuperclass(String),
     Cast,
     Destructor(Namespace, Ident),
+    AllocUninitialized(QualifiedName),
+    FreeUninitialized(QualifiedName),
 }
 
 #[derive(Clone)]
-
 pub(crate) enum CppFunctionKind {
     Function,
     Method,

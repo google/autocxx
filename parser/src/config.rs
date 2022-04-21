@@ -1,39 +1,43 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
-use std::collections::HashSet;
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 
+use itertools::Itertools;
 use proc_macro2::Span;
 use quote::ToTokens;
-use syn::{
-    parse::{Parse, ParseStream},
-    LitStr, Signature, Token,
-};
-use syn::{Ident, Result as ParseResult};
-
-use crate::{
-    directives::{EXTERN_RUST_TYPE, SUBCLASS},
-    RustPath,
-};
 
 #[cfg(feature = "reproduction_case")]
+use quote::format_ident;
+use syn::{
+    parse::{Parse, ParseStream},
+    Signature, Token, TypePath,
+};
+use syn::{Ident, Result as ParseResult};
+use thiserror::Error;
+
+use crate::{directives::get_directives, RustPath};
+
 use quote::quote;
 
 #[derive(PartialEq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
     AllFunctionsSafe,
     AllFunctionsUnsafe,
+}
+
+impl Default for UnsafePolicy {
+    fn default() -> Self {
+        Self::AllFunctionsUnsafe
+    }
 }
 
 impl Parse for UnsafePolicy {
@@ -61,7 +65,6 @@ impl Parse for UnsafePolicy {
     }
 }
 
-#[cfg(feature = "reproduction_case")]
 impl ToTokens for UnsafePolicy {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         if *self == UnsafePolicy::AllFunctionsSafe {
@@ -70,41 +73,58 @@ impl ToTokens for UnsafePolicy {
     }
 }
 
+/// An entry in the allowlist.
+#[derive(Hash, Debug)]
+pub enum AllowlistEntry {
+    Item(String),
+    Namespace(String),
+}
+
+impl AllowlistEntry {
+    fn to_bindgen_item(&self) -> String {
+        match self {
+            AllowlistEntry::Item(i) => i.clone(),
+            AllowlistEntry::Namespace(ns) => format!("{}::.*", ns),
+        }
+    }
+}
+
 /// Allowlist configuration.
 #[derive(Hash, Debug)]
 pub enum Allowlist {
-    Unspecified(Vec<String>),
+    Unspecified(Vec<AllowlistEntry>),
     All,
-    Specific(Vec<String>),
+    Specific(Vec<AllowlistEntry>),
+}
+
+/// Errors that may be encountered while adding allowlist entries.
+#[derive(Error, Debug)]
+pub enum AllowlistErr {
+    #[error("Conflict between generate/generate_ns! and generate_all! - use one not both")]
+    ConflictingGenerateAndGenerateAll,
 }
 
 impl Allowlist {
-    pub fn push(&mut self, item: LitStr) -> ParseResult<()> {
+    pub fn push(&mut self, item: AllowlistEntry) -> Result<(), AllowlistErr> {
         match self {
             Allowlist::Unspecified(ref mut uncommitted_list) => {
                 let new_list = uncommitted_list
                     .drain(..)
-                    .chain(std::iter::once(item.value()))
+                    .chain(std::iter::once(item))
                     .collect();
                 *self = Allowlist::Specific(new_list);
             }
             Allowlist::All => {
-                return Err(syn::Error::new(
-                    item.span(),
-                    "use either generate!/generate_pod! or generate_all!, not both.",
-                ))
+                return Err(AllowlistErr::ConflictingGenerateAndGenerateAll);
             }
-            Allowlist::Specific(list) => list.push(item.value()),
+            Allowlist::Specific(list) => list.push(item),
         };
         Ok(())
     }
 
-    pub(crate) fn set_all(&mut self, ident: &Ident) -> ParseResult<()> {
+    pub(crate) fn set_all(&mut self) -> Result<(), AllowlistErr> {
         if matches!(self, Allowlist::Specific(..)) {
-            return Err(syn::Error::new(
-                ident.span(),
-                "use either generate!/generate_pod! or generate_all!, not both.",
-            ));
+            return Err(AllowlistErr::ConflictingGenerateAndGenerateAll);
         }
         *self = Allowlist::All;
         Ok(())
@@ -124,9 +144,11 @@ pub struct Subclass {
     pub subclass: Ident,
 }
 
+#[derive(Clone)]
 pub struct RustFun {
     pub path: RustPath,
     pub sig: Signature,
+    pub receiver: Option<Ident>,
 }
 
 impl std::fmt::Debug for RustFun {
@@ -138,164 +160,68 @@ impl std::fmt::Debug for RustFun {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct ExternCppType {
+    pub rust_path: TypePath,
+    pub opaque: bool,
+}
+
+#[derive(Debug, Default)]
 pub struct IncludeCppConfig {
     pub inclusions: Vec<String>,
     pub unsafe_policy: UnsafePolicy,
     pub parse_only: bool,
     pub exclude_impls: bool,
-    pod_requests: Vec<String>,
+    pub(crate) pod_requests: Vec<String>,
     pub allowlist: Allowlist,
-    blocklist: Vec<String>,
-    constructor_blocklist: Vec<String>,
-    exclude_utilities: bool,
-    mod_name: Option<Ident>,
+    pub(crate) blocklist: Vec<String>,
+    pub(crate) constructor_blocklist: Vec<String>,
+    pub(crate) exclude_utilities: bool,
+    pub(crate) mod_name: Option<Ident>,
     pub rust_types: Vec<RustPath>,
     pub subclasses: Vec<Subclass>,
     pub extern_rust_funs: Vec<RustFun>,
+    pub concretes: HashMap<String, Ident>,
+    pub externs: HashMap<String, ExternCppType>,
 }
 
 impl Parse for IncludeCppConfig {
     fn parse(input: ParseStream) -> ParseResult<Self> {
-        // Takes as inputs:
-        // 1. List of headers to include
-        // 2. List of #defines to include
-        // 3. Allowlist
-
-        let mut inclusions = Vec::new();
-        let mut parse_only = false;
-        let mut exclude_impls = false;
-        let mut unsafe_policy = UnsafePolicy::AllFunctionsUnsafe;
-        let mut allowlist = Allowlist::default();
-        let mut blocklist = Vec::new();
-        let mut constructor_blocklist = Vec::new();
-        let mut pod_requests = Vec::new();
-        let mut rust_types = Vec::new();
-        let mut exclude_utilities = false;
-        let mut mod_name = None;
-        let mut subclasses = Vec::new();
-        let mut extern_rust_funs = Vec::new();
+        let mut config = IncludeCppConfig::default();
 
         while !input.is_empty() {
             let has_hexathorpe = input.parse::<Option<syn::token::Pound>>()?.is_some();
             let ident: syn::Ident = input.parse()?;
-            if has_hexathorpe {
-                if ident != "include" {
-                    return Err(syn::Error::new(ident.span(), "expected include"));
-                }
-                let hdr: syn::LitStr = input.parse()?;
-                inclusions.push(hdr.value());
+            let args;
+            let (possible_directives, to_parse, parse_completely) = if has_hexathorpe {
+                (&get_directives().need_hexathorpe, input, false)
             } else {
                 input.parse::<Option<syn::token::Bang>>()?;
-                if ident == "generate" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let generate: syn::LitStr = args.parse()?;
-                    allowlist.push(generate)?;
-                } else if ident == "generate_pod" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let generate_pod: syn::LitStr = args.parse()?;
-                    pod_requests.push(generate_pod.value());
-                    allowlist.push(generate_pod)?;
-                } else if ident == "pod" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let pod: syn::LitStr = args.parse()?;
-                    pod_requests.push(pod.value());
-                } else if ident == "block" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let generate: syn::LitStr = args.parse()?;
-                    blocklist.push(generate.value());
-                } else if ident == "block_constructors" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let generate: syn::LitStr = args.parse()?;
-                    constructor_blocklist.push(generate.value());
-                } else if ident == "rust_type" || ident == EXTERN_RUST_TYPE {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let id: Ident = args.parse()?;
-                    rust_types.push(RustPath::new_from_ident(id));
-                } else if ident == SUBCLASS {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let superclass: syn::LitStr = args.parse()?;
-                    args.parse::<syn::token::Comma>()?;
-                    let subclass: syn::Ident = args.parse()?;
-                    subclasses.push(Subclass {
-                        superclass: superclass.value(),
-                        subclass,
-                    });
-                } else if ident == "parse_only" {
-                    parse_only = true;
-                    swallow_parentheses(&input, &ident)?;
-                } else if ident == "exclude_impls" {
-                    exclude_impls = true;
-                    swallow_parentheses(&input, &ident)?;
-                } else if ident == "generate_all" {
-                    allowlist.set_all(&ident)?;
-                    swallow_parentheses(&input, &ident)?;
-                } else if ident == "name" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let ident: syn::Ident = args.parse()?;
-                    mod_name = Some(ident);
-                } else if ident == "exclude_utilities" {
-                    exclude_utilities = true;
-                    swallow_parentheses(&input, &ident)?;
-                } else if ident == "safety" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    unsafe_policy = args.parse()?;
-                } else if ident == "extern_rust_fun" {
-                    let args;
-                    syn::parenthesized!(args in input);
-                    let path: RustPath = args.parse()?;
-                    args.parse::<syn::token::Comma>()?;
-                    let sig: syn::Signature = args.parse()?;
-                    extern_rust_funs.push(RustFun { path, sig });
-                } else {
+                syn::parenthesized!(args in input);
+                (&get_directives().need_exclamation, &args, true)
+            };
+            let all_possible = possible_directives.keys().join(", ");
+            let ident_str = ident.to_string();
+            match possible_directives.get(&ident_str) {
+                None => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        "expected generate, generate_pod, nested_type, safety or exclude_utilities",
+                        format!("expected {}", all_possible),
                     ));
                 }
+                Some(directive) => directive.parse(to_parse, &mut config, &ident.span())?,
+            }
+            if parse_completely && !to_parse.is_empty() {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    format!("found unexpected input within the directive {}", ident_str),
+                ));
             }
             if input.is_empty() {
                 break;
             }
         }
-
-        Ok(IncludeCppConfig {
-            inclusions,
-            unsafe_policy,
-            parse_only,
-            exclude_impls,
-            pod_requests,
-            rust_types,
-            allowlist,
-            blocklist,
-            constructor_blocklist,
-            exclude_utilities,
-            mod_name,
-            subclasses,
-            extern_rust_funs,
-        })
-    }
-}
-
-fn swallow_parentheses(input: &ParseStream, latest_ident: &Ident) -> ParseResult<()> {
-    let args;
-    syn::parenthesized!(args in input);
-    if args.is_empty() {
-        Ok(())
-    } else {
-        Err(syn::Error::new(
-            latest_ident.span(),
-            "expected no arguments to directive",
-        ))
+        Ok(config)
     }
 }
 
@@ -321,7 +247,16 @@ impl IncludeCppConfig {
     /// we should raise an error if we weren't able to do so.
     pub fn must_generate_list(&self) -> Box<dyn Iterator<Item = String> + '_> {
         if let Allowlist::Specific(items) = &self.allowlist {
-            Box::new(items.iter().chain(self.pod_requests.iter()).cloned())
+            Box::new(
+                items
+                    .iter()
+                    .filter_map(|i| match i {
+                        AllowlistEntry::Item(i) => Some(i),
+                        AllowlistEntry::Namespace(_) => None,
+                    })
+                    .chain(self.pod_requests.iter())
+                    .cloned(),
+            )
         } else {
             Box::new(self.pod_requests.iter().cloned())
         }
@@ -334,8 +269,8 @@ impl IncludeCppConfig {
             Allowlist::Specific(items) => Some(Box::new(
                 items
                     .iter()
-                    .chain(self.pod_requests.iter())
-                    .cloned()
+                    .map(AllowlistEntry::to_bindgen_item)
+                    .chain(self.pod_requests.iter().cloned())
                     .chain(self.active_utilities())
                     .chain(self.subclasses.iter().flat_map(|sc| {
                         [
@@ -353,8 +288,20 @@ impl IncludeCppConfig {
         if self.exclude_utilities {
             Vec::new()
         } else {
-            vec![self.get_makestring_name()]
+            vec![self.get_makestring_name().to_string()]
         }
+    }
+
+    fn is_subclass_or_superclass(&self, cpp_name: &str) -> bool {
+        self.subclasses
+            .iter()
+            .flat_map(|sc| {
+                [
+                    Cow::Owned(sc.subclass.to_string()),
+                    Cow::Borrowed(&sc.superclass),
+                ]
+            })
+            .any(|item| cpp_name == item.as_str())
     }
 
     /// Whether this type is on the allowlist specified by the user.
@@ -366,16 +313,20 @@ impl IncludeCppConfig {
     /// This second pass may seem redundant. But sometimes bindgen generates
     /// unnecessary stuff.
     pub fn is_on_allowlist(&self, cpp_name: &str) -> bool {
-        match self.bindgen_allowlist() {
-            None => true,
-            Some(mut items) => {
-                items.any(|item| item == cpp_name)
-                    || self.active_utilities().iter().any(|item| *item == cpp_name)
-                    || self.is_subclass_holder(cpp_name)
-                    || self.is_subclass_cpp(cpp_name)
-                    || self.is_rust_fun(cpp_name)
+        self.active_utilities().iter().any(|item| *item == cpp_name)
+            || self.is_subclass_or_superclass(cpp_name)
+            || self.is_subclass_holder(cpp_name)
+            || self.is_subclass_cpp(cpp_name)
+            || self.is_rust_fun(cpp_name)
+            || self.is_concrete_type(cpp_name)
+            || match &self.allowlist {
+                Allowlist::Unspecified(_) => panic!("Eek no allowlist yet"),
+                Allowlist::All => true,
+                Allowlist::Specific(items) => items.iter().any(|entry| match entry {
+                    AllowlistEntry::Item(i) => i == cpp_name,
+                    AllowlistEntry::Namespace(ns) => cpp_name.starts_with(ns),
+                }),
             }
-        }
     }
 
     pub fn is_on_blocklist(&self, cpp_name: &str) -> bool {
@@ -390,14 +341,22 @@ impl IncludeCppConfig {
         self.blocklist.iter()
     }
 
-    pub fn get_makestring_name(&self) -> String {
-        format!(
-            "autocxx_make_string_{}",
-            self.mod_name
-                .as_ref()
-                .map(|i| i.to_string())
-                .unwrap_or_else(|| "default".into())
-        )
+    fn is_concrete_type(&self, cpp_name: &str) -> bool {
+        self.concretes.values().any(|val| *val == cpp_name)
+    }
+
+    /// In case there are multiple sets of ffi mods in a single binary,
+    /// endeavor to return a name which can be used to make symbols
+    /// unique.
+    pub fn uniquify_name_per_mod<'a>(&self, name: &'a str) -> Cow<'a, str> {
+        match self.mod_name.as_ref() {
+            None => Cow::Borrowed(name),
+            Some(md) => Cow::Owned(format!("{}_{}", name, md)),
+        }
+    }
+
+    pub fn get_makestring_name(&self) -> Cow<str> {
+        self.uniquify_name_per_mod("autocxx_make_string")
     }
 
     pub fn is_rust_type(&self, id: &Ident) -> bool {
@@ -443,19 +402,9 @@ impl IncludeCppConfig {
         )
     }
 
-    pub fn confirm_complete(&mut self, auto_allowlist: bool) -> ParseResult<()> {
+    pub fn confirm_complete(&mut self) {
         if matches!(self.allowlist, Allowlist::Unspecified(_)) {
-            if auto_allowlist {
-                self.allowlist = Allowlist::Specific(Vec::new());
-                Ok(())
-            } else {
-                Err(syn::Error::new(
-                    Span::call_site(),
-                    "expected either generate! or generate_all!",
-                ))
-            }
-        } else {
-            Ok(())
+            self.allowlist = Allowlist::Specific(Vec::new());
         }
     }
 
@@ -470,58 +419,23 @@ impl IncludeCppConfig {
 #[cfg(feature = "reproduction_case")]
 impl ToTokens for IncludeCppConfig {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        for inc in &self.inclusions {
-            let hexathorpe = syn::token::Pound(Span::call_site());
-            tokens.extend(quote! {
-                #hexathorpe include #inc
-            })
-        }
-        let unsafety = &self.unsafe_policy;
-        tokens.extend(quote! {
-            safety!(#unsafety)
-        });
-        if self.exclude_impls {
-            tokens.extend(quote! { exclude_impls!() });
-        }
-        if self.parse_only {
-            tokens.extend(quote! { parse_only!() });
-        }
-        if self.exclude_utilities {
-            tokens.extend(quote! { exclude_utilities!() });
-        }
-        for i in &self.pod_requests {
-            tokens.extend(quote! { pod!(#i) });
-        }
-        for i in &self.blocklist {
-            tokens.extend(quote! { block!(#i) });
-        }
-        for i in &self.constructor_blocklist {
-            tokens.extend(quote! { block_constructors!(#i) });
-        }
-        for path in &self.rust_types {
-            tokens.extend(quote! { rust_type!(#path) });
-        }
-        match &self.allowlist {
-            Allowlist::All => tokens.extend(quote! { generate_all!() }),
-            Allowlist::Specific(items) => {
-                for i in items {
-                    tokens.extend(quote! { generate!(#i) });
-                }
+        let directives = get_directives();
+        let hexathorpe = syn::token::Pound(Span::call_site());
+        for (id, directive) in &directives.need_hexathorpe {
+            let id = format_ident!("{}", id);
+            for output in directive.output(self) {
+                tokens.extend(quote! {
+                    #hexathorpe #id #output
+                })
             }
-            Allowlist::Unspecified(_) => panic!("Allowlist mode not yet determined"),
         }
-        if let Some(mod_name) = &self.mod_name {
-            tokens.extend(quote! { mod_name!(#mod_name) });
-        }
-        for i in &self.extern_rust_funs {
-            let p = &i.path;
-            let s = &i.sig;
-            tokens.extend(quote! { extern_rust_fun!(#p,#s) });
-        }
-        for i in &self.subclasses {
-            let superclass = &i.superclass;
-            let subclass = &i.subclass;
-            tokens.extend(quote! { subclass!(#superclass,#subclass) });
+        for (id, directive) in &directives.need_exclamation {
+            let id = format_ident!("{}", id);
+            for output in directive.output(self) {
+                tokens.extend(quote! {
+                    #id ! (#output)
+                })
+            }
         }
     }
 }

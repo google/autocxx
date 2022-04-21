@@ -4,21 +4,16 @@
 
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 // This feature=nightly could be set by build.rs, but since we only care
 // about it for docs, we ask docs.rs to set it in the Cargo.toml.
 #![cfg_attr(feature = "nightly", feature(doc_cfg))]
+#![forbid(unsafe_code)]
 
 mod ast_discoverer;
 mod conversion;
@@ -34,10 +29,12 @@ mod builder;
 
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
+use miette::{SourceOffset, SourceSpan};
 use parse_callbacks::AutocxxParseCallbacks;
 use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
-use std::{fmt::Display, path::PathBuf};
+use regex::Regex;
+use std::path::PathBuf;
 use std::{
     fs::File,
     io::prelude::*,
@@ -52,10 +49,12 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_quote, ItemMod, Macro,
 };
+use thiserror::Error;
 
 use itertools::{join, Itertools};
 use known_types::known_types;
 use log::info;
+use miette::Diagnostic;
 
 /// We use a forked version of bindgen - for now.
 /// We hope to unfork.
@@ -68,13 +67,6 @@ pub use builder::{
 pub use parse_file::{parse_file, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
-
-/// Re-export cxx such that clients can use the same version as
-/// us. This doesn't enable clients to avoid depending on the cxx
-/// crate too, unfortunately, since generated cxx::bridge code
-/// refers explicitly to ::cxx. See
-/// <https://github.com/google/autocxx/issues/36>
-pub use cxx;
 
 #[derive(Clone)]
 /// Some C++ content which should be written to disk and built.
@@ -91,32 +83,45 @@ pub struct CppFilePair {
 /// All generated C++ content which should be written to disk.
 pub struct GeneratedCpp(pub Vec<CppFilePair>);
 
-/// Errors which may occur in generating bindings for these C++
-/// functions.
-#[derive(Debug)]
-pub enum Error {
-    /// Any error reported by bindgen, generating the C++ bindings.
-    /// Any C++ parsing errors, etc. would be reported this way.
-    Bindgen(()),
-    /// Any problem parsing the Rust file.
-    Parsing(syn::Error),
-    /// No `include_cpp!` macro could be found.
-    NoAutoCxxInc,
-    /// Some error occcurred in converting the bindgen-style
-    /// bindings to safe cxx bindings.
-    Conversion(conversion::ConvertError),
+/// A [`syn::Error`] which also implements [`miette::Diagnostic`] so can be pretty-printed
+/// to show the affected span of code.
+#[derive(Error, Debug, Diagnostic)]
+#[error("{err}")]
+pub struct LocatedSynError {
+    err: syn::Error,
+    #[source_code]
+    file: String,
+    #[label("error here")]
+    span: SourceSpan,
 }
 
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Bindgen(_) => write!(f, "Bindgen was unable to generate the initial .rs bindings for this file. This may indicate a parsing problem with the C++ headers.")?,
-            Error::Parsing(err) => write!(f, "The Rust file could not be parsed: {}", err)?,
-            Error::NoAutoCxxInc => write!(f, "No C++ include directory was provided.")?,
-            Error::Conversion(err) => write!(f, "autocxx could not generate the requested bindings. {}", err)?,
+impl LocatedSynError {
+    fn new(err: syn::Error, file: &str) -> Self {
+        let span = proc_macro_span_to_miette_span(&err.span());
+        Self {
+            err,
+            file: file.to_string(),
+            span,
         }
-        Ok(())
     }
+}
+
+/// Errors which may occur in generating bindings for these C++
+/// functions.
+#[derive(Debug, Error, Diagnostic)]
+pub enum Error {
+    #[error("Bindgen was unable to generate the initial .rs bindings for this file. This may indicate a parsing problem with the C++ headers.")]
+    Bindgen(()),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    MacroParsing(LocatedSynError),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    BindingsParsing(LocatedSynError),
+    #[error("no C++ include directory was provided.")]
+    NoAutoCxxInc,
+    #[error(transparent)]
+    Conversion(conversion::ConvertError),
 }
 
 /// Result type.
@@ -260,8 +265,9 @@ impl Parse for IncludeCppEngine {
 }
 
 impl IncludeCppEngine {
-    pub fn new_from_syn(mac: Macro) -> Result<Self> {
-        mac.parse_body::<IncludeCppEngine>().map_err(Error::Parsing)
+    pub fn new_from_syn(mac: Macro, file_contents: &str) -> Result<Self> {
+        mac.parse_body::<IncludeCppEngine>()
+            .map_err(|e| Error::MacroParsing(LocatedSynError::new(e, file_contents)))
     }
 
     pub fn config_mut(&mut self) -> &mut IncludeCppConfig {
@@ -294,12 +300,14 @@ impl IncludeCppEngine {
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
             })
+            .size_t_is_usize(true)
             .enable_cxx_namespaces()
             .generate_inline_functions(true)
             .respect_cxx_access_specs(true)
             .use_specific_virtual_function_receiver(true)
             .cpp_semantic_attributes(true)
             .represent_cxx_operators(true)
+            .use_distinct_char16_t(true)
             .layout_tests(false); // TODO revisit later
         for item in known_types().get_initial_blocklist() {
             builder = builder.blocklist_item(item);
@@ -356,7 +364,8 @@ impl IncludeCppEngine {
         // into a single construct.
         let bindings = format!("mod bindgen {{ {} }}", bindings);
         info!("Bindings: {}", bindings);
-        syn::parse_str::<ItemMod>(&bindings).map_err(Error::Parsing)
+        syn::parse_str::<ItemMod>(&bindings)
+            .map_err(|e| Error::BindingsParsing(LocatedSynError::new(e, &bindings)))
     }
 
     /// Actually examine the headers to find out what needs generating.
@@ -457,7 +466,8 @@ impl IncludeCppEngine {
                 inc_dirs,
                 extra_clang_args,
             );
-            let header = std::fs::read_to_string(tf.path()).unwrap();
+            let header = std::fs::read(tf.path()).unwrap();
+            let header = String::from_utf8_lossy(&header);
             let output_path = PathBuf::from(output_path);
             let config = self.config.to_token_stream().to_string();
             let json = serde_json::json!({
@@ -628,18 +638,63 @@ pub fn get_clang_path() -> String {
         .unwrap_or_else(|_| "clang++".to_string())
 }
 
+/// Newtype wrapper so we can give it a [`Default`].
+pub struct HeaderNamer<'a>(pub Box<dyn 'a + Fn(String) -> String>);
+
+impl Default for HeaderNamer<'static> {
+    fn default() -> Self {
+        Self(Box::new(|mod_name| format!("autocxxgen_{}.h", mod_name)))
+    }
+}
+
+impl HeaderNamer<'_> {
+    fn name_header(&self, mod_name: String) -> String {
+        self.0(mod_name)
+    }
+}
+
 /// Options for C++ codegen
 #[derive(Default)]
-pub struct CppCodegenOptions {
+pub struct CppCodegenOptions<'a> {
     /// Whether to avoid generating `#include <some-system-header>`.
     /// You may wish to do this to make a hermetic test case with no
     /// external dependencies.
     pub suppress_system_headers: bool,
-    /// Optionally, a prefix to go at `#include "<here>cxx.h"
+    /// Optionally, a prefix to go at `#include "<here>cxx.h". This is a header file from the `cxx`
+    /// crate.
     pub path_to_cxx_h: Option<String>,
-    /// Optionally, a prefix to go at `#include "<here>cxxgen.h"
+    /// Optionally, a prefix to go at `#include "<here>cxxgen.h". This is a header file which we
+    /// generate.
     pub path_to_cxxgen_h: Option<String>,
+    /// Optionally, a function called to generate each of the per-section header files. The default
+    /// names are subject to change.
+    /// The function is passed the name of the module generated by each `include_cpp`,
+    /// configured via `name`. These will be unique.
+    pub header_namer: HeaderNamer<'a>,
     /// An annotation optionally to include on each C++ function.
     /// For example to export the symbol from a library.
     pub cxx_impl_annotations: Option<String>,
+}
+
+fn proc_macro_span_to_miette_span(span: &proc_macro2::Span) -> SourceSpan {
+    // A proc_macro2::Span stores its location as a byte offset. But there are
+    // no APIs to get that offset out.
+    // We could use `.start()` and `.end()` to get the line + column numbers, but it appears
+    // they're a little buggy. Hence we do this, to get the offsets directly across into
+    // miette.
+    struct Err;
+    let r: Result<(usize, usize), Err> = (|| {
+        let span_desc = format!("{:?}", span);
+        let re = Regex::new(r"(\d+)..(\d+)").unwrap();
+        let captures = re.captures(&span_desc).ok_or(Err)?;
+        let start = captures.get(1).ok_or(Err)?;
+        let start: usize = start.as_str().parse().map_err(|_| Err)?;
+        let start = start.saturating_sub(1); // proc_macro::Span offsets seem to be off-by-one
+        let end = captures.get(2).ok_or(Err)?;
+        let end: usize = end.as_str().parse().map_err(|_| Err)?;
+        let end = end.saturating_sub(1); // proc_macro::Span offsets seem to be off-by-one
+        Ok((start, end.saturating_sub(start)))
+    })();
+    let (start, end) = r.unwrap_or((0, 0));
+    SourceSpan::new(SourceOffset::from(start), SourceOffset::from(end))
 }

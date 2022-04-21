@@ -1,24 +1,25 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use std::{convert::TryInto, fs::File, io::Write, path::Path};
 
 use assert_cmd::Command;
+use autocxx_integration_tests::build_from_folder;
 use tempdir::TempDir;
 
-static MAIN_RS: &str = include_str!("../../../demo/src/main.rs");
+static MAIN_RS: &str = concat!(
+    include_str!("../../../demo/src/main.rs"),
+    "#[link(name = \"autocxx-demo\")]\nextern \"C\" {}"
+);
 static INPUT_H: &str = include_str!("../../../demo/src/input.h");
+static BLANK: &str = "// Blank autocxx placeholder";
+
+const KEEP_TEMPDIRS: bool = false;
 
 #[test]
 fn test_help() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,6 +29,19 @@ fn test_help() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn base_test<F>(tmp_dir: &TempDir, arg_modifier: F) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: FnOnce(&mut Command),
+{
+    let result = base_test_ex(tmp_dir, arg_modifier, false);
+    assert_contentful(tmp_dir, "gen0.cc");
+    result
+}
+
+fn base_test_ex<F>(
+    tmp_dir: &TempDir,
+    arg_modifier: F,
+    use_complete_rs: bool,
+) -> Result<(), Box<dyn std::error::Error>>
 where
     F: FnOnce(&mut Command),
 {
@@ -43,18 +57,34 @@ where
         .arg(demo_rs)
         .arg("--outdir")
         .arg(tmp_dir.path().to_str().unwrap())
-        .arg("--gen-cpp")
-        .arg("--gen-rs-include")
-        .assert()
-        .success();
-    assert_contentful(&tmp_dir, "gen0.cc");
+        .arg("--gen-cpp");
+    if use_complete_rs {
+        cmd.arg("--gen-rs-complete");
+    } else {
+        cmd.arg("--gen-rs-include");
+    }
+    cmd.assert().success();
     Ok(())
 }
 
 #[test]
 fn test_gen() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
-    base_test(&tmp_dir, |_| {})
+    base_test(&tmp_dir, |_| {})?;
+    File::create(tmp_dir.path().join("cxx.h"))
+        .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
+    std::env::set_var("OUT_DIR", tmp_dir.path().to_str().unwrap());
+    let r = build_from_folder(
+        tmp_dir.path(),
+        &tmp_dir.path().join("demo/main.rs"),
+        vec![tmp_dir.path().join("autocxx-ffi-default-gen.rs")],
+        &["gen0.cc"],
+    );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tmp_dir.into_path().to_str());
+    }
+    r.unwrap();
+    Ok(())
 }
 
 #[test]
@@ -68,7 +98,7 @@ fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
             .arg("--generate-exact")
             .arg("3");
     })?;
-    assert_contains(&tmp_dir, "autocxxgen_ffi.h", "foo/cxx.h");
+    assert_contains(&tmp_dir, "gen0.h", "foo/cxx.h");
     // Currently we don't test cxxgen-h-path because we build the demo code
     // which doesn't refer to generated cxx header code.
     Ok(())
@@ -77,17 +107,40 @@ fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = TempDir::new("example")?;
-    base_test(&tmp_dir, |cmd| {
-        cmd.arg("--generate-exact")
-            .arg("3")
-            .arg("--fix-rs-include-name");
-    })?;
+    let depfile = tmp_dir.path().join("test.d");
+    base_test_ex(
+        &tmp_dir,
+        |cmd| {
+            cmd.arg("--generate-exact")
+                .arg("3")
+                .arg("--depfile")
+                .arg(depfile);
+        },
+        true,
+    )?;
     assert_contentful(&tmp_dir, "gen0.cc");
-    assert_exists(&tmp_dir, "gen1.cc");
-    assert_exists(&tmp_dir, "gen2.cc");
-    assert_contentful(&tmp_dir, "gen0.include.rs");
-    assert_exists(&tmp_dir, "gen1.include.rs");
-    assert_exists(&tmp_dir, "gen2.include.rs");
+    assert_contentful(&tmp_dir, "gen0.h");
+    // TODO: This file will actually try #including one of our .h files if there's anything to put
+    // in it. Figure out how to make that happen to test that it works.
+    assert_not_contentful(&tmp_dir, "gen1.cc");
+    assert_not_contentful(&tmp_dir, "gen1.h");
+    assert_not_contentful(&tmp_dir, "gen2.cc");
+    assert_not_contentful(&tmp_dir, "gen2.h");
+    assert_contentful(&tmp_dir, "cxxgen.h");
+    assert_contentful(&tmp_dir, "gen.complete.rs");
+    assert_contentful(&tmp_dir, "test.d");
+    File::create(tmp_dir.path().join("cxx.h"))
+        .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
+    let r = build_from_folder(
+        tmp_dir.path(),
+        &tmp_dir.path().join("gen.complete.rs"),
+        vec![],
+        &["gen0.cc"],
+    );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tmp_dir.into_path().to_str());
+    }
+    r.unwrap();
     Ok(())
 }
 
@@ -130,19 +183,28 @@ fn assert_contentful(outdir: &TempDir, fname: &str) {
     if !p.exists() {
         panic!("File {} didn't exist", p.to_string_lossy());
     }
-    assert!(p.metadata().unwrap().len() > super::BLANK.len().try_into().unwrap());
+    assert!(
+        p.metadata().unwrap().len() > BLANK.len().try_into().unwrap(),
+        "File {} is empty",
+        fname
+    );
 }
 
-fn assert_exists(outdir: &TempDir, fname: &str) {
+fn assert_not_contentful(outdir: &TempDir, fname: &str) {
     let p = outdir.path().join(fname);
     if !p.exists() {
         panic!("File {} didn't exist", p.to_string_lossy());
     }
+    assert!(
+        p.metadata().unwrap().len() <= BLANK.len().try_into().unwrap(),
+        "File {} is not empty",
+        fname
+    );
 }
 
 fn assert_contains(outdir: &TempDir, fname: &str, pattern: &str) {
     let p = outdir.path().join(fname);
-    let content = std::fs::read_to_string(&p).unwrap();
+    let content = std::fs::read_to_string(&p).expect(fname);
     eprintln!("content = {}", content);
     assert!(content.contains(pattern));
 }

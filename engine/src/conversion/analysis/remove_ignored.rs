@@ -1,20 +1,16 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
-use std::collections::HashSet;
+use indexmap::set::IndexSet as HashSet;
 
+use super::deps::HasDependencies;
 use super::fun::{FnAnalysis, FnKind, FnPhase};
+use crate::conversion::apivec::ApiVec;
 use crate::conversion::{convert_error::ErrorContext, ConvertError};
 use crate::{conversion::api::Api, known_types};
 
@@ -22,16 +18,10 @@ use crate::{conversion::api::Api, known_types};
 /// We also eliminate any APIs that depend on some type that we just don't
 /// know about at all. In either case, we don't simply remove the type, but instead
 /// replace it with an error marker.
-pub(crate) fn filter_apis_by_ignored_dependents(mut apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
-    let (ignored_items, valid_items): (Vec<&Api<_>>, Vec<&Api<_>>) = apis.iter().partition(|api| {
-        matches!(
-            api,
-            Api::IgnoredItem {
-                ctx: ErrorContext::Item(..),
-                ..
-            }
-        )
-    });
+pub(crate) fn filter_apis_by_ignored_dependents(mut apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
+    let (ignored_items, valid_items): (Vec<&Api<_>>, Vec<&Api<_>>) = apis
+        .iter()
+        .partition(|api| matches!(api, Api::IgnoredItem { .. }));
     let mut ignored_items: HashSet<_> = ignored_items
         .into_iter()
         .map(|api| api.name().clone())
@@ -46,17 +36,22 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: Vec<Api<FnPhase>>) -> 
         apis = apis
             .into_iter()
             .map(|api| {
-                if api.deps().any(|dep| ignored_items.contains(&dep)) {
+                let ignored_dependents: HashSet<_> = api
+                    .deps()
+                    .filter(|dep| ignored_items.contains(*dep))
+                    .cloned()
+                    .collect();
+                if !ignored_dependents.is_empty() {
                     iterate_again = true;
                     ignored_items.insert(api.name().clone());
-                    create_ignore_item(api, ConvertError::IgnoredDependent)
+                    create_ignore_item(api, ConvertError::IgnoredDependent(ignored_dependents))
                 } else {
                     let mut missing_deps = api.deps().filter(|dep| {
-                        !valid_types.contains(dep) && !known_types().is_known_type(dep)
+                        !valid_types.contains(*dep) && !known_types().is_known_type(dep)
                     });
                     let first = missing_deps.next();
                     std::mem::drop(missing_deps);
-                    if let Some(missing_dep) = first {
+                    if let Some(missing_dep) = first.cloned() {
                         create_ignore_item(api, ConvertError::UnknownDependentType(missing_dep))
                     } else {
                         api
@@ -78,15 +73,23 @@ fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Api<FnPhase> {
             Api::Function {
                 analysis:
                     FnAnalysis {
-                        kind: FnKind::Method(self_ty, _),
+                        kind: FnKind::TraitMethod { .. },
                         ..
                     },
                 ..
-            } => ErrorContext::Method {
-                self_ty: self_ty.get_final_ident(),
-                method: id,
-            },
-            _ => ErrorContext::Item(id),
+            } => None,
+            Api::Function {
+                analysis:
+                    FnAnalysis {
+                        kind:
+                            FnKind::Method {
+                                impl_for: self_ty, ..
+                            },
+                        ..
+                    },
+                ..
+            } => Some(ErrorContext::new_for_method(self_ty.get_final_ident(), id)),
+            _ => Some(ErrorContext::new_for_item(id)),
         },
     }
 }

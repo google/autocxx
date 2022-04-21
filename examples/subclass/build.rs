@@ -1,22 +1,16 @@
 // Copyright 2021 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
-fn main() {
+fn main() -> miette::Result<()> {
     let path = std::path::PathBuf::from("src");
     let mut b = autocxx_build::Builder::new("src/main.rs", &[&path])
         .auto_allowlist(true)
-        .expect_build();
+        .build()?;
     b.flag_if_supported("-std=c++17")
         .file("src/messages.cc")
         .compile("autocxx-subclass-example");
@@ -27,7 +21,8 @@ fn main() {
     // The following line is *unrelated* to autocxx builds and is
     // just designed to ensure that example code doesn't get out of sync
     // from copies in comments.
-    ensure_comments_match_real_code(&std::path::PathBuf::from("src/main.rs"))
+    ensure_comments_match_real_code(&std::path::PathBuf::from("src/main.rs"));
+    Ok(())
 }
 
 use std::fs::File;

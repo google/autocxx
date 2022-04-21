@@ -1,22 +1,17 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     conversion::{
-        api::{Api, ApiName, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
+        api::{Api, ApiName, NullPhase, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
+        apivec::ApiVec,
         ConvertError,
     },
     types::Namespace,
@@ -29,7 +24,7 @@ use crate::{
     },
     types::validate_ident_ok_for_cxx,
 };
-use autocxx_parser::IncludeCppConfig;
+use autocxx_parser::{IncludeCppConfig, RustPath};
 use syn::{parse_quote, Fields, Ident, Item, TypePath, UseTree};
 
 use super::{
@@ -41,7 +36,7 @@ use super::parse_foreign_mod::ParseForeignMod;
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
     config: &'a IncludeCppConfig,
-    apis: Vec<UnanalyzedApi>,
+    apis: ApiVec<NullPhase>,
 }
 
 fn api_name(ns: &Namespace, id: Ident, attrs: &BindgenSemanticAttributes) -> ApiName {
@@ -55,7 +50,7 @@ pub(crate) fn api_name_qualified(
 ) -> Result<ApiName, ConvertErrorWithContext> {
     match validate_ident_ok_for_cxx(&id.to_string()) {
         Err(e) => {
-            let ctx = ErrorContext::Item(id);
+            let ctx = ErrorContext::new_for_item(id);
             Err(ConvertErrorWithContext(e, Some(ctx)))
         }
         Ok(..) => Ok(api_name(ns, id, attrs)),
@@ -66,7 +61,7 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn new(config: &'a IncludeCppConfig) -> Self {
         ParseBindgen {
             config,
-            apis: Vec::new(),
+            apis: ApiVec::new(),
         }
     }
 
@@ -75,7 +70,7 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn parse_items(
         mut self,
         items: Vec<Item>,
-    ) -> Result<Vec<UnanalyzedApi>, ConvertError> {
+    ) -> Result<ApiVec<NullPhase>, ConvertError> {
         let items = Self::find_items_in_root(items)?;
         if !self.config.exclude_utilities() {
             generate_utilities(&mut self.apis, self.config);
@@ -84,6 +79,7 @@ impl<'a> ParseBindgen<'a> {
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
         self.confirm_all_generate_directives_obeyed()?;
+        self.replace_extern_cpp_types();
         Ok(self.apis)
     }
 
@@ -100,17 +96,59 @@ impl<'a> ParseBindgen<'a> {
                 let id = fun.sig.ident.clone();
                 Api::RustFn {
                     name: ApiName::new_in_root_namespace(id),
-                    path: fun.path.clone(),
-                    sig: fun.sig.clone(),
+                    details: fun.clone(),
+                    receiver: fun.receiver.as_ref().map(|receiver_id| {
+                        QualifiedName::new(&Namespace::new(), receiver_id.clone())
+                    }),
                 }
             }));
-        self.apis.extend(self.config.rust_types.iter().map(|path| {
+        let unique_rust_types: HashSet<&RustPath> = self.config.rust_types.iter().collect();
+        self.apis.extend(unique_rust_types.into_iter().map(|path| {
             let id = path.get_final_ident();
             Api::RustType {
                 name: ApiName::new_in_root_namespace(id.clone()),
                 path: path.clone(),
             }
         }));
+        self.apis.extend(
+            self.config
+                .concretes
+                .iter()
+                .map(|(cpp_definition, rust_id)| {
+                    let name = ApiName::new_in_root_namespace(rust_id.clone());
+                    Api::ConcreteType {
+                        name,
+                        cpp_definition: cpp_definition.clone(),
+                        rs_definition: None,
+                    }
+                }),
+        );
+    }
+
+    /// We do this last, _after_ we've parsed all the APIs, because we might want to actually
+    /// replace some of the existing APIs (structs/enums/etc.) with replacements.
+    fn replace_extern_cpp_types(&mut self) {
+        let pod_requests: HashSet<_> = self.config.get_pod_requests().iter().collect();
+        let replacements: HashMap<_, _> = self
+            .config
+            .externs
+            .iter()
+            .map(|(cpp_definition, details)| {
+                let qn = QualifiedName::new_from_cpp_name(cpp_definition);
+                let pod = pod_requests.contains(&qn.to_cpp_name());
+                (
+                    qn.clone(),
+                    Api::ExternCppType {
+                        name: ApiName::new_from_qualified_name(qn),
+                        details: details.clone(),
+                        pod,
+                    },
+                )
+            })
+            .collect();
+        self.apis
+            .retain(|api| !replacements.contains_key(api.name()));
+        self.apis.extend(replacements.into_iter().map(|(_, v)| v));
     }
 
     fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
@@ -137,7 +175,7 @@ impl<'a> ParseBindgen<'a> {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
         let mut mod_converter = ParseForeignMod::new(ns.clone());
-        let mut more_apis = Vec::new();
+        let mut more_apis = ApiVec::new();
         for item in items {
             report_any_error(&ns, &mut more_apis, || {
                 self.parse_item(item, &mut mod_converter, &ns)
@@ -162,15 +200,23 @@ impl<'a> ParseBindgen<'a> {
                 if s.ident.to_string().ends_with("__bindgen_vtable") {
                     return Ok(());
                 }
-                let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
                 let annotations = BindgenSemanticAttributes::new(&s.attrs);
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
                 let name = api_name_qualified(ns, s.ident.clone(), &annotations)?;
+                let err = annotations.check_for_fatal_attrs(&s.ident).err();
                 let api = if ns.is_empty() && self.config.is_rust_type(&s.ident) {
                     None
-                } else if is_forward_declaration {
-                    Some(UnanalyzedApi::ForwardDeclaration { name })
+                } else if Self::spot_forward_declaration(&s.fields)
+                    || (Self::spot_zero_length_struct(&s.fields) && err.is_some())
+                {
+                    // Forward declarations are recorded especially because we can't
+                    // store them in UniquePtr or similar.
+                    // Templated forward declarations don't appear with an _unused field (which is what
+                    // we spot in the previous clause) but instead with an _address field.
+                    // So, solely in the case where we're storing up an error about such
+                    // a templated type, we'll also treat such cases as forward declarations.
+                    Some(UnanalyzedApi::ForwardDeclaration { name, err })
                 } else {
                     let has_rvalue_reference_fields = s.fields.iter().any(|f| {
                         BindgenSemanticAttributes::new(&f.attrs).has_attr("rvalue_reference")
@@ -253,7 +299,7 @@ impl<'a> ParseBindgen<'a> {
                             if new_tyname == old_tyname {
                                 return Err(ConvertErrorWithContext(
                                     ConvertError::InfinitelyRecursiveTypedef(new_tyname),
-                                    Some(ErrorContext::Item(new_id.clone())),
+                                    Some(ErrorContext::new_for_item(new_id.clone())),
                                 ));
                             }
                             let annotations = BindgenSemanticAttributes::new(&use_item.attrs);
@@ -269,7 +315,9 @@ impl<'a> ParseBindgen<'a> {
                         }
                         _ => {
                             return Err(ConvertErrorWithContext(
-                                ConvertError::UnexpectedUseStatement(segs.into_iter().last()),
+                                ConvertError::UnexpectedUseStatement(
+                                    segs.into_iter().last().map(|i| i.to_string()),
+                                ),
                                 None,
                             ))
                         }
@@ -287,6 +335,8 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Type(ity) => {
                 let annotations = BindgenSemanticAttributes::new(&ity.attrs);
+                // It's known that sometimes bindgen will give us duplicate typedefs with the
+                // same name - see test_issue_264.
                 self.apis.push(UnanalyzedApi::Typedef {
                     name: api_name(ns, ity.ident.clone(), &annotations),
                     item: TypedefKind::Type(ity),
@@ -303,9 +353,17 @@ impl<'a> ParseBindgen<'a> {
     }
 
     fn spot_forward_declaration(s: &Fields) -> bool {
+        Self::spot_field(s, "_unused")
+    }
+
+    fn spot_zero_length_struct(s: &Fields) -> bool {
+        Self::spot_field(s, "_address")
+    }
+
+    fn spot_field(s: &Fields, desired_id: &str) -> bool {
         s.iter()
             .filter_map(|f| f.ident.as_ref())
-            .any(|id| id == "_unused")
+            .any(|id| id == desired_id)
     }
 
     fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertError> {

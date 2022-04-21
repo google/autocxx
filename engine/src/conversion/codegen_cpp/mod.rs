@@ -1,18 +1,13 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 mod function_wrapper_cpp;
+mod new_and_delete_prelude;
 pub(crate) mod type_to_cpp;
 
 use crate::{
@@ -22,19 +17,26 @@ use crate::{
 };
 use autocxx_parser::IncludeCppConfig;
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
 use self::type_to_cpp::{
-    identifier_using_original_name_map, namespaced_name_using_original_name_map,
+    final_ident_using_original_name_map, namespaced_name_using_original_name_map,
 };
 
 use super::{
-    analysis::fun::{
-        function_wrapper::{CppFunction, CppFunctionBody},
-        FnPhase,
+    analysis::{
+        fun::{
+            function_wrapper::{CppFunction, CppFunctionBody},
+            FnPhase, PodAndDepAnalysis,
+        },
+        pod::PodAnalysis,
     },
-    api::{Api, SubclassName, Synthesis},
+    api::{Api, Provenance, SubclassName, TypeKind},
+    apivec::ApiVec,
     ConvertError,
 };
 
@@ -43,28 +45,27 @@ enum Header {
     System(&'static str),
     CxxH,
     CxxgenH,
+    NewDeletePrelude,
 }
 
 impl Header {
     fn include_stmt(&self, cpp_codegen_options: &CppCodegenOptions) -> String {
         let blank = "".to_string();
-        format!(
-            "#include {}",
-            match self {
-                Self::System(name) => format!("<{}>", name),
-                Self::CxxH => {
-                    let prefix = cpp_codegen_options.path_to_cxx_h.as_ref().unwrap_or(&blank);
-                    format!("\"{}cxx.h\"", prefix)
-                }
-                Self::CxxgenH => {
-                    let prefix = cpp_codegen_options
-                        .path_to_cxxgen_h
-                        .as_ref()
-                        .unwrap_or(&blank);
-                    format!("\"{}cxxgen.h\"", prefix)
-                }
+        match self {
+            Self::System(name) => format!("#include <{}>", name),
+            Self::CxxH => {
+                let prefix = cpp_codegen_options.path_to_cxx_h.as_ref().unwrap_or(&blank);
+                format!("#include \"{}cxx.h\"", prefix)
             }
-        )
+            Self::CxxgenH => {
+                let prefix = cpp_codegen_options
+                    .path_to_cxxgen_h
+                    .as_ref()
+                    .unwrap_or(&blank);
+                format!("#include \"{}cxxgen.h\"", prefix)
+            }
+            Header::NewDeletePrelude => new_and_delete_prelude::NEW_AND_DELETE_PRELUDE.to_string(),
+        }
     }
 
     fn is_system(&self) -> bool {
@@ -78,7 +79,10 @@ enum ConversionDirection {
     CppCallsRust,
 }
 
-struct AdditionalFunction {
+/// Some extra snippet of C++ which we (autocxx) need to generate, beyond
+/// that which cxx itself generates.
+#[derive(Default)]
+struct ExtraCpp {
     type_definition: Option<String>, // are output before main declarations
     declaration: Option<String>,
     definition: Option<String>,
@@ -93,11 +97,11 @@ struct AdditionalFunction {
 /// autocxx generates its own _additional_ C++ files which therefore
 /// need to be built and included in linking procedures.
 pub(crate) struct CppCodeGenerator<'a> {
-    additional_functions: Vec<AdditionalFunction>,
+    additional_functions: Vec<ExtraCpp>,
     inclusions: String,
     original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
-    cpp_codegen_options: &'a CppCodegenOptions,
+    cpp_codegen_options: &'a CppCodegenOptions<'a>,
 }
 
 struct SubclassFunction<'a> {
@@ -108,7 +112,7 @@ struct SubclassFunction<'a> {
 impl<'a> CppCodeGenerator<'a> {
     pub(crate) fn generate_cpp_code(
         inclusions: String,
-        apis: &[Api<FnPhase>],
+        apis: &ApiVec<FnPhase>,
         config: &'a IncludeCppConfig,
         cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<Option<CppFilePair>, ConvertError> {
@@ -161,21 +165,28 @@ impl<'a> CppCodeGenerator<'a> {
                     fun,
                     ..
                 } => {
-                    if let Some(Synthesis::SubclassConstructor {
-                        subclass, cpp_impl, ..
-                    }) = &fun.synthesis
-                    {
+                    if let Provenance::SynthesizedSubclassConstructor(details) = &fun.provenance {
                         constructors_by_subclass
-                            .entry(subclass.clone())
+                            .entry(details.subclass.clone())
                             .or_default()
-                            .push(cpp_impl);
+                            .push(&details.cpp_impl);
                     }
                     self.generate_cpp_function(cpp_wrapper)?
                 }
-                Api::ConcreteType { rs_definition, .. } => self.generate_typedef(
-                    api.name(),
-                    type_to_cpp(rs_definition, &self.original_name_map)?,
-                ),
+                Api::ConcreteType {
+                    rs_definition,
+                    cpp_definition,
+                    ..
+                } => {
+                    let effective_cpp_definition = match rs_definition {
+                        Some(rs_definition) => {
+                            Cow::Owned(type_to_cpp(rs_definition, &self.original_name_map)?)
+                        }
+                        None => Cow::Borrowed(cpp_definition),
+                    };
+
+                    self.generate_typedef(api.name(), &effective_cpp_definition)
+                }
                 Api::CType { typename, .. } => self.generate_ctype_typedef(typename),
                 Api::Subclass { .. } => deferred_apis.push(api),
                 Api::RustSubclassFn {
@@ -188,6 +199,21 @@ impl<'a> CppCodeGenerator<'a> {
                             fun: &details.cpp_impl,
                             is_pure_virtual: details.is_pure_virtual,
                         });
+                }
+                Api::Struct {
+                    name,
+                    analysis:
+                        PodAndDepAnalysis {
+                            pod:
+                                PodAnalysis {
+                                    kind: TypeKind::Pod,
+                                    ..
+                                },
+                            ..
+                        },
+                    ..
+                } => {
+                    self.generate_pod_assertion(name.qualified_cpp_name());
                 }
                 _ => panic!("Should have filtered on needs_cpp_codegen"),
             }
@@ -220,7 +246,10 @@ impl<'a> CppCodeGenerator<'a> {
                 headers, self.inclusions, type_definitions, declarations
             );
             log::info!("Additional C++ decls:\n{}", declarations);
-            let header_name = format!("autocxxgen_{}.h", self.config.get_mod_name());
+            let header_name = self
+                .cpp_codegen_options
+                .header_namer
+                .name_header(self.config.get_mod_name().to_string());
             let implementation = if self
                 .additional_functions
                 .iter()
@@ -246,7 +275,7 @@ impl<'a> CppCodeGenerator<'a> {
 
     fn collect_headers<F>(&self, filter: F) -> String
     where
-        F: Fn(&AdditionalFunction) -> &[Header],
+        F: Fn(&ExtraCpp) -> &[Header],
     {
         let cpp_headers: HashSet<_> = self
             .additional_functions
@@ -262,7 +291,7 @@ impl<'a> CppCodeGenerator<'a> {
 
     fn concat_additional_items<F>(&self, field_access: F) -> String
     where
-        F: FnMut(&AdditionalFunction) -> Option<&String>,
+        F: FnMut(&ExtraCpp) -> Option<&String>,
     {
         let mut s = self
             .additional_functions
@@ -273,19 +302,33 @@ impl<'a> CppCodeGenerator<'a> {
         s
     }
 
+    fn generate_pod_assertion(&mut self, name: String) {
+        // These assertions are generated by cxx for trivial ExternTypes but
+        // *only if* such types are used as trivial types in the cxx::bridge.
+        // It's possible for types which we generate to be used even without
+        // passing through the cxx::bridge, and as we generate Drop impls, that
+        // can result in destructors for nested types being called multiple times
+        // if we represent them as trivial types. So generate an extra
+        // assertion to make sure.
+        let declaration = Some(format!("static_assert(::rust::IsRelocatable<{}>::value, \"type {} should be trivially move constructible and trivially destructible to be used with generate_pod! in autocxx\");", name, name));
+        self.additional_functions.push(ExtraCpp {
+            declaration,
+            headers: vec![Header::CxxH],
+            ..Default::default()
+        })
+    }
+
     fn generate_string_constructor(&mut self) {
         let makestring_name = self.config.get_makestring_name();
         let declaration = Some(format!("inline std::unique_ptr<std::string> {}(::rust::Str str) {{ return std::make_unique<std::string>(std::string(str)); }}", makestring_name));
-        self.additional_functions.push(AdditionalFunction {
-            type_definition: None,
+        self.additional_functions.push(ExtraCpp {
             declaration,
-            definition: None,
             headers: vec![
                 Header::System("memory"),
                 Header::System("string"),
                 Header::CxxH,
             ],
-            cpp_headers: Vec::new(),
+            ..Default::default()
         })
     }
 
@@ -308,7 +351,7 @@ impl<'a> CppCodeGenerator<'a> {
         conversion_direction: ConversionDirection,
         requires_rust_declarations: bool,
         force_name: Option<&str>,
-    ) -> Result<AdditionalFunction, ConvertError> {
+    ) -> Result<ExtraCpp, ConvertError> {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
         // We could easily do this the other way round, and when
@@ -341,6 +384,8 @@ impl<'a> CppCodeGenerator<'a> {
                 format!("arg{}", counter)
             }
         };
+        // If this returns a non-POD value, we may instead wish to emplace
+        // it into a parameter, let's see.
         let args: Result<Vec<_>, _> = details
             .argument_conversion
             .iter()
@@ -368,11 +413,19 @@ impl<'a> CppCodeGenerator<'a> {
         let ret_type = details
             .return_conversion
             .as_ref()
-            .map(|x| match conversion_direction {
-                ConversionDirection::RustCallsCpp => x.converted_type(&self.original_name_map),
-                ConversionDirection::CppCallsCpp => x.unconverted_type(&self.original_name_map),
+            .and_then(|x| match conversion_direction {
+                ConversionDirection::RustCallsCpp => {
+                    if x.populate_return_value() {
+                        Some(x.converted_type(&self.original_name_map))
+                    } else {
+                        None
+                    }
+                }
+                ConversionDirection::CppCallsCpp => {
+                    Some(x.unconverted_type(&self.original_name_map))
+                }
                 ConversionDirection::CppCallsRust => {
-                    x.inverse().converted_type(&self.original_name_map)
+                    Some(x.inverse().converted_type(&self.original_name_map))
                 }
             })
             .unwrap_or_else(|| Ok(default_return.to_string()))?;
@@ -390,6 +443,20 @@ impl<'a> CppCodeGenerator<'a> {
             "{} {}{}({}){}",
             ret_type, qualification, name, args, constness
         );
+        // Whether there's a placement param in which to put the return value
+        let placement_param = details
+            .argument_conversion
+            .iter()
+            .enumerate()
+            .filter_map(|(counter, conv)| {
+                if conv.is_placement_parameter() {
+                    Some(get_arg_name(counter))
+                } else {
+                    None
+                }
+            })
+            .next();
+        // Arguments to underlying function call
         let arg_list: Result<Vec<_>, _> = details
             .argument_conversion
             .iter()
@@ -398,7 +465,7 @@ impl<'a> CppCodeGenerator<'a> {
                 ConversionDirection::RustCallsCpp => {
                     conv.cpp_conversion(&get_arg_name(counter), &self.original_name_map, false)
                 }
-                ConversionDirection::CppCallsCpp => Ok(get_arg_name(counter)),
+                ConversionDirection::CppCallsCpp => Ok(Some(get_arg_name(counter))),
                 ConversionDirection::CppCallsRust => conv.inverse().cpp_conversion(
                     &get_arg_name(counter),
                     &self.original_name_map,
@@ -406,7 +473,7 @@ impl<'a> CppCodeGenerator<'a> {
                 ),
             })
             .collect();
-        let mut arg_list = arg_list?.into_iter();
+        let mut arg_list = arg_list?.into_iter().flatten();
         let receiver = if is_a_method { arg_list.next() } else { None };
         if matches!(&details.payload, CppFunctionBody::ConstructSuperclass(_)) {
             arg_list.next();
@@ -418,24 +485,30 @@ impl<'a> CppCodeGenerator<'a> {
         } else {
             arg_list.join(", ")
         };
-        let (mut underlying_function_call, field_assignments) = match &details.payload {
-            CppFunctionBody::MakeUnique | CppFunctionBody::Cast => (arg_list, "".to_string()),
+        let (mut underlying_function_call, field_assignments, need_allocators) = match &details
+            .payload
+        {
+            CppFunctionBody::Cast => (arg_list, "".to_string(), false),
             CppFunctionBody::PlacementNew(ns, id) => {
                 let ty_id = QualifiedName::new(ns, id.clone());
-                let ty_id =
-                    namespaced_name_using_original_name_map(&ty_id, &self.original_name_map);
+                let ty_id = self.namespaced_name(&ty_id);
                 (
                     format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
                     "".to_string(),
+                    false,
                 )
             }
             CppFunctionBody::Destructor(ns, id) => {
                 let ty_id = QualifiedName::new(ns, id.clone());
-                let ty_id = identifier_using_original_name_map(&ty_id, &self.original_name_map);
-                (format!("{}->~{}()", arg_list, ty_id), "".to_string())
+                let ty_id = final_ident_using_original_name_map(&ty_id, &self.original_name_map);
+                (format!("{}->~{}()", arg_list, ty_id), "".to_string(), false)
             }
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
-                Some(receiver) => (format!("{}.{}({})", receiver, id, arg_list), "".to_string()),
+                Some(receiver) => (
+                    format!("{}.{}({})", receiver, id, arg_list),
+                    "".to_string(),
+                    false,
+                ),
                 None => {
                     let underlying_function_call = ns
                         .into_iter()
@@ -445,6 +518,7 @@ impl<'a> CppCodeGenerator<'a> {
                     (
                         format!("{}({})", underlying_function_call, arg_list),
                         "".to_string(),
+                        false,
                     )
                 }
             },
@@ -457,27 +531,47 @@ impl<'a> CppCodeGenerator<'a> {
                 (
                     format!("{}({})", underlying_function_call, arg_list),
                     "".to_string(),
+                    false,
                 )
             }
-            CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list),
+            CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list, false),
+            CppFunctionBody::AllocUninitialized(ty) => {
+                let namespaced_ty = self.namespaced_name(ty);
+                (
+                    format!("new_appropriately<{}>();", namespaced_ty,),
+                    "".to_string(),
+                    true,
+                )
+            }
+            CppFunctionBody::FreeUninitialized(ty) => (
+                format!("delete_appropriately<{}>(arg0);", self.namespaced_name(ty)),
+                "".to_string(),
+                true,
+            ),
         };
         if let Some(ret) = &details.return_conversion {
-            underlying_function_call = format!(
-                "return {}",
-                match conversion_direction {
-                    ConversionDirection::RustCallsCpp => ret.cpp_conversion(
-                        &underlying_function_call,
-                        &self.original_name_map,
-                        true
-                    )?,
-                    ConversionDirection::CppCallsCpp => underlying_function_call,
-                    ConversionDirection::CppCallsRust => ret.inverse().cpp_conversion(
-                        &underlying_function_call,
-                        &self.original_name_map,
-                        true
-                    )?,
+            let call_itself = match conversion_direction {
+                ConversionDirection::RustCallsCpp => {
+                    ret.cpp_conversion(&underlying_function_call, &self.original_name_map, true)?
                 }
+                ConversionDirection::CppCallsCpp => Some(underlying_function_call),
+                ConversionDirection::CppCallsRust => ret.inverse().cpp_conversion(
+                    &underlying_function_call,
+                    &self.original_name_map,
+                    true,
+                )?,
+            }
+            .expect(
+                "Expected some conversion type for return value which resulted in a parameter name",
             );
+
+            underlying_function_call = match placement_param {
+                Some(placement_param) => {
+                    let tyname = type_to_cpp(&ret.unwrapped_type, &self.original_name_map)?;
+                    format!("new({}) {}({})", placement_param, tyname, call_itself)
+                }
+                None => format!("return {}", call_itself),
+            };
         };
         if !underlying_function_call.is_empty() {
             underlying_function_call = format!("{};", underlying_function_call);
@@ -509,28 +603,32 @@ impl<'a> CppCodeGenerator<'a> {
                 None,
             )
         };
-        Ok(AdditionalFunction {
-            type_definition: None,
+        let mut headers = vec![Header::System("memory")];
+        if need_allocators {
+            headers.push(Header::NewDeletePrelude);
+        }
+        Ok(ExtraCpp {
             declaration,
             definition,
-            headers: vec![Header::System("memory")],
-            cpp_headers: Vec::new(),
+            headers,
+            ..Default::default()
         })
+    }
+
+    fn namespaced_name(&self, name: &QualifiedName) -> String {
+        namespaced_name_using_original_name_map(name, &self.original_name_map)
     }
 
     fn generate_ctype_typedef(&mut self, tn: &QualifiedName) {
         let cpp_name = tn.to_cpp_name();
-        self.generate_typedef(tn, cpp_name)
+        self.generate_typedef(tn, &cpp_name)
     }
 
-    fn generate_typedef(&mut self, tn: &QualifiedName, definition: String) {
+    fn generate_typedef(&mut self, tn: &QualifiedName, definition: &str) {
         let our_name = tn.get_final_item();
-        self.additional_functions.push(AdditionalFunction {
+        self.additional_functions.push(ExtraCpp {
             type_definition: Some(format!("typedef {} {};", definition, our_name)),
-            declaration: None,
-            definition: None,
-            headers: Vec::new(),
-            cpp_headers: Vec::new(),
+            ..Default::default()
         })
     }
 
@@ -542,12 +640,9 @@ impl<'a> CppCodeGenerator<'a> {
         methods: Vec<SubclassFunction>,
     ) -> Result<(), ConvertError> {
         let holder = subclass.holder();
-        self.additional_functions.push(AdditionalFunction {
+        self.additional_functions.push(ExtraCpp {
             type_definition: Some(format!("struct {};", holder)),
-            declaration: None,
-            definition: None,
-            headers: Vec::new(),
-            cpp_headers: Vec::new(),
+            ..Default::default()
         });
         let mut method_decls = Vec::new();
         for method in methods {
@@ -610,7 +705,7 @@ impl<'a> CppCodeGenerator<'a> {
             constructor_decls.push(decl);
             self.additional_functions.push(fn_impl);
         }
-        self.additional_functions.push(AdditionalFunction {
+        self.additional_functions.push(ExtraCpp {
             type_definition: Some(format!(
                 "class {} : {}\n{{\npublic:\n{}\n{}\nvoid {}() const;\nprivate:rust::Box<{}> obs;\nvoid really_remove_ownership();\n\n}};",
                 subclass.cpp(),
@@ -628,9 +723,8 @@ impl<'a> CppCodeGenerator<'a> {
                 subclass.cpp(),
                 subclass.remove_ownership()
             )),
-            declaration: None,
-            headers: Vec::new(),
             cpp_headers: vec![Header::CxxgenH],
+            ..Default::default()
         });
         Ok(())
     }

@@ -1,29 +1,34 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
-use std::collections::HashSet;
+use indexmap::set::IndexSet as HashSet;
+use std::fmt::Display;
 
 use crate::types::{make_ident, Namespace, QualifiedName};
-use autocxx_parser::RustPath;
+use autocxx_parser::{ExternCppType, RustFun, RustPath};
+use itertools::Itertools;
+use quote::ToTokens;
 use syn::{
-    parse::Parse, punctuated::Punctuated, token::Comma, Attribute, FnArg, Ident, ImplItem,
-    ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt, ReturnType, Signature,
-    Type, Visibility,
+    parse::Parse,
+    punctuated::Punctuated,
+    token::{Comma, Unsafe},
+    Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
+    Pat, ReturnType, Type, Visibility,
 };
 
 use super::{
-    analysis::fun::{function_wrapper::CppFunction, ReceiverMutability},
+    analysis::{
+        fun::{
+            function_wrapper::{CppFunction, CppFunctionBody, CppFunctionKind},
+            ReceiverMutability,
+        },
+        PointerTreatment,
+    },
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertError,
 };
@@ -37,12 +42,6 @@ pub(crate) enum TypeKind {
             // some other type which is pure virtual. Alternatively, maybe we just don't
             // know if the base class is pure virtual because it wasn't on the allowlist,
             // in which case we'll err on the side of caution.
-}
-
-/// An entry which needs to go into an `impl` block for a given type.
-pub(crate) struct ImplBlockDetails {
-    pub(crate) item: ImplItem,
-    pub(crate) ty: Ident,
 }
 
 /// C++ visibility.
@@ -101,20 +100,41 @@ pub(crate) enum CastMutability {
     MutToMut,
 }
 
-/// Indicates that this function didn't exist originally in the C++
-/// but we've created it afresh.
+/// Indicates that this function (which is synthetic) should
+/// be a trait implementation rather than a method or free function.
 #[derive(Clone)]
-pub(crate) enum Synthesis {
-    MakeUnique,
-    SubclassConstructor {
-        subclass: SubclassName,
-        cpp_impl: Box<CppFunction>,
-        is_trivial: bool,
-    },
+pub(crate) enum TraitSynthesis {
     Cast {
         to_type: QualifiedName,
         mutable: CastMutability,
     },
+    AllocUninitialized(QualifiedName),
+    FreeUninitialized(QualifiedName),
+}
+
+/// Details of a subclass constructor.
+/// TODO: zap this; replace with an extra API.
+#[derive(Clone)]
+pub(crate) struct SubclassConstructorDetails {
+    pub(crate) subclass: SubclassName,
+    pub(crate) is_trivial: bool,
+    /// Implementation of the constructor _itself_ as distinct
+    /// from any wrapper function we create to call it.
+    pub(crate) cpp_impl: CppFunction,
+}
+
+/// Contributions to traits representing C++ superclasses that
+/// we may implement as Rust subclasses.
+#[derive(Clone)]
+pub(crate) struct SuperclassMethod {
+    pub(crate) name: Ident,
+    pub(crate) receiver: QualifiedName,
+    pub(crate) params: Punctuated<FnArg, Comma>,
+    pub(crate) param_names: Vec<Pat>,
+    pub(crate) ret_type: ReturnType,
+    pub(crate) receiver_mutability: ReceiverMutability,
+    pub(crate) requires_unsafe: UnsafetyNeeded,
+    pub(crate) is_pure_virtual: bool,
 }
 
 /// Information about references (as opposed to pointers) to be found
@@ -136,15 +156,95 @@ impl References {
             ..Default::default()
         }
     }
+    pub(crate) fn param_treatment(&self, param: &Ident) -> PointerTreatment {
+        if self.rvalue_ref_params.contains(param) {
+            PointerTreatment::RValueReference
+        } else if self.ref_params.contains(param) {
+            PointerTreatment::Reference
+        } else {
+            PointerTreatment::Pointer
+        }
+    }
+    pub(crate) fn return_treatment(&self) -> PointerTreatment {
+        if self.rvalue_ref_return {
+            PointerTreatment::RValueReference
+        } else if self.ref_return {
+            PointerTreatment::Reference
+        } else {
+            PointerTreatment::Pointer
+        }
+    }
 }
 
-#[derive(Clone, Hash, Eq, PartialEq)]
+#[derive(Clone)]
+pub(crate) struct TraitImplSignature {
+    pub(crate) ty: Type,
+    pub(crate) trait_signature: Type,
+    /// The trait is 'unsafe' itself
+    pub(crate) unsafety: Option<Unsafe>,
+}
+
+impl Eq for TraitImplSignature {}
+
+impl PartialEq for TraitImplSignature {
+    fn eq(&self, other: &Self) -> bool {
+        totokens_equal(&self.unsafety, &other.unsafety)
+            && totokens_equal(&self.ty, &other.ty)
+            && totokens_equal(&self.trait_signature, &other.trait_signature)
+    }
+}
+
+fn totokens_to_string<T: ToTokens>(a: &T) -> String {
+    a.to_token_stream().to_string()
+}
+
+fn totokens_equal<T: ToTokens>(a: &T, b: &T) -> bool {
+    totokens_to_string(a) == totokens_to_string(b)
+}
+
+fn hash_totokens<T: ToTokens, H: std::hash::Hasher>(a: &T, state: &mut H) {
+    use std::hash::Hash;
+    totokens_to_string(a).hash(state)
+}
+
+impl std::hash::Hash for TraitImplSignature {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        hash_totokens(&self.ty, state);
+        hash_totokens(&self.trait_signature, state);
+        hash_totokens(&self.unsafety, state);
+    }
+}
+
+#[derive(Clone, Debug)]
 pub(crate) enum SpecialMemberKind {
     DefaultConstructor,
     CopyConstructor,
     MoveConstructor,
     Destructor,
     AssignmentOperator,
+}
+
+impl Display for SpecialMemberKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                SpecialMemberKind::DefaultConstructor => "default constructor",
+                SpecialMemberKind::CopyConstructor => "copy constructor",
+                SpecialMemberKind::MoveConstructor => "move constructor",
+                SpecialMemberKind::Destructor => "destructor",
+                SpecialMemberKind::AssignmentOperator => "assignment operator",
+            }
+        )
+    }
+}
+
+#[derive(Clone)]
+pub(crate) enum Provenance {
+    Bindgen,
+    SynthesizedOther,
+    SynthesizedSubclassConstructor(Box<SubclassConstructorDetails>),
 }
 
 /// A C++ function for which we need to generate bindings, but haven't
@@ -159,8 +259,9 @@ pub(crate) enum SpecialMemberKind {
 /// `synthesized_*` members which are not filled in from bindgen.
 #[derive(Clone)]
 pub(crate) struct FuncToConvert {
+    pub(crate) provenance: Provenance,
     pub(crate) ident: Ident,
-    pub(crate) doc_attr: Option<Attribute>,
+    pub(crate) doc_attrs: Vec<Attribute>,
     pub(crate) inputs: Punctuated<FnArg, Comma>,
     pub(crate) output: ReturnType,
     pub(crate) vis: Visibility,
@@ -177,9 +278,11 @@ pub(crate) struct FuncToConvert {
     /// method receiver, e.g. because we're making a subclass
     /// constructor, fill it in here.
     pub(crate) synthesized_this_type: Option<QualifiedName>,
+    /// If this function should actually belong to a trait.
+    pub(crate) add_to_trait: Option<TraitSynthesis>,
     /// If Some, this function didn't really exist in the original
     /// C++ and instead we're synthesizing it.
-    pub(crate) synthesis: Option<Synthesis>,
+    pub(crate) synthetic_cpp: Option<(CppFunctionBody, CppFunctionKind)>,
     pub(crate) is_deleted: bool,
 }
 
@@ -244,6 +347,15 @@ impl ApiName {
             .unwrap_or_else(|| self.name.get_final_item().to_string())
     }
 
+    pub(crate) fn qualified_cpp_name(&self) -> String {
+        let cpp_name = self.cpp_name();
+        self.name
+            .ns_segment_iter()
+            .cloned()
+            .chain(std::iter::once(cpp_name))
+            .join("::")
+    }
+
     pub(crate) fn cpp_name_if_present(&self) -> Option<&String> {
         self.cpp_name.as_ref()
     }
@@ -294,6 +406,17 @@ impl SubclassName {
     fn with_suffix(&self, suffix: &str) -> Ident {
         make_ident(format!("{}{}", self.0.name.get_final_item(), suffix))
     }
+    pub(crate) fn get_trait_api_name(sup: &QualifiedName, method_name: &str) -> QualifiedName {
+        QualifiedName::new(
+            sup.get_namespace(),
+            make_ident(format!(
+                "{}_{}_trait_item",
+                sup.get_final_item(),
+                method_name
+            )),
+        )
+    }
+    // TODO this and the following should probably include both class name and method name
     pub(crate) fn get_super_fn_name(superclass_namespace: &Namespace, id: &str) -> QualifiedName {
         let id = make_ident(format!("{}_super", id));
         QualifiedName::new(superclass_namespace, id)
@@ -328,13 +451,32 @@ impl SubclassName {
 /// (Specifically, allowing `syn` Types to be `Debug` requires
 /// enabling syn's `extra-traits` feature which increases compile time.)
 pub(crate) enum Api<T: AnalysisPhase> {
-    /// A forward declared type for which no definition is available.
-    ForwardDeclaration { name: ApiName },
+    /// A forward declaration, which we mustn't store in a UniquePtr.
+    ForwardDeclaration {
+        name: ApiName,
+        /// If we found a problem parsing this forward declaration, we'll
+        /// ephemerally store the error here, as opposed to immediately
+        /// converting it to an `IgnoredItem`. That's because the
+        /// 'replace_hopeless_typedef_targets' analysis phase needs to spot
+        /// cases where there was an error which was _also_ a forward declaration.
+        /// That phase will then discard such Api::ForwardDeclarations
+        /// and replace them with normal Api::IgnoredItems.
+        err: Option<ConvertErrorWithContext>,
+    },
+    /// We found a typedef to something that we didn't fully understand.
+    /// We'll treat it as an opaque unsized type.
+    OpaqueTypedef {
+        name: ApiName,
+        /// Further store whether this was a typedef to a forward declaration.
+        /// If so we can't allow it to live in a UniquePtr, just like a regular
+        /// Api::ForwardDeclaration.
+        forward_declaration: bool,
+    },
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
     ConcreteType {
         name: ApiName,
-        rs_definition: Box<Type>,
+        rs_definition: Option<Box<Type>>,
         cpp_definition: String,
     },
     /// A simple note that we want to make a constructor for
@@ -343,7 +485,6 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// A function. May include some analysis.
     Function {
         name: ApiName,
-        name_for_gc: Option<QualifiedName>,
         fun: Box<FuncToConvert>,
         analysis: T::FunAnalysis,
     },
@@ -382,15 +523,15 @@ pub(crate) enum Api<T: AnalysisPhase> {
     IgnoredItem {
         name: ApiName,
         err: ConvertError,
-        ctx: ErrorContext,
+        ctx: Option<ErrorContext>,
     },
     /// A Rust type which is not a C++ type.
     RustType { name: ApiName, path: RustPath },
     /// A function for the 'extern Rust' block which is not a C++ type.
     RustFn {
         name: ApiName,
-        sig: Signature,
-        path: RustPath,
+        details: RustFun,
+        receiver: Option<QualifiedName>,
     },
     /// Some function for the extern "Rust" block.
     RustSubclassFn {
@@ -403,6 +544,19 @@ pub(crate) enum Api<T: AnalysisPhase> {
         name: SubclassName,
         superclass: QualifiedName,
     },
+    /// Contributions to the traits representing superclass methods that we might
+    /// subclass in Rust.
+    SubclassTraitItem {
+        name: ApiName,
+        details: SuperclassMethod,
+    },
+    /// A type which we shouldn't ourselves generate, but can use in functions
+    /// and so-forth by referring to some definition elsewhere.
+    ExternCppType {
+        name: ApiName,
+        details: ExternCppType,
+        pod: bool,
+    },
 }
 
 pub(crate) struct RustSubclassFnDetails {
@@ -412,15 +566,23 @@ pub(crate) struct RustSubclassFnDetails {
     pub(crate) method_name: Ident,
     pub(crate) superclass: QualifiedName,
     pub(crate) receiver_mutability: ReceiverMutability,
-    pub(crate) dependency: Option<QualifiedName>,
-    pub(crate) requires_unsafe: bool,
+    pub(crate) dependencies: Vec<QualifiedName>,
+    pub(crate) requires_unsafe: UnsafetyNeeded,
     pub(crate) is_pure_virtual: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum UnsafetyNeeded {
+    None,
+    JustBridge,
+    Always,
 }
 
 impl<T: AnalysisPhase> Api<T> {
     pub(crate) fn name_info(&self) -> &ApiName {
         match self {
-            Api::ForwardDeclaration { name } => name,
+            Api::ForwardDeclaration { name, .. } => name,
+            Api::OpaqueTypedef { name, .. } => name,
             Api::ConcreteType { name, .. } => name,
             Api::StringConstructor { name } => name,
             Api::Function { name, .. } => name,
@@ -434,6 +596,8 @@ impl<T: AnalysisPhase> Api<T> {
             Api::RustFn { name, .. } => name,
             Api::RustSubclassFn { name, .. } => name,
             Api::Subclass { name, .. } => &name.0,
+            Api::SubclassTraitItem { name, .. } => name,
+            Api::ExternCppType { name, .. } => name,
         }
     }
 
@@ -459,6 +623,12 @@ impl<T: AnalysisPhase> Api<T> {
         self.cpp_name()
             .as_deref()
             .unwrap_or_else(|| self.name().get_final_item())
+    }
+
+    /// If this API turns out to have the same QualifiedName as another,
+    /// whether it's OK to just discard it?
+    pub(crate) fn discard_duplicates(&self) -> bool {
+        matches!(self, Api::IgnoredItem { .. })
     }
 
     pub(crate) fn valid_types(&self) -> Box<dyn Iterator<Item = QualifiedName>> {
@@ -521,7 +691,6 @@ impl<T: AnalysisPhase> Api<T> {
         name: ApiName,
         fun: Box<FuncToConvert>,
         analysis: T::FunAnalysis,
-        name_for_gc: Option<QualifiedName>,
     ) -> Result<Box<dyn Iterator<Item = Api<T>>>, ConvertErrorWithContext>
     where
         T: 'static,
@@ -530,7 +699,6 @@ impl<T: AnalysisPhase> Api<T> {
             name,
             fun,
             analysis,
-            name_for_gc,
         })))
     }
 
