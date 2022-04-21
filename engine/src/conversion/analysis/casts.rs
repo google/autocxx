@@ -1,23 +1,20 @@
 // Copyright 2022 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use itertools::Itertools;
 use quote::quote;
 use syn::{parse_quote, FnArg};
 
 use crate::{
-    conversion::api::{Api, ApiName, CastMutability, References, Synthesis},
+    conversion::{
+        api::{Api, ApiName, CastMutability, Provenance, References, TraitSynthesis},
+        apivec::ApiVec,
+    },
     types::{make_ident, QualifiedName},
 };
 
@@ -28,9 +25,12 @@ use crate::{
 /// But the related code may be useful in future so I'm keeping it around.
 const SUPPORT_MUTABLE_CASTS: bool = false;
 
-use super::pod::{PodAnalysis, PodPhase};
+use super::{
+    fun::function_wrapper::{CppFunctionBody, CppFunctionKind},
+    pod::{PodAnalysis, PodPhase},
+};
 
-pub(crate) fn add_casts(apis: Vec<Api<PodPhase>>) -> Vec<Api<PodPhase>> {
+pub(crate) fn add_casts(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
     apis.into_iter()
         .flat_map(|api| {
             let mut resultant_apis = match api {
@@ -91,10 +91,9 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
     };
     Api::Function {
         name: ApiName::new_from_qualified_name(name),
-        name_for_gc: None,
         fun: Box::new(crate::conversion::api::FuncToConvert {
             ident,
-            doc_attr: None,
+            doc_attrs: Vec::new(),
             inputs: [fnarg].into_iter().collect(),
             output: parse_quote! {
                 -> * #return_mutability #to_typ
@@ -108,11 +107,13 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
             original_name: None,
             self_ty: Some(from.clone()),
             synthesized_this_type: None,
-            synthesis: Some(Synthesis::Cast {
+            add_to_trait: Some(TraitSynthesis::Cast {
                 to_type: to.clone(),
                 mutable,
             }),
+            synthetic_cpp: Some((CppFunctionBody::Cast, CppFunctionKind::Function)),
             is_deleted: false,
+            provenance: Provenance::SynthesizedOther,
         }),
         analysis: (),
     }

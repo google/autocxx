@@ -1,19 +1,14 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 mod analysis;
 mod api;
+mod apivec;
 mod codegen_cpp;
 mod codegen_rs;
 #[cfg(test)]
@@ -31,20 +26,26 @@ pub(crate) use convert_error::ConvertError;
 use itertools::Itertools;
 use syn::{Item, ItemMod};
 
-use crate::{CppCodegenOptions, CppFilePair, UnsafePolicy};
+use crate::{
+    conversion::analysis::deps::HasDependencies, CppCodegenOptions, CppFilePair, UnsafePolicy,
+};
 
 use self::{
     analysis::{
         abstract_types::{discard_ignored_functions, mark_types_abstract},
+        allocators::create_alloc_and_frees,
         casts::add_casts,
         check_names,
+        constructor_deps::decorate_types_with_constructor_deps,
         fun::FnPhase,
         gc::filter_apis_by_following_edges_from_allowlist,
         pod::analyze_pod_apis,
         remove_ignored::filter_apis_by_ignored_dependents,
+        replace_hopeless_typedef_targets,
         tdef::convert_typedef_targets,
     },
-    api::{AnalysisPhase, Api},
+    api::AnalysisPhase,
+    apivec::ApiVec,
     codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
 };
@@ -82,23 +83,27 @@ impl<'a> BridgeConverter<'a> {
         }
     }
 
-    fn dump_apis<T: AnalysisPhase>(label: &str, apis: &[Api<T>]) {
+    fn dump_apis<T: AnalysisPhase>(label: &str, apis: &ApiVec<T>) {
         if LOG_APIS {
             log::info!(
                 "APIs after {}:\n{}",
                 label,
-                apis.iter().map(|api| { format!("  {:?}", api) }).join("\n")
+                apis.iter()
+                    .map(|api| { format!("  {:?}", api) })
+                    .sorted()
+                    .join("\n")
             )
         }
     }
 
-    fn dump_apis_with_deps(label: &str, apis: &[Api<FnPhase>]) {
+    fn dump_apis_with_deps(label: &str, apis: &ApiVec<FnPhase>) {
         if LOG_APIS {
             log::info!(
                 "APIs after {}:\n{}",
                 label,
                 apis.iter()
                     .map(|api| { format!("  {:?}, deps={}", api, api.format_deps()) })
+                    .sorted()
                     .join("\n")
             )
         }
@@ -141,7 +146,9 @@ impl<'a> BridgeConverter<'a> {
                 // by subsequent phases to work out which objects are POD.
                 let analyzed_apis = analyze_pod_apis(apis, self.config)?;
                 Self::dump_apis("pod analysis", &analyzed_apis);
+                let analyzed_apis = replace_hopeless_typedef_targets(analyzed_apis);
                 let analyzed_apis = add_casts(analyzed_apis);
+                let analyzed_apis = create_alloc_and_frees(analyzed_apis);
                 // Next, figure out how we materialize different functions.
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions. This is probably the most complex
@@ -153,9 +160,13 @@ impl<'a> BridgeConverter<'a> {
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
-                Self::dump_apis_with_deps("analyze fns", &analyzed_apis);
-                let analyzed_apis = mark_types_abstract(self.config, analyzed_apis);
-                Self::dump_apis_with_deps("marking abstract", &analyzed_apis);
+                Self::dump_apis("analyze fns", &analyzed_apis);
+                let analyzed_apis = mark_types_abstract(analyzed_apis);
+                Self::dump_apis("marking abstract", &analyzed_apis);
+                // Annotate structs with a note of any copy/move constructors which
+                // we may want to retain to avoid garbage collecting them later.
+                let analyzed_apis = decorate_types_with_constructor_deps(analyzed_apis);
+                Self::dump_apis_with_deps("adding constructor deps", &analyzed_apis);
                 let analyzed_apis = discard_ignored_functions(analyzed_apis);
                 Self::dump_apis_with_deps("ignoring ignorable fns", &analyzed_apis);
                 // Remove any APIs whose names are not compatible with cxx.
@@ -186,6 +197,7 @@ impl<'a> BridgeConverter<'a> {
                     self.include_list,
                     bindgen_mod,
                     self.config,
+                    cpp.as_ref().map(|file_pair| file_pair.header_name.clone()),
                 );
                 Ok(CodegenResults { rs, cpp })
             }

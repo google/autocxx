@@ -1,31 +1,23 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
-#[cfg(test)]
-mod reduce_test;
+#![forbid(unsafe_code)]
 
 use std::{
     fs::File,
     io::Write,
     os::unix::prelude::PermissionsExt,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use autocxx_engine::{get_clang_path, make_clang_args, preprocess};
 use autocxx_parser::IncludeCppConfig;
-use clap::{crate_authors, crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
+use clap::{crate_authors, crate_version, Arg, ArgMatches, Command};
 use indoc::indoc;
 use itertools::Itertools;
 use quote::ToTokens;
@@ -41,39 +33,38 @@ autocxx-reduce file -I my-inc-dir -h my-header -d 'generate!(\"MyClass\")' -k --
 "};
 
 fn main() {
-    let matches = App::new("autocxx-reduce")
+    let matches = Command::new("autocxx-reduce")
         .version(crate_version!())
         .author(crate_authors!())
         .about("Reduce a C++ test case")
         .long_about(LONG_HELP)
-        .subcommand(SubCommand::with_name("file")
+        .subcommand(Command::new("file")
                                       .about("reduce a header file")
 
                                     .arg(
-                                        Arg::with_name("inc")
-                                            .short("I")
+                                        Arg::new("inc")
+                                            .short('I')
                                             .long("inc")
-                                            .multiple(true)
+                                            .multiple_occurrences(true)
                                             .number_of_values(1)
                                             .value_name("INCLUDE DIRS")
                                             .help("include path")
                                             .takes_value(true),
                                     )
                                     .arg(
-                                        Arg::with_name("define")
-                                            .short("D")
+                                        Arg::new("define")
+                                            .short('D')
                                             .long("define")
-                                            .multiple(true)
+                                            .multiple_occurrences(true)
                                             .number_of_values(1)
                                             .value_name("DEFINE")
                                             .help("macro definition")
                                             .takes_value(true),
                                     )
                                     .arg(
-                                        Arg::with_name("header")
-                                            .short("h")
+                                        Arg::new("header")
                                             .long("header")
-                                            .multiple(true)
+                                            .multiple_occurrences(true)
                                             .number_of_values(1)
                                             .required(true)
                                             .value_name("HEADER")
@@ -82,21 +73,21 @@ fn main() {
                                     )
 
                                 .arg(
-                                    Arg::with_name("directive")
-                                        .short("d")
+                                    Arg::new("directive")
+                                        .short('d')
                                         .long("directive")
-                                        .multiple(true)
+                                        .multiple_occurrences(true)
                                         .number_of_values(1)
                                         .value_name("DIRECTIVE")
                                         .help("directives to put within include_cpp!")
                                         .takes_value(true),
                                 )
                             )
-                            .subcommand(SubCommand::with_name("repro")
+                            .subcommand(Command::new("repro")
                                                           .about("reduce a repro case JSON file")
                                             .arg(
-                                                Arg::with_name("repro")
-                                                    .short("r")
+                                                Arg::new("repro")
+                                                    .short('r')
                                                     .long("repro")
                                                     .required(true)
                                                     .value_name("REPRODUCTION CASE JSON")
@@ -104,10 +95,9 @@ fn main() {
                                                     .takes_value(true),
                                             )
                                             .arg(
-                                        Arg::with_name("header")
-                                            .short("h")
+                                        Arg::new("header")
                                             .long("header")
-                                            .multiple(true)
+                                            .multiple_occurrences(true)
                                             .number_of_values(1)
                                             .value_name("HEADER")
                                             .help("header file name; specify to resume a part-completed run")
@@ -115,8 +105,8 @@ fn main() {
                                     )
                                         )
         .arg(
-            Arg::with_name("problem")
-                .short("p")
+            Arg::new("problem")
+                .short('p')
                 .long("problem")
                 .required(true)
                 .value_name("PROBLEM")
@@ -124,62 +114,61 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("creduce")
+            Arg::new("creduce")
                 .long("creduce")
-                .required(true)
                 .value_name("PATH")
                 .help("creduce binary location")
                 .default_value("creduce")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("output")
-                .short("o")
+            Arg::new("output")
+                .short('o')
                 .long("output")
                 .value_name("OUTPUT")
                 .help("where to write minimized output")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("gen-cmd")
-                .short("g")
+            Arg::new("gen-cmd")
+                .short('g')
                 .long("gen-cmd")
                 .value_name("GEN-CMD")
                 .help("where to find autocxx-gen")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("keep")
-                .short("k")
+            Arg::new("keep")
+                .short('k')
                 .long("keep-dir")
                 .help("keep the temporary directory for debugging purposes"),
         )
         .arg(
-            Arg::with_name("clang-args")
-                .short("c")
+            Arg::new("clang-args")
+                .short('c')
                 .long("clang-arg")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .value_name("CLANG_ARG")
                 .help("Extra arguments to pass to Clang"),
         )
         .arg(
-            Arg::with_name("creduce-args")
+            Arg::new("creduce-args")
                 .long("creduce-arg")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .value_name("CREDUCE_ARG")
                 .help("Extra arguments to pass to Clang"),
         )
         .arg(
-            Arg::with_name("no-precompile")
+            Arg::new("no-precompile")
                 .long("no-precompile")
                 .help("Do not precompile the C++ header before passing to autocxxgen"),
         )
         .arg(
-            Arg::with_name("no-postcompile")
+            Arg::new("no-postcompile")
                 .long("no-postcompile")
                 .help("Do not post-compile the C++ generated by autocxxgen"),
         )
-        .setting(AppSettings::SubcommandRequiredElseHelp)
+        .arg_required_else_help(true)
         .get_matches();
     run(matches).unwrap();
 }
@@ -244,10 +233,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
             config.replace_included_headers("concat.h");
             create_file(
                 &rs_path,
-                &format!(
-                    "autocxx::include_cpp!({});",
-                    config.to_token_stream().to_string()
-                ),
+                &format!("autocxx::include_cpp!({});", config.to_token_stream()),
             )?;
             if let Some(header) = submatches.value_of("header") {
                 std::fs::copy(PathBuf::from(header), &concat_path)?;
@@ -269,6 +255,12 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         .unwrap()
         .to_string();
     let gen_cmd = matches.value_of("gen-cmd").unwrap_or(&default_gen_cmd);
+    if !Path::new(gen_cmd).exists() {
+        panic!(
+            "autocxx-gen not found in {}. hint: autocxx-reduce --gen-cmd /path/to/autocxx-gen",
+            gen_cmd
+        );
+    }
     run_sample_gen_cmd(gen_cmd, &rs_path, tmp_dir.path(), &extra_clang_args)?;
     let interestingness_test = tmp_dir.path().join("test.sh");
     create_interestingness_test(
@@ -277,8 +269,8 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         matches.value_of("problem").unwrap(),
         &rs_path,
         &extra_clang_args,
-        matches.value_of("no-precompile").is_none(),
-        matches.value_of("no-postcompile").is_none(),
+        !matches.is_present("no-precompile"),
+        !matches.is_present("no-postcompile"),
     )?;
     run_creduce(
         matches.value_of("creduce").unwrap(),
@@ -315,11 +307,13 @@ const REMOVE_PASS_LINE_MARKERS: &[&str] = &["--remove-pass", "pass_line_markers"
 const SKIP_INITIAL_PASSES: &[&str] = &["--skip-initial-passes"];
 
 fn creduce_supports_remove_pass(creduce_cmd: &str) -> bool {
-    let msg = Command::new(creduce_cmd)
+    let cmd = std::process::Command::new(creduce_cmd)
         .arg("--help")
-        .output()
-        .unwrap()
-        .stdout;
+        .output();
+    let msg = match cmd {
+        Err(error) => panic!("failed to run creduce. creduce_cmd = {}. hint: autocxx-reduce --creduce /path/to/creduce. error = {}", creduce_cmd, error),
+        Ok(result) => result.stdout
+    };
     let msg = std::str::from_utf8(&msg).unwrap();
     msg.contains("--remove-pass")
 }
@@ -345,7 +339,7 @@ fn run_creduce<'a>(
         )
         .collect::<Vec<_>>();
     println!("Command: {} {}", creduce_cmd, args.join(" "));
-    Command::new(creduce_cmd)
+    std::process::Command::new(creduce_cmd)
         .args(args)
         .status()
         .expect("failed to creduce");
@@ -361,7 +355,7 @@ fn run_sample_gen_cmd(
     let args = args.collect::<Vec<_>>();
     let args_str = args.join(" ");
     announce_progress(&format!("Running sample gen cmd: {} {}", gen_cmd, args_str));
-    Command::new(gen_cmd).args(args).status()?;
+    std::process::Command::new(gen_cmd).args(args).status()?;
     Ok(())
 }
 
@@ -415,7 +409,7 @@ fn create_interestingness_test(
         mv concat.h concat-body.h
         echo Codegen
         (echo \"#ifndef __CONCAT_H__\"; echo \"#define __CONCAT_H__\"; echo '#include \"concat-body.h\"'; echo \"#endif\") > concat.h
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h ; {} 2>&1 ) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h && {} 2>&1 ) | grep \"{}\"  >/dev/null 2>&1
         echo Remove
         rm concat.h
         echo Swap back
@@ -445,7 +439,7 @@ fn make_compile_step(enabled: bool, file: &str, extra_clang_args: &[&str]) -> St
             file,
         )
     } else {
-        "".into()
+        "echo 'Skipping compilation'".into()
     }
 }
 

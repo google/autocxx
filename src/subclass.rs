@@ -3,17 +3,11 @@
 
 // Copyright 2021 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use std::{
     cell::RefCell,
@@ -74,11 +68,14 @@ pub mod prelude {
     };
 }
 
+/// A trait representing the C++ side of a Rust/C++ subclass pair.
 #[doc(hidden)]
 pub trait CppSubclassCppPeer: UniquePtrTarget {
     fn relinquish_ownership(&self);
 }
 
+/// A type used for how the C++ side of a Rust/C++ subclass pair refers to
+/// the Rust side.
 #[doc(hidden)]
 pub enum CppSubclassRustPeerHolder<T> {
     Owned(Rc<RefCell<T>>),
@@ -102,6 +99,8 @@ impl<T> CppSubclassRustPeerHolder<T> {
     }
 }
 
+/// A type showing how the Rust side of a Rust/C++ subclass pair refers to
+/// the C++ side.
 #[doc(hidden)]
 pub enum CppSubclassCppPeerHolder<CppPeer: CppSubclassCppPeer> {
     Empty,
@@ -121,6 +120,8 @@ impl<CppPeer: CppSubclassCppPeer> CppSubclassCppPeerHolder<CppPeer> {
             CppSubclassCppPeerHolder::Empty => panic!("Peer not set up"),
             CppSubclassCppPeerHolder::Owned(peer) => peer.pin_mut(),
             CppSubclassCppPeerHolder::Unowned(peer) => unsafe {
+                // Safety: guaranteed safe because this is a pointer to a C++ object,
+                // and C++ never moves things in memory.
                 Pin::new_unchecked(peer.as_mut().unwrap())
             },
         }
@@ -129,6 +130,8 @@ impl<CppPeer: CppSubclassCppPeer> CppSubclassCppPeerHolder<CppPeer> {
         match self {
             CppSubclassCppPeerHolder::Empty => panic!("Peer not set up"),
             CppSubclassCppPeerHolder::Owned(peer) => peer.as_ref(),
+            // Safety: guaranteed safe because this is a pointer to a C++ object,
+            // and C++ never moves things in memory.
             CppSubclassCppPeerHolder::Unowned(peer) => unsafe { peer.as_ref().unwrap() },
         }
     }
@@ -136,6 +139,8 @@ impl<CppPeer: CppSubclassCppPeer> CppSubclassCppPeerHolder<CppPeer> {
         *self = Self::Owned(Box::new(peer));
     }
     fn set_unowned(&mut self, peer: &mut UniquePtr<CppPeer>) {
+        // Safety: guaranteed safe because this is a pointer to a C++ object,
+        // and C++ never moves things in memory.
         *self = Self::Unowned(unsafe {
             std::pin::Pin::<&mut CppPeer>::into_inner_unchecked(peer.pin_mut())
         });

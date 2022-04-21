@@ -1,43 +1,40 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-use autocxx_parser::IncludeCppConfig;
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use super::{
-    fun::{FnAnalysis, FnKind, FnPhase, MethodKind, TraitMethodKind},
+    fun::{
+        FnAnalysis, FnKind, FnPhase, FnPrePhase2, MethodKind, PodAndConstructorAnalysis,
+        TraitMethodKind,
+    },
     pod::PodAnalysis,
 };
+use crate::conversion::{api::Api, apivec::ApiVec};
 use crate::conversion::{
     api::TypeKind,
     error_reporter::{convert_apis, convert_item_apis},
     ConvertError,
 };
-use crate::{conversion::api::Api, types::QualifiedName};
 use std::collections::HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
-pub(crate) fn mark_types_abstract(
-    config: &IncludeCppConfig,
-    mut apis: Vec<Api<FnPhase>>,
-) -> Vec<Api<FnPhase>> {
+pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhase2> {
     let mut abstract_types: HashSet<_> = apis
         .iter()
         .filter_map(|api| match &api {
             Api::Function {
                 analysis:
                     FnAnalysis {
-                        kind: FnKind::Method(self_ty_name, MethodKind::PureVirtual(_)),
+                        kind:
+                            FnKind::Method {
+                                impl_for: self_ty_name,
+                                method_kind: MethodKind::PureVirtual(_),
+                                ..
+                            },
                         ..
                     },
                 ..
@@ -46,15 +43,6 @@ pub(crate) fn mark_types_abstract(
         })
         .collect();
 
-    for mut api in apis.iter_mut() {
-        match &mut api {
-            Api::Struct { analysis, name, .. } if abstract_types.contains(&name.name) => {
-                analysis.kind = TypeKind::Abstract;
-            }
-            _ => {}
-        }
-    }
-
     // Spot any derived classes (recursively). Also, any types which have a base
     // class that's not on the allowlist are presumed to be abstract, because we
     // have no way of knowing (as they're not on the allowlist, there will be
@@ -62,23 +50,52 @@ pub(crate) fn mark_types_abstract(
     let mut iterate = true;
     while iterate {
         iterate = false;
-        for mut api in apis.iter_mut() {
-            match &mut api {
-                Api::Struct {
-                    analysis: PodAnalysis { bases, kind, .. },
-                    ..
-                } if *kind != TypeKind::Abstract
-                    && (!abstract_types.is_disjoint(bases)
-                        || any_missing_from_allowlist(config, bases)) =>
-                {
-                    *kind = TypeKind::Abstract;
-                    abstract_types.insert(api.name().clone());
-                    // Recurse in case there are further dependent types
-                    iterate = true;
+        apis = apis
+            .into_iter()
+            .map(|api| {
+                match api {
+                    Api::Struct {
+                        analysis:
+                            PodAndConstructorAnalysis {
+                                pod:
+                                    PodAnalysis {
+                                        bases,
+                                        kind: TypeKind::Pod | TypeKind::NonPod,
+                                        castable_bases,
+                                        field_deps,
+                                        field_info,
+                                        is_generic,
+                                    },
+                                constructors,
+                            },
+                        name,
+                        details,
+                    } if abstract_types.contains(&name.name)
+                        || !abstract_types.is_disjoint(&bases) =>
+                    {
+                        abstract_types.insert(name.name.clone());
+                        // Recurse in case there are further dependent types
+                        iterate = true;
+                        Api::Struct {
+                            analysis: PodAndConstructorAnalysis {
+                                pod: PodAnalysis {
+                                    bases,
+                                    kind: TypeKind::Abstract,
+                                    castable_bases,
+                                    field_deps,
+                                    field_info,
+                                    is_generic,
+                                },
+                                constructors,
+                            },
+                            name,
+                            details,
+                        }
+                    }
+                    _ => api,
                 }
-                _ => {}
-            }
-        }
+            })
+            .collect()
     }
 
     // We also need to remove any constructors belonging to these
@@ -88,7 +105,7 @@ pub(crate) fn mark_types_abstract(
         Api::Function {
             analysis:
                 FnAnalysis {
-                    kind: FnKind::Method(self_ty, MethodKind::MakeUnique | MethodKind::Constructor)
+                    kind: FnKind::Method{impl_for: self_ty, method_kind: MethodKind::Constructor{..}, ..}
                         | FnKind::TraitMethod{ kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor, impl_for: self_ty, ..},
                     ..
                 },
@@ -105,12 +122,16 @@ pub(crate) fn mark_types_abstract(
     // 2) using "type Foo;" isn't possible unless Foo is a top-level item
     //    within its namespace. Any outer names will be interpreted as namespace
     //    names and result in cxx generating "namespace Foo { class Bar }"".
-    let mut results = Vec::new();
+    let mut results = ApiVec::new();
     convert_item_apis(apis, &mut results, |api| match api {
         Api::Struct {
             analysis:
-                PodAnalysis {
-                    kind: TypeKind::Abstract,
+                PodAndConstructorAnalysis {
+                    pod:
+                        PodAnalysis {
+                            kind: TypeKind::Abstract,
+                            ..
+                        },
                     ..
                 },
             ..
@@ -127,27 +148,20 @@ pub(crate) fn mark_types_abstract(
     results
 }
 
-fn any_missing_from_allowlist(config: &IncludeCppConfig, bases: &HashSet<QualifiedName>) -> bool {
-    bases
-        .iter()
-        .any(|qn| !config.is_on_allowlist(&qn.to_cpp_name()))
-}
-
-pub(crate) fn discard_ignored_functions(apis: Vec<Api<FnPhase>>) -> Vec<Api<FnPhase>> {
+pub(crate) fn discard_ignored_functions(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
     // Some APIs can't be generated, e.g. because they're protected.
     // Now we've finished analyzing abstract types and constructors, we'll
-    // convert them to IgnoredI
-    let mut apis_new = Vec::new();
+    // convert them to IgnoredItems.
+    let mut apis_new = ApiVec::new();
     convert_apis(
         apis,
         &mut apis_new,
-        |name, fun, analysis, name_for_gc| {
+        |name, fun, analysis| {
             analysis.ignore_reason.clone()?;
             Ok(Box::new(std::iter::once(Api::Function {
                 name,
                 fun,
                 analysis,
-                name_for_gc,
             })))
         },
         Api::struct_unchanged,

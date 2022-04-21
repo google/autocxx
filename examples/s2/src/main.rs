@@ -1,16 +1,10 @@
 // Copyright 2020 Google LLC
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
 use autocxx::prelude::*;
 
@@ -30,18 +24,16 @@ include_cpp! {
 
 // Everything that we care about is inlined, so we don't have to do
 // anything fancy to build or link any external code.
-
 fn main() {
     // Create a couple of R1Intervals using their pre-existing C++
     // constructors. Actually these will be cxx::UniquePtr<R1Interval>s.
-    let i1 = ffi::R1Interval::make_unique(1.0f64, 2.0f64);
-    let i2 = ffi::R1Interval::make_unique(5.0f64, 6.0f64);
+    let i1 = ffi::R1Interval::new(1.0f64, 2.0f64).within_unique_ptr();
+    let i2 = ffi::R1Interval::new(5.0f64, 6.0f64).within_unique_ptr();
     // Create a rect, passing references to the intervals.
-    // Note this is 'make_unique1' because R2Rect has multiple
-    // overloaded constructors. 'cargo expand' is useful here,
-    // and there's work afoot to make this work nicely with
-    // rust-analyzer to give IDE autocompletion.
-    let r = ffi::R2Rect::make_unique1(&i1, &i2);
+    // Note this is 'new1' because R2Rect has multiple
+    // overloaded constructors. 'cargo expand', `cargo doc`
+    // or a rust-analyzer IDE is useful here.
+    let r = ffi::R2Rect::new1(&i1, &i2).within_unique_ptr();
     // Call a method on one of these objects. As it happens,
     // this returns a
     // UniquePtr< ... opaque object representing a point ...>.
