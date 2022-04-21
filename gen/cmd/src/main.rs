@@ -284,8 +284,7 @@ fn main() -> miette::Result<()> {
         let rust_buildables = parsed_files
             .iter()
             .flat_map(|parsed_file| parsed_file.get_rs_outputs());
-        let mut counter = 0usize;
-        for include_cxx in rust_buildables {
+        for (counter, include_cxx) in rust_buildables.enumerate() {
             let rs_code = generate_rs_single(include_cxx);
             let fname = if matches.is_present("fix-rs-include-name") {
                 format!("gen{}.include.rs", counter)
@@ -293,7 +292,6 @@ fn main() -> miette::Result<()> {
                 rs_code.filename
             };
             write_to_file(&depfile, &outdir, fname, rs_code.code.as_bytes());
-            counter += 1;
         }
     }
     if matches.is_present("gen-rs-archive") {
