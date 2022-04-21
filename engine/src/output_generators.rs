@@ -85,29 +85,33 @@ pub fn generate_cpp(
     cpp_codegen_options: &CppCodegenOptions,
 ) -> Result<GeneratedCpp, cxx_gen::Error> {
     // Merge all the information from the diffetent include_cpp or cxx::bridge macros we found.
-    let all_output = cpp_outputs.fold(CppOutput::default(), |mut accumulator, mut element| {
-        accumulator.extra_cpp.append(&mut element.extra_cpp);
-        accumulator.cxx_bridge.extend(element.cxx_bridge);
-        accumulator
-    });
-    // Prepare to generate the C++ files from cxx.
     let mut opt = cxx_gen::Opt::default();
     opt.cxx_impl_annotations = cpp_codegen_options.cxx_impl_annotations.clone();
-    let cxx_generated = cxx_gen::generate_header_and_cc(all_output.cxx_bridge, &opt)?;
-    let first = CppFilePair {
-        header: strip_system_headers(
+    let mut header = Vec::new();
+    let mut implementation = Vec::new();
+    let mut extra_cpp = Vec::new();
+    for mut cpp_output in cpp_outputs {
+        extra_cpp.append(&mut cpp_output.extra_cpp);
+        let cxx_generated = cxx_gen::generate_header_and_cc(cpp_output.cxx_bridge, &opt)?;
+        header.extend(strip_system_headers(
             cxx_generated.header,
             cpp_codegen_options.suppress_system_headers,
-        ),
-        header_name: "cxxgen.h".into(),
-        implementation: Some(strip_system_headers(
+        ));
+        implementation.extend(strip_system_headers(
             cxx_generated.implementation,
             cpp_codegen_options.suppress_system_headers,
-        )),
+        ));
+    }
+
+    // Assemble output files
+    let first = CppFilePair {
+        header,
+        header_name: "cxxgen.h".into(),
+        implementation: Some(implementation),
     };
     let extra_cpp_combiner = ExtraCppCombiner {
         cpp_codegen_options,
-        additional_functions: &all_output.extra_cpp,
+        additional_functions: &extra_cpp,
     };
     let second = extra_cpp_combiner.generate();
     Ok(GeneratedCpp { first, second })
