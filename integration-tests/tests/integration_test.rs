@@ -5304,6 +5304,59 @@ fn test_vector_of_pointers() {
 }
 
 #[test]
+fn test_vec_and_up_of_primitives() {
+    let hdr = indoc! {"
+        #include <vector>
+        #include <memory>
+        #include <cstdint>
+        class Value {
+        public:
+            Value(std::vector<uint32_t>) {} // OK
+            Value(std::unique_ptr<uint32_t>) {} // should be ignored
+            Value(std::vector<int>) {} // should be ignored
+            Value(std::unique_ptr<int>) {} // should be ignored
+            Value(std::vector<char>) {} // should be ignored
+            Value(std::unique_ptr<char>) {} // should be ignored
+            Value(std::vector<float>) {} // OK
+            Value(std::unique_ptr<float>) {} // should be ignored
+            Value(std::vector<bool>) {} // should be ignored
+            Value(std::unique_ptr<bool>) {} // should be ignored
+            Value(std::vector<size_t>) {} // OK
+            Value(std::unique_ptr<size_t>) {} // should be ignored
+        };
+        inline std::vector<uint32_t> make_vec_uint32_t() {
+            std::vector<uint32_t> a;
+            return a;
+        }
+        inline std::vector<float> make_vec_float() {
+            std::vector<float> a;
+            return a;
+        }
+        inline std::vector<size_t> make_vec_size_t() {
+            std::vector<size_t> a;
+            return a;
+        }
+    "};
+    let rs = quote! {
+        ffi::Value::new(ffi::make_vec_uint32_t()).within_box();
+        ffi::Value::new6(ffi::make_vec_float()).within_box();
+        ffi::Value::new10(ffi::make_vec_size_t()).within_box();
+    };
+    run_test(
+        "",
+        hdr,
+        rs,
+        &[
+            "Value",
+            "make_vec_uint32_t",
+            "make_vec_float",
+            "make_vec_size_t",
+        ],
+        &[],
+    );
+}
+
+#[test]
 fn test_pointer_to_pointer() {
     // Just ensures the troublesome API is ignored
     let hdr = indoc! {"

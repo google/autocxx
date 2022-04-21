@@ -18,13 +18,14 @@ use syn::{parse_quote, Type, TypePath, TypePtr};
 //// The behavior of the type.
 #[derive(Debug)]
 enum Behavior {
-    CxxContainerByValueSafe,
-    CxxContainerNotByValueSafe,
+    CxxContainerPtr,
+    CxxContainerVector,
     CxxString,
     RustStr,
     RustString,
     RustByValue,
     CByValue,
+    CByValueVecSafe,
     CVariableLengthByValue,
     CVoid,
     CChar16,
@@ -71,14 +72,14 @@ impl TypeDetails {
             Behavior::RustString
             | Behavior::RustStr
             | Behavior::CxxString
-            | Behavior::CxxContainerByValueSafe
-            | Behavior::CxxContainerNotByValueSafe
+            | Behavior::CxxContainerPtr
+            | Behavior::CxxContainerVector
             | Behavior::RustContainerByValueSafe => {
                 let tn = QualifiedName::new_from_cpp_name(&self.rs_name);
                 let cxx_name = tn.get_final_item();
                 let (templating, payload) = match self.behavior {
-                    Behavior::CxxContainerByValueSafe
-                    | Behavior::CxxContainerNotByValueSafe
+                    Behavior::CxxContainerPtr
+                    | Behavior::CxxContainerVector
                     | Behavior::RustContainerByValueSafe => ("template<typename T> ", "T* ptr"),
                     _ => ("", "char* ptr"),
                 };
@@ -120,9 +121,8 @@ impl TypeDetails {
 
     fn get_generic_behavior(&self) -> CxxGenericType {
         match self.behavior {
-            Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => {
-                CxxGenericType::Cpp
-            }
+            Behavior::CxxContainerPtr => CxxGenericType::CppPtr,
+            Behavior::CxxContainerVector => CxxGenericType::CppVector,
             Behavior::RustContainerByValueSafe => CxxGenericType::Rust,
             _ => CxxGenericType::Not,
         }
@@ -149,7 +149,10 @@ pub enum CxxGenericType {
     Not,
     /// Some generic like cxx::UniquePtr where the contents must be a
     /// complete type.
-    Cpp,
+    CppPtr,
+    /// Some generic like cxx::Vector where the contents must be a
+    /// complete type, and some types of int are allowed too.
+    CppVector,
     /// Some generic like rust::Box where forward declarations are OK
     Rust,
 }
@@ -200,17 +203,18 @@ impl TypeDatabase {
                 (
                     tn.clone(),
                     match self.get(tn).unwrap().behavior {
-                        Behavior::CxxContainerByValueSafe
+                        Behavior::CxxContainerPtr
                         | Behavior::RustStr
                         | Behavior::RustString
                         | Behavior::RustByValue
+                        | Behavior::CByValueVecSafe
                         | Behavior::CByValue
                         | Behavior::CVariableLengthByValue
                         | Behavior::CChar16
                         | Behavior::RustContainerByValueSafe => true,
-                        Behavior::CxxString
-                        | Behavior::CxxContainerNotByValueSafe
-                        | Behavior::CVoid => false,
+                        Behavior::CxxString | Behavior::CxxContainerVector | Behavior::CVoid => {
+                            false
+                        }
                     },
                 )
             })
@@ -243,7 +247,7 @@ impl TypeDatabase {
             .map(|td| {
                 matches!(
                     td.behavior,
-                    Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe
+                    Behavior::CxxContainerPtr | Behavior::CxxContainerVector
                 )
             })
             .unwrap_or(false)
@@ -305,6 +309,23 @@ impl TypeDatabase {
                                // methods attached.
     }
 
+    pub(crate) fn permissible_within_vector(&self, ty: &QualifiedName) -> bool {
+        self.get(ty)
+            .map(|x| matches!(x.behavior, Behavior::CxxString | Behavior::CByValueVecSafe))
+            .unwrap_or(true)
+    }
+
+    pub(crate) fn permissible_within_unique_ptr(&self, ty: &QualifiedName) -> bool {
+        self.get(ty)
+            .map(|x| {
+                matches!(
+                    x.behavior,
+                    Behavior::CxxString | Behavior::CxxContainerVector
+                )
+            })
+            .unwrap_or(true)
+    }
+
     pub(crate) fn conflicts_with_built_in_type(&self, ty: &QualifiedName) -> bool {
         self.get(ty).is_some()
     }
@@ -335,7 +356,7 @@ impl TypeDatabase {
             .filter(|tn| {
                 !matches!(
                     self.get(tn).unwrap().behavior,
-                    Behavior::CxxString | Behavior::CxxContainerNotByValueSafe
+                    Behavior::CxxString | Behavior::CxxContainerVector
                 )
             })
             .cloned()
@@ -347,7 +368,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "cxx::UniquePtr",
         "std::unique_ptr",
-        Behavior::CxxContainerByValueSafe,
+        Behavior::CxxContainerPtr,
         None,
         false,
         true,
@@ -355,7 +376,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "cxx::CxxVector",
         "std::vector",
-        Behavior::CxxContainerNotByValueSafe,
+        Behavior::CxxContainerVector,
         None,
         false,
         true,
@@ -363,7 +384,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "cxx::SharedPtr",
         "std::shared_ptr",
-        Behavior::CxxContainerByValueSafe,
+        Behavior::CxxContainerPtr,
         None,
         true,
         true,
@@ -371,7 +392,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "cxx::WeakPtr",
         "std::weak_ptr",
-        Behavior::CxxContainerByValueSafe,
+        Behavior::CxxContainerPtr,
         None,
         true,
         true,
@@ -411,7 +432,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "i8",
         "int8_t",
-        Behavior::CByValue,
+        Behavior::CByValueVecSafe,
         Some("std::os::raw::c_schar".into()),
         true,
         true,
@@ -419,7 +440,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "u8",
         "uint8_t",
-        Behavior::CByValue,
+        Behavior::CByValueVecSafe,
         Some("std::os::raw::c_uchar".into()),
         true,
         true,
@@ -433,7 +454,7 @@ fn create_type_database() -> TypeDatabase {
         db.insert(TypeDetails::new(
             rust_type,
             cpp_type,
-            Behavior::CByValue,
+            Behavior::CByValueVecSafe,
             None,
             true,
             true,
@@ -485,7 +506,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "f32",
         "float",
-        Behavior::CByValue,
+        Behavior::CByValueVecSafe,
         None,
         true,
         true,
@@ -493,7 +514,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "f64",
         "double",
-        Behavior::CByValue,
+        Behavior::CByValueVecSafe,
         None,
         true,
         true,
@@ -509,7 +530,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "usize",
         "size_t",
-        Behavior::CByValue,
+        Behavior::CByValueVecSafe,
         None,
         true,
         true,
