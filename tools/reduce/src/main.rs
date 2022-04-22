@@ -370,7 +370,7 @@ fn format_gen_cmd<'a>(
         "-I".to_string(),
         dir.to_string(),
         rs_file.to_str().unwrap().to_string(),
-        "--gen-rs-complete".to_string(),
+        "--gen-rs-include".to_string(),
         "--gen-cpp".to_string(),
         "--suppress-system-headers".to_string(),
         "--".to_string(),
@@ -409,7 +409,7 @@ fn create_interestingness_test(
         mv concat.h concat-body.h
         echo Codegen
         (echo \"#ifndef __CONCAT_H__\"; echo \"#define __CONCAT_H__\"; echo '#include \"concat-body.h\"'; echo \"#endif\") > concat.h
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h && {} 2>&1 ) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat autocxx-ffi-default-gen.rs && cat autocxxgen*.h && {} 2>&1 ) | grep \"{}\"  >/dev/null 2>&1
         echo Remove
         rm concat.h
         echo Swap back

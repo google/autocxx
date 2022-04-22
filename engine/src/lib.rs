@@ -19,6 +19,7 @@ mod ast_discoverer;
 mod conversion;
 mod cxxbridge;
 mod known_types;
+mod output_generators;
 mod parse_callbacks;
 mod parse_file;
 mod rust_pretty_printer;
@@ -64,6 +65,7 @@ use autocxx_bindgen as bindgen;
 pub use builder::{
     Builder, BuilderBuild, BuilderContext, BuilderError, BuilderResult, BuilderSuccess,
 };
+pub use output_generators::{generate_rs_archive, generate_rs_single, RsOutput};
 pub use parse_file::{parse_file, ParseError, ParsedFile};
 
 pub use cxx_gen::HEADER;
@@ -130,7 +132,9 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 struct GenerationResults {
     item_mod: ItemMod,
     cpp: Option<CppFilePair>,
+    #[allow(dead_code)]
     inc_dirs: Vec<PathBuf>,
+    cxxgen_header_name: String,
 }
 enum State {
     NotGenerated,
@@ -341,11 +345,14 @@ impl IncludeCppEngine {
     }
 
     /// Generate the Rust bindings. Call `generate` first.
-    pub fn generate_rs(&self) -> TokenStream2 {
-        match &self.state {
-            State::NotGenerated => panic!("Generate first"),
-            State::Generated(gen_results) => gen_results.item_mod.to_token_stream(),
-            State::ParseOnly => TokenStream2::new(),
+    pub fn get_rs_output(&self) -> RsOutput {
+        RsOutput {
+            config: &self.config,
+            rs: match &self.state {
+                State::NotGenerated => panic!("Generate first"),
+                State::Generated(gen_results) => gen_results.item_mod.to_token_stream(),
+                State::ParseOnly => TokenStream2::new(),
+            },
         }
     }
 
@@ -431,11 +438,13 @@ impl IncludeCppEngine {
             item_mod: new_bindings,
             cpp: conversion.cpp,
             inc_dirs,
+            cxxgen_header_name: conversion.cxxgen_header_name,
         }));
         Ok(())
     }
 
     /// Return the include directories used for this include_cpp invocation.
+    #[cfg(any(test, feature = "build"))]
     fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
         match &self.state {
             State::Generated(gen_results) => gen_results.inc_dirs.iter(),
@@ -537,6 +546,7 @@ static ALL_KNOWN_SYSTEM_HEADERS: &[&str] = &[
 pub fn do_cxx_cpp_generation(
     rs: TokenStream2,
     cpp_codegen_options: &CppCodegenOptions,
+    cxxgen_header_name: String,
 ) -> Result<CppFilePair, cxx_gen::Error> {
     let mut opt = cxx_gen::Opt::default();
     opt.cxx_impl_annotations = cpp_codegen_options.cxx_impl_annotations.clone();
@@ -546,7 +556,7 @@ pub fn do_cxx_cpp_generation(
             cxx_generated.header,
             cpp_codegen_options.suppress_system_headers,
         ),
-        header_name: "cxxgen.h".into(),
+        header_name: cxxgen_header_name,
         implementation: Some(strip_system_headers(
             cxx_generated.implementation,
             cpp_codegen_options.suppress_system_headers,
@@ -580,7 +590,11 @@ impl CppBuildable for IncludeCppEngine {
             State::NotGenerated => panic!("Call generate() first"),
             State::Generated(gen_results) => {
                 let rs = gen_results.item_mod.to_token_stream();
-                files.push(do_cxx_cpp_generation(rs, cpp_codegen_options)?);
+                files.push(do_cxx_cpp_generation(
+                    rs,
+                    cpp_codegen_options,
+                    gen_results.cxxgen_header_name.clone(),
+                )?);
                 if let Some(cpp_file_pair) = &gen_results.cpp {
                     files.push(cpp_file_pair.clone());
                 }
@@ -638,18 +652,37 @@ pub fn get_clang_path() -> String {
         .unwrap_or_else(|_| "clang++".to_string())
 }
 
+/// Function to generate the desired name of the header containing autocxx's
+/// extra generated C++.
 /// Newtype wrapper so we can give it a [`Default`].
-pub struct HeaderNamer<'a>(pub Box<dyn 'a + Fn(String) -> String>);
+pub struct AutocxxgenHeaderNamer<'a>(pub Box<dyn 'a + Fn(String) -> String>);
 
-impl Default for HeaderNamer<'static> {
+impl Default for AutocxxgenHeaderNamer<'static> {
     fn default() -> Self {
         Self(Box::new(|mod_name| format!("autocxxgen_{}.h", mod_name)))
     }
 }
 
-impl HeaderNamer<'_> {
+impl AutocxxgenHeaderNamer<'_> {
     fn name_header(&self, mod_name: String) -> String {
         self.0(mod_name)
+    }
+}
+
+/// Function to generate the desired name of the header containing cxx's
+/// declarations.
+/// Newtype wrapper so we can give it a [`Default`].
+pub struct CxxgenHeaderNamer<'a>(pub Box<dyn 'a + Fn() -> String>);
+
+impl Default for CxxgenHeaderNamer<'static> {
+    fn default() -> Self {
+        Self(Box::new(|| "cxxgen.h".into()))
+    }
+}
+
+impl CxxgenHeaderNamer<'_> {
+    fn name_header(&self) -> String {
+        self.0()
     }
 }
 
@@ -666,11 +699,13 @@ pub struct CppCodegenOptions<'a> {
     /// Optionally, a prefix to go at `#include "<here>cxxgen.h". This is a header file which we
     /// generate.
     pub path_to_cxxgen_h: Option<String>,
-    /// Optionally, a function called to generate each of the per-section header files. The default
-    /// names are subject to change.
+    /// Optionally, a function called to determine the name that will be used
+    /// for the autocxxgen.h file.
     /// The function is passed the name of the module generated by each `include_cpp`,
     /// configured via `name`. These will be unique.
-    pub header_namer: HeaderNamer<'a>,
+    pub autocxxgen_header_namer: AutocxxgenHeaderNamer<'a>,
+    /// A function to generate the name of the cxxgen.h header that should be output.
+    pub cxxgen_header_namer: CxxgenHeaderNamer<'a>,
     /// An annotation optionally to include on each C++ function.
     /// For example to export the symbol from a library.
     pub cxx_impl_annotations: Option<String>,

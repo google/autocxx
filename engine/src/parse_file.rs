@@ -7,6 +7,7 @@
 // except according to those terms.
 
 use crate::ast_discoverer::{Discoveries, DiscoveryErr};
+use crate::output_generators::RsOutput;
 use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
     RebuildDependencyRecorder,
@@ -16,7 +17,6 @@ use autocxx_parser::directive_names::SUBCLASS;
 use autocxx_parser::{AllowlistEntry, RustPath, Subclass, SubclassAttrs};
 use indexmap::set::IndexSet as HashSet;
 use miette::Diagnostic;
-use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::{io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
@@ -277,21 +277,27 @@ pub trait CppBuildable {
 }
 
 impl ParsedFile {
-    /// Get all the autocxxes in this parsed file.
-    pub fn get_rs_buildables(&self) -> impl Iterator<Item = &IncludeCppEngine> {
-        fn do_get_rs_buildables(segments: &[Segment]) -> impl Iterator<Item = &IncludeCppEngine> {
+    /// Get all the autocxx `include_cpp` macros found in this file.
+    pub fn get_autocxxes(&self) -> impl Iterator<Item = &IncludeCppEngine> {
+        fn do_get_autocxxes(segments: &[Segment]) -> impl Iterator<Item = &IncludeCppEngine> {
             segments
                 .iter()
                 .flat_map(|s| -> Box<dyn Iterator<Item = &IncludeCppEngine>> {
                     match s {
                         Segment::Autocxx(includecpp) => Box::new(std::iter::once(includecpp)),
-                        Segment::Mod(segments, _) => Box::new(do_get_rs_buildables(segments)),
+                        Segment::Mod(segments, _) => Box::new(do_get_autocxxes(segments)),
                         _ => Box::new(std::iter::empty()),
                     }
                 })
         }
 
-        do_get_rs_buildables(&self.0)
+        do_get_autocxxes(&self.0)
+    }
+
+    /// Get all the areas of Rust code which need to be built for these bindings.
+    /// A shortcut for `get_autocxxes()` then calling `get_rs_output` on each.
+    pub fn get_rs_outputs(&self) -> impl Iterator<Item = RsOutput> {
+        self.get_autocxxes().map(|autocxx| autocxx.get_rs_output())
     }
 
     /// Get all items which can result in C++ code
@@ -334,7 +340,10 @@ impl ParsedFile {
         do_get_autocxxes_mut(&mut self.0)
     }
 
-    pub fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
+    /// Determines the include dirs that were set for each include_cpp, so they can be
+    /// used as input to a `cc::Build`.
+    #[cfg(any(test, feature = "build"))]
+    pub(crate) fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
         fn do_get_include_dirs(segments: &[Segment]) -> impl Iterator<Item = &PathBuf> {
             segments
                 .iter()
@@ -382,38 +391,6 @@ impl ParsedFile {
                 .map_err(ParseError::AutocxxCodegenError)?
         }
         Ok(())
-    }
-}
-
-impl ToTokens for ParsedFile {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        for seg in &self.0 {
-            seg.to_tokens(tokens)
-        }
-    }
-}
-
-impl ToTokens for Segment {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            Segment::Other(item) => item.to_tokens(tokens),
-            Segment::Autocxx(autocxx) => {
-                let these_tokens = autocxx.generate_rs();
-                tokens.extend(these_tokens);
-            }
-            Segment::Cxx(cxxbridge) => cxxbridge.to_tokens(tokens),
-            Segment::Mod(segments, (brace, itemmod)) => {
-                let mod_items = segments
-                    .iter()
-                    .map(|segment| syn::parse2::<Item>(segment.to_token_stream()).unwrap())
-                    .collect();
-                let itemmod = ItemMod {
-                    content: Some((*brace, mod_items)),
-                    ..itemmod.clone()
-                };
-                Item::Mod(itemmod).to_tokens(tokens)
-            }
-        }
     }
 }
 

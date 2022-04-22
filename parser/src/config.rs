@@ -8,7 +8,8 @@
 
 use std::{
     borrow::Cow,
-    collections::{HashMap, HashSet},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
+    hash::{Hash, Hasher},
 };
 
 use itertools::Itertools;
@@ -138,13 +139,13 @@ impl Default for Allowlist {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub struct Subclass {
     pub superclass: String,
     pub subclass: Ident,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash)]
 pub struct RustFun {
     pub path: RustPath,
     pub sig: Signature,
@@ -160,13 +161,39 @@ impl std::fmt::Debug for RustFun {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct ExternCppType {
     pub rust_path: TypePath,
     pub opaque: bool,
 }
 
+/// Newtype wrapper so we can implement Hash.
 #[derive(Debug, Default)]
+pub struct ExternCppTypeMap(pub HashMap<String, ExternCppType>);
+
+impl std::hash::Hash for ExternCppTypeMap {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for (k, v) in &self.0 {
+            k.hash(state);
+            v.hash(state);
+        }
+    }
+}
+
+/// Newtype wrapper so we can implement Hash.
+#[derive(Debug, Default)]
+pub struct ConcretesMap(pub HashMap<String, Ident>);
+
+impl std::hash::Hash for ConcretesMap {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for (k, v) in &self.0 {
+            k.hash(state);
+            v.hash(state);
+        }
+    }
+}
+
+#[derive(Debug, Default, Hash)]
 pub struct IncludeCppConfig {
     pub inclusions: Vec<String>,
     pub unsafe_policy: UnsafePolicy,
@@ -181,8 +208,8 @@ pub struct IncludeCppConfig {
     pub rust_types: Vec<RustPath>,
     pub subclasses: Vec<Subclass>,
     pub extern_rust_funs: Vec<RustFun>,
-    pub concretes: HashMap<String, Ident>,
-    pub externs: HashMap<String, ExternCppType>,
+    pub concretes: ConcretesMap,
+    pub externs: ExternCppTypeMap,
 }
 
 impl Parse for IncludeCppConfig {
@@ -288,7 +315,7 @@ impl IncludeCppConfig {
         if self.exclude_utilities {
             Vec::new()
         } else {
-            vec![self.get_makestring_name().to_string()]
+            vec![self.get_makestring_name()]
         }
     }
 
@@ -342,20 +369,24 @@ impl IncludeCppConfig {
     }
 
     fn is_concrete_type(&self, cpp_name: &str) -> bool {
-        self.concretes.values().any(|val| *val == cpp_name)
+        self.concretes.0.values().any(|val| *val == cpp_name)
+    }
+
+    /// Get a hash of the contents of this `include_cpp!` block.
+    pub fn get_hash(&self) -> u64 {
+        let mut s = DefaultHasher::new();
+        self.hash(&mut s);
+        s.finish()
     }
 
     /// In case there are multiple sets of ffi mods in a single binary,
     /// endeavor to return a name which can be used to make symbols
     /// unique.
-    pub fn uniquify_name_per_mod<'a>(&self, name: &'a str) -> Cow<'a, str> {
-        match self.mod_name.as_ref() {
-            None => Cow::Borrowed(name),
-            Some(md) => Cow::Owned(format!("{}_{}", name, md)),
-        }
+    pub fn uniquify_name_per_mod(&self, name: &str) -> String {
+        format!("{}_{:#x}", name, self.get_hash())
     }
 
-    pub fn get_makestring_name(&self) -> Cow<str> {
+    pub fn get_makestring_name(&self) -> String {
         self.uniquify_name_per_mod("autocxx_make_string")
     }
 
