@@ -464,7 +464,8 @@ fn create_interestingness_test(
 
 fn make_compile_step(enabled: bool, file: &str, extra_clang_args: &[&str]) -> String {
     if enabled {
-        let extra_defines = ["CXXBRIDGE1_RUST_STRING",
+        let extra_defines = [
+            "CXXBRIDGE1_RUST_STRING",
             "CXXBRIDGE1_RUST_STR",
             "CXXBRIDGE1_RUST_ERROR",
             "CXXBRIDGE1_RUST_ISIZE",
@@ -478,8 +479,12 @@ fn make_compile_step(enabled: bool, file: &str, extra_clang_args: &[&str]) -> St
             "CXXBRIDGE1_RUST_VEC",
             "CXXBRIDGE1_IS_COMPLETE",
             "CXXBRIDGE1_LAYOUT",
-            "CXXBRIDGE1_RELOCATABLE"];
-        let extra_defines = extra_defines.into_iter().map(|d| format!("-D{}", d)).join(" ");
+            "CXXBRIDGE1_RELOCATABLE",
+        ];
+        let extra_defines = extra_defines
+            .into_iter()
+            .map(|d| format!("-D{}", d))
+            .join(" ");
         format!(
             "{} {} {} -c {}",
             get_clang_path(),
