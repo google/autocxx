@@ -6,7 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{hash_map, HashMap, HashSet};
+use indexmap::map::IndexMap as HashMap;
+use indexmap::{map::Entry, set::IndexSet as HashSet};
 
 use syn::{Type, TypeArray};
 
@@ -549,14 +550,14 @@ fn find_explicit_items(
     let mut merge_fun = |ty: QualifiedName, kind: ExplicitKind, fun: &FuncToConvert| match result
         .entry(ExplicitType { ty, kind })
     {
-        hash_map::Entry::Vacant(entry) => {
+        Entry::Vacant(entry) => {
             entry.insert(if fun.is_deleted {
                 ExplicitFound::Deleted
             } else {
                 ExplicitFound::UserDefined(fun.cpp_vis)
             });
         }
-        hash_map::Entry::Occupied(mut entry) => {
+        Entry::Occupied(mut entry) => {
             entry.insert(ExplicitFound::Multiple);
         }
     };

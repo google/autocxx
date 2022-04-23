@@ -19,7 +19,7 @@ use crate::conversion::{
     error_reporter::{convert_apis, convert_item_apis},
     ConvertError,
 };
-use std::collections::HashSet;
+use indexmap::set::IndexSet as HashSet;
 
 /// Spot types with pure virtual functions and mark them abstract.
 pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhase2> {
