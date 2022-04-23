@@ -8,7 +8,8 @@
 
 mod byvalue_checker;
 
-use std::collections::{HashMap, HashSet};
+use indexmap::map::IndexMap as HashMap;
+use indexmap::set::IndexSet as HashSet;
 
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;

@@ -6,10 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-};
+use indexmap::map::IndexMap as HashMap;
+use indexmap::set::IndexSet as HashSet;
+use std::borrow::Cow;
 
 use itertools::Itertools;
 use proc_macro2::Span;
