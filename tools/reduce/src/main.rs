@@ -262,11 +262,29 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         );
     }
     run_sample_gen_cmd(gen_cmd, &rs_path, tmp_dir.path(), &extra_clang_args)?;
+    // Create and run an interestingness test which does not filter its output through grep.
+    let demo_interestingness_test_dir = tmp_dir.path().join("demo-interestingness-test");
+    std::fs::create_dir(&demo_interestingness_test_dir).unwrap();
+    let interestingness_test = demo_interestingness_test_dir.join("test-demo.sh");
+    create_interestingness_test(
+        gen_cmd,
+        &interestingness_test,
+        None,
+        &rs_path,
+        &extra_clang_args,
+        !matches.is_present("no-precompile"),
+        !matches.is_present("no-postcompile"),
+    )?;
+    let demo_dir_concat_path = demo_interestingness_test_dir.join("concat.h");
+    std::fs::copy(&concat_path, demo_dir_concat_path).unwrap();
+    run_demo_interestingness_test(&demo_interestingness_test_dir, &interestingness_test).unwrap();
+
+    // Now the main interestingness test
     let interestingness_test = tmp_dir.path().join("test.sh");
     create_interestingness_test(
         gen_cmd,
         &interestingness_test,
-        matches.value_of("problem").unwrap(),
+        Some(matches.value_of("problem").unwrap()),
         &rs_path,
         &extra_clang_args,
         !matches.is_present("no-precompile"),
@@ -359,6 +377,17 @@ fn run_sample_gen_cmd(
     Ok(())
 }
 
+fn run_demo_interestingness_test(demo_dir: &Path, test: &Path) -> Result<(), std::io::Error> {
+    announce_progress(&format!(
+        "Running demo interestingness test in {}",
+        demo_dir.to_string_lossy()
+    ));
+    std::process::Command::new(test)
+        .current_dir(demo_dir)
+        .status()?;
+    Ok(())
+}
+
 fn format_gen_cmd<'a>(
     rs_file: &Path,
     dir: &str,
@@ -383,7 +412,7 @@ fn format_gen_cmd<'a>(
 fn create_interestingness_test(
     gen_cmd: &str,
     test_path: &Path,
-    problem: &str,
+    problem: Option<&str>,
     rs_file: &Path,
     extra_clang_args: &[&str],
     precompile: bool,
@@ -399,6 +428,9 @@ fn create_interestingness_test(
     // For the compile afterwards, we have to avoid including any system headers.
     // We rely on equivalent content being hermetically inside concat.h.
     let postcompile_step = make_compile_step(postcompile, "gen0.cc", extra_clang_args);
+    let problem_grep = problem
+        .map(|problem| format!("| grep \"{}\"  >/dev/null  2>&1", problem))
+        .unwrap_or_default();
     let content = format!(
         indoc! {"
         #!/bin/sh
@@ -409,14 +441,14 @@ fn create_interestingness_test(
         mv concat.h concat-body.h
         echo Codegen
         (echo \"#ifndef __CONCAT_H__\"; echo \"#define __CONCAT_H__\"; echo '#include \"concat-body.h\"'; echo \"#endif\") > concat.h
-        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h && {} 2>&1 ) | grep \"{}\"  >/dev/null 2>&1
+        ({} {} 2>&1 && cat gen.complete.rs && cat autocxxgen*.h && {} 2>&1 ) {}
         echo Remove
         rm concat.h
         echo Swap back
         mv concat-body.h concat.h
         echo Done
     "},
-        precompile_step, gen_cmd, args, postcompile_step, problem
+        precompile_step, gen_cmd, args, postcompile_step, problem_grep
     );
     println!("Interestingness test:\n{}", content);
     {
