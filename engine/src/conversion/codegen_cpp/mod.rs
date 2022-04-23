@@ -605,7 +605,7 @@ impl<'a> CppCodeGenerator<'a> {
         };
         let mut headers = vec![Header::System("memory")];
         if need_allocators {
-            headers.push(Header::System("cstddef"));
+            headers.push(Header::System("stddef.h"));
             headers.push(Header::NewDeletePrelude);
         }
         Ok(ExtraCpp {
