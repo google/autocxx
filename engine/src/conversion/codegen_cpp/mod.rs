@@ -48,7 +48,11 @@ enum Header {
 }
 
 impl Header {
-    fn include_stmt(&self, cpp_codegen_options: &CppCodegenOptions) -> String {
+    fn include_stmt(
+        &self,
+        cpp_codegen_options: &CppCodegenOptions,
+        cxxgen_header_name: &str,
+    ) -> String {
         let blank = "".to_string();
         match self {
             Self::System(name) => format!("#include <{}>", name),
@@ -61,7 +65,7 @@ impl Header {
                     .path_to_cxxgen_h
                     .as_ref()
                     .unwrap_or(&blank);
-                format!("#include \"{}cxxgen.h\"", prefix)
+                format!("#include \"{}{}\"", prefix, cxxgen_header_name)
             }
             Header::NewDeletePrelude => new_and_delete_prelude::NEW_AND_DELETE_PRELUDE.to_string(),
         }
@@ -101,6 +105,7 @@ pub(crate) struct CppCodeGenerator<'a> {
     original_name_map: CppNameMap,
     config: &'a IncludeCppConfig,
     cpp_codegen_options: &'a CppCodegenOptions<'a>,
+    cxxgen_header_name: &'a str,
 }
 
 struct SubclassFunction<'a> {
@@ -114,32 +119,20 @@ impl<'a> CppCodeGenerator<'a> {
         apis: &ApiVec<FnPhase>,
         config: &'a IncludeCppConfig,
         cpp_codegen_options: &CppCodegenOptions,
+        cxxgen_header_name: &str,
     ) -> Result<Option<CppFilePair>, ConvertError> {
-        let mut gen = CppCodeGenerator::new(
+        let mut gen = CppCodeGenerator {
+            additional_functions: Vec::new(),
             inclusions,
-            original_name_map_from_apis(apis),
+            original_name_map: original_name_map_from_apis(apis),
             config,
             cpp_codegen_options,
-        );
+            cxxgen_header_name,
+        };
         // The 'filter' on the following line is designed to ensure we don't accidentally
         // end up out of sync with needs_cpp_codegen
         gen.add_needs(apis.iter().filter(|api| api.needs_cpp_codegen()))?;
         Ok(gen.generate())
-    }
-
-    fn new(
-        inclusions: String,
-        original_name_map: CppNameMap,
-        config: &'a IncludeCppConfig,
-        cpp_codegen_options: &'a CppCodegenOptions,
-    ) -> Self {
-        CppCodeGenerator {
-            additional_functions: Vec::new(),
-            inclusions,
-            original_name_map,
-            config,
-            cpp_codegen_options,
-        }
     }
 
     // It's important to keep this in sync with Api::needs_cpp_codegen.
@@ -247,7 +240,7 @@ impl<'a> CppCodeGenerator<'a> {
             log::info!("Additional C++ decls:\n{}", declarations);
             let header_name = self
                 .cpp_codegen_options
-                .header_namer
+                .autocxxgen_header_namer
                 .name_header(self.config.get_mod_name().to_string());
             let implementation = if self
                 .additional_functions
@@ -284,7 +277,7 @@ impl<'a> CppCodeGenerator<'a> {
             .collect(); // uniqify
         cpp_headers
             .iter()
-            .map(|x| x.include_stmt(self.cpp_codegen_options))
+            .map(|x| x.include_stmt(self.cpp_codegen_options, self.cxxgen_header_name))
             .join("\n")
     }
 

@@ -73,6 +73,7 @@ pub(crate) struct BridgeConverter<'a> {
 pub(crate) struct CodegenResults {
     pub(crate) rs: Vec<Item>,
     pub(crate) cpp: Option<CppFilePair>,
+    pub(crate) cxxgen_header_name: String,
 }
 
 impl<'a> BridgeConverter<'a> {
@@ -186,11 +187,13 @@ impl<'a> BridgeConverter<'a> {
                 Self::dump_apis_with_deps("GC", &analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
+                let cxxgen_header_name = cpp_codegen_options.cxxgen_header_namer.name_header();
                 let cpp = CppCodeGenerator::generate_cpp_code(
                     inclusions,
                     &analyzed_apis,
                     self.config,
                     cpp_codegen_options,
+                    &cxxgen_header_name,
                 )?;
                 let rs = RsCodeGenerator::generate_rs_code(
                     analyzed_apis,
@@ -199,7 +202,11 @@ impl<'a> BridgeConverter<'a> {
                     self.config,
                     cpp.as_ref().map(|file_pair| file_pair.header_name.clone()),
                 );
-                Ok(CodegenResults { rs, cpp })
+                Ok(CodegenResults {
+                    rs,
+                    cpp,
+                    cxxgen_header_name,
+                })
             }
         }
     }

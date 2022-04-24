@@ -114,6 +114,7 @@ impl<'a> ParseBindgen<'a> {
         self.apis.extend(
             self.config
                 .concretes
+                .0
                 .iter()
                 .map(|(cpp_definition, rust_id)| {
                     let name = ApiName::new_in_root_namespace(rust_id.clone());
@@ -133,6 +134,7 @@ impl<'a> ParseBindgen<'a> {
         let replacements: HashMap<_, _> = self
             .config
             .externs
+            .0
             .iter()
             .map(|(cpp_definition, details)| {
                 let qn = QualifiedName::new_from_cpp_name(cpp_definition);

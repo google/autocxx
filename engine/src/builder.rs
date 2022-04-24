@@ -8,9 +8,9 @@
 
 use autocxx_parser::file_locations::FileLocationStrategy;
 use miette::Diagnostic;
-use proc_macro2::TokenStream;
 use thiserror::Error;
 
+use crate::generate_rs_single;
 use crate::{strip_system_headers, CppCodegenOptions, ParseError, RebuildDependencyRecorder};
 use std::ffi::OsStr;
 use std::ffi::OsString;
@@ -250,13 +250,9 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
             }
         }
 
-        for include_cpp in parsed_file.get_rs_buildables() {
-            let rs = include_cpp.generate_rs();
-            generated_rs.push(write_rs_to_file(
-                &rsdir,
-                &include_cpp.config.get_rs_filename(),
-                rs,
-            )?);
+        for rs_output in parsed_file.get_rs_outputs() {
+            let rs = generate_rs_single(rs_output);
+            generated_rs.push(write_to_file(&rsdir, &rs.filename, rs.code.as_bytes())?);
         }
         if counter == 0 {
             Err(BuilderError::NoIncludeCxxMacrosFound)
@@ -296,14 +292,6 @@ fn write_to_file(dir: &Path, filename: &str, content: &[u8]) -> Result<PathBuf, 
 fn try_write_to_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
     let mut f = File::create(path)?;
     f.write_all(content)
-}
-
-fn write_rs_to_file(
-    dir: &Path,
-    filename: &str,
-    content: TokenStream,
-) -> Result<PathBuf, BuilderError> {
-    write_to_file(dir, filename, content.to_string().as_bytes())
 }
 
 fn rust_version_check() {

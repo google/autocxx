@@ -51,12 +51,20 @@ fn configure_builder(b: &mut BuilderBuild) -> &mut BuilderBuild {
         .flag_if_supported("-Werror")
 }
 
+/// What environment variables we should set in order to tell rustc how to find
+/// the Rust code.
+pub enum RsFindMode {
+    AutocxxRs,
+    AutocxxRsArchive,
+}
+
 /// API to test building pre-generated files.
 pub fn build_from_folder(
     folder: &Path,
     main_rs_file: &Path,
     generated_rs_files: Vec<PathBuf>,
     cpp_files: &[&str],
+    rs_find_mode: RsFindMode,
 ) -> Result<(), TestError> {
     let target_dir = folder.join("target");
     std::fs::create_dir(&target_dir).unwrap();
@@ -78,6 +86,7 @@ pub fn build_from_folder(
         &["input.h", "cxx.h"],
         &main_rs_file,
         generated_rs_files,
+        rs_find_mode,
     );
     if r.is_err() {
         return Err(TestError::RsBuild); // details of Rust panic are a bit messy to include, and
@@ -125,6 +134,7 @@ impl LinkableTryBuilder {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build<P1: AsRef<Path>, P2: AsRef<Path>, P3: AsRef<Path> + RefUnwindSafe>(
         &self,
         library_path: &P1,
@@ -133,6 +143,7 @@ impl LinkableTryBuilder {
         header_names: &[&str],
         rs_path: &P3,
         generated_rs_files: Vec<PathBuf>,
+        rs_find_mode: RsFindMode,
     ) -> std::thread::Result<()> {
         // Copy all items from the source dir into our temporary dir if their name matches
         // the pattern given in `library_name`.
@@ -152,7 +163,13 @@ impl LinkableTryBuilder {
             rustflags.push_str(" -Z sanitizer=address -Clinker=clang++ -Clink-arg=-fuse-ld=lld");
         }
         std::env::set_var("RUSTFLAGS", rustflags);
-        std::env::set_var("AUTOCXX_RS", temp_path);
+        match rs_find_mode {
+            RsFindMode::AutocxxRs => std::env::set_var("AUTOCXX_RS", temp_path),
+            RsFindMode::AutocxxRsArchive => std::env::set_var(
+                "AUTOCXX_RS_JSON_ARCHIVE",
+                self.temp_dir.path().join("gen.rs.json"),
+            ),
+        };
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();
             test_cases.pass(rs_path)
@@ -451,6 +468,7 @@ pub fn do_run_test_manual(
         &["input.h", "cxx.h"],
         &rs_path,
         generated_rs_files,
+        RsFindMode::AutocxxRs,
     );
     if KEEP_TEMPDIRS {
         println!("Tempdir: {:?}", tdir.into_path().to_str());
