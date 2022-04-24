@@ -32,6 +32,12 @@ static INPUT_H: &str = indoc::indoc! {"
         Second(const First& a) {}
         int bar;
     };
+
+    struct WithMethods {
+        First get_first();
+        Second get_second();
+        int a;
+    };
 "};
 
 enum Input {
@@ -146,7 +152,7 @@ fn write_minimal_rs_code(header: &str, demo_code_dir: &Path) {
         quote! {
             autocxx::include_cpp! {
                 #hexathorpe include #header
-                generate_all!()
+                generate!("WithMethods")
                 block!("First")
                 safety!(unsafe_ffi)
             }
@@ -191,7 +197,7 @@ where
                 .arg("--header")
                 .arg(header_name)
                 .arg("-d")
-                .arg("generate_all!()")
+                .arg("generate!(\"WithMethods\")")
                 .arg("-d")
                 .arg("block!(\"First\")");
         }
