@@ -23,7 +23,7 @@ use super::{
     function_wrapper_rs::RustParamConversion,
     maybe_unsafes_to_tokens,
     unqualify::{unqualify_params, unqualify_ret_type},
-    ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
+    ImplBlockDetails, ImplBlockKey, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
 };
 use crate::{
     conversion::{
@@ -31,7 +31,7 @@ use crate::{
             ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy,
             TraitMethodDetails,
         },
-        api::UnsafetyNeeded,
+        api::{Pointerness, UnsafetyNeeded},
     },
     types::{Namespace, QualifiedName},
 };
@@ -341,6 +341,31 @@ impl<'a> FnGenerator<'a> {
         let rust_name = make_ident(self.rust_name);
         let unsafety = self.unsafety.wrapper_token();
         let doc_attrs = self.doc_attrs;
+        let receiver_pointerness = self
+            .param_details
+            .iter()
+            .next()
+            .map(|pd| pd.conversion.is_a_pointer())
+            .unwrap_or(Pointerness::Not);
+        let ty = impl_block_type_name.get_final_ident();
+        let ty = match receiver_pointerness {
+            Pointerness::MutPtr => ImplBlockKey {
+                ty: parse_quote! {
+                    CppMutRef< 'a, #ty>
+                },
+                lifetime: Some(parse_quote! { 'a }),
+            },
+            Pointerness::ConstPtr => ImplBlockKey {
+                ty: parse_quote! {
+                    CppRef< 'a, #ty>
+                },
+                lifetime: Some(parse_quote! { 'a }),
+            },
+            Pointerness::Not => ImplBlockKey {
+                ty: parse_quote! { # ty },
+                lifetime: None,
+            },
+        };
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
                 #(#doc_attrs)*
@@ -348,7 +373,7 @@ impl<'a> FnGenerator<'a> {
                     #call_body
                 }
             }),
-            ty: impl_block_type_name.get_final_ident(),
+            ty,
         })
     }
 
@@ -385,14 +410,17 @@ impl<'a> FnGenerator<'a> {
         let rust_name = make_ident(&self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
-        Box::new(ImplBlockDetails {
-            item: ImplItem::Method(parse_quote! {
+        let ty = impl_block_type_name.get_final_ident();
+        let ty = parse_quote! { #ty };
+        let stuff = quote! {
                 #(#doc_attrs)*
                 pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                     #call_body
                 }
-            }),
-            ty: impl_block_type_name.get_final_ident(),
+        };
+        Box::new(ImplBlockDetails {
+            item: ImplItem::Method(parse_quote! { #stuff }),
+            ty: ImplBlockKey { ty, lifetime: None },
         })
     }
 

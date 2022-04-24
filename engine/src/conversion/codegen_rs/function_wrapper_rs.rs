@@ -167,6 +167,49 @@ impl TypeConversionPolicy {
                 };
                 RustParamConversion::ReturnValue { ty }
             }
+            RustConversionType::FromPointerToReferenceWrapper => {
+                let (ty, is_mut) = match &self.unwrapped_type {
+                    Type::Ptr(TypePtr {
+                        elem, mutability, ..
+                    }) => (&*elem, mutability.is_some()),
+                    _ => panic!("Not a ptr"),
+                };
+                let (ty, wrapper_name) = if is_mut {
+                    (parse_quote! { &mut CppMutRef<'a, #ty> }, "CppMutRef")
+                } else {
+                    (parse_quote! { &CppRef<'a, #ty> }, "CppRef")
+                };
+                let wrapper_name = make_ident(wrapper_name);
+                RustParamConversion::Param {
+                    ty,
+                    local_variables: Vec::new(),
+                    conversion: quote! {
+                        #wrapper_name (#var)
+                    },
+                    conversion_requires_unsafe: false,
+                }
+            }
+            RustConversionType::FromReferenceWrapperToPointer => {
+                let (ty, is_mut) = match &self.unwrapped_type {
+                    Type::Ptr(TypePtr {
+                        elem, mutability, ..
+                    }) => (&*elem, mutability.is_some()),
+                    _ => panic!("Not a ptr"),
+                };
+                let ty = if is_mut {
+                    parse_quote! { &mut CppMutRef<'a, #ty> }
+                } else {
+                    parse_quote! { &CppRef<'a, #ty> }
+                };
+                RustParamConversion::Param {
+                    ty,
+                    local_variables: Vec::new(),
+                    conversion: quote! {
+                        #var .0
+                    },
+                    conversion_requires_unsafe: false,
+                }
+            }
         }
     }
 }

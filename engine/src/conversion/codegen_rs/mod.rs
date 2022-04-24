@@ -23,7 +23,8 @@ use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, TraitItem, TypePath,
+    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Lifetime, TraitItem, Type,
+    TypePath,
 };
 
 use crate::{
@@ -61,10 +62,16 @@ use super::{
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::quote;
 
+#[derive(Clone, Hash, PartialEq, Eq)]
+struct ImplBlockKey {
+    ty: Type,
+    lifetime: Option<Lifetime>,
+}
+
 /// An entry which needs to go into an `impl` block for a given type.
 struct ImplBlockDetails {
     item: ImplItem,
-    ty: Ident,
+    ty: ImplBlockKey,
 }
 
 struct TraitImplBlockDetails {
@@ -123,6 +130,92 @@ fn get_string_items() -> Vec<Item> {
             impl ToCppString for cxx::UniquePtr<cxx::CxxString> {
                 fn into_cpp(self) -> cxx::UniquePtr<cxx::CxxString> {
                     self
+                }
+            }
+        }),
+        Item::Struct(parse_quote! {
+            #[repr(transparent)]
+            pub struct CppRef<'a, T>(pub *const T, pub ::std::marker::PhantomData<&'a T>);
+        }),
+        Item::Impl(parse_quote! {
+            impl<'a, T> autocxx::CppRef<'a, T> for CppRef<'a, T> {
+                fn as_ptr(&self) -> *const T {
+                    self.0
+                }
+            }
+        }),
+        Item::Impl(parse_quote! {
+            impl<'a, T: ::cxx::private::UniquePtrTarget> CppRef<'a, T> {
+                /// Create a `CppRef` to an item within a pinned box.
+                pub fn from_box(boxed_item: &'a ::std::pin::Pin<::std::boxed::Box<T>>) -> Self {
+                    Self(unsafe { ::std::pin::Pin::into_inner_unchecked(boxed_item.as_ref()) as *const T  }, ::std::marker::PhantomData)
+                }
+            }
+        }),
+        Item::Struct(parse_quote! {
+            #[repr(transparent)]
+            pub struct CppMutRef<'a, T>(pub *mut T, pub ::std::marker::PhantomData<&'a T>);
+        }),
+        Item::Impl(parse_quote! {
+            impl<'a, T> autocxx::CppRef<'a, T> for CppMutRef<'a, T> {
+                fn as_ptr(&self) -> *const T {
+                    self.0
+                }
+            }
+        }),
+        Item::Impl(parse_quote! {
+            impl<'a, T> autocxx::CppMutRef<'a, T> for CppMutRef<'a, T> {
+                fn as_mut_ptr(&self) -> *mut T {
+                    self.0
+                }
+            }
+        }),
+        Item::Impl(parse_quote! {
+            impl<'a, T: ::cxx::private::UniquePtrTarget> CppMutRef<'a, T> {
+                /// Create a `CppMutRef` to an item within a pinned box.
+                pub fn from_box(boxed_item: &'a mut ::std::pin::Pin<::std::boxed::Box<T>>) -> Self {
+                    Self(unsafe { ::std::pin::Pin::into_inner_unchecked(boxed_item.as_mut()) as *mut T  }, ::std::marker::PhantomData)
+                }
+                /// Create a const C++ reference from this mutable C++ reference.
+                pub fn as_cpp_ref(&self) -> CppRef<'a, T> {
+                    use autocxx::CppRef;
+                    CppRef(self.as_ptr(), ::std::marker::PhantomData)
+                }
+            }
+        }),
+        Item::Struct(parse_quote! {
+            /// "Pins" an object so that C++-compatible references can be created.
+            #[repr(transparent)]
+            pub struct CppPin<T>(T);
+        }),
+        Item::Impl(parse_quote! {
+            impl<'a, T: 'a> autocxx::CppPin<'a, T> for CppPin<T>
+            {
+                type CppRef = CppRef<'a, T>;
+                type CppMutRef = CppMutRef<'a, T>;
+                fn as_ptr(&self) -> *const T {
+                    ::std::ptr::addr_of!(self.0)
+                }
+                fn as_mut_ptr(&mut self) -> *mut T {
+                    ::std::ptr::addr_of_mut!(self.0)
+                }
+                fn as_cpp_ref(&self) -> Self::CppRef {
+                    CppRef(self.as_ptr(), ::std::marker::PhantomData)
+                }
+                fn as_cpp_mut_ref(&mut self) -> Self::CppMutRef {
+                    CppMutRef(self.as_mut_ptr(), ::std::marker::PhantomData)
+                }
+            }
+        }),
+        Item::Impl(parse_quote! {
+            impl<T> CppPin<T> {
+                /// Make this object available to C++ by reference.
+                /// This takes ownership of the object, thus proving you
+                /// have no existing Rust references. Any reference to this
+                /// object from Rust after this point is unsafe, since Rust
+                /// and C++ reference semantics are incompatible.
+                pub fn new(item: T) -> CppPin<T> {
+                    Self(item)
                 }
             }
         }),
@@ -374,7 +467,7 @@ impl<'a> RsCodeGenerator<'a> {
                 #[allow(unused_imports)]
                 use self::
                     #(#supers)::*
-                ::ToCppString;
+                ::{ToCppString, CppRef, CppMutRef};
             }));
         }
         let supers = super_duper.take(ns.depth() + 1);
@@ -410,8 +503,10 @@ impl<'a> RsCodeGenerator<'a> {
             }
         }
         for (ty, entries) in impl_entries_by_type.into_iter() {
+            let lt = ty.lifetime.map(|lt| quote! { < #lt > });
+            let ty = ty.ty;
             output_items.push(Item::Impl(parse_quote! {
-                impl #ty {
+                impl #lt #ty {
                     #(#entries)*
                 }
             }))
@@ -1075,7 +1170,10 @@ impl<'a> RsCodeGenerator<'a> {
                         fn #method(_uhoh: autocxx::BindingGenerationFailure) {
                         }
                     },
-                    ty: self_ty,
+                    ty: ImplBlockKey {
+                        ty: parse_quote! { #self_ty },
+                        lifetime: None,
+                    },
                 })),
                 None,
                 None,
