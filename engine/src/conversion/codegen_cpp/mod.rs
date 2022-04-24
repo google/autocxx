@@ -467,6 +467,17 @@ impl<'a> CppCodeGenerator<'a> {
             .collect();
         let mut arg_list = arg_list?.into_iter().flatten();
         let receiver = if is_a_method { arg_list.next() } else { None };
+        let receiver_is_a_pointer = if receiver.is_some() {
+            details
+                .argument_conversion
+                .get(0)
+                .as_ref()
+                .unwrap()
+                .is_a_pointer()
+        } else {
+            false
+        };
+        log::info!("rcvr: {:?}, riap={}", receiver, receiver_is_a_pointer);
         if matches!(&details.payload, CppFunctionBody::ConstructSuperclass(_)) {
             arg_list.next();
         }
@@ -496,6 +507,11 @@ impl<'a> CppCodeGenerator<'a> {
                 (format!("{}->~{}()", arg_list, ty_id), "".to_string(), false)
             }
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
+                Some(receiver) if receiver_is_a_pointer => (
+                    format!("{}->{}({})", receiver, id, arg_list),
+                    "".to_string(),
+                    false,
+                ),
                 Some(receiver) => (
                     format!("{}.{}({})", receiver, id, arg_list),
                     "".to_string(),

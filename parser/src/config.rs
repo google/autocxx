@@ -33,6 +33,7 @@ use quote::quote;
 pub enum UnsafePolicy {
     AllFunctionsSafe,
     AllFunctionsUnsafe,
+    ReferencesWrappedAllFunctionsSafe,
 }
 
 impl Default for UnsafePolicy {
@@ -50,8 +51,13 @@ impl Parse for UnsafePolicy {
             Some(id) => {
                 if id == "unsafe_ffi" {
                     Ok(UnsafePolicy::AllFunctionsSafe)
+                } else if id == "unsafe_references_wrapped" {
+                    Ok(UnsafePolicy::ReferencesWrappedAllFunctionsSafe)
                 } else {
-                    Err(syn::Error::new(id.span(), "expected unsafe_ffi"))
+                    Err(syn::Error::new(
+                        id.span(),
+                        "expected unsafe_ffi or unsafe_references_wrapped",
+                    ))
                 }
             }
             None => Ok(UnsafePolicy::AllFunctionsUnsafe),
@@ -70,6 +76,8 @@ impl ToTokens for UnsafePolicy {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         if *self == UnsafePolicy::AllFunctionsSafe {
             tokens.extend(quote! { unsafe })
+        } else if *self == UnsafePolicy::ReferencesWrappedAllFunctionsSafe {
+            tokens.extend(quote! { unsafe_references_wrapped })
         }
     }
 }

@@ -9,7 +9,7 @@
 use autocxx::prelude::*;
 include_cpp! {
     #include "input.h"
-    safety!(unsafe_ffi)
+    safety!(unsafe_references_wrapped)
     generate!("DoMath")
     generate!("Goat")
 }

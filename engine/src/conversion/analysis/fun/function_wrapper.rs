@@ -23,6 +23,8 @@ pub(crate) enum CppConversionType {
     /// Ignored in the sense that it isn't passed into the C++ function.
     IgnoredPlacementPtrParameter,
     FromReturnValueToPlacementPtr,
+    FromPointerToReference,
+    FromReferenceToPointer,
 }
 
 impl CppConversionType {
@@ -36,6 +38,8 @@ impl CppConversionType {
                 CppConversionType::FromValueToUniquePtr
             }
             CppConversionType::FromValueToUniquePtr => CppConversionType::FromUniquePtrToValue,
+            CppConversionType::FromPointerToReference => CppConversionType::FromReferenceToPointer,
+            CppConversionType::FromReferenceToPointer => CppConversionType::FromPointerToReference,
             _ => panic!("Did not expect to have to invert this conversion"),
         }
     }
@@ -52,6 +56,8 @@ pub(crate) enum RustConversionType {
     FromValueParamToPtr,
     FromPlacementParamToNewReturn,
     FromRValueParamToPtr,
+    FromReferenceWrapperToPointer,
+    FromPointerToReferenceWrapper,
 }
 
 impl RustConversionType {
@@ -87,6 +93,14 @@ impl TypeConversionPolicy {
             unwrapped_type: ty,
             cpp_conversion: CppConversionType::None,
             rust_conversion: RustConversionType::None,
+        }
+    }
+
+    pub(crate) fn return_reference_into_wrapper(ty: Type) -> Self {
+        TypeConversionPolicy {
+            unwrapped_type: ty,
+            cpp_conversion: CppConversionType::FromReferenceToPointer,
+            rust_conversion: RustConversionType::FromPointerToReferenceWrapper,
         }
     }
 
@@ -161,6 +175,8 @@ impl TypeConversionPolicy {
             RustConversionType::FromValueParamToPtr
                 | RustConversionType::FromRValueParamToPtr
                 | RustConversionType::FromPlacementParamToNewReturn
+                | RustConversionType::FromPointerToReferenceWrapper
+                | RustConversionType::FromReferenceWrapperToPointer
         )
     }
 

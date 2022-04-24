@@ -167,6 +167,36 @@ impl TypeConversionPolicy {
                 };
                 RustParamConversion::ReturnValue { ty }
             }
+            RustConversionType::FromPointerToReferenceWrapper => {
+                let ty = match &self.unwrapped_type {
+                    Type::Ptr(TypePtr { elem, .. }) => &*elem,
+                    _ => panic!("Not a ptr"),
+                };
+                let ty = parse_quote! { CppRef<'a, #ty> };
+                RustParamConversion::Param {
+                    ty,
+                    local_variables: Vec::new(),
+                    conversion: quote! {
+                        CppRef(#var)
+                    },
+                    conversion_requires_unsafe: false,
+                }
+            }
+            RustConversionType::FromReferenceWrapperToPointer => {
+                let ty = match &self.unwrapped_type {
+                    Type::Ptr(TypePtr { elem, .. }) => &*elem,
+                    _ => panic!("Not a ptr"),
+                };
+                let ty = parse_quote! { CppRef<'a, #ty> };
+                RustParamConversion::Param {
+                    ty,
+                    local_variables: Vec::new(),
+                    conversion: quote! {
+                        #var
+                    },
+                    conversion_requires_unsafe: false,
+                }
+            }
         }
     }
 }

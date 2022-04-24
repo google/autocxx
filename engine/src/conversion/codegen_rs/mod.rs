@@ -23,7 +23,8 @@ use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, TraitItem, TypePath,
+    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Lifetime, TraitItem, Type,
+    TypePath,
 };
 
 use crate::{
@@ -61,10 +62,16 @@ use super::{
 use super::{convert_error::ErrorContext, ConvertError};
 use quote::quote;
 
+#[derive(Clone, Hash, PartialEq, Eq)]
+struct ImplBlockKey {
+    ty: Type,
+    lifetime: Option<Lifetime>,
+}
+
 /// An entry which needs to go into an `impl` block for a given type.
 struct ImplBlockDetails {
     item: ImplItem,
-    ty: Ident,
+    ty: ImplBlockKey,
 }
 
 struct TraitImplBlockDetails {
@@ -125,6 +132,14 @@ fn get_string_items() -> Vec<Item> {
                     self
                 }
             }
+        }),
+        Item::Struct(parse_quote! {
+            #[repr(transparent)]
+            pub struct CppRef<'a, T>(pub *const T, ::std::marker::PhantomData<&'a T>);
+        }),
+        Item::Struct(parse_quote! {
+            #[repr(transparent)]
+            pub struct CppMutRef<'a, T>(pub *mut T, ::std::marker::PhantomData<&'a T>);
         }),
     ]
     .to_vec()
@@ -374,7 +389,7 @@ impl<'a> RsCodeGenerator<'a> {
                 #[allow(unused_imports)]
                 use self::
                     #(#supers)::*
-                ::ToCppString;
+                ::{ToCppString, CppRef};
             }));
         }
         let supers = super_duper.take(ns.depth() + 1);
@@ -410,8 +425,10 @@ impl<'a> RsCodeGenerator<'a> {
             }
         }
         for (ty, entries) in impl_entries_by_type.into_iter() {
+            let lt = ty.lifetime.map(|lt| quote! { < #lt > });
+            let ty = ty.ty;
             output_items.push(Item::Impl(parse_quote! {
-                impl #ty {
+                impl #lt #ty {
                     #(#entries)*
                 }
             }))
@@ -1075,7 +1092,10 @@ impl<'a> RsCodeGenerator<'a> {
                         fn #method(_uhoh: autocxx::BindingGenerationFailure) {
                         }
                     },
-                    ty: self_ty,
+                    ty: ImplBlockKey {
+                        ty: parse_quote! { #self_ty },
+                        lifetime: None,
+                    },
                 })),
                 None,
                 None,

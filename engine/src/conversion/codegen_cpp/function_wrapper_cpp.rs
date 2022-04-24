@@ -6,6 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use syn::Type;
+
 use crate::conversion::{
     analysis::fun::function_wrapper::{CppConversionType, TypeConversionPolicy},
     ConvertError,
@@ -38,6 +40,10 @@ impl TypeConversionPolicy {
         type_to_cpp(&self.unwrapped_type, cpp_name_map)
     }
 
+    pub(crate) fn is_a_pointer(&self) -> bool {
+        matches!(&self.unwrapped_type, Type::Ptr(_))
+    }
+
     fn unique_ptr_wrapped_type(
         &self,
         original_name_map: &CppNameMap,
@@ -57,9 +63,9 @@ impl TypeConversionPolicy {
         // If is_return we want to avoid unnecessary std::moves because they
         // make RVO less effective
         Ok(match self.cpp_conversion {
-            CppConversionType::None | CppConversionType::FromReturnValueToPlacementPtr => {
-                Some(var_name.to_string())
-            }
+            CppConversionType::None
+            | CppConversionType::FromReturnValueToPlacementPtr
+            | CppConversionType::FromPointerToReference => Some(var_name.to_string()),
             CppConversionType::Move => Some(format!("std::move({})", var_name)),
             CppConversionType::FromUniquePtrToValue | CppConversionType::FromPtrToMove => {
                 Some(format!("std::move(*{})", var_name))
@@ -78,6 +84,7 @@ impl TypeConversionPolicy {
                 })
             }
             CppConversionType::IgnoredPlacementPtrParameter => None,
+            CppConversionType::FromReferenceToPointer => Some(format!("&{}", var_name)),
         })
     }
 }
