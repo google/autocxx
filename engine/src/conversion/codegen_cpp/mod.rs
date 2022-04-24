@@ -16,11 +16,10 @@ use crate::{
     CppCodegenOptions, CppFilePair,
 };
 use autocxx_parser::IncludeCppConfig;
+use indexmap::map::IndexMap as HashMap;
+use indexmap::set::IndexSet as HashSet;
 use itertools::Itertools;
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-};
+use std::borrow::Cow;
 use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
 
 use self::type_to_cpp::{
@@ -598,6 +597,7 @@ impl<'a> CppCodeGenerator<'a> {
         };
         let mut headers = vec![Header::System("memory")];
         if need_allocators {
+            headers.push(Header::System("stddef.h"));
             headers.push(Header::NewDeletePrelude);
         }
         Ok(ExtraCpp {

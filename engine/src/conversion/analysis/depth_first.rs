@@ -6,7 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{HashSet, VecDeque};
+use indexmap::set::IndexSet as HashSet;
+use std::collections::VecDeque;
 use std::fmt::Debug;
 
 use itertools::Itertools;
