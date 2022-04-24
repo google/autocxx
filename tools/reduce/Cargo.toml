@@ -26,10 +26,12 @@ serde = "1.0"
 serde_derive = "1.0"
 syn = "1.0.39"
 quote = "1.0"
+cxx-gen = "0.7.54"
+regex = "1.5"
+indexmap = "1.8"
 
 [dev-dependencies]
 assert_cmd = "1.0.3"
 tempdir = "0.3.7"
 indoc = "1.0"
 proc-macro2 = "1.0"
-cxx-gen = "0.7.54"
