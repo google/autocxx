@@ -23,8 +23,8 @@ use itertools::Itertools;
 use proc_macro2::Ident;
 use quote::ToTokens;
 use syn::{
-    parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, Type,
-    TypePath, TypePtr,
+    parse_quote, punctuated::Punctuated, token::Comma, GenericArgument, PathArguments, PathSegment,
+    Type, TypePath, TypePtr,
 };
 
 use super::tdef::TypedefAnalysis;
@@ -301,16 +301,18 @@ impl<'a> TypeConverter<'a> {
             if generic_behavior != CxxGenericType::Not {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
-                kind = self.confirm_inner_type_is_acceptable_generic_payload(
-                    &last_seg.arguments,
-                    &tn,
-                    generic_behavior,
-                    forward_declarations_ok,
-                )?;
                 if let PathArguments::AngleBracketed(ref mut ab) = last_seg.arguments {
                     let mut innerty = self.convert_punctuated(ab.args.clone(), ns)?;
                     ab.args = innerty.ty;
+                    kind = self.confirm_inner_type_is_acceptable_generic_payload(
+                        &ab.args,
+                        &tn,
+                        generic_behavior,
+                        forward_declarations_ok,
+                    )?;
                     deps.extend(innerty.types_encountered.drain(..));
+                } else {
+                    return Err(ConvertError::TemplatedTypeContainingNonPathArg(tn.clone()));
                 }
             } else {
                 // Oh poop. It's a generic type which cxx won't be able to handle.
@@ -491,84 +493,65 @@ impl<'a> TypeConverter<'a> {
 
     fn confirm_inner_type_is_acceptable_generic_payload(
         &self,
-        path_args: &PathArguments,
+        path_args: &Punctuated<GenericArgument, Comma>,
         desc: &QualifiedName,
         generic_behavior: CxxGenericType,
         forward_declarations_ok: bool,
     ) -> Result<TypeKind, ConvertError> {
         // For now, all supported generics accept the same payloads. This
         // may change in future in which case we'll need to accept more arguments here.
-        match path_args {
-            PathArguments::None => Ok(TypeKind::Regular),
-            PathArguments::Parenthesized(_) => Err(
-                ConvertError::TemplatedTypeContainingNonPathArg(desc.clone()),
-            ),
-            PathArguments::AngleBracketed(ab) => {
-                for inner in &ab.args {
-                    match inner {
-                        GenericArgument::Type(Type::Path(typ)) => {
-                            let inner_qn = QualifiedName::from_type_path(typ);
-                            if !forward_declarations_ok
-                                && self.forward_declarations.contains(&inner_qn)
+
+        for inner in path_args {
+            match inner {
+                GenericArgument::Type(Type::Path(typ)) => {
+                    let inner_qn = QualifiedName::from_type_path(typ);
+                    if !forward_declarations_ok && self.forward_declarations.contains(&inner_qn) {
+                        return Err(ConvertError::TypeContainingForwardDeclaration(inner_qn));
+                    }
+                    match generic_behavior {
+                        CxxGenericType::Rust => {
+                            if !inner_qn.get_namespace().is_empty() {
+                                return Err(ConvertError::RustTypeWithAPath(inner_qn));
+                            }
+                            if !self.config.is_rust_type(&inner_qn.get_final_ident()) {
+                                return Err(ConvertError::BoxContainingNonRustType(inner_qn));
+                            }
+                            if self
+                                .config
+                                .is_subclass_holder(&inner_qn.get_final_ident().to_string())
                             {
-                                return Err(ConvertError::TypeContainingForwardDeclaration(
-                                    inner_qn,
-                                ));
-                            }
-                            match generic_behavior {
-                                CxxGenericType::Rust => {
-                                    if !inner_qn.get_namespace().is_empty() {
-                                        return Err(ConvertError::RustTypeWithAPath(inner_qn));
-                                    }
-                                    if !self.config.is_rust_type(&inner_qn.get_final_ident()) {
-                                        return Err(ConvertError::BoxContainingNonRustType(
-                                            inner_qn,
-                                        ));
-                                    }
-                                    if self
-                                        .config
-                                        .is_subclass_holder(&inner_qn.get_final_ident().to_string())
-                                    {
-                                        return Ok(TypeKind::SubclassHolder(
-                                            inner_qn.get_final_ident(),
-                                        ));
-                                    } else {
-                                        return Ok(TypeKind::Regular);
-                                    }
-                                }
-                                CxxGenericType::CppPtr => {
-                                    if !known_types().permissible_within_unique_ptr(&inner_qn) {
-                                        return Err(ConvertError::InvalidTypeForCppPtr(inner_qn));
-                                    }
-                                }
-                                CxxGenericType::CppVector => {
-                                    if !known_types().permissible_within_vector(&inner_qn) {
-                                        return Err(ConvertError::InvalidTypeForCppVector(
-                                            inner_qn,
-                                        ));
-                                    }
-                                }
-                                _ => {}
-                            }
-                            if let Some(more_generics) = typ.path.segments.last() {
-                                self.confirm_inner_type_is_acceptable_generic_payload(
-                                    &more_generics.arguments,
-                                    desc,
-                                    generic_behavior,
-                                    forward_declarations_ok,
-                                )?;
+                                return Ok(TypeKind::SubclassHolder(inner_qn.get_final_ident()));
+                            } else {
+                                return Ok(TypeKind::Regular);
                             }
                         }
-                        _ => {
-                            return Err(ConvertError::TemplatedTypeContainingNonPathArg(
-                                desc.clone(),
-                            ))
+                        CxxGenericType::CppPtr => {
+                            if !known_types().permissible_within_unique_ptr(&inner_qn) {
+                                return Err(ConvertError::InvalidTypeForCppPtr(inner_qn));
+                            }
                         }
+                        CxxGenericType::CppVector => {
+                            if !known_types().permissible_within_vector(&inner_qn) {
+                                return Err(ConvertError::InvalidTypeForCppVector(inner_qn));
+                            }
+                        }
+                        _ => {}
+                    }
+                    if matches!(
+                        typ.path.segments.last().map(|ps| &ps.arguments),
+                        Some(PathArguments::Parenthesized(_) | PathArguments::AngleBracketed(_))
+                    ) {
+                        return Err(ConvertError::MultiplyNestedGenerics);
                     }
                 }
-                Ok(TypeKind::Regular)
+                _ => {
+                    return Err(ConvertError::TemplatedTypeContainingNonPathArg(
+                        desc.clone(),
+                    ))
+                }
             }
         }
+        Ok(TypeKind::Regular)
     }
 
     fn find_typedefs<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashMap<QualifiedName, Type>

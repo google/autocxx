@@ -10967,6 +10967,46 @@ fn test_pass_rust_str_and_return_struct() {
     run_test(cxx, hdr, rs, &["take_str_return_struct"], &[]);
 }
 
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/1065
+fn test_issue_1065a() {
+    let hdr = indoc! {"
+        #include <memory>
+        #include <vector>
+
+        template <typename at> class au {
+        std::unique_ptr<at> aw;
+        };
+        class bb;
+        using bc = au<bb>;
+        class RenderFrameHost {
+        public:
+        virtual std::vector<bc> &bd() = 0;
+        virtual ~RenderFrameHost() {}
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["RenderFrameHost"], &[]);
+}
+
+#[test]
+fn test_issue_1065b() {
+    let hdr = indoc! {"
+        #include <memory>
+        #include <vector>
+
+        class bb;
+        using bc = std::unique_ptr<bb>;
+        class RenderFrameHost {
+        public:
+        virtual std::vector<bc> &bd() = 0;
+        virtual ~RenderFrameHost() {}
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["RenderFrameHost"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
