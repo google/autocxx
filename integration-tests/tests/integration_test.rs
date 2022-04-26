@@ -10894,6 +10894,50 @@ fn param_in_copy_constructor() {
 }
 
 #[test]
+fn test_typedef_to_enum() {
+    let hdr = indoc! {"
+        enum b {};
+        class c {
+        public:
+          typedef b d;
+          d e();
+        };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_all!() },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_typedef_to_ns_enum() {
+    let hdr = indoc! {"
+        namespace a {
+        enum b {};
+        class c {
+        public:
+          typedef b d;
+          d e();
+        };
+        } // namespace
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_all!() },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
 fn test_pass_rust_str_and_return_struct() {
     let cxx = indoc! {"
         A take_str_return_struct(rust::Str) {

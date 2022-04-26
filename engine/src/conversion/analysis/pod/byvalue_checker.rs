@@ -93,7 +93,13 @@ impl ByValueChecker {
                             }
                             _ => None,
                         },
-                        TypedefKind::Use(_) => None,
+                        TypedefKind::Use(_, ref ty) => match **ty {
+                            Type::Path(ref typ) => {
+                                let target_tn = QualifiedName::from_type_path(typ);
+                                known_types().consider_substitution(&target_tn)
+                            }
+                            _ => None,
+                        },
                     };
                     match &typedef_type {
                         Some(typ) => {

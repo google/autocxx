@@ -496,7 +496,7 @@ impl<'a> RsCodeGenerator<'a> {
             Api::Typedef { analysis, .. } => RsCodegenResult {
                 bindgen_mod_items: vec![match analysis.kind {
                     TypedefKind::Type(type_item) => Item::Type(type_item),
-                    TypedefKind::Use(use_item) => Item::Use(use_item),
+                    TypedefKind::Use(use_item, _) => Item::Use(use_item),
                 }],
                 materializations: vec![Use::UsedFromBindgen],
                 ..Default::default()

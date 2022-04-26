@@ -26,7 +26,7 @@ use crate::{
     types::validate_ident_ok_for_cxx,
 };
 use autocxx_parser::{IncludeCppConfig, RustPath};
-use syn::{parse_quote, Fields, Ident, Item, TypePath, UseTree};
+use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
 
 use super::{
     super::utilities::generate_utilities, bindgen_semantic_attributes::BindgenSemanticAttributes,
@@ -308,9 +308,12 @@ impl<'a> ParseBindgen<'a> {
                             let annotations = BindgenSemanticAttributes::new(&use_item.attrs);
                             self.apis.push(UnanalyzedApi::Typedef {
                                 name: api_name(ns, new_id.clone(), &annotations),
-                                item: TypedefKind::Use(parse_quote! {
-                                    pub use #old_path as #new_id;
-                                }),
+                                item: TypedefKind::Use(
+                                    parse_quote! {
+                                        pub use #old_path as #new_id;
+                                    },
+                                    Box::new(Type::Path(old_path)),
+                                ),
                                 old_tyname: Some(old_tyname),
                                 analysis: (),
                             });
