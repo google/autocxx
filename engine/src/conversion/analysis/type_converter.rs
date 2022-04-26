@@ -646,10 +646,10 @@ impl TypedefTarget for () {
 
 impl TypedefTarget for TypedefAnalysis {
     fn get_target(&self) -> Option<&Type> {
-        match self.kind {
-            TypedefKind::Type(ref ty) => Some(&ty.ty),
-            TypedefKind::Use(_) => None,
-        }
+        Some(match self.kind {
+            TypedefKind::Type(ref ty) => &ty.ty,
+            TypedefKind::Use(_, ref ty) => ty,
+        })
     }
 }
 

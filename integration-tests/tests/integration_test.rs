@@ -10937,7 +10937,6 @@ fn test_typedef_to_ns_enum() {
     );
 }
 
-
 #[test]
 fn test_pass_rust_str_and_return_struct() {
     let cxx = indoc! {"

@@ -305,7 +305,7 @@ impl AnalysisPhase for NullPhase {
 
 #[derive(Clone)]
 pub(crate) enum TypedefKind {
-    Use(ItemUse),
+    Use(ItemUse, Box<Type>),
     Type(ItemType),
 }
 
