@@ -16,7 +16,7 @@ use crate::{
     },
 };
 use autocxx_integration_tests::{
-    directives_from_lists, do_run_test, do_run_test_manual, run_test, run_test_ex,
+    directives_from_lists, do_run_test, do_run_test_manual, run_test, run_test_2, run_test_ex,
     run_test_expect_fail, run_test_expect_fail_ex, TestError,
 };
 use indoc::indoc;
@@ -2694,6 +2694,39 @@ fn test_use_pod_typedef() {
     };
     run_test(cxx, hdr, rs, &[], &["Bob"]);
 }
+
+#[test]
+fn test_typedef_unsupported_type_pub() {
+    let hdr = indoc! {"
+        #include <set>
+        namespace NS{
+            class cls{
+                public:
+                    typedef std::set<int> InnerType;
+                };
+        }
+    "};
+
+    let rs = quote! {};
+    run_test_2("", hdr, rs, &[], &[], &["NS"]);
+}
+
+#[test]
+fn test_typedef_unsupported_type_pri() {
+    let hdr = indoc! {"
+        #include <set>
+        namespace NS{
+            class cls{
+                private:
+                    typedef std::set<int> InnerType;
+                };
+        }
+    "};
+
+    let rs = quote! {};
+    run_test_2("", hdr, rs, &[], &[], &["NS"]);
+}
+
 
 #[test]
 fn test_typedef_to_ns() {
