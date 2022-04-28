@@ -1083,6 +1083,9 @@ impl<'a> FnAnalyzer<'a> {
             CppVisibility::Protected => false,
             CppVisibility::Public => true,
         };
+        if fun.variadic {
+            set_ignore_reason(ConvertError::Variadic);
+        }
         if let Some(problem) = bads.into_iter().next() {
             match problem {
                 Ok(_) => panic!("No error in the error"),
@@ -2007,6 +2010,7 @@ impl<'a> FnAnalyzer<'a> {
                         add_to_trait: None,
                         synthetic_cpp: None,
                         provenance: Provenance::SynthesizedOther,
+                        variadic: false,
                     }),
                 )
             })

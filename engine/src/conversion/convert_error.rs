@@ -111,6 +111,8 @@ pub enum ConvertError {
     InvalidTypeForCppPtr(QualifiedName),
     #[error("A C++ std::vector was found containing some type that cxx can't accommodate as a vector element ({})", .0.to_cpp_name())]
     InvalidTypeForCppVector(QualifiedName),
+    #[error("Variadic functions are not supported by cxx or autocxx.")]
+    Variadic,
 }
 
 /// Ensures that error contexts are always created using the constructors in this

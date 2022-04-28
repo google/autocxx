@@ -88,6 +88,7 @@ fn create_alloc_and_free(ty_name: QualifiedName) -> impl Iterator<Item = Api<Pod
                     add_to_trait: Some(synthesis),
                     is_deleted: false,
                     provenance: Provenance::SynthesizedOther,
+                    variadic: false,
                 }),
                 analysis: (),
             }
