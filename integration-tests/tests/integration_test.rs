@@ -10898,7 +10898,7 @@ fn test_variadic() {
     let hdr = indoc! {"
         class SomeClass{
         public:
-            inline void foo( int a, ... ) {}
+            inline void foo(int, ... ) {}
         };
     "};
     run_test("", hdr, quote! {}, &["SomeClass"], &[]);
