@@ -88,6 +88,7 @@ impl ParseForeignMod {
                     add_to_trait: None,
                     is_deleted: annotations.has_attr("deleted"),
                     synthetic_cpp: None,
+                    variadic: item.sig.variadic.is_some(),
                 });
                 Ok(())
             }

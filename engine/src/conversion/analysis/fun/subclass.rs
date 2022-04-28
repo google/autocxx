@@ -69,6 +69,7 @@ pub(super) fn create_subclass_fn_wrapper(
         is_deleted: fun.is_deleted,
         synthetic_cpp: None,
         provenance: Provenance::SynthesizedOther,
+        variadic: fun.variadic,
     })
 }
 
@@ -237,6 +238,7 @@ pub(super) fn create_subclass_constructor(
         is_deleted: fun.is_deleted,
         synthetic_cpp: None,
         provenance: Provenance::SynthesizedSubclassConstructor(subclass_constructor_details),
+        variadic: fun.variadic,
     });
     let subclass_constructor_name = ApiName::new_with_cpp_name(
         &Namespace::new(),

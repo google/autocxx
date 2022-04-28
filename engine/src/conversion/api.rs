@@ -263,6 +263,7 @@ pub(crate) struct FuncToConvert {
     pub(crate) ident: Ident,
     pub(crate) doc_attrs: Vec<Attribute>,
     pub(crate) inputs: Punctuated<FnArg, Comma>,
+    pub(crate) variadic: bool,
     pub(crate) output: ReturnType,
     pub(crate) vis: Visibility,
     pub(crate) virtualness: Virtualness,

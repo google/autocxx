@@ -10894,6 +10894,17 @@ fn param_in_copy_constructor() {
 }
 
 #[test]
+fn test_variadic() {
+    let hdr = indoc! {"
+        class SomeClass{
+        public:
+            inline void foo(int, ... ) {}
+        };
+    "};
+    run_test("", hdr, quote! {}, &["SomeClass"], &[]);
+}
+
+#[test]
 fn test_typedef_to_enum() {
     let hdr = indoc! {"
         enum b {};
