@@ -204,25 +204,6 @@ pub fn run_test(
     .unwrap()
 }
 
-pub fn run_test_2(
-    cxx_code: &str,
-    header_code: &str,
-    rust_code: TokenStream,
-    generate: &[&str],
-    generate_pods: &[&str],
-    generate_ns: &[&str],
-) {
-    do_run_test(
-        cxx_code,
-        header_code,
-        rust_code,
-        directives_from_lists_2(generate, generate_pods, generate_ns, None),
-        None,
-        None,
-        None,
-    )
-    .unwrap()
-}
 
 // A trait for objects which can check the output of the code creation
 // process.
@@ -350,35 +331,6 @@ pub fn directives_from_lists(
     quote! {
         #(#generate)*
         #(#generate_pods)*
-        #extra_directives
-    }
-}
-
-pub fn directives_from_lists_2(
-    generate: &[&str],
-    generate_pods: &[&str],
-    generate_ns: &[&str],
-    extra_directives: Option<TokenStream>,
-) -> TokenStream {
-    let generate = generate.iter().map(|s| {
-        quote! {
-            generate!(#s)
-        }
-    });
-    let generate_pods = generate_pods.iter().map(|s| {
-        quote! {
-            generate_pod!(#s)
-        }
-    });
-    let generate_ns = generate_ns.iter().map(|s| {
-        quote! {
-            generate_ns!(#s)
-        }
-    });
-    quote! {
-        #(#generate)*
-        #(#generate_pods)*
-        #(#generate_ns)*
         #extra_directives
     }
 }
