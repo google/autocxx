@@ -410,7 +410,7 @@ impl<'a> FnAnalyzer<'a> {
         ns: &Namespace,
         pointer_treatment: PointerTreatment,
     ) -> Result<Annotated<Box<Type>>, ConvertError> {
-        let ctx = TypeConversionContext::CxxOuterType { pointer_treatment };
+        let ctx = TypeConversionContext::OuterType { pointer_treatment };
         let mut annotated = self.type_converter.convert_boxed_type(ty, ns, &ctx)?;
         self.extra_apis.append(&mut annotated.extra_apis);
         Ok(annotated)
