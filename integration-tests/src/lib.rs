@@ -204,7 +204,6 @@ pub fn run_test(
     .unwrap()
 }
 
-
 // A trait for objects which can check the output of the code creation
 // process.
 pub trait CodeCheckerFns {
