@@ -91,7 +91,7 @@ fn get_replacement_typedef(
     let type_conversion_results = type_converter.convert_type(
         (*ity.ty).clone(),
         name.name.get_namespace(),
-        &TypeConversionContext::CxxInnerType,
+        &TypeConversionContext::CxxWithinReference,
     );
     match type_conversion_results {
         Err(err) => Err(ConvertErrorWithContext(
