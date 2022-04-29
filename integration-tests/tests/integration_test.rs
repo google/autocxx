@@ -10949,6 +10949,52 @@ fn test_typedef_to_ns_enum() {
 }
 
 #[test]
+fn test_typedef_unsupported_type_pub() {
+    let hdr = indoc! {"
+        #include <set>
+        namespace NS{
+            class cls{
+                public:
+                    typedef std::set<int> InnerType;
+                };
+        }
+    "};
+
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_ns!("NS") },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_typedef_unsupported_type_pri() {
+    let hdr = indoc! {"
+        #include <set>
+        namespace NS{
+            class cls{
+                private:
+                    typedef std::set<int> InnerType;
+                };
+        }
+    "};
+
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_ns!("NS") },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
 fn test_pass_rust_str_and_return_struct() {
     let cxx = indoc! {"
         A take_str_return_struct(rust::Str) {
