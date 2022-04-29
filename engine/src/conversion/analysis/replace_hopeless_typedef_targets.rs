@@ -28,13 +28,6 @@ pub(crate) fn replace_hopeless_typedef_targets(apis: ApiVec<PodPhase>) -> ApiVec
         .iter()
         .filter_map(|api| match api {
             Api::IgnoredItem { .. } => Some(api.name()),
-            _ => None,
-        })
-        .cloned()
-        .collect();
-    let ignored_forward_declarations: HashSet<QualifiedName> = apis
-        .iter()
-        .filter_map(|api| match api {
             Api::ForwardDeclaration { err: Some(_), .. } => Some(api.name()),
             _ => None,
         })
@@ -73,17 +66,9 @@ pub(crate) fn replace_hopeless_typedef_targets(apis: ApiVec<PodPhase>) -> ApiVec
                 } else {
                     Api::OpaqueTypedef {
                         name: api.name_info().clone(),
-                        forward_declaration: false,
                     }
                 }
             }
-            Api::Typedef {
-                analysis: TypedefAnalysis { ref deps, .. },
-                ..
-            } if !ignored_forward_declarations.is_disjoint(deps) => Api::OpaqueTypedef {
-                name: api.name_info().clone(),
-                forward_declaration: true,
-            },
             Api::ForwardDeclaration {
                 name,
                 err: Some(ConvertErrorWithContext(err, ctx)),

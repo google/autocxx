@@ -466,13 +466,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     },
     /// We found a typedef to something that we didn't fully understand.
     /// We'll treat it as an opaque unsized type.
-    OpaqueTypedef {
-        name: ApiName,
-        /// Further store whether this was a typedef to a forward declaration.
-        /// If so we can't allow it to live in a UniquePtr, just like a regular
-        /// Api::ForwardDeclaration.
-        forward_declaration: bool,
-    },
+    OpaqueTypedef { name: ApiName },
     /// A synthetic type we've manufactured in order to
     /// concretize some templated C++ type.
     ConcreteType {

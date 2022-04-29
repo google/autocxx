@@ -101,9 +101,6 @@ impl TypeConversionContext {
             TypeConversionContext::CxxOuterType { pointer_treatment } => *pointer_treatment,
         }
     }
-    fn allow_instantiation_of_forward_declaration(&self) -> bool {
-        matches!(self, TypeConversionContext::CxxInnerType)
-    }
 }
 
 /// A type which can convert from a type encountered in `bindgen`
@@ -153,12 +150,10 @@ impl<'a> TypeConverter<'a> {
     ) -> Result<Annotated<Type>, ConvertError> {
         let result = match ty {
             Type::Path(p) => {
-                let newp = self.convert_type_path(p, ns, ctx)?;
+                let newp = self.convert_type_path(p, ns)?;
                 if let Type::Path(newpp) = &newp.ty {
                     let qn = QualifiedName::from_type_path(newpp);
-                    if !ctx.allow_instantiation_of_forward_declaration()
-                        && self.forward_declarations.contains(&qn)
-                    {
+                    if self.forward_declarations.contains(&qn) {
                         return Err(ConvertError::TypeContainingForwardDeclaration(qn));
                     }
                     // Special handling because rust_Str (as emitted by bindgen)
@@ -213,7 +208,6 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         mut typ: TypePath,
         ns: &Namespace,
-        ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertError> {
         // First, qualify any unqualified paths.
         if typ.path.segments.iter().next().unwrap().ident != "root" {
@@ -296,8 +290,7 @@ impl<'a> TypeConverter<'a> {
         // Finally let's see if it's generic.
         if let Some(last_seg) = Self::get_generic_args(&mut typ) {
             let generic_behavior = known_types().cxx_generic_behavior(&tn);
-            let forward_declarations_ok = generic_behavior == CxxGenericType::Rust
-                || ctx.allow_instantiation_of_forward_declaration();
+            let forward_declarations_ok = generic_behavior == CxxGenericType::Rust;
             if generic_behavior != CxxGenericType::Not {
                 // this is a type of generic understood by cxx (e.g. CxxVector)
                 // so let's convert any generic type arguments. This recurses.
@@ -585,11 +578,7 @@ impl<'a> TypeConverter<'a> {
     fn find_incomplete_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
         apis.iter()
             .filter_map(|api| match api {
-                Api::ForwardDeclaration { .. }
-                | Api::OpaqueTypedef {
-                    forward_declaration: true,
-                    ..
-                } => Some(api.name()),
+                Api::ForwardDeclaration { .. } | Api::OpaqueTypedef { .. } => Some(api.name()),
                 _ => None,
             })
             .cloned()

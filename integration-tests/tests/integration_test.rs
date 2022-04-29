@@ -11014,7 +11014,6 @@ fn test_pass_rust_str_and_return_struct() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/1065
 fn test_issue_1065a() {
     let hdr = indoc! {"
         #include <memory>
@@ -11028,6 +11027,7 @@ fn test_issue_1065a() {
         class RenderFrameHost {
         public:
         virtual std::vector<bc> &bd() = 0;
+        virtual std::unique_ptr<bc> &be() = 0;
         virtual ~RenderFrameHost() {}
         };
     "};
