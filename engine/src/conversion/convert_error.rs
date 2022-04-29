@@ -113,8 +113,8 @@ pub enum ConvertError {
     InvalidTypeForCppVector(QualifiedName),
     #[error("Variadic functions are not supported by cxx or autocxx.")]
     Variadic,
-    #[error("A type had a template inside a template.")]
-    MultiplyNestedGenerics,
+    #[error("A type had a template inside a std::vector, which is not supported.")]
+    GenericsWithinVector,
 }
 
 /// Ensures that error contexts are always created using the constructors in this

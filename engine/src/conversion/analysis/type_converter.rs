@@ -498,9 +498,6 @@ impl<'a> TypeConverter<'a> {
         generic_behavior: CxxGenericType,
         forward_declarations_ok: bool,
     ) -> Result<TypeKind, ConvertError> {
-        // For now, all supported generics accept the same payloads. This
-        // may change in future in which case we'll need to accept more arguments here.
-
         for inner in path_args {
             match inner {
                 GenericArgument::Type(Type::Path(typ)) => {
@@ -534,14 +531,17 @@ impl<'a> TypeConverter<'a> {
                             if !known_types().permissible_within_vector(&inner_qn) {
                                 return Err(ConvertError::InvalidTypeForCppVector(inner_qn));
                             }
+                            if matches!(
+                                typ.path.segments.last().map(|ps| &ps.arguments),
+                                Some(
+                                    PathArguments::Parenthesized(_)
+                                        | PathArguments::AngleBracketed(_)
+                                )
+                            ) {
+                                return Err(ConvertError::GenericsWithinVector);
+                            }
                         }
                         _ => {}
-                    }
-                    if matches!(
-                        typ.path.segments.last().map(|ps| &ps.arguments),
-                        Some(PathArguments::Parenthesized(_) | PathArguments::AngleBracketed(_))
-                    ) {
-                        return Err(ConvertError::MultiplyNestedGenerics);
                     }
                 }
                 _ => {
