@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use autocxx_parser::IncludeCppConfig;
 use indexmap::set::IndexSet as HashSet;
 
 use crate::{
@@ -23,7 +24,10 @@ use super::pod::PodPhase;
 /// Where we find a typedef pointing at something we can't represent,
 /// e.g. because it uses too many template parameters, break the link.
 /// Use the typedef as a first-class type.
-pub(crate) fn replace_hopeless_typedef_targets(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
+pub(crate) fn replace_hopeless_typedef_targets(
+    config: &IncludeCppConfig,
+    apis: ApiVec<PodPhase>,
+) -> ApiVec<PodPhase> {
     let ignored_types: HashSet<QualifiedName> = apis
         .iter()
         .filter_map(|api| match api {
@@ -73,7 +77,9 @@ pub(crate) fn replace_hopeless_typedef_targets(apis: ApiVec<PodPhase>) -> ApiVec
                 } else {
                     Api::OpaqueTypedef {
                         name: api.name_info().clone(),
-                        forward_declaration: false,
+                        forward_declaration: !config
+                            .instantiable
+                            .contains(&name.name.to_cpp_name()),
                     }
                 }
             }

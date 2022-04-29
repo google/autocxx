@@ -58,6 +58,13 @@ pub(crate) fn get_directives() -> &'static DirectivesMap {
             )),
         );
         need_exclamation.insert(
+            "instantiable".into(),
+            Box::new(StringList(
+                |config| &mut config.instantiable,
+                |config| &config.instantiable,
+            )),
+        );
+        need_exclamation.insert(
             "parse_only".into(),
             Box::new(BoolFlag(
                 |config| &mut config.parse_only,

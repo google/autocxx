@@ -322,6 +322,29 @@ macro_rules! subclass {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// Indicates that a C++ type can definitely be instantiated. This has effect
+/// only in a very specific case:
+/// * the type is a typedef to something else
+/// * the 'something else' can't be fully inspected by autocxx, possibly
+///   becaue it relies on dependent qualified types or some other template
+///   arrangement that bindgen cannot fully understand.
+/// In such circumstances, autocxx normally has to err on the side of caution
+/// and assume that some type within the 'something else' is itself a forward
+/// declaration. That means, the opaque typedef won't be storable within
+/// a [`cxx::UniquePtr`]. If you know that no forward declarations are involved,
+/// you can declare the typedef type is instantiable and then you'll be able to
+/// own it within Rust.
+///
+/// The syntax is:
+/// `instantiable!("CppNameGoesHere")`
+///
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+#[macro_export]
+macro_rules! instantiable {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! usage {

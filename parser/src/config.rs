@@ -203,6 +203,7 @@ pub struct IncludeCppConfig {
     pub allowlist: Allowlist,
     pub(crate) blocklist: Vec<String>,
     pub(crate) constructor_blocklist: Vec<String>,
+    pub instantiable: Vec<String>,
     pub(crate) exclude_utilities: bool,
     pub(crate) mod_name: Option<Ident>,
     pub rust_types: Vec<RustPath>,
