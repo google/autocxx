@@ -11029,14 +11029,12 @@ fn test_array_trouble1() {
 #[test]
 fn test_array_trouble2() {
     let hdr = indoc! {"
-        namespace a {
         template <typename b> struct array {
           typedef b c;
           typedef c d;
         };
-        } // namespace a
     "};
-    run_test("", hdr, quote! {}, &["a::array_d"], &[]);
+    run_test("", hdr, quote! {}, &["array_d"], &[]);
 }
 
 #[test]
