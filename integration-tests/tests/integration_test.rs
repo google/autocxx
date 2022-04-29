@@ -11006,6 +11006,38 @@ fn test_typedef_unsupported_type_pri() {
 }
 
 #[test]
+fn test_array_trouble1() {
+    let hdr = indoc! {"
+        namespace a {
+        template <typename b> struct array {
+          typedef b c;
+          typedef c d;
+        };
+        } // namespace a
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_all!() },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_array_trouble2() {
+    let hdr = indoc! {"
+        template <typename b> struct array {
+          typedef b c;
+          typedef c d;
+        };
+    "};
+    run_test("", hdr, quote! {}, &["array_d"], &[]);
+}
+
+#[test]
 fn test_pass_rust_str_and_return_struct() {
     let cxx = indoc! {"
         A take_str_return_struct(rust::Str) {

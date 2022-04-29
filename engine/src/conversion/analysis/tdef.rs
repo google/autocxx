@@ -85,6 +85,12 @@ fn get_replacement_typedef(
     type_converter: &mut TypeConverter,
     extra_apis: &mut ApiVec<NullPhase>,
 ) -> Result<Api<TypedefPhase>, ConvertErrorWithContext> {
+    if !ity.generics.params.is_empty() {
+        return Err(ConvertErrorWithContext(
+            ConvertError::TypedefTakesGenericParameters,
+            Some(ErrorContext::new_for_item(name.name.get_final_ident())),
+        ));
+    }
     let mut converted_type = ity.clone();
     let metadata = BindgenSemanticAttributes::new_retaining_others(&mut converted_type.attrs);
     metadata.check_for_fatal_attrs(&ity.ident)?;

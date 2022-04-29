@@ -117,6 +117,8 @@ pub enum ConvertError {
     Variadic,
     #[error("A type had a template inside a std::vector, which is not supported.")]
     GenericsWithinVector,
+    #[error("This typedef takes generic parameters, not yet supported by autocxx.")]
+    TypedefTakesGenericParameters,
 }
 
 /// Ensures that error contexts are always created using the constructors in this
