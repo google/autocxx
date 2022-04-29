@@ -203,11 +203,8 @@ fn get_struct_field_types(
 ) -> Vec<ConvertError> {
     let mut convert_errors = Vec::new();
     for f in &s.fields {
-        let annotated = type_converter.convert_type(
-            f.ty.clone(),
-            ns,
-            &TypeConversionContext::CxxWithinReference,
-        );
+        let annotated =
+            type_converter.convert_type(f.ty.clone(), ns, &TypeConversionContext::WithinReference);
         match annotated {
             Ok(mut r) => {
                 extra_apis.append(&mut r.extra_apis);

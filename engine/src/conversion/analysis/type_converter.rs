@@ -90,20 +90,20 @@ pub(crate) enum PointerTreatment {
 /// we could be more liberal. At the moment though, all outputs
 /// from [TypeConverter] _might_ be used in the [cxx::bridge].
 pub(crate) enum TypeConversionContext {
-    CxxWithinReference,
-    CxxWithinContainer,
-    CxxOuterType { pointer_treatment: PointerTreatment },
+    WithinReference,
+    WithinContainer,
+    OuterType { pointer_treatment: PointerTreatment },
 }
 
 impl TypeConversionContext {
     fn pointer_treatment(&self) -> PointerTreatment {
         match self {
-            Self::CxxWithinReference | Self::CxxWithinContainer => PointerTreatment::Pointer,
-            Self::CxxOuterType { pointer_treatment } => *pointer_treatment,
+            Self::WithinReference | Self::WithinContainer => PointerTreatment::Pointer,
+            Self::OuterType { pointer_treatment } => *pointer_treatment,
         }
     }
     fn allow_instantiation_of_forward_declaration(&self) -> bool {
-        matches!(self, Self::CxxWithinReference)
+        matches!(self, Self::WithinReference)
     }
 }
 
@@ -183,11 +183,8 @@ impl<'a> TypeConverter<'a> {
                 }
             }
             Type::Reference(mut r) => {
-                let innerty = self.convert_boxed_type(
-                    r.elem,
-                    ns,
-                    &TypeConversionContext::CxxWithinReference,
-                )?;
+                let innerty =
+                    self.convert_boxed_type(r.elem, ns, &TypeConversionContext::WithinReference)?;
                 r.elem = innerty.ty;
                 Annotated::new(
                     Type::Reference(r),
@@ -198,7 +195,7 @@ impl<'a> TypeConverter<'a> {
             }
             Type::Array(mut arr) => {
                 let innerty =
-                    self.convert_type(*arr.elem, ns, &TypeConversionContext::CxxWithinReference)?;
+                    self.convert_type(*arr.elem, ns, &TypeConversionContext::WithinReference)?;
                 arr.elem = Box::new(innerty.ty);
                 Annotated::new(
                     Type::Array(arr),
@@ -307,7 +304,7 @@ impl<'a> TypeConverter<'a> {
                     let mut innerty = self.convert_punctuated(
                         ab.args.clone(),
                         ns,
-                        &TypeConversionContext::CxxWithinContainer,
+                        &TypeConversionContext::WithinContainer,
                     )?;
                     ab.args = innerty.ty;
                     kind = self.confirm_inner_type_is_acceptable_generic_payload(
@@ -403,11 +400,8 @@ impl<'a> TypeConverter<'a> {
         match pointer_treatment {
             PointerTreatment::Pointer => {
                 crate::known_types::ensure_pointee_is_valid(&ptr)?;
-                let innerty = self.convert_boxed_type(
-                    ptr.elem,
-                    ns,
-                    &TypeConversionContext::CxxWithinReference,
-                )?;
+                let innerty =
+                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
                 ptr.elem = innerty.ty;
                 Ok(Annotated::new(
                     Type::Ptr(ptr),
@@ -418,11 +412,8 @@ impl<'a> TypeConverter<'a> {
             }
             PointerTreatment::Reference => {
                 let mutability = ptr.mutability;
-                let elem = self.convert_boxed_type(
-                    ptr.elem,
-                    ns,
-                    &TypeConversionContext::CxxWithinReference,
-                )?;
+                let elem =
+                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
                 // TODO - in the future, we should check if this is a rust::Str and throw
                 // a wobbler if not. rust::Str should only be seen _by value_ in C++
                 // headers; it manifests as &str in Rust but on the C++ side it must
@@ -444,11 +435,8 @@ impl<'a> TypeConverter<'a> {
             }
             PointerTreatment::RValueReference => {
                 crate::known_types::ensure_pointee_is_valid(&ptr)?;
-                let innerty = self.convert_boxed_type(
-                    ptr.elem,
-                    ns,
-                    &TypeConversionContext::CxxWithinReference,
-                )?;
+                let innerty =
+                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
                 ptr.elem = innerty.ty;
                 Ok(Annotated::new(
                     Type::Ptr(ptr),
