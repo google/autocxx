@@ -3412,12 +3412,18 @@ fn test_associated_type_templated_typedef_by_value_regular() {
         let sp = ffi::give_string_piece();
         ffi::take_string_piece(sp);
     };
-    run_test(
+    run_test_ex(
         "",
         hdr,
         rs,
-        &["take_string_piece", "give_string_piece"],
-        &[],
+        quote! {
+            generate!("take_string_piece")
+            generate!("give_string_piece")
+            instantiable!("StringPiece")
+        },
+        None,
+        None,
+        None,
     );
 }
 
@@ -11019,7 +11025,6 @@ fn test_pass_rust_str_and_return_struct() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/1065
 fn test_issue_1065a() {
     let hdr = indoc! {"
         #include <memory>
