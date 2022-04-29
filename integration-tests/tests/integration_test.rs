@@ -4010,6 +4010,7 @@ fn test_forward_declaration() {
             static B daft3(const A&) { B b; return b; }
             A daft4();
             std::unique_ptr<A> daft5();
+            const std::unique_ptr<A>& daft6();
         };
         A* get_a();
         void delete_a(A*);
@@ -4031,6 +4032,10 @@ fn test_forward_declaration() {
         }
         std::unique_ptr<A> B::daft5() {
             return std::make_unique<A>();
+        }
+        std::unique_ptr<A> fixed;
+        const std::unique_ptr<A>& B::daft6() {
+            return fixed;
         }
     "};
     let rs = quote! {
