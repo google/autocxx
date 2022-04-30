@@ -11038,7 +11038,44 @@ fn test_array_trouble2() {
 }
 
 #[test]
-fn test_issue_1087() {
+fn test_issue_1087a() {
+    let hdr = indoc! {"
+        template <typename _CharT> class a {
+          _CharT b;
+        };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_all!() },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_issue_1087b() {
+    let hdr = indoc! {"
+        template <typename _CharT> class a {
+          typedef _CharT b;
+          b c;
+        };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_all!() },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_issue_1087c() {
     let hdr = indoc! {"
         namespace {
         namespace {
@@ -11046,8 +11083,8 @@ fn test_issue_1087() {
           typedef _CharT b;
           b c;
         };
-        } // namespace
-        } // namespace
+        }
+        }
     "};
     run_test_ex(
         "",
