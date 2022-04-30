@@ -1895,7 +1895,7 @@ impl<'a> FnAnalyzer<'a> {
             if items_found.implicit_default_constructor_needed() {
                 self.synthesize_special_member(
                     items_found,
-                    None,
+                    "default_ctor",
                     &mut apis,
                     SpecialMemberKind::DefaultConstructor,
                     parse_quote! { this: *mut #path },
@@ -1905,7 +1905,7 @@ impl<'a> FnAnalyzer<'a> {
             if items_found.implicit_move_constructor_needed() {
                 self.synthesize_special_member(
                     items_found,
-                    Some("move"),
+                    "move_ctor",
                     &mut apis,
                     SpecialMemberKind::MoveConstructor,
                     parse_quote! { this: *mut #path, other: *mut #path },
@@ -1918,7 +1918,7 @@ impl<'a> FnAnalyzer<'a> {
             if items_found.implicit_copy_constructor_needed() {
                 self.synthesize_special_member(
                     items_found,
-                    Some("const_copy"),
+                    "const_copy_ctor",
                     &mut apis,
                     SpecialMemberKind::CopyConstructor,
                     parse_quote! { this: *mut #path, other: *const #path },
@@ -1931,7 +1931,7 @@ impl<'a> FnAnalyzer<'a> {
             if items_found.implicit_destructor_needed() {
                 self.synthesize_special_member(
                     items_found,
-                    None,
+                    "destructor",
                     &mut apis,
                     SpecialMemberKind::Destructor,
                     parse_quote! { this: *mut #path },
@@ -1971,21 +1971,18 @@ impl<'a> FnAnalyzer<'a> {
     fn synthesize_special_member(
         &mut self,
         items_found: &ItemsFound,
-        label: Option<&str>,
+        label: &str,
         apis: &mut ApiVec<FnPrePhase1>,
         special_member: SpecialMemberKind,
         inputs: Punctuated<FnArg, Comma>,
         references: References,
     ) {
         let self_ty = items_found.name.as_ref().unwrap();
-        let ident = match label {
-            Some(label) => make_ident(self.config.uniquify_name_per_mod(&format!(
-                "{}_synthetic_{}_ctor",
-                self_ty.name.get_final_item(),
-                label
-            ))),
-            None => self_ty.name.get_final_ident(),
-        };
+        let ident = make_ident(self.config.uniquify_name_per_mod(&format!(
+            "{}_synthetic_{}",
+            self_ty.name.get_final_item(),
+            label
+        )));
         let cpp_name = if matches!(special_member, SpecialMemberKind::DefaultConstructor) {
             // Constructors (other than move or copy) are identified in `analyze_foreign_fn` by
             // being suffixed with the cpp_name, so we have to produce that.
