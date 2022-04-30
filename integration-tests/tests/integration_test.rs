@@ -11038,6 +11038,29 @@ fn test_array_trouble2() {
 }
 
 #[test]
+fn test_issue_1087() {
+    let hdr = indoc! {"
+        namespace {
+        namespace {
+        template <typename _CharT> class a {
+          typedef _CharT b;
+          b c;
+        };
+        } // namespace
+        } // namespace
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_all!() },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
 fn test_pass_rust_str_and_return_struct() {
     let cxx = indoc! {"
         A take_str_return_struct(rust::Str) {
