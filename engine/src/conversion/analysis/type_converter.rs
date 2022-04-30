@@ -120,6 +120,7 @@ pub(crate) struct TypeConverter<'a> {
     typedefs: HashMap<QualifiedName, Type>,
     concrete_templates: HashMap<String, QualifiedName>,
     forward_declarations: HashSet<QualifiedName>,
+    ignored_types: HashSet<QualifiedName>,
     config: &'a IncludeCppConfig,
 }
 
@@ -133,6 +134,7 @@ impl<'a> TypeConverter<'a> {
             typedefs: Self::find_typedefs(apis),
             concrete_templates: Self::find_concrete_templates(apis),
             forward_declarations: Self::find_incomplete_types(apis),
+            ignored_types: Self::find_ignored_types(apis),
             config,
         }
     }
@@ -321,6 +323,15 @@ impl<'a> TypeConverter<'a> {
                 // Oh poop. It's a generic type which cxx won't be able to handle.
                 // We'll have to come up with a concrete type in both the cxx::bridge (in Rust)
                 // and a corresponding typedef in C++.
+                // Let's first see if this is a concrete version of a templated type
+                // which we already rejected. Some, but possibly not all, of the reasons
+                // for its rejection would also apply to any concrete types we
+                // make. Err on the side of caution. In future we may be able to relax
+                // this a bit.
+                let qn = QualifiedName::from_type_path(&typ); // ignores generic params
+                if self.ignored_types.contains(&qn) {
+                    return Err(ConvertError::ConcreteVersionOfIgnoredTemplate);
+                }
                 let (new_tn, api) = self.get_templated_typename(&Type::Path(typ))?;
                 extra_apis.extend(api.into_iter());
                 deps.remove(&tn);
@@ -593,6 +604,16 @@ impl<'a> TypeConverter<'a> {
                     forward_declaration: true,
                     ..
                 } => Some(api.name()),
+                _ => None,
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn find_ignored_types<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashSet<QualifiedName> {
+        apis.iter()
+            .filter_map(|api| match api {
+                Api::IgnoredItem { .. } => Some(api.name()),
                 _ => None,
             })
             .cloned()

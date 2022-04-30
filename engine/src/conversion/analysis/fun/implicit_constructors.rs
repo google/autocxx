@@ -197,6 +197,7 @@ pub(super) fn find_constructors_present(
                     bases,
                     field_info,
                     is_generic: false,
+                    in_anonymous_namespace: false,
                     ..
                 },
             details,

@@ -281,6 +281,7 @@ pub(crate) struct FnAnalyzer<'a> {
     subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
     nested_type_name_map: HashMap<QualifiedName, String>,
     generic_types: HashSet<QualifiedName>,
+    types_in_anonymous_namespace: HashSet<QualifiedName>,
     existing_superclass_trait_api_names: HashSet<QualifiedName>,
 }
 
@@ -303,6 +304,7 @@ impl<'a> FnAnalyzer<'a> {
             nested_type_name_map: Self::build_nested_type_map(&apis),
             generic_types: Self::build_generic_type_set(&apis),
             existing_superclass_trait_api_names: HashSet::new(),
+            types_in_anonymous_namespace: Self::build_types_in_anonymous_namespace(&apis),
         };
         let mut results = ApiVec::new();
         convert_apis(
@@ -377,6 +379,22 @@ impl<'a> FnAnalyzer<'a> {
                     analysis:
                         PodAnalysis {
                             is_generic: true, ..
+                        },
+                    ..
+                } => Some(api.name().clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn build_types_in_anonymous_namespace(apis: &ApiVec<PodPhase>) -> HashSet<QualifiedName> {
+        apis.iter()
+            .filter_map(|api| match api {
+                Api::Struct {
+                    analysis:
+                        PodAnalysis {
+                            in_anonymous_namespace: true,
+                            ..
                         },
                     ..
                 } => Some(api.name().clone()),
@@ -1127,10 +1145,13 @@ impl<'a> FnAnalyzer<'a> {
                     // It may, for instance, be a private type.
                     set_ignore_reason(ConvertError::MethodOfNonAllowlistedType);
                 }
-                FnKind::Method { ref impl_for, .. } | FnKind::TraitMethod { ref impl_for, .. }
-                    if self.is_generic_type(impl_for) =>
-                {
-                    set_ignore_reason(ConvertError::MethodOfGenericType);
+                FnKind::Method { ref impl_for, .. } | FnKind::TraitMethod { ref impl_for, .. } => {
+                    if self.is_generic_type(impl_for) {
+                        set_ignore_reason(ConvertError::MethodOfGenericType);
+                    }
+                    if self.types_in_anonymous_namespace.contains(impl_for) {
+                        set_ignore_reason(ConvertError::MethodInAnonymousNamespace);
+                    }
                 }
                 _ => {}
             }
