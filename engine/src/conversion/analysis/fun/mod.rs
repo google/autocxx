@@ -811,7 +811,7 @@ impl<'a> FnAnalyzer<'a> {
                 }
                 rust_name = predetermined_rust_name
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
-                let error_context = error_context_for_method(&self_ty, &rust_name);
+                let error_context = self.error_context_for_method(&self_ty, &rust_name);
 
                 // If this is 'None', then something weird is going on. We'll check for that
                 // later when we have enough context to generate useful errors.
@@ -874,7 +874,7 @@ impl<'a> FnAnalyzer<'a> {
             } else if matches!(fun.special_member, Some(SpecialMemberKind::Destructor)) {
                 rust_name = predetermined_rust_name
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
-                let error_context = error_context_for_method(&self_ty, &rust_name);
+                let error_context = self.error_context_for_method(&self_ty, &rust_name);
                 let ty = Type::Path(self_ty.to_type_path());
                 (
                     FnKind::TraitMethod {
@@ -933,7 +933,7 @@ impl<'a> FnAnalyzer<'a> {
                 // Disambiguate overloads.
                 let rust_name = predetermined_rust_name
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
-                let error_context = error_context_for_method(&self_ty, &rust_name);
+                let error_context = self.error_context_for_method(&self_ty, &rust_name);
                 (
                     FnKind::Method {
                         impl_for: self_ty,
@@ -1361,6 +1361,19 @@ impl<'a> FnAnalyzer<'a> {
         };
         let name = ApiName::new_with_cpp_name(ns, cxxbridge_name, cpp_name);
         (analysis, name)
+    }
+
+    fn error_context_for_method(&self, self_ty: &QualifiedName, rust_name: &str) -> ErrorContext {
+        if self.is_generic_type(self_ty) {
+            // A 'method' error context would end up in an
+            //   impl A {
+            //      fn error_thingy
+            //   }
+            // block. We can't impl A if it would need to be impl A<B>
+            ErrorContext::new_for_item(make_ident(rust_name))
+        } else {
+            ErrorContext::new_for_method(self_ty.get_final_ident(), make_ident(rust_name))
+        }
     }
 
     /// Applies a specific `force_rust_conversion` to the parameter at index
@@ -2032,10 +2045,6 @@ fn constructor_with_suffix<'a>(rust_name: &'a str, nested_type_ident: &str) -> O
             None
         }
     })
-}
-
-fn error_context_for_method(self_ty: &QualifiedName, rust_name: &str) -> ErrorContext {
-    ErrorContext::new_for_method(self_ty.get_final_ident(), make_ident(rust_name))
 }
 
 impl Api<FnPhase> {
