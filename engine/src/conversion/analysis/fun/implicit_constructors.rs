@@ -192,9 +192,13 @@ pub(super) fn find_constructors_present(
     for api in depth_first(apis.iter()) {
         if let Api::Struct {
             name,
-            analysis: PodAnalysis {
-                bases, field_info, ..
-            },
+            analysis:
+                PodAnalysis {
+                    bases,
+                    field_info,
+                    is_generic: false,
+                    ..
+                },
             details,
             ..
         } = api
