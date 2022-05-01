@@ -119,6 +119,10 @@ pub enum ConvertError {
     GenericsWithinVector,
     #[error("This typedef takes generic parameters, not yet supported by autocxx.")]
     TypedefTakesGenericParameters,
+    #[error("This method belonged to an item in an anonymous namespace, not currently supported.")]
+    MethodInAnonymousNamespace,
+    #[error("We're unable to make a concrete version of this template, because we found an error handling the template.")]
+    ConcreteVersionOfIgnoredTemplate,
 }
 
 /// Ensures that error contexts are always created using the constructors in this

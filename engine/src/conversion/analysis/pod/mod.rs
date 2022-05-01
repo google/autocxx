@@ -46,6 +46,7 @@ pub(crate) struct PodAnalysis {
     pub(crate) field_deps: HashSet<QualifiedName>,
     pub(crate) field_info: Vec<FieldInfo>,
     pub(crate) is_generic: bool,
+    pub(crate) in_anonymous_namespace: bool,
 }
 
 pub(crate) struct PodPhase;
@@ -179,6 +180,10 @@ fn analyze_struct(
         .cloned()
         .collect();
     let is_generic = !details.item.generics.params.is_empty();
+    let in_anonymous_namespace = name
+        .name
+        .ns_segment_iter()
+        .any(|ns| ns.starts_with("_bindgen_mod"));
     Ok(Box::new(std::iter::once(Api::Struct {
         name,
         details,
@@ -189,6 +194,7 @@ fn analyze_struct(
             field_deps,
             field_info,
             is_generic,
+            in_anonymous_namespace,
         },
     })))
 }

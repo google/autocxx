@@ -502,19 +502,30 @@ impl<'a> RsCodeGenerator<'a> {
                 ..Default::default()
             },
             Api::Struct {
-                details, analysis, ..
+                details,
+                analysis:
+                    PodAndDepAnalysis {
+                        pod:
+                            PodAnalysis {
+                                is_generic, kind, ..
+                            },
+                        constructors,
+                        ..
+                    },
+                ..
             } => {
                 let doc_attrs = get_doc_attrs(&details.item.attrs);
                 let layout = details.layout.clone();
                 self.generate_type(
                     &name,
                     id,
-                    analysis.pod.kind,
-                    analysis.constructors.move_constructor,
-                    analysis.constructors.destructor,
+                    kind,
+                    constructors.move_constructor,
+                    constructors.destructor,
                     || Some((Item::Struct(details.item), doc_attrs)),
                     associated_methods,
                     layout,
+                    is_generic,
                 )
             }
             Api::Enum { item, .. } => {
@@ -528,6 +539,7 @@ impl<'a> RsCodeGenerator<'a> {
                     || Some((Item::Enum(item), doc_attrs)),
                     associated_methods,
                     None,
+                    false,
                 )
             }
             Api::ForwardDeclaration { .. }
@@ -541,6 +553,7 @@ impl<'a> RsCodeGenerator<'a> {
                 || None,
                 associated_methods,
                 None,
+                false,
             ),
             Api::CType { .. } => RsCodegenResult {
                 extern_c_mod_items: vec![ForeignItem::Verbatim(quote! {
@@ -832,6 +845,7 @@ impl<'a> RsCodeGenerator<'a> {
         item_creator: F,
         associated_methods: &HashMap<QualifiedName, Vec<SuperclassMethod>>,
         layout: Option<Layout>,
+        is_generic: bool,
     ) -> RsCodegenResult
     where
         F: FnOnce() -> Option<(Item, Vec<Attribute>)>,
@@ -878,25 +892,43 @@ impl<'a> RsCodeGenerator<'a> {
                 }
                 bindgen_mod_items.push(item);
 
-                RsCodegenResult {
-                    global_items: self.generate_extern_type_impl(type_kind, name),
-                    bridge_items: create_impl_items(&id, movable, destroyable, self.config),
-                    extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, doc_attrs)],
-                    bindgen_mod_items,
-                    materializations,
-                    ..Default::default()
+                if is_generic {
+                    // Still generate the type as emitted by bindgen,
+                    // but don't attempt to tell cxx about it
+                    RsCodegenResult {
+                        bindgen_mod_items,
+                        materializations,
+                        ..Default::default()
+                    }
+                } else {
+                    RsCodegenResult {
+                        global_items: self.generate_extern_type_impl(type_kind, name),
+                        bridge_items: create_impl_items(&id, movable, destroyable, self.config),
+                        extern_c_mod_items: vec![
+                            self.generate_cxxbridge_type(name, true, doc_attrs)
+                        ],
+                        bindgen_mod_items,
+                        materializations,
+                        ..Default::default()
+                    }
                 }
             }
             TypeKind::Abstract => {
-                // Feed cxx "type T;"
-                // We MUST do this because otherwise cxx assumes this can be
-                // instantiated using UniquePtr etc.
-                bindgen_mod_items.push(Item::Use(parse_quote! { pub use cxxbridge::#id; }));
-                RsCodegenResult {
-                    extern_c_mod_items: vec![self.generate_cxxbridge_type(name, false, doc_attrs)],
-                    bindgen_mod_items,
-                    materializations,
-                    ..Default::default()
+                if is_generic {
+                    RsCodegenResult::default()
+                } else {
+                    // Feed cxx "type T;"
+                    // We MUST do this because otherwise cxx assumes this can be
+                    // instantiated using UniquePtr etc.
+                    bindgen_mod_items.push(Item::Use(parse_quote! { pub use cxxbridge::#id; }));
+                    RsCodegenResult {
+                        extern_c_mod_items: vec![
+                            self.generate_cxxbridge_type(name, false, doc_attrs)
+                        ],
+                        bindgen_mod_items,
+                        materializations,
+                        ..Default::default()
+                    }
                 }
             }
         }
