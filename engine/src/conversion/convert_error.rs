@@ -123,6 +123,8 @@ pub enum ConvertError {
     MethodInAnonymousNamespace,
     #[error("We're unable to make a concrete version of this template, because we found an error handling the template.")]
     ConcreteVersionOfIgnoredTemplate,
+    #[error("bindgen decided to call this type _bindgen_ty_N because it couldn't deduce the correct name for it. That means we can't generate C++ bindings to it.")]
+    BindgenTy,
 }
 
 /// Ensures that error contexts are always created using the constructors in this

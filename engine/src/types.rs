@@ -227,6 +227,8 @@ pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), ConvertError> {
     validate_ident_ok_for_rust(id)?;
     if id.contains("__") {
         Err(ConvertError::TooManyUnderscores)
+    } else if id.starts_with("_bindgen_ty_") {
+        Err(ConvertError::BindgenTy)
     } else {
         Ok(())
     }

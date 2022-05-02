@@ -11127,7 +11127,6 @@ fn test_issue_1089() {
     );
 }
 
-
 #[test]
 fn test_pass_rust_str_and_return_struct() {
     let cxx = indoc! {"
