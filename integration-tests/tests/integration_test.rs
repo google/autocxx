@@ -11098,6 +11098,37 @@ fn test_issue_1087c() {
 }
 
 #[test]
+fn test_issue_1089() {
+    let hdr = indoc! {"
+        namespace a {
+        template <typename c, c> struct d;
+        template <bool, typename, typename> struct ab;
+        inline namespace {
+        namespace ac {
+        template <typename, template <typename> class, typename> struct bh;
+        template <template <typename> class ad, typename... bi>
+        using bj = bh<void, ad, bi...>;
+        template <typename ad> using bk = typename ad::b;
+        template <typename> struct bm;
+        } // namespace ac
+        template <typename ad>
+        struct b : ab<ac::bj<ac::bk, ad>::e, ac::bm<ad>, d<bool, ad ::e>>::bg {};
+        } // namespace
+        } // namespace a
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_all!() },
+        None,
+        None,
+        None,
+    );
+}
+
+
+#[test]
 fn test_pass_rust_str_and_return_struct() {
     let cxx = indoc! {"
         A take_str_return_struct(rust::Str) {
