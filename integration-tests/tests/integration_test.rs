@@ -16,8 +16,8 @@ use crate::{
     },
 };
 use autocxx_integration_tests::{
-    directives_from_lists, do_run_test, do_run_test_manual, run_test, run_test_ex,
-    run_test_expect_fail, run_test_expect_fail_ex, TestError,
+    directives_from_lists, do_run_test, do_run_test_manual, run_generate_all_test, run_test,
+    run_test_ex, run_test_expect_fail, run_test_expect_fail_ex, TestError,
 };
 use indoc::indoc;
 use itertools::Itertools;
@@ -3541,20 +3541,7 @@ fn test_remove_cv_t_pathological() {
         template <class _Ty>
         using _Remove_cvref_t = remove_cv_t<remove_reference_t<_Ty>>;
     "};
-
-    let rs = quote! {};
-
-    run_test_ex(
-        "",
-        hdr,
-        rs,
-        quote! {
-            generate_all!()
-        },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -5044,15 +5031,7 @@ fn test_double_underscores_fn_namespace() {
         inline void a() {}
     };
     "};
-    run_test_ex(
-        "",
-        hdr,
-        quote! {},
-        quote! { generate_all!() },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -6232,20 +6211,7 @@ fn test_bitset() {
 
         typedef bitset<1> mybitset;
     "};
-
-    let rs = quote! {};
-
-    run_test_ex(
-        "",
-        hdr,
-        rs,
-        quote! {
-            generate_all!()
-        },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -6433,18 +6399,7 @@ fn test_issue_470_492() {
             typedef std::a<b<d>::c, int, int> e;
         };
     "};
-    let rs = quote! {};
-    run_test_ex(
-        "",
-        hdr,
-        rs,
-        quote! {
-            generate_all!()
-        },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -6505,18 +6460,7 @@ fn test_std_thing() {
         }
         typedef char daft;
     "};
-    let rs = quote! {};
-    run_test_ex(
-        "",
-        hdr,
-        rs,
-        quote! {
-            generate_all!()
-        },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -10969,15 +10913,7 @@ fn test_typedef_to_enum() {
           d e();
         };
     "};
-    run_test_ex(
-        "",
-        hdr,
-        quote! {},
-        quote! { generate_all!() },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -10992,15 +10928,7 @@ fn test_typedef_to_ns_enum() {
         };
         } // namespace
     "};
-    run_test_ex(
-        "",
-        hdr,
-        quote! {},
-        quote! { generate_all!() },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -11059,15 +10987,7 @@ fn test_array_trouble1() {
         };
         } // namespace a
     "};
-    run_test_ex(
-        "",
-        hdr,
-        quote! {},
-        quote! { generate_all!() },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -11088,15 +11008,7 @@ fn test_issue_1087a() {
           _CharT b;
         };
     "};
-    run_test_ex(
-        "",
-        hdr,
-        quote! {},
-        quote! { generate_all!() },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -11107,15 +11019,7 @@ fn test_issue_1087b() {
           b c;
         };
     "};
-    run_test_ex(
-        "",
-        hdr,
-        quote! {},
-        quote! { generate_all!() },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -11130,15 +11034,7 @@ fn test_issue_1087c() {
         }
         }
     "};
-    run_test_ex(
-        "",
-        hdr,
-        quote! {},
-        quote! { generate_all!() },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
 }
 
 #[test]
@@ -11160,15 +11056,170 @@ fn test_issue_1089() {
         } // namespace
         } // namespace a
     "};
-    run_test_ex(
-        "",
-        hdr,
-        quote! {},
-        quote! { generate_all!() },
-        None,
-        None,
-        None,
-    );
+    run_generate_all_test(hdr);
+}
+
+/// The problem here is that 'g' doesn't get annotated with
+/// the unused_template semantic attribute.
+/// This seems to be because both g and f have template
+/// parameters, so they're all "used", but effectively cancel
+/// out and thus bindgen generates
+///   pub type g = root::b::f;
+/// So, what we should do here is spot any typedef depending
+/// on a template which takes template args, and reject that too.
+/// Probably.
+#[test]
+fn test_issue_1094() {
+    let hdr = indoc! {"
+        namespace {
+        typedef int a;
+        }
+        namespace b {
+        template <typename> struct c;
+        template <typename d, d e> using f = __make_integer_seq<c, d, e>;
+        template <a e> using g = f<a, e>;
+        } // namespace b
+    "};
+    run_generate_all_test(hdr);
+}
+
+#[test]
+fn test_issue_1096a() {
+    let hdr = indoc! {"
+        namespace a {
+        class b {
+          class c;
+        };
+        } // namespace a
+    "};
+    run_generate_all_test(hdr);
+}
+
+#[test]
+fn test_issue_1096b() {
+    let hdr = indoc! {"
+        namespace a {
+        class b {
+        public:
+          class c;
+        };
+        } // namespace a
+    "};
+    run_generate_all_test(hdr);
+}
+
+#[test]
+fn test_issue_1096c() {
+    let hdr = indoc! {"
+        namespace a {
+        class b {
+        public:
+          class c {
+          public:
+            int d;
+          };
+        };
+        } // namespace a
+    "};
+    run_generate_all_test(hdr);
+}
+
+#[test]
+fn test_issue_1096d() {
+    let hdr = indoc! {"
+        namespace a {
+        class b {
+        private:
+          class c {
+          public:
+            int d;
+          };
+        };
+        } // namespace a
+    "};
+    run_generate_all_test(hdr);
+}
+
+#[test]
+fn test_issue_1096e() {
+    let hdr = indoc! {"
+        namespace a {
+        class b {
+        private:
+          enum c {
+              D,
+          };
+        };
+        } // namespace a
+    "};
+    run_generate_all_test(hdr);
+}
+
+/// Unclear why minimization resulted in this particular test case.
+#[test]
+fn test_issue_1097() {
+    let hdr = indoc! {"
+        namespace rust {
+        inline namespace a {
+        class Str {
+        public:
+          ~Str();
+        };
+        } // namespace a
+        } // namespace rust
+    "};
+    run_generate_all_test(hdr);
+}
+
+#[test]
+fn test_issue_1098a() {
+    let hdr = indoc! {"
+        namespace {
+        namespace {
+        template <typename _CharT> class a {
+          typedef _CharT b;
+          b c;
+        };
+        template <typename _CharT> class d : a<_CharT> {};
+        } // namespace
+        } // namespace
+    "};
+    run_generate_all_test(hdr);
+}
+
+/// Need to spot structs like this:
+/// pub struct d<_CharT> {
+///  _base: root::a<_CharT>,
+/// }
+/// and not create concrete types where the inner type is something from
+/// the outer context.
+#[test]
+fn test_issue_1098b() {
+    let hdr = indoc! {"
+        template <typename _CharT> class a {
+          typedef _CharT b;
+          b c;
+        };
+        template <typename _CharT> class d : a<_CharT> {};
+    "};
+    run_generate_all_test(hdr);
+}
+
+/// Need to reject typedefs within anonymous namespaces.
+#[test]
+fn test_issue_1098c() {
+    let hdr = indoc! {"
+        namespace {
+        namespace {
+        struct A {
+            int a;
+        };
+        typedef A B;
+        } // namespace
+        } // namespace
+        inline void take_b(const B& b) {}
+    "};
+    run_generate_all_test(hdr);
 }
 
 #[test]

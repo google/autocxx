@@ -258,6 +258,18 @@ pub fn run_test_ex(
     .unwrap()
 }
 
+pub fn run_generate_all_test(header_code: &str) {
+    run_test_ex(
+        "",
+        header_code,
+        quote! {},
+        quote! { generate_all!() },
+        None,
+        None,
+        None,
+    );
+}
+
 pub fn run_test_expect_fail(
     cxx_code: &str,
     header_code: &str,
