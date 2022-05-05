@@ -11085,7 +11085,6 @@ fn test_issue_1094() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/pull/1096
 fn test_issue_1096a() {
     let hdr = indoc! {"
         namespace a {
@@ -11098,7 +11097,6 @@ fn test_issue_1096a() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/pull/1096
 fn test_issue_1096b() {
     let hdr = indoc! {"
         namespace a {
@@ -11144,7 +11142,6 @@ fn test_issue_1096d() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/pull/1096
 fn test_issue_1096e() {
     let hdr = indoc! {"
         namespace a {

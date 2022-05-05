@@ -18,7 +18,7 @@ use syn::{ItemEnum, ItemStruct, Type, Visibility};
 use crate::{
     conversion::{
         analysis::type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
-        api::{AnalysisPhase, Api, ApiName, CppVisibility, NullPhase, StructDetails, TypeKind},
+        api::{AnalysisPhase, Api, ApiName, NullPhase, StructDetails, TypeKind},
         apivec::ApiVec,
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
@@ -134,12 +134,6 @@ fn analyze_struct(
     config: &IncludeCppConfig,
 ) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
     let id = name.name.get_final_ident();
-    if details.vis != CppVisibility::Public {
-        return Err(ConvertErrorWithContext(
-            ConvertError::NonPublicNestedType,
-            Some(ErrorContext::new_for_item(id)),
-        ));
-    }
     let metadata = BindgenSemanticAttributes::new_retaining_others(&mut details.item.attrs);
     metadata.check_for_fatal_attrs(&id)?;
     let bases = get_bases(&details.item);
