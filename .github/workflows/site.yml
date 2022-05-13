@@ -27,9 +27,7 @@ jobs:
         run: cargo install mdbook-linkcheck
     
       - name: Install mdbook-mermaid
-        run: |
-          curl -LSfs https://japaric.github.io/trust/install.sh | \
-            sh -s -- --git badboy/mdbook-mermaid
+        run: cargo install mdbook-mermaid
     
       - run: mdbook build
         working-directory: book
