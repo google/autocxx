@@ -1012,7 +1012,7 @@ impl<'a> RsCodeGenerator<'a> {
         rust_path: TypePath,
         ns_depth: usize,
     ) -> RsCodegenResult {
-        let id = name.get_final_ident();
+        let id = name.type_path_from_root();
         let super_duper = std::iter::repeat(make_ident("super"));
         let supers = super_duper.take(ns_depth + 2);
         let use_statement = parse_quote! {
