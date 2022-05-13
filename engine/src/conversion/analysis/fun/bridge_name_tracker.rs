@@ -69,7 +69,9 @@ impl BridgeNameTracker {
     /// by means of cxx_name or rust_name attributes. In extreme cases it
     /// may even allow us to remove whole impl blocks. So we may wish to try
     /// harder to find better names in future instead of always prepending
-    /// the namespace.
+    /// the namespace. Unfortunately we currently can't do this because some
+    /// function names (such as `new`) show up across multiple modules, which
+    /// means we always need to attach the type name to it.
     pub(crate) fn get_unique_cxx_bridge_name(
         &mut self,
         type_name: Option<&str>,
@@ -81,15 +83,6 @@ impl BridgeNameTracker {
         } else {
             found_name
         };
-        let count = self
-            .next_cxx_bridge_name_for_prefix
-            .entry(found_name.to_string())
-            .or_default();
-        if *count == 0 {
-            // Oh, good, we can use this function name as-is.
-            *count += 1;
-            return found_name.to_string();
-        }
         let prefix = ns
             .iter()
             .cloned()

@@ -11185,6 +11185,45 @@ fn test_issue_1065b() {
     run_test("", hdr, rs, &["RenderFrameHost"], &[]);
 }
 
+#[test]
+/// Tests wrapping multiple types in different include_cpp blocks that need
+/// new wrappers. We used to have a bug with not giving the wrappers for these
+/// unique names.
+fn test_multiple_new_wrappers() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct A { A() {} };
+        struct C { C() {} };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        pub mod a {
+            autocxx::include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                name!(ffi_a)
+                generate!("A")
+            }
+            pub use ffi_a::A;
+        }
+        pub mod c {
+            autocxx::include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                name!(ffi_c)
+                generate!("C")
+            }
+            pub use ffi_c::C;
+        }
+        fn main() {
+            use autocxx::prelude::*;
+            crate::a::A::new().within_unique_ptr();
+            crate::c::C::new().within_unique_ptr();
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
