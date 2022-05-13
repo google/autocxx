@@ -26,7 +26,7 @@ resolver = "2"
 
 [dependencies]
 autocxx-macro = { path="macro", version="0.22.0" }
-cxx = "1.0.54" # ... also needed because expansion of type_id refers to ::cxx
+cxx = "1.0.67" # ... also needed because expansion of type_id refers to ::cxx
 aquamarine = "0.1" # docs
 moveit = { version = "0.5", features = [ "cxx" ] }
 
