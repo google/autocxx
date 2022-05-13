@@ -11185,6 +11185,20 @@ fn test_issue_1065b() {
     run_test("", hdr, rs, &["RenderFrameHost"], &[]);
 }
 
+#[test]
+fn test_issue_1081() {
+    let hdr = indoc! {"
+        namespace libtorrent {
+        char version;
+        }
+        namespace libtorrent {
+        struct session;
+        }
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["libtorrent::session"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
