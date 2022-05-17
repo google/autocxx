@@ -13,7 +13,7 @@ authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2021"
 
 [dependencies]
-cxx = "1.0.54"
+cxx = "1.0.68"
 autocxx = { path = "../..", version="0.17.2" }
 
 [build-dependencies]
