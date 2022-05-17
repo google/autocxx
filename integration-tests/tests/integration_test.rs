@@ -6738,6 +6738,50 @@ fn test_extern_cpp_type_two_include_cpp() {
 }
 
 #[test]
+/// Tests extern_cpp_type with a type inside a namespace.
+fn test_extern_cpp_type_namespace() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        namespace b {
+        struct B {
+            B() {}
+        };
+        }  // namespace b
+        struct A {
+            A() {}
+            b::B make_b() { return b::B(); }
+        };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        pub mod b {
+            autocxx::include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                name!(ffi_b)
+                generate_pod!("b::B")
+            }
+            pub use ffi_b::b::B;
+        }
+        pub mod a {
+            autocxx::include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                name!(ffi_a)
+                generate_pod!("A")
+                extern_cpp_type!("b::B", crate::b::B)
+            }
+            pub use ffi_a::A;
+        }
+        fn main() {
+            use autocxx::prelude::*;
+            let _ = crate::a::A::new().within_unique_ptr().as_mut().unwrap().make_b();
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
 #[ignore] // because we currently require UniquePtrTarget which this can't implement
 fn test_extern_cpp_type_manual() {
     let hdr = indoc! {"
@@ -11183,6 +11227,20 @@ fn test_issue_1065b() {
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["RenderFrameHost"], &[]);
+}
+
+#[test]
+fn test_issue_1081() {
+    let hdr = indoc! {"
+        namespace libtorrent {
+        char version;
+        }
+        namespace libtorrent {
+        struct session;
+        }
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["libtorrent::session"], &[]);
 }
 
 // Yet to test:

@@ -37,5 +37,5 @@ autocxx-integration-tests = { path = "../../integration-tests", version="=0.22.0
 # This is necessary for building the projects created
 # by the trybuild test system...
 autocxx = { path="../.." }
-cxx = "1.0.54"
+cxx = "1.0.68"
 itertools = "0.10.3"
