@@ -125,6 +125,8 @@ pub enum ConvertError {
     ConcreteVersionOfIgnoredTemplate,
     #[error("bindgen decided to call this type _bindgen_ty_N because it couldn't deduce the correct name for it. That means we can't generate C++ bindings to it.")]
     BindgenTy,
+    #[error("This type refers to a generic type parameter of an outer type, which is not yet supported.")]
+    ReferringToGenericTypeParam,
 }
 
 /// Ensures that error contexts are always created using the constructors in this

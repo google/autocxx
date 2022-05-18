@@ -91,6 +91,7 @@ pub(crate) enum PointerTreatment {
 /// from [TypeConverter] _might_ be used in the [cxx::bridge].
 pub(crate) enum TypeConversionContext {
     WithinReference,
+    WithinStructField { struct_type_params: HashSet<Ident> },
     WithinContainer,
     OuterType { pointer_treatment: PointerTreatment },
 }
@@ -98,12 +99,24 @@ pub(crate) enum TypeConversionContext {
 impl TypeConversionContext {
     fn pointer_treatment(&self) -> PointerTreatment {
         match self {
-            Self::WithinReference | Self::WithinContainer => PointerTreatment::Pointer,
+            Self::WithinReference | Self::WithinContainer | Self::WithinStructField { .. } => {
+                PointerTreatment::Pointer
+            }
             Self::OuterType { pointer_treatment } => *pointer_treatment,
         }
     }
     fn allow_instantiation_of_forward_declaration(&self) -> bool {
         matches!(self, Self::WithinReference)
+    }
+    fn allowed_generic_type(&self, ident: &Ident) -> bool {
+        match self {
+            Self::WithinStructField { struct_type_params }
+                if struct_type_params.contains(ident) =>
+            {
+                false
+            }
+            _ => true,
+        }
     }
 }
 
@@ -156,7 +169,7 @@ impl<'a> TypeConverter<'a> {
     ) -> Result<Annotated<Type>, ConvertError> {
         let result = match ty {
             Type::Path(p) => {
-                let newp = self.convert_type_path(p, ns)?;
+                let newp = self.convert_type_path(p, ns, ctx)?;
                 if let Type::Path(newpp) = &newp.ty {
                     let qn = QualifiedName::from_type_path(newpp);
                     if !ctx.allow_instantiation_of_forward_declaration()
@@ -216,6 +229,7 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         mut typ: TypePath,
         ns: &Namespace,
+        ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertError> {
         // First, qualify any unqualified paths.
         if typ.path.segments.iter().next().unwrap().ident != "root" {
@@ -323,7 +337,24 @@ impl<'a> TypeConverter<'a> {
                 // Oh poop. It's a generic type which cxx won't be able to handle.
                 // We'll have to come up with a concrete type in both the cxx::bridge (in Rust)
                 // and a corresponding typedef in C++.
-                // Let's first see if this is a concrete version of a templated type
+                // First let's see if this actually depends on a generic type
+                // param of the surrounding struct.
+                for seg in &typ.path.segments {
+                    if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                        for arg in args.args.iter() {
+                            if let GenericArgument::Type(Type::Path(typ)) = arg {
+                                if let Some(seg) = typ.path.segments.last() {
+                                    if typ.path.segments.len() == 1
+                                        && !ctx.allowed_generic_type(&seg.ident)
+                                    {
+                                        return Err(ConvertError::ReferringToGenericTypeParam);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Let's second see if this is a concrete version of a templated type
                 // which we already rejected. Some, but possibly not all, of the reasons
                 // for its rejection would also apply to any concrete types we
                 // make. Err on the side of caution. In future we may be able to relax
