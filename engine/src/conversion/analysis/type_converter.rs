@@ -393,6 +393,14 @@ impl<'a> TypeConverter<'a> {
                     if encountered.contains(&new_tn) {
                         return Err(ConvertError::InfinitelyRecursiveTypedef(tn.clone()));
                     }
+                    if typ
+                        .path
+                        .segments
+                        .iter()
+                        .any(|seg| seg.ident.to_string().starts_with("_bindgen_mod"))
+                    {
+                        return Err(ConvertError::TypedefToTypeInAnonymousNamespace);
+                    }
                     encountered.insert(new_tn.clone());
                     tn = new_tn;
                 }
