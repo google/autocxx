@@ -11177,7 +11177,6 @@ fn test_issue_1097() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/pull/1098
 fn test_issue_1098a() {
     let hdr = indoc! {"
         namespace {
@@ -11200,7 +11199,6 @@ fn test_issue_1098a() {
 /// and not create concrete types where the inner type is something from
 /// the outer context.
 #[test]
-#[ignore] // https://github.com/google/autocxx/pull/1098
 fn test_issue_1098b() {
     let hdr = indoc! {"
         template <typename _CharT> class a {

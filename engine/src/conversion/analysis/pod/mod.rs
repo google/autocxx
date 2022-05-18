@@ -208,9 +208,14 @@ fn get_struct_field_types(
     extra_apis: &mut ApiVec<NullPhase>,
 ) -> Vec<ConvertError> {
     let mut convert_errors = Vec::new();
+    let struct_type_params = s
+        .generics
+        .type_params()
+        .map(|tp| tp.ident.clone())
+        .collect();
+    let type_conversion_context = TypeConversionContext::WithinStructField { struct_type_params };
     for f in &s.fields {
-        let annotated =
-            type_converter.convert_type(f.ty.clone(), ns, &TypeConversionContext::WithinReference);
+        let annotated = type_converter.convert_type(f.ty.clone(), ns, &type_conversion_context);
         match annotated {
             Ok(mut r) => {
                 extra_apis.append(&mut r.extra_apis);

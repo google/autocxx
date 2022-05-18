@@ -127,6 +127,8 @@ pub enum ConvertError {
     BindgenTy,
     #[error("This is a typedef to a type in an anonymous namespace, not currently supported.")]
     TypedefToTypeInAnonymousNamespace,
+    #[error("This type refers to a generic type parameter of an outer type, which is not yet supported.")]
+    ReferringToGenericTypeParam,
 }
 
 /// Ensures that error contexts are always created using the constructors in this
