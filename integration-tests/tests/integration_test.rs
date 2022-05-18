@@ -11069,6 +11069,7 @@ fn test_issue_1089() {
 /// on a template which takes template args, and reject that too.
 /// Probably.
 #[test]
+#[ignore] // https://github.com/google/autocxx/pull/1094
 fn test_issue_1094() {
     let hdr = indoc! {"
         namespace {
@@ -11084,6 +11085,7 @@ fn test_issue_1094() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/pull/1096
 fn test_issue_1096a() {
     let hdr = indoc! {"
         namespace a {
@@ -11096,6 +11098,7 @@ fn test_issue_1096a() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/pull/1096
 fn test_issue_1096b() {
     let hdr = indoc! {"
         namespace a {
@@ -11141,6 +11144,7 @@ fn test_issue_1096d() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/pull/1096
 fn test_issue_1096e() {
     let hdr = indoc! {"
         namespace a {
@@ -11157,6 +11161,7 @@ fn test_issue_1096e() {
 
 /// Unclear why minimization resulted in this particular test case.
 #[test]
+#[ignore] // https://github.com/google/autocxx/pull/1097
 fn test_issue_1097() {
     let hdr = indoc! {"
         namespace rust {
@@ -11172,6 +11177,7 @@ fn test_issue_1097() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/pull/1098
 fn test_issue_1098a() {
     let hdr = indoc! {"
         namespace {
@@ -11194,6 +11200,7 @@ fn test_issue_1098a() {
 /// and not create concrete types where the inner type is something from
 /// the outer context.
 #[test]
+#[ignore] // https://github.com/google/autocxx/pull/1098
 fn test_issue_1098b() {
     let hdr = indoc! {"
         template <typename _CharT> class a {
@@ -11207,6 +11214,7 @@ fn test_issue_1098b() {
 
 /// Need to reject typedefs within anonymous namespaces.
 #[test]
+#[ignore] // https://github.com/google/autocxx/pull/1098
 fn test_issue_1098c() {
     let hdr = indoc! {"
         namespace {
