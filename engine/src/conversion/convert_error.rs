@@ -127,6 +127,8 @@ pub enum ConvertError {
     BindgenTy,
     #[error("This type refers to a generic type parameter of an outer type, which is not yet supported.")]
     ReferringToGenericTypeParam,
+    #[error("This forward declaration was nested within another struct/class. autocxx is unable to represent inner types if they are forward declarations.")]
+    ForwardDeclaredNestedType,
 }
 
 /// Ensures that error contexts are always created using the constructors in this
