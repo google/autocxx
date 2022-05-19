@@ -193,7 +193,8 @@ fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
             .arg("--cxxgen-h-path")
             .arg("bar/")
             .arg("--generate-exact")
-            .arg("3");
+            .arg("3")
+            .arg("--fix-rs-include-name");
     })?;
     assert_contains(&tmp_dir, "autocxxgen0.h", "foo/cxx.h");
     // Currently we don't test cxxgen-h-path because we build the demo code
@@ -208,6 +209,7 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     base_test(&tmp_dir, RsGenMode::Single, |cmd| {
         cmd.arg("--generate-exact")
             .arg("2")
+            .arg("--fix-rs-include-name")
             .arg("--depfile")
             .arg(depfile);
     })?;
@@ -217,7 +219,7 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     assert_contentful(&tmp_dir, "autocxxgen0.h");
     assert_not_contentful(&tmp_dir, "gen1.h");
     assert_not_contentful(&tmp_dir, "autocxxgen1.h");
-    assert_contentful(&tmp_dir, "autocxx-ffi-default-gen.rs");
+    assert_contentful(&tmp_dir, "gen0.include.rs");
     assert_contentful(&tmp_dir, "test.d");
     File::create(tmp_dir.path().join("cxx.h"))
         .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
