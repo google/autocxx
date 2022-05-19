@@ -11207,9 +11207,7 @@ fn test_issue_1098b() {
     run_generate_all_test(hdr);
 }
 
-/// Need to reject typedefs within anonymous namespaces.
 #[test]
-#[ignore] // https://github.com/google/autocxx/pull/1098
 fn test_issue_1098c() {
     let hdr = indoc! {"
         namespace {
@@ -11220,7 +11218,7 @@ fn test_issue_1098c() {
         typedef A B;
         } // namespace
         } // namespace
-        inline void take_b(const B& b) {}
+        inline void take_b(const B&) {}
     "};
     run_generate_all_test(hdr);
 }
