@@ -209,7 +209,7 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 ///   constructors so you need to call one explicitly (or if there's a single
 ///   non-trivial superclass constructor.) autocxx will implement this trait
 ///   for you if there's no ambiguity and FFI functions are safe to call due to
-///   [`autocxx::safety!`] being used.
+///   `autocxx::safety!` being used.
 ///
 /// # How to access your Rust structure from outside
 ///

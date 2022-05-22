@@ -640,7 +640,7 @@ impl<'a> FnAnalyzer<'a> {
                     receiver_mutability,
                     sup,
                     subclass_fn_deps,
-                    &self.unsafe_policy,
+                    self.unsafe_policy,
                 ));
 
                 // Create the trait item for the <superclass>_methods and <superclass>_supers
@@ -658,7 +658,7 @@ impl<'a> FnAnalyzer<'a> {
                         receiver_mutability,
                         sup.clone(),
                         is_pure_virtual,
-                        &self.unsafe_policy,
+                        self.unsafe_policy,
                     ));
                 }
             }
