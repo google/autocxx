@@ -270,7 +270,7 @@ enum TypeConversionSophistication {
 }
 
 pub(crate) struct FnAnalyzer<'a> {
-    unsafe_policy: UnsafePolicy,
+    unsafe_policy: &'a UnsafePolicy,
     extra_apis: ApiVec<NullPhase>,
     type_converter: TypeConverter<'a>,
     bridge_name_tracker: BridgeNameTracker,
@@ -288,7 +288,7 @@ pub(crate) struct FnAnalyzer<'a> {
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(
         apis: ApiVec<PodPhase>,
-        unsafe_policy: UnsafePolicy,
+        unsafe_policy: &'a UnsafePolicy,
         config: &'a IncludeCppConfig,
     ) -> ApiVec<FnPrePhase2> {
         let mut me = Self {
@@ -476,7 +476,9 @@ impl<'a> FnAnalyzer<'a> {
                 UnsafetyNeeded::Always => UnsafetyNeeded::JustBridge,
                 _ => unsafest_param,
             },
-            _ if self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe => UnsafetyNeeded::Always,
+            _ if matches!(self.unsafe_policy, UnsafePolicy::AllFunctionsUnsafe) => {
+                UnsafetyNeeded::Always
+            }
             _ => match unsafest_non_placement_param {
                 UnsafetyNeeded::Always => UnsafetyNeeded::Always,
                 UnsafetyNeeded::JustBridge => match unsafest_param {
@@ -638,6 +640,7 @@ impl<'a> FnAnalyzer<'a> {
                     receiver_mutability,
                     sup,
                     subclass_fn_deps,
+                    &self.unsafe_policy,
                 ));
 
                 // Create the trait item for the <superclass>_methods and <superclass>_supers
@@ -655,6 +658,7 @@ impl<'a> FnAnalyzer<'a> {
                         receiver_mutability,
                         sup.clone(),
                         is_pure_virtual,
+                        &self.unsafe_policy,
                     ));
                 }
             }
