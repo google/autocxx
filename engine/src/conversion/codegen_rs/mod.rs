@@ -723,6 +723,10 @@ impl<'a> RsCodeGenerator<'a> {
         extern_c_mod_items.push(parse_quote! {
             fn #as_mut_id(self: Pin<&mut #cpp_id>) -> Pin<&mut #super_cxxxbridge_id>;
         });
+        let as_unique_ptr_id = make_ident(format!("{}_As_{}_UniquePtr", cpp_id, super_name));
+        extern_c_mod_items.push(parse_quote! {
+            fn #as_unique_ptr_id(u: UniquePtr<#cpp_id>) -> UniquePtr<#super_cxxxbridge_id>;
+        });
         bindgen_mod_items.push(parse_quote! {
             impl AsRef<#super_path> for super::super::super::#id {
                 fn as_ref(&self) -> &cxxbridge::#super_cxxxbridge_id {
@@ -737,6 +741,14 @@ impl<'a> RsCodeGenerator<'a> {
                 pub fn pin_mut(&mut self) -> ::std::pin::Pin<&mut cxxbridge::#super_cxxxbridge_id> {
                     use autocxx::subclass::CppSubclass;
                     self.peer_mut().#as_mut_id()
+                }
+            }
+        });
+        let rs_as_unique_ptr_id = make_ident(format!("as_{}_unique_ptr", super_name));
+        bindgen_mod_items.push(parse_quote! {
+            impl super::super::super::#id {
+                pub fn #rs_as_unique_ptr_id(u: cxx::UniquePtr<#cpp_id>) -> cxx::UniquePtr<cxxbridge::#super_cxxxbridge_id> {
+                    cxxbridge::#as_unique_ptr_id(u)
                 }
             }
         });

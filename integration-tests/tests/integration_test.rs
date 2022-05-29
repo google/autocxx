@@ -8279,6 +8279,74 @@ fn test_pv_subclass_calls() {
 }
 
 #[test]
+fn test_pv_subclass_as_superclass() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <memory>
+
+    class TestObserver {
+    public:
+        TestObserver() {}
+        virtual void a() const = 0;
+        virtual ~TestObserver() {}
+    };
+
+    inline void call_observer(std::unique_ptr<TestObserver> obs) { obs->a(); }
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            use autocxx::subclass::CppSubclass;
+            let obs = MyTestObserver::new_cpp_owned(
+                MyTestObserver::default()
+            );
+            let obs = MyTestObserver::as_TestObserver_unique_ptr(obs);
+            assert!(!Lazy::force(&STATUS).lock().unwrap().dropped);
+            ffi::call_observer(obs);
+            assert!(Lazy::force(&STATUS).lock().unwrap().sub_a_called);
+            assert!(Lazy::force(&STATUS).lock().unwrap().dropped);
+            *Lazy::force(&STATUS).lock().unwrap() = Default::default();
+        },
+        quote! {
+            generate!("call_observer")
+            subclass!("TestObserver",MyTestObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use once_cell::sync::Lazy;
+            use std::sync::Mutex;
+
+            use ffi::TestObserver_methods;
+            #[autocxx::subclass::subclass]
+            #[derive(Default)]
+            pub struct MyTestObserver {
+            }
+            impl TestObserver_methods for MyTestObserver {
+                fn a(&self) {
+                    assert!(!Lazy::force(&STATUS).lock().unwrap().dropped);
+                    Lazy::force(&STATUS).lock().unwrap().sub_a_called = true;
+                }
+            }
+            impl Drop for MyTestObserver {
+                fn drop(&mut self) {
+                    Lazy::force(&STATUS).lock().unwrap().dropped = true;
+                }
+            }
+
+            #[derive(Default)]
+            struct Status {
+                sub_a_called: bool,
+                dropped: bool,
+            }
+
+            static STATUS: Lazy<Mutex<Status>> = Lazy::new(|| Mutex::new(Status::default()));
+        }),
+    );
+}
+
+#[test]
 fn test_cycle_nonpod_simple() {
     let hdr = indoc! {"
     #include <string>
