@@ -17,8 +17,10 @@ include_cpp! {
 fn main() {
     println!("Hello, world! - C++ math should say 12={}", ffi::DoMath(4));
     let mut goat = ffi::Goat::new().within_box();
-    goat.as_mut().add_a_horn();
-    goat.as_mut().add_a_horn();
+    // The next line is, of course, horrible and needs to go.
+    let mut goat = ffi::CppRef(unsafe { std::pin::Pin::into_inner_unchecked(goat.as_ref())  as *const ffi::Goat }, std::marker::PhantomData);
+    goat.add_a_horn();
+    goat.add_a_horn();
     assert_eq!(
         goat.describe().as_ref().unwrap().to_string_lossy(),
         "This goat has 2 horns."

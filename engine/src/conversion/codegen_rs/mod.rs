@@ -135,11 +135,11 @@ fn get_string_items() -> Vec<Item> {
         }),
         Item::Struct(parse_quote! {
             #[repr(transparent)]
-            pub struct CppRef<'a, T>(pub *const T, ::std::marker::PhantomData<&'a T>);
+            pub struct CppRef<'a, T>(pub *const T, pub ::std::marker::PhantomData<&'a T>);
         }),
         Item::Struct(parse_quote! {
             #[repr(transparent)]
-            pub struct CppMutRef<'a, T>(pub *mut T, ::std::marker::PhantomData<&'a T>);
+            pub struct CppMutRef<'a, T>(pub *mut T, pub ::std::marker::PhantomData<&'a T>);
         }),
     ]
     .to_vec()
