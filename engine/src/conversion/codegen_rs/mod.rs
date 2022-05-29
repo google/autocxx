@@ -71,7 +71,7 @@ struct ImplBlockKey {
 /// An entry which needs to go into an `impl` block for a given type.
 struct ImplBlockDetails {
     item: ImplItem,
-    ty: ImplBlockKey,
+    ty: Ident,
 }
 
 struct TraitImplBlockDetails {
@@ -132,14 +132,6 @@ fn get_string_items() -> Vec<Item> {
                     self
                 }
             }
-        }),
-        Item::Struct(parse_quote! {
-            #[repr(transparent)]
-            pub struct CppRef<'a, T>(pub *const T, pub ::std::marker::PhantomData<&'a T>);
-        }),
-        Item::Struct(parse_quote! {
-            #[repr(transparent)]
-            pub struct CppMutRef<'a, T>(pub *mut T, pub ::std::marker::PhantomData<&'a T>);
         }),
     ]
     .to_vec()
@@ -389,7 +381,7 @@ impl<'a> RsCodeGenerator<'a> {
                 #[allow(unused_imports)]
                 use self::
                     #(#supers)::*
-                ::{ToCppString, CppRef};
+                ::{ToCppString};
             }));
         }
         let supers = super_duper.take(ns.depth() + 1);
@@ -425,10 +417,8 @@ impl<'a> RsCodeGenerator<'a> {
             }
         }
         for (ty, entries) in impl_entries_by_type.into_iter() {
-            let lt = ty.lifetime.map(|lt| quote! { < #lt > });
-            let ty = ty.ty;
             output_items.push(Item::Impl(parse_quote! {
-                impl #lt #ty {
+                impl #ty {
                     #(#entries)*
                 }
             }))
@@ -1092,10 +1082,7 @@ impl<'a> RsCodeGenerator<'a> {
                         fn #method(_uhoh: autocxx::BindingGenerationFailure) {
                         }
                     },
-                    ty: ImplBlockKey {
-                        ty: parse_quote! { #self_ty },
-                        lifetime: None,
-                    },
+                    ty: self_ty,
                 })),
                 None,
                 None,

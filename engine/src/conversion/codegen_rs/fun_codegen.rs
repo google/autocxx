@@ -23,7 +23,7 @@ use super::{
     function_wrapper_rs::RustParamConversion,
     maybe_unsafes_to_tokens,
     unqualify::{unqualify_params, unqualify_ret_type},
-    ImplBlockDetails, ImplBlockKey, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
+    ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
 };
 use crate::{
     conversion::{
@@ -347,20 +347,6 @@ impl<'a> FnGenerator<'a> {
             .next()
             .map(|pd| pd.conversion.is_a_pointer())
             .unwrap_or_default();
-        let ty = impl_block_type_name.get_final_ident();
-        let ty = if receiver_is_a_pointer {
-            ImplBlockKey {
-                ty: parse_quote! {
-                    CppRef< 'a, #ty>
-                },
-                lifetime: Some(parse_quote! { 'a }),
-            }
-        } else {
-            ImplBlockKey {
-                ty: parse_quote! { # ty },
-                lifetime: None,
-            }
-        };
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
                 #(#doc_attrs)*
@@ -368,7 +354,7 @@ impl<'a> FnGenerator<'a> {
                     #call_body
                 }
             }),
-            ty,
+            ty: impl_block_type_name.get_final_ident(),
         })
     }
 
@@ -415,7 +401,7 @@ impl<'a> FnGenerator<'a> {
         };
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! { #stuff }),
-            ty: ImplBlockKey { ty, lifetime: None },
+            ty,
         })
     }
 

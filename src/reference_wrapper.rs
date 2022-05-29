@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::Deref};
 
 /// A C++ const reference. These are different from Rust's `&T` in that
 /// these may exist even while the object is nutated elsewhere.
@@ -42,6 +42,14 @@ impl<'a, T> CppRef<'a, T> {
 
     pub fn as_ptr(&self) -> *const T {
         self.0
+    }
+}
+
+impl<'a, T> Deref for CppRef<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.as_ref() }
     }
 }
 

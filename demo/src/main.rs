@@ -6,6 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![feature(arbitrary_self_types)]
+
 use autocxx::prelude::*;
 include_cpp! {
     #include "input.h"
@@ -18,7 +20,9 @@ fn main() {
     println!("Hello, world! - C++ math should say 12={}", ffi::DoMath(4));
     let mut goat = ffi::Goat::new().within_box();
     // The next line is, of course, horrible and needs to go.
-    let mut goat = ffi::CppRef(unsafe { std::pin::Pin::into_inner_unchecked(goat.as_ref())  as *const ffi::Goat }, std::marker::PhantomData);
+    let mut goat = autocxx::CppRef::new(unsafe {
+        std::pin::Pin::into_inner_unchecked(goat.as_ref()) as *const ffi::Goat
+    });
     goat.add_a_horn();
     goat.add_a_horn();
     assert_eq!(

@@ -172,12 +172,12 @@ impl TypeConversionPolicy {
                     Type::Ptr(TypePtr { elem, .. }) => &*elem,
                     _ => panic!("Not a ptr"),
                 };
-                let ty = parse_quote! { CppRef<'a, #ty> };
+                let ty = parse_quote! { autocxx::CppRef<'a, #ty> };
                 RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
-                        CppRef(#var)
+                        autocxx::CppRef(#var)
                     },
                     conversion_requires_unsafe: false,
                 }
@@ -187,7 +187,7 @@ impl TypeConversionPolicy {
                     Type::Ptr(TypePtr { elem, .. }) => &*elem,
                     _ => panic!("Not a ptr"),
                 };
-                let ty = parse_quote! { CppRef<'a, #ty> };
+                let ty = parse_quote! { autocxx::CppRef<'a, #ty> };
                 RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
