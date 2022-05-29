@@ -1775,7 +1775,8 @@ impl<'a> FnAnalyzer<'a> {
                 if matches!(
                     self.config.unsafe_policy,
                     UnsafePolicy::ReferencesWrappedAllFunctionsSafe
-                ) && is_reference && !rust_conversion_forced
+                ) && is_reference
+                    && !rust_conversion_forced
                 // must be std::pin::Pin<&mut T>
                 {
                     let inner_ty = extract_type_from_pinned_mut_ref(p);
@@ -1836,7 +1837,8 @@ impl<'a> FnAnalyzer<'a> {
                 } else if matches!(
                     self.config.unsafe_policy,
                     UnsafePolicy::ReferencesWrappedAllFunctionsSafe
-                ) && is_reference && !rust_conversion_forced
+                ) && is_reference
+                    && !rust_conversion_forced
                 {
                     TypeConversionPolicy {
                         unwrapped_type: ty.clone(),
