@@ -1743,6 +1743,7 @@ impl<'a> FnAnalyzer<'a> {
             annotated_type.ty.as_ref().to_token_stream().to_string(),
             is_reference
         );
+        let rust_conversion_forced = force_rust_conversion.is_some();
         let ty = &*annotated_type.ty;
         if let Some(holder_id) = is_subclass_holder {
             let subclass = SubclassName::from_holder_name(holder_id);
@@ -1774,7 +1775,7 @@ impl<'a> FnAnalyzer<'a> {
                 if matches!(
                     self.config.unsafe_policy,
                     UnsafePolicy::ReferencesWrappedAllFunctionsSafe
-                ) && is_reference
+                ) && is_reference && !rust_conversion_forced
                 // must be std::pin::Pin<&mut T>
                 {
                     let inner_ty = extract_type_from_pinned_mut_ref(p);
@@ -1835,7 +1836,7 @@ impl<'a> FnAnalyzer<'a> {
                 } else if matches!(
                     self.config.unsafe_policy,
                     UnsafePolicy::ReferencesWrappedAllFunctionsSafe
-                ) && is_reference
+                ) && is_reference && !rust_conversion_forced
                 {
                     TypeConversionPolicy {
                         unwrapped_type: ty.clone(),
