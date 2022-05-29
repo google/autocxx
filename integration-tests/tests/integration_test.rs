@@ -7692,6 +7692,54 @@ fn test_two_superclasses_with_same_name_method() {
 }
 
 #[test]
+fn test_subclass_no_safety() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo() = 0;
+        virtual ~Observer() {}
+    };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let unexpanded_rust = quote! {
+        use autocxx::prelude::*;
+
+        include_cpp!(
+            #hexathorpe include "input.h"
+            subclass!("Observer",MyObserver)
+        );
+
+        use ffi::Observer_methods;
+        #hexathorpe [autocxx::subclass::subclass]
+        pub struct MyObserver;
+        impl Observer_methods for MyObserver {
+            unsafe fn foo(&mut self) {}
+        }
+
+        use autocxx::subclass::{CppSubclass, CppPeerConstructor, CppSubclassRustPeerHolder};
+        use cxx::UniquePtr;
+        impl CppPeerConstructor<ffi::MyObserverCpp> for MyObserver {
+            fn make_peer(
+                &mut self,
+                peer_holder: CppSubclassRustPeerHolder<Self>,
+            ) -> UniquePtr<ffi::MyObserverCpp> {
+                UniquePtr::emplace(unsafe { ffi::MyObserverCpp::new(peer_holder) })
+            }
+        }
+
+        fn main() {
+            let obs = MyObserver::new_rust_owned(MyObserver { cpp_peer: Default::default() });
+            unsafe { obs.borrow_mut().foo() };
+        }
+    };
+
+    do_run_test_manual("", hdr, unexpanded_rust, None, None).unwrap()
+}
+
+#[test]
 fn test_pv_protected_constructor() {
     let hdr = indoc! {"
     #include <cstdint>
