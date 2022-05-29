@@ -7588,6 +7588,49 @@ fn test_non_pv_subclass_simple() {
 }
 
 #[test]
+/// Tests the Rust code generated for subclasses when there's a `std` module in scope representing
+/// the C++ `std` namespace. This breaks if any of the generated Rust code fails to fully qualify
+/// its references to the Rust `std`.
+fn test_subclass_with_std() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <chrono>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo() const {}
+        virtual ~Observer() {}
+
+        void unused(std::chrono::nanoseconds) {}
+    };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
+            obs.borrow().foo();
+        },
+        quote! {
+            subclass!("Observer",MyObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_two_subclasses() {
     let hdr = indoc! {"
     #include <cstdint>
