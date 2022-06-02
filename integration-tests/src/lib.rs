@@ -56,6 +56,7 @@ fn configure_builder(b: &mut BuilderBuild) -> &mut BuilderBuild {
 pub enum RsFindMode {
     AutocxxRs,
     AutocxxRsArchive,
+    AutocxxRsFile,
 }
 
 /// API to test building pre-generated files.
@@ -168,6 +169,10 @@ impl LinkableTryBuilder {
             RsFindMode::AutocxxRsArchive => std::env::set_var(
                 "AUTOCXX_RS_JSON_ARCHIVE",
                 self.temp_dir.path().join("gen.rs.json"),
+            ),
+            RsFindMode::AutocxxRsFile => std::env::set_var(
+                "AUTOCXX_RS_FILE",
+                self.temp_dir.path().join("gen0.include.rs"),
             ),
         };
         std::panic::catch_unwind(|| {

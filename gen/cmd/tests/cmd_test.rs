@@ -31,7 +31,7 @@ static DIRECTIVE2_RS: &str = include_str!("data/directive2.rs");
 static INPUT2_H: &str = include_str!("data/input2.h");
 static INPUT3_H: &str = include_str!("data/input3.h");
 
-const KEEP_TEMPDIRS: bool = false;
+const KEEP_TEMPDIRS: bool = true;
 
 #[test]
 fn test_help() -> Result<(), Box<dyn std::error::Error>> {
@@ -226,9 +226,9 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
     let r = build_from_folder(
         tmp_dir.path(),
         &tmp_dir.path().join("demo/main.rs"),
-        vec![tmp_dir.path().join("autocxx-ffi-default-gen.rs")],
+        vec![tmp_dir.path().join("gen0.include.rs")],
         &["gen0.cc"],
-        RsFindMode::AutocxxRs,
+        RsFindMode::AutocxxRsFile,
     );
     if KEEP_TEMPDIRS {
         println!("Tempdir: {:?}", tmp_dir.into_path().to_str());
