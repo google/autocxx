@@ -80,7 +80,7 @@ in reporting the bug is much appreciated and will make `autocxx` better. In
 order of preference here's how we would like to hear about your problem:
 
 * Raise a pull request adding a new failing integration test to
-  `engine/src/integration_tests.rs`.
+  [`integration_test.rs`](https://github.com/google/autocxx/blob/main/integration-tests/tests/integration_test.rs)
 * Minimize the test using `tools/reduce`, something like this:
   `target/debug/autocxx-reduce file -d "safety!(unsafe_ffi)" -d
   'generate_pod!("A")' -I ~/my-include-dir -h my-header.h -p
