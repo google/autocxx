@@ -199,7 +199,7 @@ in reporting the bug is much appreciated and will make <code>autocxx</code> bett
 order of preference here's how we would like to hear about your problem:</p>
 <ul>
 <li>Raise a pull request adding a new failing integration test to
-<code>engine/src/integration_tests.rs</code>.</li>
+<a href="https://github.com/google/autocxx/blob/main/integration-tests/tests/integration_test.rs"><code>integration_test.rs</code></a></li>
 <li>Minimize the test using <code>tools/reduce</code>, something like this:
 <code>target/debug/autocxx-reduce file -d &quot;safety!(unsafe_ffi)&quot; -d 'generate_pod!(&quot;A&quot;)' -I ~/my-include-dir -h my-header.h -p problem-error-message -- --remove-pass pass_line_markers</code>
 This is a wrapper for the amazing <code>creduce</code> which will take thousands of lines
