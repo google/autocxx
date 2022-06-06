@@ -54,6 +54,8 @@ jobs:
       # The `{ sharedKey: ... }` allows different actions to share the cache.
       - uses: Swatinem/rust-cache@v1
         with: { sharedKey: fullBuild }
+      # Install a faster linker
+      - uses: rui314/setup-mold@v1
       # For operating systems that have it packaged, install creduce
       - name: Install creduce (Linux)
         if: matrix.os == ''
