@@ -32,7 +32,7 @@ indexmap = "1.8"
 
 [dev-dependencies]
 assert_cmd = "1.0.3"
-tempdir = "0.3.7"
+tempfile = "3.1"
 autocxx-integration-tests = { path = "../../integration-tests", version="=0.22.1" }
 # This is necessary for building the projects created
 # by the trybuild test system...

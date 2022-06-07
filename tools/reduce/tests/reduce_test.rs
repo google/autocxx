@@ -16,7 +16,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use syn::Token;
-use tempdir::TempDir;
+use tempfile::tempdir;
 
 static INPUT_H: &str = indoc::indoc! {"
     inline int DoMath(int a) {
@@ -169,7 +169,7 @@ where
     if creduce_is_broken() {
         return Ok(());
     }
-    let tmp_dir = TempDir::new("example")?;
+    let tmp_dir = tempdir()?;
     let demo_code_dir = tmp_dir.path().join("demo");
     std::fs::create_dir(&demo_code_dir).unwrap();
     let input_header = if include_cxx_h {
