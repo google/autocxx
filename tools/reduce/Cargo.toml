@@ -32,6 +32,6 @@ indexmap = "1.8"
 
 [dev-dependencies]
 assert_cmd = "1.0.3"
-tempdir = "0.3.7"
+tempfile = "3.1"
 indoc = "1.0"
 proc-macro2 = "1.0"

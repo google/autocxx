@@ -13,7 +13,7 @@ use indexmap::map::IndexMap as HashMap;
 use assert_cmd::Command;
 use autocxx_integration_tests::{build_from_folder, RsFindMode};
 use itertools::Itertools;
-use tempdir::TempDir;
+use tempfile::{tempdir, TempDir};
 
 static MAIN_RS: &str = concat!(
     include_str!("../../../demo/src/main.rs"),
@@ -107,7 +107,7 @@ where
 
 #[test]
 fn test_gen() -> Result<(), Box<dyn std::error::Error>> {
-    let tmp_dir = TempDir::new("example")?;
+    let tmp_dir = tempdir()?;
     base_test(&tmp_dir, RsGenMode::Single, |_| {})?;
     File::create(tmp_dir.path().join("cxx.h"))
         .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
@@ -128,7 +128,7 @@ fn test_gen() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_gen_archive() -> Result<(), Box<dyn std::error::Error>> {
-    let tmp_dir = TempDir::new("example")?;
+    let tmp_dir = tempdir()?;
     base_test(&tmp_dir, RsGenMode::Archive, |_| {})?;
     File::create(tmp_dir.path().join("cxx.h"))
         .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
@@ -148,7 +148,7 @@ fn test_gen_archive() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_gen_multiple_in_archive() -> Result<(), Box<dyn std::error::Error>> {
-    let tmp_dir = TempDir::new("example")?;
+    let tmp_dir = tempdir()?;
 
     let mut files = HashMap::new();
     files.insert("input2.h", INPUT2_H.as_bytes());
@@ -186,7 +186,7 @@ fn test_gen_multiple_in_archive() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
-    let tmp_dir = TempDir::new("example")?;
+    let tmp_dir = tempdir()?;
     base_test(&tmp_dir, RsGenMode::Single, |cmd| {
         cmd.arg("--cxx-h-path")
             .arg("foo/")
@@ -204,7 +204,7 @@ fn test_include_prefixes() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
-    let tmp_dir = TempDir::new("example")?;
+    let tmp_dir = tempdir()?;
     let depfile = tmp_dir.path().join("test.d");
     base_test(&tmp_dir, RsGenMode::Single, |cmd| {
         cmd.arg("--generate-exact")
@@ -239,7 +239,7 @@ fn test_gen_fixed_num() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_gen_preprocess() -> Result<(), Box<dyn std::error::Error>> {
-    let tmp_dir = TempDir::new("example")?;
+    let tmp_dir = tempdir()?;
     let prepro_path = tmp_dir.path().join("preprocessed.h");
     base_test(&tmp_dir, RsGenMode::Single, |cmd| {
         cmd.env("AUTOCXX_PREPROCESS", prepro_path.to_str().unwrap());
@@ -253,7 +253,7 @@ fn test_gen_preprocess() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_gen_repro() -> Result<(), Box<dyn std::error::Error>> {
-    let tmp_dir = TempDir::new("example")?;
+    let tmp_dir = tempdir()?;
     let repro_path = tmp_dir.path().join("repro.json");
     base_test(&tmp_dir, RsGenMode::Single, |cmd| {
         cmd.env("AUTOCXX_REPRO_CASE", repro_path.to_str().unwrap());
