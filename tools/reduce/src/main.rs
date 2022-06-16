@@ -482,7 +482,7 @@ fn create_interestingness_test(
         mv concat.h concat-body.h
         echo Codegen
         (echo \"#ifndef __CONCAT_H__\"; echo \"#define __CONCAT_H__\"; echo '#include \"concat-body.h\"'; echo \"#endif\") > concat.h
-        ({} {} 2>&1 && cat autocxx-ffi-default-gen.rs && cat autocxxgen*.h && {} 2>&1 ) {}
+        (trap \"if [[ \\$? -eq 139 ]]; then echo Segfault; fi\" CHLD; {} {} 2>&1 && cat autocxx-ffi-default-gen.rs && cat autocxxgen*.h && {} 2>&1 ) {}
         echo Remove
         rm concat.h
         echo Swap back
