@@ -8,4 +8,5 @@
 
 mod builder_modifiers;
 mod code_checkers;
+mod cpprefs_test;
 mod integration_test;
