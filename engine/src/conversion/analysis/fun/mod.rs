@@ -1214,20 +1214,6 @@ impl<'a> FnAnalyzer<'a> {
             .as_ref()
             .map_or(false, |x| x.cpp_work_needed());
 
-        log::info!(
-            "DDN={}, PTCN={}, RTCN={}",
-            cxxbridge_name,
-            param_conversion_needed,
-            ret_type_conversion_needed
-        );
-        log::info!(
-            "Param convs = {:?}",
-            param_details
-                .iter()
-                .map(|p| &p.conversion.cpp_conversion)
-                .cloned()
-                .collect_vec()
-        );
         // See https://github.com/dtolnay/cxx/issues/878 for the reason for this next line.
         let effective_cpp_name = cpp_name.as_ref().unwrap_or(&rust_name);
         let cpp_name_incompatible_with_cxx =
@@ -1650,18 +1636,7 @@ impl<'a> FnAnalyzer<'a> {
                         is_placement_return_destination = construct_into_self;
                         if treat_this_as_reference {
                             pp.ident = Ident::new("self", pp.ident.span());
-                            // if is_placement_return_destination
-                            //     // || !matches!(
-                            //     //     self.config.unsafe_policy,
-                            //     //     UnsafePolicy::ReferencesWrappedAllFunctionsSafe
-                            //     // )
-                            //     || matches!(
-                            //         force_rust_conversion,
-                            //         Some(RustConversionType::FromPlacementParamToNewReturn)
-                            //     )
-                            // {
                             pointer_treatment = PointerTreatment::Reference;
-                            // }
                         }
                         syn::Pat::Ident(pp)
                     }
