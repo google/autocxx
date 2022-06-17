@@ -35,7 +35,7 @@ fn run_cpprefs_test(
 }
 
 #[test]
-fn test_method_call_const() {
+fn test_method_call_mut() {
     run_cpprefs_test(
         "",
         indoc! {"
@@ -46,12 +46,38 @@ fn test_method_call_const() {
             public:
                 Goat() : horns(0) {}
                 void add_a_horn();
-                std::string describe() const;
             private:
                 uint32_t horns;
         };
             
         inline void Goat::add_a_horn() { horns++; }
+    "},
+        quote! {
+            let mut goat = ffi::Goat::new().within_box();
+            let mut goat = ffi::CppMutRef::from_box(&mut goat);
+            goat.add_a_horn();
+        },
+        &["Goat"],
+        &[],
+    )
+}
+
+#[test]
+fn test_method_call_const() {
+    run_cpprefs_test(
+        "",
+        indoc! {"
+        #include <string>
+        #include <sstream>
+
+        class Goat {
+            public:
+                Goat() : horns(0) {}
+                std::string describe() const;
+            private:
+                uint32_t horns;
+        };
+            
         inline std::string Goat::describe() const {
             std::ostringstream oss;
             std::string plural = horns == 1 ? \"\" : \"s\";
@@ -61,8 +87,8 @@ fn test_method_call_const() {
     "},
         quote! {
             let mut goat = ffi::Goat::new().within_box();
-            let mut goat = ffi::CppMutRef::from_box(&mut goat);
-            goat.add_a_horn();
+            let goat = ffi::CppMutRef::from_box(&mut goat);
+            goat.as_cpp_ref().describe();
         },
         &["Goat"],
         &[],
