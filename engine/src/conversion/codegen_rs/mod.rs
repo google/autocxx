@@ -133,6 +133,12 @@ fn get_string_items() -> Vec<Item> {
                 }
             }
         }),
+    ]
+    .to_vec()
+}
+
+fn get_cppref_items() -> Vec<Item> {
+    [
         Item::Struct(parse_quote! {
             #[repr(transparent)]
             pub struct CppRef<'a, T>(pub *const T, pub ::std::marker::PhantomData<&'a T>);
@@ -315,6 +321,9 @@ impl<'a> RsCodeGenerator<'a> {
         let mut extern_rust_mod_items = extern_rust_mod_items.into_iter().flatten().collect();
         // And a list of global items to include at the top level.
         let mut all_items: Vec<Item> = all_items.into_iter().flatten().collect();
+        if self.config.unsafe_policy.requires_cpprefs() {
+            all_items.append(&mut get_cppref_items())
+        }
         // And finally any C++ we need to generate. And by "we" I mean autocxx not cxx.
         let has_additional_cpp_needs = additional_cpp_needs.into_iter().any(std::convert::identity);
         extern_c_mod_items.extend(self.build_include_foreign_items(has_additional_cpp_needs));
@@ -453,23 +462,24 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn append_uses_for_ns(&mut self, items: &mut Vec<Item>, ns: &Namespace) {
+        let mut imports_from_super = vec!["cxxbridge"];
+        if !self.config.exclude_utilities() {
+            imports_from_super.push("ToCppString");
+        }
+        if self.config.unsafe_policy.requires_cpprefs() {
+            imports_from_super.extend(["CppRef", "CppMutRef"]);
+        }
+        let imports_from_super = imports_from_super.into_iter().map(make_ident);
         let super_duper = std::iter::repeat(make_ident("super")); // I'll get my coat
         let supers = super_duper.clone().take(ns.depth() + 2);
         items.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]
             use self::
                 #(#supers)::*
-            ::cxxbridge;
+            ::{
+                #(#imports_from_super),*
+            };
         }));
-        if !self.config.exclude_utilities() {
-            let supers = super_duper.clone().take(ns.depth() + 2);
-            items.push(Item::Use(parse_quote! {
-                #[allow(unused_imports)]
-                use self::
-                    #(#supers)::*
-                ::{ToCppString, CppRef, CppMutRef};
-            }));
-        }
         let supers = super_duper.take(ns.depth() + 1);
         items.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]

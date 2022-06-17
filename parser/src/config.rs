@@ -82,6 +82,14 @@ impl ToTokens for UnsafePolicy {
     }
 }
 
+impl UnsafePolicy {
+    /// Whether we are treating C++ references as a different thing from Rust
+    /// references and therefore have to generate lots of code for a CppRef type
+    pub fn requires_cpprefs(&self) -> bool {
+        matches!(self, Self::ReferencesWrappedAllFunctionsSafe)
+    }
+}
+
 /// An entry in the allowlist.
 #[derive(Hash, Debug)]
 pub enum AllowlistEntry {
