@@ -22,10 +22,6 @@ private:
     uint32_t horns;
 };
 
-inline uint32_t DoMath(uint32_t a) {
-    return a * 3;
-}
-
 inline void Goat::add_a_horn() { horns++; }
 inline std::string Goat::describe() const {
     std::ostringstream oss;

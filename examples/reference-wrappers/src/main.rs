@@ -10,12 +10,10 @@ use autocxx::prelude::*;
 include_cpp! {
     #include "input.h"
     safety!(unsafe_references_wrapped)
-    generate!("DoMath")
     generate!("Goat")
 }
 
 fn main() {
-    println!("Hello, world! - C++ math should say 12={}", ffi::DoMath(4));
     let mut goat = ffi::Goat::new().within_box();
     let mut goat = ffi::CppMutRef::from_box(&mut goat);
     goat.add_a_horn();
