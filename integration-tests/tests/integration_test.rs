@@ -11454,6 +11454,33 @@ fn test_issue_1081() {
     run_test("", hdr, rs, &["libtorrent::session"], &[]);
 }
 
+#[test]
+fn test_issue_1125() {
+    let hdr = indoc! {"
+        namespace {
+        namespace {
+        template <class a> class b {
+          typedef a c;
+          struct {
+            c : sizeof(c);
+          };
+        };
+        } // namespace
+        } // namespace
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! {
+            generate_all!()
+        },
+        make_cpp17_adder(),
+        None,
+        None,
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
