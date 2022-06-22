@@ -154,6 +154,7 @@ dependencies = [
  "log",
  "miette",
  "once_cell",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -1060,6 +1061,16 @@ checksum = "4d86de6de25020a36c6d3643a86d9a6a9f552107c0559c60ea03551b5e16c032"
 dependencies = [
  "predicates-core",
  "termtree",
+]
+
+[[package]]
+name = "prettyplease"
+version = "0.1.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e1516508b396cefe095485fdce673007422f5e48e82934b7b423dc26aa5e6a4"
+dependencies = [
+ "proc-macro2",
+ "syn",
 ]
 
 [[package]]
