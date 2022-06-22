@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use syn::{Type, TypePtr};
+use syn::{Type, TypePtr, TypeReference};
 
 use crate::conversion::{
     analysis::fun::function_wrapper::{CppConversionType, TypeConversionPolicy},
@@ -33,12 +33,32 @@ impl TypeConversionPolicy {
     pub(super) fn converted_type(&self, cpp_name_map: &CppNameMap) -> Result<String, ConvertError> {
         match self.cpp_conversion {
             CppConversionType::FromValueToUniquePtr => self.unique_ptr_wrapped_type(cpp_name_map),
+            CppConversionType::FromReferenceToPointer => {
+                let (elem, is_mut) = self.unwrapped_type_referent();
+                let const_string = if is_mut {
+                    ""
+                } else {
+                    "const "
+                };
+                Ok(format!("{}{}*", const_string, type_to_cpp(elem, cpp_name_map)?))
+            },
             _ => self.unwrapped_type_as_string(cpp_name_map),
         }
     }
 
     fn unwrapped_type_as_string(&self, cpp_name_map: &CppNameMap) -> Result<String, ConvertError> {
         type_to_cpp(&self.unwrapped_type, cpp_name_map)
+    }
+
+    fn unwrapped_type_referent(&self) -> (&Type, bool) {
+        match &self.unwrapped_type {
+            Type::Reference(TypeReference {
+                elem,
+                mutability,
+                ..
+            }) => (&elem, mutability.is_some()),
+            _ => panic!("Unexpectedly trying to convert non-reference")
+        }
     }
 
     pub(crate) fn is_a_pointer(&self) -> Pointerness {
