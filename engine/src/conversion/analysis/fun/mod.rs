@@ -1751,9 +1751,9 @@ impl<'a> FnAnalyzer<'a> {
                     && !rust_conversion_forced
                 // must be std::pin::Pin<&mut T>
                 {
-                    let inner_ty = extract_type_from_pinned_mut_ref(p);
+                    let unwrapped_type = extract_type_from_pinned_mut_ref(p);
                     TypeConversionPolicy {
-                        unwrapped_type: parse_quote! { *mut #inner_ty },
+                        unwrapped_type: parse_quote! { *mut #unwrapped_type },
                         cpp_conversion: CppConversionType::FromPointerToReference,
                         rust_conversion: RustConversionType::FromReferenceWrapperToPointer,
                     }
@@ -1835,17 +1835,13 @@ impl<'a> FnAnalyzer<'a> {
             ) && !rust_conversion_forced
                 && !is_placement_return_destination =>
             {
-                let unwrapped_type = if mutability.is_some() {
-                    parse_quote! {
-                        *mut #elem
-                    }
-                } else {
-                    parse_quote! {
-                        *const #elem
-                    }
-                };
+                let is_mut = mutability.is_some();
                 TypeConversionPolicy {
-                    unwrapped_type,
+                    unwrapped_type: if is_mut {
+                        panic!("Never expected to find &mut T at this point, we should be Pin<&mut T> by now")
+                    } else {
+                        parse_quote! { *const #elem }
+                    },
                     cpp_conversion: CppConversionType::FromPointerToReference,
                     rust_conversion: RustConversionType::FromReferenceWrapperToPointer,
                 }

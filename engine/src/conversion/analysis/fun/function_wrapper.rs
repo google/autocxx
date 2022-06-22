@@ -10,7 +10,8 @@ use crate::{
     conversion::api::SubclassName,
     types::{Namespace, QualifiedName},
 };
-use syn::{parse_quote, Ident, Type};
+use quote::ToTokens;
+use syn::{parse_quote, Ident, Type, TypeReference};
 
 #[derive(Clone, Debug)]
 pub(crate) enum CppConversionType {
@@ -23,8 +24,8 @@ pub(crate) enum CppConversionType {
     /// Ignored in the sense that it isn't passed into the C++ function.
     IgnoredPlacementPtrParameter,
     FromReturnValueToPlacementPtr,
-    FromPointerToReference,
-    FromReferenceToPointer,
+    FromPointerToReference, // unwrapped_type is always Type::Ptr
+    FromReferenceToPointer, // unwrapped_type is always Type::Ptr
 }
 
 impl CppConversionType {
@@ -56,8 +57,8 @@ pub(crate) enum RustConversionType {
     FromValueParamToPtr,
     FromPlacementParamToNewReturn,
     FromRValueParamToPtr,
-    FromReferenceWrapperToPointer,
-    FromPointerToReferenceWrapper,
+    FromReferenceWrapperToPointer, // unwrapped_type is always Type::Ptr
+    FromPointerToReferenceWrapper, // unwrapped_type is always Type::Ptr
 }
 
 impl RustConversionType {
@@ -97,8 +98,18 @@ impl TypeConversionPolicy {
     }
 
     pub(crate) fn return_reference_into_wrapper(ty: Type) -> Self {
+        let (unwrapped_type, is_mut) = match ty {
+            Type::Reference(TypeReference {
+                elem, mutability, ..
+            }) => (*elem, mutability.is_some()),
+            _ => panic!("Not a ptr: {}", ty.to_token_stream().to_string()),
+        };
         TypeConversionPolicy {
-            unwrapped_type: ty,
+            unwrapped_type: if is_mut {
+                parse_quote! { *mut #unwrapped_type }
+            } else {
+                parse_quote! { *const #unwrapped_type }
+            },
             cpp_conversion: CppConversionType::FromReferenceToPointer,
             rust_conversion: RustConversionType::FromPointerToReferenceWrapper,
         }
@@ -175,8 +186,8 @@ impl TypeConversionPolicy {
             RustConversionType::FromValueParamToPtr
                 | RustConversionType::FromRValueParamToPtr
                 | RustConversionType::FromPlacementParamToNewReturn
-                | RustConversionType::FromPointerToReferenceWrapper
-                | RustConversionType::FromReferenceWrapperToPointer
+                | RustConversionType::FromPointerToReferenceWrapper { .. }
+                | RustConversionType::FromReferenceWrapperToPointer { .. }
         )
     }
 
