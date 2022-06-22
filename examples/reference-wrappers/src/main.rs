@@ -11,6 +11,7 @@ include_cpp! {
     #include "input.h"
     safety!(unsafe_references_wrapped)
     generate!("Goat")
+    generate!("Field")
 }
 
 fn main() {
@@ -26,4 +27,6 @@ fn main() {
             .to_string_lossy(),
         "This goat has 2 horns."
     );
+    let mut field = ffi::Field::new().within_box();
+    let another_goat = field.get_goat();
 }

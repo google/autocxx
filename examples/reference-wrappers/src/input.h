@@ -22,6 +22,7 @@ private:
     uint32_t horns;
 };
 
+
 inline void Goat::add_a_horn() { horns++; }
 inline std::string Goat::describe() const {
     std::ostringstream oss;
@@ -29,3 +30,13 @@ inline std::string Goat::describe() const {
     oss << "This goat has " << horns << " horn" << plural << ".";
     return oss.str();
 }
+
+class Field {
+public:
+    const Goat& get_goat() const {
+        return the_goat;
+    }
+
+private:
+    Goat the_goat;
+};
