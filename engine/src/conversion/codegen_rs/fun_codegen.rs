@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use autocxx_parser::IncludeCppConfig;
 use indexmap::set::IndexSet as HashSet;
 use std::borrow::Cow;
 
@@ -89,6 +90,7 @@ pub(super) fn gen_function(
     analysis: FnAnalysis,
     cpp_call_name: String,
     non_pod_types: &HashSet<QualifiedName>,
+    config: &IncludeCppConfig,
 ) -> RsCodegenResult {
     if analysis.ignore_reason.is_err() || !analysis.externally_callable {
         return RsCodegenResult::default();
@@ -122,6 +124,7 @@ pub(super) fn gen_function(
         non_pod_types,
         ret_type: &ret_type,
         ret_conversion: &ret_conversion,
+        reference_wrappers: config.unsafe_policy.requires_cpprefs(),
     };
     // In rare occasions, we might need to give an explicit lifetime.
     let (lifetime_tokens, params, ret_type) = add_explicit_lifetime_if_necessary(
@@ -235,6 +238,7 @@ struct FnGenerator<'a> {
     always_unsafe_due_to_trait_definition: bool,
     doc_attrs: &'a Vec<Attribute>,
     non_pod_types: &'a HashSet<QualifiedName>,
+    reference_wrappers: bool,
 }
 
 impl<'a> FnGenerator<'a> {
@@ -385,23 +389,30 @@ impl<'a> FnGenerator<'a> {
             .map(|pd| pd.conversion.is_a_pointer())
             .unwrap_or(Pointerness::Not);
         let ty = impl_block_type_name.get_final_ident();
-        let ty = match receiver_pointerness {
-            Pointerness::MutPtr => ImplBlockKey {
-                ty: parse_quote! {
-                    CppMutRef< 'a, #ty>
+        let ty = if self.reference_wrappers {
+            match receiver_pointerness {
+                Pointerness::MutPtr => ImplBlockKey {
+                    ty: parse_quote! {
+                        CppMutRef< 'a, #ty>
+                    },
+                    lifetime: Some(parse_quote! { 'a }),
                 },
-                lifetime: Some(parse_quote! { 'a }),
-            },
-            Pointerness::ConstPtr => ImplBlockKey {
-                ty: parse_quote! {
-                    CppRef< 'a, #ty>
+                Pointerness::ConstPtr => ImplBlockKey {
+                    ty: parse_quote! {
+                        CppRef< 'a, #ty>
+                    },
+                    lifetime: Some(parse_quote! { 'a }),
                 },
-                lifetime: Some(parse_quote! { 'a }),
-            },
-            Pointerness::Not => ImplBlockKey {
+                Pointerness::Not => ImplBlockKey {
+                    ty: parse_quote! { # ty },
+                    lifetime: None,
+                },
+            }
+        } else {
+            ImplBlockKey {
                 ty: parse_quote! { # ty },
                 lifetime: None,
-            },
+            }
         };
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {

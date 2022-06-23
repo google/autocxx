@@ -595,6 +595,7 @@ impl<'a> RsCodeGenerator<'a> {
                 analysis,
                 cpp_call_name,
                 non_pod_types,
+                self.config,
             ),
             Api::Const { const_item, .. } => RsCodegenResult {
                 bindgen_mod_items: vec![Item::Const(const_item)],
