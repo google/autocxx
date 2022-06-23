@@ -28,8 +28,8 @@ use super::{
 use crate::{
     conversion::{
         analysis::fun::{
-            ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy,
-            TraitMethodDetails, function_wrapper::TypeConversionPolicy,
+            function_wrapper::TypeConversionPolicy, ArgumentAnalysis, FnAnalysis, FnKind,
+            MethodKind, RustRenameStrategy, TraitMethodDetails,
         },
         api::{Pointerness, UnsafetyNeeded},
     },
@@ -253,7 +253,9 @@ impl<'a> FnGenerator<'a> {
         let mut local_variables = Vec::new();
         let mut arg_list = Vec::new();
         let mut ptr_arg_name = None;
-        let mut ret_type: Cow<'a,_> = ret_type.map(Cow::Owned).unwrap_or(Cow::Borrowed(self.ret_type));
+        let mut ret_type: Cow<'a, _> = ret_type
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(self.ret_type));
         let mut any_conversion_requires_unsafe = false;
         for pd in self.param_details {
             let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
@@ -261,7 +263,9 @@ impl<'a> FnGenerator<'a> {
             } else {
                 pd.name.clone()
             };
-            let rust_for_param = pd.conversion.rust_conversion(parse_quote! { #wrapper_arg_name });
+            let rust_for_param = pd
+                .conversion
+                .rust_conversion(parse_quote! { #wrapper_arg_name });
             match rust_for_param {
                 RustParamConversion::Param {
                     ty,
@@ -316,16 +320,28 @@ impl<'a> FnGenerator<'a> {
                 let expr = maybe_unsafes_to_tokens(vec![call_body], context_is_unsafe);
                 let conv = ret_conversion.rust_conversion(parse_quote! { #expr });
                 let (conversion, requires_unsafe, ty) = match conv {
-                    RustParamConversion::Param { local_variables, .. } if !local_variables.is_empty() => panic!("return type required variables"),
-                    RustParamConversion::Param { conversion, conversion_requires_unsafe, ty, .. } => (conversion, conversion_requires_unsafe, ty),
-                    _ => panic!("Unexpected - return type is supposed to be converted to a return type")
+                    RustParamConversion::Param {
+                        local_variables, ..
+                    } if !local_variables.is_empty() => panic!("return type required variables"),
+                    RustParamConversion::Param {
+                        conversion,
+                        conversion_requires_unsafe,
+                        ty,
+                        ..
+                    } => (conversion, conversion_requires_unsafe, ty),
+                    _ => panic!(
+                        "Unexpected - return type is supposed to be converted to a return type"
+                    ),
                 };
-                (if requires_unsafe {
-                    MaybeUnsafeStmt::NeedsUnsafe(conversion)
-                } else {
-                    MaybeUnsafeStmt::Normal(conversion)
-                }, Cow::Owned(parse_quote! { -> #ty }))
-            },
+                (
+                    if requires_unsafe {
+                        MaybeUnsafeStmt::NeedsUnsafe(conversion)
+                    } else {
+                        MaybeUnsafeStmt::Normal(conversion)
+                    },
+                    Cow::Owned(parse_quote! { -> #ty }),
+                )
+            }
             _ => (call_body, ret_type),
         };
 
@@ -399,10 +415,7 @@ impl<'a> FnGenerator<'a> {
     }
 
     /// Generate an 'impl Trait for Type { methods-go-here }' in its entrety.
-    fn generate_trait_impl(
-        &self,
-        details: &TraitMethodDetails,
-    ) -> Box<TraitImplBlockDetails> {
+    fn generate_trait_impl(&self, details: &TraitMethodDetails) -> Box<TraitImplBlockDetails> {
         let (lifetime_tokens, wrapper_params, ret_type, call_body) =
             self.common_parts(details.avoid_self, &details.parameter_reordering, None);
         let doc_attrs = self.doc_attrs;

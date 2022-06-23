@@ -40,13 +40,15 @@ impl TypeConversionPolicy {
                         elem,
                         ..
                     }) => ("", elem.as_ref()),
-                    Type::Ptr(TypePtr {
-                        elem, ..
-                    }) => ("const ", elem.as_ref()),
-                    _ => panic!("Not a pointer")
+                    Type::Ptr(TypePtr { elem, .. }) => ("const ", elem.as_ref()),
+                    _ => panic!("Not a pointer"),
                 };
-                Ok(format!("{}{}*", const_string, type_to_cpp(ty, cpp_name_map)?))
-            },
+                Ok(format!(
+                    "{}{}*",
+                    const_string,
+                    type_to_cpp(ty, cpp_name_map)?
+                ))
+            }
             _ => self.unwrapped_type_as_string(cpp_name_map),
         }
     }

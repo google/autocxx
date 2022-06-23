@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use proc_macro2::TokenStream;
-use syn::{Type, TypePtr, Expr};
+use syn::{Expr, Type, TypePtr};
 
 use crate::{
     conversion::analysis::fun::function_wrapper::{RustConversionType, TypeConversionPolicy},
@@ -164,11 +164,9 @@ impl TypeConversionPolicy {
             RustConversionType::FromPointerToReferenceWrapper => {
                 let (is_mut, ty) = match &self.unwrapped_type {
                     Type::Ptr(TypePtr {
-                        mutability,
-                        elem,
-                        ..
+                        mutability, elem, ..
                     }) => (mutability.is_some(), elem.as_ref()),
-                    _ => panic!("Not a pointer")
+                    _ => panic!("Not a pointer"),
                 };
                 let (ty, wrapper_name) = if is_mut {
                     (parse_quote! { CppMutRef<'a, #ty> }, "CppMutRef")
@@ -188,11 +186,9 @@ impl TypeConversionPolicy {
             RustConversionType::FromReferenceWrapperToPointer => {
                 let (is_mut, ty) = match &self.unwrapped_type {
                     Type::Ptr(TypePtr {
-                        mutability,
-                        elem,
-                        ..
+                        mutability, elem, ..
                     }) => (mutability.is_some(), elem.as_ref()),
-                    _ => panic!("Not a pointer")
+                    _ => panic!("Not a pointer"),
                 };
                 let ty = if is_mut {
                     parse_quote! { &mut CppMutRef<'a, #ty> }

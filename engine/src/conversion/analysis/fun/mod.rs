@@ -1213,7 +1213,10 @@ impl<'a> FnAnalyzer<'a> {
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
             .map_or(false, |x| x.cpp_work_needed());
-        let return_needs_rust_conversion = ret_type_conversion.as_ref().map(|ra| ra.rust_work_needed()).unwrap_or_default();
+        let return_needs_rust_conversion = ret_type_conversion
+            .as_ref()
+            .map(|ra| ra.rust_work_needed())
+            .unwrap_or_default();
 
         // See https://github.com/dtolnay/cxx/issues/878 for the reason for this next line.
         let effective_cpp_name = cpp_name.as_ref().unwrap_or(&rust_name);
