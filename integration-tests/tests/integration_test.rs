@@ -11454,6 +11454,44 @@ fn test_issue_1081() {
     run_test("", hdr, rs, &["libtorrent::session"], &[]);
 }
 
+#[test]
+#[ignore] // This test passes under all normal builds. However
+          // it triggers a stack use-after-return in older versions of
+          // libclang which is only detected under ASAN (obviously it
+          // sometimes causes crashes the rest of the time).
+          // This UaR does not occur when the same code is processed
+          // with a HEAD version of clang itself as of June 2022. This
+          // may mean that the UaR has been fixed in later versions of
+          // the clang code, or that it only occurs when the code is used
+          // in a libclang context (not a plain clang compilation context).
+          // If the problem recurs, we should work out which of these is
+          // the case.
+fn test_issue_1125() {
+    let hdr = indoc! {"
+        namespace {
+        namespace {
+        template <class a> class b {
+          typedef a c;
+          struct {
+            c : sizeof(c);
+          };
+        };
+        } // namespace
+        } // namespace
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! {
+            generate_all!()
+        },
+        make_cpp17_adder(),
+        None,
+        None,
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
