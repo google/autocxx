@@ -102,7 +102,7 @@ impl TypeConversionPolicy {
             Type::Reference(TypeReference {
                 elem, mutability, ..
             }) => (*elem, mutability.is_some()),
-            _ => panic!("Not a ptr: {}", ty.to_token_stream().to_string()),
+            _ => panic!("Not a ptr: {}", ty.to_token_stream()),
         };
         TypeConversionPolicy {
             unwrapped_type: if is_mut {
