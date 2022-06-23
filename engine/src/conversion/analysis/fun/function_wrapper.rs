@@ -81,6 +81,10 @@ impl RustConversionType {
 /// * Finally, the actual C++ API receives a `std::string` by value.
 /// The implementation here is distributed across this file, and
 /// `function_wrapper_rs` and `function_wrapper_cpp`.
+/// TODO: we should make this into a single enum, with the Type as enum
+/// variant params. That would remove the possibility of various runtime
+/// panics by enforcing (for example) that conversion from a pointer always
+/// has a Type::Ptr.
 #[derive(Clone)]
 pub(crate) struct TypeConversionPolicy {
     pub(crate) unwrapped_type: Type,
