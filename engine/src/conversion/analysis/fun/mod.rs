@@ -183,7 +183,7 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) is_placement_return_destination: bool,
 }
 
-struct ReturnTypeAnalysis {
+pub(crate) struct ReturnTypeAnalysis {
     rt: ReturnType,
     conversion: Option<TypeConversionPolicy>,
     was_reference: bool,
@@ -1213,6 +1213,7 @@ impl<'a> FnAnalyzer<'a> {
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
             .map_or(false, |x| x.cpp_work_needed());
+        let return_needs_rust_conversion = ret_type_conversion.as_ref().map(|ra| ra.rust_work_needed()).unwrap_or_default();
 
         // See https://github.com/dtolnay/cxx/issues/878 for the reason for this next line.
         let effective_cpp_name = cpp_name.as_ref().unwrap_or(&rust_name);
@@ -1351,9 +1352,10 @@ impl<'a> FnAnalyzer<'a> {
             .any(|pd| pd.conversion.rust_work_needed());
 
         let rust_wrapper_needed = match kind {
+            _ if any_param_needs_rust_conversion || return_needs_rust_conversion => true,
             FnKind::TraitMethod { .. } => true,
-            FnKind::Method { .. } => any_param_needs_rust_conversion || cxxbridge_name != rust_name,
-            _ => any_param_needs_rust_conversion,
+            FnKind::Method { .. } => cxxbridge_name != rust_name,
+            _ => false,
         };
 
         // Naming, part two.
@@ -1929,6 +1931,7 @@ impl<'a> FnAnalyzer<'a> {
                     }
                     _ => {
                         let was_reference = references.ref_return;
+                        log::info!("ADE FOO wr={}", was_reference);
                         let conversion = Some(
                             if was_reference
                                 && matches!(
@@ -1936,6 +1939,7 @@ impl<'a> FnAnalyzer<'a> {
                                     UnsafePolicy::ReferencesWrappedAllFunctionsSafe
                                 )
                             {
+                                log::info!("ADE FOO@");
                                 TypeConversionPolicy::return_reference_into_wrapper(ty.clone())
                             } else {
                                 TypeConversionPolicy::new_unconverted(ty.clone())

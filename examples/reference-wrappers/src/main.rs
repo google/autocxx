@@ -28,10 +28,10 @@ fn main() {
         "This goat has 2 horns."
     );
     let mut field = ffi::Field::new().within_box();
-    let mut field = ffi::CppMutRef::from_box(&mut field);
+    let field = ffi::CppMutRef::from_box(&mut field);
     let another_goat = field.as_cpp_ref().get_goat();
     assert_eq!(
-        another_goat.as_cpp_ref()
+        another_goat
             .describe()
             .as_ref()
             .unwrap()

@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use proc_macro2::TokenStream;
-use syn::{Pat, Type, TypePtr};
+use syn::{Type, TypePtr, Expr};
 
 use crate::{
     conversion::analysis::fun::function_wrapper::{RustConversionType, TypeConversionPolicy},
@@ -32,8 +32,7 @@ pub(super) enum RustParamConversion {
 }
 
 impl TypeConversionPolicy {
-    /// If returns `None` then this parameter should be omitted entirely.
-    pub(super) fn rust_conversion(&self, var: Pat) -> RustParamConversion {
+    pub(super) fn rust_conversion(&self, var: Expr) -> RustParamConversion {
         match self.rust_conversion {
             RustConversionType::None => RustParamConversion::Param {
                 ty: self.converted_rust_type(),
@@ -123,12 +122,7 @@ impl TypeConversionPolicy {
                 };
                 let handler_type = make_ident(handler_type);
                 let param_trait = make_ident(param_trait);
-                let var_name = if let Pat::Ident(pti) = &var {
-                    &pti.ident
-                } else {
-                    panic!("Unexpected non-ident parameter name");
-                };
-                let space_var_name = make_ident(format!("{}_space", var_name));
+                let space_var_name = make_ident("foo_space"); // TODO
                 let ty = &self.unwrapped_type;
                 let ty = parse_quote! { impl autocxx::#param_trait<#ty> };
                 // This is the usual trick to put something on the stack, then
@@ -148,7 +142,7 @@ impl TypeConversionPolicy {
                             },
                         ),
                         MaybeUnsafeStmt::needs_unsafe(
-                            quote! { #space_var_name.as_mut().populate(#var_name); },
+                            quote! { #space_var_name.as_mut().populate(#var); },
                         ),
                     ],
                     conversion: quote! {
@@ -177,16 +171,16 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a pointer")
                 };
                 let (ty, wrapper_name) = if is_mut {
-                    (parse_quote! { &mut CppMutRef<'a, #ty> }, "CppMutRef")
+                    (parse_quote! { CppMutRef<'a, #ty> }, "CppMutRef")
                 } else {
-                    (parse_quote! { &CppRef<'a, #ty> }, "CppRef")
+                    (parse_quote! { CppRef<'a, #ty> }, "CppRef")
                 };
                 let wrapper_name = make_ident(wrapper_name);
                 RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
-                        #wrapper_name (#var)
+                        #wrapper_name (#var, std::marker::PhantomData)
                     },
                     conversion_requires_unsafe: false,
                 }
