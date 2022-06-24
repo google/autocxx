@@ -7,6 +7,7 @@
 // except according to those terms.
 
 use autocxx::prelude::*;
+
 include_cpp! {
     #include "input.h"
     safety!(unsafe_references_wrapped)
@@ -29,6 +30,19 @@ fn main() {
     );
     let mut field = ffi::Field::new().within_box();
     let field = ffi::CppMutRef::from_box(&mut field);
+    let another_goat = field.as_cpp_ref().get_goat();
+    assert_eq!(
+        another_goat
+            .describe()
+            .as_ref()
+            .unwrap()
+            .to_string_lossy(),
+        "This goat has 0 horns."
+    );
+
+
+    let field = ffi::Field::new().within_unique_ptr();
+    let field = ffi::CppPin::new(field);
     let another_goat = field.as_cpp_ref().get_goat();
     assert_eq!(
         another_goat

@@ -623,6 +623,9 @@ pub mod prelude {
     pub use crate::WithinBoxTrivial;
     pub use crate::WithinUniquePtr;
     pub use crate::WithinUniquePtrTrivial;
+    pub use crate::CppMutRef;
+    pub use crate::CppRef;
+    pub use crate::CppPin;
     pub use cxx::UniquePtr;
     pub use moveit::moveit;
     pub use moveit::new::New;
