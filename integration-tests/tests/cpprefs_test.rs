@@ -77,7 +77,7 @@ fn test_method_call_const() {
             private:
                 uint32_t horns;
         };
-            
+
         inline std::string Goat::describe() const {
             std::ostringstream oss;
             std::string plural = horns == 1 ? \"\" : \"s\";
@@ -86,8 +86,8 @@ fn test_method_call_const() {
         }
     "},
         quote! {
-            let mut goat = ffi::Goat::new().within_box();
-            let goat = ffi::CppMutRef::from_box(&mut goat);
+            let goat = ffi::Goat::new().within_unique_ptr();
+            let goat = ffi::CppUniquePtrPin::new(goat);
             goat.as_cpp_ref().describe();
         },
         &["Goat"],
