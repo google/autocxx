@@ -16,33 +16,8 @@ include_cpp! {
 }
 
 fn main() {
-    let mut goat = ffi::Goat::new().within_box();
-    let mut goat = ffi::CppMutRef::from_box(&mut goat);
-    goat.add_a_horn();
-    goat.add_a_horn();
-    assert_eq!(
-        goat.as_cpp_ref()
-            .describe()
-            .as_ref()
-            .unwrap()
-            .to_string_lossy(),
-        "This goat has 2 horns."
-    );
-    let mut field = ffi::Field::new().within_box();
-    let field = ffi::CppMutRef::from_box(&mut field);
-    let another_goat = field.as_cpp_ref().get_goat();
-    assert_eq!(
-        another_goat
-            .describe()
-            .as_ref()
-            .unwrap()
-            .to_string_lossy(),
-        "This goat has 0 horns."
-    );
-
-
     let field = ffi::Field::new().within_unique_ptr();
-    let field = ffi::CppPin::new(field);
+    let field = ffi::CppUniquePtrPin::new(field);
     let another_goat = field.as_cpp_ref().get_goat();
     assert_eq!(
         another_goat

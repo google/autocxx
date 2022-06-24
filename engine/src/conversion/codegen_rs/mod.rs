@@ -190,20 +190,21 @@ fn get_cppref_items() -> Vec<Item> {
             }
         }),
         Item::Struct(parse_quote! {
-            /// "Pins" an object so that C++-compatible references can be created.
+            /// "Pins" a `UniquePtr` to an object, so that C++-compatible references can be created.
             #[repr(transparent)]
-            pub struct CppPin<T>(T);
+            pub struct CppUniquePtrPin<T: ::cxx::private::UniquePtrTarget>(::cxx::UniquePtr<T>);
         }),
         Item::Impl(parse_quote! {
-            impl<'a, T: 'a> autocxx::CppPin<'a, T> for CppPin<T>
+            impl<'a, T: 'a + ::cxx::private::UniquePtrTarget> autocxx::CppPin<'a, T> for CppUniquePtrPin<T>
             {
                 type CppRef = CppRef<'a, T>;
                 type CppMutRef = CppMutRef<'a, T>;
                 fn as_ptr(&self) -> *const T {
-                    ::std::ptr::addr_of!(self.0)
+                    // TODO add as_ptr to cxx to avoid the ephemeral reference
+                    self.0.as_ref().unwrap() as *const T
                 }
                 fn as_mut_ptr(&mut self) -> *mut T {
-                    ::std::ptr::addr_of_mut!(self.0)
+                    unsafe { ::std::pin::Pin::into_inner_unchecked(self.0.as_mut().unwrap()) as *mut T  }
                 }
                 fn as_cpp_ref(&self) -> Self::CppRef {
                     CppRef(self.as_ptr(), ::std::marker::PhantomData)
@@ -214,13 +215,13 @@ fn get_cppref_items() -> Vec<Item> {
             }
         }),
         Item::Impl(parse_quote! {
-            impl<T> CppPin<T> {
+            impl<T: ::cxx::private::UniquePtrTarget> CppUniquePtrPin<T> {
                 /// Make this object available to C++ by reference.
                 /// This takes ownership of the object, thus proving you
                 /// have no existing Rust references. Any reference to this
                 /// object from Rust after this point is unsafe, since Rust
                 /// and C++ reference semantics are incompatible.
-                pub fn new(item: T) -> CppPin<T> {
+                pub fn new(item: ::cxx::UniquePtr<T>) -> Self {
                     Self(item)
                 }
             }
