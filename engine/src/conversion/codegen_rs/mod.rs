@@ -150,14 +150,6 @@ fn get_cppref_items() -> Vec<Item> {
                 }
             }
         }),
-        Item::Impl(parse_quote! {
-            impl<'a, T: ::cxx::private::UniquePtrTarget> CppRef<'a, T> {
-                /// Create a `CppRef` to an item within a pinned box.
-                pub fn from_box(boxed_item: &'a ::std::pin::Pin<::std::boxed::Box<T>>) -> Self {
-                    Self(unsafe { ::std::pin::Pin::into_inner_unchecked(boxed_item.as_ref()) as *const T  }, ::std::marker::PhantomData)
-                }
-            }
-        }),
         Item::Struct(parse_quote! {
             #[repr(transparent)]
             pub struct CppMutRef<'a, T>(pub *mut T, pub ::std::marker::PhantomData<&'a T>);
@@ -178,10 +170,6 @@ fn get_cppref_items() -> Vec<Item> {
         }),
         Item::Impl(parse_quote! {
             impl<'a, T: ::cxx::private::UniquePtrTarget> CppMutRef<'a, T> {
-                /// Create a `CppMutRef` to an item within a pinned box.
-                pub fn from_box(boxed_item: &'a mut ::std::pin::Pin<::std::boxed::Box<T>>) -> Self {
-                    Self(unsafe { ::std::pin::Pin::into_inner_unchecked(boxed_item.as_mut()) as *mut T  }, ::std::marker::PhantomData)
-                }
                 /// Create a const C++ reference from this mutable C++ reference.
                 pub fn as_cpp_ref(&self) -> CppRef<'a, T> {
                     use autocxx::CppRef;
