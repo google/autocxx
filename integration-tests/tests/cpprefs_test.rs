@@ -49,7 +49,7 @@ fn test_method_call_mut() {
             private:
                 uint32_t horns;
         };
-            
+
         inline void Goat::add_a_horn() { horns++; }
     "},
         quote! {
