@@ -1831,7 +1831,6 @@ impl<'a> FnAnalyzer<'a> {
                     }
                 }
             }
-            // TODO remove this
             Type::Reference(TypeReference {
                 elem, mutability, ..
             }) if matches!(
@@ -1934,7 +1933,6 @@ impl<'a> FnAnalyzer<'a> {
                     }
                     _ => {
                         let was_reference = references.ref_return;
-                        log::info!("ADE FOO wr={}", was_reference);
                         let conversion = Some(
                             if was_reference
                                 && matches!(
@@ -1942,7 +1940,6 @@ impl<'a> FnAnalyzer<'a> {
                                     UnsafePolicy::ReferencesWrappedAllFunctionsSafe
                                 )
                             {
-                                log::info!("ADE FOO@");
                                 TypeConversionPolicy::return_reference_into_wrapper(ty.clone())
                             } else {
                                 TypeConversionPolicy::new_unconverted(ty.clone())
