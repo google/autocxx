@@ -53,9 +53,9 @@ fn test_method_call_mut() {
         inline void Goat::add_a_horn() { horns++; }
     "},
         quote! {
-            let mut goat = ffi::Goat::new().within_box();
-            let mut goat = ffi::CppMutRef::from_box(&mut goat);
-            goat.add_a_horn();
+            let goat = ffi::Goat::new().within_unique_ptr();
+            let mut goat = ffi::CppUniquePtrPin::new(goat);
+            goat.as_cpp_mut_ref().add_a_horn();
         },
         &["Goat"],
         &[],
