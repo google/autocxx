@@ -17,7 +17,7 @@ include_cpp! {
 
 fn main() {
     let field = ffi::Field::new().within_unique_ptr();
-    let field = ffi::CppUniquePtrPin::new(field);
+    let field = ffi::cpp_pin_uniqueptr(field);
     let another_goat = field.as_cpp_ref().get_goat();
     assert_eq!(
         another_goat

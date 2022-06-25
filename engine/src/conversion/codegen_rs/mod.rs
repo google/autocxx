@@ -204,16 +204,19 @@ fn get_cppref_items() -> Vec<Item> {
         }),
         Item::Impl(parse_quote! {
             impl<T: ::cxx::private::UniquePtrTarget> CppUniquePtrPin<T> {
-                /// Make this object available to C++ by reference.
-                /// This takes ownership of the object, thus proving you
-                /// have no existing Rust references. Any reference to this
-                /// object from Rust after this point is unsafe, since Rust
-                /// and C++ reference semantics are incompatible.
                 pub fn new(item: ::cxx::UniquePtr<T>) -> Self {
                     Self(item)
                 }
             }
         }),
+        Item::Fn(parse_quote! {
+            /// Pin this item so that we can create C++ references to it.
+            /// This makes it impossible to hold Rust references because Rust
+            /// references are fundamentally incompatible with C++ references.
+            pub fn cpp_pin_uniqueptr<T: ::cxx::private::UniquePtrTarget> (item: ::cxx::UniquePtr<T>) -> CppUniquePtrPin<T> {
+                CppUniquePtrPin::new(item)
+            }
+        })
     ]
     .to_vec()
 }

@@ -87,7 +87,7 @@ fn test_method_call_const() {
     "},
         quote! {
             let goat = ffi::Goat::new().within_unique_ptr();
-            let goat = ffi::CppUniquePtrPin::new(goat);
+            let goat = ffi::cpp_pin_uniqueptr(goat);
             goat.as_cpp_ref().describe();
         },
         &["Goat"],
