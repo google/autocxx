@@ -32,7 +32,7 @@ pub(super) enum RustParamConversion {
 }
 
 impl TypeConversionPolicy {
-    pub(super) fn rust_conversion(&self, var: Expr) -> RustParamConversion {
+    pub(super) fn rust_conversion(&self, var: Expr, counter: &mut usize) -> RustParamConversion {
         match self.rust_conversion {
             RustConversionType::None => RustParamConversion::Param {
                 ty: self.converted_rust_type(),
@@ -122,7 +122,10 @@ impl TypeConversionPolicy {
                 };
                 let handler_type = make_ident(handler_type);
                 let param_trait = make_ident(param_trait);
-                let space_var_name = make_ident("foo_space"); // TODO
+                let var_counter = *counter;
+                *counter += 1;
+                let space_var_name = format!("space{}", var_counter);
+                let space_var_name = make_ident(space_var_name);
                 let ty = &self.unwrapped_type;
                 let ty = parse_quote! { impl autocxx::#param_trait<#ty> };
                 // This is the usual trick to put something on the stack, then

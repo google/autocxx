@@ -261,6 +261,7 @@ impl<'a> FnGenerator<'a> {
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(self.ret_type));
         let mut any_conversion_requires_unsafe = false;
+        let mut variable_counter = 0usize;
         for pd in self.param_details {
             let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
                 parse_quote!(self)
@@ -269,7 +270,7 @@ impl<'a> FnGenerator<'a> {
             };
             let rust_for_param = pd
                 .conversion
-                .rust_conversion(parse_quote! { #wrapper_arg_name });
+                .rust_conversion(parse_quote! { #wrapper_arg_name }, &mut variable_counter);
             match rust_for_param {
                 RustParamConversion::Param {
                     ty,
@@ -322,7 +323,8 @@ impl<'a> FnGenerator<'a> {
         let (call_body, ret_type) = match self.ret_conversion {
             Some(ret_conversion) if ret_conversion.rust_work_needed() => {
                 let expr = maybe_unsafes_to_tokens(vec![call_body], context_is_unsafe);
-                let conv = ret_conversion.rust_conversion(parse_quote! { #expr });
+                let conv =
+                    ret_conversion.rust_conversion(parse_quote! { #expr }, &mut variable_counter);
                 let (conversion, requires_unsafe, ty) = match conv {
                     RustParamConversion::Param {
                         local_variables, ..
