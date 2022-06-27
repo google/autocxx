@@ -33,7 +33,7 @@ jobs:
             rust: nightly
             os: macos
           - name: Windows (gnu)
-            rust: nightly-x86_64-pc-windows-gnu
+            rust: stable-x86_64-pc-windows-gnu
             os: windows
           - name: Windows (msvc)
             rust: nightly-x86_64-pc-windows-msvc
@@ -93,7 +93,7 @@ jobs:
             rust: nightly
             os: macos
           - name: Windows (gnu)
-            rust: nightly-x86_64-pc-windows-gnu
+            rust: stable-x86_64-pc-windows-gnu
             os: windows
           - name: Windows (msvc)
             rust: nightly-x86_64-pc-windows-msvc
