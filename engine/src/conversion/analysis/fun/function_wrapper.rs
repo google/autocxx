@@ -28,6 +28,21 @@ pub(crate) enum CppConversionType {
     FromReferenceToPointer, // unwrapped_type is always Type::Ptr
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum RustConversionType {
+    None,
+    FromStr,
+    ToBoxedUpHolder(SubclassName),
+    FromPinMaybeUninitToPtr,
+    FromPinMoveRefToPtr,
+    FromTypeToPtr,
+    FromValueParamToPtr,
+    FromPlacementParamToNewReturn,
+    FromRValueParamToPtr,
+    FromReferenceWrapperToPointer, // unwrapped_type is always Type::Ptr
+    FromPointerToReferenceWrapper, // unwrapped_type is always Type::Ptr
+}
+
 impl CppConversionType {
     /// If we've found a function which does X to its parameter, what
     /// is the opposite of X? This is used for subclasses where calls
@@ -44,21 +59,6 @@ impl CppConversionType {
             _ => panic!("Did not expect to have to invert this conversion"),
         }
     }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum RustConversionType {
-    None,
-    FromStr,
-    ToBoxedUpHolder(SubclassName),
-    FromPinMaybeUninitToPtr,
-    FromPinMoveRefToPtr,
-    FromTypeToPtr,
-    FromValueParamToPtr,
-    FromPlacementParamToNewReturn,
-    FromRValueParamToPtr,
-    FromReferenceWrapperToPointer, // unwrapped_type is always Type::Ptr
-    FromPointerToReferenceWrapper, // unwrapped_type is always Type::Ptr
 }
 
 impl RustConversionType {
