@@ -5920,6 +5920,7 @@ fn test_double_destruction() {
         None,
         None,
         None,
+        "unsafe_ffi",
     ) {
         Err(TestError::CppBuild(_)) => {} // be sure this fails due to a static_assert
         // rather than some runtime problem
