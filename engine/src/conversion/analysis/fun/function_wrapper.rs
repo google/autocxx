@@ -46,6 +46,14 @@ pub(crate) enum RustConversionType {
     FromReferenceToPointerToReferenceWrapper, // unwrapped_type is always Type::Ptr
 }
 
+pub(crate) enum ConversionHint {
+    None,
+    FromValueToPtrToPtr,
+    FromPlacementParamToNewReturnToNone,
+    FromPinMaybeUninitToPtrToPtr,
+    FromPinMoveRefToPtrToPtr,
+}
+
 impl CppConversionType {
     /// If we've found a function which does X to its parameter, what
     /// is the opposite of X? This is used for subclasses where calls

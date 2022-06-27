@@ -54,7 +54,7 @@ use crate::{
 
 use self::{
     bridge_name_tracker::BridgeNameTracker,
-    function_wrapper::RustConversionType,
+    function_wrapper::{RustConversionType, ConversionHint},
     implicit_constructors::{find_constructors_present, ItemsFound},
     overload_tracker::OverloadTracker,
     subclass::{
@@ -737,7 +737,7 @@ impl<'a> FnAnalyzer<'a> {
                     &fun.references,
                     true,
                     false,
-                    None,
+                    ConversionHint::None,
                     sophistication,
                     false,
                 )
@@ -1002,7 +1002,7 @@ impl<'a> FnAnalyzer<'a> {
                     &rust_name,
                     &mut params,
                     &mut param_details,
-                    None,
+                    ConversionHint::None,
                     sophistication,
                     true,
                     false,
@@ -1021,7 +1021,7 @@ impl<'a> FnAnalyzer<'a> {
                     &rust_name,
                     &mut params,
                     &mut param_details,
-                    Some(RustConversionType::FromValueToPtrToPtr),
+                    ConversionHint::FromValueToPtrToPtr,
                     sophistication,
                     false,
                     false,
@@ -1045,7 +1045,7 @@ impl<'a> FnAnalyzer<'a> {
                     &rust_name,
                     &mut params,
                     &mut param_details,
-                    Some(RustConversionType::FromPinMaybeUninitToPtrToPtr),
+                    ConversionHint::FromPinMaybeUninitToPtrToPtr,
                     sophistication,
                     false,
                     false,
@@ -1070,7 +1070,7 @@ impl<'a> FnAnalyzer<'a> {
                     &rust_name,
                     &mut params,
                     &mut param_details,
-                    Some(RustConversionType::FromPinMaybeUninitToPtrToPtr),
+                    ConversionHint::FromPinMaybeUninitToPtrToPtr,
                     sophistication,
                     false,
                     false,
@@ -1083,7 +1083,7 @@ impl<'a> FnAnalyzer<'a> {
                     &rust_name,
                     &mut params,
                     &mut param_details,
-                    Some(RustConversionType::FromPinMoveRefToPtrToPtr),
+                    ConversionHint::FromPinMoveRefToPtrToPtr,
                     sophistication,
                     false,
                     true,
@@ -1418,7 +1418,7 @@ impl<'a> FnAnalyzer<'a> {
         rust_name: &str,
         params: &mut Punctuated<FnArg, Comma>,
         param_details: &mut [ArgumentAnalysis],
-        force_rust_conversion: Option<RustConversionType>,
+        force_rust_conversion: ConversionHint,
         sophistication: TypeConversionSophistication,
         construct_into_self: bool,
         is_move_constructor: bool,
@@ -1587,7 +1587,7 @@ impl<'a> FnAnalyzer<'a> {
         references: &References,
         treat_this_as_reference: bool,
         is_move_constructor: bool,
-        force_rust_conversion: Option<RustConversionType>,
+        force_rust_conversion: ConversionHint,
         sophistication: TypeConversionSophistication,
         construct_into_self: bool,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
@@ -1656,7 +1656,7 @@ impl<'a> FnAnalyzer<'a> {
                 let is_placement_return_destination = is_placement_return_destination
                     || matches!(
                         force_rust_conversion,
-                        Some(RustConversionType::FromPlacementParamToNewReturnToNone)
+                        ConversionHint::FromPlacementParamToNewReturnToNone
                     );
                 let annotated_type = self.convert_boxed_type(pt.ty, ns, pointer_treatment)?;
                 let conversion = self.argument_conversion_details(
@@ -1705,7 +1705,7 @@ impl<'a> FnAnalyzer<'a> {
         &self,
         annotated_type: &Annotated<Box<Type>>,
         is_move_constructor: bool,
-        force_rust_conversion: Option<RustConversionType>,
+        force_rust_conversion: ConversionHint,
         sophistication: TypeConversionSophistication,
         is_self: bool,
         is_placement_return_destination: bool,
@@ -1720,7 +1720,7 @@ impl<'a> FnAnalyzer<'a> {
         );
         let is_reference =
             matches!(annotated_type.kind, type_converter::TypeKind::Reference) || is_self;
-        let rust_conversion_forced = force_rust_conversion.is_some();
+        let rust_conversion_forced = !matches!(force_rust_conversion, ConversionHint::None);
         let ty = &*annotated_type.ty;
         if let Some(holder_id) = is_subclass_holder {
             let subclass = SubclassName::from_holder_name(holder_id);
@@ -1736,7 +1736,7 @@ impl<'a> FnAnalyzer<'a> {
             };
         } else if matches!(
             force_rust_conversion,
-            Some(RustConversionType::FromPlacementParamToNewReturnToNone)
+            ConversionHint::FromPlacementParamToNewReturnToNone
         ) && matches!(sophistication, TypeConversionSophistication::Regular)
         {
             return TypeConversionPolicy::new(
@@ -1893,7 +1893,7 @@ impl<'a> FnAnalyzer<'a> {
                                 &References::default(),
                                 false,
                                 false,
-                                Some(RustConversionType::FromPlacementParamToNewReturnToNone),
+                                ConversionHint::FromPlacementParamToNewReturnToNone,
                                 TypeConversionSophistication::Regular,
                                 false,
                             )?;
