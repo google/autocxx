@@ -31,16 +31,19 @@ pub(crate) enum CppConversionType {
 #[derive(Clone, Debug)]
 pub(crate) enum RustConversionType {
     None,
-    FromStr,
-    ToBoxedUpHolder(SubclassName),
-    FromPinMaybeUninitToPtr,
-    FromPinMoveRefToPtr,
-    FromTypeToPtr,
-    FromValueParamToPtr,
-    FromPlacementParamToNewReturn,
-    FromRValueParamToPtr,
-    FromReferenceWrapperToPointer, // unwrapped_type is always Type::Ptr
-    FromPointerToReferenceWrapper, // unwrapped_type is always Type::Ptr
+    FromReturnValueToPlacementPtr, // like None
+    FromValueToValueToMove,
+    FromUniquePtrToUniquePtrToValue,
+    FromStrToUniquePtrToValue,
+    ToBoxedUpHolderToMove(SubclassName),
+    FromPinMaybeUninitToPtrToPtr,
+    FromPinMoveRefToPtrToPtr,
+    FromValueToPtrToPtr,
+    FromValueParamToPtrToValue,
+    FromPlacementParamToNewReturnToNone,
+    FromRValueParamToPtrToValue,
+    FromReferenceWrapperToPointerToReference, // unwrapped_type is always Type::Ptr
+    FromReferenceToPointerToReferenceWrapper, // unwrapped_type is always Type::Ptr
 }
 
 impl CppConversionType {
@@ -64,7 +67,7 @@ impl CppConversionType {
 impl RustConversionType {
     pub(crate) fn requires_mutability(&self) -> Option<syn::token::Mut> {
         match self {
-            Self::FromPinMoveRefToPtr => Some(parse_quote! { mut }),
+            Self::FromPinMoveRefToPtrToPtr => Some(parse_quote! { mut }),
             _ => None,
         }
     }
@@ -127,7 +130,7 @@ impl TypeConversionPolicy {
                 parse_quote! { *const #unwrapped_type }
             },
             cpp_conversion: CppConversionType::FromReferenceToPointer,
-            rust_conversion: RustConversionType::FromPointerToReferenceWrapper,
+            rust_conversion: RustConversionType::FromReferenceToPointerToReferenceWrapper,
         }
     }
 
@@ -135,7 +138,7 @@ impl TypeConversionPolicy {
         TypeConversionPolicy {
             unwrapped_type: ty,
             cpp_conversion: CppConversionType::FromValueToUniquePtr,
-            rust_conversion: RustConversionType::None,
+            rust_conversion: RustConversionType::FromUniquePtrToUniquePtrToValue,
         }
     }
 
@@ -146,7 +149,7 @@ impl TypeConversionPolicy {
             // Rust conversion is marked as none here, since this policy
             // will be applied to the return value, and the Rust-side
             // shenanigans applies to the placement new *parameter*
-            rust_conversion: RustConversionType::None,
+            rust_conversion: RustConversionType::FromReturnValueToPlacementPtr,
         }
     }
 
@@ -199,11 +202,11 @@ impl TypeConversionPolicy {
     pub(crate) fn bridge_unsafe_needed(&self) -> bool {
         matches!(
             self.rust_conversion,
-            RustConversionType::FromValueParamToPtr
-                | RustConversionType::FromRValueParamToPtr
-                | RustConversionType::FromPlacementParamToNewReturn
-                | RustConversionType::FromPointerToReferenceWrapper { .. }
-                | RustConversionType::FromReferenceWrapperToPointer { .. }
+            RustConversionType::FromValueParamToPtrToValue
+                | RustConversionType::FromRValueParamToPtrToValue
+                | RustConversionType::FromPlacementParamToNewReturnToNone
+                | RustConversionType::FromReferenceToPointerToReferenceWrapper { .. }
+                | RustConversionType::FromReferenceWrapperToPointerToReference { .. }
         )
     }
 

@@ -34,19 +34,19 @@ pub(super) enum RustParamConversion {
 impl TypeConversionPolicy {
     pub(super) fn rust_conversion(&self, var: Expr, counter: &mut usize) -> RustParamConversion {
         match self.rust_conversion {
-            RustConversionType::None => RustParamConversion::Param {
+            RustConversionType::None | RustConversionType::FromUniquePtrToUniquePtrToValue | RustConversionType::FromReturnValueToPlacementPtr | RustConversionType::FromValueToValueToMove => RustParamConversion::Param {
                 ty: self.converted_rust_type(),
                 local_variables: Vec::new(),
                 conversion: quote! { #var },
                 conversion_requires_unsafe: false,
             },
-            RustConversionType::FromStr => RustParamConversion::Param {
+            RustConversionType::FromStrToUniquePtrToValue => RustParamConversion::Param {
                 ty: parse_quote! { impl ToCppString },
                 local_variables: Vec::new(),
                 conversion: quote! ( #var .into_cpp() ),
                 conversion_requires_unsafe: false,
             },
-            RustConversionType::ToBoxedUpHolder(ref sub) => {
+            RustConversionType::ToBoxedUpHolderToMove(ref sub) => {
                 let holder_type = sub.holder();
                 let id = sub.id();
                 let ty = parse_quote! { autocxx::subclass::CppSubclassRustPeerHolder<
@@ -61,7 +61,7 @@ impl TypeConversionPolicy {
                     conversion_requires_unsafe: false,
                 }
             }
-            RustConversionType::FromPinMaybeUninitToPtr => {
+            RustConversionType::FromPinMaybeUninitToPtrToPtr => {
                 let ty = match self.cxxbridge_type() {
                     Type::Ptr(TypePtr { elem, .. }) => &*elem,
                     _ => panic!("Not a ptr"),
@@ -78,7 +78,7 @@ impl TypeConversionPolicy {
                     conversion_requires_unsafe: true,
                 }
             }
-            RustConversionType::FromPinMoveRefToPtr => {
+            RustConversionType::FromPinMoveRefToPtrToPtr => {
                 let ty = match self.cxxbridge_type() {
                     Type::Ptr(TypePtr { elem, .. }) => &*elem,
                     _ => panic!("Not a ptr"),
@@ -97,7 +97,7 @@ impl TypeConversionPolicy {
                     conversion_requires_unsafe: true,
                 }
             }
-            RustConversionType::FromTypeToPtr => {
+            RustConversionType::FromValueToPtrToPtr => {
                 let ty = match self.cxxbridge_type() {
                     Type::Ptr(TypePtr { elem, .. }) => &*elem,
                     _ => panic!("Not a ptr"),
@@ -112,10 +112,10 @@ impl TypeConversionPolicy {
                     conversion_requires_unsafe: false,
                 }
             }
-            RustConversionType::FromValueParamToPtr | RustConversionType::FromRValueParamToPtr => {
+            RustConversionType::FromValueParamToPtrToValue | RustConversionType::FromRValueParamToPtrToValue => {
                 let (handler_type, param_trait) = match self.rust_conversion {
-                    RustConversionType::FromValueParamToPtr => ("ValueParamHandler", "ValueParam"),
-                    RustConversionType::FromRValueParamToPtr => {
+                    RustConversionType::FromValueParamToPtrToValue => ("ValueParamHandler", "ValueParam"),
+                    RustConversionType::FromRValueParamToPtrToValue => {
                         ("RValueParamHandler", "RValueParam")
                     }
                     _ => unreachable!(),
@@ -157,14 +157,14 @@ impl TypeConversionPolicy {
             // This type of conversion means that this function parameter appears in the cxx::bridge
             // but not in the arguments for the wrapper function, because instead we return an
             // impl New which uses the cxx::bridge function's pointer parameter.
-            RustConversionType::FromPlacementParamToNewReturn => {
+            RustConversionType::FromPlacementParamToNewReturnToNone => {
                 let ty = match self.cxxbridge_type() {
                     Type::Ptr(TypePtr { elem, .. }) => *(*elem).clone(),
                     _ => panic!("Not a ptr"),
                 };
                 RustParamConversion::ReturnValue { ty }
             }
-            RustConversionType::FromPointerToReferenceWrapper => {
+            RustConversionType::FromReferenceToPointerToReferenceWrapper => {
                 let (is_mut, ty) = match self.cxxbridge_type() {
                     Type::Ptr(TypePtr {
                         mutability, elem, ..
@@ -186,7 +186,7 @@ impl TypeConversionPolicy {
                     conversion_requires_unsafe: false,
                 }
             }
-            RustConversionType::FromReferenceWrapperToPointer => {
+            RustConversionType::FromReferenceWrapperToPointerToReference => {
                 let (is_mut, ty) = match self.cxxbridge_type() {
                     Type::Ptr(TypePtr {
                         mutability, elem, ..

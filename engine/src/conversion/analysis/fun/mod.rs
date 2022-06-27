@@ -1021,7 +1021,7 @@ impl<'a> FnAnalyzer<'a> {
                     &rust_name,
                     &mut params,
                     &mut param_details,
-                    Some(RustConversionType::FromTypeToPtr),
+                    Some(RustConversionType::FromValueToPtrToPtr),
                     sophistication,
                     false,
                     false,
@@ -1045,7 +1045,7 @@ impl<'a> FnAnalyzer<'a> {
                     &rust_name,
                     &mut params,
                     &mut param_details,
-                    Some(RustConversionType::FromPinMaybeUninitToPtr),
+                    Some(RustConversionType::FromPinMaybeUninitToPtrToPtr),
                     sophistication,
                     false,
                     false,
@@ -1070,7 +1070,7 @@ impl<'a> FnAnalyzer<'a> {
                     &rust_name,
                     &mut params,
                     &mut param_details,
-                    Some(RustConversionType::FromPinMaybeUninitToPtr),
+                    Some(RustConversionType::FromPinMaybeUninitToPtrToPtr),
                     sophistication,
                     false,
                     false,
@@ -1083,7 +1083,7 @@ impl<'a> FnAnalyzer<'a> {
                     &rust_name,
                     &mut params,
                     &mut param_details,
-                    Some(RustConversionType::FromPinMoveRefToPtr),
+                    Some(RustConversionType::FromPinMoveRefToPtrToPtr),
                     sophistication,
                     false,
                     true,
@@ -1656,7 +1656,7 @@ impl<'a> FnAnalyzer<'a> {
                 let is_placement_return_destination = is_placement_return_destination
                     || matches!(
                         force_rust_conversion,
-                        Some(RustConversionType::FromPlacementParamToNewReturn)
+                        Some(RustConversionType::FromPlacementParamToNewReturnToNone)
                     );
                 let annotated_type = self.convert_boxed_type(pt.ty, ns, pointer_treatment)?;
                 let conversion = self.argument_conversion_details(
@@ -1731,18 +1731,18 @@ impl<'a> FnAnalyzer<'a> {
                 TypeConversionPolicy::new(
                     ty,
                     CppConversionType::Move,
-                    RustConversionType::ToBoxedUpHolder(subclass),
+                    RustConversionType::ToBoxedUpHolderToMove(subclass),
                 )
             };
         } else if matches!(
             force_rust_conversion,
-            Some(RustConversionType::FromPlacementParamToNewReturn)
+            Some(RustConversionType::FromPlacementParamToNewReturnToNone)
         ) && matches!(sophistication, TypeConversionSophistication::Regular)
         {
             return TypeConversionPolicy::new(
                 ty.clone(),
                 CppConversionType::IgnoredPlacementPtrParameter,
-                RustConversionType::FromPlacementParamToNewReturn,
+                RustConversionType::FromPlacementParamToNewReturnToNone,
             );
         }
         match ty {
@@ -1760,14 +1760,14 @@ impl<'a> FnAnalyzer<'a> {
                     TypeConversionPolicy::new(
                         parse_quote! { *mut #unwrapped_type },
                         CppConversionType::FromPointerToReference,
-                        RustConversionType::FromReferenceWrapperToPointer,
+                        RustConversionType::FromReferenceWrapperToPointerToReference,
                     )
                 } else if self.pod_safe_types.contains(&tn) {
                     if known_types().lacks_copy_constructor(&tn) {
                         TypeConversionPolicy::new(
                             ty,
                             CppConversionType::Move,
-                            RustConversionType::None,
+                            RustConversionType::FromValueToValueToMove,
                         )
                     } else {
                         TypeConversionPolicy::new_unconverted(ty)
@@ -1778,7 +1778,7 @@ impl<'a> FnAnalyzer<'a> {
                     TypeConversionPolicy::new(
                         ty,
                         CppConversionType::FromUniquePtrToValue,
-                        RustConversionType::FromStr,
+                        RustConversionType::FromStrToUniquePtrToValue,
                     )
                 } else if matches!(
                     sophistication,
@@ -1787,13 +1787,13 @@ impl<'a> FnAnalyzer<'a> {
                     TypeConversionPolicy::new(
                         ty,
                         CppConversionType::FromUniquePtrToValue,
-                        RustConversionType::None,
+                        RustConversionType::FromUniquePtrToUniquePtrToValue,
                     )
                 } else {
                     TypeConversionPolicy::new(
                         ty,
                         CppConversionType::FromPtrToValue,
-                        RustConversionType::FromValueParamToPtr,
+                        RustConversionType::FromValueParamToPtrToValue,
                     )
                 }
             }
@@ -1809,7 +1809,7 @@ impl<'a> FnAnalyzer<'a> {
                     TypeConversionPolicy::new(
                         *tp.elem.clone(),
                         CppConversionType::FromPtrToValue,
-                        RustConversionType::FromRValueParamToPtr,
+                        RustConversionType::FromRValueParamToPtrToValue,
                     )
                 } else if matches!(
                     self.config.unsafe_policy,
@@ -1821,7 +1821,7 @@ impl<'a> FnAnalyzer<'a> {
                     TypeConversionPolicy::new(
                         ty.clone(),
                         CppConversionType::FromPointerToReference,
-                        RustConversionType::FromReferenceWrapperToPointer,
+                        RustConversionType::FromReferenceWrapperToPointerToReference,
                     )
                 } else {
                     TypeConversionPolicy::new(ty.clone(), CppConversionType::None, rust_conversion)
@@ -1843,7 +1843,7 @@ impl<'a> FnAnalyzer<'a> {
                         parse_quote! { *const #elem }
                     },
                     CppConversionType::FromPointerToReference,
-                    RustConversionType::FromReferenceWrapperToPointer,
+                    RustConversionType::FromReferenceWrapperToPointerToReference,
                 )
             }
             _ => {
@@ -1893,7 +1893,7 @@ impl<'a> FnAnalyzer<'a> {
                                 &References::default(),
                                 false,
                                 false,
-                                Some(RustConversionType::FromPlacementParamToNewReturn),
+                                Some(RustConversionType::FromPlacementParamToNewReturnToNone),
                                 TypeConversionSophistication::Regular,
                                 false,
                             )?;
