@@ -207,6 +207,13 @@ reference:</p>
 <li>It doesn't delete it.</li>
 <li>or any of the other things that you're not permitted to do in unsafe Rust.</li>
 </ul>
+<h2 id="soundness"><a class="header" href="#soundness">Soundness</a></h2>
+<p>This crate shares the general approach to safety and soundness pioneered by cxx, but has two important differences:</p>
+<ul>
+<li>cxx requires you to specify your interface in detail, and thus think through all aspects of the language boundary. autocxx doesn't, and may autogenerate footguns.</li>
+<li>cxx may allow multiple conflicting Rust references to exist to 'trivial' data types (&quot;plain old data&quot; or POD in autocxx parlance), but they're rare. autocxx may allow conflicting Rust references to exist even to 'opaque' (non-POD) data, and they're more common. This difference exists because opaque data is zero-sized in cxx, and zero-sized references cannot conflict. (In autocxx, we tell Rust about the size in order that we can allocate such types on the stack.)</li>
+</ul>
+<p>There are preliminary explorations to avoid this problem by using a C++ reference wrapper type. See <code>examples/reference-wrappers</code>.</p>
 
                     </main>
 
