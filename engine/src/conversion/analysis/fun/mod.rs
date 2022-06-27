@@ -840,7 +840,7 @@ impl<'a> FnAnalyzer<'a> {
                 let arg_is_reference = matches!(
                     param_details
                         .get(1)
-                        .map(|param| &param.conversion.unwrapped_type),
+                        .map(|param| param.conversion.cxxbridge_type()),
                     Some(Type::Reference(_))
                 );
                 // Some exotic forms of copy constructor have const and/or volatile qualifiers.
@@ -1728,22 +1728,22 @@ impl<'a> FnAnalyzer<'a> {
                 let ty = parse_quote! {
                     rust::Box<#holder_id>
                 };
-                TypeConversionPolicy {
-                    unwrapped_type: ty,
-                    cpp_conversion: CppConversionType::Move,
-                    rust_conversion: RustConversionType::ToBoxedUpHolder(subclass),
-                }
+                TypeConversionPolicy::new(
+                    ty,
+                    CppConversionType::Move,
+                    RustConversionType::ToBoxedUpHolder(subclass),
+                )
             };
         } else if matches!(
             force_rust_conversion,
             Some(RustConversionType::FromPlacementParamToNewReturn)
         ) && matches!(sophistication, TypeConversionSophistication::Regular)
         {
-            return TypeConversionPolicy {
-                unwrapped_type: ty.clone(),
-                cpp_conversion: CppConversionType::IgnoredPlacementPtrParameter,
-                rust_conversion: RustConversionType::FromPlacementParamToNewReturn,
-            };
+            return TypeConversionPolicy::new(
+                ty.clone(),
+                CppConversionType::IgnoredPlacementPtrParameter,
+                RustConversionType::FromPlacementParamToNewReturn,
+            );
         }
         match ty {
             Type::Path(p) => {
@@ -1757,60 +1757,60 @@ impl<'a> FnAnalyzer<'a> {
                 // must be std::pin::Pin<&mut T>
                 {
                     let unwrapped_type = extract_type_from_pinned_mut_ref(p);
-                    TypeConversionPolicy {
-                        unwrapped_type: parse_quote! { *mut #unwrapped_type },
-                        cpp_conversion: CppConversionType::FromPointerToReference,
-                        rust_conversion: RustConversionType::FromReferenceWrapperToPointer,
-                    }
+                    TypeConversionPolicy::new(
+                        parse_quote! { *mut #unwrapped_type },
+                        CppConversionType::FromPointerToReference,
+                        RustConversionType::FromReferenceWrapperToPointer,
+                    )
                 } else if self.pod_safe_types.contains(&tn) {
                     if known_types().lacks_copy_constructor(&tn) {
-                        TypeConversionPolicy {
-                            unwrapped_type: ty,
-                            cpp_conversion: CppConversionType::Move,
-                            rust_conversion: RustConversionType::None,
-                        }
+                        TypeConversionPolicy::new(
+                            ty,
+                            CppConversionType::Move,
+                            RustConversionType::None,
+                        )
                     } else {
                         TypeConversionPolicy::new_unconverted(ty)
                     }
                 } else if known_types().convertible_from_strs(&tn)
                     && !self.config.exclude_utilities()
                 {
-                    TypeConversionPolicy {
-                        unwrapped_type: ty,
-                        cpp_conversion: CppConversionType::FromUniquePtrToValue,
-                        rust_conversion: RustConversionType::FromStr,
-                    }
+                    TypeConversionPolicy::new(
+                        ty,
+                        CppConversionType::FromUniquePtrToValue,
+                        RustConversionType::FromStr,
+                    )
                 } else if matches!(
                     sophistication,
                     TypeConversionSophistication::SimpleForSubclasses
                 ) {
-                    TypeConversionPolicy {
-                        unwrapped_type: ty,
-                        cpp_conversion: CppConversionType::FromUniquePtrToValue,
-                        rust_conversion: RustConversionType::None,
-                    }
+                    TypeConversionPolicy::new(
+                        ty,
+                        CppConversionType::FromUniquePtrToValue,
+                        RustConversionType::None,
+                    )
                 } else {
-                    TypeConversionPolicy {
-                        unwrapped_type: ty,
-                        cpp_conversion: CppConversionType::FromPtrToValue,
-                        rust_conversion: RustConversionType::FromValueParamToPtr,
-                    }
+                    TypeConversionPolicy::new(
+                        ty,
+                        CppConversionType::FromPtrToValue,
+                        RustConversionType::FromValueParamToPtr,
+                    )
                 }
             }
             Type::Ptr(tp) => {
                 let rust_conversion = force_rust_conversion.unwrap_or(RustConversionType::None);
                 if is_move_constructor {
-                    TypeConversionPolicy {
-                        unwrapped_type: ty.clone(),
-                        cpp_conversion: CppConversionType::FromPtrToMove,
+                    TypeConversionPolicy::new(
+                        ty.clone(),
+                        CppConversionType::FromPtrToMove,
                         rust_conversion,
-                    }
+                    )
                 } else if is_rvalue_ref {
-                    TypeConversionPolicy {
-                        unwrapped_type: *tp.elem.clone(),
-                        cpp_conversion: CppConversionType::FromPtrToValue,
-                        rust_conversion: RustConversionType::FromRValueParamToPtr,
-                    }
+                    TypeConversionPolicy::new(
+                        *tp.elem.clone(),
+                        CppConversionType::FromPtrToValue,
+                        RustConversionType::FromRValueParamToPtr,
+                    )
                 } else if matches!(
                     self.config.unsafe_policy,
                     UnsafePolicy::ReferencesWrappedAllFunctionsSafe
@@ -1818,17 +1818,13 @@ impl<'a> FnAnalyzer<'a> {
                     && !rust_conversion_forced
                     && !is_placement_return_destination
                 {
-                    TypeConversionPolicy {
-                        unwrapped_type: ty.clone(),
-                        cpp_conversion: CppConversionType::FromPointerToReference,
-                        rust_conversion: RustConversionType::FromReferenceWrapperToPointer,
-                    }
+                    TypeConversionPolicy::new(
+                        ty.clone(),
+                        CppConversionType::FromPointerToReference,
+                        RustConversionType::FromReferenceWrapperToPointer,
+                    )
                 } else {
-                    TypeConversionPolicy {
-                        unwrapped_type: ty.clone(),
-                        cpp_conversion: CppConversionType::None,
-                        rust_conversion,
-                    }
+                    TypeConversionPolicy::new(ty.clone(), CppConversionType::None, rust_conversion)
                 }
             }
             Type::Reference(TypeReference {
@@ -1840,23 +1836,19 @@ impl<'a> FnAnalyzer<'a> {
                 && !is_placement_return_destination =>
             {
                 let is_mut = mutability.is_some();
-                TypeConversionPolicy {
-                    unwrapped_type: if is_mut {
+                TypeConversionPolicy::new(
+                    if is_mut {
                         panic!("Never expected to find &mut T at this point, we should be Pin<&mut T> by now")
                     } else {
                         parse_quote! { *const #elem }
                     },
-                    cpp_conversion: CppConversionType::FromPointerToReference,
-                    rust_conversion: RustConversionType::FromReferenceWrapperToPointer,
-                }
+                    CppConversionType::FromPointerToReference,
+                    RustConversionType::FromReferenceWrapperToPointer,
+                )
             }
             _ => {
                 let rust_conversion = force_rust_conversion.unwrap_or(RustConversionType::None);
-                TypeConversionPolicy {
-                    unwrapped_type: ty.clone(),
-                    cpp_conversion: CppConversionType::None,
-                    rust_conversion,
-                }
+                TypeConversionPolicy::new(ty.clone(), CppConversionType::None, rust_conversion)
             }
         }
     }

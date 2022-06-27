@@ -87,18 +87,30 @@ impl RustConversionType {
 /// has a Type::Ptr.
 #[derive(Clone)]
 pub(crate) struct TypeConversionPolicy {
-    pub(crate) unwrapped_type: Type,
+    unwrapped_type: Type,
     pub(crate) cpp_conversion: CppConversionType,
     pub(crate) rust_conversion: RustConversionType,
 }
 
 impl TypeConversionPolicy {
     pub(crate) fn new_unconverted(ty: Type) -> Self {
-        TypeConversionPolicy {
+        Self::new(ty, CppConversionType::None, RustConversionType::None)
+    }
+
+    pub(crate) fn new(
+        ty: Type,
+        cpp_conversion: CppConversionType,
+        rust_conversion: RustConversionType,
+    ) -> Self {
+        Self {
             unwrapped_type: ty,
-            cpp_conversion: CppConversionType::None,
-            rust_conversion: RustConversionType::None,
+            cpp_conversion,
+            rust_conversion,
         }
+    }
+
+    pub(crate) fn cxxbridge_type(&self) -> &Type {
+        &self.unwrapped_type
     }
 
     pub(crate) fn return_reference_into_wrapper(ty: Type) -> Self {

@@ -34,7 +34,7 @@ impl TypeConversionPolicy {
         match self.cpp_conversion {
             CppConversionType::FromValueToUniquePtr => self.unique_ptr_wrapped_type(cpp_name_map),
             CppConversionType::FromReferenceToPointer => {
-                let (const_string, ty) = match &self.unwrapped_type {
+                let (const_string, ty) = match self.cxxbridge_type() {
                     Type::Ptr(TypePtr {
                         mutability: Some(_),
                         elem,
@@ -54,11 +54,11 @@ impl TypeConversionPolicy {
     }
 
     fn unwrapped_type_as_string(&self, cpp_name_map: &CppNameMap) -> Result<String, ConvertError> {
-        type_to_cpp(&self.unwrapped_type, cpp_name_map)
+        type_to_cpp(self.cxxbridge_type(), cpp_name_map)
     }
 
     pub(crate) fn is_a_pointer(&self) -> Pointerness {
-        match &self.unwrapped_type {
+        match self.cxxbridge_type() {
             Type::Ptr(TypePtr {
                 mutability: Some(_),
                 ..
