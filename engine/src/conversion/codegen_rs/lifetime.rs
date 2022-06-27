@@ -51,7 +51,7 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
         pd.has_lifetime
             || matches!(
                 pd.conversion.rust_conversion,
-                RustConversionType::FromValueParamToPtr
+                RustConversionType::FromValueParamToPtrToValue
             )
     });
     let return_type_is_impl = return_type_is_impl(&ret_type);

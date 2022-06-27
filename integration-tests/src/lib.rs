@@ -21,7 +21,7 @@ use autocxx_engine::{
 use log::info;
 use once_cell::sync::OnceCell;
 use proc_macro2::{Span, TokenStream};
-use quote::{quote, TokenStreamExt};
+use quote::{format_ident, quote, TokenStreamExt};
 use syn::Token;
 use tempfile::{tempdir, TempDir};
 
@@ -205,6 +205,7 @@ pub fn run_test(
         None,
         None,
         None,
+        "unsafe_ffi",
     )
     .unwrap()
 }
@@ -259,6 +260,7 @@ pub fn run_test_ex(
         builder_modifier,
         code_checker,
         extra_rust,
+        "unsafe_ffi",
     )
     .unwrap()
 }
@@ -290,6 +292,7 @@ pub fn run_test_expect_fail(
         None,
         None,
         None,
+        "unsafe_ffi",
     )
     .expect_err("Unexpected success");
 }
@@ -311,6 +314,7 @@ pub fn run_test_expect_fail_ex(
         builder_modifier,
         code_checker,
         extra_rust,
+        "unsafe_ffi",
     )
     .expect_err("Unexpected success");
 }
@@ -360,14 +364,16 @@ pub fn do_run_test(
     builder_modifier: Option<BuilderModifier>,
     rust_code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
+    safety_policy: &str,
 ) -> Result<(), TestError> {
     let hexathorpe = Token![#](Span::call_site());
+    let safety_policy = format_ident!("{}", safety_policy);
     let unexpanded_rust = quote! {
             use autocxx::prelude::*;
 
             include_cpp!(
                 #hexathorpe include "input.h"
-                safety!(unsafe_ffi)
+                safety!(#safety_policy)
                 #directives
             );
 

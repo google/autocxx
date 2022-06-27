@@ -14,9 +14,12 @@
 // do anything - all the magic is handled entirely by
 // autocxx_macro::include_cpp_impl.
 
+mod reference_wrapper;
 mod rvalue_param;
 pub mod subclass;
 mod value_param;
+
+pub use reference_wrapper::{CppMutRef, CppPin, CppRef};
 
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// Include some C++ headers in your Rust project.
@@ -613,6 +616,9 @@ pub mod prelude {
     pub use crate::c_void;
     pub use crate::cpp_semantics;
     pub use crate::include_cpp;
+    pub use crate::CppMutRef;
+    pub use crate::CppPin;
+    pub use crate::CppRef;
     pub use crate::PinMut;
     pub use crate::RValueParam;
     pub use crate::ValueParam;
