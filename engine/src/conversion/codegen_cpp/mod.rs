@@ -540,6 +540,11 @@ impl<'a> CppCodeGenerator<'a> {
                 "".to_string(),
                 true,
             ),
+            CppFunctionBody::ReturnFieldAccess(field_name) => (
+                format!("arg0.{}", field_name.to_string()),
+                "".to_string(),
+                false
+            )
         };
         if let Some(ret) = &details.return_conversion {
             let call_itself = match conversion_direction {

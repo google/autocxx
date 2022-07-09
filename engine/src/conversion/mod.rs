@@ -43,6 +43,7 @@ use self::{
         remove_ignored::filter_apis_by_ignored_dependents,
         replace_hopeless_typedef_targets,
         tdef::convert_typedef_targets,
+        struct_accessors::add_field_accessors,
     },
     api::AnalysisPhase,
     apivec::ApiVec,
@@ -133,6 +134,9 @@ impl<'a> BridgeConverter<'a> {
                 Self::dump_apis("parsing", &apis);
                 // Inside parse_results, we now have a list of APIs.
                 // We now enter various analysis phases.
+                // Add accessors for class/struct fields. These are necessary to access fields of non-POD types
+                let apis = add_field_accessors(self.config, apis);
+                Self::dump_apis("adding field accessors", &apis);
                 // Next, convert any typedefs.
                 // "Convert" means replacing bindgen-style type targets
                 // (e.g. root::std::unique_ptr) with cxx-style targets (e.g. UniquePtr).

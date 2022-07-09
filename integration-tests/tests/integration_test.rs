@@ -11493,6 +11493,47 @@ fn test_issue_1125() {
     );
 }
 
+#[test]
+fn test_non_pod_field_access() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Foo {
+            uint32_t i;
+
+            Foo(uint32_t i) : i(i) {}
+
+            virtual ~Foo() {} // Foo is not a POD, it has a vtable!
+        };
+    "};
+
+    let rs = quote! {
+        let mut foo = ffi::Foo::new(3).within_unique_ptr();
+        let i = foo.pin_mut().get_i();
+        assert_eq!(i, 3);
+    };
+
+    run_test("", hdr, rs, &["Foo"], &[]);
+}
+
+#[test]
+fn test_non_pod_with_non_copyable_member() {
+    let hdr = indoc! {"
+        struct Foo {
+            Foo(const Foo &foo) = delete;
+            int x;
+        };
+
+        struct Bar {
+            Foo foo;
+        };
+    "};
+
+    let rs = quote! {
+    };
+
+    run_test("", hdr, rs, &["Foo", "Bar"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers

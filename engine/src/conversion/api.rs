@@ -221,6 +221,7 @@ pub(crate) enum SpecialMemberKind {
     MoveConstructor,
     Destructor,
     AssignmentOperator,
+    GeneratedAccessor,
 }
 
 impl Display for SpecialMemberKind {
@@ -234,6 +235,7 @@ impl Display for SpecialMemberKind {
                 SpecialMemberKind::MoveConstructor => "move constructor",
                 SpecialMemberKind::Destructor => "destructor",
                 SpecialMemberKind::AssignmentOperator => "assignment operator",
+                SpecialMemberKind::GeneratedAccessor => "generated accessor",
             }
         )
     }
