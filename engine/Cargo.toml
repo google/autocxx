@@ -49,6 +49,7 @@ miette = "4.3"
 thiserror = "1"
 regex = "1.5"
 indexmap = "1.8"
+prettyplease = { version = "0.1.15", features = ["verbatim"] }
 
 [dependencies.syn]
 version = "1.0.39"
