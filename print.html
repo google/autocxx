@@ -486,11 +486,12 @@ a memcpy. Such self-referential pointers are common - even some implementations 
 <li>Call the <code>new</code> associated function in the same way. This will give you something implementing <a href="https://docs.rs/moveit/latest/moveit/new/trait.New.html"><code>moveit::New</code></a>/</li>
 <li>Use this to make the object on the heap or stack, in any of the following ways:</li>
 </ul>
-<table><thead><tr><th>Where you want to create it</th><th>How to create it</th><th>What you get</th><th>Example</th></tr></thead><tbody>
+<div class="table-wrapper"><table><thead><tr><th>Where you want to create it</th><th>How to create it</th><th>What you get</th><th>Example</th></tr></thead><tbody>
 <tr><td>C++ heap (<em>recommended for simplicity</em>)</td><td><a href="https://docs.rs/autocxx/latest/autocxx/trait.Within.html"><code>Within.within_unique_ptr()</code></a> or <a href="https://docs.rs/moveit/latest/moveit/new/trait.EmplaceUnpinned.html#method.emplace"><code>UniquePtr::emplace</code></a></td><td><a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr&lt;T&gt;</code></a></td><td><code>let mut obj = ffi::Goldfish::new().within_unique_ptr()</code> or <code>let mut obj = UniquePtr::emplace(ffi::Goldfish::new())</code></td></tr>
 <tr><td>Rust heap</td><td><a href="https://docs.rs/autocxx/latest/autocxx/trait.Within.html"><code>Within.within_box()</code></a> or <a href="https://docs.rs/moveit/latest/moveit/new/trait.Emplace.html#method.emplace"><code>Box::emplace</code></a></td><td><code>Pin&lt;Box&lt;T&gt;&gt;</code></td><td><code>let mut obj = ffi::Goldfish::new().within_box()</code> or <code>let mut obj = Box::emplace(ffi::Goldfish::new())</code></td></tr>
 <tr><td>Rust stack</td><td><a href="https://docs.rs/moveit/latest/moveit/macro.moveit.html"><code>moveit</code> macro</a></td><td><code>&amp;mut T</code> (more or less)</td><td><code>moveit! { let mut obj = ffi::Goldfish::new() }</code></td></tr>
 </tbody></table>
+</div>
 <p>For heap construction, the prefix (<code>emplace</code>) and postfix (<code>.within_...</code>) forms are exactly identical. Choose whichever suits your needs best.</p>
 <h3 id="should-you-construct-on-the-rust-heap-or-the-c-heap"><a class="header" href="#should-you-construct-on-the-rust-heap-or-the-c-heap">Should you construct on the Rust heap or the C++ heap?</a></h3>
 <p>Use <code>.within_unique_ptr()</code> to create objects on the C++ heap. This gives you a <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr&lt;T&gt;</code></a> which works well with other autocxx and cxx APIs.</p>
