@@ -1,6 +1,13 @@
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
 use std::collections::HashSet;
 
-use autocxx_parser::IncludeCppConfig;
 use syn::{parse_quote, Field, FnArg, Visibility};
 
 use crate::{
@@ -16,11 +23,7 @@ use crate::{
 
 use super::fun::function_wrapper::{CppFunctionBody, CppFunctionKind};
 
-pub(crate) fn add_field_accessors(
-    // TODO: this isn't used currently, but maybe there will be some option for doing this phase
-    _config: &IncludeCppConfig,
-    apis: ApiVec<NullPhase>,
-) -> ApiVec<NullPhase> {
+pub(crate) fn add_field_accessors(apis: ApiVec<NullPhase>) -> ApiVec<NullPhase> {
     let existing_api: HashSet<QualifiedName> = apis.iter().map(|api| api.name().clone()).collect();
 
     let mut results = ApiVec::new();
@@ -87,9 +90,8 @@ pub(crate) fn add_field_accessors(
                         })
                     }
                 }
-                // TODO: is it even possible for these to occur?
-                syn::Fields::Unnamed(_) => todo!(),
-                syn::Fields::Unit => todo!(),
+                syn::Fields::Unnamed(_) => {}
+                syn::Fields::Unit => {}
             };
 
             // Generate the accessors (if any) + the struct itself
@@ -114,14 +116,12 @@ fn should_generate_accessor(field: &Field) -> bool {
         return false;
     }
 
-    // Don't generate accessors for cpp reference fields
-    // TODO: is this restriction necessary?
+    // Don't generate accessors for cpp reference fields (this restriction may be lifted in the future)
     if field.attrs.iter().any(is_cpp_reference) {
         return false;
     }
 
     // Don't generate accessors for "fake" bindgen fields which wouldn't appear directly in the C++ struct
-    // TODO: is there a better way to tell which fields these are?
     let field_name = field.ident.as_ref().unwrap().to_string();
     if field_name == "vtable_" || field_name == "_address" || field_name == "_base" {
         return false;
