@@ -135,7 +135,7 @@ impl<'a> BridgeConverter<'a> {
                 // Inside parse_results, we now have a list of APIs.
                 // We now enter various analysis phases.
                 // Add accessors for class/struct fields. These are necessary to access fields of non-POD types
-                let apis = add_field_accessors(self.config, apis);
+                let apis = add_field_accessors(apis);
                 Self::dump_apis("adding field accessors", &apis);
                 // Next, convert any typedefs.
                 // "Convert" means replacing bindgen-style type targets
