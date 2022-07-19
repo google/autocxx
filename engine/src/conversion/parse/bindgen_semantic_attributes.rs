@@ -76,7 +76,7 @@ impl BindgenSemanticAttributes {
         self.0.iter().any(|a| a.is_ident(attr_name))
     }
 
-    pub fn is_cpp_reference(&self) -> bool {
+    pub(crate) fn is_cpp_reference(&self) -> bool {
         self.has_attr("reference") || self.has_attr("rvalue_reference")
     }
 

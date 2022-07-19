@@ -952,11 +952,9 @@ impl<'a> FnAnalyzer<'a> {
                         Virtualness::PureVirtual => MethodKind::PureVirtual(receiver_mutability),
                     }
                 };
-
                 // Disambiguate overloads.
                 let rust_name = predetermined_rust_name
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
-
                 let error_context = self.error_context_for_method(&self_ty, &rust_name);
                 (
                     FnKind::Method {
