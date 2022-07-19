@@ -43,17 +43,16 @@ pub(crate) fn add_field_accessors(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
             match &details.item.fields {
                 syn::Fields::Named(named) => {
                     for field in named.named.iter() {
-                        if !should_generate_accessor(field, &pod_safe_types) {
-                            continue;
-                        }
-
                         let field_name = field.ident.as_ref().unwrap().to_string();
                         let accessor_name = get_accessor_name(&struct_name.name, &field_name);
                         let ident = accessor_name.get_final_ident();
 
-                        // Don't generate accessors that would conflict with existing api (i.e., if a method with the name we would generate already exists)
-                        // TOOD: it would be nicer for this to be in should_generate_accessor
-                        if existing_api.contains(&accessor_name) {
+                        if !should_generate_accessor(
+                            field,
+                            &existing_api,
+                            &accessor_name,
+                            &pod_safe_types,
+                        ) {
                             continue;
                         }
 
@@ -116,7 +115,17 @@ pub(crate) fn add_field_accessors(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
     results
 }
 
-fn should_generate_accessor(field: &Field, pod_safe_types: &HashSet<QualifiedName>) -> bool {
+fn should_generate_accessor(
+    field: &Field,
+    existing_api: &HashSet<QualifiedName>,
+    accessor_name: &QualifiedName,
+    pod_safe_types: &HashSet<QualifiedName>,
+) -> bool {
+    // Don't generate accessors that would conflict with existing api (i.e., if a method with the name we would generate already exists)
+    if existing_api.contains(&accessor_name) {
+        return false;
+    }
+
     // Don't generate accessors for non-public fields
     if !matches!(field.vis, Visibility::Public(_)) {
         return false;
@@ -140,7 +149,7 @@ fn should_generate_accessor(field: &Field, pod_safe_types: &HashSet<QualifiedNam
             if !pod_safe_types.contains(&QualifiedName::from_type_path(path)) {
                 return false;
             }
-        },
+        }
         _ => {
             return false;
         }
