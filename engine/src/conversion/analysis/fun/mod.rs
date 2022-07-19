@@ -953,17 +953,9 @@ impl<'a> FnAnalyzer<'a> {
                     }
                 };
 
-                let rust_name = if matches!(
-                    fun.special_member,
-                    Some(SpecialMemberKind::GeneratedAccessor)
-                ) {
-                    // TODO: We can do better than this. We should be able to determine the struct name and strip that prefix
-                    (&rust_name[rust_name.find("get_").unwrap()..]).to_string()
-                } else {
-                    // Disambiguate overloads.
-                    predetermined_rust_name
-                        .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name))
-                };
+                // Disambiguate overloads.
+                let rust_name = predetermined_rust_name
+                    .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
 
                 let error_context = self.error_context_for_method(&self_ty, &rust_name);
                 (

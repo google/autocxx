@@ -11508,7 +11508,7 @@ fn test_non_pod_field_access() {
 
     let rs = quote! {
         let mut foo = ffi::Foo::new(3).within_unique_ptr();
-        let i = foo.pin_mut().get_i();
+        let i = foo.pin_mut().Foo_get_i();
         assert_eq!(i, 3);
     };
 

@@ -12,9 +12,7 @@ use syn::{parse_quote, Field, FnArg, Visibility};
 
 use crate::{
     conversion::{
-        api::{
-            Api, ApiName, FuncToConvert, Provenance, SpecialMemberKind, StructDetails, TypeKind,
-        },
+        api::{Api, ApiName, FuncToConvert, Provenance, StructDetails, TypeKind},
         apivec::ApiVec,
         error_reporter::convert_apis,
         parse::BindgenSemanticAttributes,
@@ -81,7 +79,7 @@ pub(crate) fn add_field_accessors(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
                                 vis: parse_quote! { pub },
                                 virtualness: crate::conversion::api::Virtualness::None,
                                 cpp_vis: crate::conversion::api::CppVisibility::Public,
-                                special_member: Some(SpecialMemberKind::GeneratedAccessor),
+                                special_member: None,
                                 unused_template_param: false,
                                 references: Default::default(),
                                 original_name: None,
