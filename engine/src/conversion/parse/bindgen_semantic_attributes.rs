@@ -76,6 +76,10 @@ impl BindgenSemanticAttributes {
         self.0.iter().any(|a| a.is_ident(attr_name))
     }
 
+    pub fn is_cpp_reference(&self) -> bool {
+        self.has_attr("reference") || self.has_attr("rvalue_reference")
+    }
+
     /// The C++ visibility of the item.
     pub(super) fn get_cpp_visibility(&self) -> CppVisibility {
         if self.has_attr("visibility_private") {

@@ -16,7 +16,7 @@ use crate::{
             Api, ApiName, FuncToConvert, NullPhase, Provenance, SpecialMemberKind, StructDetails,
         },
         apivec::ApiVec,
-        error_reporter::convert_apis,
+        error_reporter::convert_apis, parse::BindgenSemanticAttributes,
     },
     types::{make_ident, QualifiedName},
 };
@@ -117,7 +117,8 @@ fn should_generate_accessor(field: &Field) -> bool {
     }
 
     // Don't generate accessors for cpp reference fields (this restriction may be lifted in the future)
-    if field.attrs.iter().any(is_cpp_reference) {
+    let annotations = BindgenSemanticAttributes::new(&field.attrs);
+    if annotations.is_cpp_reference() {
         return false;
     }
 
@@ -128,11 +129,6 @@ fn should_generate_accessor(field: &Field) -> bool {
     }
 
     return true;
-}
-
-fn is_cpp_reference(attr: &syn::Attribute) -> bool {
-    return *attr == parse_quote! { #[cpp_semantics(reference)] }
-        || *attr == parse_quote! { #[cpp_semantics(rvalue_reference)] };
 }
 
 fn get_accessor_name(struct_name: &QualifiedName, field_name: &str) -> QualifiedName {
