@@ -32,9 +32,10 @@ jobs:
           - name: macOS
             rust: nightly
             os: macos
-          - name: Windows (gnu)
-            rust: nightly-x86_64-pc-windows-gnu
-            os: windows
+          # Windows GNU disabled due to https://github.com/google/autocxx/issues/1134
+          # - name: Windows (gnu)
+          #    rust: nightly-x86_64-pc-windows-gnu
+          #    os: windows
           - name: Windows (msvc)
             rust: nightly-x86_64-pc-windows-msvc
             os: windows
