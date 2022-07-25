@@ -62,6 +62,9 @@ jobs:
       - name: Install creduce (MacOS)
         if: matrix.os == 'macOS'
         run: brew install creduce
+      - name: HACK: install different libclang-dev
+        if: matrix.os == ubuntu-latest
+        run: wget http://ftp.us.debian.org/debian/pool/main/l/llvm-toolchain-11/libclang-11-dev_11.0.1-2_amd64.deb && sudo dpkg -i libclang-11-dev_11.0.1-2_amd64.deb && dpkg -S libclang.so
       - name: Set LIBCLANG_PATH (Windows)
         # Windows github action doesn't set the path for clang, so set it
         # See https://github.com/rust-lang/rust-bindgen/issues/1797
