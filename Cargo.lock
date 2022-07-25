@@ -105,7 +105,7 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "clap 2.34.0",
- "env_logger 0.9.0",
+ "env_logger",
  "itertools 0.10.3",
  "lazy_static",
  "lazycell",
@@ -124,7 +124,7 @@ name = "autocxx-build"
 version = "0.22.3"
 dependencies = [
  "autocxx-engine",
- "env_logger 0.9.0",
+ "env_logger",
  "indexmap",
  "syn",
 ]
@@ -176,7 +176,7 @@ dependencies = [
  "autocxx-integration-tests",
  "clap 3.1.9",
  "cxx",
- "env_logger 0.9.0",
+ "env_logger",
  "indexmap",
  "itertools 0.10.3",
  "miette",
@@ -193,7 +193,7 @@ dependencies = [
  "autocxx-engine",
  "cc",
  "cxx",
- "env_logger 0.9.0",
+ "env_logger",
  "indoc",
  "itertools 0.10.3",
  "link-cplusplus",
@@ -226,7 +226,7 @@ dependencies = [
  "anyhow",
  "autocxx-integration-tests",
  "clap 3.1.9",
- "env_logger 0.9.0",
+ "env_logger",
  "gag",
  "itertools 0.10.3",
  "mdbook",
@@ -559,25 +559,12 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "env_logger"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
-dependencies = [
- "atty",
- "humantime 1.3.0",
- "log",
- "regex",
- "termcolor",
-]
-
-[[package]]
-name = "env_logger"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
 dependencies = [
  "atty",
- "humantime 2.1.0",
+ "humantime",
  "log",
  "regex",
  "termcolor",
@@ -649,7 +636,7 @@ dependencies = [
  "log",
  "pest",
  "pest_derive",
- "quick-error 2.0.1",
+ "quick-error",
  "serde",
  "serde_json",
 ]
@@ -673,15 +660,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "humantime"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df004cfca50ef23c36850aaaa59ad52cc70d0e90243c3c7737a4dd32dc7a3c4f"
-dependencies = [
- "quick-error 1.2.3",
 ]
 
 [[package]]
@@ -803,15 +781,15 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 
 [[package]]
 name = "mdbook"
-version = "0.4.18"
+version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74612ae81a3e5ee509854049dfa4c7975ae033c06f5fc4735c7dfbe60ee2a39d"
+checksum = "23f3e133c6d515528745ffd3b9f0c7d975ae039f0b6abb099f2168daa2afb4f9"
 dependencies = [
  "anyhow",
  "chrono",
  "clap 3.1.9",
  "clap_complete",
- "env_logger 0.7.1",
+ "env_logger",
  "handlebars",
  "lazy_static",
  "log",
@@ -820,7 +798,6 @@ dependencies = [
  "pulldown-cmark",
  "regex",
  "serde",
- "serde_derive",
  "serde_json",
  "shlex",
  "tempfile",
@@ -1116,12 +1093,6 @@ dependencies = [
  "memchr",
  "unicase",
 ]
-
-[[package]]
-name = "quick-error"
-version = "1.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quick-error"
