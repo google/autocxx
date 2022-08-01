@@ -644,14 +644,23 @@ impl<'a> RsCodeGenerator<'a> {
                     false,
                 )
             }
-            Api::ForwardDeclaration { .. }
-            | Api::ConcreteType { .. }
-            | Api::OpaqueTypedef { .. } => self.generate_type(
+            Api::ConcreteType { .. } => self.generate_type(
                 &name,
                 id,
                 TypeKind::Abstract,
                 false, // assume for now that these types can't be kept in a Vector
                 true,  // assume for now that these types can be put in a smart pointer
+                || None,
+                associated_methods,
+                None,
+                false,
+            ),
+            Api::ForwardDeclaration { .. } | Api::OpaqueTypedef { .. } => self.generate_type(
+                &name,
+                id,
+                TypeKind::Abstract,
+                false, // these types can't be kept in a Vector
+                false, // these types can't be put in a smart pointer
                 || None,
                 associated_methods,
                 None,
@@ -1042,6 +1051,7 @@ impl<'a> RsCodeGenerator<'a> {
                         extern_c_mod_items: vec![
                             self.generate_cxxbridge_type(name, false, doc_attrs)
                         ],
+                        bridge_items: create_impl_items(&id, movable, destroyable, self.config),
                         bindgen_mod_items,
                         materializations,
                         ..Default::default()

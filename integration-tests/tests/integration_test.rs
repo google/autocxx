@@ -8,7 +8,8 @@
 
 use crate::{
     builder_modifiers::{
-        make_clang_arg_adder, make_cpp17_adder, EnableAutodiscover, SetSuppressSystemHeaders,
+        make_clang_arg_adder, make_clang_optional_arg_adder, make_cpp17_adder, EnableAutodiscover,
+        SetSuppressSystemHeaders,
     },
     code_checkers::{
         make_error_finder, make_rust_code_finder, make_string_finder, CppMatcher,
@@ -5756,7 +5757,17 @@ fn test_issue_506() {
         } // namespace spanner
     "};
     let rs = quote! {};
-    run_test("", hdr, rs, &["spanner::Database", "spanner::Row"], &[]);
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["spanner::Database", "spanner::Row"], &[], None),
+        // This is normally a valid warning for generating bindings for this code, but we're doing
+        // it on purpose as a regression test on minimized code so we'll just ignore it.
+        make_clang_optional_arg_adder(&[], &["-Wno-delete-abstract-non-virtual-dtor"]),
+        None,
+        None,
+    );
 }
 
 #[test]
@@ -9427,6 +9438,43 @@ fn test_abstract_up() {
         a.foo();
     };
     run_test("", hdr, rs, &["A", "get_a"], &[]);
+}
+
+#[test]
+fn test_abstract_up_multiple_bridge() {
+    let hdr = indoc! {"
+    #include <memory>
+    class A {
+    public:
+        virtual void foo() const = 0;
+        virtual ~A() {}
+    };
+    class B : public A {
+    public:
+        void foo() const {}
+    };
+    inline std::unique_ptr<A> get_a() { return std::make_unique<B>(); }
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("A")
+        }
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            name!(ffi2)
+            extern_cpp_type!("A", crate::ffi::A)
+            generate!("get_a")
+        }
+        fn main() {
+            let a = ffi2::get_a();
+            a.foo();
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 #[test]
