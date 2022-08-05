@@ -11541,6 +11541,21 @@ fn test_issue_1125() {
     );
 }
 
+#[test]
+#[ignore]
+fn test_issue_1143() {
+    let hdr = indoc! {
+        "namespace mapnik {
+            class Map {
+            public:
+              int &a(long);
+            };
+        }"
+    };
+
+    run_test("", hdr, quote! {}, &["mapnik::Map"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
