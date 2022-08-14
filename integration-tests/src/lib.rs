@@ -57,6 +57,9 @@ pub enum RsFindMode {
     AutocxxRs,
     AutocxxRsArchive,
     AutocxxRsFile,
+    /// This just calls the callback instead of setting any environment variables. The callback
+    /// receives the path to the temporary directory.
+    Custom(Box<dyn FnOnce(&Path)>),
 }
 
 /// API to test building pre-generated files.
@@ -174,6 +177,7 @@ impl LinkableTryBuilder {
                 "AUTOCXX_RS_FILE",
                 self.temp_dir.path().join("gen0.include.rs"),
             ),
+            RsFindMode::Custom(f) => f(self.temp_dir.path()),
         };
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();
