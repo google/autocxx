@@ -63,7 +63,7 @@ impl TypeConversionPolicy {
             }
             RustConversionType::FromPinMaybeUninitToPtr => {
                 let ty = match self.cxxbridge_type() {
-                    Type::Ptr(TypePtr { elem, .. }) => &*elem,
+                    Type::Ptr(TypePtr { elem, .. }) => elem,
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! {
@@ -80,7 +80,7 @@ impl TypeConversionPolicy {
             }
             RustConversionType::FromPinMoveRefToPtr => {
                 let ty = match self.cxxbridge_type() {
-                    Type::Ptr(TypePtr { elem, .. }) => &*elem,
+                    Type::Ptr(TypePtr { elem, .. }) => elem,
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! {
@@ -99,7 +99,7 @@ impl TypeConversionPolicy {
             }
             RustConversionType::FromTypeToPtr => {
                 let ty = match self.cxxbridge_type() {
-                    Type::Ptr(TypePtr { elem, .. }) => &*elem,
+                    Type::Ptr(TypePtr { elem, .. }) => elem,
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! { &mut #ty };

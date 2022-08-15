@@ -29,7 +29,7 @@ use crate::{directives::get_directives, RustPath};
 
 use quote::quote;
 
-#[derive(PartialEq, Clone, Debug, Hash)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
     AllFunctionsSafe,
     AllFunctionsUnsafe,
