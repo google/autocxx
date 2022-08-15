@@ -147,6 +147,58 @@ fn test_gen_archive() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_gen_archive_first_entry() -> Result<(), Box<dyn std::error::Error>> {
+    let tmp_dir = tempdir()?;
+    base_test(&tmp_dir, RsGenMode::Archive, |_| {})?;
+    File::create(tmp_dir.path().join("cxx.h"))
+        .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
+    let r = build_from_folder(
+        tmp_dir.path(),
+        &tmp_dir.path().join("demo/main.rs"),
+        vec![tmp_dir.path().join("gen.rs.json")],
+        &["gen0.cc"],
+        RsFindMode::Custom(Box::new(|path: &Path| {
+            std::env::set_var(
+                "AUTOCXX_RS_JSON_ARCHIVE",
+                std::env::join_paths([&path.join("gen.rs.json"), Path::new("/nonexistent")])
+                    .unwrap(),
+            )
+        })),
+    );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tmp_dir.into_path().to_str());
+    }
+    r.unwrap();
+    Ok(())
+}
+
+#[test]
+fn test_gen_archive_second_entry() -> Result<(), Box<dyn std::error::Error>> {
+    let tmp_dir = tempdir()?;
+    base_test(&tmp_dir, RsGenMode::Archive, |_| {})?;
+    File::create(tmp_dir.path().join("cxx.h"))
+        .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
+    let r = build_from_folder(
+        tmp_dir.path(),
+        &tmp_dir.path().join("demo/main.rs"),
+        vec![tmp_dir.path().join("gen.rs.json")],
+        &["gen0.cc"],
+        RsFindMode::Custom(Box::new(|path: &Path| {
+            std::env::set_var(
+                "AUTOCXX_RS_JSON_ARCHIVE",
+                std::env::join_paths([Path::new("/nonexistent"), &path.join("gen.rs.json")])
+                    .unwrap(),
+            )
+        })),
+    );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tmp_dir.into_path().to_str());
+    }
+    r.unwrap();
+    Ok(())
+}
+
+#[test]
 fn test_gen_multiple_in_archive() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = tempdir()?;
 
