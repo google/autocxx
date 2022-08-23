@@ -26,7 +26,7 @@ cxx = "1.0"
 
 [build-dependencies]
 autocxx-build = "0.22.4"
-miette = { version="4.3", features=["fancy"] } # optional but gives nicer error messages!
+miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!
 ```
 
 Now, add a `build.rs` next to your `Cargo.toml` (this is a standard `cargo` [build script](https://doc.rust-lang.org/cargo/reference/build-scripts.html)). This is where you need your include path:
