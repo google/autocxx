@@ -1142,13 +1142,16 @@ impl<'a> RsCodeGenerator<'a> {
         let id = name.type_path_from_root();
         let super_duper = std::iter::repeat(make_ident("super"));
         let supers = super_duper.take(ns_depth + 2);
+        let name_final = name.get_final_ident();
         let use_statement = parse_quote! {
             pub use #(#supers)::* :: #id;
         };
         RsCodegenResult {
             bindgen_mod_items: vec![use_statement],
             extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, Vec::new())],
-            materializations: vec![Use::Custom(Box::new(parse_quote! { pub use #rust_path; }))],
+            materializations: vec![Use::Custom(Box::new(
+                parse_quote! { pub use #rust_path as #name_final; },
+            ))],
             ..Default::default()
         }
     }

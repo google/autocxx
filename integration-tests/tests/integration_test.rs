@@ -6643,6 +6643,48 @@ fn test_extern_cpp_type_cxx_bridge() {
 }
 
 #[test]
+fn test_extern_cpp_type_different_name() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct A {
+            A() : a(0) {}
+            int a;
+        };
+        inline void handle_a(const A&) {
+        }
+        inline A create_a() {
+            A a;
+            return a;
+        }
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::prelude::*;
+        include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("handle_a")
+            generate!("create_a")
+            extern_cpp_opaque_type!("A", crate::DifferentA)
+        }
+        #[cxx::bridge]
+        pub mod ffi2 {
+            unsafe extern "C++" {
+                include!("input.h");
+                type A;
+            }
+            impl UniquePtr<A> {}
+        }
+        pub use ffi2::A as DifferentA;
+        fn main() {
+            let a = ffi::create_a();
+            ffi::handle_a(&a);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
 fn test_extern_cpp_type_two_include_cpp() {
     let hdr = indoc! {"
         #include <cstdint>
