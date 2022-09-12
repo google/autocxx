@@ -36,12 +36,12 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     mut params: Punctuated<FnArg, Comma>,
     ret_type: Cow<'r, ReturnType>,
     non_pod_types: &HashSet<QualifiedName>,
-    assert_all_parameters_are_references: bool,
 ) -> (
     Option<TokenStream>,
     Punctuated<FnArg, Comma>,
     Cow<'r, ReturnType>,
 ) {
+    log::info!("Beforehand it's {:?}", params.to_token_stream().to_string());
     let has_mutable_receiver = param_details.iter().any(|pd| {
         matches!(pd.self_type, Some((_, ReceiverMutability::Mutable)))
             && !pd.is_placement_return_destination
@@ -98,19 +98,11 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                         Type::Path(TypePath {
                             path: Path { segments, .. },
                             ..
-                        }) => add_lifetime_to_pinned_reference(segments).unwrap_or_else(|e| {
-                            if assert_all_parameters_are_references {
-                                panic!("Expected a pinned reference: {:?}", e)
-                            }
-                        }),
+                        }) => add_lifetime_to_pinned_reference(segments).unwrap_or(()),
                         Type::Reference(tyr) => add_lifetime_to_reference(tyr),
                         Type::ImplTrait(tyit) => add_lifetime_to_impl_trait(tyit),
-                        _ if assert_all_parameters_are_references => {
-                            panic!("Expected Pin<&mut T> or &T")
-                        }
                         _ => {}
                     },
-                    _ if assert_all_parameters_are_references => panic!("Unexpected fnarg"),
                     _ => {}
                 }
             }
