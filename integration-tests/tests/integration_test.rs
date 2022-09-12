@@ -11542,7 +11542,6 @@ fn test_issue_1125() {
 }
 
 #[test]
-#[ignore]
 fn test_issue_1143() {
     let hdr = indoc! {
         "namespace mapnik {
