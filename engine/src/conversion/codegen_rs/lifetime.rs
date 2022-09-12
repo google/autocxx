@@ -93,8 +93,8 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
         None => (None, params, ret_type),
         Some(new_return_type) => {
             for mut param in params.iter_mut() {
-                match &mut param {
-                    FnArg::Typed(PatType { ty, .. }) => match ty.as_mut() {
+                if let FnArg::Typed(PatType { ty, .. }) = &mut param {
+                    match ty.as_mut() {
                         Type::Path(TypePath {
                             path: Path { segments, .. },
                             ..
@@ -102,8 +102,7 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                         Type::Reference(tyr) => add_lifetime_to_reference(tyr),
                         Type::ImplTrait(tyit) => add_lifetime_to_impl_trait(tyit),
                         _ => {}
-                    },
-                    _ => {}
+                    }
                 }
             }
 
