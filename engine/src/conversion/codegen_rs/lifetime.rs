@@ -41,7 +41,6 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     Punctuated<FnArg, Comma>,
     Cow<'r, ReturnType>,
 ) {
-    log::info!("Beforehand it's {:?}", params.to_token_stream().to_string());
     let has_mutable_receiver = param_details.iter().any(|pd| {
         matches!(pd.self_type, Some((_, ReceiverMutability::Mutable)))
             && !pd.is_placement_return_destination
