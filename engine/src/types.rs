@@ -175,7 +175,7 @@ impl QualifiedName {
     pub(crate) fn get_final_cpp_item(&self) -> String {
         let special_cpp_name = known_types().special_cpp_name(self);
         match special_cpp_name {
-            Some(name) => name,
+            Some(name) => Self::new_from_cpp_name(&name).1,
             None => self.1.to_string(),
         }
     }
