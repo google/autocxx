@@ -109,14 +109,9 @@ impl TypeConversionContext {
         matches!(self, Self::WithinReference)
     }
     fn allowed_generic_type(&self, ident: &Ident) -> bool {
-        match self {
+        !matches!(self,
             Self::WithinStructField { struct_type_params }
-                if struct_type_params.contains(ident) =>
-            {
-                false
-            }
-            _ => true,
-        }
+                if struct_type_params.contains(ident))
     }
 }
 
