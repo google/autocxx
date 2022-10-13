@@ -416,7 +416,7 @@ impl IncludeCppConfig {
     fn is_rust_type_name(&self, possible_ty: &str) -> bool {
         self.rust_types
             .iter()
-            .any(|rt| rt.get_final_ident() == &possible_ty)
+            .any(|rt| rt.get_final_ident() == possible_ty)
     }
 
     fn is_rust_fun(&self, possible_fun: &str) -> bool {
