@@ -7065,6 +7065,25 @@ fn test_rust_reference_no_autodiscover() {
 }
 
 #[test]
+fn test_rust_reference_no_autodiscover_no_usage() {
+    let rs = quote! {
+        let _ = RustType(3);
+    };
+    run_test_ex(
+        "",
+        "",
+        rs,
+        directives_from_lists(&[], &[], None),
+        None,
+        None,
+        Some(quote! {
+            #[autocxx::extern_rust::extern_rust_type]
+            pub struct RustType(i32);
+        }),
+    );
+}
+
+#[test]
 #[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 // TODO - replace make_clang_arg_adder with something that knows how to add an MSVC-suitable
 // directive for the cc build.

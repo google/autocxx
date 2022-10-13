@@ -495,6 +495,12 @@ pub mod extern_rust {
     /// for instance. This will contribute to an `extern "Rust"` section of the
     /// generated `cxx` bindings, and this type will appear in the C++ header
     /// generated for use in C++.
+    ///
+    /// You will likely need to forward-declare this type within your C++ headers
+    /// before you can use it in such function signatures. autocxx can't generate
+    /// headers (with this type definition) until it's parsed your header files;
+    /// logically therefore if your header files mention one of these types
+    /// it's impossible for them to see the definition of the type.
     pub use autocxx_macro::extern_rust_type;
 
     /// Declare that a given function is a Rust function which is to be exported
