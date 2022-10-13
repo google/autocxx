@@ -7065,6 +7065,36 @@ fn test_rust_reference_no_autodiscover() {
 }
 
 #[test]
+fn test_rust_box() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <cxx.h>
+
+    struct RustType;
+    inline uint32_t take_rust_box(rust::Box<RustType>) {
+        return 4;
+    }
+    "};
+    let rs = quote! {
+        let foo = Box::new(RustType(3));
+        let result = ffi::take_rust_box(foo);
+        assert_eq!(result, 4);
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["take_rust_box"], &[], None),
+        None,
+        None,
+        Some(quote! {
+            #[autocxx::extern_rust::extern_rust_type]
+            pub struct RustType(i32);
+        }),
+    );
+}
+
+#[test]
 fn test_rust_reference_no_autodiscover_no_usage() {
     let rs = quote! {
         let _ = RustType(3);
