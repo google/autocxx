@@ -389,30 +389,23 @@ impl<'a> FnGenerator<'a> {
             .map(|pd| pd.conversion.is_a_pointer())
             .unwrap_or(Pointerness::Not);
         let ty = impl_block_type_name.get_final_ident();
-        let ty = if self.reference_wrappers {
-            match receiver_pointerness {
-                Pointerness::MutPtr => ImplBlockKey {
-                    ty: parse_quote! {
-                        CppMutRef< 'a, #ty>
-                    },
-                    lifetime: Some(parse_quote! { 'a }),
+        let ty = match receiver_pointerness {
+            Pointerness::MutPtr if self.reference_wrappers => ImplBlockKey {
+                ty: parse_quote! {
+                    #ty
                 },
-                Pointerness::ConstPtr => ImplBlockKey {
-                    ty: parse_quote! {
-                        CppRef< 'a, #ty>
-                    },
-                    lifetime: Some(parse_quote! { 'a }),
+                lifetime: Some(parse_quote! { 'a }),
+            },
+            Pointerness::ConstPtr if self.reference_wrappers => ImplBlockKey {
+                ty: parse_quote! {
+                    #ty
                 },
-                Pointerness::Not => ImplBlockKey {
-                    ty: parse_quote! { # ty },
-                    lifetime: None,
-                },
-            }
-        } else {
-            ImplBlockKey {
+                lifetime: Some(parse_quote! { 'a }),
+            },
+            _ => ImplBlockKey {
                 ty: parse_quote! { # ty },
                 lifetime: None,
-            }
+            },
         };
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {

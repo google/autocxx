@@ -172,16 +172,16 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a pointer"),
                 };
                 let (ty, wrapper_name) = if is_mut {
-                    (parse_quote! { CppMutRef<'a, #ty> }, "CppMutRef")
+                    (parse_quote! { autocxx::CppMutRef<'a, #ty> }, "CppMutRef")
                 } else {
-                    (parse_quote! { CppRef<'a, #ty> }, "CppRef")
+                    (parse_quote! { autocxx::CppRef<'a, #ty> }, "CppRef")
                 };
                 let wrapper_name = make_ident(wrapper_name);
                 RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
-                        #wrapper_name (#var, std::marker::PhantomData)
+                        autocxx::#wrapper_name::from_ptr (#var)
                     },
                     conversion_requires_unsafe: false,
                 }
@@ -194,15 +194,21 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a pointer"),
                 };
                 let ty = if is_mut {
-                    parse_quote! { &mut CppMutRef<'a, #ty> }
+                    parse_quote! { &mut autocxx::CppMutRef<'a, #ty> }
                 } else {
-                    parse_quote! { &CppRef<'a, #ty> }
+                    parse_quote! { &autocxx::CppRef<'a, #ty> }
                 };
                 RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
-                    conversion: quote! {
-                        #var .0
+                    conversion: if is_mut {
+                        quote! {
+                            #var .as_mut_ptr()
+                        }
+                    } else {
+                        quote! {
+                            #var .as_ptr()
+                        }
                     },
                     conversion_requires_unsafe: false,
                 }

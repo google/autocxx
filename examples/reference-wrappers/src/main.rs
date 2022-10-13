@@ -47,7 +47,7 @@ fn main() {
     // However, as soon as we want to pass a reference to the field
     // back to C++, we have to ensure we have no Rust references
     // in existence. So: we imprison the object in a "CppPin":
-    let field = ffi::cpp_pin_uniqueptr(field);
+    let field = CppUniquePtrPin::new(field);
     // We can no longer take Rust references to the field...
     //   let _field_rust_ref = field.as_ref();
     // However, we can take C++ references. And use such references
@@ -58,7 +58,7 @@ fn main() {
     assert_eq!(
         another_goat
             .describe() // returns a UniquePtr<CxxString>, there
-                // are no Rust or C++ references involved at this point.
+            // are no Rust or C++ references involved at this point.
             .as_ref()
             .unwrap()
             .to_string_lossy(),
