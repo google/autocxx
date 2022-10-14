@@ -45,7 +45,7 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// you can use `lifetime_cast` to get a long-lived version.
 ///
 /// On the other hand, these references do not give you Rust's exclusivity
-/// guarantees. These references can be freely cloned, and using [`const_cast`]
+/// guarantees. These references can be freely cloned, and using [`CppRef::const_cast`]
 /// you can even make a mutable reference from an immutable reference.
 ///
 /// # Field access
@@ -282,7 +282,7 @@ impl<T> CppPinContents<T> {
 ///
 /// If you need C++ to access your Rust object, first imprison it in one of these
 /// objects, then use [`Self::as_cpp_ref`] to obtain C++ references to it.
-/// If you need the object back for use in the Rust domain, use [`extract`],
+/// If you need the object back for use in the Rust domain, use [`CppPin::extract`],
 /// but be aware of the safety invariants that you - as a human - will need
 /// to guarantee.
 ///
