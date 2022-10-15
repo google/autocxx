@@ -7036,6 +7036,26 @@ fn test_extern_rust_method() {
 }
 
 #[test]
+fn test_extern_rust_fn_callback() {
+    let hdr = indoc! {"
+        struct a {};
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::prelude::*;
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("a")
+        }
+
+        #[autocxx::extern_rust::extern_rust_function]
+        pub fn called_from_cpp(a: Pin<&mut ffi::a>) {}
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
 fn test_rust_reference_no_autodiscover() {
     let hdr = indoc! {"
     #include <cstdint>
