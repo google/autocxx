@@ -194,6 +194,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rust_info",
+ "rustc_version",
  "syn",
  "tempfile",
  "test-log",
