@@ -6,14 +6,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::{
-    conversion::ConvertErrorFromCpp,
-    types::{make_ident, QualifiedName},
-};
+use crate::types::{make_ident, QualifiedName};
 use indexmap::map::IndexMap as HashMap;
 use indoc::indoc;
 use once_cell::sync::OnceCell;
-use syn::{parse_quote, Type, TypePath, TypePtr};
+use syn::{parse_quote, TypePath};
 
 //// The behavior of the type.
 #[derive(Debug)]
@@ -552,11 +549,4 @@ fn create_type_database() -> TypeDatabase {
         false,
     ));
     db
-}
-
-pub(crate) fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertErrorFromCpp> {
-    match *ptr.elem {
-        Type::Path(..) => Ok(()),
-        _ => Err(ConvertErrorFromCpp::InvalidPointee),
-    }
 }

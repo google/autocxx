@@ -256,7 +256,9 @@ impl<'a> TypeConverter<'a> {
         }
 
         let original_tn = QualifiedName::from_type_path(&typ);
-        original_tn.validate_ok_for_cxx()?;
+        original_tn
+            .validate_ok_for_cxx()
+            .map_err(ConvertErrorFromCpp::InvalidIdent)?;
         if self.config.is_on_blocklist(&original_tn.to_cpp_name()) {
             return Err(ConvertErrorFromCpp::Blocked(original_tn));
         }
@@ -455,7 +457,7 @@ impl<'a> TypeConverter<'a> {
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         match pointer_treatment {
             PointerTreatment::Pointer => {
-                crate::known_types::ensure_pointee_is_valid(&ptr)?;
+                Self::ensure_pointee_is_valid(&ptr)?;
                 let innerty =
                     self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
                 ptr.elem = innerty.ty;
@@ -490,7 +492,7 @@ impl<'a> TypeConverter<'a> {
                 Ok(outer)
             }
             PointerTreatment::RValueReference => {
-                crate::known_types::ensure_pointee_is_valid(&ptr)?;
+                Self::ensure_pointee_is_valid(&ptr)?;
                 let innerty =
                     self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
                 ptr.elem = innerty.ty;
@@ -501,6 +503,13 @@ impl<'a> TypeConverter<'a> {
                     TypeKind::RValueReference,
                 ))
             }
+        }
+    }
+
+    fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertErrorFromCpp> {
+        match *ptr.elem {
+            Type::Path(..) => Ok(()),
+            _ => Err(ConvertErrorFromCpp::InvalidPointee),
         }
     }
 

@@ -12,8 +12,9 @@ use quote::ToTokens;
 use std::iter::Peekable;
 use std::{fmt::Display, sync::Arc};
 use syn::{parse_quote, Ident, PathSegment, TypePath};
+use thiserror::Error;
 
-use crate::{conversion::ConvertErrorFromCpp, known_types::known_types};
+use crate::known_types::known_types;
 
 pub(crate) fn make_ident<S: AsRef<str>>(id: S) -> Ident {
     Ident::new(id.as_ref(), Span::call_site())
@@ -140,7 +141,7 @@ impl QualifiedName {
 
     /// cxx doesn't accept names containing double underscores,
     /// but these are OK elsewhere in our output mod.
-    pub(crate) fn validate_ok_for_cxx(&self) -> Result<(), ConvertErrorFromCpp> {
+    pub(crate) fn validate_ok_for_cxx(&self) -> Result<(), InvalidIdentError> {
         validate_ident_ok_for_cxx(self.get_final_item())
     }
 
@@ -228,26 +229,38 @@ impl Display for QualifiedName {
     }
 }
 
+/// Problems representing C++ identifiers in a way which is compatible with
+/// cxx.
+#[derive(Error, Clone, Debug)]
+pub enum InvalidIdentError {
+    #[error("Names containing __ are reserved by C++ so not acceptable to cxx")]
+    TooManyUnderscores,
+    #[error("bindgen decided to call this type _bindgen_ty_N because it couldn't deduce the correct name for it. That means we can't generate C++ bindings to it.")]
+    BindgenTy,
+    #[error("The item name '{0}' is a reserved word in Rust.")]
+    ReservedName(String),
+}
+
 /// cxx doesn't allow identifiers containing __. These are OK elsewhere
 /// in our output mod. It would be nice in future to think of a way we
 /// can enforce this using the Rust type system, e.g. a newtype
 /// wrapper for a CxxCompatibleIdent which is used in any context
 /// where code will be output as part of the `#[cxx::bridge]` mod.
-pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), ConvertErrorFromCpp> {
+pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), InvalidIdentError> {
     validate_ident_ok_for_rust(id)?;
     if id.contains("__") {
-        Err(ConvertErrorFromCpp::TooManyUnderscores)
+        Err(InvalidIdentError::TooManyUnderscores)
     } else if id.starts_with("_bindgen_ty_") {
-        Err(ConvertErrorFromCpp::BindgenTy)
+        Err(InvalidIdentError::BindgenTy)
     } else {
         Ok(())
     }
 }
 
-pub fn validate_ident_ok_for_rust(label: &str) -> Result<(), ConvertErrorFromCpp> {
+pub fn validate_ident_ok_for_rust(label: &str) -> Result<(), InvalidIdentError> {
     let id = make_ident(label);
     syn::parse2::<syn::Ident>(id.into_token_stream())
-        .map_err(|_| ConvertErrorFromCpp::ReservedName(label.to_string()))
+        .map_err(|_| InvalidIdentError::ReservedName(label.to_string()))
         .map(|_| ())
 }
 

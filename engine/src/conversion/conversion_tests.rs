@@ -34,6 +34,7 @@ fn do_test(input: ItemMod) {
         UnsafePolicy::AllFunctionsSafe,
         inclusions,
         &CppCodegenOptions::default(),
+        "",
     )
     .unwrap();
 }

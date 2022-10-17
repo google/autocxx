@@ -9,18 +9,34 @@
 use indexmap::set::IndexSet as HashSet;
 
 use itertools::Itertools;
+use miette::{Diagnostic, SourceSpan};
+use proc_macro2::Span;
 use syn::Ident;
 use thiserror::Error;
 
 use crate::{
-    known_types,
-    types::{make_ident, Namespace, QualifiedName},
+    known_types, proc_macro_span_to_miette_span,
+    types::{make_ident, InvalidIdentError, Namespace, QualifiedName},
 };
 
-#[derive(Debug, Clone, Error)]
-pub enum ConvertErrorFromCpp {
+/// Errors which can occur during conversion
+#[derive(Debug, Clone, Error, Diagnostic)]
+pub enum ConvertError {
     #[error("The initial run of 'bindgen' did not generate any content. This might be because none of the requested items for generation could be converted.")]
     NoContent,
+    #[error(transparent)]
+    Cpp(ConvertErrorFromCpp),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Rust(LocatedConvertErrorFromRust),
+}
+
+/// Errors that can occur during conversion which are detected from some C++
+/// source code. Currently, we do not gain span information from bindgen
+/// so these errors are presented without useful source code snippets.
+/// We hope to change this in future.
+#[derive(Debug, Clone, Error)]
+pub enum ConvertErrorFromCpp {
     #[error("An item was requested using 'generate_pod' which was not safe to hold by value in Rust. {0}")]
     UnsafePodType(String),
     #[error("Bindgen generated some unexpected code in a foreign mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")]
@@ -63,14 +79,12 @@ pub enum ConvertErrorFromCpp {
     Blocked(QualifiedName),
     #[error("This function or method uses a type where one of the template parameters was incomprehensible to bindgen/autocxx - probably because it uses template specialization.")]
     UnusedTemplateParam,
-    #[error("Names containing __ are reserved by C++ so not acceptable to cxx")]
-    TooManyUnderscores,
     #[error("This item relies on a type not known to autocxx ({})", .0.to_cpp_name())]
     UnknownDependentType(QualifiedName),
     #[error("This item depends on some other type(s) which autocxx could not generate, some of them are: {}", .0.iter().join(", "))]
     IgnoredDependent(HashSet<QualifiedName>),
-    #[error("The item name '{0}' is a reserved word in Rust.")]
-    ReservedName(String),
+    #[error(transparent)]
+    InvalidIdent(InvalidIdentError),
     #[error("This item name is used in multiple namespaces. At present, autocxx and cxx allow only one type of a given name. This limitation will be fixed in future. (Items found with this name: {})", .0.iter().join(", "))]
     DuplicateCxxBridgeName(Vec<String>),
     #[error("This is a method on a type which can't be used as the receiver in Rust (i.e. self/this). This is probably because some type involves template specialization.")]
@@ -123,14 +137,50 @@ pub enum ConvertErrorFromCpp {
     MethodInAnonymousNamespace,
     #[error("We're unable to make a concrete version of this template, because we found an error handling the template.")]
     ConcreteVersionOfIgnoredTemplate,
-    #[error("bindgen decided to call this type _bindgen_ty_N because it couldn't deduce the correct name for it. That means we can't generate C++ bindings to it.")]
-    BindgenTy,
     #[error("This is a typedef to a type in an anonymous namespace, not currently supported.")]
     TypedefToTypeInAnonymousNamespace,
     #[error("This type refers to a generic type parameter of an outer type, which is not yet supported.")]
     ReferringToGenericTypeParam,
     #[error("This forward declaration was nested within another struct/class. autocxx is unable to represent inner types if they are forward declarations.")]
     ForwardDeclaredNestedType,
+}
+
+/// Error types derived from Rust code. This is separate from [`ConvertError`] because these
+/// may have spans attached for better diagnostics.
+#[derive(Debug, Clone, Error)]
+pub enum ConvertErrorFromRust {
+    #[error("extern_rust_function only supports limited parameter and return types. This is not such a supported type")]
+    UnsupportedTypeForExternFun,
+    #[error("extern_rust_function requires a fully qualified receiver, that is: fn a(self: &SomeType) as opposed to fn a(&self)")]
+    ExternRustFunRequiresFullyQualifiedReceiver,
+    #[error("extern_rust_function cannot support &mut T references; instead use Pin<&mut T> (see cxx documentation for more details")]
+    PinnedReferencesRequiredForExternFun,
+    #[error("extern_rust_function cannot currently support qualified type paths (that is, foo::bar::Baz). All type paths must be within the current module, imported using 'use'. This restriction may be lifted in future.")]
+    NamespacesNotSupportedForExternFun,
+    #[error("extern_rust_function signatures must never reference Self: instead, spell out the type explicitly.")]
+    ExplicitSelf,
+}
+
+/// A [`ConvertErrorFromRust`] which also implements [`miette::Diagnostic`] so can be pretty-printed
+/// to show the affected span of code.
+#[derive(Error, Debug, Diagnostic, Clone)]
+#[error("{err}")]
+pub struct LocatedConvertErrorFromRust {
+    err: ConvertErrorFromRust,
+    #[source_code]
+    file: String,
+    #[label("error here")]
+    span: SourceSpan,
+}
+
+impl LocatedConvertErrorFromRust {
+    pub(crate) fn new(err: ConvertErrorFromRust, span: &Span, file: &str) -> Self {
+        Self {
+            err,
+            span: proc_macro_span_to_miette_span(span),
+            file: file.to_string(),
+        }
+    }
 }
 
 /// Ensures that error contexts are always created using the constructors in this

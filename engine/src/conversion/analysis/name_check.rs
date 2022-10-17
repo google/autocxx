@@ -109,7 +109,7 @@ fn validate_all_segments_ok_for_cxx(
     items: impl Iterator<Item = String>,
 ) -> Result<(), ConvertErrorFromCpp> {
     for seg in items {
-        validate_ident_ok_for_cxx(&seg)?;
+        validate_ident_ok_for_cxx(&seg).map_err(ConvertErrorFromCpp::InvalidIdent)?;
     }
     Ok(())
 }

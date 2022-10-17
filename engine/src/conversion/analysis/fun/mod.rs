@@ -1363,7 +1363,9 @@ impl<'a> FnAnalyzer<'a> {
 
         // Naming, part two.
         // Work out our final naming strategy.
-        validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).unwrap_or_else(set_ignore_reason);
+        validate_ident_ok_for_cxx(&cxxbridge_name.to_string())
+            .map_err(ConvertErrorFromCpp::InvalidIdent)
+            .unwrap_or_else(set_ignore_reason);
         let rust_name_ident = make_ident(&rust_name);
         let rust_rename_strategy = match kind {
             _ if rust_wrapper_needed => RustRenameStrategy::RenameUsingWrapperFunction,
@@ -1645,7 +1647,8 @@ impl<'a> FnAnalyzer<'a> {
                         syn::Pat::Ident(pp)
                     }
                     syn::Pat::Ident(pp) => {
-                        validate_ident_ok_for_cxx(&pp.ident.to_string())?;
+                        validate_ident_ok_for_cxx(&pp.ident.to_string())
+                            .map_err(ConvertErrorFromCpp::InvalidIdent)?;
                         pointer_treatment = references.param_treatment(&pp.ident);
                         syn::Pat::Ident(pp)
                     }

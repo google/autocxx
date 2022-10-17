@@ -685,34 +685,28 @@ impl<'a> RsCodeGenerator<'a> {
                 details:
                     RustFun {
                         path,
-                        sig,
-                        receiver: None,
+                        mut sig,
+                        has_receiver,
                         ..
                     },
                 ..
-            } => RsCodegenResult {
-                global_items: vec![parse_quote! {
-                    use super::#path;
-                }],
-                extern_rust_mod_items: vec![parse_quote! {
-                    #sig;
-                }],
-                ..Default::default()
-            },
-            Api::RustFn {
-                details:
-                    RustFun {
-                        sig,
-                        receiver: Some(_),
-                        ..
+            } => {
+                sig.inputs = unqualify_params(sig.inputs);
+                sig.output = unqualify_ret_type(sig.output);
+                RsCodegenResult {
+                    global_items: if !has_receiver {
+                        vec![parse_quote! {
+                            use super::#path;
+                        }]
+                    } else {
+                        Vec::new()
                     },
-                ..
-            } => RsCodegenResult {
-                extern_rust_mod_items: vec![parse_quote! {
-                    #sig;
-                }],
-                ..Default::default()
-            },
+                    extern_rust_mod_items: vec![parse_quote! {
+                        #sig;
+                    }],
+                    ..Default::default()
+                }
+            }
             Api::RustSubclassFn {
                 details, subclass, ..
             } => Self::generate_subclass_fn(id, *details, subclass),

@@ -127,11 +127,11 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
             Api::RustFn {
                 name,
                 details,
-                receiver,
+                deps,
             } => Ok(Box::new(std::iter::once(Api::RustFn {
                 name,
                 details,
-                receiver,
+                deps,
             }))),
             Api::RustSubclassFn {
                 name,

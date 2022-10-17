@@ -472,7 +472,7 @@ impl Directive for ExternRustFun {
         config.extern_rust_funs.push(RustFun {
             path,
             sig,
-            receiver: None,
+            has_receiver: false,
         });
         Ok(())
     }

@@ -531,7 +531,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     RustFn {
         name: ApiName,
         details: RustFun,
-        receiver: Option<QualifiedName>,
+        deps: Vec<QualifiedName>,
     },
     /// Some function for the extern "Rust" block.
     RustSubclassFn {
