@@ -210,6 +210,7 @@ pub fn run_test(
         None,
         None,
         "unsafe_ffi",
+        None,
     )
     .unwrap()
 }
@@ -265,6 +266,7 @@ pub fn run_test_ex(
         code_checker,
         extra_rust,
         "unsafe_ffi",
+        None,
     )
     .unwrap()
 }
@@ -297,6 +299,7 @@ pub fn run_test_expect_fail(
         None,
         None,
         "unsafe_ffi",
+        None,
     )
     .expect_err("Unexpected success");
 }
@@ -319,6 +322,7 @@ pub fn run_test_expect_fail_ex(
         code_checker,
         extra_rust,
         "unsafe_ffi",
+        None,
     )
     .expect_err("Unexpected success");
 }
@@ -369,10 +373,13 @@ pub fn do_run_test(
     rust_code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
     safety_policy: &str,
+    module_attributes: Option<TokenStream>,
 ) -> Result<(), TestError> {
     let hexathorpe = Token![#](Span::call_site());
     let safety_policy = format_ident!("{}", safety_policy);
     let unexpanded_rust = quote! {
+            #module_attributes
+
             use autocxx::prelude::*;
 
             include_cpp!(

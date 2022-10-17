@@ -21,6 +21,10 @@ fn run_cpprefs_test(
     generate: &[&str],
     generate_pods: &[&str],
 ) {
+    if rustc_version::version_meta().unwrap().channel != rustc_version::Channel::Nightly {
+        // "unsafe_references_wrapped" requires arbitrary_self_types, which requires nightly.
+        return;
+    }
     do_run_test(
         cxx_code,
         header_code,
@@ -30,6 +34,9 @@ fn run_cpprefs_test(
         None,
         None,
         "unsafe_references_wrapped",
+        Some(quote! {
+            #![feature(arbitrary_self_types)]
+        }),
     )
     .unwrap()
 }

@@ -131,9 +131,6 @@ impl<'a, T> CppRef<'a, T> {
     }
 }
 
-#[cfg(nightly)]
-impl<'a, T> core::ops::Receiver for CppRef<'a, T> {}
-
 impl<'a, T> core::ops::Deref for CppRef<'a, T> {
     type Target = T;
     #[inline]
@@ -204,9 +201,6 @@ impl<'a, T> CppMutRef<'a, T> {
         PhantomReferentMut(self.ptr)
     }
 }
-
-#[cfg(nightly)]
-impl<'a, T> core::ops::Receiver for CppMutRef<'a, T> {}
 
 impl<'a, T> core::ops::Deref for CppMutRef<'a, T> {
     type Target = T;
@@ -486,7 +480,7 @@ impl<T> AsCppMutRef<T> for PhantomReferentMut<T> {
     }
 }
 
-#[cfg(all(nightly, test))]
+#[cfg(all(feature = "arbitrary_self_types", test))]
 mod tests {
     use super::*;
 

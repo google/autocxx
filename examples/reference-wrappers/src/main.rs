@@ -23,11 +23,16 @@
 // especially in the absence of the Rust "arbitrary self types"
 // feature.
 
+// Necessary to be able to call methods on reference wrappers.
+// For that reason, this example only builds on nightly Rust.
+#![feature(arbitrary_self_types)]
+
 use autocxx::prelude::*;
 
 include_cpp! {
     #include "input.h"
     // This next line enables C++ reference wrappers
+    // This is what requires the 'arbitrary_self_types' feature.
     safety!(unsafe_references_wrapped)
     generate!("Goat")
     generate!("Field")

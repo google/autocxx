@@ -84,7 +84,6 @@ dependencies = [
  "autocxx-macro",
  "cxx",
  "moveit",
- "rustc_version",
 ]
 
 [[package]]
