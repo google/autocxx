@@ -142,6 +142,7 @@ jobs:
         run: cargo build
       - name: Build reference-wrappers example
         working-directory: ./examples/reference-wrappers
+        if: matrix.rust == 'nightly'
         run: cargo build
         # We do not build the LLVM example because even 'apt-get install llvm-13-dev'
         # does not work to install the LLVM 13 headers.

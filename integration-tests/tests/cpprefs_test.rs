@@ -21,6 +21,10 @@ fn run_cpprefs_test(
     generate: &[&str],
     generate_pods: &[&str],
 ) {
+    if rustc_version::version_meta().unwrap().channel != rustc_version::Channel::Nightly {
+        // "unsafe_references_wrapped" requires arbitrary_self_types, which requires nightly.
+        return;
+    }
     do_run_test(
         cxx_code,
         header_code,
@@ -30,6 +34,9 @@ fn run_cpprefs_test(
         None,
         None,
         "unsafe_references_wrapped",
+        Some(quote! {
+            #![feature(arbitrary_self_types)]
+        }),
     )
     .unwrap()
 }
@@ -54,8 +61,11 @@ fn test_method_call_mut() {
     "},
         quote! {
             let goat = ffi::Goat::new().within_unique_ptr();
-            let mut goat = ffi::CppUniquePtrPin::new(goat);
-            goat.as_cpp_mut_ref().add_a_horn();
+            let mut goat = autocxx::CppUniquePtrPin::new(goat);
+            // Only nightly supports calling methods on cpp refs
+            if rustc_version::version_meta().unwrap().channel == rustc_version::Channel::Nightly {
+                goat.as_cpp_mut_ref().add_a_horn();
+            }
         },
         &["Goat"],
         &[],
@@ -87,8 +97,11 @@ fn test_method_call_const() {
     "},
         quote! {
             let goat = ffi::Goat::new().within_unique_ptr();
-            let goat = ffi::cpp_pin_uniqueptr(goat);
-            goat.as_cpp_ref().describe();
+            let goat = autocxx::CppUniquePtrPin::new(goat);
+            // Only nightly supports calling methods on cpp refs
+            if rustc_version::version_meta().unwrap().channel == rustc_version::Channel::Nightly {
+                goat.as_cpp_ref().describe();
+            }
         },
         &["Goat"],
         &[],

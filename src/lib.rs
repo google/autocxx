@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![cfg_attr(nightly, feature(receiver_trait))]
 
 // Copyright 2020 Google LLC
 //
@@ -19,7 +20,7 @@ mod rvalue_param;
 pub mod subclass;
 mod value_param;
 
-pub use reference_wrapper::{CppMutRef, CppPin, CppRef};
+pub use reference_wrapper::{AsCppMutRef, AsCppRef, CppMutRef, CppPin, CppRef, CppUniquePtrPin};
 
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// Include some C++ headers in your Rust project.
@@ -265,9 +266,12 @@ macro_rules! concrete {
 /// policy available here:
 /// `safety!(unsafe_references_wrapped)`
 /// This policy treats C++ references as scary and requires
-/// them to be wrapped in a `CppRef` type. This `CppRef`
-/// type is implemented within the generated bindings but
-/// follows the contract of [`CppRef`].
+/// them to be wrapped in a `CppRef` type: see [`CppRef`].
+/// This only works on nightly Rust because it
+/// depends upon an unstable feature
+/// (`arbitrary_self_types`). However, it should
+/// eliminate all undefined behavior related to Rust's
+/// stricter aliasing rules than C++.
 #[macro_export]
 macro_rules! safety {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
@@ -630,9 +634,12 @@ pub mod prelude {
     pub use crate::c_void;
     pub use crate::cpp_semantics;
     pub use crate::include_cpp;
+    pub use crate::AsCppMutRef;
+    pub use crate::AsCppRef;
     pub use crate::CppMutRef;
     pub use crate::CppPin;
     pub use crate::CppRef;
+    pub use crate::CppUniquePtrPin;
     pub use crate::PinMut;
     pub use crate::RValueParam;
     pub use crate::ValueParam;
