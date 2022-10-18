@@ -149,6 +149,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
+ "rustc_version",
  "serde_json",
  "strum_macros",
  "syn",

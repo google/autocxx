@@ -125,6 +125,8 @@ pub enum Error {
     NoAutoCxxInc,
     #[error(transparent)]
     Conversion(conversion::ConvertError),
+    #[error("Using `unsafe_references_wrapped` requires the Rust nightly `arbitrary_self_types` feature")]
+    WrappedReferencesButNoArbitrarySelfTypes,
 }
 
 /// Result type.
@@ -396,6 +398,14 @@ impl IncludeCppEngine {
             State::ParseOnly => return Ok(()),
             State::NotGenerated => {}
             State::Generated(_) => panic!("Only call generate once"),
+        }
+
+        if matches!(
+            self.config.unsafe_policy,
+            UnsafePolicy::ReferencesWrappedAllFunctionsSafe
+        ) && cfg!(not(nightly))
+        {
+            return Err(Error::WrappedReferencesButNoArbitrarySelfTypes);
         }
 
         let mod_name = self.config.get_mod_name();

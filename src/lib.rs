@@ -267,8 +267,9 @@ macro_rules! concrete {
 /// `safety!(unsafe_references_wrapped)`
 /// This policy treats C++ references as scary and requires
 /// them to be wrapped in a `CppRef` type: see [`CppRef`].
-/// This only works practically on nightly Rust because it
-/// depends upon an unstable feature. However, it should
+/// This only works on nightly Rust because it
+/// depends upon an unstable feature
+/// (`arbitrary_self_types`). However, it should
 /// eliminate all undefined behavior related to Rust's
 /// stricter aliasing rules than C++.
 #[macro_export]
