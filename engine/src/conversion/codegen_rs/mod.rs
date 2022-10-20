@@ -59,7 +59,7 @@ use super::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
 };
-use super::{convert_error::ErrorContext, ConvertError};
+use super::{convert_error::ErrorContext, ConvertErrorFromCpp};
 use quote::quote;
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -594,34 +594,28 @@ impl<'a> RsCodeGenerator<'a> {
                 details:
                     RustFun {
                         path,
-                        sig,
-                        receiver: None,
+                        mut sig,
+                        has_receiver,
                         ..
                     },
                 ..
-            } => RsCodegenResult {
-                global_items: vec![parse_quote! {
-                    use super::#path;
-                }],
-                extern_rust_mod_items: vec![parse_quote! {
-                    #sig;
-                }],
-                ..Default::default()
-            },
-            Api::RustFn {
-                details:
-                    RustFun {
-                        sig,
-                        receiver: Some(_),
-                        ..
+            } => {
+                sig.inputs = unqualify_params(sig.inputs);
+                sig.output = unqualify_ret_type(sig.output);
+                RsCodegenResult {
+                    global_items: if !has_receiver {
+                        vec![parse_quote! {
+                            use super::#path;
+                        }]
+                    } else {
+                        Vec::new()
                     },
-                ..
-            } => RsCodegenResult {
-                extern_rust_mod_items: vec![parse_quote! {
-                    #sig;
-                }],
-                ..Default::default()
-            },
+                    extern_rust_mod_items: vec![parse_quote! {
+                        #sig;
+                    }],
+                    ..Default::default()
+                }
+            }
             Api::RustSubclassFn {
                 details, subclass, ..
             } => Self::generate_subclass_fn(id, *details, subclass),
@@ -1068,7 +1062,7 @@ impl<'a> RsCodeGenerator<'a> {
     /// Generates something in the output mod that will carry a docstring
     /// explaining why a given type or function couldn't have bindings
     /// generated.
-    fn generate_error_entry(err: ConvertError, ctx: ErrorContext) -> RsCodegenResult {
+    fn generate_error_entry(err: ConvertErrorFromCpp, ctx: ErrorContext) -> RsCodegenResult {
         let err = format!("autocxx bindings couldn't be generated: {}", err);
         let (impl_entry, bindgen_mod_item, materialization) = match ctx.into_type() {
             ErrorContextType::Item(id) => (

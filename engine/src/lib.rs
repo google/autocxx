@@ -37,6 +37,7 @@ use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
 use regex::Regex;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::{
     fs::File,
     io::prelude::*,
@@ -124,6 +125,7 @@ pub enum Error {
     #[error("no C++ include directory was provided.")]
     NoAutoCxxInc,
     #[error(transparent)]
+    #[diagnostic(transparent)]
     Conversion(conversion::ConvertError),
     #[error("Using `unsafe_references_wrapped` requires the Rust nightly `arbitrary_self_types` feature")]
     WrappedReferencesButNoArbitrarySelfTypes,
@@ -257,6 +259,7 @@ pub trait RebuildDependencyRecorder: std::fmt::Debug {
 pub struct IncludeCppEngine {
     config: IncludeCppConfig,
     state: State,
+    source_code: Option<Rc<String>>, // so we can create diagnostics
 }
 
 impl Parse for IncludeCppEngine {
@@ -267,14 +270,21 @@ impl Parse for IncludeCppEngine {
         } else {
             State::NotGenerated
         };
-        Ok(Self { config, state })
+        Ok(Self {
+            config,
+            state,
+            source_code: None,
+        })
     }
 }
 
 impl IncludeCppEngine {
-    pub fn new_from_syn(mac: Macro, file_contents: &str) -> Result<Self> {
-        mac.parse_body::<IncludeCppEngine>()
-            .map_err(|e| Error::MacroParsing(LocatedSynError::new(e, file_contents)))
+    pub fn new_from_syn(mac: Macro, file_contents: Rc<String>) -> Result<Self> {
+        let mut this = mac
+            .parse_body::<IncludeCppEngine>()
+            .map_err(|e| Error::MacroParsing(LocatedSynError::new(e, &file_contents)))?;
+        this.source_code = Some(file_contents);
+        Ok(this)
     }
 
     pub fn config_mut(&mut self) -> &mut IncludeCppConfig {
@@ -422,6 +432,14 @@ impl IncludeCppEngine {
         let bindings = builder.generate().map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
 
+        // Source code contents just used for diagnostics - if we don't have it,
+        // use a blank string and miette will not attempt to annotate it nicely.
+        let source_file_contents = self
+            .source_code
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| Rc::new("".to_string()));
+
         let converter = BridgeConverter::new(&self.config.inclusions, &self.config);
 
         let conversion = converter
@@ -430,6 +448,7 @@ impl IncludeCppEngine {
                 self.config.unsafe_policy.clone(),
                 header_contents,
                 cpp_codegen_options,
+                &source_file_contents,
             )
             .map_err(Error::Conversion)?;
         let mut items = conversion.rs;

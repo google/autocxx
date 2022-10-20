@@ -13,7 +13,8 @@ use crate::{
     conversion::{
         api::{Api, ApiName, NullPhase, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
         apivec::ApiVec,
-        ConvertError,
+        convert_error::LocatedConvertErrorFromRust,
+        ConvertError, ConvertErrorFromCpp,
     },
     types::Namespace,
     types::QualifiedName,
@@ -52,7 +53,10 @@ pub(crate) fn api_name_qualified(
     match validate_ident_ok_for_cxx(&id.to_string()) {
         Err(e) => {
             let ctx = ErrorContext::new_for_item(id);
-            Err(ConvertErrorWithContext(e, Some(ctx)))
+            Err(ConvertErrorWithContext(
+                ConvertErrorFromCpp::InvalidIdent(e),
+                Some(ctx),
+            ))
         }
         Ok(..) => Ok(api_name(ns, id, attrs)),
     }
@@ -71,38 +75,44 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn parse_items(
         mut self,
         items: Vec<Item>,
+        source_file_contents: &str,
     ) -> Result<ApiVec<NullPhase>, ConvertError> {
-        let items = Self::find_items_in_root(items)?;
+        let items = Self::find_items_in_root(items).map_err(ConvertError::Cpp)?;
         if !self.config.exclude_utilities() {
             generate_utilities(&mut self.apis, self.config);
         }
-        self.add_apis_from_config();
+        self.add_apis_from_config(source_file_contents)
+            .map_err(ConvertError::Rust)?;
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
-        self.confirm_all_generate_directives_obeyed()?;
+        self.confirm_all_generate_directives_obeyed()
+            .map_err(ConvertError::Cpp)?;
         self.replace_extern_cpp_types();
         Ok(self.apis)
     }
 
     /// Some API items are not populated from bindgen output, but instead
     /// directly from items in the config.
-    fn add_apis_from_config(&mut self) {
+    fn add_apis_from_config(
+        &mut self,
+        source_file_contents: &str,
+    ) -> Result<(), LocatedConvertErrorFromRust> {
         self.apis
             .extend(self.config.subclasses.iter().map(|sc| Api::Subclass {
                 name: SubclassName::new(sc.subclass.clone()),
                 superclass: QualifiedName::new_from_cpp_name(&sc.superclass),
             }));
-        self.apis
-            .extend(self.config.extern_rust_funs.iter().map(|fun| {
-                let id = fun.sig.ident.clone();
-                Api::RustFn {
-                    name: ApiName::new_in_root_namespace(id),
-                    details: fun.clone(),
-                    receiver: fun.receiver.as_ref().map(|receiver_id| {
-                        QualifiedName::new(&Namespace::new(), receiver_id.clone())
-                    }),
-                }
-            }));
+        for fun in &self.config.extern_rust_funs {
+            let id = fun.sig.ident.clone();
+            self.apis.push(Api::RustFn {
+                name: ApiName::new_in_root_namespace(id),
+                details: fun.clone(),
+                deps: super::extern_fun_signatures::assemble_extern_fun_deps(
+                    &fun.sig,
+                    source_file_contents,
+                )?,
+            })
+        }
         let unique_rust_types: HashSet<&RustPath> = self.config.rust_types.iter().collect();
         self.apis.extend(unique_rust_types.into_iter().map(|path| {
             let id = path.get_final_ident();
@@ -125,6 +135,7 @@ impl<'a> ParseBindgen<'a> {
                     }
                 }),
         );
+        Ok(())
     }
 
     /// We do this last, _after_ we've parsed all the APIs, because we might want to actually
@@ -154,7 +165,7 @@ impl<'a> ParseBindgen<'a> {
         self.apis.extend(replacements.into_iter().map(|(_, v)| v));
     }
 
-    fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
+    fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertErrorFromCpp> {
         for item in items {
             match item {
                 Item::Mod(root_mod) => {
@@ -166,7 +177,7 @@ impl<'a> ParseBindgen<'a> {
                         return Ok(items);
                     }
                 }
-                _ => return Err(ConvertError::UnexpectedOuterItem),
+                _ => return Err(ConvertErrorFromCpp::UnexpectedOuterItem),
             }
         }
         Ok(Vec::new())
@@ -224,7 +235,7 @@ impl<'a> ParseBindgen<'a> {
                     // forward declarations.
                     if err.is_none() && name.cpp_name().contains("::") {
                         err = Some(ConvertErrorWithContext(
-                            ConvertError::ForwardDeclaredNestedType,
+                            ConvertErrorFromCpp::ForwardDeclaredNestedType,
                             Some(ErrorContext::new_for_item(s.ident)),
                         ));
                     }
@@ -309,7 +320,7 @@ impl<'a> ParseBindgen<'a> {
                             let old_tyname = QualifiedName::from_type_path(&old_path);
                             if new_tyname == old_tyname {
                                 return Err(ConvertErrorWithContext(
-                                    ConvertError::InfinitelyRecursiveTypedef(new_tyname),
+                                    ConvertErrorFromCpp::InfinitelyRecursiveTypedef(new_tyname),
                                     Some(ErrorContext::new_for_item(new_id.clone())),
                                 ));
                             }
@@ -329,7 +340,7 @@ impl<'a> ParseBindgen<'a> {
                         }
                         _ => {
                             return Err(ConvertErrorWithContext(
-                                ConvertError::UnexpectedUseStatement(
+                                ConvertErrorFromCpp::UnexpectedUseStatement(
                                     segs.into_iter().last().map(|i| i.to_string()),
                                 ),
                                 None,
@@ -360,7 +371,7 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             _ => Err(ConvertErrorWithContext(
-                ConvertError::UnexpectedItemInMod,
+                ConvertErrorFromCpp::UnexpectedItemInMod,
                 None,
             )),
         }
@@ -380,7 +391,7 @@ impl<'a> ParseBindgen<'a> {
             .any(|id| id == desired_id)
     }
 
-    fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertError> {
+    fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertErrorFromCpp> {
         let api_names: HashSet<_> = self
             .apis
             .iter()
@@ -388,7 +399,9 @@ impl<'a> ParseBindgen<'a> {
             .collect();
         for generate_directive in self.config.must_generate_list() {
             if !api_names.contains(&generate_directive) {
-                return Err(ConvertError::DidNotGenerateAnything(generate_directive));
+                return Err(ConvertErrorFromCpp::DidNotGenerateAnything(
+                    generate_directive,
+                ));
             }
         }
         Ok(())

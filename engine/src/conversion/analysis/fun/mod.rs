@@ -47,7 +47,7 @@ use syn::{
 use crate::{
     conversion::{
         api::{AnalysisPhase, Api, TypeKind},
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},
 };
@@ -427,7 +427,7 @@ impl<'a> FnAnalyzer<'a> {
         ty: Box<Type>,
         ns: &Namespace,
         pointer_treatment: PointerTreatment,
-    ) -> Result<Annotated<Box<Type>>, ConvertError> {
+    ) -> Result<Annotated<Box<Type>>, ConvertErrorFromCpp> {
         let ctx = TypeConversionContext::OuterType { pointer_treatment };
         let mut annotated = self.type_converter.convert_boxed_type(ty, ns, &ctx)?;
         self.extra_apis.append(&mut annotated.extra_apis);
@@ -1033,10 +1033,10 @@ impl<'a> FnAnalyzer<'a> {
                 ..
             } => {
                 if param_details.len() < 2 {
-                    set_ignore_reason(ConvertError::ConstructorWithOnlyOneParam);
+                    set_ignore_reason(ConvertErrorFromCpp::ConstructorWithOnlyOneParam);
                 }
                 if param_details.len() > 2 {
-                    set_ignore_reason(ConvertError::ConstructorWithMultipleParams);
+                    set_ignore_reason(ConvertErrorFromCpp::ConstructorWithMultipleParams);
                 }
                 self.reanalyze_parameter(
                     0,
@@ -1058,10 +1058,10 @@ impl<'a> FnAnalyzer<'a> {
                 ..
             } => {
                 if param_details.len() < 2 {
-                    set_ignore_reason(ConvertError::ConstructorWithOnlyOneParam);
+                    set_ignore_reason(ConvertErrorFromCpp::ConstructorWithOnlyOneParam);
                 }
                 if param_details.len() > 2 {
-                    set_ignore_reason(ConvertError::ConstructorWithMultipleParams);
+                    set_ignore_reason(ConvertErrorFromCpp::ConstructorWithMultipleParams);
                 }
                 self.reanalyze_parameter(
                     0,
@@ -1099,14 +1099,14 @@ impl<'a> FnAnalyzer<'a> {
         // or note whether the type is abstract.
         let externally_callable = match fun.cpp_vis {
             CppVisibility::Private => {
-                set_ignore_reason(ConvertError::PrivateMethod);
+                set_ignore_reason(ConvertErrorFromCpp::PrivateMethod);
                 false
             }
             CppVisibility::Protected => false,
             CppVisibility::Public => true,
         };
         if fun.variadic {
-            set_ignore_reason(ConvertError::Variadic);
+            set_ignore_reason(ConvertErrorFromCpp::Variadic);
         }
         if let Some(problem) = bads.into_iter().next() {
             match problem {
@@ -1116,7 +1116,7 @@ impl<'a> FnAnalyzer<'a> {
         } else if fun.unused_template_param {
             // This indicates that bindgen essentially flaked out because templates
             // were too complex.
-            set_ignore_reason(ConvertError::UnusedTemplateParam)
+            set_ignore_reason(ConvertErrorFromCpp::UnusedTemplateParam)
         } else if matches!(
             fun.special_member,
             Some(SpecialMemberKind::AssignmentOperator)
@@ -1124,11 +1124,11 @@ impl<'a> FnAnalyzer<'a> {
             // Be careful with the order of this if-else tree. Anything above here means we won't
             // treat it as an assignment operator, but anything below we still consider when
             // deciding which other C++ special member functions are implicitly defined.
-            set_ignore_reason(ConvertError::AssignmentOperator)
+            set_ignore_reason(ConvertErrorFromCpp::AssignmentOperator)
         } else if fun.references.rvalue_ref_return {
-            set_ignore_reason(ConvertError::RValueReturn)
+            set_ignore_reason(ConvertErrorFromCpp::RValueReturn)
         } else if fun.is_deleted {
-            set_ignore_reason(ConvertError::Deleted)
+            set_ignore_reason(ConvertErrorFromCpp::Deleted)
         } else {
             match kind {
                 FnKind::Method {
@@ -1140,21 +1140,21 @@ impl<'a> FnAnalyzer<'a> {
                         | MethodKind::Virtual(..),
                     ..
                 } if !known_types().is_cxx_acceptable_receiver(impl_for) => {
-                    set_ignore_reason(ConvertError::UnsupportedReceiver);
+                    set_ignore_reason(ConvertErrorFromCpp::UnsupportedReceiver);
                 }
                 FnKind::Method { ref impl_for, .. } if !self.is_on_allowlist(impl_for) => {
                     // Bindgen will output methods for types which have been encountered
                     // virally as arguments on other allowlisted types. But we don't want
                     // to generate methods unless the user has specifically asked us to.
                     // It may, for instance, be a private type.
-                    set_ignore_reason(ConvertError::MethodOfNonAllowlistedType);
+                    set_ignore_reason(ConvertErrorFromCpp::MethodOfNonAllowlistedType);
                 }
                 FnKind::Method { ref impl_for, .. } | FnKind::TraitMethod { ref impl_for, .. } => {
                     if self.is_generic_type(impl_for) {
-                        set_ignore_reason(ConvertError::MethodOfGenericType);
+                        set_ignore_reason(ConvertErrorFromCpp::MethodOfGenericType);
                     }
                     if self.types_in_anonymous_namespace.contains(impl_for) {
-                        set_ignore_reason(ConvertError::MethodInAnonymousNamespace);
+                        set_ignore_reason(ConvertErrorFromCpp::MethodInAnonymousNamespace);
                     }
                 }
                 _ => {}
@@ -1203,7 +1203,7 @@ impl<'a> FnAnalyzer<'a> {
         if num_input_references != 1 && return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
             // one reference as a parameter. Let's see...
-            set_ignore_reason(ConvertError::NotOneInputReference(rust_name.clone()));
+            set_ignore_reason(ConvertErrorFromCpp::NotOneInputReference(rust_name.clone()));
         }
         let mut ret_type = return_analysis.rt;
         let ret_type_conversion = return_analysis.conversion;
@@ -1363,7 +1363,9 @@ impl<'a> FnAnalyzer<'a> {
 
         // Naming, part two.
         // Work out our final naming strategy.
-        validate_ident_ok_for_cxx(&cxxbridge_name.to_string()).unwrap_or_else(set_ignore_reason);
+        validate_ident_ok_for_cxx(&cxxbridge_name.to_string())
+            .map_err(ConvertErrorFromCpp::InvalidIdent)
+            .unwrap_or_else(set_ignore_reason);
         let rust_name_ident = make_ident(&rust_name);
         let rust_rename_strategy = match kind {
             _ if rust_wrapper_needed => RustRenameStrategy::RenameUsingWrapperFunction,
@@ -1422,7 +1424,7 @@ impl<'a> FnAnalyzer<'a> {
         sophistication: TypeConversionSophistication,
         construct_into_self: bool,
         is_move_constructor: bool,
-    ) -> Result<(), ConvertError> {
+    ) -> Result<(), ConvertErrorFromCpp> {
         self.convert_fn_arg(
             fun.inputs.iter().nth(param_idx).unwrap(),
             ns,
@@ -1590,7 +1592,7 @@ impl<'a> FnAnalyzer<'a> {
         force_rust_conversion: Option<RustConversionType>,
         sophistication: TypeConversionSophistication,
         construct_into_self: bool,
-    ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
+    ) -> Result<(FnArg, ArgumentAnalysis), ConvertErrorFromCpp> {
         Ok(match arg {
             FnArg::Typed(pt) => {
                 let mut pt = pt.clone();
@@ -1627,12 +1629,11 @@ impl<'a> FnAnalyzer<'a> {
                                     };
                                     Ok((this_type, receiver_mutability))
                                 }
-                                _ => Err(ConvertError::UnexpectedThisType(QualifiedName::new(
-                                    ns,
-                                    make_ident(fn_name),
-                                ))),
+                                _ => Err(ConvertErrorFromCpp::UnexpectedThisType(
+                                    QualifiedName::new(ns, make_ident(fn_name)),
+                                )),
                             },
-                            _ => Err(ConvertError::UnexpectedThisType(QualifiedName::new(
+                            _ => Err(ConvertErrorFromCpp::UnexpectedThisType(QualifiedName::new(
                                 ns,
                                 make_ident(fn_name),
                             ))),
@@ -1646,7 +1647,8 @@ impl<'a> FnAnalyzer<'a> {
                         syn::Pat::Ident(pp)
                     }
                     syn::Pat::Ident(pp) => {
-                        validate_ident_ok_for_cxx(&pp.ident.to_string())?;
+                        validate_ident_ok_for_cxx(&pp.ident.to_string())
+                            .map_err(ConvertErrorFromCpp::InvalidIdent)?;
                         pointer_treatment = references.param_treatment(&pp.ident);
                         syn::Pat::Ident(pp)
                     }
@@ -1859,7 +1861,7 @@ impl<'a> FnAnalyzer<'a> {
         ns: &Namespace,
         references: &References,
         sophistication: TypeConversionSophistication,
-    ) -> Result<ReturnTypeAnalysis, ConvertError> {
+    ) -> Result<ReturnTypeAnalysis, ConvertErrorFromCpp> {
         Ok(match rt {
             ReturnType::Default => ReturnTypeAnalysis::default(),
             ReturnType::Type(rarrow, boxed_type) => {

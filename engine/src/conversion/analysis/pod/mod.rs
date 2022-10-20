@@ -23,7 +23,7 @@ use crate::{
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
         parse::BindgenSemanticAttributes,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     types::{Namespace, QualifiedName},
 };
@@ -65,7 +65,7 @@ impl AnalysisPhase for PodPhase {
 pub(crate) fn analyze_pod_apis(
     apis: ApiVec<TypedefPhase>,
     config: &IncludeCppConfig,
-) -> Result<ApiVec<PodPhase>, ConvertError> {
+) -> Result<ApiVec<PodPhase>, ConvertErrorFromCpp> {
     // This next line will return an error if any of the 'generate_pod'
     // directives from the user can't be met because, for instance,
     // a type contains a std::string or some other type which can't be
@@ -152,7 +152,7 @@ fn analyze_struct(
         // Let's not allow anything to be POD if it's got rvalue reference fields.
         if details.has_rvalue_reference_fields {
             return Err(ConvertErrorWithContext(
-                ConvertError::RValueReferenceField,
+                ConvertErrorFromCpp::RValueReferenceField,
                 Some(ErrorContext::new_for_item(id)),
             ));
         }
@@ -200,7 +200,7 @@ fn get_struct_field_types(
     field_deps: &mut HashSet<QualifiedName>,
     field_info: &mut Vec<FieldInfo>,
     extra_apis: &mut ApiVec<NullPhase>,
-) -> Vec<ConvertError> {
+) -> Vec<ConvertErrorFromCpp> {
     let mut convert_errors = Vec::new();
     let struct_type_params = s
         .generics

@@ -7037,6 +7037,35 @@ fn test_extern_rust_method() {
 }
 
 #[test]
+fn test_extern_rust_fn_callback() {
+    let hdr = indoc! {"
+        struct a {};
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("a")
+        }
+
+        use ffi::a;
+        use std::pin::Pin;
+
+        #[autocxx::extern_rust::extern_rust_function]
+        pub fn called_from_cpp(_a: Pin<&mut a>) {}
+
+        fn main() {}
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+// TODO: there are various other tests for extern_rust_fn we should add:
+// 1) taking mutable and immutable references
+// 2) ensuring that types on which the signature depends as receiver,
+//    parameters and return are not garbage collected
+
+#[test]
 fn test_rust_reference_no_autodiscover() {
     let hdr = indoc! {"
     #include <cstdint>

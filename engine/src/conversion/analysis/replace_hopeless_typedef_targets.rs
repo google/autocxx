@@ -15,7 +15,7 @@ use crate::{
         api::Api,
         apivec::ApiVec,
         convert_error::{ConvertErrorWithContext, ErrorContext},
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     types::QualifiedName,
 };
@@ -71,7 +71,7 @@ pub(crate) fn replace_hopeless_typedef_targets(
                 {
                     Api::IgnoredItem {
                         name: api.name_info().clone(),
-                        err: ConvertError::NestedOpaqueTypedef,
+                        err: ConvertErrorFromCpp::NestedOpaqueTypedef,
                         ctx: Some(ErrorContext::new_for_item(name_id)),
                     }
                 } else {

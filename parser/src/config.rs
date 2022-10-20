@@ -165,7 +165,7 @@ pub struct Subclass {
 pub struct RustFun {
     pub path: RustPath,
     pub sig: Signature,
-    pub receiver: Option<Ident>,
+    pub has_receiver: bool,
 }
 
 impl std::fmt::Debug for RustFun {

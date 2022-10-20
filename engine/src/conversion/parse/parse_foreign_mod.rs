@@ -16,7 +16,7 @@ use crate::conversion::{
     convert_error::ErrorContext,
 };
 use crate::{
-    conversion::ConvertError,
+    conversion::ConvertErrorFromCpp,
     types::{Namespace, QualifiedName},
 };
 use std::collections::HashMap;
@@ -93,11 +93,11 @@ impl ParseForeignMod {
                 Ok(())
             }
             ForeignItem::Static(item) => Err(ConvertErrorWithContext(
-                ConvertError::StaticData(item.ident.to_string()),
+                ConvertErrorFromCpp::StaticData(item.ident.to_string()),
                 Some(ErrorContext::new_for_item(item.ident)),
             )),
             _ => Err(ConvertErrorWithContext(
-                ConvertError::UnexpectedForeignItem,
+                ConvertErrorFromCpp::UnexpectedForeignItem,
                 None,
             )),
         }
