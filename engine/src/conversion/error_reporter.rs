@@ -12,7 +12,7 @@ use super::{
     api::{AnalysisPhase, Api, ApiName, FuncToConvert, StructDetails, TypedefKind},
     apivec::ApiVec,
     convert_error::{ConvertErrorWithContext, ErrorContext},
-    ConvertError,
+    ConvertErrorFromCpp,
 };
 use crate::{
     conversion::convert_error::ErrorContextType,
@@ -210,7 +210,7 @@ pub(crate) fn convert_item_apis<F, A, B: 'static>(
     out_apis: &mut ApiVec<B>,
     mut fun: F,
 ) where
-    F: FnMut(Api<A>) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertError>,
+    F: FnMut(Api<A>) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorFromCpp>,
     A: AnalysisPhase,
     B: AnalysisPhase,
 {

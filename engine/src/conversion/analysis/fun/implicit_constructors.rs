@@ -17,7 +17,7 @@ use crate::{
         api::{Api, ApiName, CppVisibility, FuncToConvert, SpecialMemberKind},
         apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     known_types::{known_types, KnownTypeConstructorDetails},
     types::QualifiedName,
@@ -575,7 +575,8 @@ fn find_explicit_items(
                         kind: FnKind::Method { impl_for, .. },
                         param_details,
                         ignore_reason:
-                            Ok(()) | Err(ConvertErrorWithContext(ConvertError::AssignmentOperator, _)),
+                            Ok(())
+                            | Err(ConvertErrorWithContext(ConvertErrorFromCpp::AssignmentOperator, _)),
                         ..
                     },
                 fun,

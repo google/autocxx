@@ -36,7 +36,7 @@ use super::{
     },
     api::{Api, Provenance, SubclassName, TypeKind},
     apivec::ApiVec,
-    ConvertError,
+    ConvertErrorFromCpp,
 };
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -120,7 +120,7 @@ impl<'a> CppCodeGenerator<'a> {
         config: &'a IncludeCppConfig,
         cpp_codegen_options: &CppCodegenOptions,
         cxxgen_header_name: &str,
-    ) -> Result<Option<CppFilePair>, ConvertError> {
+    ) -> Result<Option<CppFilePair>, ConvertErrorFromCpp> {
         let mut gen = CppCodeGenerator {
             additional_functions: Vec::new(),
             inclusions,
@@ -139,7 +139,7 @@ impl<'a> CppCodeGenerator<'a> {
     fn add_needs<'b>(
         &mut self,
         apis: impl Iterator<Item = &'a Api<FnPhase>>,
-    ) -> Result<(), ConvertError> {
+    ) -> Result<(), ConvertErrorFromCpp> {
         let mut constructors_by_subclass: HashMap<SubclassName, Vec<&CppFunction>> = HashMap::new();
         let mut methods_by_subclass: HashMap<SubclassName, Vec<SubclassFunction>> = HashMap::new();
         let mut deferred_apis = Vec::new();
@@ -324,7 +324,7 @@ impl<'a> CppCodeGenerator<'a> {
         })
     }
 
-    fn generate_cpp_function(&mut self, details: &CppFunction) -> Result<(), ConvertError> {
+    fn generate_cpp_function(&mut self, details: &CppFunction) -> Result<(), ConvertErrorFromCpp> {
         self.additional_functions
             .push(self.generate_cpp_function_inner(
                 details,
@@ -343,7 +343,7 @@ impl<'a> CppCodeGenerator<'a> {
         conversion_direction: ConversionDirection,
         requires_rust_declarations: bool,
         force_name: Option<&str>,
-    ) -> Result<ExtraCpp, ConvertError> {
+    ) -> Result<ExtraCpp, ConvertErrorFromCpp> {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
         // We could easily do this the other way round, and when
@@ -631,7 +631,7 @@ impl<'a> CppCodeGenerator<'a> {
         subclass: &SubclassName,
         constructors: Vec<&CppFunction>,
         methods: Vec<SubclassFunction>,
-    ) -> Result<(), ConvertError> {
+    ) -> Result<(), ConvertErrorFromCpp> {
         let holder = subclass.holder();
         self.additional_functions.push(ExtraCpp {
             type_definition: Some(format!("struct {};", holder)),

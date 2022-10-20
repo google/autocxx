@@ -15,7 +15,7 @@ use crate::{
         api::{Api, SubclassName},
         apivec::ApiVec,
         error_reporter::convert_item_apis,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     types::{validate_ident_ok_for_cxx, QualifiedName},
 };
@@ -92,7 +92,7 @@ pub(crate) fn check_names(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
         if let Some(name) = my_name {
             let symbols_for_this_name = names_found.entry(name).or_default();
             if symbols_for_this_name.len() > 1usize {
-                Err(ConvertError::DuplicateCxxBridgeName(
+                Err(ConvertErrorFromCpp::DuplicateCxxBridgeName(
                     symbols_for_this_name.clone(),
                 ))
             } else {
@@ -107,7 +107,7 @@ pub(crate) fn check_names(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
 
 fn validate_all_segments_ok_for_cxx(
     items: impl Iterator<Item = String>,
-) -> Result<(), ConvertError> {
+) -> Result<(), ConvertErrorFromCpp> {
     for seg in items {
         validate_ident_ok_for_cxx(&seg)?;
     }

@@ -30,7 +30,7 @@ use super::{
         PointerTreatment,
     },
     convert_error::{ConvertErrorWithContext, ErrorContext},
-    ConvertError,
+    ConvertErrorFromCpp,
 };
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -522,7 +522,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// dependent items.
     IgnoredItem {
         name: ApiName,
-        err: ConvertError,
+        err: ConvertErrorFromCpp,
         ctx: Option<ErrorContext>,
     },
     /// A Rust type which is not a C++ type.

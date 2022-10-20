@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use crate::{
-    conversion::ConvertError,
+    conversion::ConvertErrorFromCpp,
     types::{make_ident, QualifiedName},
 };
 use indexmap::map::IndexMap as HashMap;
@@ -554,9 +554,9 @@ fn create_type_database() -> TypeDatabase {
     db
 }
 
-pub(crate) fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertError> {
+pub(crate) fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertErrorFromCpp> {
     match *ptr.elem {
         Type::Path(..) => Ok(()),
-        _ => Err(ConvertError::InvalidPointee),
+        _ => Err(ConvertErrorFromCpp::InvalidPointee),
     }
 }

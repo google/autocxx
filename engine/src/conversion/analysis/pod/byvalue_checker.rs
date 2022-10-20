@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use crate::conversion::apivec::ApiVec;
-use crate::{conversion::ConvertError, known_types::known_types};
+use crate::{conversion::ConvertErrorFromCpp, known_types::known_types};
 use crate::{
     conversion::{
         analysis::tdef::TypedefPhase,
@@ -72,7 +72,7 @@ impl ByValueChecker {
     pub(crate) fn new_from_apis(
         apis: &ApiVec<TypedefPhase>,
         config: &IncludeCppConfig,
-    ) -> Result<ByValueChecker, ConvertError> {
+    ) -> Result<ByValueChecker, ConvertErrorFromCpp> {
         let mut byvalue_checker = ByValueChecker::new();
         for blocklisted in config.get_blocklist() {
             let tn = QualifiedName::new_from_cpp_name(blocklisted);
@@ -136,7 +136,7 @@ impl ByValueChecker {
             .collect();
         byvalue_checker
             .satisfy_requests(pod_requests)
-            .map_err(ConvertError::UnsafePodType)?;
+            .map_err(ConvertErrorFromCpp::UnsafePodType)?;
         Ok(byvalue_checker)
     }
 

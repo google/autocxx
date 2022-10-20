@@ -13,7 +13,7 @@ use crate::{
     conversion::{
         api::{Api, ApiName, NullPhase, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
         apivec::ApiVec,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     types::Namespace,
     types::QualifiedName,
@@ -71,7 +71,7 @@ impl<'a> ParseBindgen<'a> {
     pub(crate) fn parse_items(
         mut self,
         items: Vec<Item>,
-    ) -> Result<ApiVec<NullPhase>, ConvertError> {
+    ) -> Result<ApiVec<NullPhase>, ConvertErrorFromCpp> {
         let items = Self::find_items_in_root(items)?;
         if !self.config.exclude_utilities() {
             generate_utilities(&mut self.apis, self.config);
@@ -154,7 +154,7 @@ impl<'a> ParseBindgen<'a> {
         self.apis.extend(replacements.into_iter().map(|(_, v)| v));
     }
 
-    fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertError> {
+    fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertErrorFromCpp> {
         for item in items {
             match item {
                 Item::Mod(root_mod) => {
@@ -166,7 +166,7 @@ impl<'a> ParseBindgen<'a> {
                         return Ok(items);
                     }
                 }
-                _ => return Err(ConvertError::UnexpectedOuterItem),
+                _ => return Err(ConvertErrorFromCpp::UnexpectedOuterItem),
             }
         }
         Ok(Vec::new())
@@ -224,7 +224,7 @@ impl<'a> ParseBindgen<'a> {
                     // forward declarations.
                     if err.is_none() && name.cpp_name().contains("::") {
                         err = Some(ConvertErrorWithContext(
-                            ConvertError::ForwardDeclaredNestedType,
+                            ConvertErrorFromCpp::ForwardDeclaredNestedType,
                             Some(ErrorContext::new_for_item(s.ident)),
                         ));
                     }
@@ -309,7 +309,7 @@ impl<'a> ParseBindgen<'a> {
                             let old_tyname = QualifiedName::from_type_path(&old_path);
                             if new_tyname == old_tyname {
                                 return Err(ConvertErrorWithContext(
-                                    ConvertError::InfinitelyRecursiveTypedef(new_tyname),
+                                    ConvertErrorFromCpp::InfinitelyRecursiveTypedef(new_tyname),
                                     Some(ErrorContext::new_for_item(new_id.clone())),
                                 ));
                             }
@@ -329,7 +329,7 @@ impl<'a> ParseBindgen<'a> {
                         }
                         _ => {
                             return Err(ConvertErrorWithContext(
-                                ConvertError::UnexpectedUseStatement(
+                                ConvertErrorFromCpp::UnexpectedUseStatement(
                                     segs.into_iter().last().map(|i| i.to_string()),
                                 ),
                                 None,
@@ -360,7 +360,7 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             _ => Err(ConvertErrorWithContext(
-                ConvertError::UnexpectedItemInMod,
+                ConvertErrorFromCpp::UnexpectedItemInMod,
                 None,
             )),
         }
@@ -380,7 +380,7 @@ impl<'a> ParseBindgen<'a> {
             .any(|id| id == desired_id)
     }
 
-    fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertError> {
+    fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertErrorFromCpp> {
         let api_names: HashSet<_> = self
             .apis
             .iter()
@@ -388,7 +388,9 @@ impl<'a> ParseBindgen<'a> {
             .collect();
         for generate_directive in self.config.must_generate_list() {
             if !api_names.contains(&generate_directive) {
-                return Err(ConvertError::DidNotGenerateAnything(generate_directive));
+                return Err(ConvertErrorFromCpp::DidNotGenerateAnything(
+                    generate_directive,
+                ));
             }
         }
         Ok(())

@@ -13,7 +13,7 @@ use std::iter::Peekable;
 use std::{fmt::Display, sync::Arc};
 use syn::{parse_quote, Ident, PathSegment, TypePath};
 
-use crate::{conversion::ConvertError, known_types::known_types};
+use crate::{conversion::ConvertErrorFromCpp, known_types::known_types};
 
 pub(crate) fn make_ident<S: AsRef<str>>(id: S) -> Ident {
     Ident::new(id.as_ref(), Span::call_site())
@@ -140,7 +140,7 @@ impl QualifiedName {
 
     /// cxx doesn't accept names containing double underscores,
     /// but these are OK elsewhere in our output mod.
-    pub(crate) fn validate_ok_for_cxx(&self) -> Result<(), ConvertError> {
+    pub(crate) fn validate_ok_for_cxx(&self) -> Result<(), ConvertErrorFromCpp> {
         validate_ident_ok_for_cxx(self.get_final_item())
     }
 
@@ -233,21 +233,21 @@ impl Display for QualifiedName {
 /// can enforce this using the Rust type system, e.g. a newtype
 /// wrapper for a CxxCompatibleIdent which is used in any context
 /// where code will be output as part of the `#[cxx::bridge]` mod.
-pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), ConvertError> {
+pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), ConvertErrorFromCpp> {
     validate_ident_ok_for_rust(id)?;
     if id.contains("__") {
-        Err(ConvertError::TooManyUnderscores)
+        Err(ConvertErrorFromCpp::TooManyUnderscores)
     } else if id.starts_with("_bindgen_ty_") {
-        Err(ConvertError::BindgenTy)
+        Err(ConvertErrorFromCpp::BindgenTy)
     } else {
         Ok(())
     }
 }
 
-pub fn validate_ident_ok_for_rust(label: &str) -> Result<(), ConvertError> {
+pub fn validate_ident_ok_for_rust(label: &str) -> Result<(), ConvertErrorFromCpp> {
     let id = make_ident(label);
     syn::parse2::<syn::Ident>(id.into_token_stream())
-        .map_err(|_| ConvertError::ReservedName(label.to_string()))
+        .map_err(|_| ConvertErrorFromCpp::ReservedName(label.to_string()))
         .map(|_| ())
 }
 

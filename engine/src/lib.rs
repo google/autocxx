@@ -124,7 +124,7 @@ pub enum Error {
     #[error("no C++ include directory was provided.")]
     NoAutoCxxInc,
     #[error(transparent)]
-    Conversion(conversion::ConvertError),
+    Conversion(conversion::ConvertErrorFromCpp),
 }
 
 /// Result type.

@@ -22,7 +22,7 @@ mod utilities;
 use analysis::fun::FnAnalyzer;
 use autocxx_parser::IncludeCppConfig;
 pub(crate) use codegen_cpp::CppCodeGenerator;
-pub(crate) use convert_error::ConvertError;
+pub(crate) use convert_error::ConvertErrorFromCpp;
 use itertools::Itertools;
 use syn::{Item, ItemMod};
 
@@ -122,9 +122,9 @@ impl<'a> BridgeConverter<'a> {
         unsafe_policy: UnsafePolicy,
         inclusions: String,
         cpp_codegen_options: &CppCodegenOptions,
-    ) -> Result<CodegenResults, ConvertError> {
+    ) -> Result<CodegenResults, ConvertErrorFromCpp> {
         match &mut bindgen_mod.content {
-            None => Err(ConvertError::NoContent),
+            None => Err(ConvertErrorFromCpp::NoContent),
             Some((_, items)) => {
                 // Parse the bindgen mod.
                 let items_to_process = items.drain(..).collect();

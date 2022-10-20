@@ -18,7 +18,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Error)]
-pub enum ConvertError {
+pub enum ConvertErrorFromCpp {
     #[error("The initial run of 'bindgen' did not generate any content. This might be because none of the requested items for generation could be converted.")]
     NoContent,
     #[error("An item was requested using 'generate_pod' which was not safe to hold by value in Rust. {0}")]
@@ -209,7 +209,10 @@ impl std::fmt::Display for ErrorContext {
 }
 
 #[derive(Clone)]
-pub(crate) struct ConvertErrorWithContext(pub(crate) ConvertError, pub(crate) Option<ErrorContext>);
+pub(crate) struct ConvertErrorWithContext(
+    pub(crate) ConvertErrorFromCpp,
+    pub(crate) Option<ErrorContext>,
+);
 
 impl std::fmt::Debug for ConvertErrorWithContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
