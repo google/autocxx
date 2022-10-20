@@ -469,8 +469,10 @@ fn create_interestingness_test(
     // For the compile afterwards, we have to avoid including any system headers.
     // We rely on equivalent content being hermetically inside concat.h.
     let postcompile_step = make_compile_step(postcompile, "gen0.cc", extra_clang_args);
+    // -q below to exit immediately as soon as a match is found, to avoid
+    // extra compile/codegen steps
     let problem_grep = problem
-        .map(|problem| format!("| grep \"{}\"  >/dev/null  2>&1", problem))
+        .map(|problem| format!("| grep -q \"{}\"  >/dev/null  2>&1", problem))
         .unwrap_or_default();
     let content = format!(
         indoc! {"
