@@ -17,7 +17,7 @@ use crate::conversion::{api::Api, apivec::ApiVec};
 use crate::conversion::{
     api::TypeKind,
     error_reporter::{convert_apis, convert_item_apis},
-    ConvertError,
+    ConvertErrorFromCpp,
 };
 use indexmap::set::IndexSet as HashSet;
 
@@ -143,7 +143,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
             .map(|n| n.contains("::"))
             .unwrap_or_default() =>
         {
-            Err(ConvertError::AbstractNestedType)
+            Err(ConvertErrorFromCpp::AbstractNestedType)
         }
         _ => Ok(Box::new(std::iter::once(api))),
     });

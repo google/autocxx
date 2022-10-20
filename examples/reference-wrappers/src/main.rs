@@ -23,11 +23,16 @@
 // especially in the absence of the Rust "arbitrary self types"
 // feature.
 
+// Necessary to be able to call methods on reference wrappers.
+// For that reason, this example only builds on nightly Rust.
+#![feature(arbitrary_self_types)]
+
 use autocxx::prelude::*;
 
 include_cpp! {
     #include "input.h"
     // This next line enables C++ reference wrappers
+    // This is what requires the 'arbitrary_self_types' feature.
     safety!(unsafe_references_wrapped)
     generate!("Goat")
     generate!("Field")
@@ -47,7 +52,7 @@ fn main() {
     // However, as soon as we want to pass a reference to the field
     // back to C++, we have to ensure we have no Rust references
     // in existence. So: we imprison the object in a "CppPin":
-    let field = ffi::cpp_pin_uniqueptr(field);
+    let field = CppUniquePtrPin::new(field);
     // We can no longer take Rust references to the field...
     //   let _field_rust_ref = field.as_ref();
     // However, we can take C++ references. And use such references
@@ -58,7 +63,7 @@ fn main() {
     assert_eq!(
         another_goat
             .describe() // returns a UniquePtr<CxxString>, there
-                // are no Rust or C++ references involved at this point.
+            // are no Rust or C++ references involved at this point.
             .as_ref()
             .unwrap()
             .to_string_lossy(),

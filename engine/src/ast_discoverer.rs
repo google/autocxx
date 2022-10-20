@@ -103,7 +103,7 @@ impl<'b> PerModDiscoveries<'b> {
                     self.discoveries.extern_rust_funs.push(RustFun {
                         path: self.deeper_path(&fun.sig.ident),
                         sig: fun.sig.clone(),
-                        receiver: None,
+                        has_receiver: false,
                     });
                 }
             }
@@ -347,7 +347,7 @@ impl<'b> PerModDiscoveries<'b> {
                     self.discoveries.extern_rust_funs.push(RustFun {
                         path: self.deeper_path(&itm.sig.ident),
                         sig,
-                        receiver: Some(receiver.get_final_ident().clone()),
+                        has_receiver: true,
                     });
                     self.discoveries.extern_rust_types.push(receiver.clone())
                 } else {

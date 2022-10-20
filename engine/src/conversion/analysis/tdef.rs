@@ -19,7 +19,7 @@ use crate::{
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
         parse::BindgenSemanticAttributes,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     types::QualifiedName,
 };
@@ -87,7 +87,7 @@ fn get_replacement_typedef(
 ) -> Result<Api<TypedefPhase>, ConvertErrorWithContext> {
     if !ity.generics.params.is_empty() {
         return Err(ConvertErrorWithContext(
-            ConvertError::TypedefTakesGenericParameters,
+            ConvertErrorFromCpp::TypedefTakesGenericParameters,
             Some(ErrorContext::new_for_item(name.name.get_final_ident())),
         ));
     }
@@ -108,7 +108,7 @@ fn get_replacement_typedef(
             ty: syn::Type::Path(ref typ),
             ..
         }) if QualifiedName::from_type_path(typ) == name.name => Err(ConvertErrorWithContext(
-            ConvertError::InfinitelyRecursiveTypedef(name.name.clone()),
+            ConvertErrorFromCpp::InfinitelyRecursiveTypedef(name.name.clone()),
             Some(ErrorContext::new_for_item(name.name.get_final_ident())),
         )),
         Ok(mut final_type) => {

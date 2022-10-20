@@ -37,5 +37,5 @@ tempfile = "3.1"
 # by the trybuild test system...
 autocxx = { path = "../.." }
 autocxx-integration-tests = { path = "../../integration-tests", version = "=0.22.4" }
-cxx = "1.0.68"
+cxx = "1.0.78"
 itertools = "0.10.3"

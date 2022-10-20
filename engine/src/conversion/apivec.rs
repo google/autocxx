@@ -15,7 +15,7 @@
 use indexmap::set::IndexSet as HashSet;
 
 use crate::{
-    conversion::{api::ApiName, convert_error::ErrorContext, ConvertError},
+    conversion::{api::ApiName, convert_error::ErrorContext, ConvertErrorFromCpp},
     types::QualifiedName,
 };
 
@@ -64,7 +64,7 @@ impl<P: AnalysisPhase> ApiVec<P> {
                 self.retain(|api| api.name() != name);
                 self.push(Api::IgnoredItem {
                     name: ApiName::new_from_qualified_name(name.clone()),
-                    err: ConvertError::DuplicateItemsFoundInParsing,
+                    err: ConvertErrorFromCpp::DuplicateItemsFoundInParsing,
                     ctx: Some(ErrorContext::new_for_item(name.get_final_ident())),
                 })
             }

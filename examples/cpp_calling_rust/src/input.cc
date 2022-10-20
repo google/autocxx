@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC
+// Copyright 2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -6,10 +6,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-mod bindgen_semantic_attributes;
-mod extern_fun_signatures;
-mod parse_bindgen;
-mod parse_foreign_mod;
+#include "cxxgen.h"
+#include "input.h"
 
-pub(crate) use bindgen_semantic_attributes::BindgenSemanticAttributes;
-pub(crate) use parse_bindgen::ParseBindgen;
+void jurassic() {
+    rust::Box<Dinosaur> prey = new_dinosaur(false);
+    rust::Box<Dinosaur> predator = new_dinosaur(true);
+    prey->roar();
+    predator->roar();
+    predator->eat(std::move(prey));
+    go_extinct();
+}

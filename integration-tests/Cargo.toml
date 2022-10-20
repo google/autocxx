@@ -37,8 +37,9 @@ link-cplusplus = "1.0"
 tempfile = "3.1"
 indoc = "1.0"
 log = "0.4"
-cxx = "1.0.68"
+cxx = "1.0.78"
 itertools = "0.10"
+rustc_version = "0.4.0"
 
 [dependencies.syn]
 version = "1.0.39"

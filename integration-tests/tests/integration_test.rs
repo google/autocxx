@@ -5932,6 +5932,7 @@ fn test_double_destruction() {
         None,
         None,
         "unsafe_ffi",
+        None,
     ) {
         Err(TestError::CppBuild(_)) => {} // be sure this fails due to a static_assert
         // rather than some runtime problem
@@ -6643,6 +6644,48 @@ fn test_extern_cpp_type_cxx_bridge() {
 }
 
 #[test]
+fn test_extern_cpp_type_different_name() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct A {
+            A() : a(0) {}
+            int a;
+        };
+        inline void handle_a(const A&) {
+        }
+        inline A create_a() {
+            A a;
+            return a;
+        }
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::prelude::*;
+        include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("handle_a")
+            generate!("create_a")
+            extern_cpp_opaque_type!("A", crate::DifferentA)
+        }
+        #[cxx::bridge]
+        pub mod ffi2 {
+            unsafe extern "C++" {
+                include!("input.h");
+                type A;
+            }
+            impl UniquePtr<A> {}
+        }
+        pub use ffi2::A as DifferentA;
+        fn main() {
+            let a = ffi::create_a();
+            ffi::handle_a(&a);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
 fn test_extern_cpp_type_two_include_cpp() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -6994,6 +7037,35 @@ fn test_extern_rust_method() {
 }
 
 #[test]
+fn test_extern_rust_fn_callback() {
+    let hdr = indoc! {"
+        struct a {};
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("a")
+        }
+
+        use ffi::a;
+        use std::pin::Pin;
+
+        #[autocxx::extern_rust::extern_rust_function]
+        pub fn called_from_cpp(_a: Pin<&mut a>) {}
+
+        fn main() {}
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+// TODO: there are various other tests for extern_rust_fn we should add:
+// 1) taking mutable and immutable references
+// 2) ensuring that types on which the signature depends as receiver,
+//    parameters and return are not garbage collected
+
+#[test]
 fn test_rust_reference_no_autodiscover() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -7013,6 +7085,55 @@ fn test_rust_reference_no_autodiscover() {
         hdr,
         rs,
         directives_from_lists(&["take_rust_reference"], &[], None),
+        None,
+        None,
+        Some(quote! {
+            #[autocxx::extern_rust::extern_rust_type]
+            pub struct RustType(i32);
+        }),
+    );
+}
+
+#[test]
+fn test_rust_box() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <cxx.h>
+
+    struct RustType;
+    inline uint32_t take_rust_box(rust::Box<RustType>) {
+        return 4;
+    }
+    "};
+    let rs = quote! {
+        let foo = Box::new(RustType(3));
+        let result = ffi::take_rust_box(foo);
+        assert_eq!(result, 4);
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["take_rust_box"], &[], None),
+        None,
+        None,
+        Some(quote! {
+            #[autocxx::extern_rust::extern_rust_type]
+            pub struct RustType(i32);
+        }),
+    );
+}
+
+#[test]
+fn test_rust_reference_no_autodiscover_no_usage() {
+    let rs = quote! {
+        let _ = RustType(3);
+    };
+    run_test_ex(
+        "",
+        "",
+        rs,
+        directives_from_lists(&[], &[], None),
         None,
         None,
         Some(quote! {
@@ -11542,7 +11663,6 @@ fn test_issue_1125() {
 }
 
 #[test]
-#[ignore]
 fn test_issue_1143() {
     let hdr = indoc! {
         "namespace mapnik {

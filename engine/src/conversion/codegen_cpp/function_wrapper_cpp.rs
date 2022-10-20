@@ -11,7 +11,7 @@ use syn::{Type, TypePtr};
 use crate::conversion::{
     analysis::fun::function_wrapper::{CppConversionType, TypeConversionPolicy},
     api::Pointerness,
-    ConvertError,
+    ConvertErrorFromCpp,
 };
 
 use super::type_to_cpp::{type_to_cpp, CppNameMap};
@@ -20,7 +20,7 @@ impl TypeConversionPolicy {
     pub(super) fn unconverted_type(
         &self,
         cpp_name_map: &CppNameMap,
-    ) -> Result<String, ConvertError> {
+    ) -> Result<String, ConvertErrorFromCpp> {
         match self.cpp_conversion {
             CppConversionType::FromUniquePtrToValue => self.unique_ptr_wrapped_type(cpp_name_map),
             CppConversionType::FromPtrToValue => {
@@ -30,7 +30,10 @@ impl TypeConversionPolicy {
         }
     }
 
-    pub(super) fn converted_type(&self, cpp_name_map: &CppNameMap) -> Result<String, ConvertError> {
+    pub(super) fn converted_type(
+        &self,
+        cpp_name_map: &CppNameMap,
+    ) -> Result<String, ConvertErrorFromCpp> {
         match self.cpp_conversion {
             CppConversionType::FromValueToUniquePtr => self.unique_ptr_wrapped_type(cpp_name_map),
             CppConversionType::FromReferenceToPointer => {
@@ -53,7 +56,10 @@ impl TypeConversionPolicy {
         }
     }
 
-    fn unwrapped_type_as_string(&self, cpp_name_map: &CppNameMap) -> Result<String, ConvertError> {
+    fn unwrapped_type_as_string(
+        &self,
+        cpp_name_map: &CppNameMap,
+    ) -> Result<String, ConvertErrorFromCpp> {
         type_to_cpp(self.cxxbridge_type(), cpp_name_map)
     }
 
@@ -71,7 +77,7 @@ impl TypeConversionPolicy {
     fn unique_ptr_wrapped_type(
         &self,
         original_name_map: &CppNameMap,
-    ) -> Result<String, ConvertError> {
+    ) -> Result<String, ConvertErrorFromCpp> {
         Ok(format!(
             "std::unique_ptr<{}>",
             self.unwrapped_type_as_string(original_name_map)?
@@ -83,7 +89,7 @@ impl TypeConversionPolicy {
         var_name: &str,
         cpp_name_map: &CppNameMap,
         is_return: bool,
-    ) -> Result<Option<String>, ConvertError> {
+    ) -> Result<Option<String>, ConvertErrorFromCpp> {
         // If is_return we want to avoid unnecessary std::moves because they
         // make RVO less effective
         Ok(match self.cpp_conversion {

@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC
+// Copyright 2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -6,10 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-mod bindgen_semantic_attributes;
-mod extern_fun_signatures;
-mod parse_bindgen;
-mod parse_foreign_mod;
+use rustc_version::{version_meta, Channel};
 
-pub(crate) use bindgen_semantic_attributes::BindgenSemanticAttributes;
-pub(crate) use parse_bindgen::ParseBindgen;
+fn main() {
+    if version_meta().unwrap().channel == Channel::Nightly {
+        println!("cargo:rustc-cfg=nightly");
+    }
+}
