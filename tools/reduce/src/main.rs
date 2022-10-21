@@ -488,7 +488,7 @@ fn create_interestingness_test(
     let rustc_path = matches.value_of("rustc").unwrap();
 
     let rust_libs_path: Vec<String> = matches
-        .get_many::<String>("rlib")
+        .get_many::<String>("rlibs")
         .expect("No rlib path specified")
         .into_iter()
         .cloned()
