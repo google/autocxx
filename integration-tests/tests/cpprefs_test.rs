@@ -13,14 +13,8 @@ use indoc::indoc;
 use proc_macro2::TokenStream;
 use quote::quote;
 
-#[rustversion::nightly]
 const fn arbitrary_self_types_supported() -> bool {
-    true
-}
-
-#[rustversion::not(nightly)]
-const fn arbitrary_self_types_supported() -> bool {
-    false
+    rustversion::cfg!(nightly)
 }
 
 /// A positive test, we expect to pass.
