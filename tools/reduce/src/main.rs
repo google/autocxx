@@ -315,31 +315,18 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
         );
     }
 
-    let rustc = matches.value_of("rustc").unwrap();
-
-    let rust_libs_paths: Vec<String> = matches
-        .get_many::<String>("rlib")
-        .expect("No rlib path specified")
-        .into_iter()
-        .cloned()
-        .collect();
-
     run_sample_gen_cmd(gen_cmd, &rs_path, tmp_dir.path(), &extra_clang_args)?;
     // Create and run an interestingness test which does not filter its output through grep.
     let demo_interestingness_test_dir = tmp_dir.path().join("demo-interestingness-test");
     std::fs::create_dir(&demo_interestingness_test_dir).unwrap();
     let interestingness_test = demo_interestingness_test_dir.join("test-demo.sh");
     create_interestingness_test(
+        &matches,
         gen_cmd,
-        &rust_libs_paths,
         &interestingness_test,
         None,
         &rs_path,
         &extra_clang_args,
-        rustc,
-        !matches.is_present("no-precompile"),
-        !matches.is_present("no-postcompile"),
-        !matches.is_present("no-rustc"),
     )?;
     let demo_dir_concat_path = demo_interestingness_test_dir.join("concat.h");
     std::fs::copy(&concat_path, demo_dir_concat_path).unwrap();
@@ -348,16 +335,12 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     // Now the main interestingness test
     let interestingness_test = tmp_dir.path().join("test.sh");
     create_interestingness_test(
+        &matches,
         gen_cmd,
-        &rust_libs_paths,
         &interestingness_test,
         Some(matches.value_of("problem").unwrap()),
         &rs_path,
         &extra_clang_args,
-        rustc,
-        !matches.is_present("no-precompile"),
-        !matches.is_present("no-postcompile"),
-        !matches.is_present("no-rustc"),
     )?;
     run_creduce(
         matches.value_of("creduce").unwrap(),
@@ -490,18 +473,27 @@ fn format_gen_cmd<'a>(
 }
 
 fn create_interestingness_test(
+    matches: &ArgMatches,
     gen_cmd: &str,
-    rust_libs_path: &[String],
     test_path: &Path,
     problem: Option<&str>,
     rs_file: &Path,
     extra_clang_args: &[&str],
-    rustc_path: &str,
-    precompile: bool,
-    postcompile: bool,
-    rustc: bool,
 ) -> Result<(), std::io::Error> {
     announce_progress("Creating interestingness test");
+    let precompile = !matches.is_present("no-precompile");
+    let postcompile = !matches.is_present("no-postcompile");
+    let rustc = !matches.is_present("no-rustc");
+
+    let rustc_path = matches.value_of("rustc").unwrap();
+
+    let rust_libs_path: Vec<String> = matches
+        .get_many::<String>("rlib")
+        .expect("No rlib path specified")
+        .into_iter()
+        .cloned()
+        .collect();
+
     // Ensure we refer to the input header by relative path
     // because creduce will invoke us in some other directory with
     // a copy thereof.
