@@ -410,7 +410,7 @@ impl IncludeCppEngine {
         if matches!(
             self.config.unsafe_policy,
             UnsafePolicy::ReferencesWrappedAllFunctionsSafe
-        ) && cfg!(not(nightly))
+        ) && !rustversion::cfg!(nightly)
         {
             return Err(Error::WrappedReferencesButNoArbitrarySelfTypes);
         }
