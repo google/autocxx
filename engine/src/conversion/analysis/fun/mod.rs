@@ -873,6 +873,7 @@ impl<'a> FnAnalyzer<'a> {
                                         autocxx::moveit::new:: #trait_id
                                     },
                                     unsafety: Some(parse_quote! { unsafe }),
+                                    lifetime: None,
                                 },
                                 avoid_self: true,
                                 method_name: make_ident(method_name),
@@ -909,6 +910,7 @@ impl<'a> FnAnalyzer<'a> {
                                     Drop
                                 },
                                 unsafety: None,
+                                lifetime: None,
                             },
                             avoid_self: false,
                             method_name: make_ident("drop"),
@@ -1473,13 +1475,14 @@ impl<'a> FnAnalyzer<'a> {
                 let from_type = self_ty.as_ref().unwrap();
                 let from_type_path = from_type.to_type_path();
                 let to_type = to_type.to_type_path();
-                let (trait_signature, ty, method_name) = match *mutable {
+                let (trait_signature, ty, method_name, trait_lifetime) = match *mutable {
                     CastMutability::ConstToConst => (
                         parse_quote! {
                             AsRef < #to_type >
                         },
                         Type::Path(from_type_path),
                         "as_ref",
+                        None,
                     ),
                     CastMutability::MutToConst => (
                         parse_quote! {
@@ -1489,15 +1492,17 @@ impl<'a> FnAnalyzer<'a> {
                             &'a mut ::std::pin::Pin < &'a mut #from_type_path >
                         },
                         "as_ref",
+                        parse_quote! { 'a }
                     ),
                     CastMutability::MutToMut => (
                         parse_quote! {
                             autocxx::PinMut < #to_type >
                         },
                         parse_quote! {
-                            ::std::pin::Pin < &'a mut #from_type_path >
+                            std::pin::Pin < &'a mut #from_type_path >
                         },
                         "pin_mut",
+                        parse_quote! { 'a }
                     ),
                 };
                 let method_name = make_ident(method_name);
@@ -1510,6 +1515,7 @@ impl<'a> FnAnalyzer<'a> {
                                 ty,
                                 trait_signature,
                                 unsafety: None,
+                                lifetime: trait_lifetime,
                             },
                             avoid_self: false,
                             method_name,
@@ -1554,6 +1560,7 @@ impl<'a> FnAnalyzer<'a> {
                         ty: Type::Path(typ),
                         trait_signature: parse_quote! { autocxx::moveit::MakeCppStorage },
                         unsafety: Some(parse_quote! { unsafe }),
+                        lifetime: None,
                     },
                     avoid_self: false,
                     method_name: make_ident(method_name),

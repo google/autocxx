@@ -12,6 +12,9 @@ include_cpp! {
     safety!(unsafe_ffi)
     generate!("DoMath")
     generate!("Goat")
+    generate!("A")
+    generate!("B")
+    generate!("get_b")
 }
 
 fn main() {
@@ -23,4 +26,8 @@ fn main() {
         goat.describe().as_ref().unwrap().to_string_lossy(),
         "This goat has 2 horns."
     );
+
+    let mut b = ffi::get_b();
+    b.as_ref().unwrap().as_ref().foo();
+    b.as_mut().unwrap().pin_mut().foo_mut();
 }

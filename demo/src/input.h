@@ -33,3 +33,15 @@ inline std::string Goat::describe() const {
     oss << "This goat has " << horns << " horn" << plural << ".";
     return oss.str();
 }
+
+class A {
+    public:
+        virtual void foo() const {};
+        virtual void foo_mut() {};
+        virtual ~A() {}
+    };
+class B : public A {
+public:
+    void bar() const {}
+};
+inline std::unique_ptr<B> get_b() { return std::make_unique<B>(); }

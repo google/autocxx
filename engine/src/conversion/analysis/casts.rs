@@ -69,7 +69,7 @@ fn cast_types() -> impl Iterator<Item = CastMutability> {
         ]
         .into_iter()
     } else {
-        vec![CastMutability::ConstToConst].into_iter()
+        vec![CastMutability::ConstToConst, CastMutability::MutToMut].into_iter()
     }
 }
 

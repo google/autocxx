@@ -9838,7 +9838,7 @@ fn test_call_superclass() {
     let rs = quote! {
         let mut b = ffi::get_b();
         b.as_ref().unwrap().as_ref().foo();
-        b.pin_mut().unwrap().pin_mut().foo_mut();
+        b.as_mut().unwrap().pin_mut().foo_mut();
     };
     run_test("", hdr, rs, &["A", "B", "get_b"], &[]);
 }
@@ -9864,9 +9864,15 @@ fn test_pass_superclass() {
     let rs = quote! {
         let mut b = ffi::get_b();
         ffi::take_a(b.as_ref().unwrap().as_ref());
-        ffi::take_a_mut(b.pin_mut().unwrap().pin_mut());
+        ffi::take_a_mut(b.as_mut().unwrap().pin_mut());
     };
-    run_test("", hdr, rs, &["A", "B", "get_b", "take_a"], &[]);
+    run_test(
+        "",
+        hdr,
+        rs,
+        &["A", "B", "get_b", "take_a", "take_a_mut"],
+        &[],
+    );
 }
 
 #[test]

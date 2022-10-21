@@ -519,9 +519,12 @@ pub mod extern_rust {
 
 /// Equivalent to [`std::convert::AsMut`], but returns a pinned mutable reference
 /// such that cxx methods can be called on it.
-pub trait PinMut<T>: AsRef<T> {
+/// Unlike [`std::convert::AsMut`] this does not require that the type also
+/// implement [`AsRef`], because this trait primarily applies to `Pin<T>` types,
+/// and they don't support `AsRef`.
+pub trait PinMut<T> {
     /// Return a pinned mutable reference to a type.
-    fn pin_mut(&mut self) -> std::pin::Pin<&mut T>;
+    fn pin_mut<'a>(&'a mut self) -> std::pin::Pin<&'a mut T>;
 }
 
 /// Provides utility functions to emplace any [`moveit::New`] into a
