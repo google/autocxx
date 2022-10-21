@@ -9,6 +9,7 @@
 use std::{
     borrow::Cow,
     collections::HashSet,
+    ffi::OsString,
     fmt::Display,
     io::{self, Read},
     path::PathBuf,
@@ -135,7 +136,7 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
                     &case.cpp,
                     &case.hdr,
                     case.rs,
-                    args.value_of_os("manifest_dir").unwrap(),
+                    &OsString::from(args.value_of("manifest_dir").unwrap()),
                 );
                 let desc = match err {
                     Ok(_) => "passed".to_string(),
