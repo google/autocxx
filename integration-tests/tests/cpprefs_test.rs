@@ -13,6 +13,16 @@ use indoc::indoc;
 use proc_macro2::TokenStream;
 use quote::quote;
 
+#[rustversion::nightly]
+const fn arbitrary_self_types_supported() -> bool {
+    true
+}
+
+#[rustversion::not(nightly)]
+const fn arbitrary_self_types_supported() -> bool {
+    false
+}
+
 /// A positive test, we expect to pass.
 fn run_cpprefs_test(
     cxx_code: &str,
@@ -21,7 +31,7 @@ fn run_cpprefs_test(
     generate: &[&str],
     generate_pods: &[&str],
 ) {
-    if rustc_version::version_meta().unwrap().channel != rustc_version::Channel::Nightly {
+    if !arbitrary_self_types_supported() {
         // "unsafe_references_wrapped" requires arbitrary_self_types, which requires nightly.
         return;
     }
@@ -62,10 +72,7 @@ fn test_method_call_mut() {
         quote! {
             let goat = ffi::Goat::new().within_unique_ptr();
             let mut goat = autocxx::CppUniquePtrPin::new(goat);
-            // Only nightly supports calling methods on cpp refs
-            if rustc_version::version_meta().unwrap().channel == rustc_version::Channel::Nightly {
-                goat.as_cpp_mut_ref().add_a_horn();
-            }
+            goat.as_cpp_mut_ref().add_a_horn();
         },
         &["Goat"],
         &[],
@@ -98,10 +105,7 @@ fn test_method_call_const() {
         quote! {
             let goat = ffi::Goat::new().within_unique_ptr();
             let goat = autocxx::CppUniquePtrPin::new(goat);
-            // Only nightly supports calling methods on cpp refs
-            if rustc_version::version_meta().unwrap().channel == rustc_version::Channel::Nightly {
-                goat.as_cpp_ref().describe();
-            }
+            goat.as_cpp_ref().describe();
         },
         &["Goat"],
         &[],
