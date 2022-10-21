@@ -4421,6 +4421,31 @@ fn test_vector_cycle_bare() {
 }
 
 #[test]
+fn test_cycle_up_of_vec() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <vector>
+        #include <memory>
+        struct A {
+            uint32_t a;
+        };
+        inline std::unique_ptr<std::vector<A>> take_vec(std::unique_ptr<std::vector<A>> a) {
+            return a;
+        }
+        inline std::unique_ptr<std::vector<A>> get_vec() {
+            std::unique_ptr<std::vector<A>> items = std::make_unique<std::vector<A>>();
+            items->push_back(A { 3 });
+            items->push_back(A { 4 });
+            return items;
+        }
+    "};
+    let rs = quote! {
+        ffi::take_vec(ffi::get_vec());
+    };
+    run_test("", hdr, rs, &["take_vec", "get_vec"], &[]);
+}
+
+#[test]
 fn test_typedef_to_std() {
     let hdr = indoc! {"
         #include <string>
