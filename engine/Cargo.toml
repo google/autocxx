@@ -50,9 +50,7 @@ thiserror = "1"
 regex = "1.5"
 indexmap = "1.8"
 prettyplease = { version = "0.1.15", features = ["verbatim"] }
-
-[build-dependencies]
-rustc_version = "0.4"
+rustversion = "1.0"
 
 [dependencies.syn]
 version = "1.0.39"

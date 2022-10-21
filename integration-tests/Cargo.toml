@@ -39,7 +39,7 @@ indoc = "1.0"
 log = "0.4"
 cxx = "1.0.78"
 itertools = "0.10"
-rustc_version = "0.4.0"
+rustversion = "1.0"
 
 [dependencies.syn]
 version = "1.0.39"

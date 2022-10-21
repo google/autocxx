@@ -10,9 +10,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// This feature=nightly could be set by build.rs, but since we only care
-// about it for docs, we ask docs.rs to set it in the Cargo.toml.
-#![cfg_attr(feature = "nightly", feature(doc_cfg))]
 #![forbid(unsafe_code)]
 
 mod ast_discoverer;
@@ -413,7 +410,7 @@ impl IncludeCppEngine {
         if matches!(
             self.config.unsafe_policy,
             UnsafePolicy::ReferencesWrappedAllFunctionsSafe
-        ) && cfg!(not(nightly))
+        ) && !rustversion::cfg!(nightly)
         {
             return Err(Error::WrappedReferencesButNoArbitrarySelfTypes);
         }

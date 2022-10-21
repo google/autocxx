@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-#![cfg_attr(nightly, feature(receiver_trait))]
 
 // Copyright 2020 Google LLC
 //
