@@ -4425,6 +4425,7 @@ fn test_cycle_up_of_vec() {
     let hdr = indoc! {"
         #include <cstdint>
         #include <vector>
+        #include <memory>
         struct A {
             uint32_t a;
         };
