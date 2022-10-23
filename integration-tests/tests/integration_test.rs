@@ -11701,6 +11701,20 @@ fn test_issue_1143() {
     run_test("", hdr, quote! {}, &["mapnik::Map"], &[]);
 }
 
+#[test]
+fn test_issue_1170() {
+    let hdr = indoc! {
+        "#include <vector>
+        struct a {
+            enum b {} c;
+        } Loc;
+        struct Arch {
+            std::vector<a> d();
+        } DeterministicRNG;"
+    };
+    run_test("", hdr, quote! {}, &["Arch"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
