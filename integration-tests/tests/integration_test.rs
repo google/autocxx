@@ -10265,6 +10265,12 @@ fn test_implicit_constructor_rules() {
         };
 
         struct BasePublicDeleted : public PublicDeleted {};
+        struct BasePublicDeletedExplicit : public PublicDeleted {
+            BasePublicDeletedExplicit() = default;
+            BasePublicDeletedExplicit(const BasePublicDeletedExplicit&) = default;
+            BasePublicDeletedExplicit(BasePublicDeletedExplicit&&) = default;
+            ~BasePublicDeletedExplicit() = default;
+        };
         struct BasePublicDeletedDefault : public PublicDeletedDefault {};
         struct BasePublicDeletedCopy : public PublicDeletedCopy {};
         struct BasePublicDeletedCopyNoDefault : public PublicDeletedCopyNoDefault { };
@@ -10654,6 +10660,7 @@ fn test_implicit_constructor_rules() {
         test_call_a![ffi::MemberRvalueReference];
 
         test_call_a_as![ffi::BasePublicDeleted, ffi::PublicDeleted];
+        test_call_a_as![ffi::BasePublicDeletedExplicit, ffi::PublicDeleted];
 
         test_copyable![ffi::BasePublicDeletedDefault];
         test_movable![ffi::BasePublicDeletedDefault];
@@ -10929,6 +10936,7 @@ fn test_implicit_constructor_rules() {
             "MemberRvalueReferenceDeleted",
             "MemberRvalueReference",
             "BasePublicDeleted",
+            "BasePublicDeletedExplicit",
             "BasePublicDeletedDefault",
             "BasePublicDeletedCopy",
             "BasePublicDeletedCopyNoDefault",
