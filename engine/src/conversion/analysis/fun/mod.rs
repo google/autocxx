@@ -19,9 +19,9 @@ use crate::{
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{
-            ApiName, CastMutability, CppVisibility, FuncToConvert, NullPhase, Provenance,
-            References, SpecialMemberKind, SubclassName, TraitImplSignature, TraitSynthesis,
-            UnsafetyNeeded, Virtualness,
+            ApiName, CastMutability, CppVisibility, DeletedOrDefaulted, FuncToConvert, NullPhase,
+            Provenance, References, SpecialMemberKind, SubclassName, TraitImplSignature,
+            TraitSynthesis, UnsafetyNeeded, Virtualness,
         },
         apivec::ApiVec,
         convert_error::ErrorContext,
@@ -513,7 +513,7 @@ impl<'a> FnAnalyzer<'a> {
                     **fun,
                     FuncToConvert {
                         special_member: Some(SpecialMemberKind::Destructor),
-                        is_deleted: false,
+                        is_deleted: DeletedOrDefaulted::Neither | DeletedOrDefaulted::Defaulted,
                         cpp_vis: CppVisibility::Public,
                         ..
                     }
@@ -1127,7 +1127,7 @@ impl<'a> FnAnalyzer<'a> {
             set_ignore_reason(ConvertErrorFromCpp::AssignmentOperator)
         } else if fun.references.rvalue_ref_return {
             set_ignore_reason(ConvertErrorFromCpp::RValueReturn)
-        } else if fun.is_deleted {
+        } else if matches!(fun.is_deleted, DeletedOrDefaulted::Deleted) {
             set_ignore_reason(ConvertErrorFromCpp::Deleted)
         } else {
             match kind {
@@ -2104,7 +2104,7 @@ impl<'a> FnAnalyzer<'a> {
                         references,
                         original_name: None,
                         synthesized_this_type: None,
-                        is_deleted: false,
+                        is_deleted: DeletedOrDefaulted::Neither,
                         add_to_trait: None,
                         synthetic_cpp: None,
                         provenance: Provenance::SynthesizedOther,

@@ -246,6 +246,14 @@ pub(crate) enum Provenance {
     SynthesizedSubclassConstructor(Box<SubclassConstructorDetails>),
 }
 
+/// Whether a function has =delete or =default
+#[derive(Clone, Copy)]
+pub(crate) enum DeletedOrDefaulted {
+    Neither,
+    Deleted,
+    Defaulted,
+}
+
 /// A C++ function for which we need to generate bindings, but haven't
 /// yet analyzed in depth. This is little more than a `ForeignItemFn`
 /// broken down into its constituent parts, plus some metadata from the
@@ -283,7 +291,8 @@ pub(crate) struct FuncToConvert {
     /// If Some, this function didn't really exist in the original
     /// C++ and instead we're synthesizing it.
     pub(crate) synthetic_cpp: Option<(CppFunctionBody, CppFunctionKind)>,
-    pub(crate) is_deleted: bool,
+    /// =delete
+    pub(crate) is_deleted: DeletedOrDefaulted,
 }
 
 /// Layers of analysis which may be applied to decorate each API.

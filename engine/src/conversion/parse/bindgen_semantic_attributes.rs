@@ -14,7 +14,7 @@ use syn::{
 };
 
 use crate::conversion::{
-    api::{CppVisibility, Layout, References, SpecialMemberKind, Virtualness},
+    api::{CppVisibility, DeletedOrDefaulted, Layout, References, SpecialMemberKind, Virtualness},
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertErrorFromCpp,
 };
@@ -95,6 +95,16 @@ impl BindgenSemanticAttributes {
             Virtualness::Virtual
         } else {
             Virtualness::None
+        }
+    }
+
+    pub(super) fn get_deleted_or_defaulted(&self) -> DeletedOrDefaulted {
+        if self.has_attr("deleted") {
+            DeletedOrDefaulted::Deleted
+        } else if self.has_attr("defaulted") {
+            DeletedOrDefaulted::Defaulted
+        } else {
+            DeletedOrDefaulted::Neither
         }
     }
 

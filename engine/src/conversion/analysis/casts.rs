@@ -12,7 +12,10 @@ use syn::{parse_quote, FnArg};
 
 use crate::{
     conversion::{
-        api::{Api, ApiName, CastMutability, Provenance, References, TraitSynthesis},
+        api::{
+            Api, ApiName, CastMutability, DeletedOrDefaulted, Provenance, References,
+            TraitSynthesis,
+        },
         apivec::ApiVec,
     },
     types::{make_ident, QualifiedName},
@@ -112,7 +115,7 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
                 mutable,
             }),
             synthetic_cpp: Some((CppFunctionBody::Cast, CppFunctionKind::Function)),
-            is_deleted: false,
+            is_deleted: DeletedOrDefaulted::Neither,
             provenance: Provenance::SynthesizedOther,
             variadic: false,
         }),
