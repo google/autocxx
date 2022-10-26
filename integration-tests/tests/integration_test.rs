@@ -11286,6 +11286,16 @@ fn test_typedef_to_ns_enum() {
 }
 
 #[test]
+fn test_enum_in_ns() {
+    let hdr = indoc! {"
+        namespace a {
+        enum b {};
+        } // namespace
+    "};
+    run_test("", hdr, quote! {}, &["a::b"], &[]);
+}
+
+#[test]
 fn test_typedef_unsupported_type_pub() {
     let hdr = indoc! {"
         #include <set>
