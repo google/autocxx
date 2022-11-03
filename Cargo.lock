@@ -108,15 +108,12 @@ dependencies = [
 
 [[package]]
 name = "autocxx-bindgen"
-version = "0.60.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b18fefa44908cac43e24eef89938e3ddf9c9409b15fcf43d97638278bcaf879"
+version = "0.62.0"
+source = "git+https://github.com/adetaylor/rust-bindgen?branch=merge-upstream-0.62#afa4a5c1a39cb2c1d9666cec70f128eb77b4c314"
 dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "clap",
- "env_logger",
  "itertools 0.10.5",
  "lazy_static",
  "lazycell",
@@ -127,6 +124,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
+ "syn",
  "which",
 ]
 
