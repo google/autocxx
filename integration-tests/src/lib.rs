@@ -448,7 +448,7 @@ pub fn do_run_test_manual(
     let rs_path = write_rust_to_file(&rust_code);
 
     info!("Path is {:?}", tdir.path());
-    let builder = Builder::<TestBuilderContext>::new(&rs_path, &[tdir.path()])
+    let builder = Builder::<TestBuilderContext>::new(&rs_path, [tdir.path()])
         .custom_gendir(target_dir.clone());
     let builder = if let Some(builder_modifier) = &builder_modifier {
         builder_modifier.modify_autocxx_builder(builder)

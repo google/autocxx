@@ -192,7 +192,7 @@ struct PhantomSanitized;
 /// This is used to generate suitable rustdoc in the output codegen so that
 /// the errors can be revealed in rust-analyzer-based IDEs, etc.
 #[derive(Clone)]
-pub(crate) struct ErrorContext(ErrorContextType, PhantomSanitized);
+pub(crate) struct ErrorContext(Box<ErrorContextType>, PhantomSanitized);
 
 /// All idents in this structure are guaranteed to be something we can safely codegen for.
 #[derive(Clone)]
@@ -205,8 +205,11 @@ pub(crate) enum ErrorContextType {
 impl ErrorContext {
     pub(crate) fn new_for_item(id: Ident) -> Self {
         match Self::sanitize_error_ident(&id) {
-            None => Self(ErrorContextType::Item(id), PhantomSanitized),
-            Some(sanitized) => Self(ErrorContextType::SanitizedItem(sanitized), PhantomSanitized),
+            None => Self(Box::new(ErrorContextType::Item(id)), PhantomSanitized),
+            Some(sanitized) => Self(
+                Box::new(ErrorContextType::SanitizedItem(sanitized)),
+                PhantomSanitized,
+            ),
         }
     }
 
@@ -216,14 +219,17 @@ impl ErrorContext {
         // an impl block.
         match Self::sanitize_error_ident(&self_ty) {
             None => Self(
-                ErrorContextType::Method {
+                Box::new(ErrorContextType::Method {
                     self_ty,
                     method: Self::sanitize_error_ident(&method).unwrap_or(method),
-                },
+                }),
                 PhantomSanitized,
             ),
             Some(_) => Self(
-                ErrorContextType::SanitizedItem(make_ident(format!("{}_{}", self_ty, method))),
+                Box::new(ErrorContextType::SanitizedItem(make_ident(format!(
+                    "{}_{}",
+                    self_ty, method
+                )))),
                 PhantomSanitized,
             ),
         }
@@ -245,13 +251,13 @@ impl ErrorContext {
     }
 
     pub(crate) fn into_type(self) -> ErrorContextType {
-        self.0
+        *self.0
     }
 }
 
 impl std::fmt::Display for ErrorContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.0 {
+        match &*self.0 {
             ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => write!(f, "{}", id),
             ErrorContextType::Method { self_ty, method } => write!(f, "{}::{}", self_ty, method),
         }
