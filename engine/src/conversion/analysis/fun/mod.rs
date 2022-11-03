@@ -1254,7 +1254,7 @@ impl<'a> FnAnalyzer<'a> {
         let cpp_wrapper = if wrapper_function_needed {
             // Generate a new layer of C++ code to wrap/unwrap parameters
             // and return values into/out of std::unique_ptrs.
-            let cpp_construction_ident = make_ident(&effective_cpp_name);
+            let cpp_construction_ident = make_ident(effective_cpp_name);
             let joiner = if cxxbridge_name.to_string().ends_with('_') {
                 ""
             } else {
