@@ -37,13 +37,9 @@ impl HasDependencies for Api<FnPrePhase1> {
                 ..
             } => Box::new(old_tyname.iter().chain(deps.iter())),
             Api::Struct {
-                analysis:
-                    PodAnalysis {
-                        kind: TypeKind::Pod,
-                        bases,
-                        field_deps,
-                        ..
-                    },
+                analysis: PodAnalysis {
+                    bases, field_deps, ..
+                },
                 ..
             } => Box::new(field_deps.iter().chain(bases.iter())),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter()),

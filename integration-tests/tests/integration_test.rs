@@ -11286,6 +11286,16 @@ fn test_typedef_to_ns_enum() {
 }
 
 #[test]
+fn test_enum_in_ns() {
+    let hdr = indoc! {"
+        namespace a {
+        enum b {};
+        } // namespace
+    "};
+    run_test("", hdr, quote! {}, &["a::b"], &[]);
+}
+
+#[test]
 fn test_typedef_unsupported_type_pub() {
     let hdr = indoc! {"
         #include <set>
@@ -11699,6 +11709,20 @@ fn test_issue_1143() {
     };
 
     run_test("", hdr, quote! {}, &["mapnik::Map"], &[]);
+}
+
+#[test]
+fn test_issue_1170() {
+    let hdr = indoc! {
+        "#include <vector>
+        struct a {
+            enum b {} c;
+        } Loc;
+        struct Arch {
+            std::vector<a> d();
+        } DeterministicRNG;"
+    };
+    run_test("", hdr, quote! {}, &["Arch"], &[]);
 }
 
 // Yet to test:

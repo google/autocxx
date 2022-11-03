@@ -177,6 +177,13 @@ pub(super) fn find_constructors_present(
     apis: &ApiVec<FnPrePhase1>,
 ) -> HashMap<QualifiedName, ItemsFound> {
     let (explicits, unknown_types) = find_explicit_items(apis);
+    let enums: HashSet<QualifiedName> = apis
+        .iter()
+        .filter_map(|api| match api {
+            Api::Enum { name, .. } => Some(name.name.clone()),
+            _ => None,
+        })
+        .collect();
 
     // These contain all the classes we've seen so far with the relevant properties on their
     // constructors of each kind. We iterate via [`depth_first`], so analyzing later classes
@@ -211,7 +218,17 @@ pub(super) fn find_constructors_present(
                 })
             };
             let get_items_found = |qn: &QualifiedName| -> Option<ItemsFound> {
-                if let Some(constructor_details) = known_types().get_constructor_details(qn) {
+                if enums.contains(qn) {
+                    Some(ItemsFound {
+                        default_constructor: SpecialMemberFound::NotPresent,
+                        destructor: SpecialMemberFound::Implicit,
+                        const_copy_constructor: SpecialMemberFound::Implicit,
+                        non_const_copy_constructor: SpecialMemberFound::NotPresent,
+                        move_constructor: SpecialMemberFound::Implicit,
+                        name: Some(name.clone()),
+                    })
+                } else if let Some(constructor_details) = known_types().get_constructor_details(qn)
+                {
                     Some(known_type_items_found(constructor_details))
                 } else {
                     all_items_found.get(qn).cloned()
