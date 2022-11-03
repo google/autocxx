@@ -227,7 +227,8 @@ pub(super) fn find_constructors_present(
                         move_constructor: SpecialMemberFound::Implicit,
                         name: Some(name.clone()),
                     })
-                } else if let Some(constructor_details) = known_types().get_constructor_details(qn) {
+                } else if let Some(constructor_details) = known_types().get_constructor_details(qn)
+                {
                     Some(known_type_items_found(constructor_details))
                 } else {
                     all_items_found.get(qn).cloned()
