@@ -539,9 +539,9 @@ fn create_interestingness_test(
         file.write_all(content.as_bytes())?;
     }
 
-    let mut perms = std::fs::metadata(&test_path)?.permissions();
+    let mut perms = std::fs::metadata(test_path)?.permissions();
     perms.set_mode(0o700);
-    std::fs::set_permissions(&test_path, perms)?;
+    std::fs::set_permissions(test_path, perms)?;
     Ok(())
 }
 
