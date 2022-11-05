@@ -11,6 +11,7 @@ use indexmap::{map::Entry, set::IndexSet as HashSet};
 
 use syn::{Type, TypeArray};
 
+use crate::conversion::api::DeletedOrDefaulted;
 use crate::{
     conversion::{
         analysis::{depth_first::depth_first, pod::PodAnalysis, type_converter::TypeKind},
@@ -573,7 +574,7 @@ fn find_explicit_items(
         .entry(ExplicitType { ty, kind })
     {
         Entry::Vacant(entry) => {
-            entry.insert(if fun.is_deleted {
+            entry.insert(if matches!(fun.is_deleted, DeletedOrDefaulted::Deleted) {
                 ExplicitFound::Deleted
             } else {
                 ExplicitFound::UserDefined(fun.cpp_vis)

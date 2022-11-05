@@ -9964,6 +9964,13 @@ fn test_implicit_constructor_rules() {
             void a() const {}
         };
 
+        struct AllExplicitlyDefaulted {
+            AllExplicitlyDefaulted() = default;
+            AllExplicitlyDefaulted(const AllExplicitlyDefaulted&) = default;
+            AllExplicitlyDefaulted(AllExplicitlyDefaulted&&) = default;
+            void a() const {};
+        };
+
         struct PublicDeleted {
             PublicDeleted() = delete;
             PublicDeleted(const PublicDeleted&) = delete;
@@ -10505,6 +10512,12 @@ fn test_implicit_constructor_rules() {
         test_movable![ffi::AllImplicitlyDefaulted];
         test_call_a![ffi::AllImplicitlyDefaulted];
 
+        test_constructible![ffi::AllExplicitlyDefaulted];
+        test_make_unique![ffi::AllExplicitlyDefaulted];
+        test_copyable![ffi::AllExplicitlyDefaulted];
+        test_movable![ffi::AllExplicitlyDefaulted];
+        test_call_a![ffi::AllExplicitlyDefaulted];
+
         test_call_a![ffi::PublicDeleted];
 
         test_copyable![ffi::PublicDeletedDefault];
@@ -10878,6 +10891,7 @@ fn test_implicit_constructor_rules() {
         rs,
         &[
             "AllImplicitlyDefaulted",
+            "AllExplicitlyDefaulted",
             "PublicDeleted",
             "PublicDeletedDefault",
             "PublicDeletedCopy",

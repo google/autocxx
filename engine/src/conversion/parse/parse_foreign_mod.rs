@@ -86,7 +86,7 @@ impl ParseForeignMod {
                     original_name: annotations.get_original_name(),
                     synthesized_this_type: None,
                     add_to_trait: None,
-                    is_deleted: annotations.has_attr("deleted"),
+                    is_deleted: annotations.get_deleted_or_defaulted(),
                     synthetic_cpp: None,
                     variadic: item.sig.variadic.is_some(),
                 });
