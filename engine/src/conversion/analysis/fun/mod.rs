@@ -64,6 +64,7 @@ use self::{
 };
 
 use super::{
+    depth_first::HasFieldsAndBases,
     doc_label::make_doc_attrs,
     pod::{PodAnalysis, PodPhase},
     tdef::TypedefAnalysis,
@@ -2224,5 +2225,26 @@ fn extract_type_from_pinned_mut_ref(ty: &TypePath) -> Type {
             }
         }
         _ => panic!("did not find angle bracketed args"),
+    }
+}
+
+impl HasFieldsAndBases for Api<FnPrePhase1> {
+    fn name(&self) -> &QualifiedName {
+        self.name()
+    }
+
+    fn field_and_base_deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
+        match self {
+            Api::Struct {
+                analysis:
+                    PodAnalysis {
+                        field_definition_deps,
+                        bases,
+                        ..
+                    },
+                ..
+            } => Box::new(field_definition_deps.iter().chain(bases.iter())),
+            _ => Box::new(std::iter::empty()),
+        }
     }
 }
