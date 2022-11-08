@@ -14,7 +14,9 @@ use syn::{Type, TypeArray};
 use crate::conversion::api::DeletedOrDefaulted;
 use crate::{
     conversion::{
-        analysis::{depth_first::depth_first, pod::PodAnalysis, type_converter::TypeKind},
+        analysis::{
+            depth_first::fields_and_bases_first, pod::PodAnalysis, type_converter::TypeKind,
+        },
         api::{Api, ApiName, CppVisibility, FuncToConvert, SpecialMemberKind},
         apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
@@ -197,7 +199,7 @@ pub(super) fn find_constructors_present(
     // These analyses include all bases and members of each class.
     let mut all_items_found: HashMap<QualifiedName, ItemsFound> = HashMap::new();
 
-    for api in depth_first(apis.iter()) {
+    for api in fields_and_bases_first(apis.iter()) {
         if let Api::Struct {
             name,
             analysis:

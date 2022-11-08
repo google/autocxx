@@ -11310,6 +11310,33 @@ fn test_enum_in_ns() {
 }
 
 #[test]
+fn test_recursive_field() {
+    let hdr = indoc! {"
+        #include <memory>
+        struct A {
+            std::unique_ptr<A> a;
+        };
+    "};
+    run_test("", hdr, quote! {}, &["A"], &[]);
+}
+
+#[test]
+fn test_recursive_field_indirect() {
+    let hdr = indoc! {"
+        #include <memory>
+        struct B;
+        struct A {
+            std::unique_ptr<B> a;
+        };
+        struct B {
+            std::unique_ptr<A> a1;
+            A a2;
+        };
+    "};
+    run_test("", hdr, quote! {}, &["A", "B"], &[]);
+}
+
+#[test]
 fn test_typedef_unsupported_type_pub() {
     let hdr = indoc! {"
         #include <set>
