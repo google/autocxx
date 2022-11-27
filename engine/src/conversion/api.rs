@@ -657,7 +657,13 @@ impl<T: AnalysisPhase> Api<T> {
 
 impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?} (kind={})", self.name_info(), self)
+        write!(
+            f,
+            "{:?} (kind={}, details={})",
+            self.name_info(),
+            self,
+            self.details_display()
+        )
     }
 }
 
@@ -719,6 +725,28 @@ impl<T: AnalysisPhase> Api<T> {
         T: 'static,
     {
         Ok(Box::new(std::iter::once(Api::Enum { name, item })))
+    }
+
+    /// Display some details of each API. It's a bit unfortunate that we can't
+    /// just use `Debug` here, but some of the `syn` types make that awkward.
+    pub(crate) fn details_display(&self) -> String {
+        match self {
+            Api::ForwardDeclaration { err, .. } => format!("{:?}", err),
+            Api::OpaqueTypedef {
+                forward_declaration,
+                ..
+            } => format!("forward_declaration={:?}", forward_declaration),
+            Api::ConcreteType {
+                rs_definition,
+                cpp_definition,
+                ..
+            } => format!(
+                "rs_definition={:?}, cpp_definition={}",
+                rs_definition, cpp_definition
+            ),
+            Api::ExternCppType { pod, .. } => format!("pod={}", pod),
+            _ => String::new(),
+        }
     }
 }
 
