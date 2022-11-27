@@ -11766,6 +11766,46 @@ fn test_issue_1170() {
     run_test("", hdr, quote! {}, &["Arch"], &[]);
 }
 
+#[test]
+fn test_issue_1192() {
+    let hdr = indoc! {
+        "#include <vector>
+        template <typename B>
+        struct A {
+            B a;
+        };
+        struct VecThingy {
+            std::vector<A<int>> vec;
+        };
+        struct MyStruct {
+            VecThingy vec;
+        };"
+    };
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! {
+
+            extern_cpp_type!("VecThingy", crate::VecThingy)
+            pod!("VecThingy")
+
+            generate_pod!("MyStruct")
+        },
+        None,
+        None,
+        Some(quote! {
+            #[repr(transparent)]
+            pub struct VecThingy(pub u128);
+
+            impl cxx::ExternType for Vector2d {
+                type Id = cxx::type_id!("VecThingy");
+                type Kind = cxx::kind::Trivial;
+            }
+        }),
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
