@@ -11770,12 +11770,13 @@ fn test_issue_1170() {
 fn test_issue_1192() {
     let hdr = indoc! {
         "#include <vector>
+        #include <cstdint>
         template <typename B>
         struct A {
             B a;
         };
         struct VecThingy {
-            std::vector<A<int>> vec;
+            A<uint32_t> contents[2];
         };
         struct MyStruct {
             VecThingy vec;
@@ -11795,10 +11796,12 @@ fn test_issue_1192() {
         None,
         None,
         Some(quote! {
+            // VecThingy isn't necessarily 128 bits long.
+            // This test doesn't actually allocate one.
             #[repr(transparent)]
             pub struct VecThingy(pub u128);
 
-            impl cxx::ExternType for Vector2d {
+            unsafe impl cxx::ExternType for VecThingy {
                 type Id = cxx::type_id!("VecThingy");
                 type Kind = cxx::kind::Trivial;
             }
