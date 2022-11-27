@@ -66,7 +66,7 @@ use self::{
 use super::{
     depth_first::HasFieldsAndBases,
     doc_label::make_doc_attrs,
-    pod::{PodAnalysis, PodPhase},
+    pod::{FieldsInfo, PodAnalysis, PodPhase},
     tdef::TypedefAnalysis,
     type_converter::{Annotated, PointerTreatment},
 };
@@ -2238,7 +2238,11 @@ impl HasFieldsAndBases for Api<FnPrePhase1> {
             Api::Struct {
                 analysis:
                     PodAnalysis {
-                        field_definition_deps,
+                        fields:
+                            FieldsInfo {
+                                field_definition_deps,
+                                ..
+                            },
                         bases,
                         ..
                     },

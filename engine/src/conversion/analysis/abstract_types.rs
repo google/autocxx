@@ -11,7 +11,7 @@ use super::{
         FnAnalysis, FnKind, FnPhase, FnPrePhase2, MethodKind, PodAndConstructorAnalysis,
         TraitMethodKind,
     },
-    pod::PodAnalysis,
+    pod::{FieldsInfo, PodAnalysis},
 };
 use crate::conversion::{api::Api, apivec::ApiVec};
 use crate::conversion::{
@@ -62,9 +62,13 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
                                         bases,
                                         kind: TypeKind::Pod | TypeKind::NonPod,
                                         castable_bases,
-                                        field_deps,
-                                        field_definition_deps,
-                                        field_info,
+                                        fields:
+                                            FieldsInfo {
+                                                field_deps,
+                                                field_definition_deps,
+                                                field_info,
+                                                ..
+                                            },
                                         is_generic,
                                         in_anonymous_namespace,
                                     },
@@ -84,9 +88,13 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
                                     bases,
                                     kind: TypeKind::Abstract,
                                     castable_bases,
-                                    field_deps,
-                                    field_definition_deps,
-                                    field_info,
+
+                                    fields: FieldsInfo {
+                                        field_deps,
+                                        field_definition_deps,
+                                        field_info,
+                                        field_conversion_errors: Vec::new(),
+                                    },
                                     is_generic,
                                     in_anonymous_namespace,
                                 },

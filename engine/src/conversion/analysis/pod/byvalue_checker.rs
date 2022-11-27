@@ -6,18 +6,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::conversion::analysis::depth_first::fields_and_bases_first;
 use crate::conversion::apivec::ApiVec;
-use crate::{conversion::ConvertErrorFromCpp, known_types::known_types};
 use crate::{
-    conversion::{
-        analysis::tdef::TypedefPhase,
-        api::{Api, TypedefKind},
-    },
+    conversion::api::{Api, TypedefKind},
     types::{Namespace, QualifiedName},
 };
+use crate::{conversion::ConvertErrorFromCpp, known_types::known_types};
 use autocxx_parser::IncludeCppConfig;
+use indexmap::IndexSet;
 use std::collections::HashMap;
 use syn::{ItemStruct, Type};
+
+use super::FieldsDeterminedPhase;
 
 #[derive(Clone)]
 enum PodState {
@@ -30,14 +31,14 @@ enum PodState {
 #[derive(Clone)]
 struct StructDetails {
     state: PodState,
-    dependent_structs: Vec<QualifiedName>,
+    dependent_structs: IndexSet<QualifiedName>,
 }
 
 impl StructDetails {
     fn new(state: PodState) -> Self {
         StructDetails {
             state,
-            dependent_structs: Vec::new(),
+            dependent_structs: IndexSet::new(),
         }
     }
 }
@@ -73,7 +74,7 @@ impl ByValueChecker {
     /// Scan APIs to work out which are by-value safe. Constructs a [ByValueChecker]
     /// that others can use to query the results.
     pub(crate) fn new_from_apis(
-        apis: &ApiVec<TypedefPhase>,
+        apis: &ApiVec<FieldsDeterminedPhase>,
         config: &IncludeCppConfig,
     ) -> Result<ByValueChecker, ConvertErrorFromCpp> {
         let mut byvalue_checker = ByValueChecker::new();
@@ -84,12 +85,7 @@ impl ByValueChecker {
                 .results
                 .insert(tn, StructDetails::new(safety));
         }
-        // As we do this analysis, we need to be aware that structs
-        // may depend on other types. Ideally we'd use the depth first iterator
-        // but that's awkward given that our ApiPhase does not yet have a fixed
-        // list of field/base types. Instead, we'll iterate first over non-struct
-        // types and then over structs.
-        for api in apis.iter() {
+        for api in fields_and_bases_first(apis.iter()) {
             match api {
                 Api::Typedef { analysis, .. } => {
                     let name = api.name();
@@ -126,12 +122,14 @@ impl ByValueChecker {
                         .results
                         .insert(api.name().clone(), StructDetails::new(PodState::IsPod));
                 }
+                Api::Struct {
+                    details, analysis, ..
+                } => byvalue_checker.ingest_struct(
+                    &details.item,
+                    api.name().get_namespace(),
+                    &analysis.field_deps,
+                ),
                 _ => {}
-            }
-        }
-        for api in apis.iter() {
-            if let Api::Struct { details, .. } = api {
-                byvalue_checker.ingest_struct(&details.item, api.name().get_namespace())
             }
         }
         let pod_requests = config
@@ -145,12 +143,16 @@ impl ByValueChecker {
         Ok(byvalue_checker)
     }
 
-    fn ingest_struct(&mut self, def: &ItemStruct, ns: &Namespace) {
+    fn ingest_struct(
+        &mut self,
+        def: &ItemStruct,
+        ns: &Namespace,
+        fieldlist: &IndexSet<QualifiedName>,
+    ) {
         // For this struct, work out whether it _could_ be safe as a POD.
         let tyname = QualifiedName::new(ns, def.ident.clone());
         let mut field_safety_problem = PodState::SafeToBePod;
-        let fieldlist = Self::get_field_types(def);
-        for ty_id in &fieldlist {
+        for ty_id in fieldlist.iter() {
             match self.results.get(ty_id) {
                 None => {
                     field_safety_problem = PodState::UnsafeToBePod(format!(
@@ -176,7 +178,7 @@ impl ByValueChecker {
             field_safety_problem = PodState::UnsafeToBePod(reason);
         }
         let mut my_details = StructDetails::new(field_safety_problem);
-        my_details.dependent_structs = fieldlist;
+        my_details.dependent_structs = fieldlist.clone();
         self.results.insert(tyname, my_details);
     }
 
@@ -205,7 +207,7 @@ impl ByValueChecker {
                     PodState::IsPod => {}
                     PodState::SafeToBePod => {
                         deets.state = PodState::IsPod;
-                        requests.extend_from_slice(&deets.dependent_structs);
+                        requests.extend(deets.dependent_structs.iter().cloned());
                     }
                     PodState::IsAlias(target_type) => {
                         alias_to_consider = Some(target_type.clone());
@@ -239,22 +241,6 @@ impl ByValueChecker {
                 dependent_structs: _,
             })
         )
-    }
-
-    /// This is a miniature version of the analysis in `super::get_struct_field_types`.
-    /// It would be nice to unify them. However, this version only cares about spotting
-    /// fields which may be non-POD, so can largely concern itself with just `Type::Path`
-    /// fields.
-    fn get_field_types(def: &ItemStruct) -> Vec<QualifiedName> {
-        let mut results = Vec::new();
-        for f in &def.fields {
-            let fty = &f.ty;
-            if let Type::Path(p) = fty {
-                results.push(QualifiedName::from_type_path(p));
-            }
-            // TODO handle anything else which bindgen might spit out, e.g. arrays?
-        }
-        results
     }
 
     fn has_vtable(def: &ItemStruct) -> bool {
@@ -294,7 +280,11 @@ mod tests {
             }
         };
         let t_id = ty_from_ident(&t.ident);
-        bvc.ingest_struct(&t, &Namespace::new());
+        let fieldlist = [
+            QualifiedName::new_from_cpp_name("int32_t"),
+            QualifiedName::new_from_cpp_name("int64_t"),
+        ];
+        bvc.ingest_struct(&t, &Namespace::new(), &fieldlist.into_iter().collect());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
     }
@@ -308,15 +298,23 @@ mod tests {
                 b: i64,
             }
         };
-        bvc.ingest_struct(&t, &Namespace::new());
+        let fieldlist = [
+            QualifiedName::new_from_cpp_name("int32_t"),
+            QualifiedName::new_from_cpp_name("int64_t"),
+        ];
+        bvc.ingest_struct(&t, &Namespace::new(), &fieldlist.into_iter().collect());
         let t: ItemStruct = parse_quote! {
             struct Bar {
                 a: Foo,
                 b: i64,
             }
         };
+        let fieldlist = [
+            QualifiedName::new_from_cpp_name("Foo"),
+            QualifiedName::new_from_cpp_name("int64_t"),
+        ];
         let t_id = ty_from_ident(&t.ident);
-        bvc.ingest_struct(&t, &Namespace::new());
+        bvc.ingest_struct(&t, &Namespace::new(), &fieldlist.into_iter().collect());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
     }
@@ -330,8 +328,12 @@ mod tests {
                 b: i64,
             }
         };
+        let fieldlist = [
+            QualifiedName::new_from_cpp_name("std::unique_ptr"),
+            QualifiedName::new_from_cpp_name("int64_t"),
+        ];
         let t_id = ty_from_ident(&t.ident);
-        bvc.ingest_struct(&t, &Namespace::new());
+        bvc.ingest_struct(&t, &Namespace::new(), &fieldlist.into_iter().collect());
         bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
         assert!(bvc.is_pod(&t_id));
     }
@@ -345,8 +347,12 @@ mod tests {
                 b: i64,
             }
         };
+        let fieldlist = [
+            QualifiedName::new_from_cpp_name("std::string"),
+            QualifiedName::new_from_cpp_name("int64_t"),
+        ];
         let t_id = ty_from_ident(&t.ident);
-        bvc.ingest_struct(&t, &Namespace::new());
+        bvc.ingest_struct(&t, &Namespace::new(), &fieldlist.into_iter().collect());
         assert!(bvc.satisfy_requests(vec![t_id]).is_err());
     }
 }
