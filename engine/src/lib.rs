@@ -721,10 +721,10 @@ pub struct CppCodegenOptions<'a> {
     /// You may wish to do this to make a hermetic test case with no
     /// external dependencies.
     pub suppress_system_headers: bool,
-    /// Optionally, a prefix to go at `#include "<here>cxx.h". This is a header file from the `cxx`
+    /// Optionally, a prefix to go at `#include "*here*cxx.h". This is a header file from the `cxx`
     /// crate.
     pub path_to_cxx_h: Option<String>,
-    /// Optionally, a prefix to go at `#include "<here>cxxgen.h". This is a header file which we
+    /// Optionally, a prefix to go at `#include "*here*cxxgen.h". This is a header file which we
     /// generate.
     pub path_to_cxxgen_h: Option<String>,
     /// Optionally, a function called to determine the name that will be used
