@@ -1261,7 +1261,7 @@ impl<'a> FnAnalyzer<'a> {
             } else {
                 "_"
             };
-            cxxbridge_name = make_ident(&format!("{}{}autocxx_wrapper", cxxbridge_name, joiner));
+            cxxbridge_name = make_ident(format!("{}{}autocxx_wrapper", cxxbridge_name, joiner));
             let (payload, cpp_function_kind) = match fun.synthetic_cpp.as_ref().cloned() {
                 Some((payload, cpp_function_kind)) => (payload, cpp_function_kind),
                 None => match kind {

@@ -353,7 +353,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     match output_path {
         None => print_minimized_case(&concat_path)?,
         Some(output_path) => {
-            std::fs::copy(&concat_path, &PathBuf::from(output_path))?;
+            std::fs::copy(&concat_path, PathBuf::from(output_path))?;
         }
     };
     Ok(())

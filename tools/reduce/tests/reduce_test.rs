@@ -220,7 +220,7 @@ where
 
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) {
     let path = dir.join(filename);
-    let mut f = File::create(&path).expect("Unable to create file");
+    let mut f = File::create(path).expect("Unable to create file");
     f.write_all(content).expect("Unable to write file");
 }
 

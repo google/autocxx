@@ -548,7 +548,7 @@ impl<'a> TypeConverter<'a> {
                     Some(_) => format!("AutocxxConcrete{}", count),
                 };
                 let api = UnanalyzedApi::ConcreteType {
-                    name: ApiName::new_in_root_namespace(make_ident(&synthetic_ident)),
+                    name: ApiName::new_in_root_namespace(make_ident(synthetic_ident)),
                     cpp_definition: cpp_definition.clone(),
                     rs_definition: Some(Box::new(rs_definition.clone())),
                 };

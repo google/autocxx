@@ -511,7 +511,7 @@ impl IncludeCppEngine {
                 "header": header,
                 "config": config
             });
-            let f = File::create(&output_path).unwrap();
+            let f = File::create(output_path).unwrap();
             serde_json::to_writer(f, &json).unwrap();
         }
     }
