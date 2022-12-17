@@ -5,8 +5,10 @@
         <meta charset="UTF-8">
         <title>Rust ♡ Existing C++</title>
         <meta name="robots" content="noindex" />
+
+
         <!-- Custom HTML head -->
-        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        
         <meta name="description" content="autocxx — safe interop between Rust and existing C++">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff" />
@@ -17,25 +19,28 @@
         <link rel="stylesheet" href="css/general.css">
         <link rel="stylesheet" href="css/chrome.css">
         <link rel="stylesheet" href="css/print.css" media="print">
+
         <!-- Fonts -->
         <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
         <link rel="stylesheet" href="fonts/fonts.css">
+
         <!-- Highlight.js Stylesheets -->
         <link rel="stylesheet" href="highlight.css">
         <link rel="stylesheet" href="tomorrow-night.css">
         <link rel="stylesheet" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+
     </head>
     <body>
         <!-- Provide site root to javascript -->
-        <script type="text/javascript">
+        <script>
             var path_to_root = "";
             var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
         </script>
 
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
-        <script type="text/javascript">
+        <script>
             try {
                 var theme = localStorage.getItem('mdbook-theme');
                 var sidebar = localStorage.getItem('mdbook-sidebar');
@@ -51,7 +56,7 @@
         </script>
 
         <!-- Set the theme before any content is loaded, prevents flash -->
-        <script type="text/javascript">
+        <script>
             var theme;
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
@@ -63,7 +68,7 @@
         </script>
 
         <!-- Hide / unhide sidebar before it is displayed -->
-        <script type="text/javascript">
+        <script>
             var html = document.querySelector('html');
             var sidebar = 'hidden';
             if (document.body.clientWidth >= 1080) {
@@ -84,7 +89,7 @@
         <div id="page-wrapper" class="page-wrapper">
 
             <div class="page">
-                <div id="menu-bar-hover-placeholder"></div>
+                                <div id="menu-bar-hover-placeholder"></div>
                 <div id="menu-bar" class="menu-bar sticky bordered">
                     <div class="left-buttons">
                         <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
@@ -94,7 +99,7 @@
                             <i class="fa fa-paint-brush"></i>
                         </button>
                         <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
@@ -114,6 +119,7 @@
                         <a href="https://github.com/google/autocxx" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
+
                     </div>
                 </div>
 
@@ -127,8 +133,9 @@
                         </ul>
                     </div>
                 </div>
+
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
-                <script type="text/javascript">
+                <script>
                     document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
                     document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
                     Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
@@ -178,7 +185,6 @@ include_cpp! {
 fn main() {
     assert_eq!(ffi::do_math(12, 13), 25);
 }
-
 </code></pre>
 <p>A more complex example:</p>
 <h4 id="c-header-1"><a class="header" href="#c-header-1">C++ header:</a></h4>
@@ -212,7 +218,6 @@ fn main() {
     goat.pin_mut().add_a_horn();
     assert_eq!(goat.describe().as_ref().unwrap().to_string_lossy(), &quot;This goat has 2 horns.&quot;);
 }
-
 </code></pre>
 <p>This is typical <code>autocxx</code> code: the C++ objects behave much like Rust objects, but
 sometimes extra steps are required to handle cases like null pointers or converting strings that may not be UTF-8.</p>
@@ -252,8 +257,7 @@ miette = { version = &quot;5&quot;, features = [&quot;fancy&quot;] } # optional 
     println!(&quot;cargo:rerun-if-changed=src/main.rs&quot;);
     // Add instructions to link to any C++ libraries you need.
     Ok(())
-}
-</code></pre>
+}</code></pre>
 <p>See <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script">the standard cargo build script output mechanisms for how you can direct Rust to link against pre-existing libraries</a>, and see the <a href="building.html">building section of this book for more details about build options - for example, enabling C++17</a>.</p>
 <p>Finally, in your <code>main.rs</code> you can use the <a href="https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html"><code>include_cpp</code></a> macro which is the heart of <code>autocxx</code>:</p>
 <pre><code class="language-rust ignore">use autocxx::prelude::*; // use all the main autocxx functions
@@ -262,13 +266,11 @@ include_cpp! {
 <span class="boring">    include &quot;my_header.h&quot; // your header file name
 </span>    safety!(unsafe) // see details of unsafety policies described in the 'safety' section of the book
     generate!(&quot;DeepThought&quot;) // add this line for each function or type you wish to generate
-}
-</code></pre>
+}</code></pre>
 <p>You should then find you can call the function by referring to an <code>ffi</code> namespace:</p>
 <pre><code class="language-rust ignore">fn main() {
     println!(&quot;The answer to Life, The Universe and Everything is {}&quot;, ffi::DeepThought());
-}
-</code></pre>
+}</code></pre>
 <p>C++ types such as <code>std::string</code> and <code>std::unique_ptr</code> are represented using the types provided by the marvellous <a href="https://cxx.rs">cxx</a> library. This provides good ergonomics and safety norms, so unlike with normal <code>bindgen</code> bindings, you won't <em>normally</em> need to write <code>unsafe</code> code for every function call.</p>
 <p>Next, read the section about <a href="workflow.html">workflows</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="workflow"><a class="header" href="#workflow">Workflow</a></h1>
@@ -332,8 +334,7 @@ mod ffi2 {
 fn main() {
     let a = ffi2::give_A();
     assert_eq!(ffi::take_A(&amp;a), autocxx::c_int(5));
-}
-</code></pre>
+}</code></pre>
 <p>In the example above, we're referring <em>from</em> manual bindings <em>to</em> automated bindings.</p>
 <p>You can also do it the other way round using <code>extern_cpp_opaque_type!</code>:</p>
 <pre><code class="language-rust ignore">autocxx::include_cpp! {
@@ -354,8 +355,7 @@ pub mod ffi2 {
 fn main() {
     let a = ffi::create_a();
     ffi::handle_a(&amp;a);
-}
-</code></pre>
+}</code></pre>
 <h2 id="my-build-entirely-failed"><a class="header" href="#my-build-entirely-failed">My build entirely failed</a></h2>
 <p><code>autocxx</code> should nearly always successfully parse the C++ codebase and
 generate <em>some</em> APIs. It's reliant on <code>bindgen</code>, but <code>bindgen</code> is excellent
@@ -380,8 +380,7 @@ at least one <a href="https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.h
 include_cpp! {
 <span class="boring">    include &quot;my_header.h&quot;
 </span>    generate!(&quot;MyAPIFunction&quot;)
-}
-</code></pre>
+}</code></pre>
 <p>You need to include <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate!</code> directives</a>
 for every <em>type</em> or <em>function</em> you wish to access from Rust. You don't need to specify this for member functions
 of types that you've added - they'll be generated automatically. (If a particular member function can't
@@ -409,8 +408,7 @@ see the chapter on <a href="cpp_types.html">C++ types</a>.</li>
         .compile(&quot;autocxx-demo&quot;); // arbitrary library name, pick anything
     println!(&quot;cargo:rerun-if-changed=src/main.rs&quot;);
     // Add instructions to link to any C++ libraries you need.
-}
-</code></pre>
+}</code></pre>
 <h2 id="building---if-youre-not-using-cargo"><a class="header" href="#building---if-youre-not-using-cargo">Building - if you're not using cargo</a></h2>
 <p>See the <code>autocxx-gen</code> crate. You'll need to:</p>
 <ul>
@@ -533,7 +531,6 @@ fn main() {
     another_heap_obj.as_mut().set(42);
     assert_eq!(another_heap_obj.get(), 42);
 }
-
 </code></pre>
 <h2 id="forward-declarations"><a class="header" href="#forward-declarations">Forward declarations</a></h2>
 <p>A type which is incomplete in the C++ headers (i.e. represented only by a forward
@@ -596,7 +593,6 @@ fn main() {
     let nicer_than_it_sounds: cxx::UniquePtr&lt;ffi::Boba&gt; = ffi::prepare();
     ffi::drink(&amp;nicer_than_it_sounds);
 }
-
 </code></pre>
 <h2 id="implicit-member-functions"><a class="header" href="#implicit-member-functions">Implicit member functions</a></h2>
 <p>Most of the API of a C++ type is contained within the type, so <code>autocxx</code> can
@@ -713,8 +709,7 @@ quirks which you're more likely to run into with <code>autocxx</code>.</p>
 see <a href="cpp_functions.html">the example at the bottom of C++ functions</a>.</li>
 <li>If you need to pass a raw pointer to a function, lots of unsafety is required - something like this:
 <pre><code class="language-rust ignore">   let mut a = ffi::A::make_unique();
-   unsafe { ffi::TakePointerToA(std::pin::Pin::&lt;&amp;mut ffi::A&gt;::into_inner_unchecked(a.pin_mut())) };
-</code></pre>
+   unsafe { ffi::TakePointerToA(std::pin::Pin::&lt;&amp;mut ffi::A&gt;::into_inner_unchecked(a.pin_mut())) };</code></pre>
 This may be simplified in future.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="storage---stack-and-heaps"><a class="header" href="#storage---stack-and-heaps">Storage - stack and heaps</a></h1>
@@ -755,7 +750,6 @@ include_cpp! {
 fn main() {
     assert_eq!(ffi::do_math(c_int(12), c_int(13)), c_int(25));
 }
-
 </code></pre>
 <h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
 <p><code>autocxx</code> uses <a href="https://docs.rs/cxx/latest/cxx/struct.CxxString.html"><code>cxx::CxxString</code></a>. However, as noted above, we can't
@@ -790,7 +784,6 @@ include_cpp! {
 fn main() {
     assert_eq!(ffi::take_string(&quot;hello&quot;), 5)
 }
-
 </code></pre>
 <p>If you need to create a blank <code>UniquePtr&lt;CxxString&gt;</code> in Rust, such that
 (for example) you can pass its mutable reference or pointer into some
@@ -829,7 +822,6 @@ fn main() {
     ffi::generations::hey_boomer(); // insults your elders and betters
     ffi::submarines::hey_boomer(); // launches missiles
 }
-
 </code></pre>
 <h2 id="nested-types"><a class="header" href="#nested-types">Nested types</a></h2>
 <p>There is support for generating bindings of nested types, with some
@@ -859,7 +851,6 @@ include_cpp! {
 fn main() {
     let _turducken = ffi::Turkey_Duck_Hen::new().within_box();
 }
-
 </code></pre>
 <h2 id="overloads"><a class="header" href="#overloads">Overloads</a></h2>
 <p>See <a href="cpp_functions.html">the chapter on C++ functions</a>.</p>
@@ -902,7 +893,6 @@ fn main() {
     // No goat any more...
     // ffi::feed_goat(&amp;goat); // doesn't compile
 }
-
 </code></pre>
 <p>Specifically, you can pass anything which implements <a href="https://docs.rs/autocxx/latest/autocxx/trait.ValueParam.html"><code>ValueParam&lt;T&gt;</code></a>.</p>
 <p>If you're keeping non-POD values on the Rust stack, you need to explicitly use <a href="https://docs.rs/autocxx/latest/autocxx/prelude/fn.as_mov.html"><code>as_mov</code></a> to indicate that you want to consume the object using move semantics:</p>
@@ -937,7 +927,6 @@ fn main() {
     ffi::burst(as_copy(blimp.as_ref())); // explicitly say you want to pass by copy
     ffi::burst(as_mov(blimp)); // consume, using move constructor
 }
-
 </code></pre>
 <p>RValue parameters are a little simpler, because (as you'd hope) they consume
 the object you're passing in.</p>
@@ -975,7 +964,6 @@ fn main() {
     ffi::eat(heap_cake);
     // Really no more cake now.
 }
-
 </code></pre>
 <h2 id="default-parameters"><a class="header" href="#default-parameters">Default parameters</a></h2>
 <p>Are not yet supported<sup class="footnote-reference"><a href="#default">1</a></sup>.</p>
@@ -1027,7 +1015,6 @@ fn main() {
     let tree = ffi::Tree::new().within_unique_ptr();
     ffi::saw1(&amp;tree); // yuck, overload
 }
-
 </code></pre>
 <p><code>autocxx</code> doesn't yet support default parameters.</p>
 <p>It's fairly likely we'll change the model here in the future, such that
@@ -1058,7 +1045,6 @@ fn main() {
     sloth.sleep();
     sloth.sleep();
 }
-
 </code></pre>
 <p>Calling a non-const method is a bit more of a pain. Per <code>cxx</code> norms, all mutable
 references to C++ objects must be <a href="https://doc.rust-lang.org/std/pin/">pinned</a>.
@@ -1088,7 +1074,6 @@ fn main() {
     sloth.pin_mut().unpeel_from_tree();
     sloth.pin_mut().unpeel_from_tree();
 }
-
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="callbacks-into-rust"><a class="header" href="#callbacks-into-rust">Callbacks into Rust</a></h1>
 <p><code>autocxx</code> is primarily to allow calls from Rust to C++, but like <code>cxx</code> it also allows you to expose Rust APIs to C++.</p>
@@ -1158,7 +1143,6 @@ fn main() {
     feed_goat();
     feed_goat(); // prints BURP!
 }
-
 </code></pre>
 <h2 id="subclass-ownership"><a class="header" href="#subclass-ownership">Subclass ownership</a></h2>
 <p>See <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclass.html"><code>subclass::CppSubclass</code></a>
@@ -1234,7 +1218,6 @@ fn main() {
     let diplo = Diplodocus::default_rust_owned();
     diplo.borrow().as_ref().eat(); // eats shoots and leaves
 }
-
 </code></pre>
 <h2 id="subclass-casting"><a class="header" href="#subclass-casting">Subclass casting</a></h2>
 <p>Subclasses implement <code>AsRef</code> to enable casting to superclasses.</p>
@@ -1286,7 +1269,6 @@ include_cpp! {
 fn main() {
     assert_eq!(unsafe { ffi::do_math(12, 13) }, 25);
 }
-
 </code></pre>
 <p>With a <code>safety!</code> directive:</p>
 <h4 id="c-header-17"><a class="header" href="#c-header-17">C++ header:</a></h4>
@@ -1306,7 +1288,6 @@ include_cpp! {
 fn main() {
     assert_eq!(ffi::do_math(12, 13), 25);
 }
-
 </code></pre>
 <h2 id="pragmatism-in-a-complex-c-codebase"><a class="header" href="#pragmatism-in-a-complex-c-codebase">Pragmatism in a complex C++ codebase</a></h2>
 <p>This crate mostly intends to follow the lead of the <code>cxx</code> crate in where and when <code>unsafe</code> is required. But, this crate is opinionated. It believes some unsafety requires more careful review than other bits, along the following spectrum:</p>
@@ -1394,7 +1375,6 @@ fn main() {
     let a = dependent::create_a(base::B::VARIANT).within_unique_ptr();
     dependent::handle_a(&amp;a);
 }
-
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="examples"><a class="header" href="#examples">Examples</a></h1>
 <ul>
@@ -1551,33 +1531,44 @@ be found at <a href="https://opensource.google/conduct/">https://opensource.goog
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+
+
                         <div style="clear: both"></div>
                     </nav>
                 </div>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
             </nav>
 
         </div>
 
-        <script type="text/javascript">
+
+
+
+        <script>
             window.playground_copyable = true;
         </script>
-        <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
-        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
-        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
-        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
-        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
-        <script src="book.js" type="text/javascript" charset="utf-8"></script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
-        <script type="text/javascript" src="mermaid.min.js"></script>
-        <script type="text/javascript" src="mermaid-init.js"></script>
-        <script type="text/javascript">
+        <script src="mermaid.min.js"></script>
+        <script src="mermaid-init.js"></script>
+
+        <script>
         window.addEventListener('load', function() {
             window.setTimeout(window.print, 100);
         });
         </script>
+
     </body>
 </html>
