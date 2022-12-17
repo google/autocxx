@@ -319,7 +319,7 @@ fn test_gen_repro() -> Result<(), Box<dyn std::error::Error>> {
 
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) {
     let path = dir.join(filename);
-    let mut f = File::create(&path).expect("Unable to create file");
+    let mut f = File::create(path).expect("Unable to create file");
     f.write_all(content).expect("Unable to write file");
 }
 
@@ -350,7 +350,7 @@ fn assert_not_contentful(outdir: &TempDir, fname: &str) {
 
 fn assert_contains(outdir: &TempDir, fname: &str, pattern: &str) {
     let p = outdir.path().join(fname);
-    let content = std::fs::read_to_string(&p).expect(fname);
+    let content = std::fs::read_to_string(p).expect(fname);
     eprintln!("content = {}", content);
     assert!(content.contains(pattern));
 }
