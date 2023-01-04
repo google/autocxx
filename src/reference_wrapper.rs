@@ -51,6 +51,14 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// # Field access
 ///
 /// Field access would be achieved by adding C++ `get` and/or `set` methods.
+/// It's possible that a future version of `autocxx` could generate such
+/// getters and setters automatically, but they would need to be `unsafe`
+/// because there is no guarantee that the referent of a `CppRef` is actually
+/// what it's supposed to be, or alive. `CppRef`s may flow from C++ to Rust
+/// via arbitrary means, and with sufficient uses of `get` and `set` it would
+/// even be possible to create a use-after-free in pure Rust code (for instance,
+/// store a [`CppPin`] in a struct field, get a `CppRef` to its referent, then
+/// use a setter to reset that field of the struct.)
 ///
 /// # Implementation notes
 ///
