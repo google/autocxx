@@ -475,6 +475,15 @@ fn create_type_database() -> TypeDatabase {
         false,
     ));
 
+    db.insert(TypeDetails::new(
+        "core::pin::Pin",
+        "Pin",
+        Behavior::RustByValue, // because this is actually Pin<&something>
+        None,
+        true,
+        false,
+    ));
+
     let mut insert_ctype = |cname: &str| {
         let concatenated_name = cname.replace(' ', "");
         db.insert(TypeDetails::new(

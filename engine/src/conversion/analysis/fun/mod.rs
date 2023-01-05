@@ -1487,7 +1487,7 @@ impl<'a> FnAnalyzer<'a> {
                             AsRef < #to_type >
                         },
                         parse_quote! {
-                            &'a mut ::std::pin::Pin < &'a mut #from_type_path >
+                            &'a mut ::core::pin::Pin < &'a mut #from_type_path >
                         },
                         "as_ref",
                     ),
@@ -1496,7 +1496,7 @@ impl<'a> FnAnalyzer<'a> {
                             autocxx::PinMut < #to_type >
                         },
                         parse_quote! {
-                            ::std::pin::Pin < &'a mut #from_type_path >
+                            ::core::pin::Pin < &'a mut #from_type_path >
                         },
                         "pin_mut",
                     ),

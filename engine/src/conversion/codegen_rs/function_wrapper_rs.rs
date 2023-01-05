@@ -67,7 +67,7 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! {
-                    ::std::pin::Pin<&mut ::std::mem::MaybeUninit< #ty >>
+                    ::core::pin::Pin<&mut ::core::mem::MaybeUninit< #ty >>
                 };
                 RustParamConversion::Param {
                     ty,
@@ -84,13 +84,13 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! {
-                    ::std::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
+                    ::core::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
                 };
                 RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
-                        { let r: &mut _ = ::std::pin::Pin::into_inner_unchecked(#var.as_mut());
+                        { let r: &mut _ = ::core::pin::Pin::into_inner_unchecked(#var.as_mut());
                             r
                         }
                     },
@@ -138,10 +138,10 @@ impl TypeConversionPolicy {
                         ),
                         MaybeUnsafeStmt::binary(
                             quote! { let mut #space_var_name =
-                                unsafe { ::std::pin::Pin::new_unchecked(&mut #space_var_name) };
+                                unsafe { ::core::pin::Pin::new_unchecked(&mut #space_var_name) };
                             },
                             quote! { let mut #space_var_name =
-                                ::std::pin::Pin::new_unchecked(&mut #space_var_name);
+                                ::core::pin::Pin::new_unchecked(&mut #space_var_name);
                             },
                         ),
                         MaybeUnsafeStmt::needs_unsafe(
