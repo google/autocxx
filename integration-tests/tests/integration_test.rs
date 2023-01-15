@@ -11766,6 +11766,52 @@ fn test_issue_1170() {
     run_test("", hdr, quote! {}, &["Arch"], &[]);
 }
 
+// https://github.com/google/autocxx/issues/774
+#[test]
+fn test_virtual_methods() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        class Base {
+        public:
+            Base() {}
+            virtual ~Base() = 0;
+
+            virtual int a() = 0;
+
+            virtual void b(int) = 0;
+            virtual void b(bool) = 0;
+
+            // virtual int c() const = 0;
+            // virtual int c() = 0;
+        };
+        class FullyDefined : public Base {
+        public:
+            int a() { return 0; }
+
+            // void b(int) { }
+            // void b(bool) { }
+
+            // int c() const { return 1; }
+            // int c() { return 2; }
+        };
+        class Partial1 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(bool) {}
+        };
+    "};
+    let rs = quote! {
+        static_assertions::assert_impl_all!(ffi::FullyDefined: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial1: moveit::MoveNew);
+        // let c1 = ffi::B::new().within_unique_ptr();
+    };
+    run_test("", hdr, rs, &["FullyDefined", "Partial1"], &[]);
+}
+
+
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers

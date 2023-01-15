@@ -18,7 +18,7 @@ use super::{
 use crate::conversion::{
     api::TypeKind,
     error_reporter::{convert_apis, convert_item_apis},
-    ConvertErrorFromCpp,
+    ConvertErrorFromCpp, analysis::fun::ReceiverMutability,
 };
 use crate::{
     conversion::{
@@ -32,13 +32,18 @@ use itertools::Itertools;
 
 /// Spot types with pure virtual functions and mark them abstract.
 pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhase2> {
-    dbg!(&apis);
-
     // values of set are the cppname
+    #[derive(Hash, PartialEq, Eq, Clone)]
+    struct Signature {
+        name: String,
+        args: Vec<QualifiedName>,
+        constness: ReceiverMutability,
+    }
+
     #[derive(Default)]
     struct ClassAbstractState {
-        undefined: HashSet<String>,
-        defined: HashSet<String>,
+        undefined: HashSet<Signature>,
+        defined: HashSet<Signature>,
     }
     let mut class_states: HashMap<QualifiedName, ClassAbstractState> = HashMap::new();
     for api in apis.iter() {
@@ -50,18 +55,24 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
                         kind:
                             FnKind::Method {
                                 impl_for: self_ty_name,
-                                method_kind: MethodKind::PureVirtual(_),
+                                method_kind: MethodKind::PureVirtual(constness),
                                 ..
                             },
+                        param_details,
                         ..
                     },
                 ..
             } => {
+                dbg!(api);
                 class_states
                     .entry(self_ty_name.clone())
                     .or_default()
                     .undefined
-                    .insert(name.cpp_name());
+                    .insert(Signature {
+                        name: name.cpp_name(),
+                        args: vec![],
+                        constness: *constness,
+                    });
             }
             Api::Function {
                 name,
@@ -70,18 +81,23 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
                         kind:
                             FnKind::Method {
                                 impl_for: self_ty_name,
-                                method_kind: MethodKind::Virtual(_),
+                                method_kind: MethodKind::Virtual(constness),
                                 ..
                             },
                         ..
                     },
                 ..
             } => {
+                dbg!(api);
                 class_states
                     .entry(self_ty_name.clone())
                     .or_default()
                     .defined
-                    .insert(name.cpp_name());
+                    .insert(Signature {
+                        name: name.cpp_name(),
+                        args: vec![],
+                        constness: *constness,
+                    });
             }
             _ => (),
         }
@@ -114,7 +130,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
                         .unwrap_or(false)
                 }) =>
                 {
-                    let mut newset: HashSet<String> = bases
+                    let mut newset: HashSet<Signature> = bases
                         .iter()
                         .flat_map(|b| class_states.get(b).map(|cs| cs.undefined.iter()))
                         .flatten()
@@ -204,7 +220,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
         } if class_states.get(self_ty).map(|cs| !cs.undefined.is_empty()).unwrap_or(false)) {
             true
         } else {
-            dbg!(api);
+            // dbg!(api);
             false
         }
     });
@@ -242,7 +258,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
         _ => Ok(Box::new(std::iter::once(api))),
     });
 
-    dbg!(results)
+    results
 }
 
 pub(crate) fn discard_ignored_functions(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
