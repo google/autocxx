@@ -34,7 +34,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
     #[derive(Hash, PartialEq, Eq, Clone, Debug)]
     struct Signature {
         name: String,
-        args: Vec<Box<syn::Type>>,
+        args: Vec<syn::Type>,
         constness: ReceiverMutability,
     }
 
@@ -73,7 +73,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
                             .skip(1)
                             .filter_map(|p| {
                                 if let FnArg::Typed(t) = p {
-                                    Some(t.ty.clone())
+                                    Some((*t.ty).clone())
                                 } else {
                                     None
                                 }
@@ -108,7 +108,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
                             .skip(1)
                             .filter_map(|p| {
                                 if let FnArg::Typed(t) = p {
-                                    Some(t.ty.clone())
+                                    Some((*t.ty).clone())
                                 } else {
                                     None
                                 }
@@ -226,20 +226,17 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
     // We also need to remove any constructors belonging to these
     // abstract types.
     apis.retain(|api| {
-        if !matches!(&api,
-        Api::Function {
-            analysis:
-                FnAnalysis {
-                    kind: FnKind::Method{impl_for: self_ty, method_kind: MethodKind::Constructor{..}, ..}
-                        | FnKind::TraitMethod{ kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor, impl_for: self_ty, ..},
+        !matches!(&api,
+            Api::Function {
+                analysis:
+                    FnAnalysis {
+                        kind: FnKind::Method{impl_for: self_ty, method_kind: MethodKind::Constructor{..}, ..}
+                            | FnKind::TraitMethod{ kind: TraitMethodKind::CopyConstructor | TraitMethodKind::MoveConstructor, impl_for: self_ty, ..},
+                        ..
+                    },
                     ..
-                },
-                ..
-        } if class_states.get(self_ty).map(|cs| !cs.undefined.is_empty()).unwrap_or(false)) {
-            true
-        } else {
-            false
-        }
+            } if class_states.get(self_ty).map(|cs| !cs.undefined.is_empty()).unwrap_or(false)
+        ) 
     });
 
     // Finally, if there are any types which are nested inside other types,
