@@ -209,11 +209,13 @@ dependencies = [
  "itertools 0.10.5",
  "link-cplusplus",
  "log",
+ "moveit",
  "once_cell",
  "proc-macro2",
  "quote",
  "rust_info",
  "rustversion",
+ "static_assertions",
  "syn",
  "tempfile",
  "test-log",
@@ -1310,6 +1312,12 @@ name = "smawk"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f67ad224767faa3c7d8b6d91985b78e70a1324408abcb1cfcc2be4c06bc06043"
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strsim"

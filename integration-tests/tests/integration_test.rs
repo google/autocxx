@@ -11775,25 +11775,25 @@ fn test_virtual_methods() {
         class Base {
         public:
             Base() {}
-            virtual ~Base() = 0;
+            virtual ~Base() {}
 
             virtual int a() = 0;
 
             virtual void b(int) = 0;
             virtual void b(bool) = 0;
 
-            // virtual int c() const = 0;
-            // virtual int c() = 0;
+            virtual int c() const = 0;
+            virtual int c() = 0;
         };
         class FullyDefined : public Base {
         public:
             int a() { return 0; }
 
-            // void b(int) { }
-            // void b(bool) { }
+            void b(int) { }
+            void b(bool) { }
 
-            // int c() const { return 1; }
-            // int c() { return 2; }
+            int c() const { return 1; }
+            int c() { return 2; }
         };
         class Partial1 : public Base {
         public:
@@ -11801,13 +11801,69 @@ fn test_virtual_methods() {
 
             void b(bool) {}
         };
+
+        class Partial2 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+            void b(bool) { }
+
+            int c() const { return 1; }
+        };
+
+        class Partial3 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+
+            int c() const { return 1; }
+            int c() { return 2; }
+        };
+
+        class Partial4 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+            void b(bool) = 0;
+
+            int c() const { return 1; }
+            int c() { return 2; }
+        };
+
+        // class Partial5 : public Base {
+        // public:
+        //     ~Partial5() = 0;
+
+        //     int a() { return 0; }
+
+        //     void b(int) { }
+        //     void b(bool) { }
+
+        //     int c() const { return 1; }
+        //     int c() { return 2; }
+        // };
+
     "};
     let rs = quote! {
         static_assertions::assert_impl_all!(ffi::FullyDefined: moveit::CopyNew);
-        static_assertions::assert_not_impl_any!(ffi::Partial1: moveit::MoveNew);
-        // let c1 = ffi::B::new().within_unique_ptr();
+        static_assertions::assert_not_impl_any!(ffi::Partial1: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial2: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial3: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial4: moveit::CopyNew);
+        // static_assertions::assert_not_impl_any!(ffi::Partial5: moveit::CopyNew);
+        let _c1 = ffi::FullyDefined::new().within_unique_ptr();
     };
-    run_test("", hdr, rs, &["FullyDefined", "Partial1"], &[]);
+    run_test("", hdr, rs, &[
+        "FullyDefined", 
+        "Partial1", 
+        "Partial2", 
+        "Partial3", 
+        "Partial4", 
+        // "Partial5"
+    ], &[]);
 }
 
 
