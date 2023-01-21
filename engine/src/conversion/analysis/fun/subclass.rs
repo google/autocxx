@@ -98,7 +98,7 @@ pub(super) fn create_subclass_trait_item(
             params: analysis.params.clone(),
             ret_type: analysis.ret_type.clone(),
             param_names,
-            receiver_mutability: receiver_mutability.clone(),
+            receiver_mutability: *receiver_mutability,
             requires_unsafe,
             is_pure_virtual,
             receiver,
@@ -161,7 +161,7 @@ pub(super) fn create_subclass_function(
                 qualification: Some(cpp),
             },
             superclass: superclass.clone(),
-            receiver_mutability: receiver_mutability.clone(),
+            receiver_mutability: *receiver_mutability,
             dependencies,
             requires_unsafe,
             is_pure_virtual: matches!(
