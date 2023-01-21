@@ -71,7 +71,7 @@ use super::{
     type_converter::{Annotated, PointerTreatment},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub(crate) enum ReceiverMutability {
     Const,
     Mutable,
