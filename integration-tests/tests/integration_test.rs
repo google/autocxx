@@ -11856,17 +11856,21 @@ fn test_virtual_methods() {
         // static_assertions::assert_not_impl_any!(ffi::Partial5: moveit::CopyNew);
         let _c1 = ffi::FullyDefined::new().within_unique_ptr();
     };
-    run_test("", hdr, rs, &[
-        "FullyDefined", 
-        "Partial1", 
-        "Partial2", 
-        "Partial3", 
-        "Partial4", 
-        // "Partial5"
-    ], &[]);
+    run_test(
+        "",
+        hdr,
+        rs,
+        &[
+            "FullyDefined",
+            "Partial1",
+            "Partial2",
+            "Partial3",
+            "Partial4",
+            // "Partial5"
+        ],
+        &[],
+    );
 }
-
-
 
 // Yet to test:
 // - Ifdef

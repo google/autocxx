@@ -236,7 +236,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
                     },
                     ..
             } if class_states.get(self_ty).map(|cs| !cs.undefined.is_empty()).unwrap_or(false)
-        ) 
+        )
     });
 
     // Finally, if there are any types which are nested inside other types,
