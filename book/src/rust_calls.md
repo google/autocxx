@@ -36,8 +36,7 @@ void feed_goat() {
     }
 }
 ",
-"#include <memory>
-class GoatObserver {
+"class GoatObserver {
 public:
     virtual void goat_full() const = 0;
     virtual ~GoatObserver() {}
