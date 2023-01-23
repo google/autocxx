@@ -216,7 +216,7 @@ macro_rules! name {
 
 /// A concrete type to make, for example
 /// `concrete!("Container<Contents>")`.
-/// All types msut already be on the allowlist by having used
+/// All types must already be on the allowlist by having used
 /// `generate!` or similar.
 ///
 /// A directive to be included inside
