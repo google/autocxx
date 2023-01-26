@@ -12,7 +12,7 @@ fn main() {
     let mut b = autocxx_build::Builder::new("src/main.rs", &[&path])
         .extra_clang_args(&["-std=c++17"])
         .expect_build();
-    b.flag_if_supported("-std=c++17")
+    b.flag_if_supported("-std=c++17") // use "-std:c++17" here if using msvc on windows
         .compile("autocxx-demo"); // arbitrary library name, pick anything
     println!("cargo:rerun-if-changed=src/main.rs");
     // Add instructions to link to any C++ libraries you need.
