@@ -252,8 +252,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
             let listing_path = tmp_dir.path().join("listing.h");
             create_concatenated_header(&headers, &listing_path)?;
             announce_progress(&format!(
-                "Preprocessing {:?} to {:?}",
-                listing_path, concat_path
+                "Preprocessing {listing_path:?} to {concat_path:?}"
             ));
             preprocess(&listing_path, &concat_path, &incs, &defs)?;
             let directives: Vec<_> = std::iter::once("#include \"concat.h\"\n".to_string())
@@ -261,7 +260,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
                     submatches
                         .values_of("directive")
                         .unwrap_or_default()
-                        .map(|s| format!("{}\n", s)),
+                        .map(|s| format!("{s}\n")),
                 )
                 .collect();
             create_rs_file(&rs_path, &directives)?;
@@ -310,8 +309,7 @@ fn do_run(matches: ArgMatches, tmp_dir: &TempDir) -> Result<(), std::io::Error> 
     let gen_cmd = matches.value_of("gen-cmd").unwrap();
     if !Path::new(gen_cmd).exists() {
         panic!(
-            "autocxx-gen not found in {}. hint: autocxx-reduce --gen-cmd /path/to/autocxx-gen",
-            gen_cmd
+            "autocxx-gen not found in {gen_cmd}. hint: autocxx-reduce --gen-cmd /path/to/autocxx-gen"
         );
     }
 
@@ -371,13 +369,13 @@ fn detect_cxx_h(concat_path: &Path) -> Result<bool, std::io::Error> {
 }
 
 fn announce_progress(msg: &str) {
-    println!("=== {} ===", msg);
+    println!("=== {msg} ===");
 }
 
 fn print_minimized_case(concat_path: &Path) -> Result<(), std::io::Error> {
     announce_progress("Completed. Minimized test case:");
     let contents = std::fs::read_to_string(concat_path)?;
-    println!("{}", contents);
+    println!("{contents}");
     Ok(())
 }
 
@@ -392,7 +390,7 @@ fn creduce_supports_remove_pass(creduce_cmd: &str) -> bool {
         .arg("--help")
         .output();
     let msg = match cmd {
-        Err(error) => panic!("failed to run creduce. creduce_cmd = {}. hint: autocxx-reduce --creduce /path/to/creduce. error = {}", creduce_cmd, error),
+        Err(error) => panic!("failed to run creduce. creduce_cmd = {creduce_cmd}. hint: autocxx-reduce --creduce /path/to/creduce. error = {error}"),
         Ok(result) => result.stdout
     };
     let msg = std::str::from_utf8(&msg).unwrap();
@@ -435,7 +433,7 @@ fn run_sample_gen_cmd(
     let args = format_gen_cmd(rs_file, tmp_dir.to_str().unwrap(), extra_clang_args);
     let args = args.collect::<Vec<_>>();
     let args_str = args.join(" ");
-    announce_progress(&format!("Running sample gen cmd: {} {}", gen_cmd, args_str));
+    announce_progress(&format!("Running sample gen cmd: {gen_cmd} {args_str}"));
     std::process::Command::new(gen_cmd).args(args).status()?;
     Ok(())
 }
@@ -490,7 +488,6 @@ fn create_interestingness_test(
     let rust_libs_path: Vec<String> = matches
         .get_many::<String>("rlibs")
         .expect("No rlib path specified")
-        .into_iter()
         .cloned()
         .collect();
 
@@ -504,15 +501,15 @@ fn create_interestingness_test(
     // We rely on equivalent content being hermetically inside concat.h.
     let postcompile_step = make_compile_step(postcompile, "gen0.cc", extra_clang_args);
     let rustc_step = if rustc {
-        let rust_libs_path = rust_libs_path.iter().map(|p| format!(" -L{}", p)).join(" ");
-        format!("{} --extern cxx --extern autocxx {} --crate-type rlib --emit=metadata --edition=2021 autocxx-ffi-default-gen.rs 2>&1", rustc_path, rust_libs_path)
+        let rust_libs_path = rust_libs_path.iter().map(|p| format!(" -L{p}")).join(" ");
+        format!("{rustc_path} --extern cxx --extern autocxx {rust_libs_path} --crate-type rlib --emit=metadata --edition=2021 autocxx-ffi-default-gen.rs 2>&1")
     } else {
         "echo Skipping rustc".to_string()
     };
     // -q below to exit immediately as soon as a match is found, to avoid
     // extra compile/codegen steps
     let problem_grep = problem
-        .map(|problem| format!("| grep -q \"{}\"  >/dev/null  2>&1", problem))
+        .map(|problem| format!("| grep -q \"{problem}\"  >/dev/null  2>&1"))
         .unwrap_or_default();
     let content = format!(
         indoc! {"
@@ -533,7 +530,7 @@ fn create_interestingness_test(
     "},
         precompile_step, gen_cmd, args, rustc_step, postcompile_step, problem_grep
     );
-    println!("Interestingness test:\n{}", content);
+    println!("Interestingness test:\n{content}");
     {
         let mut file = File::create(test_path)?;
         file.write_all(content.as_bytes())?;
@@ -573,14 +570,14 @@ fn create_concatenated_header(headers: &[&str], listing_path: &Path) -> Result<(
     announce_progress("Creating preprocessed header");
     let mut file = File::create(listing_path)?;
     for header in headers {
-        file.write_all(format!("#include \"{}\"\n", header).as_bytes())?;
+        file.write_all(format!("#include \"{header}\"\n").as_bytes())?;
     }
     Ok(())
 }
 
 fn create_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
     let mut file = File::create(path)?;
-    write!(file, "{}", content)?;
+    write!(file, "{content}")?;
     Ok(())
 }
 
@@ -592,7 +589,7 @@ fn get_cxx_suppressions() -> Vec<String> {
         .collect(); // for uniqueness
     defines
         .into_iter()
-        .map(|def| format!("-D{}", def))
+        .map(|def| format!("-D{def}"))
         .collect()
 }
 

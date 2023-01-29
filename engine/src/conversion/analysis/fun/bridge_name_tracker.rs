@@ -104,7 +104,7 @@ impl BridgeNameTracker {
             *count += 1;
             prefix
         } else {
-            let r = format!("{}_autocxx{}", prefix, count);
+            let r = format!("{prefix}_autocxx{count}");
             *count += 1;
             r
         }

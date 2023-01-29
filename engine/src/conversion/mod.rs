@@ -91,7 +91,7 @@ impl<'a> BridgeConverter<'a> {
                 "APIs after {}:\n{}",
                 label,
                 apis.iter()
-                    .map(|api| { format!("  {:?}", api) })
+                    .map(|api| { format!("  {api:?}") })
                     .sorted()
                     .join("\n")
             )

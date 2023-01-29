@@ -101,7 +101,7 @@ pub(crate) fn type_to_cpp(
             };
             match suffix {
                 None => Ok(root),
-                Some(suffix) => Ok(format!("{}<{}>", root, suffix)),
+                Some(suffix) => Ok(format!("{root}<{suffix}>")),
             }
         }
         Type::Reference(typr) => match &*typr.elem {

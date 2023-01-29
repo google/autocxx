@@ -44,7 +44,7 @@ impl Depfile {
         let dependency_list = self.dependencies.join(" \\\n  ");
         for output in &self.outputs {
             self.file
-                .write_all(format!("{}: {}\n\n", output, dependency_list).as_bytes())?
+                .write_all(format!("{output}: {dependency_list}\n\n").as_bytes())?
         }
         Ok(())
     }

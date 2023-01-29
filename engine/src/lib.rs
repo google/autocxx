@@ -297,7 +297,7 @@ impl IncludeCppEngine {
             self.config
                 .inclusions
                 .iter()
-                .map(|path| format!("#include \"{}\"\n", path)),
+                .map(|path| format!("#include \"{path}\"\n")),
             "",
         )
     }
@@ -345,7 +345,7 @@ impl IncludeCppEngine {
             builder
                 .command_line_flags()
                 .into_iter()
-                .map(|f| format!("\"{}\"", f))
+                .map(|f| format!("\"{f}\""))
                 .join(" ")
         );
         builder
@@ -380,7 +380,7 @@ impl IncludeCppEngine {
         let bindings = bindings.to_string();
         // Manually add the mod ffi {} so that we can ask syn to parse
         // into a single construct.
-        let bindings = format!("mod bindgen {{ {} }}", bindings);
+        let bindings = format!("mod bindgen {{ {bindings} }}");
         info!("Bindings: {}", bindings);
         syn::parse_str::<ItemMod>(&bindings)
             .map_err(|e| Error::BindingsParsing(LocatedSynError::new(e, &bindings)))
@@ -532,12 +532,12 @@ impl IncludeCppEngine {
         // to refer to local headers on the reduction machine too.
         let suffix = ALL_KNOWN_SYSTEM_HEADERS
             .iter()
-            .map(|hdr| format!("#include <{}>\n", hdr))
+            .map(|hdr| format!("#include <{hdr}>\n"))
             .join("\n");
         let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n{}\n",
             self.config, header, suffix, cxx_gen::HEADER);
         let mut tf = NamedTempFile::new().unwrap();
-        write!(tf, "{}", input).unwrap();
+        write!(tf, "{input}").unwrap();
         let tp = tf.into_temp_path();
         preprocess(&tp, &PathBuf::from(output_path), inc_dirs, extra_clang_args).unwrap();
     }
@@ -687,7 +687,7 @@ pub struct AutocxxgenHeaderNamer<'a>(pub Box<dyn 'a + Fn(String) -> String>);
 
 impl Default for AutocxxgenHeaderNamer<'static> {
     fn default() -> Self {
-        Self(Box::new(|mod_name| format!("autocxxgen_{}.h", mod_name)))
+        Self(Box::new(|mod_name| format!("autocxxgen_{mod_name}.h")))
     }
 }
 
@@ -747,7 +747,7 @@ fn proc_macro_span_to_miette_span(span: &proc_macro2::Span) -> SourceSpan {
     // miette.
     struct Err;
     let r: Result<(usize, usize), Err> = (|| {
-        let span_desc = format!("{:?}", span);
+        let span_desc = format!("{span:?}");
         let re = Regex::new(r"(\d+)..(\d+)").unwrap();
         let captures = re.captures(&span_desc).ok_or(Err)?;
         let start = captures.get(1).ok_or(Err)?;

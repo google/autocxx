@@ -101,7 +101,7 @@ impl AllowlistEntry {
     fn to_bindgen_item(&self) -> String {
         match self {
             AllowlistEntry::Item(i) => i.clone(),
-            AllowlistEntry::Namespace(ns) => format!("{}::.*", ns),
+            AllowlistEntry::Namespace(ns) => format!("{ns}::.*"),
         }
     }
 }
@@ -250,7 +250,7 @@ impl Parse for IncludeCppConfig {
                 None => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("expected {}", all_possible),
+                        format!("expected {all_possible}"),
                     ));
                 }
                 Some(directive) => directive.parse(to_parse, &mut config, &ident.span())?,
@@ -258,7 +258,7 @@ impl Parse for IncludeCppConfig {
             if parse_completely && !to_parse.is_empty() {
                 return Err(syn::Error::new(
                     ident.span(),
-                    format!("found unexpected input within the directive {}", ident_str),
+                    format!("found unexpected input within the directive {ident_str}"),
                 ));
             }
             if input.is_empty() {

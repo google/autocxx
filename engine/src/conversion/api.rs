@@ -374,7 +374,7 @@ impl std::fmt::Debug for ApiName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
         if let Some(cpp_name) = &self.cpp_name {
-            write!(f, " (cpp={})", cpp_name)?;
+            write!(f, " (cpp={cpp_name})")?;
         }
         Ok(())
     }
@@ -427,7 +427,7 @@ impl SubclassName {
     }
     // TODO this and the following should probably include both class name and method name
     pub(crate) fn get_super_fn_name(superclass_namespace: &Namespace, id: &str) -> QualifiedName {
-        let id = make_ident(format!("{}_super", id));
+        let id = make_ident(format!("{id}_super"));
         QualifiedName::new(superclass_namespace, id)
     }
     pub(crate) fn get_methods_trait_name(superclass_name: &QualifiedName) -> QualifiedName {

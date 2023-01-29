@@ -60,7 +60,7 @@ impl ByValueChecker {
             let safety = if by_value_safe {
                 PodState::IsPod
             } else {
-                PodState::UnsafeToBePod(format!("type {} is not safe for POD", tn))
+                PodState::UnsafeToBePod(format!("type {tn} is not safe for POD"))
             };
             results.insert(tn.clone(), StructDetails::new(safety));
         }
@@ -149,14 +149,13 @@ impl ByValueChecker {
             match self.results.get(ty_id) {
                 None => {
                     field_safety_problem = PodState::UnsafeToBePod(format!(
-                        "Type {} could not be POD because its dependent type {} isn't known",
-                        tyname, ty_id
+                        "Type {tyname} could not be POD because its dependent type {ty_id} isn't known"
                     ));
                     break;
                 }
                 Some(deets) => {
                     if let PodState::UnsafeToBePod(reason) = &deets.state {
-                        let new_reason = format!("Type {} could not be POD because its dependent type {} isn't safe to be POD. Because: {}", tyname, ty_id, reason);
+                        let new_reason = format!("Type {tyname} could not be POD because its dependent type {ty_id} isn't safe to be POD. Because: {reason}");
                         field_safety_problem = PodState::UnsafeToBePod(new_reason);
                         break;
                     }
@@ -165,8 +164,7 @@ impl ByValueChecker {
         }
         if Self::has_vtable(def) {
             let reason = format!(
-                "Type {} could not be POD because it has virtual functions.",
-                tyname
+                "Type {tyname} could not be POD because it has virtual functions."
             );
             field_safety_problem = PodState::UnsafeToBePod(reason);
         }
@@ -176,7 +174,7 @@ impl ByValueChecker {
     }
 
     fn ingest_nonpod_type(&mut self, tyname: QualifiedName) {
-        let new_reason = format!("Type {} is a typedef to a complex type", tyname);
+        let new_reason = format!("Type {tyname} is a typedef to a complex type");
         self.results.insert(
             tyname,
             StructDetails::new(PodState::UnsafeToBePod(new_reason)),
@@ -191,8 +189,7 @@ impl ByValueChecker {
             match deets {
                 None => {
                     return Err(format!(
-                        "Unable to make {} POD because we never saw a struct definition",
-                        ty_id
+                        "Unable to make {ty_id} POD because we never saw a struct definition"
                     ))
                 }
                 Some(deets) => match &deets.state {
