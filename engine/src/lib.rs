@@ -33,6 +33,7 @@ use parse_callbacks::AutocxxParseCallbacks;
 use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
 use regex::Regex;
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::{
@@ -704,7 +705,27 @@ pub struct CxxgenHeaderNamer<'a>(pub Box<dyn 'a + Fn() -> String>);
 
 impl Default for CxxgenHeaderNamer<'static> {
     fn default() -> Self {
-        Self(Box::new(|| "cxxgen.h".into()))
+        // The default implementation here is to name these headers
+        // cxxgen.h, cxxgen1.h, cxxgen2.h etc.
+        // These names are not especially predictable by callers and this
+        // behavior is not tested anywhere - so this is considered semi-
+        // supported, at best. This only comes into play in the rare case
+        // that you're generating bindings to multiple include_cpp!
+        // or a mix of include_cpp! and #[cxx::bridge] bindings.
+        let header_counter = Rc::new(RefCell::new(0));
+        Self(Box::new(move || {
+            let header_counter = header_counter.clone();
+            let header_counter_cell = header_counter.as_ref();
+            let mut header_counter = header_counter_cell.borrow_mut();
+            if *header_counter == 0 {
+                *header_counter += 1;
+                "cxxgen.h".into()
+            } else {
+                let count = *header_counter;
+                *header_counter += 1;
+                format!("cxxgen{count}.h")
+            }
+        }))
     }
 }
 

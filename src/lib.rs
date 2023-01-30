@@ -499,11 +499,24 @@ pub mod extern_rust {
     /// generated `cxx` bindings, and this type will appear in the C++ header
     /// generated for use in C++.
     ///
+    /// # Finding these bindings from C++
+    ///
     /// You will likely need to forward-declare this type within your C++ headers
     /// before you can use it in such function signatures. autocxx can't generate
     /// headers (with this type definition) until it's parsed your header files;
     /// logically therefore if your header files mention one of these types
     /// it's impossible for them to see the definition of the type.
+    ///
+    /// If you're using multiple sets of `include_cpp!` directives, or
+    /// a mixture of `include_cpp!` and `#[cxx::bridge]` bindings, then you
+    /// may be able to `#include "cxxgen.h"` to refer to the generated C++
+    /// function prototypes. In this particular circumstance, you'll want to know
+    /// how exactly the `cxxgen.h` header is named, because one will be
+    /// generated for each of the sets of bindings encountered. The pattern
+    /// can be set manually using `autocxxgen`'s command-line options. If you're
+    /// using `autocxx`'s `build.rs` support, those headers will be named
+    /// `cxxgen.h`, `cxxgen1.h`, `cxxgen2.h` according to the order in which
+    /// the `include_cpp` or `cxx::bridge` bindings are encountered.
     pub use autocxx_macro::extern_rust_type;
 
     /// Declare that a given function is a Rust function which is to be exported
@@ -513,6 +526,9 @@ pub mod extern_rust {
     /// #[extern_rust_function]
     /// pub fn call_me_from_cpp() { }
     /// ```
+    ///
+    /// See [`extern_rust_type`] for details of how to find the generated
+    /// declarations from C++.
     pub use autocxx_macro::extern_rust_function;
 }
 
