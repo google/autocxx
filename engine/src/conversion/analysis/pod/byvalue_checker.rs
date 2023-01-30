@@ -163,9 +163,8 @@ impl ByValueChecker {
             }
         }
         if Self::has_vtable(def) {
-            let reason = format!(
-                "Type {tyname} could not be POD because it has virtual functions."
-            );
+            let reason =
+                format!("Type {tyname} could not be POD because it has virtual functions.");
             field_safety_problem = PodState::UnsafeToBePod(reason);
         }
         let mut my_details = StructDetails::new(field_safety_problem);

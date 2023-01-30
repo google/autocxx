@@ -9767,12 +9767,9 @@ fn size_and_alignment_test(pod: bool) {
     let allowlist_fns: Vec<String> = TYPES
         .iter()
         .flat_map(|(name, _)| {
-            [
-                format!("get_sizeof_{name}"),
-                format!("get_alignof_{name}"),
-            ]
-            .to_vec()
-            .into_iter()
+            [format!("get_sizeof_{name}"), format!("get_alignof_{name}")]
+                .to_vec()
+                .into_iter()
         })
         .collect_vec();
     let allowlist_types: Vec<String> = TYPES.iter().map(|(name, _)| name.to_string()).collect_vec();

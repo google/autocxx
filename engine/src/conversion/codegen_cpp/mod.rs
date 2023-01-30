@@ -248,9 +248,8 @@ impl<'a> CppCodeGenerator<'a> {
                 .any(|x| x.definition.is_some())
             {
                 let definitions = self.concat_additional_items(|x| x.definition.as_ref());
-                let definitions = format!(
-                    "#include \"{header_name}\"\n{cpp_headers}\n{definitions}"
-                );
+                let definitions =
+                    format!("#include \"{header_name}\"\n{cpp_headers}\n{definitions}");
                 log::info!("Additional C++ defs:\n{}", definitions);
                 Some(definitions.into_bytes())
             } else {
@@ -430,9 +429,7 @@ impl<'a> CppCodeGenerator<'a> {
         } else {
             "".to_string()
         };
-        let qualified_declaration = format!(
-            "{ret_type} {qualification}{name}({args}){constness}"
-        );
+        let qualified_declaration = format!("{ret_type} {qualification}{name}({args}){constness}");
         // Whether there's a placement param in which to put the return value
         let placement_param = details
             .argument_conversion
@@ -577,14 +574,11 @@ impl<'a> CppCodeGenerator<'a> {
             } else {
                 "".into()
             };
-        let definition_after_sig =
-            format!("{field_assignments} {{ {underlying_function_call} }}",);
+        let definition_after_sig = format!("{field_assignments} {{ {underlying_function_call} }}",);
         let (declaration, definition) = if requires_rust_declarations {
             (
                 Some(format!("{declaration};")),
-                Some(format!(
-                    "{qualified_declaration} {definition_after_sig}"
-                )),
+                Some(format!("{qualified_declaration} {definition_after_sig}")),
             )
         } else {
             (

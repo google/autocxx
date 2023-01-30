@@ -423,11 +423,7 @@ pub fn do_run_test_manual(
     const HEADER_NAME: &str = "input.h";
     // Step 2: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
-    write_to_file(
-        &tdir,
-        HEADER_NAME,
-        &format!("#pragma once\n{header_code}"),
-    );
+    write_to_file(&tdir, HEADER_NAME, &format!("#pragma once\n{header_code}"));
     write_to_file(&tdir, "cxx.h", HEADER);
 
     rust_code.append_all(quote! {

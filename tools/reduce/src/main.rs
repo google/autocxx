@@ -587,10 +587,7 @@ fn get_cxx_suppressions() -> Vec<String> {
         .find_iter(cxx_gen::HEADER)
         .map(|m| m.as_str())
         .collect(); // for uniqueness
-    defines
-        .into_iter()
-        .map(|def| format!("-D{def}"))
-        .collect()
+    defines.into_iter().map(|def| format!("-D{def}")).collect()
 }
 
 #[test]

@@ -110,8 +110,6 @@ pub enum CppSubclassCppPeerHolder<CppPeer: CppSubclassCppPeer> {
     Unowned(*mut CppPeer),
 }
 
-
-
 impl<CppPeer: CppSubclassCppPeer> CppSubclassCppPeerHolder<CppPeer> {
     fn pin_mut(&mut self) -> Pin<&mut CppPeer> {
         match self {
