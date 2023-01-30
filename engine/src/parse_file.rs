@@ -27,7 +27,7 @@ use thiserror::Error;
 /// and interpret include_cxx macros.
 #[derive(Error, Diagnostic, Debug)]
 pub enum ParseError {
-    #[error("unable to open the source file: {0}")]
+    #[error("unable to open the source file containing your autocxx bindings. (This filename is usually specified within your build.rs file.): {0}")]
     FileOpen(std::io::Error),
     #[error("the .rs file couldn't be read: {0}")]
     FileRead(std::io::Error),
