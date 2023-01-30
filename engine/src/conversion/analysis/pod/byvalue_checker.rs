@@ -48,6 +48,9 @@ impl StructDetails {
 /// std::string contains a self-referential pointer.
 /// It is possible that this is duplicative of the information stored
 /// elsewhere in the `Api` list and could possibly be removed or simplified.
+/// In general this is one of the oldest parts of autocxx and
+/// the code here could quite possibly be simplified by reusing code
+/// elsewhere.
 pub struct ByValueChecker {
     // Mapping from type name to whether it is safe to be POD
     results: HashMap<QualifiedName, StructDetails>,
@@ -81,6 +84,11 @@ impl ByValueChecker {
                 .results
                 .insert(tn, StructDetails::new(safety));
         }
+        // As we do this analysis, we need to be aware that structs
+        // may depend on other types. Ideally we'd use the depth first iterator
+        // but that's awkward given that our ApiPhase does not yet have a fixed
+        // list of field/base types. Instead, we'll iterate first over non-struct
+        // types and then over structs.
         for api in apis.iter() {
             match api {
                 Api::Typedef { analysis, .. } => {
@@ -113,20 +121,17 @@ impl ByValueChecker {
                         None => byvalue_checker.ingest_nonpod_type(name.clone()),
                     }
                 }
-                Api::Struct { details, .. } => {
-                    byvalue_checker.ingest_struct(&details.item, api.name().get_namespace())
-                }
-                Api::Enum { .. } => {
-                    byvalue_checker
-                        .results
-                        .insert(api.name().clone(), StructDetails::new(PodState::IsPod));
-                }
-                Api::ExternCppType { pod: true, .. } => {
+                Api::Enum { .. } | Api::ExternCppType { pod: true, .. } => {
                     byvalue_checker
                         .results
                         .insert(api.name().clone(), StructDetails::new(PodState::IsPod));
                 }
                 _ => {}
+            }
+        }
+        for api in apis.iter() {
+            if let Api::Struct { details, .. } = api {
+                byvalue_checker.ingest_struct(&details.item, api.name().get_namespace())
             }
         }
         let pod_requests = config
@@ -232,6 +237,10 @@ impl ByValueChecker {
         )
     }
 
+    /// This is a miniature version of the analysis in `super::get_struct_field_types`.
+    /// It would be nice to unify them. However, this version only cares about spotting
+    /// fields which may be non-POD, so can largely concern itself with just `Type::Path`
+    /// fields.
     fn get_field_types(def: &ItemStruct) -> Vec<QualifiedName> {
         let mut results = Vec::new();
         for f in &def.fields {
