@@ -11805,6 +11805,18 @@ fn test_issue_1192() {
     );
 }
 
+#[test]
+fn test_issue_1214() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        enum class C: uint16_t {
+            A,
+            B,
+        };
+    "};
+    run_test("", hdr, quote! {}, &["C"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
