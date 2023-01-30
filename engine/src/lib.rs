@@ -11,6 +11,7 @@
 // except according to those terms.
 
 #![forbid(unsafe_code)]
+#![cfg_attr(feature = "nightly", feature(doc_cfg))]
 
 mod ast_discoverer;
 mod conversion;
