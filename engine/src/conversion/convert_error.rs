@@ -227,8 +227,7 @@ impl ErrorContext {
             ),
             Some(_) => Self(
                 Box::new(ErrorContextType::SanitizedItem(make_ident(format!(
-                    "{}_{}",
-                    self_ty, method
+                    "{self_ty}_{method}"
                 )))),
                 PhantomSanitized,
             ),
@@ -258,8 +257,8 @@ impl ErrorContext {
 impl std::fmt::Display for ErrorContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &*self.0 {
-            ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => write!(f, "{}", id),
-            ErrorContextType::Method { self_ty, method } => write!(f, "{}::{}", self_ty, method),
+            ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => write!(f, "{id}"),
+            ErrorContextType::Method { self_ty, method } => write!(f, "{self_ty}::{method}"),
         }
     }
 }

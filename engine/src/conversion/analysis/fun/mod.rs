@@ -776,7 +776,7 @@ impl<'a> FnAnalyzer<'a> {
                 if initial_rust_name.ends_with('_') {
                     initial_rust_name // case 2
                 } else if validate_ident_ok_for_rust(cpp_name).is_err() {
-                    format!("{}_", cpp_name) // case 5
+                    format!("{cpp_name}_") // case 5
                 } else {
                     cpp_name.to_string() // cases 3, 4, 6
                 }
@@ -830,7 +830,7 @@ impl<'a> FnAnalyzer<'a> {
                 let is_move =
                     matches!(fun.special_member, Some(SpecialMemberKind::MoveConstructor));
                 if let Some(constructor_suffix) = rust_name.strip_prefix(nested_type_ident) {
-                    rust_name = format!("new{}", constructor_suffix);
+                    rust_name = format!("new{constructor_suffix}");
                 }
                 rust_name = predetermined_rust_name
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
@@ -935,7 +935,7 @@ impl<'a> FnAnalyzer<'a> {
                     // fn make_unique(...args) -> UniquePtr<Type>
                     // If there are multiple constructors, bindgen generates
                     // new, new1, new2 etc. and we'll keep those suffixes.
-                    rust_name = format!("new{}", constructor_suffix);
+                    rust_name = format!("new{constructor_suffix}");
                     MethodKind::Constructor {
                         is_default: matches!(
                             fun.special_member,
@@ -1261,7 +1261,7 @@ impl<'a> FnAnalyzer<'a> {
             } else {
                 "_"
             };
-            cxxbridge_name = make_ident(format!("{}{}autocxx_wrapper", cxxbridge_name, joiner));
+            cxxbridge_name = make_ident(format!("{cxxbridge_name}{joiner}autocxx_wrapper"));
             let (payload, cpp_function_kind) = match fun.synthetic_cpp.as_ref().cloned() {
                 Some((payload, cpp_function_kind)) => (payload, cpp_function_kind),
                 None => match kind {
@@ -2094,7 +2094,7 @@ impl<'a> FnAnalyzer<'a> {
                     Box::new(FuncToConvert {
                         self_ty: Some(self_ty.clone()),
                         ident,
-                        doc_attrs: make_doc_attrs(format!("Synthesized {}.", special_member)),
+                        doc_attrs: make_doc_attrs(format!("Synthesized {special_member}.")),
                         inputs,
                         output: ReturnType::Default,
                         vis: parse_quote! { pub },

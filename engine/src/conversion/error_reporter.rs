@@ -33,7 +33,7 @@ where
     match fun() {
         Ok(result) => Some(result),
         Err(ConvertErrorWithContext(err, None)) => {
-            eprintln!("Ignored item: {}", err);
+            eprintln!("Ignored item: {err}");
             None
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {

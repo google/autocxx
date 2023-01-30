@@ -87,8 +87,7 @@ impl CodeCheckerFns for StringFinder {
         for msg in &self.0 {
             if !toks.contains(msg) {
                 return Err(TestError::RsCodeExaminationFail(format!(
-                    "Couldn't find string '{}'",
-                    msg
+                    "Couldn't find string '{msg}'"
                 )));
             };
         }
@@ -110,8 +109,7 @@ impl CodeCheckerFns for RustCodeFinder {
             let needle = msg.to_string();
             if !haystack.contains(&needle) {
                 return Err(TestError::RsCodeExaminationFail(format!(
-                    "Couldn't find tokens '{}'",
-                    needle
+                    "Couldn't find tokens '{needle}'"
                 )));
             };
         }

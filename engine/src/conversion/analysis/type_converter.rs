@@ -545,7 +545,7 @@ impl<'a> TypeConverter<'a> {
                     .find(|s| s == &synthetic_ident)
                 {
                     None => synthetic_ident,
-                    Some(_) => format!("AutocxxConcrete{}", count),
+                    Some(_) => format!("AutocxxConcrete{count}"),
                 };
                 let api = UnanalyzedApi::ConcreteType {
                     name: ApiName::new_in_root_namespace(make_ident(synthetic_ident)),

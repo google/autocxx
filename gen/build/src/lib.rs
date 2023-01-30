@@ -45,7 +45,7 @@ impl RebuildDependencyRecorder for CargoRebuildDependencyRecorder {
     fn record_header_file_dependency(&self, filename: &str) {
         let mut already = self.printed_already.lock().unwrap();
         if already.insert(filename.into()) {
-            println!("cargo:rerun-if-changed={}", filename);
+            println!("cargo:rerun-if-changed={filename}");
         }
     }
 }

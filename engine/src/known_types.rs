@@ -100,12 +100,12 @@ impl TypeDetails {
         let mut segs = self.rs_name.split("::").peekable();
         if segs.peek().map(|seg| seg.is_empty()).unwrap_or_default() {
             segs.next();
-            let segs = segs.into_iter().map(make_ident);
+            let segs = segs.map(make_ident);
             parse_quote! {
                 ::#(#segs)::*
             }
         } else {
-            let segs = segs.into_iter().map(make_ident);
+            let segs = segs.map(make_ident);
             parse_quote! {
                 #(#segs)::*
             }
@@ -444,8 +444,8 @@ fn create_type_database() -> TypeDatabase {
     ));
     for (cpp_type, rust_type) in (4..7).map(|x| 2i32.pow(x)).flat_map(|x| {
         vec![
-            (format!("uint{}_t", x), format!("u{}", x)),
-            (format!("int{}_t", x), format!("i{}", x)),
+            (format!("uint{x}_t"), format!("u{x}")),
+            (format!("int{x}_t"), format!("i{x}")),
         ]
     }) {
         db.insert(TypeDetails::new(
@@ -478,18 +478,18 @@ fn create_type_database() -> TypeDatabase {
     let mut insert_ctype = |cname: &str| {
         let concatenated_name = cname.replace(' ', "");
         db.insert(TypeDetails::new(
-            format!("autocxx::c_{}", concatenated_name),
+            format!("autocxx::c_{concatenated_name}"),
             cname,
             Behavior::CVariableLengthByValue,
-            Some(format!("std::os::raw::c_{}", concatenated_name)),
+            Some(format!("std::os::raw::c_{concatenated_name}")),
             true,
             true,
         ));
         db.insert(TypeDetails::new(
-            format!("autocxx::c_u{}", concatenated_name),
-            format!("unsigned {}", cname),
+            format!("autocxx::c_u{concatenated_name}"),
+            format!("unsigned {cname}"),
             Behavior::CVariableLengthByValue,
-            Some(format!("std::os::raw::c_u{}", concatenated_name)),
+            Some(format!("std::os::raw::c_u{concatenated_name}")),
             true,
             true,
         ));

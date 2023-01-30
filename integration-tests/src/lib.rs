@@ -162,7 +162,7 @@ impl LinkableTryBuilder {
             );
         }
         let temp_path = self.temp_dir.path().to_str().unwrap();
-        let mut rustflags = format!("-L {}", temp_path);
+        let mut rustflags = format!("-L {temp_path}");
         if std::env::var_os("AUTOCXX_ASAN").is_some() {
             rustflags.push_str(" -Z sanitizer=address -Clinker=clang++ -Clink-arg=-fuse-ld=lld");
         }
@@ -423,11 +423,7 @@ pub fn do_run_test_manual(
     const HEADER_NAME: &str = "input.h";
     // Step 2: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
-    write_to_file(
-        &tdir,
-        HEADER_NAME,
-        &format!("#pragma once\n{}", header_code),
-    );
+    write_to_file(&tdir, HEADER_NAME, &format!("#pragma once\n{header_code}"));
     write_to_file(&tdir, "cxx.h", HEADER);
 
     rust_code.append_all(quote! {
@@ -438,7 +434,7 @@ pub fn do_run_test_manual(
 
     let write_rust_to_file = |ts: &TokenStream| -> PathBuf {
         // Step 3: Write the Rust code to a temp file
-        let rs_code = format!("{}", ts);
+        let rs_code = format!("{ts}");
         write_to_file(&tdir, "input.rs", &rs_code)
     };
 
@@ -477,7 +473,7 @@ pub fn do_run_test_manual(
     if !cxx_code.is_empty() {
         // Step 4: Write the C++ code snippet to a .cc file, along with a #include
         //         of the header emitted in step 5.
-        let cxx_code = format!("#include \"input.h\"\n#include \"cxxgen.h\"\n{}", cxx_code);
+        let cxx_code = format!("#include \"input.h\"\n#include \"cxxgen.h\"\n{cxx_code}");
         let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
         b.file(cxx_path);
     }
@@ -492,7 +488,7 @@ pub fn do_run_test_manual(
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
     if KEEP_TEMPDIRS {
-        println!("Generated .rs files: {:?}", generated_rs_files);
+        println!("Generated .rs files: {generated_rs_files:?}");
     }
     // Step 8: use the trybuild crate to build the Rust file.
     let r = get_builder().lock().unwrap().build(
