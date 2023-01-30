@@ -404,7 +404,7 @@ see the chapter on <a href="cpp_types.html">C++ types</a>.</li>
     let mut b = autocxx_build::Builder::new(&quot;src/main.rs&quot;, &amp;[&amp;path])
         .extra_clang_args(&amp;[&quot;-std=c++17&quot;])
         .expect_build();
-    b.flag_if_supported(&quot;-std=c++17&quot;)
+    b.flag_if_supported(&quot;-std=c++17&quot;) // use &quot;-std:c++17&quot; here if using msvc on windows
         .compile(&quot;autocxx-demo&quot;); // arbitrary library name, pick anything
     println!(&quot;cargo:rerun-if-changed=src/main.rs&quot;);
     // Add instructions to link to any C++ libraries you need.
@@ -1091,8 +1091,7 @@ See <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclass.h
 This is useful primarily if you want to listen out for messages broadcast
 using the C++ observer/listener pattern.</p>
 <h4 id="c-header-14"><a class="header" href="#c-header-14">C++ header:</a></h4>
-<pre><code class="language-cpp">#include &lt;memory&gt;
-class GoatObserver {
+<pre><code class="language-cpp">class GoatObserver {
 public:
     virtual void goat_full() const = 0;
     virtual ~GoatObserver() {}

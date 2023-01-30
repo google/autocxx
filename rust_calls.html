@@ -160,8 +160,7 @@ See <a href="https://docs.rs/autocxx/latest/autocxx/subclass/trait.CppSubclass.h
 This is useful primarily if you want to listen out for messages broadcast
 using the C++ observer/listener pattern.</p>
 <h4 id="c-header"><a class="header" href="#c-header">C++ header:</a></h4>
-<pre><code class="language-cpp">#include &lt;memory&gt;
-class GoatObserver {
+<pre><code class="language-cpp">class GoatObserver {
 public:
     virtual void goat_full() const = 0;
     virtual ~GoatObserver() {}

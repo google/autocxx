@@ -153,7 +153,7 @@
     let mut b = autocxx_build::Builder::new(&quot;src/main.rs&quot;, &amp;[&amp;path])
         .extra_clang_args(&amp;[&quot;-std=c++17&quot;])
         .expect_build();
-    b.flag_if_supported(&quot;-std=c++17&quot;)
+    b.flag_if_supported(&quot;-std=c++17&quot;) // use &quot;-std:c++17&quot; here if using msvc on windows
         .compile(&quot;autocxx-demo&quot;); // arbitrary library name, pick anything
     println!(&quot;cargo:rerun-if-changed=src/main.rs&quot;);
     // Add instructions to link to any C++ libraries you need.
