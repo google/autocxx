@@ -1282,7 +1282,7 @@ fn test_define_str() {
         #define BOB \"foo\"
     "};
     let rs = quote! {
-        assert_eq!(std::str::from_utf8(ffi::BOB).unwrap().trim_end_matches(char::from(0)), "foo");
+        assert_eq!(core::str::from_utf8(ffi::BOB).unwrap().trim_end_matches(char::from(0)), "foo");
     };
     run_test(cxx, hdr, rs, &["BOB"], &[]);
 }
@@ -1429,7 +1429,7 @@ fn test_asan_working_as_expected_for_cpp_allocations() {
 #[test]
 fn test_asan_working_as_expected_for_rust_allocations() {
     perform_asan_doom_test(
-        quote! { Box::into_raw(std::pin::Pin::into_inner_unchecked(a)) },
+        quote! { Box::into_raw(core::pin::Pin::into_inner_unchecked(a)) },
         quote! { Box },
     )
 }
@@ -3043,7 +3043,7 @@ fn test_string_constant() {
         const char* STRING = \"Foo\";
     "};
     let rs = quote! {
-        let a = std::str::from_utf8(ffi::STRING).unwrap().trim_end_matches(char::from(0));
+        let a = core::str::from_utf8(ffi::STRING).unwrap().trim_end_matches(char::from(0));
         assert_eq!(a, "Foo");
     };
     run_test("", hdr, rs, &["STRING"], &[]);
@@ -8065,10 +8065,10 @@ fn test_pv_subclass_allocation_not_self_owned() {
             assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
             let obs_superclass = obs.as_ref().unwrap(); // &subclass
-            let obs_superclass = unsafe { std::mem::transmute::<&ffi::MyTestObserverCpp, &ffi::TestObserver>(obs_superclass) };
+            let obs_superclass = unsafe { core::mem::transmute::<&ffi::MyTestObserverCpp, &ffi::TestObserver>(obs_superclass) };
             ffi::TriggerTestObserverA(obs_superclass);
             assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
-            std::mem::drop(obs);
+            core::mem::drop(obs);
             Lazy::force(&STATUS).lock().unwrap().a_called = false;
             assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
@@ -8085,7 +8085,7 @@ fn test_pv_subclass_allocation_not_self_owned() {
             ffi::TriggerTestObserverA(obs.as_ref().borrow().as_ref());
             assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
             Lazy::force(&STATUS).lock().unwrap().a_called = false;
-            std::mem::drop(obs);
+            core::mem::drop(obs);
             assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
@@ -8200,11 +8200,11 @@ fn test_pv_subclass_allocation_self_owned() {
             assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
             let obs_superclass = obs.as_ref().unwrap(); // &subclass
-            let obs_superclass = unsafe { std::mem::transmute::<&ffi::MyTestObserverCpp, &ffi::TestObserver>(obs_superclass) };
+            let obs_superclass = unsafe { core::mem::transmute::<&ffi::MyTestObserverCpp, &ffi::TestObserver>(obs_superclass) };
 
             ffi::TriggerTestObserverA(obs_superclass);
             assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
-            std::mem::drop(obs);
+            core::mem::drop(obs);
             Lazy::force(&STATUS).lock().unwrap().a_called = false;
             assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
@@ -8221,7 +8221,7 @@ fn test_pv_subclass_allocation_self_owned() {
 
             assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
             Lazy::force(&STATUS).lock().unwrap().a_called = false;
-            std::mem::drop(obs);
+            core::mem::drop(obs);
             assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
@@ -8233,7 +8233,7 @@ fn test_pv_subclass_allocation_self_owned() {
             let obs_superclass_ptr: *const ffi::TestObserver = obs.as_ref().borrow().as_ref();
             // Retain just a pointer on the Rust side, so there is no Rust-side
             // ownership.
-            std::mem::drop(obs);
+            core::mem::drop(obs);
             assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
@@ -9790,8 +9790,8 @@ fn size_and_alignment_test(pod: bool) {
         accumulator.extend(quote! {
             let c_size = ffi::#get_size_symbol();
             let c_align = ffi::#get_align_symbol();
-            assert_eq!(std::mem::size_of::<ffi::#type_symbol>(), c_size);
-            assert_eq!(std::mem::align_of::<ffi::#type_symbol>(), c_align);
+            assert_eq!(core::mem::size_of::<ffi::#type_symbol>(), c_size);
+            assert_eq!(core::mem::align_of::<ffi::#type_symbol>(), c_align);
         });
         accumulator
     });
