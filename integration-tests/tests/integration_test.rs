@@ -11833,6 +11833,10 @@ fn test_virtual_methods() {
             int c() { return 2; }
         };
 
+        // TODO: currently this class cannot be detected as virtual as there
+        // is no metadata captured to show that this destructor is virtual
+        // uncommenting this (as well as corresponding sections below) gives a 
+        // 'instantiation of abstract class' error.
         // class Partial5 : public Base {
         // public:
         //     ~Partial5() = 0;

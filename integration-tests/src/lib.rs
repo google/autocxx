@@ -194,6 +194,7 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
 }
 
 /// A positive test, we expect to pass.
+#[track_caller]
 pub fn run_test(
     cxx_code: &str,
     header_code: &str,

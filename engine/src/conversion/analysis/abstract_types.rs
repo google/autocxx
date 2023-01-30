@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use indexmap::map::IndexMap as HashMap;
-use syn::FnArg;
+use syn::{punctuated::Punctuated, token::Comma, FnArg};
 
 use super::{
     fun::{
@@ -17,8 +17,8 @@ use super::{
     pod::PodAnalysis,
 };
 use crate::conversion::{
-    analysis::fun::ReceiverMutability,
-    api::TypeKind,
+    analysis::{depth_first::fields_and_bases_first, fun::ReceiverMutability},
+    api::{ApiName, TypeKind},
     error_reporter::{convert_apis, convert_item_apis},
     ConvertErrorFromCpp,
 };
@@ -28,156 +28,49 @@ use crate::{
 };
 use indexmap::set::IndexSet as HashSet;
 
+#[derive(Hash, PartialEq, Eq, Clone, Debug)]
+struct Signature {
+    name: String,
+    args: Vec<syn::Type>,
+    constness: ReceiverMutability,
+}
+
+impl Signature {
+    fn new(
+        name: &ApiName,
+        params: &Punctuated<FnArg, Comma>,
+        constness: ReceiverMutability,
+    ) -> Self {
+        Signature {
+            name: name.cpp_name(),
+            args: params
+                .iter()
+                .skip(1) // skip `this` implicit argument
+                .filter_map(|p| {
+                    if let FnArg::Typed(t) = p {
+                        Some((*t.ty).clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            constness,
+        }
+    }
+}
+
 /// Spot types with pure virtual functions and mark them abstract.
 pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhase2> {
-    // values of set are the cppname
-    #[derive(Hash, PartialEq, Eq, Clone, Debug)]
-    struct Signature {
-        name: String,
-        args: Vec<syn::Type>,
-        constness: ReceiverMutability,
-    }
-
-    #[derive(Default, Debug)]
+    #[derive(Default, Debug, Clone)]
     struct ClassAbstractState {
         undefined: HashSet<Signature>,
         defined: HashSet<Signature>,
     }
     let mut class_states: HashMap<QualifiedName, ClassAbstractState> = HashMap::new();
+    let mut abstract_classes = HashSet::new();
 
-    for api in apis.iter() {
-        match &api {
-            Api::Function {
-                name,
-                analysis:
-                    FnAnalysis {
-                        kind:
-                            FnKind::Method {
-                                impl_for: self_ty_name,
-                                method_kind: MethodKind::PureVirtual(constness),
-                                ..
-                            },
-                        params,
-                        ..
-                    },
-                ..
-            } => {
-                class_states
-                    .entry(self_ty_name.clone())
-                    .or_default()
-                    .undefined
-                    .insert(Signature {
-                        name: name.cpp_name(),
-                        args: params
-                            .iter()
-                            .skip(1)
-                            .filter_map(|p| {
-                                if let FnArg::Typed(t) = p {
-                                    Some((*t.ty).clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect(),
-                        constness: *constness,
-                    });
-            }
-            Api::Function {
-                name,
-                analysis:
-                    FnAnalysis {
-                        kind:
-                            FnKind::Method {
-                                impl_for: self_ty_name,
-                                method_kind: MethodKind::Virtual(constness),
-                                ..
-                            },
-                        params,
-                        ..
-                    },
-                ..
-            } => {
-                class_states
-                    .entry(self_ty_name.clone())
-                    .or_default()
-                    .defined
-                    .insert(Signature {
-                        name: name.cpp_name(),
-                        args: params
-                            .iter()
-                            .skip(1)
-                            .filter_map(|p| {
-                                if let FnArg::Typed(t) = p {
-                                    Some((*t.ty).clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect(),
-                        constness: *constness,
-                    });
-            }
-            _ => (),
-        }
-    }
-
-    // Propagate undefined virtuals down, but remove functions that are well-defined
-    // as they propagate down
-    let mut iterate = true;
-    while iterate {
-        iterate = false;
-        for api in apis.iter() {
-            match api {
-                Api::Struct {
-                    analysis:
-                        PodAndConstructorAnalysis {
-                            pod:
-                                PodAnalysis {
-                                    bases,
-                                    kind: TypeKind::Pod | TypeKind::NonPod,
-                                    ..
-                                },
-                            ..
-                        },
-                    name,
-                    ..
-                } if bases.iter().any(|b| {
-                    class_states
-                        .get(b)
-                        .map(|cs| !cs.undefined.is_empty())
-                        .unwrap_or(false)
-                }) =>
-                {
-                    let mut newset: HashSet<Signature> = bases
-                        .iter()
-                        .flat_map(|b| class_states.get(b).map(|cs| cs.undefined.iter()))
-                        .flatten()
-                        .cloned()
-                        .collect();
-
-                    let state = class_states.entry(name.name.clone()).or_default();
-
-                    newset = newset
-                        .into_iter()
-                        .filter(|s| !state.defined.contains(s))
-                        .collect();
-
-                    // Recurse in case there are further dependent types
-
-                    if state.undefined != newset {
-                        state.undefined = newset;
-                        iterate = true;
-                    }
-                }
-
-                _ => {}
-            }
-        }
-    }
-
-    apis = apis
-        .into_iter()
-        .map(|api| match api {
+    for api in fields_and_bases_first(apis.iter()) {
+        match dbg!(api) {
             Api::Struct {
                 analysis:
                     PodAndConstructorAnalysis {
@@ -185,43 +78,80 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
                             PodAnalysis {
                                 bases,
                                 kind: TypeKind::Pod | TypeKind::NonPod,
-                                castable_bases,
-                                field_deps,
-                                field_definition_deps,
-                                field_info,
-                                is_generic,
-                                in_anonymous_namespace,
+                                ..
                             },
-                        constructors,
+                        ..
                     },
                 name,
-                details,
-            } if class_states
-                .get(&name.name)
-                .map(|cs| !cs.undefined.is_empty())
-                .unwrap_or(false) =>
-            {
-                Api::Struct {
-                    analysis: PodAndConstructorAnalysis {
-                        pod: PodAnalysis {
-                            bases,
-                            kind: TypeKind::Abstract,
-                            castable_bases,
-                            field_deps,
-                            field_definition_deps,
-                            field_info,
-                            is_generic,
-                            in_anonymous_namespace,
-                        },
-                        constructors,
-                    },
-                    name,
-                    details,
+                ..
+            } => {
+                // resolve virtuals for a class: start with new pure virtuals in this class
+                let mut self_cs = class_states.get(&name.name).cloned().unwrap_or_default();
+
+                // then add pure virtuals of bases
+                for base in bases.iter() {
+                    if let Some(base_cs) = class_states.get(base) {
+                        self_cs.undefined.extend(base_cs.undefined.iter().cloned());
+                    }
                 }
+
+                // then remove virtuals defined in this class
+                self_cs
+                    .undefined
+                    .retain(|und| !self_cs.defined.contains(und));
+
+                // if there are undefined functions, mark as virtual
+                if !self_cs.undefined.is_empty() {
+                    abstract_classes.insert(name.name.clone());
+                }
+
+                // store it back so child classes can read it properly
+                *class_states.entry(name.name.clone()).or_default() = dbg!(self_cs);
             }
-            api => api,
-        })
-        .collect();
+            Api::Function {
+                name,
+                analysis:
+                    FnAnalysis {
+                        kind:
+                            FnKind::Method {
+                                impl_for: self_ty_name,
+                                method_kind,
+                                ..
+                            },
+                        params,
+                        ..
+                    },
+                ..
+            } => match method_kind {
+                MethodKind::PureVirtual(constness) => {
+                    class_states
+                        .entry(self_ty_name.clone())
+                        .or_default()
+                        .undefined
+                        .insert(Signature::new(&name, params, *constness));
+                }
+                MethodKind::Virtual(constness) => {
+                    class_states
+                        .entry(self_ty_name.clone())
+                        .or_default()
+                        .defined
+                        .insert(Signature::new(&name, params, *constness));
+                }
+                _ => {}
+            },
+
+            _ => {}
+        }
+    }
+
+    // mark abstract types as abstract
+    for api in apis.iter_mut() {
+        if let Api::Struct { name, analysis, .. } = api {
+            if abstract_classes.contains(&name.name) {
+                analysis.pod.kind = TypeKind::Abstract;
+            }
+        }
+    }
 
     // We also need to remove any constructors belonging to these
     // abstract types.
@@ -235,7 +165,7 @@ pub(crate) fn mark_types_abstract(mut apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPre
                         ..
                     },
                     ..
-            } if class_states.get(self_ty).map(|cs| !cs.undefined.is_empty()).unwrap_or(false)
+            } if abstract_classes.contains(self_ty)
         )
     });
 
