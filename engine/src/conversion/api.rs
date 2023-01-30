@@ -740,9 +740,7 @@ impl<T: AnalysisPhase> Api<T> {
                 rs_definition,
                 cpp_definition,
                 ..
-            } => format!(
-                "rs_definition={rs_definition:?}, cpp_definition={cpp_definition}"
-            ),
+            } => format!("rs_definition={rs_definition:?}, cpp_definition={cpp_definition}"),
             Api::ExternCppType { pod, .. } => format!("pod={pod}"),
             _ => String::new(),
         }
