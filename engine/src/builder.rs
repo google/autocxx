@@ -285,6 +285,13 @@ where
 
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) -> Result<PathBuf, BuilderError> {
     let path = dir.join(filename);
+    if let Ok(existing_contents) = std::fs::read(&path) {
+        // Avoid altering timestamps on disk if the file already exists,
+        // to stop downstream build steps recurring.
+        if existing_contents == content {
+            return Ok(path);
+        }
+    }
     try_write_to_file(&path, content).map_err(|e| BuilderError::FileWriteFail(e, path.clone()))?;
     Ok(path)
 }
