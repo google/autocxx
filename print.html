@@ -1473,6 +1473,15 @@ and send the <em>entire</em> log to us. This will include two key bits of loggin
 the C++ bindings as distilled by <code>bindgen</code>, and then the version which
 we've converted and moulded to be suitable for use by <code>cxx</code>.</li>
 </ul>
+<h2 id="bugs-related-to-linking-problems"><a class="header" href="#bugs-related-to-linking-problems">Bugs related to linking problems</a></h2>
+<p>Unfortunately, <em>linking</em> C++ binaries is a complex area subject in itself, and
+we won't be able to debug your linking issues by means of an autocxx bug report.
+Assuming you're using autocxx's build.rs support, the actual C++ build and
+managed by the <a href="https://crates.io/crates/cc"><code>cc</code></a> crate. You can find
+many of its options on its <a href="https://docs.rs/cc/latest/cc/struct.Build.html"><code>Build</code> type</a>.
+If you need to bring in an external library, you may also need to emit certain
+<a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib">print statements from your <code>build.rs</code></a>
+to instruct cargo to link against that library.</p>
 <h2 id="how-to-contribute-to-this-manual"><a class="header" href="#how-to-contribute-to-this-manual">How to contribute to this manual</a></h2>
 <p>More examples in this manual are <em>very</em> welcome!</p>
 <p>Because <code>autocxx</code> examples require both Rust and C++ code to be linked together,
