@@ -7345,7 +7345,14 @@ fn test_issue_956() {
         "",
         hdr,
         quote! {},
-        &["take_int", "take_uint16", "take_char16",  "take_uint16_ref", "take_char16_ref", "take_us"],
+        &[
+            "take_int",
+            "take_uint16",
+            "take_char16",
+            "take_uint16_ref",
+            "take_char16_ref",
+            "take_us",
+        ],
         &[],
     );
 }
