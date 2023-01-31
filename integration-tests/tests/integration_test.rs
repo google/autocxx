@@ -7336,6 +7336,7 @@ fn test_issue_956() {
         #include <cstdint>
         inline void take_int(int&) {}
         inline void take_uint16(uint16_t) {}
+        inline void take_us(unsigned short) {}
         inline void take_char16(char16_t) {}
         inline void take_uint16_ref(uint16_t&) {}
         inline void take_char16_ref(char16_t &) {}
@@ -7344,7 +7345,7 @@ fn test_issue_956() {
         "",
         hdr,
         quote! {},
-        &["take_int", "take_uint16", "take_char16",  "take_uint16_ref", "take_char16_ref"],
+        &["take_int", "take_uint16", "take_char16",  "take_uint16_ref", "take_char16_ref", "take_us"],
         &[],
     );
 }
