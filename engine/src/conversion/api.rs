@@ -731,20 +731,17 @@ impl<T: AnalysisPhase> Api<T> {
     /// just use `Debug` here, but some of the `syn` types make that awkward.
     pub(crate) fn details_display(&self) -> String {
         match self {
-            Api::ForwardDeclaration { err, .. } => format!("{:?}", err),
+            Api::ForwardDeclaration { err, .. } => format!("{err:?}"),
             Api::OpaqueTypedef {
                 forward_declaration,
                 ..
-            } => format!("forward_declaration={:?}", forward_declaration),
+            } => format!("forward_declaration={forward_declaration:?}"),
             Api::ConcreteType {
                 rs_definition,
                 cpp_definition,
                 ..
-            } => format!(
-                "rs_definition={:?}, cpp_definition={}",
-                rs_definition, cpp_definition
-            ),
-            Api::ExternCppType { pod, .. } => format!("pod={}", pod),
+            } => format!("rs_definition={rs_definition:?}, cpp_definition={cpp_definition}"),
+            Api::ExternCppType { pod, .. } => format!("pod={pod}"),
             _ => String::new(),
         }
     }
