@@ -7335,14 +7335,16 @@ fn test_issue_956() {
     let hdr = indoc! {"
         #include <cstdint>
         inline void take_int(int&) {}
-        inline void take_uin16(uint16_t&) {}
-        inline void take_char16(char16_t &) {}
+        inline void take_uint16(uint16_t) {}
+        inline void take_char16(char16_t) {}
+        inline void take_uint16_ref(uint16_t&) {}
+        inline void take_char16_ref(char16_t &) {}
     "};
     run_test(
         "",
         hdr,
         quote! {},
-        &["take_int", "take_uin16", "take_char16"],
+        &["take_int", "take_uint16", "take_char16",  "take_uint16_ref", "take_char16_ref"],
         &[],
     );
 }
