@@ -167,7 +167,10 @@ fn add_lifetime_to_pinned_reference(
     ];
 
     for (seg, (expected_name, act)) in segments.iter_mut().zip(EXPECTED_SEGMENTS.iter()) {
-        if !expected_name.iter().any(|expected_name| seg.ident == expected_name) {
+        if !expected_name
+            .iter()
+            .any(|expected_name| seg.ident == expected_name)
+        {
             return Err(AddLifetimeError::WasNotPin);
         }
         if *act {
