@@ -284,6 +284,7 @@ pub(crate) struct FnAnalyzer<'a> {
     generic_types: HashSet<QualifiedName>,
     types_in_anonymous_namespace: HashSet<QualifiedName>,
     existing_superclass_trait_api_names: HashSet<QualifiedName>,
+    wrapped_functions_count: usize,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -306,6 +307,7 @@ impl<'a> FnAnalyzer<'a> {
             generic_types: Self::build_generic_type_set(&apis),
             existing_superclass_trait_api_names: HashSet::new(),
             types_in_anonymous_namespace: Self::build_types_in_anonymous_namespace(&apis),
+            wrapped_functions_count: 0,
         };
         let mut results = ApiVec::new();
         convert_apis(
@@ -1261,7 +1263,11 @@ impl<'a> FnAnalyzer<'a> {
             } else {
                 "_"
             };
-            cxxbridge_name = make_ident(format!("{cxxbridge_name}{joiner}autocxx_wrapper"));
+            cxxbridge_name = make_ident(format!(
+                "{cxxbridge_name}{joiner}autocxx_wrapper_{}",
+                self.wrapped_functions_count
+            ));
+            self.wrapped_functions_count += 1;
             let (payload, cpp_function_kind) = match fun.synthetic_cpp.as_ref().cloned() {
                 Some((payload, cpp_function_kind)) => (payload, cpp_function_kind),
                 None => match kind {
