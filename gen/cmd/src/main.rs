@@ -283,6 +283,14 @@ fn main() -> miette::Result<()> {
 
     // Finally start to write the C++ and Rust out.
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
+
+    if !outdir.exists() {
+        use miette::WrapErr as _;
+        std::fs::create_dir_all(&outdir)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to create `outdir` '{}'", outdir.display()))?;
+    }
+
     let mut writer = FileWriter {
         depfile: &depfile,
         outdir: &outdir,
