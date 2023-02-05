@@ -132,7 +132,7 @@ fn main() -> miette::Result<()> {
         .arg(
             Arg::new("gen-rs-include")
                 .long("gen-rs-include")
-                .help("whether to generate Rust files for inclusion using autocxx_macro (suffix will be .include.rs)")
+                .help("whether to generate Rust files for inclusion using autocxx_macro")
         )
         .arg(
             Arg::new("gen-rs-archive")
@@ -156,7 +156,7 @@ fn main() -> miette::Result<()> {
         .arg(
             Arg::new("fix-rs-include-name")
                 .long("fix-rs-include-name")
-                .help("Make the name of the .rs file predictable. You must set AUTOCXX_RS_FILE during Rust build time to educate autocxx_macro about your choice.")
+                .help("Make the name of the .rs file predictable (suffix will be .include.rs). You must set AUTOCXX_RS_FILE during Rust build time to educate autocxx_macro about your choice.")
                 .requires("gen-rs-include")
         )
         .arg(
