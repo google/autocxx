@@ -7335,14 +7335,24 @@ fn test_issue_956() {
     let hdr = indoc! {"
         #include <cstdint>
         inline void take_int(int&) {}
-        inline void take_uin16(uint16_t&) {}
-        inline void take_char16(char16_t &) {}
+        inline void take_uint16(uint16_t) {}
+        inline void take_us(unsigned short) {}
+        inline void take_char16(char16_t) {}
+        inline void take_uint16_ref(uint16_t&) {}
+        inline void take_char16_ref(char16_t &) {}
     "};
     run_test(
         "",
         hdr,
         quote! {},
-        &["take_int", "take_uin16", "take_char16"],
+        &[
+            "take_int",
+            "take_uint16",
+            "take_char16",
+            "take_uint16_ref",
+            "take_char16_ref",
+            "take_us",
+        ],
         &[],
     );
 }
@@ -9753,8 +9763,7 @@ fn size_and_alignment_test(pod: bool) {
         ("F", "struct F { uint32_t a; uint8_t b; };"),
     ];
     let type_definitions = TYPES.iter().map(|(_, def)| *def).join("\n");
-    let function_definitions = TYPES.iter().map(|(name, _)| format!("inline size_t get_sizeof_{}() {{ return sizeof({}); }}\ninline size_t get_alignof_{}() {{ return alignof({}); }}\n",
-    name, name, name, name)).join("\n");
+    let function_definitions = TYPES.iter().map(|(name, _)| format!("inline size_t get_sizeof_{name}() {{ return sizeof({name}); }}\ninline size_t get_alignof_{name}() {{ return alignof({name}); }}\n")).join("\n");
     let hdr = format!(
         indoc! {"
         #include <cstdint>
@@ -9768,12 +9777,9 @@ fn size_and_alignment_test(pod: bool) {
     let allowlist_fns: Vec<String> = TYPES
         .iter()
         .flat_map(|(name, _)| {
-            [
-                format!("get_sizeof_{}", name),
-                format!("get_alignof_{}", name),
-            ]
-            .to_vec()
-            .into_iter()
+            [format!("get_sizeof_{name}"), format!("get_alignof_{name}")]
+                .to_vec()
+                .into_iter()
         })
         .collect_vec();
     let allowlist_types: Vec<String> = TYPES.iter().map(|(name, _)| name.to_string()).collect_vec();
@@ -9787,9 +9793,9 @@ fn size_and_alignment_test(pod: bool) {
     let allowlist_both: Vec<&str> = allowlist_both.iter().map(AsRef::as_ref).collect_vec();
     let rs = TYPES.iter().fold(quote! {}, |mut accumulator, (name, _)| {
         let get_align_symbol =
-            proc_macro2::Ident::new(&format!("get_alignof_{}", name), Span::call_site());
+            proc_macro2::Ident::new(&format!("get_alignof_{name}"), Span::call_site());
         let get_size_symbol =
-            proc_macro2::Ident::new(&format!("get_sizeof_{}", name), Span::call_site());
+            proc_macro2::Ident::new(&format!("get_sizeof_{name}"), Span::call_site());
         let type_symbol = proc_macro2::Ident::new(name, Span::call_site());
         accumulator.extend(quote! {
             let c_size = ffi::#get_size_symbol();
@@ -11226,7 +11232,7 @@ fn test_doc_comments_survive() {
         "Function",
     ]
     .into_iter()
-    .flat_map(|l| [format!("{} line A", l), format!("{} line B", l)])
+    .flat_map(|l| [format!("{l} line A"), format!("{l} line B")])
     .collect_vec();
 
     run_test_ex(
@@ -11874,6 +11880,61 @@ fn test_virtual_methods() {
         ],
         &[],
     );
+}
+
+#[test]
+fn test_issue_1192() {
+    let hdr = indoc! {
+        "#include <vector>
+        #include <cstdint>
+        template <typename B>
+        struct A {
+            B a;
+        };
+        struct VecThingy {
+            A<uint32_t> contents[2];
+        };
+        struct MyStruct {
+            VecThingy vec;
+        };"
+    };
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! {
+
+            extern_cpp_type!("VecThingy", crate::VecThingy)
+            pod!("VecThingy")
+
+            generate_pod!("MyStruct")
+        },
+        None,
+        None,
+        Some(quote! {
+            // VecThingy isn't necessarily 128 bits long.
+            // This test doesn't actually allocate one.
+            #[repr(transparent)]
+            pub struct VecThingy(pub u128);
+
+            unsafe impl cxx::ExternType for VecThingy {
+                type Id = cxx::type_id!("VecThingy");
+                type Kind = cxx::kind::Trivial;
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_issue_1214() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        enum class C: uint16_t {
+            A,
+            B,
+        };
+    "};
+    run_test("", hdr, quote! {}, &["C"], &[]);
 }
 
 // Yet to test:

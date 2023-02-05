@@ -11,6 +11,7 @@
 // except according to those terms.
 
 #![forbid(unsafe_code)]
+#![cfg_attr(feature = "nightly", feature(doc_cfg))]
 
 mod ast_discoverer;
 mod conversion;
@@ -33,6 +34,7 @@ use parse_callbacks::AutocxxParseCallbacks;
 use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
 use regex::Regex;
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::{
@@ -297,7 +299,7 @@ impl IncludeCppEngine {
             self.config
                 .inclusions
                 .iter()
-                .map(|path| format!("#include \"{}\"\n", path)),
+                .map(|path| format!("#include \"{path}\"\n")),
             "",
         )
     }
@@ -345,7 +347,7 @@ impl IncludeCppEngine {
             builder
                 .command_line_flags()
                 .into_iter()
-                .map(|f| format!("\"{}\"", f))
+                .map(|f| format!("\"{f}\""))
                 .join(" ")
         );
         builder
@@ -380,7 +382,7 @@ impl IncludeCppEngine {
         let bindings = bindings.to_string();
         // Manually add the mod ffi {} so that we can ask syn to parse
         // into a single construct.
-        let bindings = format!("mod bindgen {{ {} }}", bindings);
+        let bindings = format!("mod bindgen {{ {bindings} }}");
         info!("Bindings: {}", bindings);
         syn::parse_str::<ItemMod>(&bindings)
             .map_err(|e| Error::BindingsParsing(LocatedSynError::new(e, &bindings)))
@@ -532,12 +534,12 @@ impl IncludeCppEngine {
         // to refer to local headers on the reduction machine too.
         let suffix = ALL_KNOWN_SYSTEM_HEADERS
             .iter()
-            .map(|hdr| format!("#include <{}>\n", hdr))
+            .map(|hdr| format!("#include <{hdr}>\n"))
             .join("\n");
         let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n{}\n",
             self.config, header, suffix, cxx_gen::HEADER);
         let mut tf = NamedTempFile::new().unwrap();
-        write!(tf, "{}", input).unwrap();
+        write!(tf, "{input}").unwrap();
         let tp = tf.into_temp_path();
         preprocess(&tp, &PathBuf::from(output_path), inc_dirs, extra_clang_args).unwrap();
     }
@@ -687,7 +689,7 @@ pub struct AutocxxgenHeaderNamer<'a>(pub Box<dyn 'a + Fn(String) -> String>);
 
 impl Default for AutocxxgenHeaderNamer<'static> {
     fn default() -> Self {
-        Self(Box::new(|mod_name| format!("autocxxgen_{}.h", mod_name)))
+        Self(Box::new(|mod_name| format!("autocxxgen_{mod_name}.h")))
     }
 }
 
@@ -704,7 +706,27 @@ pub struct CxxgenHeaderNamer<'a>(pub Box<dyn 'a + Fn() -> String>);
 
 impl Default for CxxgenHeaderNamer<'static> {
     fn default() -> Self {
-        Self(Box::new(|| "cxxgen.h".into()))
+        // The default implementation here is to name these headers
+        // cxxgen.h, cxxgen1.h, cxxgen2.h etc.
+        // These names are not especially predictable by callers and this
+        // behavior is not tested anywhere - so this is considered semi-
+        // supported, at best. This only comes into play in the rare case
+        // that you're generating bindings to multiple include_cpp!
+        // or a mix of include_cpp! and #[cxx::bridge] bindings.
+        let header_counter = Rc::new(RefCell::new(0));
+        Self(Box::new(move || {
+            let header_counter = header_counter.clone();
+            let header_counter_cell = header_counter.as_ref();
+            let mut header_counter = header_counter_cell.borrow_mut();
+            if *header_counter == 0 {
+                *header_counter += 1;
+                "cxxgen.h".into()
+            } else {
+                let count = *header_counter;
+                *header_counter += 1;
+                format!("cxxgen{count}.h")
+            }
+        }))
     }
 }
 
@@ -747,7 +769,7 @@ fn proc_macro_span_to_miette_span(span: &proc_macro2::Span) -> SourceSpan {
     // miette.
     struct Err;
     let r: Result<(usize, usize), Err> = (|| {
-        let span_desc = format!("{:?}", span);
+        let span_desc = format!("{span:?}");
         let re = Regex::new(r"(\d+)..(\d+)").unwrap();
         let captures = re.captures(&span_desc).ok_or(Err)?;
         let start = captures.get(1).ok_or(Err)?;

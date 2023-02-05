@@ -732,15 +732,15 @@ impl<'a> RsCodeGenerator<'a> {
         };
 
         // Once for each superclass, in future...
-        let as_id = make_ident(format!("As_{}", super_name));
+        let as_id = make_ident(format!("As_{super_name}"));
         extern_c_mod_items.push(parse_quote! {
             fn #as_id(self: &#cpp_id) -> &#super_cxxxbridge_id;
         });
-        let as_mut_id = make_ident(format!("As_{}_mut", super_name));
+        let as_mut_id = make_ident(format!("As_{super_name}_mut"));
         extern_c_mod_items.push(parse_quote! {
             fn #as_mut_id(self: Pin<&mut #cpp_id>) -> Pin<&mut #super_cxxxbridge_id>;
         });
-        let as_unique_ptr_id = make_ident(format!("{}_As_{}_UniquePtr", cpp_id, super_name));
+        let as_unique_ptr_id = make_ident(format!("{cpp_id}_As_{super_name}_UniquePtr"));
         extern_c_mod_items.push(parse_quote! {
             fn #as_unique_ptr_id(u: UniquePtr<#cpp_id>) -> UniquePtr<#super_cxxxbridge_id>;
         });
@@ -761,7 +761,7 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             }
         });
-        let rs_as_unique_ptr_id = make_ident(format!("as_{}_unique_ptr", super_name));
+        let rs_as_unique_ptr_id = make_ident(format!("as_{super_name}_unique_ptr"));
         bindgen_mod_items.push(parse_quote! {
             impl super::super::super::#id {
                 pub fn #rs_as_unique_ptr_id(u: cxx::UniquePtr<#cpp_id>) -> cxx::UniquePtr<cxxbridge::#super_cxxxbridge_id> {
@@ -1063,7 +1063,7 @@ impl<'a> RsCodeGenerator<'a> {
     /// explaining why a given type or function couldn't have bindings
     /// generated.
     fn generate_error_entry(err: ConvertErrorFromCpp, ctx: ErrorContext) -> RsCodegenResult {
-        let err = format!("autocxx bindings couldn't be generated: {}", err);
+        let err = format!("autocxx bindings couldn't be generated: {err}");
         let (impl_entry, bindgen_mod_item, materialization) = match ctx.into_type() {
             ErrorContextType::Item(id) => (
                 // Populate within bindgen mod because impl blocks may attach.

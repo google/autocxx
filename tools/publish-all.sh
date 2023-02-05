@@ -11,6 +11,4 @@ for CRATE in $DIRS; do
   echo "Publish: $CRATE"
   cargo publish
   popd
-  sleep 30 # sometimes crates.io takes a moment, and our
-           # crates are interdependent.
 done

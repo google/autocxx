@@ -144,6 +144,9 @@ jobs:
         working-directory: ./examples/reference-wrappers
         if: matrix.rust == 'nightly'
         run: cargo build
+      - name: Build cpp_calling_rust example
+        working-directory: ./examples/cpp_calling_rust
+        run: cargo build
         # We do not build the LLVM example because even 'apt-get install llvm-13-dev'
         # does not work to install the LLVM 13 headers.
 

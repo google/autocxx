@@ -220,7 +220,7 @@ fn test_gen_multiple_in_archive() -> Result<(), Box<dyn std::error::Error>> {
     File::create(tmp_dir.path().join("cxx.h"))
         .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
     // We've asked to create 8 C++ files, mostly blank. Build 'em all.
-    let cpp_files = (0..7).map(|id| format!("gen{}.cc", id)).collect_vec();
+    let cpp_files = (0..7).map(|id| format!("gen{id}.cc")).collect_vec();
     let cpp_files = cpp_files.iter().map(|s| s.as_str()).collect_vec();
     let r = build_from_folder(
         tmp_dir.path(),
@@ -330,8 +330,7 @@ fn assert_contentful(outdir: &TempDir, fname: &str) {
     }
     assert!(
         p.metadata().unwrap().len() > BLANK.len().try_into().unwrap(),
-        "File {} is empty",
-        fname
+        "File {fname} is empty"
     );
 }
 
@@ -351,6 +350,6 @@ fn assert_not_contentful(outdir: &TempDir, fname: &str) {
 fn assert_contains(outdir: &TempDir, fname: &str, pattern: &str) {
     let p = outdir.path().join(fname);
     let content = std::fs::read_to_string(p).expect(fname);
-    eprintln!("content = {}", content);
+    eprintln!("content = {content}");
     assert!(content.contains(pattern));
 }

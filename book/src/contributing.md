@@ -99,6 +99,17 @@ order of preference here's how we would like to hear about your problem:
   the C++ bindings as distilled by `bindgen`, and then the version which
   we've converted and moulded to be suitable for use by `cxx`.
 
+## Bugs related to linking problems
+
+Unfortunately, _linking_ C++ binaries is a complex area subject in itself, and
+we won't be able to debug your linking issues by means of an autocxx bug report.
+Assuming you're using autocxx's build.rs support, the actual C++ build and
+managed by the [`cc`](https://crates.io/crates/cc) crate. You can find
+many of its options on its [`Build` type](https://docs.rs/cc/latest/cc/struct.Build.html).
+If you need to bring in an external library, you may also need to emit certain
+[print statements from your `build.rs`](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib)
+to instruct cargo to link against that library.
+
 ## How to contribute to this manual
 
 More examples in this manual are _very_ welcome!

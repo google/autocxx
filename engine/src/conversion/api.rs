@@ -374,7 +374,7 @@ impl std::fmt::Debug for ApiName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
         if let Some(cpp_name) = &self.cpp_name {
-            write!(f, " (cpp={})", cpp_name)?;
+            write!(f, " (cpp={cpp_name})")?;
         }
         Ok(())
     }
@@ -427,7 +427,7 @@ impl SubclassName {
     }
     // TODO this and the following should probably include both class name and method name
     pub(crate) fn get_super_fn_name(superclass_namespace: &Namespace, id: &str) -> QualifiedName {
-        let id = make_ident(format!("{}_super", id));
+        let id = make_ident(format!("{id}_super"));
         QualifiedName::new(superclass_namespace, id)
     }
     pub(crate) fn get_methods_trait_name(superclass_name: &QualifiedName) -> QualifiedName {
@@ -657,7 +657,13 @@ impl<T: AnalysisPhase> Api<T> {
 
 impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?} (kind={})", self.name_info(), self)
+        write!(
+            f,
+            "{:?} (kind={}, details={})",
+            self.name_info(),
+            self,
+            self.details_display()
+        )
     }
 }
 
@@ -719,6 +725,25 @@ impl<T: AnalysisPhase> Api<T> {
         T: 'static,
     {
         Ok(Box::new(std::iter::once(Api::Enum { name, item })))
+    }
+
+    /// Display some details of each API. It's a bit unfortunate that we can't
+    /// just use `Debug` here, but some of the `syn` types make that awkward.
+    pub(crate) fn details_display(&self) -> String {
+        match self {
+            Api::ForwardDeclaration { err, .. } => format!("{err:?}"),
+            Api::OpaqueTypedef {
+                forward_declaration,
+                ..
+            } => format!("forward_declaration={forward_declaration:?}"),
+            Api::ConcreteType {
+                rs_definition,
+                cpp_definition,
+                ..
+            } => format!("rs_definition={rs_definition:?}, cpp_definition={cpp_definition}"),
+            Api::ExternCppType { pod, .. } => format!("pod={pod}"),
+            _ => String::new(),
+        }
     }
 }
 

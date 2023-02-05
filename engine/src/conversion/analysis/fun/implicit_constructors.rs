@@ -559,8 +559,7 @@ pub(super) fn find_constructors_present(
                 all_items_found
                     .insert(name.name.clone(), items_found)
                     .is_none(),
-                "Duplicate struct: {:?}",
-                name
+                "Duplicate struct: {name:?}"
             );
         }
     }

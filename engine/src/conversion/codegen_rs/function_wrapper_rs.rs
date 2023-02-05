@@ -124,7 +124,7 @@ impl TypeConversionPolicy {
                 let param_trait = make_ident(param_trait);
                 let var_counter = *counter;
                 *counter += 1;
-                let space_var_name = format!("space{}", var_counter);
+                let space_var_name = format!("space{var_counter}");
                 let space_var_name = make_ident(space_var_name);
                 let ty = self.cxxbridge_type();
                 let ty = parse_quote! { impl autocxx::#param_trait<#ty> };
