@@ -9857,6 +9857,7 @@ fn test_call_superclass() {
     class A {
     public:
         virtual void foo() const {};
+        virtual void foo_mut() {};
         virtual ~A() {}
     };
     class B : public A {
@@ -9866,8 +9867,9 @@ fn test_call_superclass() {
     inline std::unique_ptr<B> get_b() { return std::make_unique<B>(); }
     "};
     let rs = quote! {
-        let b = ffi::get_b();
+        let mut b = ffi::get_b();
         b.as_ref().unwrap().as_ref().foo();
+        b.as_mut().unwrap().pin_mut().foo_mut();
     };
     run_test("", hdr, rs, &["A", "B", "get_b"], &[]);
 }
@@ -9879,6 +9881,7 @@ fn test_pass_superclass() {
     class A {
     public:
         virtual void foo() const {};
+        virtual void foo_mut() {};
         virtual ~A() {}
     };
     class B : public A {
@@ -9887,12 +9890,20 @@ fn test_pass_superclass() {
     };
     inline std::unique_ptr<B> get_b() { return std::make_unique<B>(); }
     inline void take_a(const A&) {}
+    inline void take_a_mut(A&) {}
     "};
     let rs = quote! {
-        let b = ffi::get_b();
+        let mut b = ffi::get_b();
         ffi::take_a(b.as_ref().unwrap().as_ref());
+        ffi::take_a_mut(b.as_mut().unwrap().pin_mut());
     };
-    run_test("", hdr, rs, &["A", "B", "get_b", "take_a"], &[]);
+    run_test(
+        "",
+        hdr,
+        rs,
+        &["A", "B", "get_b", "take_a", "take_a_mut"],
+        &[],
+    );
 }
 
 #[test]

@@ -18,7 +18,7 @@ use syn::{
     punctuated::Punctuated,
     token::{Comma, Unsafe},
     Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
-    Pat, ReturnType, Type, Visibility,
+    Pat, ReturnType, Type, Visibility, Lifetime,
 };
 
 use super::{
@@ -181,6 +181,7 @@ pub(crate) struct TraitImplSignature {
     pub(crate) trait_signature: Type,
     /// The trait is 'unsafe' itself
     pub(crate) unsafety: Option<Unsafe>,
+    pub(crate) lifetime: Option<Lifetime>,
 }
 
 impl Eq for TraitImplSignature {}
@@ -190,6 +191,7 @@ impl PartialEq for TraitImplSignature {
         totokens_equal(&self.unsafety, &other.unsafety)
             && totokens_equal(&self.ty, &other.ty)
             && totokens_equal(&self.trait_signature, &other.trait_signature)
+            && totokens_equal(&self.lifetime, &other.lifetime)
     }
 }
 
@@ -211,6 +213,7 @@ impl std::hash::Hash for TraitImplSignature {
         hash_totokens(&self.ty, state);
         hash_totokens(&self.trait_signature, state);
         hash_totokens(&self.unsafety, state);
+        hash_totokens(&self.lifetime, state);
     }
 }
 

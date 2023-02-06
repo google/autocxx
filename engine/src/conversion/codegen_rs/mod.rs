@@ -427,8 +427,9 @@ impl<'a> RsCodeGenerator<'a> {
             let unsafety = key.unsafety;
             let ty = key.ty;
             let trt = key.trait_signature;
+            let lt = key.lifetime.map(|lt| quote! { < #lt > });
             output_items.push(Item::Impl(parse_quote! {
-                #unsafety impl #trt for #ty {
+                #unsafety impl #lt #trt for #ty {
                     #(#entries)*
                 }
             }))
