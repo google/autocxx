@@ -467,10 +467,10 @@ fn create_type_database() -> TypeDatabase {
     ));
 
     db.insert(TypeDetails::new(
-        "std::pin::Pin",
+        "core::pin::Pin",
         "Pin",
         Behavior::RustByValue, // because this is actually Pin<&something>
-        None,
+        Some("std::pin::Pin".to_string()),
         true,
         false,
     ));

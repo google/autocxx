@@ -160,14 +160,17 @@ enum AddLifetimeError {
 fn add_lifetime_to_pinned_reference(
     segments: &mut Punctuated<PathSegment, syn::token::Colon2>,
 ) -> Result<(), AddLifetimeError> {
-    static EXPECTED_SEGMENTS: &[(&str, bool)] = &[
-        ("std", false),
-        ("pin", false),
-        ("Pin", true), // true = act on the arguments of this segment
+    static EXPECTED_SEGMENTS: &[(&[&str], bool)] = &[
+        (&["std", "core"], false),
+        (&["pin"], false),
+        (&["Pin"], true), // true = act on the arguments of this segment
     ];
 
     for (seg, (expected_name, act)) in segments.iter_mut().zip(EXPECTED_SEGMENTS.iter()) {
-        if seg.ident != expected_name {
+        if !expected_name
+            .iter()
+            .any(|expected_name| seg.ident == expected_name)
+        {
             return Err(AddLifetimeError::WasNotPin);
         }
         if *act {
