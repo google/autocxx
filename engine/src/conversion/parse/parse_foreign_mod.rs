@@ -15,12 +15,12 @@ use crate::conversion::{
     convert_error::ConvertErrorWithContext,
     convert_error::ErrorContext,
 };
+use crate::minisyn::{Block, Expr, ExprCall, ForeignItem, Ident, ImplItem, ItemImpl, Stmt, Type};
 use crate::{
     conversion::ConvertErrorFromCpp,
     types::{Namespace, QualifiedName},
 };
 use std::collections::HashMap;
-use syn::{Block, Expr, ExprCall, ForeignItem, Ident, ImplItem, ItemImpl, Stmt, Type};
 
 use super::bindgen_semantic_attributes::BindgenSemanticAttributes;
 
@@ -162,8 +162,8 @@ fn get_called_function(block: &Block) -> Option<&Ident> {
 #[cfg(test)]
 mod test {
     use super::get_called_function;
-    use syn::parse_quote;
-    use syn::Block;
+    use crate::minisyn::parse_quote;
+    use crate::minisyn::Block;
 
     #[test]
     fn test_get_called_function() {

@@ -9,17 +9,17 @@
 use indexmap::set::IndexSet as HashSet;
 use std::fmt::Display;
 
-use crate::types::{make_ident, Namespace, QualifiedName};
-use autocxx_parser::{ExternCppType, RustFun, RustPath};
-use itertools::Itertools;
-use quote::ToTokens;
-use syn::{
+use crate::minisyn::{
     parse::Parse,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
     Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
     Pat, ReturnType, Type, Visibility,
 };
+use crate::types::{make_ident, Namespace, QualifiedName};
+use autocxx_parser::{ExternCppType, RustFun, RustPath};
+use itertools::Itertools;
+use quote::ToTokens;
 
 use super::{
     analysis::{

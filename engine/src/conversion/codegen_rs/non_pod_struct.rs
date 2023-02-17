@@ -7,12 +7,12 @@
 // except according to those terms.
 
 use crate::conversion::api::Layout;
+use crate::minisyn::parse::Parser;
+use crate::minisyn::punctuated::Punctuated;
+use crate::minisyn::{parse_quote, Field, Fields, GenericParam, ItemStruct, LitInt};
 use crate::types::make_ident;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::parse::Parser;
-use syn::punctuated::Punctuated;
-use syn::{parse_quote, Field, Fields, GenericParam, ItemStruct, LitInt};
 
 pub(crate) fn new_non_pod_struct(id: Ident) -> ItemStruct {
     let mut s = parse_quote! {

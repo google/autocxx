@@ -19,13 +19,13 @@ use indexmap::set::IndexSet as HashSet;
 
 use autocxx_parser::{ExternCppType, IncludeCppConfig, RustFun, UnsafePolicy};
 
-use itertools::Itertools;
-use proc_macro2::{Span, TokenStream};
-use syn::{
+use crate::minisyn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
     ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Lifetime, TraitItem, Type,
     TypePath,
 };
+use itertools::Itertools;
+use proc_macro2::{Span, TokenStream};
 
 use crate::{
     conversion::{

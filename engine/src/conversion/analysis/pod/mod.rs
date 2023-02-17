@@ -11,9 +11,9 @@ mod byvalue_checker;
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 
+use crate::minisyn::{ItemEnum, ItemStruct, Type, Visibility};
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
-use syn::{ItemEnum, ItemStruct, Type, Visibility};
 
 use crate::{
     conversion::{

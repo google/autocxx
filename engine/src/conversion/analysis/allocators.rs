@@ -8,7 +8,7 @@
 
 //! Code to create functions to alloc and free while unitialized.
 
-use syn::{parse_quote, punctuated::Punctuated, token::Comma, FnArg, ReturnType};
+use crate::minisyn::{parse_quote, punctuated::Punctuated, token::Comma, FnArg, ReturnType};
 
 use crate::{
     conversion::{

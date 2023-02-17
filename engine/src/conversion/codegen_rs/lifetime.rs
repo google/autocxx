@@ -5,6 +5,10 @@
 // <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+use crate::minisyn::{
+    parse_quote, punctuated::Punctuated, token::Comma, FnArg, GenericArgument, PatType, Path,
+    PathSegment, ReturnType, Type, TypePath, TypeReference,
+};
 use crate::{
     conversion::analysis::fun::{
         function_wrapper::RustConversionType, ArgumentAnalysis, ReceiverMutability,
@@ -15,10 +19,6 @@ use indexmap::set::IndexSet as HashSet;
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use std::borrow::Cow;
-use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, FnArg, GenericArgument, PatType, Path,
-    PathSegment, ReturnType, Type, TypePath, TypeReference,
-};
 
 /// Function which can add explicit lifetime parameters to function signatures
 /// where necessary, based on analysis of parameters and return types.

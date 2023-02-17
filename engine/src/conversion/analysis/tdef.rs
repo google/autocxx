@@ -8,8 +8,8 @@
 
 use indexmap::set::IndexSet as HashSet;
 
+use crate::minisyn::ItemType;
 use autocxx_parser::IncludeCppConfig;
-use syn::ItemType;
 
 use crate::{
     conversion::{

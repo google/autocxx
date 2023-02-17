@@ -8,7 +8,7 @@
 
 use indexmap::map::IndexMap as HashMap;
 
-use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
+use crate::minisyn::{parse_quote, FnArg, PatType, Type, TypePtr};
 
 use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability, UnsafePolicy};
 use crate::conversion::analysis::pod::PodPhase;

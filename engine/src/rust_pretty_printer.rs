@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use syn::{Item, ItemMod};
+use crate::minisyn::{Item, ItemMod};
 
 pub(crate) fn pretty_print(itm: &ItemMod) -> String {
     prettyplease::unparse(&syn::File {

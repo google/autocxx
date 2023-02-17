@@ -15,6 +15,7 @@ use std::{
     sync::Mutex,
 };
 
+use crate::minisyn::Token;
 use autocxx_engine::{
     Builder, BuilderBuild, BuilderContext, BuilderError, RebuildDependencyRecorder, HEADER,
 };
@@ -22,7 +23,6 @@ use log::info;
 use once_cell::sync::OnceCell;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, TokenStreamExt};
-use syn::Token;
 use tempfile::{tempdir, TempDir};
 
 const KEEP_TEMPDIRS: bool = false;

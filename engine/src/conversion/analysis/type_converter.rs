@@ -6,6 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::{
+    parse_quote, punctuated::Punctuated, token::Comma, GenericArgument, PathArguments, PathSegment,
+    Type, TypePath, TypePtr,
+};
 use crate::{
     conversion::{
         api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
@@ -22,10 +26,6 @@ use indexmap::set::IndexSet as HashSet;
 use itertools::Itertools;
 use proc_macro2::Ident;
 use quote::ToTokens;
-use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, GenericArgument, PathArguments, PathSegment,
-    Type, TypePath, TypePtr,
-};
 
 use super::tdef::TypedefAnalysis;
 

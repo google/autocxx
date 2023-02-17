@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use syn::{
+use crate::minisyn::{
     parse_quote, punctuated::Punctuated, FnArg, GenericArgument, PathArguments, PathSegment,
     ReturnType, Token, Type, TypePath,
 };

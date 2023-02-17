@@ -8,7 +8,7 @@
 
 use indexmap::IndexSet as HashSet;
 
-use syn::{
+use crate::minisyn::{
     spanned::Spanned, AngleBracketedGenericArguments, GenericArgument, PatType, PathArguments,
     PathSegment, ReturnType, Signature, Type, TypePath, TypeReference,
 };
@@ -199,7 +199,7 @@ fn add_path_to_deps(
 
 #[cfg(test)]
 mod tests {
-    use syn::parse_quote;
+    use crate::minisyn::parse_quote;
 
     use super::*;
 
