@@ -581,15 +581,22 @@ impl<'a> RsCodeGenerator<'a> {
                 })],
                 ..Default::default()
             },
-            Api::RustType { path, .. } => RsCodegenResult {
-                global_items: vec![parse_quote! {
-                    use super::#path;
-                }],
-                extern_rust_mod_items: vec![parse_quote! {
-                    type #id;
-                }],
-                ..Default::default()
-            },
+            Api::RustType { path, .. } => {
+                let id = path.get_final_ident();
+                RsCodegenResult {
+                    global_items: vec![parse_quote! {
+                        use super::#path;
+                    }],
+                    extern_rust_mod_items: vec![parse_quote! {
+                        type #id;
+                    }],
+                    bindgen_mod_items: vec![parse_quote! {
+                        #[allow(unused_imports)]
+                        use super::super::#id;
+                    }],
+                    ..Default::default()
+                }
+            }
             Api::RustFn {
                 details:
                     RustFun {
