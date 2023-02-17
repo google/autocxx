@@ -18,6 +18,7 @@ use crate::{
         },
         apivec::ApiVec,
     },
+    minisyn::minisynize_punctuated,
     types::{make_ident, QualifiedName},
 };
 
@@ -76,8 +77,8 @@ fn create_alloc_and_free(ty_name: QualifiedName) -> impl Iterator<Item = Api<Pod
                 fun: Box::new(FuncToConvert {
                     ident,
                     doc_attrs: Vec::new(),
-                    inputs,
-                    output,
+                    inputs: minisynize_punctuated(inputs),
+                    output: output.into(),
                     vis: parse_quote! { pub },
                     virtualness: crate::conversion::api::Virtualness::None,
                     cpp_vis: CppVisibility::Public,

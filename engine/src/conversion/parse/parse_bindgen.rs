@@ -42,7 +42,7 @@ pub(crate) struct ParseBindgen<'a> {
 }
 
 fn api_name(ns: &Namespace, id: Ident, attrs: &BindgenSemanticAttributes) -> ApiName {
-    ApiName::new_with_cpp_name(ns, id, attrs.get_original_name())
+    ApiName::new_with_cpp_name(ns, id.into(), attrs.get_original_name())
 }
 
 pub(crate) fn api_name_qualified(
@@ -52,7 +52,7 @@ pub(crate) fn api_name_qualified(
 ) -> Result<ApiName, ConvertErrorWithContext> {
     match validate_ident_ok_for_cxx(&id.to_string()) {
         Err(e) => {
-            let ctx = ErrorContext::new_for_item(id);
+            let ctx = ErrorContext::new_for_item(id.into());
             Err(ConvertErrorWithContext(
                 ConvertErrorFromCpp::InvalidIdent(e),
                 Some(ctx),
@@ -99,13 +99,13 @@ impl<'a> ParseBindgen<'a> {
     ) -> Result<(), LocatedConvertErrorFromRust> {
         self.apis
             .extend(self.config.subclasses.iter().map(|sc| Api::Subclass {
-                name: SubclassName::new(sc.subclass.clone()),
+                name: SubclassName::new(sc.subclass.clone().into()),
                 superclass: QualifiedName::new_from_cpp_name(&sc.superclass),
             }));
         for fun in &self.config.extern_rust_funs {
             let id = fun.sig.ident.clone();
             self.apis.push(Api::RustFn {
-                name: ApiName::new_in_root_namespace(id),
+                name: ApiName::new_in_root_namespace(id.into()),
                 details: fun.clone(),
                 deps: super::extern_fun_signatures::assemble_extern_fun_deps(
                     &fun.sig,
@@ -117,7 +117,7 @@ impl<'a> ParseBindgen<'a> {
         self.apis.extend(unique_rust_types.into_iter().map(|path| {
             let id = path.get_final_ident();
             Api::RustType {
-                name: ApiName::new_in_root_namespace(id.clone()),
+                name: ApiName::new_in_root_namespace(id.clone().into()),
                 path: path.clone(),
             }
         }));
@@ -127,7 +127,7 @@ impl<'a> ParseBindgen<'a> {
                 .0
                 .iter()
                 .map(|(cpp_definition, rust_id)| {
-                    let name = ApiName::new_in_root_namespace(rust_id.clone());
+                    let name = ApiName::new_in_root_namespace(rust_id.clone().into());
                     Api::ConcreteType {
                         name,
                         cpp_definition: cpp_definition.clone(),
@@ -236,7 +236,7 @@ impl<'a> ParseBindgen<'a> {
                     if err.is_none() && name.cpp_name().contains("::") {
                         err = Some(ConvertErrorWithContext(
                             ConvertErrorFromCpp::ForwardDeclaredNestedType,
-                            Some(ErrorContext::new_for_item(s.ident)),
+                            Some(ErrorContext::new_for_item(s.ident.into())),
                         ));
                     }
                     Some(UnanalyzedApi::ForwardDeclaration { name, err })
@@ -248,7 +248,7 @@ impl<'a> ParseBindgen<'a> {
                         name,
                         details: Box::new(StructDetails {
                             layout: annotations.get_layout(),
-                            item: s,
+                            item: s.into(),
                             has_rvalue_reference_fields,
                         }),
                         analysis: (),
@@ -265,7 +265,7 @@ impl<'a> ParseBindgen<'a> {
                 let annotations = BindgenSemanticAttributes::new(&e.attrs);
                 let api = UnanalyzedApi::Enum {
                     name: api_name_qualified(ns, e.ident.clone(), &annotations)?,
-                    item: e,
+                    item: e.into(),
                 };
                 if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
                     self.apis.push(api);
@@ -304,7 +304,7 @@ impl<'a> ParseBindgen<'a> {
                         UseTree::Rename(urn) => {
                             let old_id = &urn.ident;
                             let new_id = &urn.rename;
-                            let new_tyname = QualifiedName::new(ns, new_id.clone());
+                            let new_tyname = QualifiedName::new(ns, new_id.clone().into());
                             assert!(segs.remove(0) == "self", "Path didn't start with self");
                             assert!(
                                 segs.remove(0) == "super",
@@ -321,7 +321,7 @@ impl<'a> ParseBindgen<'a> {
                             if new_tyname == old_tyname {
                                 return Err(ConvertErrorWithContext(
                                     ConvertErrorFromCpp::InfinitelyRecursiveTypedef(new_tyname),
-                                    Some(ErrorContext::new_for_item(new_id.clone())),
+                                    Some(ErrorContext::new_for_item(new_id.clone().into())),
                                 ));
                             }
                             let annotations = BindgenSemanticAttributes::new(&use_item.attrs);
@@ -331,7 +331,7 @@ impl<'a> ParseBindgen<'a> {
                                     parse_quote! {
                                         pub use #old_path as #new_id;
                                     },
-                                    Box::new(Type::Path(old_path)),
+                                    Box::new(Type::Path(old_path).into()),
                                 ),
                                 old_tyname: Some(old_tyname),
                                 analysis: (),
@@ -366,7 +366,7 @@ impl<'a> ParseBindgen<'a> {
                 if enum_type_name_valid {
                     self.apis.push(UnanalyzedApi::Const {
                         name: api_name(ns, const_item.ident.clone(), &annotations),
-                        const_item,
+                        const_item: const_item.into(),
                     });
                 }
                 Ok(())
@@ -377,7 +377,7 @@ impl<'a> ParseBindgen<'a> {
                 // same name - see test_issue_264.
                 self.apis.push(UnanalyzedApi::Typedef {
                     name: api_name(ns, ity.ident.clone(), &annotations),
-                    item: TypedefKind::Type(ity),
+                    item: TypedefKind::Type(ity.into()),
                     old_tyname: None,
                     analysis: (),
                 });

@@ -34,7 +34,7 @@ use super::tdef::TypedefAnalysis;
 pub(crate) enum TypeKind {
     Regular,
     Pointer,
-    SubclassHolder(Ident),
+    SubclassHolder(crate::minisyn::Ident),
     Reference,
     RValueReference,
     MutableReference,
@@ -556,7 +556,7 @@ impl<'a> TypeConverter<'a> {
                 let api = UnanalyzedApi::ConcreteType {
                     name: ApiName::new_in_root_namespace(make_ident(synthetic_ident)),
                     cpp_definition: cpp_definition.clone(),
-                    rs_definition: Some(Box::new(rs_definition.clone())),
+                    rs_definition: Some(Box::new(rs_definition.clone().into())),
                 };
                 self.concrete_templates
                     .insert(cpp_definition, api.name().clone());

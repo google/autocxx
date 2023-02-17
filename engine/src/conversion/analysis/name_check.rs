@@ -8,7 +8,7 @@
 
 use indexmap::map::IndexMap as HashMap;
 
-use syn::Ident;
+use crate::minisyn::Ident;
 
 use crate::{
     conversion::{

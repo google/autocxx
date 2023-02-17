@@ -8,10 +8,10 @@
 
 use indexmap::set::IndexSet as HashSet;
 
+use crate::minisyn::Ident;
 use itertools::Itertools;
 use miette::{Diagnostic, SourceSpan};
 use proc_macro2::Span;
-use syn::Ident;
 use thiserror::Error;
 
 use crate::{
@@ -201,17 +201,17 @@ impl LocatedConvertErrorFromRust {
 
 /// Ensures that error contexts are always created using the constructors in this
 /// mod, therefore undergoing identifier sanitation.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct PhantomSanitized;
 
 /// The context of an error, e.g. whether it applies to a function or a method.
 /// This is used to generate suitable rustdoc in the output codegen so that
 /// the errors can be revealed in rust-analyzer-based IDEs, etc.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct ErrorContext(Box<ErrorContextType>, PhantomSanitized);
 
 /// All idents in this structure are guaranteed to be something we can safely codegen for.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum ErrorContextType {
     Item(Ident),
     SanitizedItem(Ident),

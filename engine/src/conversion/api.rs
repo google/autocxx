@@ -9,17 +9,20 @@
 use indexmap::set::IndexSet as HashSet;
 use std::fmt::Display;
 
-use crate::types::{make_ident, Namespace, QualifiedName};
-use autocxx_parser::{ExternCppType, RustFun, RustPath};
-use itertools::Itertools;
-use quote::ToTokens;
 use syn::{
     parse::Parse,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
+};
+
+use crate::minisyn::{
     Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
     Pat, ReturnType, Type, Visibility,
 };
+use crate::types::{make_ident, Namespace, QualifiedName};
+use autocxx_parser::{ExternCppType, RustFun, RustPath};
+use itertools::Itertools;
+use quote::ToTokens;
 
 use super::{
     analysis::{
@@ -33,7 +36,7 @@ use super::{
     ConvertErrorFromCpp,
 };
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum TypeKind {
     Pod,    // trivial. Can be moved and copied in Rust.
     NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
@@ -53,6 +56,7 @@ pub(crate) enum CppVisibility {
 }
 
 /// Details about a C++ struct.
+#[derive(Debug)]
 pub(crate) struct StructDetails {
     pub(crate) item: ItemStruct,
     pub(crate) layout: Option<Layout>,
@@ -60,7 +64,7 @@ pub(crate) struct StructDetails {
 }
 
 /// Layout of a type, equivalent to the same type in ir/layout.rs in bindgen
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Layout {
     /// The size (in bytes) of this layout.
     pub(crate) size: usize,
@@ -85,14 +89,14 @@ impl Parse for Layout {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum Virtualness {
     None,
     Virtual,
     PureVirtual,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum CastMutability {
     ConstToConst,
     MutToConst,
@@ -101,7 +105,7 @@ pub(crate) enum CastMutability {
 
 /// Indicates that this function (which is synthetic) should
 /// be a trait implementation rather than a method or free function.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum TraitSynthesis {
     Cast {
         to_type: QualifiedName,
@@ -113,7 +117,7 @@ pub(crate) enum TraitSynthesis {
 
 /// Details of a subclass constructor.
 /// TODO: zap this; replace with an extra API.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct SubclassConstructorDetails {
     pub(crate) subclass: SubclassName,
     pub(crate) is_trivial: bool,
@@ -124,7 +128,7 @@ pub(crate) struct SubclassConstructorDetails {
 
 /// Contributions to traits representing C++ superclasses that
 /// we may implement as Rust subclasses.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct SuperclassMethod {
     pub(crate) name: Ident,
     pub(crate) receiver: QualifiedName,
@@ -139,7 +143,7 @@ pub(crate) struct SuperclassMethod {
 /// Information about references (as opposed to pointers) to be found
 /// within the function signature. This is derived from bindgen annotations
 /// which is why it's not within `FuncToConvert::inputs`
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct References {
     pub(crate) rvalue_ref_params: HashSet<Ident>,
     pub(crate) ref_params: HashSet<Ident>,
@@ -175,7 +179,7 @@ impl References {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct TraitImplSignature {
     pub(crate) ty: Type,
     pub(crate) trait_signature: Type,
@@ -239,7 +243,7 @@ impl Display for SpecialMemberKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum Provenance {
     Bindgen,
     SynthesizedOther,
@@ -247,7 +251,7 @@ pub(crate) enum Provenance {
 }
 
 /// Whether a function has =delete or =default
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum DeletedOrDefaulted {
     Neither,
     Deleted,
@@ -264,7 +268,7 @@ pub(crate) enum DeletedOrDefaulted {
 /// during normal bindgen parsing. If that happens, they'll create one
 /// of these structures, and typically fill in some of the
 /// `synthesized_*` members which are not filled in from bindgen.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct FuncToConvert {
     pub(crate) provenance: Provenance,
     pub(crate) ident: Ident,
@@ -297,13 +301,14 @@ pub(crate) struct FuncToConvert {
 
 /// Layers of analysis which may be applied to decorate each API.
 /// See description of the purpose of this trait within `Api`.
-pub(crate) trait AnalysisPhase {
-    type TypedefAnalysis;
-    type StructAnalysis;
-    type FunAnalysis;
+pub(crate) trait AnalysisPhase: std::fmt::Debug {
+    type TypedefAnalysis: std::fmt::Debug;
+    type StructAnalysis: std::fmt::Debug;
+    type FunAnalysis: std::fmt::Debug;
 }
 
 /// No analysis has been applied to this API.
+#[derive(std::fmt::Debug)]
 pub(crate) struct NullPhase;
 
 impl AnalysisPhase for NullPhase {
@@ -312,7 +317,7 @@ impl AnalysisPhase for NullPhase {
     type FunAnalysis = ();
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum TypedefKind {
     Use(ItemUse, Box<Type>),
     Type(ItemType),
@@ -443,7 +448,7 @@ impl SubclassName {
     }
 }
 
-#[derive(strum_macros::Display)]
+#[derive(std::fmt::Debug)]
 /// Different types of API we might encounter.
 ///
 /// This type is parameterized over an `ApiAnalysis`. This is any additional
@@ -454,11 +459,9 @@ impl SubclassName {
 /// because sometimes we pass on the `bindgen` output directly in the
 /// Rust codegen output.
 ///
-/// This derives from [strum_macros::Display] because we want to be
-/// able to debug-print the enum discriminant without worrying about
-/// the fact that their payloads may not be `Debug` or `Display`.
-/// (Specifically, allowing `syn` Types to be `Debug` requires
-/// enabling syn's `extra-traits` feature which increases compile time.)
+/// Any `syn` types represented in this `Api` type, or any of the types from
+/// which it is composed, should be wrapped in `crate::minisyn` equivalents
+/// to avoid excessively verbose `Debug` logging.
 pub(crate) enum Api<T: AnalysisPhase> {
     /// A forward declaration, which we mustn't store in a UniquePtr.
     ForwardDeclaration {
@@ -568,6 +571,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     },
 }
 
+#[derive(Debug)]
 pub(crate) struct RustSubclassFnDetails {
     pub(crate) params: Punctuated<FnArg, Comma>,
     pub(crate) ret: ReturnType,
@@ -655,18 +659,6 @@ impl<T: AnalysisPhase> Api<T> {
     }
 }
 
-impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{:?} (kind={}, details={})",
-            self.name_info(),
-            self,
-            self.details_display()
-        )
-    }
-}
-
 pub(crate) type UnanalyzedApi = Api<NullPhase>;
 
 impl<T: AnalysisPhase> Api<T> {
@@ -725,25 +717,6 @@ impl<T: AnalysisPhase> Api<T> {
         T: 'static,
     {
         Ok(Box::new(std::iter::once(Api::Enum { name, item })))
-    }
-
-    /// Display some details of each API. It's a bit unfortunate that we can't
-    /// just use `Debug` here, but some of the `syn` types make that awkward.
-    pub(crate) fn details_display(&self) -> String {
-        match self {
-            Api::ForwardDeclaration { err, .. } => format!("{err:?}"),
-            Api::OpaqueTypedef {
-                forward_declaration,
-                ..
-            } => format!("forward_declaration={forward_declaration:?}"),
-            Api::ConcreteType {
-                rs_definition,
-                cpp_definition,
-                ..
-            } => format!("rs_definition={rs_definition:?}, cpp_definition={cpp_definition}"),
-            Api::ExternCppType { pod, .. } => format!("pod={pod}"),
-            _ => String::new(),
-        }
     }
 }
 

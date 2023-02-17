@@ -59,12 +59,12 @@ impl BindgenSemanticAttributes {
         if self.has_attr("unused_template_param") {
             Err(ConvertErrorWithContext(
                 ConvertErrorFromCpp::UnusedTemplateParam,
-                Some(ErrorContext::new_for_item(id_for_context.clone())),
+                Some(ErrorContext::new_for_item(id_for_context.clone().into())),
             ))
         } else if self.get_cpp_visibility() != CppVisibility::Public {
             Err(ConvertErrorWithContext(
                 ConvertErrorFromCpp::NonPublicNestedType,
-                Some(ErrorContext::new_for_item(id_for_context.clone())),
+                Some(ErrorContext::new_for_item(id_for_context.clone().into())),
             ))
         } else {
             Ok(())
@@ -154,12 +154,12 @@ impl BindgenSemanticAttributes {
             } else if a.is_ident("arg_type_reference") {
                 let r: Result<Ident, syn::Error> = a.parse_args();
                 if let Ok(ls) = r {
-                    results.ref_params.insert(ls);
+                    results.ref_params.insert(ls.into());
                 }
             } else if a.is_ident("arg_type_rvalue_reference") {
                 let r: Result<Ident, syn::Error> = a.parse_args();
                 if let Ok(ls) = r {
-                    results.rvalue_ref_params.insert(ls);
+                    results.rvalue_ref_params.insert(ls.into());
                 }
             }
         }

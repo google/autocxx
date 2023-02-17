@@ -13,7 +13,7 @@ use indexmap::set::IndexSet as HashSet;
 
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
-use syn::{ItemEnum, ItemStruct, Type, Visibility};
+use syn::{ItemStruct, Type, Visibility};
 
 use crate::{
     conversion::{
@@ -30,11 +30,14 @@ use crate::{
 
 use super::tdef::{TypedefAnalysis, TypedefPhase};
 
+#[derive(std::fmt::Debug)]
+
 pub(crate) struct FieldInfo {
     pub(crate) ty: Type,
     pub(crate) type_kind: type_converter::TypeKind,
 }
 
+#[derive(std::fmt::Debug)]
 pub(crate) struct PodAnalysis {
     pub(crate) kind: TypeKind,
     pub(crate) bases: HashSet<QualifiedName>,
@@ -54,6 +57,7 @@ pub(crate) struct PodAnalysis {
     pub(crate) in_anonymous_namespace: bool,
 }
 
+#[derive(std::fmt::Debug)]
 pub(crate) struct PodPhase;
 
 impl AnalysisPhase for PodPhase {
@@ -123,7 +127,7 @@ pub(crate) fn analyze_pod_apis(
 
 fn analyze_enum(
     name: ApiName,
-    mut item: ItemEnum,
+    mut item: crate::minisyn::ItemEnum,
 ) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
     let metadata = BindgenSemanticAttributes::new_retaining_others(&mut item.attrs);
     metadata.check_for_fatal_attrs(&name.name.get_final_ident())?;

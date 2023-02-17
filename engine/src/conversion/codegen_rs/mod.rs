@@ -28,13 +28,11 @@ use syn::{
 };
 
 use crate::{
-    conversion::{
-        codegen_rs::{
-            non_pod_struct::{make_non_pod, new_non_pod_struct},
-            unqualify::{unqualify_params, unqualify_ret_type},
-        },
-        doc_attr::get_doc_attrs,
+    conversion::codegen_rs::{
+        non_pod_struct::{make_non_pod, new_non_pod_struct},
+        unqualify::{unqualify_params, unqualify_ret_type},
     },
+    minisyn::minisynize_punctuated,
     types::{make_ident, Namespace, QualifiedName},
 };
 use impl_item_creator::create_impl_items;
@@ -51,6 +49,7 @@ use super::{
     },
     api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind},
     convert_error::ErrorContextType,
+    doc_attr::get_doc_attrs,
 };
 use super::{
     api::{Layout, Provenance, RustSubclassFnDetails, SuperclassMethod, TraitImplSignature},
@@ -340,7 +339,7 @@ impl<'a> RsCodeGenerator<'a> {
                     Use::UsedFromCxxBridge => Self::generate_cxx_use_stmt(name, None),
                     Use::UsedFromBindgen => Self::generate_bindgen_use_stmt(name),
                     Use::SpecificNameFromBindgen(id) => {
-                        let name = QualifiedName::new(name.get_namespace(), id.clone());
+                        let name = QualifiedName::new(name.get_namespace(), id.clone().into());
                         Self::generate_bindgen_use_stmt(&name)
                     }
                     Use::Custom(item) => *item.clone(),
@@ -483,9 +482,9 @@ impl<'a> RsCodeGenerator<'a> {
                         fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;
                     ))],
                     global_items: get_string_items(),
-                    materializations: vec![Use::UsedFromCxxBridgeWithAlias(make_ident(
-                        "make_string",
-                    ))],
+                    materializations: vec![Use::UsedFromCxxBridgeWithAlias(
+                        make_ident("make_string").into(),
+                    )],
                     ..Default::default()
                 }
             }
@@ -498,14 +497,14 @@ impl<'a> RsCodeGenerator<'a> {
                 self.config,
             ),
             Api::Const { const_item, .. } => RsCodegenResult {
-                bindgen_mod_items: vec![Item::Const(const_item)],
+                bindgen_mod_items: vec![Item::Const(const_item.into())],
                 materializations: vec![Use::UsedFromBindgen],
                 ..Default::default()
             },
             Api::Typedef { analysis, .. } => RsCodegenResult {
                 bindgen_mod_items: vec![match analysis.kind {
-                    TypedefKind::Type(type_item) => Item::Type(type_item),
-                    TypedefKind::Use(use_item, _) => Item::Use(use_item),
+                    TypedefKind::Type(type_item) => Item::Type(type_item.into()),
+                    TypedefKind::Use(use_item, _) => Item::Use(use_item.into()),
                 }],
                 materializations: vec![Use::UsedFromBindgen],
                 ..Default::default()
@@ -531,7 +530,7 @@ impl<'a> RsCodeGenerator<'a> {
                     kind,
                     constructors.move_constructor,
                     constructors.destructor,
-                    || Some((Item::Struct(details.item), doc_attrs)),
+                    || Some((Item::Struct(details.item.into()), doc_attrs)),
                     associated_methods,
                     layout,
                     is_generic,
@@ -545,7 +544,7 @@ impl<'a> RsCodeGenerator<'a> {
                     TypeKind::Pod,
                     true,
                     true,
-                    || Some((Item::Enum(item), doc_attrs)),
+                    || Some((Item::Enum(item.into()), doc_attrs)),
                     associated_methods,
                     None,
                     false,
@@ -623,7 +622,7 @@ impl<'a> RsCodeGenerator<'a> {
             }
             Api::RustSubclassFn {
                 details, subclass, ..
-            } => Self::generate_subclass_fn(id, *details, subclass),
+            } => Self::generate_subclass_fn(id.into(), *details, subclass),
             Api::Subclass {
                 name, superclass, ..
             } => {
@@ -813,8 +812,8 @@ impl<'a> RsCodeGenerator<'a> {
         let ret = details.ret;
         let unsafe_token = details.requires_unsafe.wrapper_token();
         let global_def = quote! { #unsafe_token fn #api_name(#params) #ret };
-        let params = unqualify_params(params);
-        let ret = unqualify_ret_type(ret);
+        let params = unqualify_params(minisynize_punctuated(params));
+        let ret = unqualify_ret_type(ret.into());
         let method_name = details.method_name;
         let cxxbridge_decl: ForeignItemFn =
             parse_quote! { #unsafe_token fn #api_name(#params) #ret; };
@@ -872,7 +871,7 @@ impl<'a> RsCodeGenerator<'a> {
     fn generate_type<F>(
         &self,
         name: &QualifiedName,
-        id: Ident,
+        id: crate::minisyn::Ident,
         type_kind: TypeKind,
         movable: bool,
         destroyable: bool,
@@ -921,7 +920,7 @@ impl<'a> RsCodeGenerator<'a> {
                         make_non_pod(s, layout);
                     } else {
                         // enum
-                        item = Item::Struct(new_non_pod_struct(id.clone()));
+                        item = Item::Struct(new_non_pod_struct(id.clone().into()));
                     }
                 }
                 bindgen_mod_items.push(item);
@@ -983,8 +982,9 @@ impl<'a> RsCodeGenerator<'a> {
                     let super_id =
                         SubclassName::get_super_fn_name(&Namespace::new(), &id.to_string())
                             .get_final_ident();
+                    let params = minisynize_punctuated(method.params.clone());
                     let param_names: Punctuated<Expr, Comma> =
-                        Self::args_from_sig(&method.params).collect();
+                        Self::args_from_sig(&params).collect();
                     let mut params = method.params.clone();
                     *(params.iter_mut().next().unwrap()) = match method.receiver_mutability {
                         ReceiverMutability::Const => parse_quote!(&self),
@@ -1028,7 +1028,7 @@ impl<'a> RsCodeGenerator<'a> {
                         #(#mains)*
                     }
                 });
-                materializations.push(Use::SpecificNameFromBindgen(supers_name));
+                materializations.push(Use::SpecificNameFromBindgen(supers_name.into()));
             } else {
                 bindgen_mod_items.push(parse_quote! {
                     #[allow(non_snake_case)]
@@ -1037,7 +1037,7 @@ impl<'a> RsCodeGenerator<'a> {
                     }
                 });
             }
-            materializations.push(Use::SpecificNameFromBindgen(methods_name));
+            materializations.push(Use::SpecificNameFromBindgen(methods_name.into()));
         }
     }
 
@@ -1077,7 +1077,7 @@ impl<'a> RsCodeGenerator<'a> {
                     #[doc = #err]
                     pub struct #id;
                 }),
-                Some(Use::SpecificNameFromBindgen(id)),
+                Some(Use::SpecificNameFromBindgen(id.into())),
             ),
             ErrorContextType::SanitizedItem(id) => (
                 // Guaranteed to be no impl blocks - populate directly in output mod.
@@ -1209,7 +1209,7 @@ impl<'a> RsCodeGenerator<'a> {
         ForeignItem::Verbatim(for_extern_c_ts)
     }
 
-    fn find_output_mod_root(ns: &Namespace) -> impl Iterator<Item = Ident> {
+    fn find_output_mod_root(ns: &Namespace) -> impl Iterator<Item = crate::minisyn::Ident> {
         std::iter::repeat(make_ident("super")).take(ns.depth())
     }
 }

@@ -15,6 +15,7 @@ use crate::conversion::{
     convert_error::ConvertErrorWithContext,
     convert_error::ErrorContext,
 };
+use crate::minisyn::{minisynize_punctuated, minisynize_vec};
 use crate::{
     conversion::ConvertErrorFromCpp,
     types::{Namespace, QualifiedName},
@@ -72,11 +73,11 @@ impl ParseForeignMod {
                 self.funcs_to_convert.push(FuncToConvert {
                     provenance: Provenance::Bindgen,
                     self_ty: None,
-                    ident: item.sig.ident,
-                    doc_attrs,
-                    inputs: item.sig.inputs,
-                    output: item.sig.output,
-                    vis: item.vis,
+                    ident: item.sig.ident.into(),
+                    doc_attrs: minisynize_vec(doc_attrs),
+                    inputs: minisynize_punctuated(item.sig.inputs),
+                    output: item.sig.output.into(),
+                    vis: item.vis.into(),
                     virtualness: annotations.get_virtualness(),
                     cpp_vis: annotations.get_cpp_visibility(),
                     special_member: annotations.special_member_kind(),
@@ -94,7 +95,7 @@ impl ParseForeignMod {
             }
             ForeignItem::Static(item) => Err(ConvertErrorWithContext(
                 ConvertErrorFromCpp::StaticData(item.ident.to_string()),
-                Some(ErrorContext::new_for_item(item.ident)),
+                Some(ErrorContext::new_for_item(item.ident.into())),
             )),
             _ => Err(ConvertErrorWithContext(
                 ConvertErrorFromCpp::UnexpectedForeignItem,
@@ -118,7 +119,7 @@ impl ParseForeignMod {
                 };
                 self.method_receivers.insert(
                     effective_fun_name,
-                    QualifiedName::new(&self.ns, ty_id.clone()),
+                    QualifiedName::new(&self.ns, ty_id.clone().into()),
                 );
             }
         }
