@@ -7247,6 +7247,32 @@ fn test_box_via_extern_rust() {
 }
 
 #[test]
+fn test_box_via_extern_rust_no_include_cpp() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct Foo;
+        inline void take_box(rust::Box<Foo>) {
+        }
+    "};
+    do_run_test_manual(
+        "",
+        hdr,
+        quote! {
+            #[autocxx::extern_rust::extern_rust_type]
+            pub struct Foo {
+                a: String,
+            }
+
+            fn main() {
+            }
+        },
+        Some(Box::new(EnableAutodiscover)),
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
 fn test_box_via_extern_rust_in_mod() {
     let hdr = indoc! {"
         #include <cxx.h>

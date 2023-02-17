@@ -286,6 +286,16 @@ impl IncludeCppEngine {
         Ok(this)
     }
 
+    /// Used if we find that we're asked to auto-discover extern_rust_type and similar
+    /// but didn't have any include_cpp macro at all.
+    pub fn new_for_autodiscover() -> Self {
+        Self {
+            config: IncludeCppConfig::default(),
+            state: State::NotGenerated,
+            source_code: None,
+        }
+    }
+
     pub fn config_mut(&mut self) -> &mut IncludeCppConfig {
         assert!(
             matches!(self.state, State::NotGenerated),
