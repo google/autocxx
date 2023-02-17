@@ -215,12 +215,7 @@ fn parse_file_contents(
     if must_handle_discovered_things {
         // If we have to handle discovered things but there was no include_cpp! macro,
         // fake one.
-        if results
-            .iter()
-            .filter(|seg| matches!(seg, Segment::Autocxx(_)))
-            .next()
-            .is_none()
-        {
+        if !results.iter().any(|seg| matches!(seg, Segment::Autocxx(_))) {
             results.push(Segment::Autocxx(IncludeCppEngine::new_for_autodiscover()));
         }
         let mut autocxx_seg_iterator = results.iter_mut().filter_map(|seg| match seg {
