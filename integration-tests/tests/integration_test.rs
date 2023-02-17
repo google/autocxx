@@ -11860,8 +11860,8 @@ fn test_issue_1229() {
         }
 
         fn main() {
-            let thing = thing::Thing::new(15.).within_unique_ptr();
-            let item = item::Item::new(15.).within_unique_ptr();
+            let _thing = thing::Thing::new(15.).within_unique_ptr();
+            let _item = item::Item::new(15.).within_unique_ptr();
         }
     };
 
