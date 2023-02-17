@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use syn::ItemEnum;
+use crate::minisyn::ItemEnum;
 
 use super::{
     api::{AnalysisPhase, Api, ApiName, FuncToConvert, StructDetails, TypedefKind},

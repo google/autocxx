@@ -17,6 +17,7 @@ mod ast_discoverer;
 mod conversion;
 mod cxxbridge;
 mod known_types;
+mod minisyn;
 mod output_generators;
 mod parse_callbacks;
 mod parse_file;
@@ -45,12 +46,12 @@ use std::{
 };
 use tempfile::NamedTempFile;
 
-use quote::ToTokens;
-use syn::Result as ParseResult;
-use syn::{
+use crate::minisyn::Result as ParseResult;
+use crate::minisyn::{
     parse::{Parse, ParseStream},
     parse_quote, ItemMod, Macro,
 };
+use quote::ToTokens;
 use thiserror::Error;
 
 use itertools::{join, Itertools};

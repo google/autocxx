@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::{parse_quote, Token};
 use crate::{
     builder_modifiers::{
         make_clang_arg_adder, make_clang_optional_arg_adder, make_cpp17_adder, EnableAutodiscover,
@@ -24,7 +25,6 @@ use indoc::indoc;
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{parse_quote, Token};
 use test_log::test;
 
 #[test]

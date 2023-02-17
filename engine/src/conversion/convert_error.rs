@@ -8,10 +8,10 @@
 
 use indexmap::set::IndexSet as HashSet;
 
+use crate::minisyn::Ident;
 use itertools::Itertools;
 use miette::{Diagnostic, SourceSpan};
 use proc_macro2::Span;
-use syn::Ident;
 use thiserror::Error;
 
 use crate::{

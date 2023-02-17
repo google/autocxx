@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::Token;
 use assert_cmd::Command;
 use proc_macro2::Span;
 use quote::quote;
@@ -15,7 +16,6 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
-use syn::Token;
 use tempfile::tempdir;
 
 static INPUT_H: &str = indoc::indoc! {"

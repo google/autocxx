@@ -12,10 +12,10 @@ use std::{
     path::PathBuf,
 };
 
+use crate::minisyn::Item;
 use itertools::{Either, Itertools};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::Item;
 
 use autocxx_integration_tests::{CodeChecker, CodeCheckerFns, TestError};
 

@@ -19,13 +19,13 @@ mod error_reporter;
 mod parse;
 mod utilities;
 
+use crate::minisyn::{Item, ItemMod};
 use analysis::fun::FnAnalyzer;
 use autocxx_parser::IncludeCppConfig;
 pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use convert_error::ConvertError;
 use convert_error::ConvertErrorFromCpp;
 use itertools::Itertools;
-use syn::{Item, ItemMod};
 
 use crate::{
     conversion::analysis::deps::HasDependencies, CppCodegenOptions, CppFilePair, UnsafePolicy,

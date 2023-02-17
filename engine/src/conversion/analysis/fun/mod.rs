@@ -34,15 +34,15 @@ use crate::{
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 
+use crate::minisyn::{
+    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
+    TypePath, TypePtr, TypeReference, Visibility,
+};
 use autocxx_parser::{ExternCppType, IncludeCppConfig, UnsafePolicy};
 use function_wrapper::{CppFunction, CppFunctionBody, TypeConversionPolicy};
 use itertools::Itertools;
 use proc_macro2::Span;
 use quote::quote;
-use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
-    TypePath, TypePtr, TypeReference, Visibility,
-};
 
 use crate::{
     conversion::{

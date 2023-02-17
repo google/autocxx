@@ -8,19 +8,19 @@
 
 use indexmap::set::IndexSet as HashSet;
 
-use autocxx_parser::{
-    directive_names::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE},
-    RustFun, RustPath,
-};
-use itertools::Itertools;
-use proc_macro2::Ident;
-use syn::{
+use crate::minisyn::{
     parse_quote, punctuated::Punctuated, Attribute, Binding, Expr, ExprAssign, ExprAssignOp,
     ExprAwait, ExprBinary, ExprBox, ExprBreak, ExprCast, ExprField, ExprGroup, ExprLet, ExprParen,
     ExprReference, ExprTry, ExprType, ExprUnary, ImplItem, Item, ItemEnum, ItemStruct, Pat, PatBox,
     PatReference, PatSlice, PatTuple, Path, Receiver, ReturnType, Signature, Stmt, TraitItem, Type,
     TypeArray, TypeGroup, TypeParamBound, TypeParen, TypePtr, TypeReference, TypeSlice,
 };
+use autocxx_parser::{
+    directive_names::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE},
+    RustFun, RustPath,
+};
+use itertools::Itertools;
+use proc_macro2::Ident;
 use thiserror::Error;
 
 #[derive(Default)]
@@ -533,8 +533,8 @@ fn add_receiver(sig: &Signature, receiver: &Ident) -> Result<Signature, Discover
 
 #[cfg(test)]
 mod tests {
+    use crate::minisyn::{parse_quote, ImplItemMethod};
     use quote::{quote, ToTokens};
-    use syn::{parse_quote, ImplItemMethod};
 
     use crate::{ast_discoverer::add_receiver, types::make_ident};
 

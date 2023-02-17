@@ -6,12 +6,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::{parse_quote, Ident, Type, TypeReference};
 use crate::{
     conversion::api::SubclassName,
     types::{Namespace, QualifiedName},
 };
 use quote::ToTokens;
-use syn::{parse_quote, Ident, Type, TypeReference};
 
 #[derive(Clone, Debug)]
 pub(crate) enum CppConversionType {

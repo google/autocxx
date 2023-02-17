@@ -6,15 +6,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::{Expr, Type, TypePtr};
 use proc_macro2::TokenStream;
-use syn::{Expr, Type, TypePtr};
 
+use crate::minisyn::parse_quote;
 use crate::{
     conversion::analysis::fun::function_wrapper::{RustConversionType, TypeConversionPolicy},
     types::make_ident,
 };
 use quote::quote;
-use syn::parse_quote;
 
 use super::MaybeUnsafeStmt;
 

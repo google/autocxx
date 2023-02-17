@@ -6,10 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use autocxx_parser::UnsafePolicy;
 #[allow(unused_imports)]
-use syn::parse_quote;
-use syn::ItemMod;
+use crate::minisyn::parse_quote;
+use crate::minisyn::ItemMod;
+use autocxx_parser::UnsafePolicy;
 
 use crate::CppCodegenOptions;
 

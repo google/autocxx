@@ -16,13 +16,13 @@ use std::{
     process,
 };
 
+use crate::minisyn::{Expr, __private::ToTokens, spanned::Spanned};
 use anyhow::Error;
 use clap::{crate_authors, crate_version, Arg, ArgMatches, Command};
 use itertools::Itertools;
 use mdbook::{book::Book, preprocess::CmdPreprocessor};
 use proc_macro2::{Span, TokenStream};
 use rayon::prelude::*;
-use syn::{Expr, __private::ToTokens, spanned::Spanned};
 
 static LONG_ABOUT: &str =
     "This is an mdbook preprocessor tailored for autocxx code examples. Autocxx

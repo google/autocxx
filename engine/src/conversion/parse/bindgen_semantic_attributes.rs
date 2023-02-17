@@ -6,12 +6,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use proc_macro2::{Ident, TokenStream};
-use syn::{
+use crate::minisyn::{
     parenthesized,
     parse::{Parse, Parser},
     Attribute, LitStr,
 };
+use proc_macro2::{Ident, TokenStream};
 
 use crate::conversion::{
     api::{CppVisibility, DeletedOrDefaulted, Layout, References, SpecialMemberKind, Virtualness},

@@ -6,8 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::{parse_quote, Ident, Item};
 use autocxx_parser::IncludeCppConfig;
-use syn::{parse_quote, Ident, Item};
 
 pub(crate) fn create_impl_items(
     id: &Ident,

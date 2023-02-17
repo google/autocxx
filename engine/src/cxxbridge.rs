@@ -6,9 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::ItemMod;
 use proc_macro2::TokenStream;
 use quote::{ToTokens, TokenStreamExt};
-use syn::ItemMod;
 
 use crate::{do_cxx_cpp_generation, parse_file::CppBuildable, CppCodegenOptions, GeneratedCpp};
 

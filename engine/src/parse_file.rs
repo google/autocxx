@@ -7,6 +7,7 @@
 // except according to those terms.
 
 use crate::ast_discoverer::{Discoveries, DiscoveryErr};
+use crate::minisyn::{token::Brace, Item, ItemMod};
 use crate::output_generators::RsOutput;
 use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
@@ -20,7 +21,6 @@ use miette::Diagnostic;
 use quote::ToTokens;
 use std::{io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
-use syn::{token::Brace, Item, ItemMod};
 use thiserror::Error;
 
 /// Errors which may occur when parsing a Rust source file to discover

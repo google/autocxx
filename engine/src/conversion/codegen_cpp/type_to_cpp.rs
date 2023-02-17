@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::{Token, Type};
 use crate::{
     conversion::{apivec::ApiVec, AnalysisPhase, ConvertErrorFromCpp},
     types::QualifiedName,
@@ -14,7 +15,6 @@ use indexmap::map::IndexMap as HashMap;
 use itertools::Itertools;
 use quote::ToTokens;
 use std::iter::once;
-use syn::{Token, Type};
 
 /// Map from QualifiedName to original C++ name. Original C++ name does not
 /// include the namespace; this can be assumed to be the same as the namespace

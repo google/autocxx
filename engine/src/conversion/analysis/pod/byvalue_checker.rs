@@ -7,6 +7,7 @@
 // except according to those terms.
 
 use crate::conversion::apivec::ApiVec;
+use crate::minisyn::{ItemStruct, Type};
 use crate::{conversion::ConvertErrorFromCpp, known_types::known_types};
 use crate::{
     conversion::{
@@ -17,7 +18,6 @@ use crate::{
 };
 use autocxx_parser::IncludeCppConfig;
 use std::collections::HashMap;
-use syn::{ItemStruct, Type};
 
 #[derive(Clone)]
 enum PodState {
@@ -266,8 +266,8 @@ impl ByValueChecker {
 #[cfg(test)]
 mod tests {
     use super::ByValueChecker;
+    use crate::minisyn::{parse_quote, Ident, ItemStruct};
     use crate::types::{Namespace, QualifiedName};
-    use syn::{parse_quote, Ident, ItemStruct};
 
     fn ty_from_ident(id: &Ident) -> QualifiedName {
         QualifiedName::new_from_cpp_name(&id.to_string())

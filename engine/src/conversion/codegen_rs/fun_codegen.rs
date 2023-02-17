@@ -10,15 +10,15 @@ use autocxx_parser::IncludeCppConfig;
 use indexmap::set::IndexSet as HashSet;
 use std::borrow::Cow;
 
-use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
-use syn::{
+use crate::minisyn::{
     parse::Parser,
     parse_quote,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
     Attribute, FnArg, ForeignItem, Ident, ImplItem, Item, ReturnType,
 };
+use proc_macro2::TokenStream;
+use quote::{quote, ToTokens};
 
 use super::{
     function_wrapper_rs::RustParamConversion,

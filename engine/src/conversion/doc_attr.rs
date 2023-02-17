@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use syn::Attribute;
+use crate::minisyn::Attribute;
 
 /// Returns the attribute (if any) which contains a doc comment.
 pub(super) fn get_doc_attrs(attrs: &[Attribute]) -> Vec<Attribute> {
