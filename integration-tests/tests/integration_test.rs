@@ -7225,8 +7225,9 @@ fn test_box_return_placement_new() {
     let hdr = indoc! {"
         #include <cxx.h>
         struct Foo;
+        struct Foo2;
         struct Ret {};
-        inline Ret take_box(rust::Box<Foo>) {
+        inline Ret take_box(rust::Box<Foo>, rust::Box<Foo2>) {
             return Ret{};
         }
     "};
@@ -7234,7 +7235,10 @@ fn test_box_return_placement_new() {
         "",
         hdr,
         quote! {
-            let _ = ffi::take_box(Box::new(Foo { a: "Hello".into() }));
+            let _ = ffi::take_box(
+                Box::new(Foo { a: "Hello".into() }),
+                Box::new(bar::Foo2 { a: "Goodbye".into() })
+            );
         },
         quote! {
             generate!("take_box")
@@ -7246,6 +7250,12 @@ fn test_box_return_placement_new() {
         Some(quote! {
             pub struct Foo {
                 a: String,
+            }
+            mod bar {
+                #[autocxx::extern_rust::extern_rust_type]
+                pub struct Foo2 {
+                    pub a: String,
+                }
             }
         }),
     );
