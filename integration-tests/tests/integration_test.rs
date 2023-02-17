@@ -7193,7 +7193,7 @@ fn test_cpp17() {
 }
 
 #[test]
-fn test_box() {
+fn test_box_extern_rust_type() {
     let hdr = indoc! {"
         #include <cxx.h>
         struct Foo;
