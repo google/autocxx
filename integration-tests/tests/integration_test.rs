@@ -7234,7 +7234,7 @@ fn test_box_return_placement_new() {
         "",
         hdr,
         quote! {
-            ffi::take_box(Box::new(Foo { a: "Hello".into() }));
+            let _ = ffi::take_box(Box::new(Foo { a: "Hello".into() }));
         },
         quote! {
             generate!("take_box")
