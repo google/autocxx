@@ -11827,6 +11827,47 @@ fn test_issue_1214() {
     run_test("", hdr, quote! {}, &["C"], &[]);
 }
 
+#[test]
+fn test_issue_1229() {
+    let hdr = indoc! {"
+    struct Thing {
+        float id;
+    
+        Thing(float id) : id(id) {}
+    };
+
+    struct Item {
+        float id;
+    
+        Item(float id) : id(id) {}
+    };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::WithinUniquePtr;
+
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            name!(thing)
+            safety!(unsafe)
+            generate!("Thing")
+        }
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            name!(item)
+            safety!(unsafe)
+            generate!("Item")
+        }
+
+        fn main() {
+            let _thing = thing::Thing::new(15.).within_unique_ptr();
+            let _item = item::Item::new(15.).within_unique_ptr();
+        }
+    };
+
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
