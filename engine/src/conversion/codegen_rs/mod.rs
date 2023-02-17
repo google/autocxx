@@ -588,6 +588,9 @@ impl<'a> RsCodeGenerator<'a> {
                 extern_rust_mod_items: vec![parse_quote! {
                     type #id;
                 }],
+                bindgen_mod_items: vec![parse_quote! {
+                    use super::super::#path;
+                }],
                 ..Default::default()
             },
             Api::RustFn {
