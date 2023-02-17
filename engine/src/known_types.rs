@@ -244,7 +244,9 @@ impl TypeDatabase {
             .map(|td| {
                 matches!(
                     td.behavior,
-                    Behavior::CxxContainerPtr | Behavior::CxxContainerVector
+                    Behavior::CxxContainerPtr
+                        | Behavior::CxxContainerVector
+                        | Behavior::RustContainerByValueSafe
                 )
             })
             .unwrap_or(false)
