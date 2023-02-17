@@ -7221,6 +7221,37 @@ fn test_box() {
 }
 
 #[test]
+fn test_box_return_placement_new() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct Foo;
+        struct Ret {};
+        inline Ret take_box(rust::Box<Foo>) {
+            return Ret{};
+        }
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            ffi::take_box(Box::new(Foo { a: "Hello".into() }));
+        },
+        quote! {
+            generate!("take_box")
+            extern_rust_type!(Foo)
+            generate!("Ret")
+        },
+        None,
+        None,
+        Some(quote! {
+            pub struct Foo {
+                a: String,
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_box_via_extern_rust() {
     let hdr = indoc! {"
         #include <cxx.h>
