@@ -101,10 +101,6 @@ impl<P: AnalysisPhase> ApiVec<P> {
         self.apis.into_iter()
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.apis.is_empty()
-    }
-
     pub fn retain<F>(&mut self, f: F)
     where
         F: FnMut(&Api<P>) -> bool,

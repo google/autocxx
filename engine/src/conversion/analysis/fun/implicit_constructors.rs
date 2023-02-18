@@ -11,6 +11,7 @@ use indexmap::{map::Entry, set::IndexSet as HashSet};
 
 use syn::{Type, TypeArray};
 
+use crate::conversion::analysis::pod::FieldsInfo;
 use crate::conversion::api::DeletedOrDefaulted;
 use crate::{
     conversion::{
@@ -205,7 +206,7 @@ pub(super) fn find_constructors_present(
             analysis:
                 PodAnalysis {
                     bases,
-                    field_info,
+                    fields: FieldsInfo { field_info, .. },
                     is_generic: false,
                     in_anonymous_namespace: false,
                     ..

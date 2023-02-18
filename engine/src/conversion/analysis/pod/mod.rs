@@ -28,7 +28,46 @@ use crate::{
     types::{Namespace, QualifiedName},
 };
 
-use super::tdef::{TypedefAnalysis, TypedefPhase};
+use super::{
+    depth_first::HasFieldsAndBases,
+    tdef::{TypedefAnalysis, TypedefPhase},
+};
+
+/// Analysis phase where typedef analysis has been performed and we've also
+/// figured out the fields and bases of a struct.
+pub(crate) struct FieldsDeterminedPhase;
+
+impl AnalysisPhase for FieldsDeterminedPhase {
+    type TypedefAnalysis = TypedefAnalysis;
+    type StructAnalysis = FieldsInfo;
+    type FunAnalysis = ();
+}
+
+pub(crate) struct FieldsInfo {
+    /// All field types. e.g. for std::unique_ptr<A>, this would include
+    /// both std::unique_ptr and A
+    pub(crate) field_deps: HashSet<QualifiedName>,
+    /// Types within fields where we need a definition, e.g. for
+    /// std::unique_ptr<A> it would just be std::unique_ptr.
+    pub(crate) field_definition_deps: HashSet<QualifiedName>,
+    pub(crate) field_info: Vec<FieldInfo>,
+    pub(crate) field_conversion_errors: Vec<ConvertErrorFromCpp>,
+}
+
+// TODO - this is probably exhibiting slightly different semantics than
+// the other impl of this trait.
+impl HasFieldsAndBases for Api<FieldsDeterminedPhase> {
+    fn name(&self) -> &QualifiedName {
+        self.name()
+    }
+
+    fn field_and_base_deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
+        match self {
+            Api::Struct { analysis, .. } => Box::new(analysis.field_deps.iter()),
+            _ => Box::new(std::iter::empty()),
+        }
+    }
+}
 
 pub(crate) struct FieldInfo {
     pub(crate) ty: Type,
@@ -43,13 +82,7 @@ pub(crate) struct PodAnalysis {
     /// because otherwise we don't know whether they're
     /// abstract or not.
     pub(crate) castable_bases: HashSet<QualifiedName>,
-    /// All field types. e.g. for std::unique_ptr<A>, this would include
-    /// both std::unique_ptr and A
-    pub(crate) field_deps: HashSet<QualifiedName>,
-    /// Types within fields where we need a definition, e.g. for
-    /// std::unique_ptr<A> it would just be std::unique_ptr.
-    pub(crate) field_definition_deps: HashSet<QualifiedName>,
-    pub(crate) field_info: Vec<FieldInfo>,
+    pub(crate) fields: FieldsInfo,
     pub(crate) is_generic: bool,
     pub(crate) in_anonymous_namespace: bool,
 }
@@ -71,53 +104,47 @@ pub(crate) fn analyze_pod_apis(
     apis: ApiVec<TypedefPhase>,
     config: &IncludeCppConfig,
 ) -> Result<ApiVec<PodPhase>, ConvertErrorFromCpp> {
+    let mut extra_apis = ApiVec::new();
+    let mut type_converter = TypeConverter::new(config, &apis);
+    let mut apis_with_known_fields = ApiVec::new();
+    // First let's work out what fields each struct has.
+    convert_apis(
+        apis,
+        &mut apis_with_known_fields,
+        Api::fun_unchanged,
+        |name, details, _| {
+            determine_struct_fields(&mut type_converter, name, details, &mut extra_apis)
+        },
+        Api::enum_unchanged,
+        Api::typedef_unchanged,
+    );
     // This next line will return an error if any of the 'generate_pod'
     // directives from the user can't be met because, for instance,
     // a type contains a std::string or some other type which can't be
     // held safely by value in Rust.
-    let byvalue_checker = ByValueChecker::new_from_apis(&apis, config)?;
-    let mut extra_apis = ApiVec::new();
-    let mut type_converter = TypeConverter::new(config, &apis);
+    let byvalue_checker = ByValueChecker::new_from_apis(&apis_with_known_fields, config)?;
     let mut results = ApiVec::new();
     convert_apis(
-        apis,
+        apis_with_known_fields,
         &mut results,
         Api::fun_unchanged,
-        |name, details, _| {
-            analyze_struct(
-                &byvalue_checker,
-                &mut type_converter,
-                &mut extra_apis,
-                name,
-                details,
-                config,
-            )
-        },
+        |name, details, analysis| analyze_struct(&byvalue_checker, name, details, config, analysis),
         analyze_enum,
         Api::typedef_unchanged,
     );
     // Conceivably, the process of POD-analysing the first set of APIs could result
     // in us creating new APIs to concretize generic types.
     let extra_apis: ApiVec<PodPhase> = extra_apis.into_iter().map(add_analysis).collect();
-    let mut more_extra_apis = ApiVec::new();
     convert_apis(
         extra_apis,
         &mut results,
         Api::fun_unchanged,
-        |name, details, _| {
-            analyze_struct(
-                &byvalue_checker,
-                &mut type_converter,
-                &mut more_extra_apis,
-                name,
-                details,
-                config,
-            )
+        |name, details, analysis| {
+            analyze_struct(&byvalue_checker, name, details, config, analysis.fields)
         },
         analyze_enum,
         Api::typedef_unchanged,
     );
-    assert!(more_extra_apis.is_empty());
     Ok(results)
 }
 
@@ -130,18 +157,15 @@ fn analyze_enum(
     Ok(Box::new(std::iter::once(Api::Enum { name, item })))
 }
 
-fn analyze_struct(
-    byvalue_checker: &ByValueChecker,
+fn determine_struct_fields(
     type_converter: &mut TypeConverter,
-    extra_apis: &mut ApiVec<NullPhase>,
     name: ApiName,
     mut details: Box<StructDetails>,
-    config: &IncludeCppConfig,
-) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
+    extra_apis: &mut ApiVec<NullPhase>,
+) -> Result<Box<dyn Iterator<Item = Api<FieldsDeterminedPhase>>>, ConvertErrorWithContext> {
     let id = name.name.get_final_ident();
     let metadata = BindgenSemanticAttributes::new_retaining_others(&mut details.item.attrs);
     metadata.check_for_fatal_attrs(&id)?;
-    let bases = get_bases(&details.item);
     let mut field_deps = HashSet::new();
     let mut field_definition_deps = HashSet::new();
     let mut field_info = Vec::new();
@@ -154,6 +178,29 @@ fn analyze_struct(
         &mut field_info,
         extra_apis,
     );
+    Ok(Box::new(std::iter::once(Api::Struct {
+        name,
+        details,
+        analysis: FieldsInfo {
+            field_deps,
+            field_definition_deps,
+            field_info,
+            field_conversion_errors,
+        },
+    })))
+}
+
+fn analyze_struct(
+    byvalue_checker: &ByValueChecker,
+    name: ApiName,
+    mut details: Box<StructDetails>,
+    config: &IncludeCppConfig,
+    fields: FieldsInfo,
+) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
+    let id = name.name.get_final_ident();
+    let metadata = BindgenSemanticAttributes::new_retaining_others(&mut details.item.attrs);
+    metadata.check_for_fatal_attrs(&id)?;
+    let bases = get_bases(&details.item);
     let type_kind = if byvalue_checker.is_pod(&name.name) {
         // It's POD so any errors encountered parsing its fields are important.
         // Let's not allow anything to be POD if it's got rvalue reference fields.
@@ -163,7 +210,7 @@ fn analyze_struct(
                 Some(ErrorContext::new_for_item(id)),
             ));
         }
-        if let Some(err) = field_conversion_errors.into_iter().next() {
+        if let Some(err) = fields.field_conversion_errors.first().cloned() {
             return Err(ConvertErrorWithContext(
                 err,
                 Some(ErrorContext::new_for_item(id)),
@@ -192,9 +239,7 @@ fn analyze_struct(
             kind: type_kind,
             bases: bases.into_keys().collect(),
             castable_bases,
-            field_deps,
-            field_definition_deps,
-            field_info,
+            fields,
             is_generic,
             in_anonymous_namespace,
         },
