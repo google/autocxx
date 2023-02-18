@@ -148,14 +148,17 @@ pub(crate) fn mark_types_abstract(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhas
     }
 
     // mark abstract types as abstract
-    let mut apis: ApiVec<_> = apis.into_iter().map(|mut api| {
-        if let Api::Struct { name, analysis, .. } = &mut api {
-            if abstract_classes.contains(&name.name) {
-                analysis.pod.kind = TypeKind::Abstract;
+    let mut apis: ApiVec<_> = apis
+        .into_iter()
+        .map(|mut api| {
+            if let Api::Struct { name, analysis, .. } = &mut api {
+                if abstract_classes.contains(&name.name) {
+                    analysis.pod.kind = TypeKind::Abstract;
+                }
             }
-        }
-        api
-    }).collect();
+            api
+        })
+        .collect();
 
     // We also need to remove any constructors belonging to these
     // abstract types.
