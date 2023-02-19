@@ -34,7 +34,7 @@ include_cpp! {
 // See the main function at the bottom for how this subclass
 // is instantiated.
 
-#[is_subclass(superclass("MessageDisplayer"))]
+#[subclass(superclass("MessageDisplayer"))]
 #[derive(Default)]
 pub struct UwuDisplayer {}
 
@@ -60,7 +60,7 @@ impl ffi::MessageDisplayer_methods for UwuDisplayer {
 // for now, at least, we can't hold non-trivial C++ objects on the Rust stack.)
 // All the boxing and unboxing is done automatically by autocxx layers.
 
-#[is_subclass(superclass("MessageProducer"))]
+#[subclass(superclass("MessageProducer"))]
 #[derive(Default)]
 pub struct QuoteProducer;
 
@@ -93,7 +93,7 @@ impl ffi::MessageProducer_methods for QuoteProducer {
 // doing stuff. In C++ you'd probably need a const_cast. Here we use
 // interior mutability.
 
-#[is_subclass(superclass("MessageDisplayer"))]
+#[subclass(superclass("MessageDisplayer"))]
 pub struct BoxDisplayer {
     message_count: RefCell<usize>,
 }
@@ -103,7 +103,7 @@ impl BoxDisplayer {
         Self::new_rust_owned(Self {
             // As we're allocating this class ourselves instead of using [`Default`]
             // we need to initialize the `cpp_peer` member ourselves. This member is
-            // inserted by the `#[is_subclass]` annotation. autocxx will
+            // inserted by the `#[subclass]` annotation. autocxx will
             // later use this to store a pointer back to the C++ peer.
             cpp_peer: Default::default(),
             message_count: RefCell::new(1usize),
