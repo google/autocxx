@@ -399,7 +399,7 @@ impl<'a> FileWriter<'a> {
     ) -> miette::Result<()> {
         if let Some(desired_number) = desired_number {
             if counter > desired_number {
-                return Err(miette::Report::msg("More files were generated than expected. Increase the value passed to --generate-exact or reduce the number of include_cpp! sections."));
+                return Err(miette::Report::msg(format!("{counter} files were generated. Increase the value passed to --generate-exact or reduce the number of include_cpp! sections.")));
             }
             while counter < desired_number {
                 let fname = filename(counter);
