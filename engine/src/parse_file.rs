@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use crate::ast_discoverer::{Discoveries, DiscoveryErr};
-use crate::minisyn::{token::Brace, Item, ItemMod};
+use syn::{token::Brace, Item, ItemMod};
 use crate::output_generators::RsOutput;
 use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,

@@ -9,7 +9,7 @@
 use indexmap::map::IndexMap as HashMap;
 use indexmap::{map::Entry, set::IndexSet as HashSet};
 
-use crate::minisyn::{Type, TypeArray};
+use syn::{Type, TypeArray};
 
 use crate::conversion::api::DeletedOrDefaulted;
 use crate::{

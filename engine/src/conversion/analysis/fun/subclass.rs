@@ -8,7 +8,7 @@
 
 use indexmap::map::IndexMap as HashMap;
 
-use crate::minisyn::{parse_quote, FnArg, PatType, Type, TypePtr};
+use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 
 use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability, UnsafePolicy};
 use crate::conversion::analysis::pod::PodPhase;
@@ -148,7 +148,7 @@ pub(super) fn create_subclass_function(
         subclass: sub.clone(),
         details: Box::new(RustSubclassFnDetails {
             params,
-            ret: analysis.ret_type.clone(),
+            ret: crate::minisyn::ReturnType(analysis.ret_type.clone()),
             method_name: make_ident(&analysis.rust_name),
             cpp_impl: CppFunction {
                 payload: CppFunctionBody::FunctionCall(Namespace::new(), rust_call_name),

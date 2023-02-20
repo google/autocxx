@@ -7,13 +7,15 @@
 // except according to those terms.
 
 use indexmap::set::IndexSet as HashSet;
+use syn::{LitInt, LitBool};
 use std::fmt::Display;
 
 use crate::minisyn::{
+    Attribute,
     parse::Parse,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
-    Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
+     FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse,
     Pat, ReturnType, Type, Visibility,
 };
 use crate::types::{make_ident, Namespace, QualifiedName};

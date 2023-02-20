@@ -16,8 +16,10 @@ pub use syn::{parse, parse_quote, punctuated, token, Ident};
 
 macro_rules! minisyn {
     ($syntype:ident) => {
+        /// Newtype wrapper for `syn::$syntype` which has a more concise
+        /// `Debug` representation.
         #[derive(Clone)]
-        pub struct $syntype(::syn::$syntype);
+        pub (crate) struct $syntype(pub(crate) ::syn::$syntype);
         impl std::fmt::Debug for $syntype {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
                 write!(f, "{}", self.0.to_token_stream().to_string())
@@ -43,11 +45,17 @@ macro_rules! minisyn {
                 syn::parse::Parse::parse(input).map(Self)
             }
         }
+        impl std::ops::Deref for $syntype {
+            type Target = ::syn::$syntype;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
     };
 }
 
 minisyn!(ItemMod);
-minisyn!(Attribute);
 minisyn!(Binding);
 minisyn!(Expr);
 minisyn!(ExprAssign);
@@ -58,7 +66,7 @@ minisyn!(ExprBox);
 minisyn!(ExprBreak);
 minisyn!(ExprCast);
 minisyn!(ExprField);
-minisyn!(ExprGroup);
+// minisyn!(ExprGroup);
 minisyn!(ExprLet);
 minisyn!(ExprParen);
 minisyn!(ExprReference);
@@ -75,11 +83,11 @@ minisyn!(ItemType);
 minisyn!(ItemUse);
 minisyn!(Macro);
 minisyn!(Pat);
-minisyn!(PatBox);
-minisyn!(PatType);
-minisyn!(PatReference);
-minisyn!(PatSlice);
-minisyn!(PatTuple);
+// minisyn!(PatBox);
+// minisyn!(PatType);
+// minisyn!(PatReference);
+// minisyn!(PatSlice);
+// minisyn!(PatTuple);
 minisyn!(Path);
 minisyn!(Receiver);
 minisyn!(ReturnType);
@@ -96,3 +104,8 @@ minisyn!(TypePtr);
 minisyn!(TypeReference);
 minisyn!(TypeSlice);
 minisyn!(Visibility);
+
+#[derive(Clone)]
+pub(crate) struct Punctuated<T, P>(pub(crate) syn::punctuated::Punctuated<T, P>);
+#[derive(Clone)]
+pub(crate) struct Attribute(pub(crate) syn::Attribute);

@@ -9,7 +9,7 @@
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 
-use crate::minisyn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
+use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
 use crate::{
     conversion::{
         api::{Api, ApiName, NullPhase, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
@@ -248,7 +248,7 @@ impl<'a> ParseBindgen<'a> {
                         name,
                         details: Box::new(StructDetails {
                             layout: annotations.get_layout(),
-                            item: s,
+                            item: crate::minisyn::ItemStruct(s),
                             has_rvalue_reference_fields,
                         }),
                         analysis: (),
@@ -265,7 +265,7 @@ impl<'a> ParseBindgen<'a> {
                 let annotations = BindgenSemanticAttributes::new(&e.attrs);
                 let api = UnanalyzedApi::Enum {
                     name: api_name_qualified(ns, e.ident.clone(), &annotations)?,
-                    item: e,
+                    item: crate::minisyn::ItemEnum(e),
                 };
                 if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
                     self.apis.push(api);
@@ -331,7 +331,7 @@ impl<'a> ParseBindgen<'a> {
                                     parse_quote! {
                                         pub use #old_path as #new_id;
                                     },
-                                    Box::new(Type::Path(old_path)),
+                                    Box::new(crate::minisyn::Type(Type::Path(old_path))),
                                 ),
                                 old_tyname: Some(old_tyname),
                                 analysis: (),
@@ -354,7 +354,7 @@ impl<'a> ParseBindgen<'a> {
                 let annotations = BindgenSemanticAttributes::new(&const_item.attrs);
                 self.apis.push(UnanalyzedApi::Const {
                     name: api_name(ns, const_item.ident.clone(), &annotations),
-                    const_item,
+                    const_item: crate::minisyn::ItemConst(const_item),
                 });
                 Ok(())
             }
@@ -364,7 +364,7 @@ impl<'a> ParseBindgen<'a> {
                 // same name - see test_issue_264.
                 self.apis.push(UnanalyzedApi::Typedef {
                     name: api_name(ns, ity.ident.clone(), &annotations),
-                    item: TypedefKind::Type(ity),
+                    item: TypedefKind::Type(crate::minisyn::ItemType(ity)),
                     old_tyname: None,
                     analysis: (),
                 });

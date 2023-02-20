@@ -11,7 +11,7 @@ mod byvalue_checker;
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 
-use crate::minisyn::{ItemEnum, ItemStruct, Type, Visibility};
+use syn::{ItemStruct, Type};
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
 
@@ -123,7 +123,7 @@ pub(crate) fn analyze_pod_apis(
 
 fn analyze_enum(
     name: ApiName,
-    mut item: ItemEnum,
+    mut item: crate::minisyn::ItemEnum,
 ) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
     let metadata = BindgenSemanticAttributes::new_retaining_others(&mut item.attrs);
     metadata.check_for_fatal_attrs(&name.name.get_final_ident())?;
@@ -234,7 +234,7 @@ fn get_struct_field_types(
                     .unwrap_or(false)
                 {
                     field_deps.extend(r.types_encountered);
-                    if let Type::Path(typ) = &r.ty {
+                    if let syn::Type::Path(typ) = &r.ty {
                         // Later analyses need to know about the field
                         // types where we need full definitions, as opposed
                         // to just declarations. That means just the outermost
@@ -259,9 +259,9 @@ fn get_bases(item: &ItemStruct) -> HashMap<QualifiedName, bool> {
     item.fields
         .iter()
         .filter_map(|f| {
-            let is_public = matches!(f.vis, Visibility::Public(_));
+            let is_public = matches!(f.vis, syn::Visibility::Public(_));
             match &f.ty {
-                Type::Path(typ) => f
+                syn::Type::Path(typ) => f
                     .ident
                     .as_ref()
                     .filter(|id| id.to_string().starts_with("_base"))

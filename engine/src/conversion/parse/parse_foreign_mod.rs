@@ -8,14 +8,14 @@
 
 use crate::conversion::api::{ApiName, NullPhase, Provenance};
 use crate::conversion::apivec::ApiVec;
-use crate::conversion::doc_attr::get_doc_attrs;
+use crate::conversion::doc_attr::{get_doc_attrs, get_doc_attrs_as_minisyn};
 use crate::conversion::error_reporter::report_any_error;
 use crate::conversion::{
     api::{FuncToConvert, UnanalyzedApi},
     convert_error::ConvertErrorWithContext,
     convert_error::ErrorContext,
 };
-use crate::minisyn::{Block, Expr, ExprCall, ForeignItem, Ident, ImplItem, ItemImpl, Stmt, Type};
+use syn::{Block, Expr, ExprCall, ForeignItem, Ident, ImplItem, ItemImpl, Stmt, Type};
 use crate::{
     conversion::ConvertErrorFromCpp,
     types::{Namespace, QualifiedName},
@@ -68,15 +68,15 @@ impl ParseForeignMod {
         match i {
             ForeignItem::Fn(item) => {
                 let annotations = BindgenSemanticAttributes::new(&item.attrs);
-                let doc_attrs = get_doc_attrs(&item.attrs);
+                let doc_attrs = get_doc_attrs_as_minisyn(&item.attrs);
                 self.funcs_to_convert.push(FuncToConvert {
                     provenance: Provenance::Bindgen,
                     self_ty: None,
                     ident: item.sig.ident,
                     doc_attrs,
-                    inputs: item.sig.inputs,
-                    output: item.sig.output,
-                    vis: item.vis,
+                    inputs: crate::minisyn::Punctuated(item.sig.inputs),
+                    output: crate::minisyn::ReturnType(item.sig.output),
+                    vis: crate::minisyn::Visibility(item.vis),
                     virtualness: annotations.get_virtualness(),
                     cpp_vis: annotations.get_cpp_visibility(),
                     special_member: annotations.special_member_kind(),
@@ -162,8 +162,8 @@ fn get_called_function(block: &Block) -> Option<&Ident> {
 #[cfg(test)]
 mod test {
     use super::get_called_function;
-    use crate::minisyn::parse_quote;
-    use crate::minisyn::Block;
+    use syn::parse_quote;
+    use syn::Block;
 
     #[test]
     fn test_get_called_function() {

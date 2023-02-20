@@ -8,7 +8,7 @@
 
 use indexmap::set::IndexSet as HashSet;
 
-use crate::minisyn::{
+use syn::{
     parse_quote, punctuated::Punctuated, Attribute, Binding, Expr, ExprAssign, ExprAssignOp,
     ExprAwait, ExprBinary, ExprBox, ExprBreak, ExprCast, ExprField, ExprGroup, ExprLet, ExprParen,
     ExprReference, ExprTry, ExprType, ExprUnary, ImplItem, Item, ItemEnum, ItemStruct, Pat, PatBox,
@@ -533,7 +533,7 @@ fn add_receiver(sig: &Signature, receiver: &Ident) -> Result<Signature, Discover
 
 #[cfg(test)]
 mod tests {
-    use crate::minisyn::{parse_quote, ImplItemMethod};
+    use syn::{parse_quote, ImplItemMethod};
     use quote::{quote, ToTokens};
 
     use crate::{ast_discoverer::add_receiver, types::make_ident};

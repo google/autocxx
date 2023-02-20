@@ -34,7 +34,7 @@ use crate::{
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 
-use crate::minisyn::{
+use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
     TypePath, TypePtr, TypeReference, Visibility,
 };
@@ -872,7 +872,7 @@ impl<'a> FnAnalyzer<'a> {
                             impl_for: self_ty,
                             details: Box::new(TraitMethodDetails {
                                 trt: TraitImplSignature {
-                                    ty,
+                                    ty: crate::minisyn::Type(ty),
                                     trait_signature: parse_quote! {
                                         autocxx::moveit::new:: #trait_id
                                     },
@@ -908,7 +908,7 @@ impl<'a> FnAnalyzer<'a> {
                         impl_for: self_ty,
                         details: Box::new(TraitMethodDetails {
                             trt: TraitImplSignature {
-                                ty,
+                                ty: crate::minisyn::Type(ty),
                                 trait_signature: parse_quote! {
                                     Drop
                                 },
@@ -1394,7 +1394,7 @@ impl<'a> FnAnalyzer<'a> {
             ret_type,
             param_details,
             requires_unsafe,
-            vis,
+            vis: vis.0,
             cpp_wrapper,
             deps,
             ignore_reason,
@@ -1516,7 +1516,7 @@ impl<'a> FnAnalyzer<'a> {
                         impl_for: from_type.clone(),
                         details: Box::new(TraitMethodDetails {
                             trt: TraitImplSignature {
-                                ty,
+                                ty: crate::minisyn::Type(ty),
                                 trait_signature,
                                 unsafety: None,
                             },
@@ -1560,7 +1560,7 @@ impl<'a> FnAnalyzer<'a> {
                 impl_for: ty.clone(),
                 details: Box::new(TraitMethodDetails {
                     trt: TraitImplSignature {
-                        ty: Type::Path(typ),
+                        ty: crate::minisyn::Type(Type::Path(typ)),
                         trait_signature: parse_quote! { autocxx::moveit::MakeCppStorage },
                         unsafety: Some(parse_quote! { unsafe }),
                     },
@@ -2104,7 +2104,7 @@ impl<'a> FnAnalyzer<'a> {
                         ident,
                         doc_attrs: make_doc_attrs(format!("Synthesized {special_member}.")),
                         inputs,
-                        output: ReturnType::Default,
+                        output: crate::minisyn::ReturnType(ReturnType::Default),
                         vis: parse_quote! { pub },
                         virtualness: Virtualness::None,
                         cpp_vis: CppVisibility::Public,

@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::minisyn::{Type, TypePtr};
+use syn::{Type, TypePtr};
 
 use crate::conversion::{
     analysis::fun::function_wrapper::{CppConversionType, TypeConversionPolicy},

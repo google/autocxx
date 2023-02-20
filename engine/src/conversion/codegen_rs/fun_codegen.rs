@@ -10,7 +10,7 @@ use autocxx_parser::IncludeCppConfig;
 use indexmap::set::IndexSet as HashSet;
 use std::borrow::Cow;
 
-use crate::minisyn::{
+use syn::{
     parse::Parser,
     parse_quote,
     punctuated::Punctuated,
@@ -104,7 +104,7 @@ pub(super) fn gen_function(
     let params = analysis.params;
     let vis = analysis.vis;
     let kind = analysis.kind;
-    let doc_attrs = fun.doc_attrs;
+    let doc_attrs = fun.doc_attrs.into_iter().map(|attr| attr.0).collect();
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;

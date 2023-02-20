@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::minisyn::{parse_quote, Ident, PathSegment, TypePath};
+use syn::{parse_quote, Ident, PathSegment, TypePath};
 use itertools::Itertools;
 use proc_macro2::Span;
 use quote::ToTokens;

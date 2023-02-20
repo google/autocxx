@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::minisyn::{Token, Type};
+use syn::{Token, Type};
 use crate::{
     conversion::{apivec::ApiVec, AnalysisPhase, ConvertErrorFromCpp},
     types::QualifiedName,

@@ -19,7 +19,7 @@ mod error_reporter;
 mod parse;
 mod utilities;
 
-use crate::minisyn::{Item, ItemMod};
+use syn::{Item, ItemMod};
 use analysis::fun::FnAnalyzer;
 use autocxx_parser::IncludeCppConfig;
 pub(crate) use codegen_cpp::CppCodeGenerator;

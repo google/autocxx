@@ -5,7 +5,7 @@
 // <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use crate::minisyn::{
+use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, FnArg, GenericArgument, PatType, Path,
     PathSegment, ReturnType, Type, TypePath, TypeReference,
 };

@@ -8,7 +8,7 @@
 
 use indexmap::IndexSet as HashSet;
 
-use crate::minisyn::{
+use syn::{
     spanned::Spanned, AngleBracketedGenericArguments, GenericArgument, PatType, PathArguments,
     PathSegment, ReturnType, Signature, Type, TypePath, TypeReference,
 };

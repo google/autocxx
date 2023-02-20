@@ -19,7 +19,7 @@ use indexmap::set::IndexSet as HashSet;
 
 use autocxx_parser::{ExternCppType, IncludeCppConfig, RustFun, UnsafePolicy};
 
-use crate::minisyn::{
+use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
     ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Lifetime, TraitItem, Type,
     TypePath,
@@ -500,14 +500,14 @@ impl<'a> RsCodeGenerator<'a> {
                 self.config,
             ),
             Api::Const { const_item, .. } => RsCodegenResult {
-                bindgen_mod_items: vec![Item::Const(const_item)],
+                bindgen_mod_items: vec![Item::Const(const_item.0)],
                 materializations: vec![Use::UsedFromBindgen],
                 ..Default::default()
             },
             Api::Typedef { analysis, .. } => RsCodegenResult {
                 bindgen_mod_items: vec![match analysis.kind {
-                    TypedefKind::Type(type_item) => Item::Type(type_item),
-                    TypedefKind::Use(use_item, _) => Item::Use(use_item),
+                    TypedefKind::Type(type_item) => Item::Type(type_item.0),
+                    TypedefKind::Use(use_item, _) => Item::Use(use_item.0),
                 }],
                 materializations: vec![Use::UsedFromBindgen],
                 ..Default::default()
@@ -533,7 +533,7 @@ impl<'a> RsCodeGenerator<'a> {
                     kind,
                     constructors.move_constructor,
                     constructors.destructor,
-                    || Some((Item::Struct(details.item), doc_attrs)),
+                    || Some((Item::Struct(details.item.0), doc_attrs)),
                     associated_methods,
                     layout,
                     is_generic,
@@ -547,7 +547,7 @@ impl<'a> RsCodeGenerator<'a> {
                     TypeKind::Pod,
                     true,
                     true,
-                    || Some((Item::Enum(item), doc_attrs)),
+                    || Some((Item::Enum(item.0), doc_attrs)),
                     associated_methods,
                     None,
                     false,
@@ -811,12 +811,12 @@ impl<'a> RsCodeGenerator<'a> {
         details: RustSubclassFnDetails,
         subclass: SubclassName,
     ) -> RsCodegenResult {
-        let params = details.params;
+        let params = details.params.into_iter().map(|arg| arg.0).collect();
         let ret = details.ret;
         let unsafe_token = details.requires_unsafe.wrapper_token();
         let global_def = quote! { #unsafe_token fn #api_name(#params) #ret };
         let params = unqualify_params(params);
-        let ret = unqualify_ret_type(ret);
+        let ret = unqualify_ret_type(ret.0);
         let method_name = details.method_name;
         let cxxbridge_decl: ForeignItemFn =
             parse_quote! { #unsafe_token fn #api_name(#params) #ret; };

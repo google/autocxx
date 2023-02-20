@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::minisyn::ItemMod;
+use syn::ItemMod;
 use proc_macro2::TokenStream;
 use quote::{ToTokens, TokenStreamExt};
 

@@ -46,8 +46,8 @@ use std::{
 };
 use tempfile::NamedTempFile;
 
-use crate::minisyn::Result as ParseResult;
-use crate::minisyn::{
+use syn::Result as ParseResult;
+use syn::{
     parse::{Parse, ParseStream},
     parse_quote, ItemMod, Macro,
 };

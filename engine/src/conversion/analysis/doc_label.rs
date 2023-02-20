@@ -6,12 +6,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::minisyn::{parse_quote, Attribute};
+use syn::{parse_quote};
 use proc_macro2::Span;
 
-pub(crate) fn make_doc_attrs(label: String) -> Vec<Attribute> {
+pub(crate) fn make_doc_attrs(label: String) -> Vec<crate::minisyn::Attribute> {
     let hexathorpe = syn::token::Pound(Span::call_site());
-    vec![parse_quote! {
+    vec![crate::minisyn::Attribute(parse_quote! {
         #hexathorpe [doc = #label]
-    }]
+    })]
 }

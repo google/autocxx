@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::minisyn::{parse_quote, TypePath};
+use syn::{parse_quote, TypePath};
 use crate::types::{make_ident, QualifiedName};
 use indexmap::map::IndexMap as HashMap;
 use indoc::indoc;

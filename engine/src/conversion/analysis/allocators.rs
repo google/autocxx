@@ -8,7 +8,7 @@
 
 //! Code to create functions to alloc and free while unitialized.
 
-use crate::minisyn::{parse_quote, punctuated::Punctuated, token::Comma, FnArg, ReturnType};
+use syn::{parse_quote, punctuated::Punctuated, token::Comma, FnArg, ReturnType};
 
 use crate::{
     conversion::{
@@ -77,7 +77,7 @@ fn create_alloc_and_free(ty_name: QualifiedName) -> impl Iterator<Item = Api<Pod
                     ident,
                     doc_attrs: Vec::new(),
                     inputs,
-                    output,
+                    output: crate::minisyn::ReturnType(output),
                     vis: parse_quote! { pub },
                     virtualness: crate::conversion::api::Virtualness::None,
                     cpp_vis: CppVisibility::Public,

@@ -7,8 +7,8 @@
 // except according to those terms.
 
 #[allow(unused_imports)]
-use crate::minisyn::parse_quote;
-use crate::minisyn::ItemMod;
+use syn::parse_quote;
+use syn::ItemMod;
 use autocxx_parser::UnsafePolicy;
 
 use crate::CodegenOptions;

@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use crate::conversion::apivec::ApiVec;
-use crate::minisyn::{ItemStruct, Type};
+use syn::{ItemStruct, Type};
 use crate::{conversion::ConvertErrorFromCpp, known_types::known_types};
 use crate::{
     conversion::{
@@ -101,7 +101,7 @@ impl ByValueChecker {
                             }
                             _ => None,
                         },
-                        TypedefKind::Use(_, ref ty) => match **ty {
+                        TypedefKind::Use(_, ref ty) => match ty.0 {
                             Type::Path(ref typ) => {
                                 let target_tn = QualifiedName::from_type_path(typ);
                                 known_types().consider_substitution(&target_tn)

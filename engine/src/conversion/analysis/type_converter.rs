@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::minisyn::{
+use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, GenericArgument, PathArguments, PathSegment,
     Type, TypePath, TypePtr,
 };
@@ -550,7 +550,7 @@ impl<'a> TypeConverter<'a> {
                 let api = UnanalyzedApi::ConcreteType {
                     name: ApiName::new_in_root_namespace(make_ident(synthetic_ident)),
                     cpp_definition: cpp_definition.clone(),
-                    rs_definition: Some(Box::new(rs_definition.clone())),
+                    rs_definition: Some(Box::new(crate::minisyn::Type(rs_definition.clone()))),
                 };
                 self.concrete_templates
                     .insert(cpp_definition, api.name().clone());

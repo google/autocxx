@@ -8,7 +8,7 @@
 
 use indexmap::set::IndexSet as HashSet;
 
-use crate::minisyn::ItemType;
+use syn::ItemType;
 use autocxx_parser::IncludeCppConfig;
 
 use crate::{
@@ -57,7 +57,7 @@ pub(crate) fn convert_typedef_targets(
             Ok(Box::new(std::iter::once(match item {
                 TypedefKind::Type(ity) => get_replacement_typedef(
                     name,
-                    ity,
+                    ity.0,
                     old_tyname,
                     &mut type_converter,
                     &mut extra_apis,
@@ -116,10 +116,10 @@ fn get_replacement_typedef(
             extra_apis.append(&mut final_type.extra_apis);
             Ok(Api::Typedef {
                 name,
-                item: TypedefKind::Type(ity),
+                item: TypedefKind::Type(crate::minisyn::ItemType(ity)),
                 old_tyname,
                 analysis: TypedefAnalysis {
-                    kind: TypedefKind::Type(converted_type),
+                    kind: TypedefKind::Type(crate::minisyn::ItemType(converted_type)),
                     deps: final_type.types_encountered,
                 },
             })
