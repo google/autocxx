@@ -146,6 +146,16 @@ enum State {
     Generated(Box<GenerationResults>),
 }
 
+/// Code generation options.
+#[derive(Default)]
+pub struct CodegenOptions<'a> {
+    // An option used by the test suite to force a more convoluted
+    // route through our code, to uncover bugs.
+    pub force_wrapper_gen: bool,
+    /// Options about the C++ code generation.
+    pub cpp_codegen_options: CppCodegenOptions<'a>,
+}
+
 const AUTOCXX_CLANG_ARGS: &[&str; 4] = &["-x", "c++", "-std=c++14", "-DBINDGEN"];
 
 /// Implement to learn of header files which get included
@@ -408,7 +418,7 @@ impl IncludeCppEngine {
         inc_dirs: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-        cpp_codegen_options: &CppCodegenOptions,
+        codegen_options: &CodegenOptions,
     ) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -456,7 +466,7 @@ impl IncludeCppEngine {
                 bindings,
                 self.config.unsafe_policy.clone(),
                 header_contents,
-                cpp_codegen_options,
+                codegen_options,
                 &source_file_contents,
             )
             .map_err(Error::Conversion)?;

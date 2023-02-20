@@ -28,7 +28,7 @@ use itertools::Itertools;
 use syn::{Item, ItemMod};
 
 use crate::{
-    conversion::analysis::deps::HasDependencies, CppCodegenOptions, CppFilePair, UnsafePolicy,
+    conversion::analysis::deps::HasDependencies, CodegenOptions, CppFilePair, UnsafePolicy,
 };
 
 use self::{
@@ -122,7 +122,7 @@ impl<'a> BridgeConverter<'a> {
         mut bindgen_mod: ItemMod,
         unsafe_policy: UnsafePolicy,
         inclusions: String,
-        cpp_codegen_options: &CppCodegenOptions,
+        codegen_options: &CodegenOptions,
         source_file_contents: &str,
     ) -> Result<CodegenResults, ConvertError> {
         match &mut bindgen_mod.content {
@@ -158,8 +158,12 @@ impl<'a> BridgeConverter<'a> {
                 // part of `autocxx`. Again, this returns a new set of `Api`s, but
                 // parameterized by a richer set of metadata.
                 Self::dump_apis("adding casts", &analyzed_apis);
-                let analyzed_apis =
-                    FnAnalyzer::analyze_functions(analyzed_apis, &unsafe_policy, self.config);
+                let analyzed_apis = FnAnalyzer::analyze_functions(
+                    analyzed_apis,
+                    &unsafe_policy,
+                    self.config,
+                    codegen_options.force_wrapper_gen,
+                );
                 // If any of those functions turned out to be pure virtual, don't attempt
                 // to generate UniquePtr implementations for the type, since it can't
                 // be instantiated.
@@ -189,12 +193,15 @@ impl<'a> BridgeConverter<'a> {
                 Self::dump_apis_with_deps("GC", &analyzed_apis);
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
-                let cxxgen_header_name = cpp_codegen_options.cxxgen_header_namer.name_header();
+                let cxxgen_header_name = codegen_options
+                    .cpp_codegen_options
+                    .cxxgen_header_namer
+                    .name_header();
                 let cpp = CppCodeGenerator::generate_cpp_code(
                     inclusions,
                     &analyzed_apis,
                     self.config,
-                    cpp_codegen_options,
+                    &codegen_options.cpp_codegen_options,
                     &cxxgen_header_name,
                 )
                 .map_err(ConvertError::Cpp)?;
