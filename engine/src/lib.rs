@@ -614,7 +614,11 @@ pub fn do_cxx_cpp_generation(
     })
 }
 
-pub(crate) fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool) -> Vec<u8> {
+pub fn get_cxx_header_bytes(suppress_system_headers: bool) -> Vec<u8> {
+    strip_system_headers(cxx_gen::HEADER.as_bytes().to_vec(), suppress_system_headers)
+}
+
+fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool) -> Vec<u8> {
     if suppress_system_headers {
         std::str::from_utf8(&input)
             .unwrap()

@@ -11,7 +11,7 @@ use miette::Diagnostic;
 use thiserror::Error;
 
 use crate::{generate_rs_single, CodegenOptions};
-use crate::{strip_system_headers, CppCodegenOptions, ParseError, RebuildDependencyRecorder};
+use crate::{get_cxx_header_bytes, CppCodegenOptions, ParseError, RebuildDependencyRecorder};
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fs::File;
@@ -221,7 +221,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         write_to_file(
             &incdir,
             "cxx.h",
-            &Self::get_cxx_header_bytes(
+            &get_cxx_header_bytes(
                 self.codegen_options
                     .cpp_codegen_options
                     .suppress_system_headers,
@@ -276,10 +276,6 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         } else {
             Ok(BuilderSuccess(builder, generated_rs, generated_cpp))
         }
-    }
-
-    fn get_cxx_header_bytes(suppress_system_headers: bool) -> Vec<u8> {
-        strip_system_headers(crate::HEADER.as_bytes().to_vec(), suppress_system_headers)
     }
 }
 
