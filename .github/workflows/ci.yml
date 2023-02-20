@@ -147,8 +147,11 @@ jobs:
       - name: Build cpp_calling_rust example
         working-directory: ./examples/cpp_calling_rust
         run: cargo build
-        # We do not build the LLVM example because even 'apt-get install llvm-13-dev'
-        # does not work to install the LLVM 13 headers.
+      - name: Build llvm example
+        working-directory: ./examples/llvm
+        # llvm example needs to install LLVM 13 headers via apt-get.
+        if: matrix.os == ''
+        run: sudo apt-get install llvm-13-dev && cargo build
 
   sanitizer:
     name: Address Sanitizer
