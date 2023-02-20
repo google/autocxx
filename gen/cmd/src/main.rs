@@ -248,7 +248,7 @@ fn main() -> miette::Result<()> {
         cxxgen_header_namer,
     };
     let codegen_options = autocxx_engine::CodegenOptions {
-        cpp_codegen_options: cpp_codegen_options,
+        cpp_codegen_options,
         ..Default::default()
     };
     let depfile = match matches.value_of("depfile") {
