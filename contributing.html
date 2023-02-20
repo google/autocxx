@@ -200,7 +200,11 @@ in the test suite. With suitable options, you can get plenty of output. For inst
 </code></pre>
 <p>This is especially valuable to see the <code>bindgen</code> output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
 in <code>engine/src/conversion</code>. See <a href="https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCppEngine.html">here</a> for documentation and diagrams on how the engine works.</p>
-<p>You may also wish to set <code>AUTOCXX_ASAN=1</code> on Linux when running tests.</p>
+<p>You may also wish to set <code>AUTOCXX_ASAN=1</code> on Linux when running tests. To exercise all
+the code paths related to generating both C++ and Rust side shims, you can set
+<code>AUTOCXX_FORCE_WRAPPER_GENERATION=1</code>. The test suite doesn't do this by default because
+we also want to test the normal code paths. (In the future we might want to
+parameterize the test suite to do both.)</p>
 <h2 id="reporting-bugs"><a class="header" href="#reporting-bugs">Reporting bugs</a></h2>
 <p>If you've found a problem, and you're reading this, <em>thank you</em>! Your diligence
 in reporting the bug is much appreciated and will make <code>autocxx</code> better. In
