@@ -511,9 +511,11 @@ fn create_interestingness_test(
     let problem_grep = problem
         .map(|problem| format!("| grep -q \"{problem}\"  >/dev/null  2>&1"))
         .unwrap_or_default();
+    // We formerly had a 'trap' below but it seems to have caused problems
+    // (trap \"if [[ \\$? -eq 139 ]]; then echo Segfault; fi\" CHLD; {} {} 2>&1 && cat autocxx-ffi-default-gen.rs && cat autocxxgen*.h && {} && {} 2>&1 ) {}
     let content = format!(
         indoc! {"
-        #!/bin/sh
+        #!/bin/bash
         set -e
         echo Precompile
         {}
@@ -521,7 +523,7 @@ fn create_interestingness_test(
         mv concat.h concat-body.h
         (echo \"#ifndef __CONCAT_H__\"; echo \"#define __CONCAT_H__\"; echo '#include \"concat-body.h\"'; echo \"#endif\") > concat.h
         echo Codegen
-        (trap \"if [[ \\$? -eq 139 ]]; then echo Segfault; fi\" CHLD; {} {} 2>&1 && cat autocxx-ffi-default-gen.rs && cat autocxxgen*.h && {} && {} 2>&1 ) {}
+        ({} {} 2>&1 && cat autocxx-ffi-default-gen.rs && cat autocxxgen*.h && {} && {} 2>&1) {}
         echo Remove
         rm concat.h
         echo Swap back
