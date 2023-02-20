@@ -33,6 +33,7 @@ autocxx = { path = "..", version = "=0.24.0" }
 autocxx-engine = { version = "=0.24.0", path = "../engine", features = [
     "build",
 ] }
+moveit = { version = "0.5", features = [ "cxx" ] }
 link-cplusplus = "1.0"
 tempfile = "3.1"
 indoc = "1.0"
@@ -40,6 +41,7 @@ log = "0.4"
 cxx = "1.0.78"
 itertools = "0.10"
 rustversion = "1.0"
+static_assertions = "1.1.0"
 
 [dependencies.syn]
 version = "1.0.39"

@@ -71,7 +71,7 @@ use super::{
     type_converter::{Annotated, PointerTreatment},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub(crate) enum ReceiverMutability {
     Const,
     Mutable,
@@ -2243,6 +2243,31 @@ impl HasFieldsAndBases for Api<FnPrePhase1> {
                     PodAnalysis {
                         field_definition_deps,
                         bases,
+                        ..
+                    },
+                ..
+            } => Box::new(field_definition_deps.iter().chain(bases.iter())),
+            _ => Box::new(std::iter::empty()),
+        }
+    }
+}
+
+impl HasFieldsAndBases for Api<FnPrePhase2> {
+    fn name(&self) -> &QualifiedName {
+        self.name()
+    }
+
+    fn field_and_base_deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
+        match self {
+            Api::Struct {
+                analysis:
+                    PodAndConstructorAnalysis {
+                        pod:
+                            PodAnalysis {
+                                field_definition_deps,
+                                bases,
+                                ..
+                            },
                         ..
                     },
                 ..
