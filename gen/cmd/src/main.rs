@@ -247,6 +247,10 @@ fn main() -> miette::Result<()> {
         autocxxgen_header_namer,
         cxxgen_header_namer,
     };
+    let codegen_options = autocxx_engine::CodegenOptions {
+        cpp_codegen_options,
+        ..Default::default()
+    };
     let depfile = match matches.value_of("depfile") {
         None => None,
         Some(depfile_path) => {
@@ -277,7 +281,7 @@ fn main() -> miette::Result<()> {
             incs.clone(),
             &extra_clang_args,
             dep_recorder,
-            &cpp_codegen_options,
+            &codegen_options,
         )?;
     }
 
@@ -305,7 +309,7 @@ fn main() -> miette::Result<()> {
             .flat_map(|file| file.get_cpp_buildables())
         {
             let generations = include_cxx
-                .generate_h_and_cxx(&cpp_codegen_options)
+                .generate_h_and_cxx(&codegen_options.cpp_codegen_options)
                 .expect("Unable to generate header and C++ code");
             for pair in generations.0 {
                 let cppname = name_cc_file(counter);
@@ -314,7 +318,7 @@ fn main() -> miette::Result<()> {
                 counter += 1;
             }
         }
-        drop(cpp_codegen_options);
+        drop(codegen_options);
         // Write placeholders to ensure we always make exactly 'n' of each file type.
         writer.write_placeholders(counter, desired_number, name_cc_file)?;
         writer.write_placeholders(

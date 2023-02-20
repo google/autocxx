@@ -284,6 +284,7 @@ pub(crate) struct FnAnalyzer<'a> {
     generic_types: HashSet<QualifiedName>,
     types_in_anonymous_namespace: HashSet<QualifiedName>,
     existing_superclass_trait_api_names: HashSet<QualifiedName>,
+    force_wrapper_generation: bool,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -291,6 +292,7 @@ impl<'a> FnAnalyzer<'a> {
         apis: ApiVec<PodPhase>,
         unsafe_policy: &'a UnsafePolicy,
         config: &'a IncludeCppConfig,
+        force_wrapper_generation: bool,
     ) -> ApiVec<FnPrePhase2> {
         let mut me = Self {
             unsafe_policy,
@@ -306,6 +308,7 @@ impl<'a> FnAnalyzer<'a> {
             generic_types: Self::build_generic_type_set(&apis),
             existing_superclass_trait_api_names: HashSet::new(),
             types_in_anonymous_namespace: Self::build_types_in_anonymous_namespace(&apis),
+            force_wrapper_generation,
         };
         let mut results = ApiVec::new();
         convert_apis(
@@ -1249,6 +1252,7 @@ impl<'a> FnAnalyzer<'a> {
             _ if ret_type_conversion_needed => true,
             _ if cpp_name_incompatible_with_cxx => true,
             _ if fun.synthetic_cpp.is_some() => true,
+            _ if self.force_wrapper_generation => true,
             _ => false,
         };
 
@@ -1362,6 +1366,7 @@ impl<'a> FnAnalyzer<'a> {
             _ if any_param_needs_rust_conversion || return_needs_rust_conversion => true,
             FnKind::TraitMethod { .. } => true,
             FnKind::Method { .. } => cxxbridge_name != rust_name,
+            _ if self.force_wrapper_generation => true,
             _ => false,
         };
 

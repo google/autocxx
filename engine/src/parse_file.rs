@@ -12,7 +12,7 @@ use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
     RebuildDependencyRecorder,
 };
-use crate::{CppCodegenOptions, LocatedSynError};
+use crate::{CodegenOptions, CppCodegenOptions, LocatedSynError};
 use autocxx_parser::directive_names::SUBCLASS;
 use autocxx_parser::{AllowlistEntry, RustPath, Subclass, SubclassAttrs};
 use indexmap::set::IndexSet as HashSet;
@@ -372,7 +372,7 @@ impl ParsedFile {
         autocxx_inc: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-        cpp_codegen_options: &CppCodegenOptions,
+        codegen_options: &CodegenOptions,
     ) -> Result<(), ParseError> {
         let mut mods_found = HashSet::new();
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
@@ -394,7 +394,7 @@ impl ParsedFile {
                     autocxx_inc.clone(),
                     extra_clang_args,
                     dep_recorder,
-                    cpp_codegen_options,
+                    codegen_options,
                 )
                 .map_err(ParseError::AutocxxCodegenError)?
         }

@@ -177,6 +177,17 @@ jobs:
           RUST_BACKTRACE: "0"
         run: cargo -Z build-std test --workspace --target x86_64-unknown-linux-gnu
 
+  force-wrapper-generation:
+    name: Test forcing wrapper generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1
+      - name: Tests generating all possible shims
+        env:
+          AUTOCXX_FORCE_WRAPPER_GENERATION: 1
+        run: cargo test --workspace
+
   # Clippy check
   clippy:
     name: Clippy

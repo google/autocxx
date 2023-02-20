@@ -11,7 +11,7 @@ use autocxx_parser::UnsafePolicy;
 use syn::parse_quote;
 use syn::ItemMod;
 
-use crate::CppCodegenOptions;
+use crate::CodegenOptions;
 
 use super::BridgeConverter;
 
@@ -33,7 +33,7 @@ fn do_test(input: ItemMod) {
         input,
         UnsafePolicy::AllFunctionsSafe,
         inclusions,
-        &CppCodegenOptions::default(),
+        &CodegenOptions::default(),
         "",
     )
     .unwrap();

@@ -502,6 +502,7 @@ fn test_negative_take_as_pod_with_move_constructor() {
     run_test_expect_fail(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
+#[ignore] // https://github.com/google/autocxx/issues/1252
 #[test]
 fn test_take_as_pod_with_is_relocatable() {
     let cxx = indoc! {"
@@ -4980,6 +4981,7 @@ fn test_union_ignored() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
+#[ignore] // https://github.com/google/autocxx/issues/1251
 #[test]
 fn test_double_underscores_ignored() {
     let hdr = indoc! {"
