@@ -179,6 +179,7 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) name: Pat,
     pub(crate) self_type: Option<(QualifiedName, ReceiverMutability)>,
     pub(crate) has_lifetime: bool,
+    pub(crate) is_mutable_reference: bool,
     pub(crate) deps: HashSet<QualifiedName>,
     pub(crate) requires_unsafe: UnsafetyNeeded,
     pub(crate) is_placement_return_destination: bool,
@@ -188,6 +189,7 @@ pub(crate) struct ReturnTypeAnalysis {
     rt: ReturnType,
     conversion: Option<TypeConversionPolicy>,
     was_reference: bool,
+    was_mutable_reference: bool,
     deps: HashSet<QualifiedName>,
     placement_param_needed: Option<(FnArg, ArgumentAnalysis)>,
 }
@@ -198,6 +200,7 @@ impl Default for ReturnTypeAnalysis {
             rt: parse_quote! {},
             conversion: None,
             was_reference: false,
+            was_mutable_reference: false,
             deps: Default::default(),
             placement_param_needed: None,
         }
@@ -1203,12 +1206,46 @@ impl<'a> FnAnalyzer<'a> {
 
         let requires_unsafe = self.should_be_unsafe(&param_details, &kind);
 
-        let num_input_references = param_details.iter().filter(|pd| pd.has_lifetime).count();
-        if num_input_references != 1 && return_analysis.was_reference {
+        // The following sections reject some types of function because of the arrangement
+        // of Rust references. We could lift these restrictions when/if we switch to using
+        // CppRef to represent C++ references.
+        if return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
-            // one reference as a parameter. Let's see...
-            set_ignore_reason(ConvertErrorFromCpp::NotOneInputReference(rust_name.clone()));
+            // one reference as a parameter. Let's see.
+            let num_input_references = param_details.iter().filter(|pd| pd.has_lifetime).count();
+            if num_input_references == 0 {
+                set_ignore_reason(ConvertErrorFromCpp::NoInputReference(rust_name.clone()));
+            }
+            if num_input_references > 1 {
+                set_ignore_reason(ConvertErrorFromCpp::MultipleInputReferences(
+                    rust_name.clone(),
+                ));
+            }
         }
+        if return_analysis.was_mutable_reference {
+            // This one's a bit more subtle. We can't have:
+            //    fn foo(thing: &Thing) -> &mut OtherThing
+            // because Rust doesn't allow it.
+            // We could probably allow:
+            //    fn foo(thing: &mut Thing, thing2: &mut OtherThing) -> &mut OtherThing
+            // but probably cxx doesn't allow that. (I haven't checked). Even if it did,
+            // there's ambiguity here so won't allow it.
+            let num_input_mutable_references = param_details
+                .iter()
+                .filter(|pd| pd.has_lifetime && pd.is_mutable_reference)
+                .count();
+            if num_input_mutable_references == 0 {
+                set_ignore_reason(ConvertErrorFromCpp::NoMutableInputReference(
+                    rust_name.clone(),
+                ));
+            }
+            if num_input_mutable_references > 1 {
+                set_ignore_reason(ConvertErrorFromCpp::MultipleMutableInputReferences(
+                    rust_name.clone(),
+                ));
+            }
+        }
+
         let mut ret_type = return_analysis.rt;
         let ret_type_conversion = return_analysis.conversion;
 
@@ -1702,6 +1739,10 @@ impl<'a> FnAnalyzer<'a> {
                             type_converter::TypeKind::Reference
                                 | type_converter::TypeKind::MutableReference
                         ),
+                        is_mutable_reference: matches!(
+                            annotated_type.kind,
+                            type_converter::TypeKind::MutableReference
+                        ),
                         deps: annotated_type.types_encountered,
                         requires_unsafe,
                         is_placement_return_destination,
@@ -1913,9 +1954,9 @@ impl<'a> FnAnalyzer<'a> {
                                 conversion: Some(TypeConversionPolicy::new_for_placement_return(
                                     ty.clone(),
                                 )),
-                                was_reference: false,
                                 deps: annotated_type.types_encountered,
                                 placement_param_needed: Some((fnarg, analysis)),
+                                ..Default::default()
                             }
                         } else {
                             // There are some types which we can't currently represent within a moveit::new::New.
@@ -1928,14 +1969,18 @@ impl<'a> FnAnalyzer<'a> {
                             ReturnTypeAnalysis {
                                 rt: ReturnType::Type(*rarrow, boxed_type),
                                 conversion,
-                                was_reference: false,
                                 deps: annotated_type.types_encountered,
-                                placement_param_needed: None,
+                                ..Default::default()
                             }
                         }
                     }
                     _ => {
-                        let was_reference = references.ref_return;
+                        let was_mutable_reference = matches!(
+                            annotated_type.kind,
+                            type_converter::TypeKind::MutableReference
+                        );
+                        let was_reference = was_mutable_reference
+                            || matches!(annotated_type.kind, type_converter::TypeKind::Reference);
                         let conversion = Some(
                             if was_reference
                                 && matches!(
@@ -1952,6 +1997,7 @@ impl<'a> FnAnalyzer<'a> {
                             rt: ReturnType::Type(*rarrow, boxed_type),
                             conversion,
                             was_reference,
+                            was_mutable_reference,
                             deps: annotated_type.types_encountered,
                             placement_param_needed: None,
                         }

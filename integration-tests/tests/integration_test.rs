@@ -9965,6 +9965,24 @@ fn test_pass_superclass() {
 }
 
 #[test]
+fn test_issue_1238() {
+    let hdr = indoc! {"
+    class b;
+    class c;
+    class f {
+        b d();
+    };
+    class S2E {
+    public:
+        f e;
+        b &d(c *) const;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["S2E"], &[]);
+}
+
+#[test]
 fn test_issue486_multi_types() {
     let hdr = indoc! {"
         namespace a {

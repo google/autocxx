@@ -55,8 +55,14 @@ pub enum ConvertErrorFromCpp {
     ConflictingTemplatedArgsWithTypedef(QualifiedName),
     #[error("Function {0} has a parameter or return type which is either on the blocklist or a forward declaration")]
     UnacceptableParam(String),
-    #[error("Function {0} has a return reference parameter, but 0 or >1 input reference parameters, so the lifetime of the output reference cannot be deduced.")]
-    NotOneInputReference(String),
+    #[error("Function {0} has a reference return value, but no reference parameters, so the lifetime of the output reference cannot be deduced.")]
+    NoInputReference(String),
+    #[error("Function {0} has a reference return value, but >1 input reference parameters, so the lifetime of the output reference cannot be deduced.")]
+    MultipleInputReferences(String),
+    #[error("Function {0} has a mutable reference return value, but no mutable reference parameters, so the lifetime of the output reference cannot be deduced.")]
+    NoMutableInputReference(String),
+    #[error("Function {0} has a mutable reference return value, but >1 input mutable reference parameters, so the lifetime of the output reference cannot be deduced.")]
+    MultipleMutableInputReferences(String),
     #[error("Encountered type not yet supported by autocxx: {0}")]
     UnsupportedType(String),
     #[error("Encountered type not yet known by autocxx: {0}")]
