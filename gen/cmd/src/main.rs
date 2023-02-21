@@ -11,8 +11,8 @@
 mod depfile;
 
 use autocxx_engine::{
-    generate_rs_archive, generate_rs_single, parse_file, AutocxxgenHeaderNamer, CxxgenHeaderNamer,
-    RebuildDependencyRecorder,
+    generate_rs_archive, generate_rs_single, get_cxx_header_bytes, parse_file,
+    AutocxxgenHeaderNamer, CxxgenHeaderNamer, RebuildDependencyRecorder,
 };
 use clap::{crate_authors, crate_version, Arg, ArgGroup, Command};
 use depfile::Depfile;
@@ -177,6 +177,11 @@ fn main() -> miette::Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::new("generate-cxx-h")
+                .long("generate-cxx-h")
+                .help("whether to generate cxx.h header file. If you already knew where to find cxx.h, consider using --cxx-h-path")
+        )
+        .arg(
             Arg::new("cxx-h-path")
                 .long("cxx-h-path")
                 .value_name("PREFIX")
@@ -332,6 +337,14 @@ fn main() -> miette::Result<()> {
             name_autocxxgen_h,
         )?;
     }
+
+    if matches.is_present("generate-cxx-h") {
+        writer.write_to_file(
+            "cxx.h".to_string(),
+            &get_cxx_header_bytes(suppress_system_headers),
+        )?;
+    }
+
     if matches.is_present("gen-rs-include") {
         if !matches.is_present("fix-rs-include-name") && desired_number.is_some() {
             return Err(miette::Report::msg(
