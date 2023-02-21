@@ -1,2 +1,7 @@
 target
 .vscode/
+/bazel-bin
+/bazel-autocxx
+/bazel-out
+/bazel-testlogs
+/buck-out
