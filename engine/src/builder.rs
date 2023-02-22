@@ -10,8 +10,8 @@ use autocxx_parser::file_locations::FileLocationStrategy;
 use miette::Diagnostic;
 use thiserror::Error;
 
-use crate::generate_rs_single;
-use crate::{strip_system_headers, CppCodegenOptions, ParseError, RebuildDependencyRecorder};
+use crate::{generate_rs_single, CodegenOptions};
+use crate::{get_cxx_header_bytes, CppCodegenOptions, ParseError, RebuildDependencyRecorder};
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fs::File;
@@ -73,7 +73,7 @@ pub struct Builder<'a, BuilderContext> {
     dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     custom_gendir: Option<PathBuf>,
     auto_allowlist: bool,
-    cpp_codegen_options: CppCodegenOptions<'a>,
+    codegen_options: CodegenOptions<'a>,
     // This member is to ensure that this type is parameterized
     // by a BuilderContext. The goal is to balance three needs:
     // (1) have most of the functionality over in autocxx_engine,
@@ -108,7 +108,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
             dependency_recorder: CTX::get_dependency_recorder(),
             custom_gendir: None,
             auto_allowlist: false,
-            cpp_codegen_options: CppCodegenOptions::default(),
+            codegen_options: CodegenOptions::default(),
             ctx: PhantomData,
         }
     }
@@ -130,7 +130,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
     where
         F: FnOnce(&mut CppCodegenOptions),
     {
-        modifier(&mut self.cpp_codegen_options);
+        modifier(&mut self.codegen_options.cpp_codegen_options);
         self
     }
 
@@ -152,20 +152,33 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         self
     }
 
+    #[doc(hidden)]
+    /// Whether to force autocxx always to generate extra Rust and C++
+    /// side shims. This is only used by the integration test suite to
+    /// exercise more code paths - don't use it!
+    pub fn force_wrapper_generation(mut self, do_it: bool) -> Self {
+        self.codegen_options.force_wrapper_gen = do_it;
+        self
+    }
+
     /// Whether to suppress inclusion of system headers (`memory`, `string` etc.)
     /// from generated C++ bindings code. This should not normally be used,
     /// but can occasionally be useful if you're reducing a test case and you
     /// have a preprocessed header file which already contains absolutely everything
     /// that the bindings could ever need.
     pub fn suppress_system_headers(mut self, do_it: bool) -> Self {
-        self.cpp_codegen_options.suppress_system_headers = do_it;
+        self.codegen_options
+            .cpp_codegen_options
+            .suppress_system_headers = do_it;
         self
     }
 
     /// An annotation optionally to include on each C++ function.
     /// For example to export the symbol from a library.
     pub fn cxx_impl_annotations(mut self, cxx_impl_annotations: Option<String>) -> Self {
-        self.cpp_codegen_options.cxx_impl_annotations = cxx_impl_annotations;
+        self.codegen_options
+            .cpp_codegen_options
+            .cxx_impl_annotations = cxx_impl_annotations;
         self
     }
 
@@ -208,7 +221,11 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         write_to_file(
             &incdir,
             "cxx.h",
-            &Self::get_cxx_header_bytes(self.cpp_codegen_options.suppress_system_headers),
+            &get_cxx_header_bytes(
+                self.codegen_options
+                    .cpp_codegen_options
+                    .suppress_system_headers,
+            ),
         )?;
 
         let autocxx_inc = build_autocxx_inc(self.autocxx_incs, &incdir);
@@ -221,7 +238,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
                 autocxx_inc,
                 clang_args,
                 self.dependency_recorder,
-                &self.cpp_codegen_options,
+                &self.codegen_options,
             )
             .map_err(BuilderError::ParseError)?;
         let mut counter = 0;
@@ -235,7 +252,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         builder.includes(parsed_file.include_dirs());
         for include_cpp in parsed_file.get_cpp_buildables() {
             let generated_code = include_cpp
-                .generate_h_and_cxx(&self.cpp_codegen_options)
+                .generate_h_and_cxx(&self.codegen_options.cpp_codegen_options)
                 .map_err(BuilderError::InvalidCxx)?;
             for filepair in generated_code.0 {
                 let fname = format!("gen{counter}.cxx");
@@ -259,10 +276,6 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         } else {
             Ok(BuilderSuccess(builder, generated_rs, generated_cpp))
         }
-    }
-
-    fn get_cxx_header_bytes(suppress_system_headers: bool) -> Vec<u8> {
-        strip_system_headers(crate::HEADER.as_bytes().to_vec(), suppress_system_headers)
     }
 }
 

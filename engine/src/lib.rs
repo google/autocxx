@@ -146,6 +146,16 @@ enum State {
     Generated(Box<GenerationResults>),
 }
 
+/// Code generation options.
+#[derive(Default)]
+pub struct CodegenOptions<'a> {
+    // An option used by the test suite to force a more convoluted
+    // route through our code, to uncover bugs.
+    pub force_wrapper_gen: bool,
+    /// Options about the C++ code generation.
+    pub cpp_codegen_options: CppCodegenOptions<'a>,
+}
+
 const AUTOCXX_CLANG_ARGS: &[&str; 4] = &["-x", "c++", "-std=c++14", "-DBINDGEN"];
 
 /// Implement to learn of header files which get included
@@ -286,6 +296,16 @@ impl IncludeCppEngine {
         Ok(this)
     }
 
+    /// Used if we find that we're asked to auto-discover extern_rust_type and similar
+    /// but didn't have any include_cpp macro at all.
+    pub fn new_for_autodiscover() -> Self {
+        Self {
+            config: IncludeCppConfig::default(),
+            state: State::NotGenerated,
+            source_code: None,
+        }
+    }
+
     pub fn config_mut(&mut self) -> &mut IncludeCppConfig {
         assert!(
             matches!(self.state, State::NotGenerated),
@@ -398,7 +418,7 @@ impl IncludeCppEngine {
         inc_dirs: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-        cpp_codegen_options: &CppCodegenOptions,
+        codegen_options: &CodegenOptions,
     ) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -446,7 +466,7 @@ impl IncludeCppEngine {
                 bindings,
                 self.config.unsafe_policy.clone(),
                 header_contents,
-                cpp_codegen_options,
+                codegen_options,
                 &source_file_contents,
             )
             .map_err(Error::Conversion)?;
@@ -594,7 +614,11 @@ pub fn do_cxx_cpp_generation(
     })
 }
 
-pub(crate) fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool) -> Vec<u8> {
+pub fn get_cxx_header_bytes(suppress_system_headers: bool) -> Vec<u8> {
+    strip_system_headers(cxx_gen::HEADER.as_bytes().to_vec(), suppress_system_headers)
+}
+
+fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool) -> Vec<u8> {
     if suppress_system_headers {
         std::str::from_utf8(&input)
             .unwrap()

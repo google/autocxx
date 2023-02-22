@@ -502,6 +502,7 @@ fn test_negative_take_as_pod_with_move_constructor() {
     run_test_expect_fail(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
+#[ignore] // https://github.com/google/autocxx/issues/1252
 #[test]
 fn test_take_as_pod_with_is_relocatable() {
     let cxx = indoc! {"
@@ -4980,6 +4981,7 @@ fn test_union_ignored() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
+#[ignore] // https://github.com/google/autocxx/issues/1251
 #[test]
 fn test_double_underscores_ignored() {
     let hdr = indoc! {"
@@ -7193,7 +7195,7 @@ fn test_cpp17() {
 }
 
 #[test]
-fn test_box() {
+fn test_box_extern_rust_type() {
     let hdr = indoc! {"
         #include <cxx.h>
         struct Foo;
@@ -7215,6 +7217,47 @@ fn test_box() {
         Some(quote! {
             pub struct Foo {
                 a: String,
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_box_return_placement_new() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct Foo;
+        struct Foo2;
+        struct Ret {};
+        inline Ret take_box(rust::Box<Foo>, rust::Box<Foo2>) {
+            return Ret{};
+        }
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let _ = ffi::take_box(
+                Box::new(Foo { a: "Hello".into() }),
+                Box::new(bar::Foo2 { a: "Goodbye".into() })
+            );
+        },
+        quote! {
+            generate!("take_box")
+            extern_rust_type!(Foo)
+            generate!("Ret")
+        },
+        None,
+        None,
+        Some(quote! {
+            pub struct Foo {
+                a: String,
+            }
+            mod bar {
+                #[autocxx::extern_rust::extern_rust_type]
+                pub struct Foo2 {
+                    pub a: String,
+                }
             }
         }),
     );
@@ -7244,6 +7287,32 @@ fn test_box_via_extern_rust() {
             }
         }),
     );
+}
+
+#[test]
+fn test_box_via_extern_rust_no_include_cpp() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct Foo;
+        inline void take_box(rust::Box<Foo>) {
+        }
+    "};
+    do_run_test_manual(
+        "",
+        hdr,
+        quote! {
+            #[autocxx::extern_rust::extern_rust_type]
+            pub struct Foo {
+                a: String,
+            }
+
+            fn main() {
+            }
+        },
+        Some(Box::new(EnableAutodiscover)),
+        None,
+    )
+    .unwrap();
 }
 
 #[test]
@@ -9896,6 +9965,24 @@ fn test_pass_superclass() {
 }
 
 #[test]
+fn test_issue_1238() {
+    let hdr = indoc! {"
+    class b;
+    class c;
+    class f {
+        b d();
+    };
+    class S2E {
+    public:
+        f e;
+        b &d(c *) const;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["S2E"], &[]);
+}
+
+#[test]
 fn test_issue486_multi_types() {
     let hdr = indoc! {"
         namespace a {
@@ -11810,6 +11897,116 @@ fn test_issue_1170() {
     run_test("", hdr, quote! {}, &["Arch"], &[]);
 }
 
+// https://github.com/google/autocxx/issues/774
+#[test]
+fn test_virtual_methods() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        class Base {
+        public:
+            Base() {}
+            virtual ~Base() {}
+
+            virtual int a() = 0;
+
+            virtual void b(int) = 0;
+            virtual void b(bool) = 0;
+
+            virtual int c() const = 0;
+            virtual int c() = 0;
+        };
+        class FullyDefined : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+            void b(bool) { }
+
+            int c() const { return 1; }
+            int c() { return 2; }
+        };
+        class Partial1 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(bool) {}
+        };
+
+        class Partial2 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+            void b(bool) { }
+
+            int c() const { return 1; }
+        };
+
+        class Partial3 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+
+            int c() const { return 1; }
+            int c() { return 2; }
+        };
+
+        class Partial4 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+            void b(bool) = 0;
+
+            int c() const { return 1; }
+            int c() { return 2; }
+        };
+
+        // TODO: currently this class cannot be detected as virtual as there
+        // is no metadata captured to show that this destructor is virtual
+        // uncommenting this (as well as corresponding sections below) gives a 
+        // 'instantiation of abstract class' error.
+        // class Partial5 : public Base {
+        // public:
+        //     ~Partial5() = 0;
+
+        //     int a() { return 0; }
+
+        //     void b(int) { }
+        //     void b(bool) { }
+
+        //     int c() const { return 1; }
+        //     int c() { return 2; }
+        // };
+
+    "};
+    let rs = quote! {
+        static_assertions::assert_impl_all!(ffi::FullyDefined: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial1: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial2: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial3: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial4: moveit::CopyNew);
+        // static_assertions::assert_not_impl_any!(ffi::Partial5: moveit::CopyNew);
+        let _c1 = ffi::FullyDefined::new().within_unique_ptr();
+    };
+    run_test(
+        "",
+        hdr,
+        rs,
+        &[
+            "FullyDefined",
+            "Partial1",
+            "Partial2",
+            "Partial3",
+            "Partial4",
+            // "Partial5"
+        ],
+        &[],
+    );
+}
+
 #[test]
 fn test_issue_1192() {
     let hdr = indoc! {
@@ -11863,6 +12060,47 @@ fn test_issue_1214() {
         };
     "};
     run_test("", hdr, quote! {}, &["C"], &[]);
+}
+
+#[test]
+fn test_issue_1229() {
+    let hdr = indoc! {"
+    struct Thing {
+        float id;
+    
+        Thing(float id) : id(id) {}
+    };
+
+    struct Item {
+        float id;
+    
+        Item(float id) : id(id) {}
+    };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::WithinUniquePtr;
+
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            name!(thing)
+            safety!(unsafe)
+            generate!("Thing")
+        }
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            name!(item)
+            safety!(unsafe)
+            generate!("Item")
+        }
+
+        fn main() {
+            let _thing = thing::Thing::new(15.).within_unique_ptr();
+            let _item = item::Item::new(15.).within_unique_ptr();
+        }
+    };
+
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
 // Yet to test:

@@ -12,7 +12,7 @@ use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
     RebuildDependencyRecorder,
 };
-use crate::{CppCodegenOptions, LocatedSynError};
+use crate::{CodegenOptions, CppCodegenOptions, LocatedSynError};
 use autocxx_parser::directive_names::SUBCLASS;
 use autocxx_parser::{AllowlistEntry, RustPath, Subclass, SubclassAttrs};
 use indexmap::set::IndexSet as HashSet;
@@ -52,8 +52,6 @@ pub enum ParseError {
     /// mod name.
     #[error("there are two or more include_cpp! mods with the same mod name")]
     ConflictingModNames,
-    #[error("dynamic discovery was enabled but no mod was found")]
-    ZeroModsForDynamicDiscovery,
     #[error("dynamic discovery was enabled but multiple mods were found")]
     MultipleModsForDynamicDiscovery,
     #[error("a problem occurred while discovering C++ APIs used within the Rust: {0}")]
@@ -215,13 +213,18 @@ fn parse_file_contents(
     // We do not want to enter this 'if' block unless the above conditions are true,
     // since we may emit errors.
     if must_handle_discovered_things {
+        // If we have to handle discovered things but there was no include_cpp! macro,
+        // fake one.
+        if !results.iter().any(|seg| matches!(seg, Segment::Autocxx(_))) {
+            results.push(Segment::Autocxx(IncludeCppEngine::new_for_autodiscover()));
+        }
         let mut autocxx_seg_iterator = results.iter_mut().filter_map(|seg| match seg {
             Segment::Autocxx(engine) => Some(engine),
             _ => None,
         });
         let our_seg = autocxx_seg_iterator.next();
         match our_seg {
-            None => return Err(ParseError::ZeroModsForDynamicDiscovery),
+            None => panic!("We should have just added a fake mod but apparently didn't"),
             Some(engine) => {
                 engine
                     .config_mut()
@@ -369,7 +372,7 @@ impl ParsedFile {
         autocxx_inc: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-        cpp_codegen_options: &CppCodegenOptions,
+        codegen_options: &CodegenOptions,
     ) -> Result<(), ParseError> {
         let mut mods_found = HashSet::new();
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
@@ -391,7 +394,7 @@ impl ParsedFile {
                     autocxx_inc.clone(),
                     extra_clang_args,
                     dep_recorder,
-                    cpp_codegen_options,
+                    codegen_options,
                 )
                 .map_err(ParseError::AutocxxCodegenError)?
         }

@@ -71,7 +71,11 @@ RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test --all test_cycle_string
 This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
 in `engine/src/conversion`. See [here](https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCppEngine.html) for documentation and diagrams on how the engine works.
 
-You may also wish to set `AUTOCXX_ASAN=1` on Linux when running tests.
+You may also wish to set `AUTOCXX_ASAN=1` on Linux when running tests. To exercise all
+the code paths related to generating both C++ and Rust side shims, you can set
+`AUTOCXX_FORCE_WRAPPER_GENERATION=1`. The test suite doesn't do this by default because
+we also want to test the normal code paths. (In the future we might want to
+parameterize the test suite to do both.)
 
 ## Reporting bugs
 

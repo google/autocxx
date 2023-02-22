@@ -71,7 +71,7 @@ use super::{
     type_converter::{Annotated, PointerTreatment},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub(crate) enum ReceiverMutability {
     Const,
     Mutable,
@@ -179,6 +179,7 @@ pub(crate) struct ArgumentAnalysis {
     pub(crate) name: Pat,
     pub(crate) self_type: Option<(QualifiedName, ReceiverMutability)>,
     pub(crate) has_lifetime: bool,
+    pub(crate) is_mutable_reference: bool,
     pub(crate) deps: HashSet<QualifiedName>,
     pub(crate) requires_unsafe: UnsafetyNeeded,
     pub(crate) is_placement_return_destination: bool,
@@ -188,6 +189,7 @@ pub(crate) struct ReturnTypeAnalysis {
     rt: ReturnType,
     conversion: Option<TypeConversionPolicy>,
     was_reference: bool,
+    was_mutable_reference: bool,
     deps: HashSet<QualifiedName>,
     placement_param_needed: Option<(FnArg, ArgumentAnalysis)>,
 }
@@ -198,6 +200,7 @@ impl Default for ReturnTypeAnalysis {
             rt: parse_quote! {},
             conversion: None,
             was_reference: false,
+            was_mutable_reference: false,
             deps: Default::default(),
             placement_param_needed: None,
         }
@@ -284,6 +287,7 @@ pub(crate) struct FnAnalyzer<'a> {
     generic_types: HashSet<QualifiedName>,
     types_in_anonymous_namespace: HashSet<QualifiedName>,
     existing_superclass_trait_api_names: HashSet<QualifiedName>,
+    force_wrapper_generation: bool,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -291,6 +295,7 @@ impl<'a> FnAnalyzer<'a> {
         apis: ApiVec<PodPhase>,
         unsafe_policy: &'a UnsafePolicy,
         config: &'a IncludeCppConfig,
+        force_wrapper_generation: bool,
     ) -> ApiVec<FnPrePhase2> {
         let mut me = Self {
             unsafe_policy,
@@ -306,6 +311,7 @@ impl<'a> FnAnalyzer<'a> {
             generic_types: Self::build_generic_type_set(&apis),
             existing_superclass_trait_api_names: HashSet::new(),
             types_in_anonymous_namespace: Self::build_types_in_anonymous_namespace(&apis),
+            force_wrapper_generation,
         };
         let mut results = ApiVec::new();
         convert_apis(
@@ -1200,12 +1206,46 @@ impl<'a> FnAnalyzer<'a> {
 
         let requires_unsafe = self.should_be_unsafe(&param_details, &kind);
 
-        let num_input_references = param_details.iter().filter(|pd| pd.has_lifetime).count();
-        if num_input_references != 1 && return_analysis.was_reference {
+        // The following sections reject some types of function because of the arrangement
+        // of Rust references. We could lift these restrictions when/if we switch to using
+        // CppRef to represent C++ references.
+        if return_analysis.was_reference {
             // cxx only allows functions to return a reference if they take exactly
-            // one reference as a parameter. Let's see...
-            set_ignore_reason(ConvertErrorFromCpp::NotOneInputReference(rust_name.clone()));
+            // one reference as a parameter. Let's see.
+            let num_input_references = param_details.iter().filter(|pd| pd.has_lifetime).count();
+            if num_input_references == 0 {
+                set_ignore_reason(ConvertErrorFromCpp::NoInputReference(rust_name.clone()));
+            }
+            if num_input_references > 1 {
+                set_ignore_reason(ConvertErrorFromCpp::MultipleInputReferences(
+                    rust_name.clone(),
+                ));
+            }
         }
+        if return_analysis.was_mutable_reference {
+            // This one's a bit more subtle. We can't have:
+            //    fn foo(thing: &Thing) -> &mut OtherThing
+            // because Rust doesn't allow it.
+            // We could probably allow:
+            //    fn foo(thing: &mut Thing, thing2: &mut OtherThing) -> &mut OtherThing
+            // but probably cxx doesn't allow that. (I haven't checked). Even if it did,
+            // there's ambiguity here so won't allow it.
+            let num_input_mutable_references = param_details
+                .iter()
+                .filter(|pd| pd.has_lifetime && pd.is_mutable_reference)
+                .count();
+            if num_input_mutable_references == 0 {
+                set_ignore_reason(ConvertErrorFromCpp::NoMutableInputReference(
+                    rust_name.clone(),
+                ));
+            }
+            if num_input_mutable_references > 1 {
+                set_ignore_reason(ConvertErrorFromCpp::MultipleMutableInputReferences(
+                    rust_name.clone(),
+                ));
+            }
+        }
+
         let mut ret_type = return_analysis.rt;
         let ret_type_conversion = return_analysis.conversion;
 
@@ -1249,6 +1289,7 @@ impl<'a> FnAnalyzer<'a> {
             _ if ret_type_conversion_needed => true,
             _ if cpp_name_incompatible_with_cxx => true,
             _ if fun.synthetic_cpp.is_some() => true,
+            _ if self.force_wrapper_generation => true,
             _ => false,
         };
 
@@ -1261,7 +1302,10 @@ impl<'a> FnAnalyzer<'a> {
             } else {
                 "_"
             };
-            cxxbridge_name = make_ident(format!("{cxxbridge_name}{joiner}autocxx_wrapper"));
+            cxxbridge_name = make_ident(
+                self.config
+                    .uniquify_name_per_mod(&format!("{cxxbridge_name}{joiner}autocxx_wrapper")),
+            );
             let (payload, cpp_function_kind) = match fun.synthetic_cpp.as_ref().cloned() {
                 Some((payload, cpp_function_kind)) => (payload, cpp_function_kind),
                 None => match kind {
@@ -1359,6 +1403,7 @@ impl<'a> FnAnalyzer<'a> {
             _ if any_param_needs_rust_conversion || return_needs_rust_conversion => true,
             FnKind::TraitMethod { .. } => true,
             FnKind::Method { .. } => cxxbridge_name != rust_name,
+            _ if self.force_wrapper_generation => true,
             _ => false,
         };
 
@@ -1694,6 +1739,10 @@ impl<'a> FnAnalyzer<'a> {
                             type_converter::TypeKind::Reference
                                 | type_converter::TypeKind::MutableReference
                         ),
+                        is_mutable_reference: matches!(
+                            annotated_type.kind,
+                            type_converter::TypeKind::MutableReference
+                        ),
                         deps: annotated_type.types_encountered,
                         requires_unsafe,
                         is_placement_return_destination,
@@ -1905,9 +1954,9 @@ impl<'a> FnAnalyzer<'a> {
                                 conversion: Some(TypeConversionPolicy::new_for_placement_return(
                                     ty.clone(),
                                 )),
-                                was_reference: false,
                                 deps: annotated_type.types_encountered,
                                 placement_param_needed: Some((fnarg, analysis)),
+                                ..Default::default()
                             }
                         } else {
                             // There are some types which we can't currently represent within a moveit::new::New.
@@ -1920,14 +1969,18 @@ impl<'a> FnAnalyzer<'a> {
                             ReturnTypeAnalysis {
                                 rt: ReturnType::Type(*rarrow, boxed_type),
                                 conversion,
-                                was_reference: false,
                                 deps: annotated_type.types_encountered,
-                                placement_param_needed: None,
+                                ..Default::default()
                             }
                         }
                     }
                     _ => {
-                        let was_reference = references.ref_return;
+                        let was_mutable_reference = matches!(
+                            annotated_type.kind,
+                            type_converter::TypeKind::MutableReference
+                        );
+                        let was_reference = was_mutable_reference
+                            || matches!(annotated_type.kind, type_converter::TypeKind::Reference);
                         let conversion = Some(
                             if was_reference
                                 && matches!(
@@ -1944,6 +1997,7 @@ impl<'a> FnAnalyzer<'a> {
                             rt: ReturnType::Type(*rarrow, boxed_type),
                             conversion,
                             was_reference,
+                            was_mutable_reference,
                             deps: annotated_type.types_encountered,
                             placement_param_needed: None,
                         }
@@ -2240,6 +2294,31 @@ impl HasFieldsAndBases for Api<FnPrePhase1> {
                     PodAnalysis {
                         field_definition_deps,
                         bases,
+                        ..
+                    },
+                ..
+            } => Box::new(field_definition_deps.iter().chain(bases.iter())),
+            _ => Box::new(std::iter::empty()),
+        }
+    }
+}
+
+impl HasFieldsAndBases for Api<FnPrePhase2> {
+    fn name(&self) -> &QualifiedName {
+        self.name()
+    }
+
+    fn field_and_base_deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
+        match self {
+            Api::Struct {
+                analysis:
+                    PodAndConstructorAnalysis {
+                        pod:
+                            PodAnalysis {
+                                field_definition_deps,
+                                bases,
+                                ..
+                            },
                         ..
                     },
                 ..

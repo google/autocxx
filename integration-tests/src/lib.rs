@@ -194,6 +194,7 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
 }
 
 /// A positive test, we expect to pass.
+#[track_caller]
 pub fn run_test(
     cxx_code: &str,
     header_code: &str,
@@ -420,6 +421,8 @@ pub fn do_run_test_manual(
     builder_modifier: Option<BuilderModifier>,
     rust_code_checker: Option<CodeChecker>,
 ) -> Result<(), TestError> {
+    let builder_modifier = consider_forcing_wrapper_generation(builder_modifier);
+
     const HEADER_NAME: &str = "input.h";
     // Step 2: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
@@ -508,4 +511,39 @@ pub fn do_run_test_manual(
                                         // not important at the moment.
     }
     Ok(())
+}
+
+/// If AUTOCXX_FORCE_WRAPPER_GENERATION is set, always force both C++
+/// and Rust side shims, for extra testing of obscure code paths.
+fn consider_forcing_wrapper_generation(
+    existing_builder_modifier: Option<BuilderModifier>,
+) -> Option<BuilderModifier> {
+    if std::env::var("AUTOCXX_FORCE_WRAPPER_GENERATION").is_err() {
+        existing_builder_modifier
+    } else {
+        Some(Box::new(ForceWrapperGeneration(existing_builder_modifier)))
+    }
+}
+
+struct ForceWrapperGeneration(Option<BuilderModifier>);
+
+impl BuilderModifierFns for ForceWrapperGeneration {
+    fn modify_autocxx_builder<'a>(
+        &self,
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
+        let builder = builder.force_wrapper_generation(true);
+        if let Some(modifier) = &self.0 {
+            modifier.modify_autocxx_builder(builder)
+        } else {
+            builder
+        }
+    }
+    fn modify_cc_builder<'a>(&self, builder: &'a mut cc::Build) -> &'a mut cc::Build {
+        if let Some(modifier) = &self.0 {
+            modifier.modify_cc_builder(builder)
+        } else {
+            builder
+        }
+    }
 }

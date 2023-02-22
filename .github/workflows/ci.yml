@@ -147,8 +147,11 @@ jobs:
       - name: Build cpp_calling_rust example
         working-directory: ./examples/cpp_calling_rust
         run: cargo build
-        # We do not build the LLVM example because even 'apt-get install llvm-13-dev'
-        # does not work to install the LLVM 13 headers.
+      - name: Build llvm example
+        working-directory: ./examples/llvm
+        # llvm example needs to install LLVM 13 headers via apt-get.
+        if: matrix.os == ''
+        run: sudo apt-get install llvm-13-dev && cargo build
 
   sanitizer:
     name: Address Sanitizer
@@ -173,6 +176,17 @@ jobs:
           # as the other tests have them.
           RUST_BACKTRACE: "0"
         run: cargo -Z build-std test --workspace --target x86_64-unknown-linux-gnu
+
+  force-wrapper-generation:
+    name: Test forcing wrapper generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1
+      - name: Tests generating all possible shims
+        env:
+          AUTOCXX_FORCE_WRAPPER_GENERATION: 1
+        run: cargo test --workspace
 
   # Clippy check
   clippy:
