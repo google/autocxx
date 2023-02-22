@@ -170,8 +170,9 @@ jobs:
           chmod +x install.sh
           ./install.sh --user
           echo $HOME/bin >> $GITHUB_PATH
-      - run: cargo vendor --versioned-dirs --locked
-        working-directory: third-party
+      - run: bazel run //third-party:vendor
+      - name: Check third-party/bazel up to date.
+        run: git diff --exit-code
       - run: bazel run //demo:autocxx-demo --verbose_failures --noshow_progress
 
   sanitizer:

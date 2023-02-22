@@ -1,5 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//third-party/bazel:defs.bzl", "all_crate_deps")
+
+# referenced by third-party/BUILD.
+exports_files(["Cargo.toml"])
 
 src = "src/main.rs"
 
@@ -12,11 +16,7 @@ rust_binary(
         ":bridge/generated",
     ],
     edition = "2018",
-    deps = [
-        ":bridge",
-        "//:autocxx",
-        "//third-party:cxx",
-    ],
+    deps = all_crate_deps(normal = True, package_name = "demo") + ["//:autocxx", ":bridge"],
 )
 
 filegroup(
