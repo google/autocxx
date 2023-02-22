@@ -23,6 +23,7 @@ use analysis::fun::FnAnalyzer;
 use autocxx_parser::IncludeCppConfig;
 pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use convert_error::ConvertError;
+use convert_error::ConvertErrorFromCpp;
 use itertools::Itertools;
 use syn::{Item, ItemMod};
 
@@ -91,7 +92,7 @@ impl<'a> BridgeConverter<'a> {
                 "APIs after {}:\n{}",
                 label,
                 apis.iter()
-                    .map(|api| { format!("  {:?}", api) })
+                    .map(|api| { format!("  {api:?}") })
                     .sorted()
                     .join("\n")
             )
@@ -123,6 +124,7 @@ impl<'a> BridgeConverter<'a> {
         unsafe_policy: UnsafePolicy,
         inclusions: String,
         cpp_codegen_options: &CppCodegenOptions,
+        source_file_contents: &str,
     ) -> Result<CodegenResults, ConvertError> {
         match &mut bindgen_mod.content {
             None => Err(ConvertError::NoContent),
@@ -130,7 +132,7 @@ impl<'a> BridgeConverter<'a> {
                 // Parse the bindgen mod.
                 let items_to_process = items.drain(..).collect();
                 let parser = ParseBindgen::new(self.config);
-                let apis = parser.parse_items(items_to_process)?;
+                let apis = parser.parse_items(items_to_process, source_file_contents)?;
                 Self::dump_apis("parsing", &apis);
                 // Inside parse_results, we now have a list of APIs.
                 // We now enter various analysis phases.
@@ -144,9 +146,9 @@ impl<'a> BridgeConverter<'a> {
                 // Specifically, let's confirm that the items requested by the user to be
                 // POD really are POD, and duly mark any dependent types.
                 // This returns a new list of `Api`s, which will be parameterized with
-                // the analysis results. It also returns an object which can be used
-                // by subsequent phases to work out which objects are POD.
-                let analyzed_apis = analyze_pod_apis(apis, self.config)?;
+                // the analysis results.
+                let analyzed_apis =
+                    analyze_pod_apis(apis, self.config).map_err(ConvertError::Cpp)?;
                 Self::dump_apis("pod analysis", &analyzed_apis);
                 // Add accessors for class/struct fields. These are necessary to access fields of non-POD types
                 let analyzed_apis = add_field_accessors(analyzed_apis);
@@ -198,7 +200,8 @@ impl<'a> BridgeConverter<'a> {
                     self.config,
                     cpp_codegen_options,
                     &cxxgen_header_name,
-                )?;
+                )
+                .map_err(ConvertError::Cpp)?;
                 let rs = RsCodeGenerator::generate_rs_code(
                     analyzed_apis,
                     &unsafe_policy,

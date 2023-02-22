@@ -8,15 +8,17 @@
 
 [package]
 name = "autocxx-reduce"
-version = "0.22.3"
+version = "0.24.0"
 authors = ["adetaylor <adetaylor@chromium.org>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-autocxx-engine = { version = "=0.22.3", path="../../engine" }
-autocxx-parser = { version = "=0.22.3", path="../../parser", features = [ "reproduction_case" ] }
+autocxx-engine = { version = "=0.24.0", path = "../../engine" }
+autocxx-parser = { version = "=0.24.0", path = "../../parser", features = [
+    "reproduction_case",
+] }
 clap = { version = "3.1.2", features = ["cargo"] }
 tempfile = "3.1"
 indoc = "1.0"
@@ -26,12 +28,12 @@ serde = "1.0"
 serde_derive = "1.0"
 syn = "1.0.39"
 quote = "1.0"
-cxx-gen = "0.7.68"
+cxx-gen = "0.7.78"
 regex = "1.5"
 indexmap = "1.8"
 
 [dev-dependencies]
-assert_cmd = "1.0.3"
+assert_cmd = "2"
 tempfile = "3.1"
 indoc = "1.0"
 proc-macro2 = "1.0"

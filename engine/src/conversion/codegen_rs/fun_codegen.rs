@@ -132,7 +132,6 @@ pub(super) fn gen_function(
         params,
         Cow::Borrowed(&ret_type),
         non_pod_types,
-        true,
     );
 
     if analysis.rust_wrapper_needed {
@@ -259,7 +258,7 @@ impl<'a> FnGenerator<'a> {
         let mut ptr_arg_name = None;
         let mut ret_type: Cow<'a, _> = ret_type
             .map(Cow::Owned)
-            .unwrap_or(Cow::Borrowed(self.ret_type));
+            .unwrap_or_else(|| Cow::Borrowed(self.ret_type));
         let mut any_conversion_requires_unsafe = false;
         let mut variable_counter = 0usize;
         for pd in self.param_details {
@@ -308,7 +307,6 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             ret_type,
             self.non_pod_types,
-            false,
         );
 
         let cxxbridge_name = self.cxxbridge_name;
@@ -391,30 +389,23 @@ impl<'a> FnGenerator<'a> {
             .map(|pd| pd.conversion.is_a_pointer())
             .unwrap_or(Pointerness::Not);
         let ty = impl_block_type_name.get_final_ident();
-        let ty = if self.reference_wrappers {
-            match receiver_pointerness {
-                Pointerness::MutPtr => ImplBlockKey {
-                    ty: parse_quote! {
-                        CppMutRef< 'a, #ty>
-                    },
-                    lifetime: Some(parse_quote! { 'a }),
+        let ty = match receiver_pointerness {
+            Pointerness::MutPtr if self.reference_wrappers => ImplBlockKey {
+                ty: parse_quote! {
+                    #ty
                 },
-                Pointerness::ConstPtr => ImplBlockKey {
-                    ty: parse_quote! {
-                        CppRef< 'a, #ty>
-                    },
-                    lifetime: Some(parse_quote! { 'a }),
+                lifetime: Some(parse_quote! { 'a }),
+            },
+            Pointerness::ConstPtr if self.reference_wrappers => ImplBlockKey {
+                ty: parse_quote! {
+                    #ty
                 },
-                Pointerness::Not => ImplBlockKey {
-                    ty: parse_quote! { # ty },
-                    lifetime: None,
-                },
-            }
-        } else {
-            ImplBlockKey {
+                lifetime: Some(parse_quote! { 'a }),
+            },
+            _ => ImplBlockKey {
                 ty: parse_quote! { # ty },
                 lifetime: None,
-            }
+            },
         };
         Box::new(ImplBlockDetails {
             item: ImplItem::Method(parse_quote! {
@@ -453,7 +444,7 @@ impl<'a> FnGenerator<'a> {
         let ret_type: ReturnType = parse_quote! { -> impl autocxx::moveit::new::New<Output=Self> };
         let (lifetime_tokens, wrapper_params, ret_type, call_body) =
             self.common_parts(true, &None, Some(ret_type));
-        let rust_name = make_ident(&self.rust_name);
+        let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
         let ty = impl_block_type_name.get_final_ident();

@@ -59,7 +59,7 @@ use super::{
         namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
     },
 };
-use super::{convert_error::ErrorContext, ConvertError};
+use super::{convert_error::ErrorContext, ConvertErrorFromCpp};
 use quote::quote;
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -133,91 +133,6 @@ fn get_string_items() -> Vec<Item> {
                 }
             }
         }),
-    ]
-    .to_vec()
-}
-
-fn get_cppref_items() -> Vec<Item> {
-    [
-        Item::Struct(parse_quote! {
-            #[repr(transparent)]
-            pub struct CppRef<'a, T>(pub *const T, pub ::std::marker::PhantomData<&'a T>);
-        }),
-        Item::Impl(parse_quote! {
-            impl<'a, T> autocxx::CppRef<'a, T> for CppRef<'a, T> {
-                fn as_ptr(&self) -> *const T {
-                    self.0
-                }
-            }
-        }),
-        Item::Struct(parse_quote! {
-            #[repr(transparent)]
-            pub struct CppMutRef<'a, T>(pub *mut T, pub ::std::marker::PhantomData<&'a T>);
-        }),
-        Item::Impl(parse_quote! {
-            impl<'a, T> autocxx::CppRef<'a, T> for CppMutRef<'a, T> {
-                fn as_ptr(&self) -> *const T {
-                    self.0
-                }
-            }
-        }),
-        Item::Impl(parse_quote! {
-            impl<'a, T> autocxx::CppMutRef<'a, T> for CppMutRef<'a, T> {
-                fn as_mut_ptr(&self) -> *mut T {
-                    self.0
-                }
-            }
-        }),
-        Item::Impl(parse_quote! {
-            impl<'a, T: ::cxx::private::UniquePtrTarget> CppMutRef<'a, T> {
-                /// Create a const C++ reference from this mutable C++ reference.
-                pub fn as_cpp_ref(&self) -> CppRef<'a, T> {
-                    use autocxx::CppRef;
-                    CppRef(self.as_ptr(), ::std::marker::PhantomData)
-                }
-            }
-        }),
-        Item::Struct(parse_quote! {
-            /// "Pins" a `UniquePtr` to an object, so that C++-compatible references can be created.
-            /// See [`::autocxx::CppPin`]
-            #[repr(transparent)]
-            pub struct CppUniquePtrPin<T: ::cxx::private::UniquePtrTarget>(::cxx::UniquePtr<T>);
-        }),
-        Item::Impl(parse_quote! {
-            impl<'a, T: 'a + ::cxx::private::UniquePtrTarget> autocxx::CppPin<'a, T> for CppUniquePtrPin<T>
-            {
-                type CppRef = CppRef<'a, T>;
-                type CppMutRef = CppMutRef<'a, T>;
-                fn as_ptr(&self) -> *const T {
-                    // TODO add as_ptr to cxx to avoid the ephemeral reference
-                    self.0.as_ref().unwrap() as *const T
-                }
-                fn as_mut_ptr(&mut self) -> *mut T {
-                    unsafe { ::std::pin::Pin::into_inner_unchecked(self.0.as_mut().unwrap()) as *mut T  }
-                }
-                fn as_cpp_ref(&self) -> Self::CppRef {
-                    CppRef(self.as_ptr(), ::std::marker::PhantomData)
-                }
-                fn as_cpp_mut_ref(&mut self) -> Self::CppMutRef {
-                    CppMutRef(self.as_mut_ptr(), ::std::marker::PhantomData)
-                }
-            }
-        }),
-        Item::Impl(parse_quote! {
-            impl<T: ::cxx::private::UniquePtrTarget> CppUniquePtrPin<T> {
-                pub fn new(item: ::cxx::UniquePtr<T>) -> Self {
-                    Self(item)
-                }
-            }
-        }),
-        Item::Fn(parse_quote! {
-            /// Pin this item so that we can create C++ references to it.
-            /// This makes it impossible to hold Rust references because Rust
-            /// references are fundamentally incompatible with C++ references.
-            pub fn cpp_pin_uniqueptr<T: ::cxx::private::UniquePtrTarget> (item: ::cxx::UniquePtr<T>) -> CppUniquePtrPin<T> {
-                CppUniquePtrPin::new(item)
-            }
-        })
     ]
     .to_vec()
 }
@@ -314,9 +229,6 @@ impl<'a> RsCodeGenerator<'a> {
         let mut extern_rust_mod_items = extern_rust_mod_items.into_iter().flatten().collect();
         // And a list of global items to include at the top level.
         let mut all_items: Vec<Item> = all_items.into_iter().flatten().collect();
-        if self.config.unsafe_policy.requires_cpprefs() {
-            all_items.append(&mut get_cppref_items())
-        }
         // And finally any C++ we need to generate. And by "we" I mean autocxx not cxx.
         let has_additional_cpp_needs = additional_cpp_needs.into_iter().any(std::convert::identity);
         extern_c_mod_items.extend(self.build_include_foreign_items(has_additional_cpp_needs));
@@ -458,9 +370,6 @@ impl<'a> RsCodeGenerator<'a> {
         let mut imports_from_super = vec!["cxxbridge"];
         if !self.config.exclude_utilities() {
             imports_from_super.push("ToCppString");
-        }
-        if self.config.unsafe_policy.requires_cpprefs() {
-            imports_from_super.extend(["CppRef", "CppMutRef"]);
         }
         let imports_from_super = imports_from_super.into_iter().map(make_ident);
         let super_duper = std::iter::repeat(make_ident("super")); // I'll get my coat
@@ -644,14 +553,23 @@ impl<'a> RsCodeGenerator<'a> {
                     false,
                 )
             }
-            Api::ForwardDeclaration { .. }
-            | Api::ConcreteType { .. }
-            | Api::OpaqueTypedef { .. } => self.generate_type(
+            Api::ConcreteType { .. } => self.generate_type(
                 &name,
                 id,
                 TypeKind::Abstract,
                 false, // assume for now that these types can't be kept in a Vector
                 true,  // assume for now that these types can be put in a smart pointer
+                || None,
+                associated_methods,
+                None,
+                false,
+            ),
+            Api::ForwardDeclaration { .. } | Api::OpaqueTypedef { .. } => self.generate_type(
+                &name,
+                id,
+                TypeKind::Abstract,
+                false, // these types can't be kept in a Vector
+                false, // these types can't be put in a smart pointer
                 || None,
                 associated_methods,
                 None,
@@ -676,34 +594,28 @@ impl<'a> RsCodeGenerator<'a> {
                 details:
                     RustFun {
                         path,
-                        sig,
-                        receiver: None,
+                        mut sig,
+                        has_receiver,
                         ..
                     },
                 ..
-            } => RsCodegenResult {
-                global_items: vec![parse_quote! {
-                    use super::#path;
-                }],
-                extern_rust_mod_items: vec![parse_quote! {
-                    #sig;
-                }],
-                ..Default::default()
-            },
-            Api::RustFn {
-                details:
-                    RustFun {
-                        sig,
-                        receiver: Some(_),
-                        ..
+            } => {
+                sig.inputs = unqualify_params(sig.inputs);
+                sig.output = unqualify_ret_type(sig.output);
+                RsCodegenResult {
+                    global_items: if !has_receiver {
+                        vec![parse_quote! {
+                            use super::#path;
+                        }]
+                    } else {
+                        Vec::new()
                     },
-                ..
-            } => RsCodegenResult {
-                extern_rust_mod_items: vec![parse_quote! {
-                    #sig;
-                }],
-                ..Default::default()
-            },
+                    extern_rust_mod_items: vec![parse_quote! {
+                        #sig;
+                    }],
+                    ..Default::default()
+                }
+            }
             Api::RustSubclassFn {
                 details, subclass, ..
             } => Self::generate_subclass_fn(id, *details, subclass),
@@ -820,15 +732,15 @@ impl<'a> RsCodeGenerator<'a> {
         };
 
         // Once for each superclass, in future...
-        let as_id = make_ident(format!("As_{}", super_name));
+        let as_id = make_ident(format!("As_{super_name}"));
         extern_c_mod_items.push(parse_quote! {
             fn #as_id(self: &#cpp_id) -> &#super_cxxxbridge_id;
         });
-        let as_mut_id = make_ident(format!("As_{}_mut", super_name));
+        let as_mut_id = make_ident(format!("As_{super_name}_mut"));
         extern_c_mod_items.push(parse_quote! {
             fn #as_mut_id(self: Pin<&mut #cpp_id>) -> Pin<&mut #super_cxxxbridge_id>;
         });
-        let as_unique_ptr_id = make_ident(format!("{}_As_{}_UniquePtr", cpp_id, super_name));
+        let as_unique_ptr_id = make_ident(format!("{cpp_id}_As_{super_name}_UniquePtr"));
         extern_c_mod_items.push(parse_quote! {
             fn #as_unique_ptr_id(u: UniquePtr<#cpp_id>) -> UniquePtr<#super_cxxxbridge_id>;
         });
@@ -843,13 +755,13 @@ impl<'a> RsCodeGenerator<'a> {
         // TODO it would be nice to impl AsMut here but pin prevents us
         bindgen_mod_items.push(parse_quote! {
             impl super::super::super::#id {
-                pub fn pin_mut(&mut self) -> ::std::pin::Pin<&mut cxxbridge::#super_cxxxbridge_id> {
+                pub fn pin_mut(&mut self) -> ::core::pin::Pin<&mut cxxbridge::#super_cxxxbridge_id> {
                     use autocxx::subclass::CppSubclass;
                     self.peer_mut().#as_mut_id()
                 }
             }
         });
-        let rs_as_unique_ptr_id = make_ident(format!("as_{}_unique_ptr", super_name));
+        let rs_as_unique_ptr_id = make_ident(format!("as_{super_name}_unique_ptr"));
         bindgen_mod_items.push(parse_quote! {
             impl super::super::super::#id {
                 pub fn #rs_as_unique_ptr_id(u: cxx::UniquePtr<#cpp_id>) -> cxx::UniquePtr<cxxbridge::#super_cxxxbridge_id> {
@@ -930,7 +842,7 @@ impl<'a> RsCodeGenerator<'a> {
                         .as_ref()
                         .#borrow()
                         .expect(#reentrancy_panic_msg);
-                    let r = ::std::ops::#deref_ty::#deref_call(& #mut_token b);
+                    let r = ::core::ops::#deref_ty::#deref_call(& #mut_token b);
                     #methods_trait :: #method_name
                         (r,
                         #args)
@@ -1042,6 +954,7 @@ impl<'a> RsCodeGenerator<'a> {
                         extern_c_mod_items: vec![
                             self.generate_cxxbridge_type(name, false, doc_attrs)
                         ],
+                        bridge_items: create_impl_items(&id, movable, destroyable, self.config),
                         bindgen_mod_items,
                         materializations,
                         ..Default::default()
@@ -1132,13 +1045,16 @@ impl<'a> RsCodeGenerator<'a> {
         let id = name.type_path_from_root();
         let super_duper = std::iter::repeat(make_ident("super"));
         let supers = super_duper.take(ns_depth + 2);
+        let name_final = name.get_final_ident();
         let use_statement = parse_quote! {
             pub use #(#supers)::* :: #id;
         };
         RsCodegenResult {
             bindgen_mod_items: vec![use_statement],
             extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, Vec::new())],
-            materializations: vec![Use::Custom(Box::new(parse_quote! { pub use #rust_path; }))],
+            materializations: vec![Use::Custom(Box::new(
+                parse_quote! { pub use #rust_path as #name_final; },
+            ))],
             ..Default::default()
         }
     }
@@ -1146,8 +1062,8 @@ impl<'a> RsCodeGenerator<'a> {
     /// Generates something in the output mod that will carry a docstring
     /// explaining why a given type or function couldn't have bindings
     /// generated.
-    fn generate_error_entry(err: ConvertError, ctx: ErrorContext) -> RsCodegenResult {
-        let err = format!("autocxx bindings couldn't be generated: {}", err);
+    fn generate_error_entry(err: ConvertErrorFromCpp, ctx: ErrorContext) -> RsCodegenResult {
+        let err = format!("autocxx bindings couldn't be generated: {err}");
         let (impl_entry, bindgen_mod_item, materialization) = match ctx.into_type() {
             ErrorContextType::Item(id) => (
                 // Populate within bindgen mod because impl blocks may attach.

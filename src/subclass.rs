@@ -31,7 +31,7 @@ pub use autocxx_macro::subclass as is_subclass;
 ///   #[subclass(superclass("MyCppSuperclass"))]
 ///   struct Bar {};
 ///   ```
-/// * as a directive within the [include_cpp] macro, in which case you
+/// * as a directive within the [crate::include_cpp] macro, in which case you
 ///   must provide two arguments of the superclass and then the
 ///   subclass:
 ///   ```
@@ -102,16 +102,12 @@ impl<T> CppSubclassRustPeerHolder<T> {
 /// A type showing how the Rust side of a Rust/C++ subclass pair refers to
 /// the C++ side.
 #[doc(hidden)]
+#[derive(Default)]
 pub enum CppSubclassCppPeerHolder<CppPeer: CppSubclassCppPeer> {
+    #[default]
     Empty,
     Owned(Box<UniquePtr<CppPeer>>),
     Unowned(*mut CppPeer),
-}
-
-impl<CppPeer: CppSubclassCppPeer> Default for CppSubclassCppPeerHolder<CppPeer> {
-    fn default() -> Self {
-        CppSubclassCppPeerHolder::Empty
-    }
 }
 
 impl<CppPeer: CppSubclassCppPeer> CppSubclassCppPeerHolder<CppPeer> {

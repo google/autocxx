@@ -147,6 +147,58 @@ fn test_gen_archive() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_gen_archive_first_entry() -> Result<(), Box<dyn std::error::Error>> {
+    let tmp_dir = tempdir()?;
+    base_test(&tmp_dir, RsGenMode::Archive, |_| {})?;
+    File::create(tmp_dir.path().join("cxx.h"))
+        .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
+    let r = build_from_folder(
+        tmp_dir.path(),
+        &tmp_dir.path().join("demo/main.rs"),
+        vec![tmp_dir.path().join("gen.rs.json")],
+        &["gen0.cc"],
+        RsFindMode::Custom(Box::new(|path: &Path| {
+            std::env::set_var(
+                "AUTOCXX_RS_JSON_ARCHIVE",
+                std::env::join_paths([&path.join("gen.rs.json"), Path::new("/nonexistent")])
+                    .unwrap(),
+            )
+        })),
+    );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tmp_dir.into_path().to_str());
+    }
+    r.unwrap();
+    Ok(())
+}
+
+#[test]
+fn test_gen_archive_second_entry() -> Result<(), Box<dyn std::error::Error>> {
+    let tmp_dir = tempdir()?;
+    base_test(&tmp_dir, RsGenMode::Archive, |_| {})?;
+    File::create(tmp_dir.path().join("cxx.h"))
+        .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
+    let r = build_from_folder(
+        tmp_dir.path(),
+        &tmp_dir.path().join("demo/main.rs"),
+        vec![tmp_dir.path().join("gen.rs.json")],
+        &["gen0.cc"],
+        RsFindMode::Custom(Box::new(|path: &Path| {
+            std::env::set_var(
+                "AUTOCXX_RS_JSON_ARCHIVE",
+                std::env::join_paths([Path::new("/nonexistent"), &path.join("gen.rs.json")])
+                    .unwrap(),
+            )
+        })),
+    );
+    if KEEP_TEMPDIRS {
+        println!("Tempdir: {:?}", tmp_dir.into_path().to_str());
+    }
+    r.unwrap();
+    Ok(())
+}
+
+#[test]
 fn test_gen_multiple_in_archive() -> Result<(), Box<dyn std::error::Error>> {
     let tmp_dir = tempdir()?;
 
@@ -168,7 +220,7 @@ fn test_gen_multiple_in_archive() -> Result<(), Box<dyn std::error::Error>> {
     File::create(tmp_dir.path().join("cxx.h"))
         .and_then(|mut cxx_h| cxx_h.write_all(autocxx_engine::HEADER.as_bytes()))?;
     // We've asked to create 8 C++ files, mostly blank. Build 'em all.
-    let cpp_files = (0..7).map(|id| format!("gen{}.cc", id)).collect_vec();
+    let cpp_files = (0..7).map(|id| format!("gen{id}.cc")).collect_vec();
     let cpp_files = cpp_files.iter().map(|s| s.as_str()).collect_vec();
     let r = build_from_folder(
         tmp_dir.path(),
@@ -267,7 +319,7 @@ fn test_gen_repro() -> Result<(), Box<dyn std::error::Error>> {
 
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) {
     let path = dir.join(filename);
-    let mut f = File::create(&path).expect("Unable to create file");
+    let mut f = File::create(path).expect("Unable to create file");
     f.write_all(content).expect("Unable to write file");
 }
 
@@ -278,8 +330,7 @@ fn assert_contentful(outdir: &TempDir, fname: &str) {
     }
     assert!(
         p.metadata().unwrap().len() > BLANK.len().try_into().unwrap(),
-        "File {} is empty",
-        fname
+        "File {fname} is empty"
     );
 }
 
@@ -298,7 +349,7 @@ fn assert_not_contentful(outdir: &TempDir, fname: &str) {
 
 fn assert_contains(outdir: &TempDir, fname: &str, pattern: &str) {
     let p = outdir.path().join(fname);
-    let content = std::fs::read_to_string(&p).expect(fname);
-    eprintln!("content = {}", content);
+    let content = std::fs::read_to_string(p).expect(fname);
+    eprintln!("content = {content}");
     assert!(content.contains(pattern));
 }

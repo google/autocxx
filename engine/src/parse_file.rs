@@ -27,7 +27,7 @@ use thiserror::Error;
 /// and interpret include_cxx macros.
 #[derive(Error, Diagnostic, Debug)]
 pub enum ParseError {
-    #[error("unable to open the source file: {0}")]
+    #[error("unable to open the source file containing your autocxx bindings. (This filename is usually specified within your build.rs file.): {0}")]
     FileOpen(std::io::Error),
     #[error("the .rs file couldn't be read: {0}")]
     FileRead(std::io::Error),
@@ -87,12 +87,13 @@ fn parse_file_contents(
         extra_superclasses: Vec<Subclass>,
         discoveries: Discoveries,
     }
+    let file_contents = Rc::new(file_contents.to_string());
     impl State {
         fn parse_item(
             &mut self,
             item: Item,
             mod_path: Option<RustPath>,
-            file_contents: &str,
+            file_contents: Rc<String>,
         ) -> Result<(), ParseError> {
             let result = match item {
                 Item::Macro(mac)
@@ -128,7 +129,11 @@ fn parse_file_contents(
                             Some(mod_path) => mod_path.append(itm.ident.clone()),
                         };
                         for item in items {
-                            mod_state.parse_item(item, Some(mod_path.clone()), file_contents)?
+                            mod_state.parse_item(
+                                item,
+                                Some(mod_path.clone()),
+                                file_contents.clone(),
+                            )?
                         }
                         self.extra_superclasses.extend(mod_state.extra_superclasses);
                         self.discoveries.extend(mod_state.discoveries);
@@ -162,7 +167,7 @@ fn parse_file_contents(
                                 is_superclass_attr.parse_args().map_err(|e| {
                                     ParseError::SubclassSyntax(LocatedSynError::new(
                                         e,
-                                        file_contents,
+                                        &file_contents,
                                     ))
                                 })?;
                             if let Some(superclass) = args.superclass {
@@ -194,7 +199,7 @@ fn parse_file_contents(
         ..Default::default()
     };
     for item in source.items {
-        state.parse_item(item, None, file_contents)?
+        state.parse_item(item, None, file_contents.clone())?
     }
     let State {
         auto_allowlist,

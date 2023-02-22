@@ -8,7 +8,7 @@
 
 [package]
 name = "autocxx-gen"
-version = "0.22.3"
+version = "0.24.0"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -18,24 +18,24 @@ keywords = ["ffi"]
 categories = ["development-tools::ffi", "api-bindings"]
 
 [features]
-runtime = [ "autocxx-engine/runtime" ]
-static = [ "autocxx-engine/static" ]
+runtime = ["autocxx-engine/runtime"]
+static = ["autocxx-engine/static"]
 
 [dependencies]
-autocxx-engine = { version="=0.22.3", path="../../engine" }
+autocxx-engine = { version = "=0.24.0", path = "../../engine" }
 clap = { version = "3.1.2", features = ["cargo"] }
 proc-macro2 = "1.0"
 env_logger = "0.9.0"
-miette = { version="4.3", features=["fancy"]}
+miette = { version = "5", features = ["fancy"] }
 pathdiff = "0.2.1"
 indexmap = "1.8"
 
 [dev-dependencies]
-assert_cmd = "1.0.3"
+assert_cmd = "2"
 tempfile = "3.1"
-autocxx-integration-tests = { path = "../../integration-tests", version="=0.22.3" }
 # This is necessary for building the projects created
 # by the trybuild test system...
-autocxx = { path="../.." }
-cxx = "1.0.68"
+autocxx = { path = "../.." }
+autocxx-integration-tests = { path = "../../integration-tests", version = "=0.24.0" }
+cxx = "1.0.78"
 itertools = "0.10.3"

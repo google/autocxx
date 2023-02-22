@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use crate::conversion::apivec::ApiVec;
-use crate::{conversion::ConvertError, known_types::known_types};
+use crate::{conversion::ConvertErrorFromCpp, known_types::known_types};
 use crate::{
     conversion::{
         analysis::tdef::TypedefPhase,
@@ -48,6 +48,9 @@ impl StructDetails {
 /// std::string contains a self-referential pointer.
 /// It is possible that this is duplicative of the information stored
 /// elsewhere in the `Api` list and could possibly be removed or simplified.
+/// In general this is one of the oldest parts of autocxx and
+/// the code here could quite possibly be simplified by reusing code
+/// elsewhere.
 pub struct ByValueChecker {
     // Mapping from type name to whether it is safe to be POD
     results: HashMap<QualifiedName, StructDetails>,
@@ -60,7 +63,7 @@ impl ByValueChecker {
             let safety = if by_value_safe {
                 PodState::IsPod
             } else {
-                PodState::UnsafeToBePod(format!("type {} is not safe for POD", tn))
+                PodState::UnsafeToBePod(format!("type {tn} is not safe for POD"))
             };
             results.insert(tn.clone(), StructDetails::new(safety));
         }
@@ -72,7 +75,7 @@ impl ByValueChecker {
     pub(crate) fn new_from_apis(
         apis: &ApiVec<TypedefPhase>,
         config: &IncludeCppConfig,
-    ) -> Result<ByValueChecker, ConvertError> {
+    ) -> Result<ByValueChecker, ConvertErrorFromCpp> {
         let mut byvalue_checker = ByValueChecker::new();
         for blocklisted in config.get_blocklist() {
             let tn = QualifiedName::new_from_cpp_name(blocklisted);
@@ -81,6 +84,11 @@ impl ByValueChecker {
                 .results
                 .insert(tn, StructDetails::new(safety));
         }
+        // As we do this analysis, we need to be aware that structs
+        // may depend on other types. Ideally we'd use the depth first iterator
+        // but that's awkward given that our ApiPhase does not yet have a fixed
+        // list of field/base types. Instead, we'll iterate first over non-struct
+        // types and then over structs.
         for api in apis.iter() {
             match api {
                 Api::Typedef { analysis, .. } => {
@@ -113,20 +121,17 @@ impl ByValueChecker {
                         None => byvalue_checker.ingest_nonpod_type(name.clone()),
                     }
                 }
-                Api::Struct { details, .. } => {
-                    byvalue_checker.ingest_struct(&details.item, api.name().get_namespace())
-                }
-                Api::Enum { .. } => {
-                    byvalue_checker
-                        .results
-                        .insert(api.name().clone(), StructDetails::new(PodState::IsPod));
-                }
-                Api::ExternCppType { pod: true, .. } => {
+                Api::Enum { .. } | Api::ExternCppType { pod: true, .. } => {
                     byvalue_checker
                         .results
                         .insert(api.name().clone(), StructDetails::new(PodState::IsPod));
                 }
                 _ => {}
+            }
+        }
+        for api in apis.iter() {
+            if let Api::Struct { details, .. } = api {
+                byvalue_checker.ingest_struct(&details.item, api.name().get_namespace())
             }
         }
         let pod_requests = config
@@ -136,7 +141,7 @@ impl ByValueChecker {
             .collect();
         byvalue_checker
             .satisfy_requests(pod_requests)
-            .map_err(ConvertError::UnsafePodType)?;
+            .map_err(ConvertErrorFromCpp::UnsafePodType)?;
         Ok(byvalue_checker)
     }
 
@@ -149,14 +154,13 @@ impl ByValueChecker {
             match self.results.get(ty_id) {
                 None => {
                     field_safety_problem = PodState::UnsafeToBePod(format!(
-                        "Type {} could not be POD because its dependent type {} isn't known",
-                        tyname, ty_id
+                        "Type {tyname} could not be POD because its dependent type {ty_id} isn't known"
                     ));
                     break;
                 }
                 Some(deets) => {
                     if let PodState::UnsafeToBePod(reason) = &deets.state {
-                        let new_reason = format!("Type {} could not be POD because its dependent type {} isn't safe to be POD. Because: {}", tyname, ty_id, reason);
+                        let new_reason = format!("Type {tyname} could not be POD because its dependent type {ty_id} isn't safe to be POD. Because: {reason}");
                         field_safety_problem = PodState::UnsafeToBePod(new_reason);
                         break;
                     }
@@ -164,10 +168,8 @@ impl ByValueChecker {
             }
         }
         if Self::has_vtable(def) {
-            let reason = format!(
-                "Type {} could not be POD because it has virtual functions.",
-                tyname
-            );
+            let reason =
+                format!("Type {tyname} could not be POD because it has virtual functions.");
             field_safety_problem = PodState::UnsafeToBePod(reason);
         }
         let mut my_details = StructDetails::new(field_safety_problem);
@@ -176,7 +178,7 @@ impl ByValueChecker {
     }
 
     fn ingest_nonpod_type(&mut self, tyname: QualifiedName) {
-        let new_reason = format!("Type {} is a typedef to a complex type", tyname);
+        let new_reason = format!("Type {tyname} is a typedef to a complex type");
         self.results.insert(
             tyname,
             StructDetails::new(PodState::UnsafeToBePod(new_reason)),
@@ -191,8 +193,7 @@ impl ByValueChecker {
             match deets {
                 None => {
                     return Err(format!(
-                        "Unable to make {} POD because we never saw a struct definition",
-                        ty_id
+                        "Unable to make {ty_id} POD because we never saw a struct definition"
                     ))
                 }
                 Some(deets) => match &deets.state {
@@ -236,6 +237,10 @@ impl ByValueChecker {
         )
     }
 
+    /// This is a miniature version of the analysis in `super::get_struct_field_types`.
+    /// It would be nice to unify them. However, this version only cares about spotting
+    /// fields which may be non-POD, so can largely concern itself with just `Type::Path`
+    /// fields.
     fn get_field_types(def: &ItemStruct) -> Vec<QualifiedName> {
         let mut results = Vec::new();
         for f in &def.fields {

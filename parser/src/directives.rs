@@ -275,7 +275,7 @@ impl Directive for Safety {
 }
 
 fn allowlist_err_to_syn_err(err: AllowlistErr, span: &Span) -> syn::Error {
-    syn::Error::new(*span, format!("{}", err))
+    syn::Error::new(*span, format!("{err}"))
 }
 
 struct StringList<SET, GET>(SET, GET)
@@ -472,7 +472,7 @@ impl Directive for ExternRustFun {
         config.extern_rust_funs.push(RustFun {
             path,
             sig,
-            receiver: None,
+            has_receiver: false,
         });
         Ok(())
     }

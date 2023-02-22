@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use crate::{
-    conversion::{apivec::ApiVec, AnalysisPhase, ConvertError},
+    conversion::{apivec::ApiVec, AnalysisPhase, ConvertErrorFromCpp},
     types::QualifiedName,
 };
 use indexmap::map::IndexMap as HashMap;
@@ -64,7 +64,10 @@ pub(crate) fn final_ident_using_original_name_map(
     }
 }
 
-pub(crate) fn type_to_cpp(ty: &Type, cpp_name_map: &CppNameMap) -> Result<String, ConvertError> {
+pub(crate) fn type_to_cpp(
+    ty: &Type,
+    cpp_name_map: &CppNameMap,
+) -> Result<String, ConvertErrorFromCpp> {
     match ty {
         Type::Path(typ) => {
             // If this is a std::unique_ptr we do need to pass
@@ -98,7 +101,7 @@ pub(crate) fn type_to_cpp(ty: &Type, cpp_name_map: &CppNameMap) -> Result<String
             };
             match suffix {
                 None => Ok(root),
-                Some(suffix) => Ok(format!("{}<{}>", root, suffix)),
+                Some(suffix) => Ok(format!("{root}<{suffix}>")),
             }
         }
         Type::Reference(typr) => match &*typr.elem {
@@ -125,10 +128,12 @@ pub(crate) fn type_to_cpp(ty: &Type, cpp_name_map: &CppNameMap) -> Result<String
         | Type::Slice(_)
         | Type::TraitObject(_)
         | Type::Tuple(_)
-        | Type::Verbatim(_) => Err(ConvertError::UnsupportedType(
+        | Type::Verbatim(_) => Err(ConvertErrorFromCpp::UnsupportedType(
             ty.to_token_stream().to_string(),
         )),
-        _ => Err(ConvertError::UnknownType(ty.to_token_stream().to_string())),
+        _ => Err(ConvertErrorFromCpp::UnknownType(
+            ty.to_token_stream().to_string(),
+        )),
     }
 }
 

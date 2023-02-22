@@ -36,7 +36,6 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     mut params: Punctuated<FnArg, Comma>,
     ret_type: Cow<'r, ReturnType>,
     non_pod_types: &HashSet<QualifiedName>,
-    assert_all_parameters_are_references: bool,
 ) -> (
     Option<TokenStream>,
     Punctuated<FnArg, Comma>,
@@ -93,25 +92,16 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
         None => (None, params, ret_type),
         Some(new_return_type) => {
             for mut param in params.iter_mut() {
-                match &mut param {
-                    FnArg::Typed(PatType { ty, .. }) => match ty.as_mut() {
+                if let FnArg::Typed(PatType { ty, .. }) = &mut param {
+                    match ty.as_mut() {
                         Type::Path(TypePath {
                             path: Path { segments, .. },
                             ..
-                        }) => add_lifetime_to_pinned_reference(segments).unwrap_or_else(|e| {
-                            if assert_all_parameters_are_references {
-                                panic!("Expected a pinned reference: {:?}", e)
-                            }
-                        }),
+                        }) => add_lifetime_to_pinned_reference(segments).unwrap_or(()),
                         Type::Reference(tyr) => add_lifetime_to_reference(tyr),
                         Type::ImplTrait(tyit) => add_lifetime_to_impl_trait(tyit),
-                        _ if assert_all_parameters_are_references => {
-                            panic!("Expected Pin<&mut T> or &T")
-                        }
                         _ => {}
-                    },
-                    _ if assert_all_parameters_are_references => panic!("Unexpected fnarg"),
-                    _ => {}
+                    }
                 }
             }
 
@@ -170,14 +160,17 @@ enum AddLifetimeError {
 fn add_lifetime_to_pinned_reference(
     segments: &mut Punctuated<PathSegment, syn::token::Colon2>,
 ) -> Result<(), AddLifetimeError> {
-    static EXPECTED_SEGMENTS: &[(&str, bool)] = &[
-        ("std", false),
-        ("pin", false),
-        ("Pin", true), // true = act on the arguments of this segment
+    static EXPECTED_SEGMENTS: &[(&[&str], bool)] = &[
+        (&["std", "core"], false),
+        (&["pin"], false),
+        (&["Pin"], true), // true = act on the arguments of this segment
     ];
 
     for (seg, (expected_name, act)) in segments.iter_mut().zip(EXPECTED_SEGMENTS.iter()) {
-        if seg.ident != expected_name {
+        if !expected_name
+            .iter()
+            .any(|expected_name| seg.ident == expected_name)
+        {
             return Err(AddLifetimeError::WasNotPin);
         }
         if *act {

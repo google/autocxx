@@ -30,7 +30,7 @@ use super::{
         PointerTreatment,
     },
     convert_error::{ConvertErrorWithContext, ErrorContext},
-    ConvertError,
+    ConvertErrorFromCpp,
 };
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -246,6 +246,14 @@ pub(crate) enum Provenance {
     SynthesizedSubclassConstructor(Box<SubclassConstructorDetails>),
 }
 
+/// Whether a function has =delete or =default
+#[derive(Clone, Copy)]
+pub(crate) enum DeletedOrDefaulted {
+    Neither,
+    Deleted,
+    Defaulted,
+}
+
 /// A C++ function for which we need to generate bindings, but haven't
 /// yet analyzed in depth. This is little more than a `ForeignItemFn`
 /// broken down into its constituent parts, plus some metadata from the
@@ -283,7 +291,8 @@ pub(crate) struct FuncToConvert {
     /// If Some, this function didn't really exist in the original
     /// C++ and instead we're synthesizing it.
     pub(crate) synthetic_cpp: Option<(CppFunctionBody, CppFunctionKind)>,
-    pub(crate) is_deleted: bool,
+    /// =delete
+    pub(crate) is_deleted: DeletedOrDefaulted,
 }
 
 /// Layers of analysis which may be applied to decorate each API.
@@ -365,7 +374,7 @@ impl std::fmt::Debug for ApiName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
         if let Some(cpp_name) = &self.cpp_name {
-            write!(f, " (cpp={})", cpp_name)?;
+            write!(f, " (cpp={cpp_name})")?;
         }
         Ok(())
     }
@@ -418,7 +427,7 @@ impl SubclassName {
     }
     // TODO this and the following should probably include both class name and method name
     pub(crate) fn get_super_fn_name(superclass_namespace: &Namespace, id: &str) -> QualifiedName {
-        let id = make_ident(format!("{}_super", id));
+        let id = make_ident(format!("{id}_super"));
         QualifiedName::new(superclass_namespace, id)
     }
     pub(crate) fn get_methods_trait_name(superclass_name: &QualifiedName) -> QualifiedName {
@@ -522,7 +531,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// dependent items.
     IgnoredItem {
         name: ApiName,
-        err: ConvertError,
+        err: ConvertErrorFromCpp,
         ctx: Option<ErrorContext>,
     },
     /// A Rust type which is not a C++ type.
@@ -531,7 +540,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     RustFn {
         name: ApiName,
         details: RustFun,
-        receiver: Option<QualifiedName>,
+        deps: Vec<QualifiedName>,
     },
     /// Some function for the extern "Rust" block.
     RustSubclassFn {
@@ -648,7 +657,13 @@ impl<T: AnalysisPhase> Api<T> {
 
 impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?} (kind={})", self.name_info(), self)
+        write!(
+            f,
+            "{:?} (kind={}, details={})",
+            self.name_info(),
+            self,
+            self.details_display()
+        )
     }
 }
 
@@ -710,6 +725,25 @@ impl<T: AnalysisPhase> Api<T> {
         T: 'static,
     {
         Ok(Box::new(std::iter::once(Api::Enum { name, item })))
+    }
+
+    /// Display some details of each API. It's a bit unfortunate that we can't
+    /// just use `Debug` here, but some of the `syn` types make that awkward.
+    pub(crate) fn details_display(&self) -> String {
+        match self {
+            Api::ForwardDeclaration { err, .. } => format!("{err:?}"),
+            Api::OpaqueTypedef {
+                forward_declaration,
+                ..
+            } => format!("forward_declaration={forward_declaration:?}"),
+            Api::ConcreteType {
+                rs_definition,
+                cpp_definition,
+                ..
+            } => format!("rs_definition={rs_definition:?}, cpp_definition={cpp_definition}"),
+            Api::ExternCppType { pod, .. } => format!("pod={pod}"),
+            _ => String::new(),
+        }
     }
 }
 

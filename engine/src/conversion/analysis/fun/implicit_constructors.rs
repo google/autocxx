@@ -11,13 +11,16 @@ use indexmap::{map::Entry, set::IndexSet as HashSet};
 
 use syn::{Type, TypeArray};
 
+use crate::conversion::api::DeletedOrDefaulted;
 use crate::{
     conversion::{
-        analysis::{depth_first::depth_first, pod::PodAnalysis, type_converter::TypeKind},
+        analysis::{
+            depth_first::fields_and_bases_first, pod::PodAnalysis, type_converter::TypeKind,
+        },
         api::{Api, ApiName, CppVisibility, FuncToConvert, SpecialMemberKind},
         apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     known_types::{known_types, KnownTypeConstructorDetails},
     types::QualifiedName,
@@ -177,6 +180,13 @@ pub(super) fn find_constructors_present(
     apis: &ApiVec<FnPrePhase1>,
 ) -> HashMap<QualifiedName, ItemsFound> {
     let (explicits, unknown_types) = find_explicit_items(apis);
+    let enums: HashSet<QualifiedName> = apis
+        .iter()
+        .filter_map(|api| match api {
+            Api::Enum { name, .. } => Some(name.name.clone()),
+            _ => None,
+        })
+        .collect();
 
     // These contain all the classes we've seen so far with the relevant properties on their
     // constructors of each kind. We iterate via [`depth_first`], so analyzing later classes
@@ -189,7 +199,7 @@ pub(super) fn find_constructors_present(
     // These analyses include all bases and members of each class.
     let mut all_items_found: HashMap<QualifiedName, ItemsFound> = HashMap::new();
 
-    for api in depth_first(apis.iter()) {
+    for api in fields_and_bases_first(apis.iter()) {
         if let Api::Struct {
             name,
             analysis:
@@ -211,7 +221,17 @@ pub(super) fn find_constructors_present(
                 })
             };
             let get_items_found = |qn: &QualifiedName| -> Option<ItemsFound> {
-                if let Some(constructor_details) = known_types().get_constructor_details(qn) {
+                if enums.contains(qn) {
+                    Some(ItemsFound {
+                        default_constructor: SpecialMemberFound::NotPresent,
+                        destructor: SpecialMemberFound::Implicit,
+                        const_copy_constructor: SpecialMemberFound::Implicit,
+                        non_const_copy_constructor: SpecialMemberFound::NotPresent,
+                        move_constructor: SpecialMemberFound::Implicit,
+                        name: Some(name.clone()),
+                    })
+                } else if let Some(constructor_details) = known_types().get_constructor_details(qn)
+                {
                     Some(known_type_items_found(constructor_details))
                 } else {
                     all_items_found.get(qn).cloned()
@@ -539,8 +559,7 @@ pub(super) fn find_constructors_present(
                 all_items_found
                     .insert(name.name.clone(), items_found)
                     .is_none(),
-                "Duplicate struct: {:?}",
-                name
+                "Duplicate struct: {name:?}"
             );
         }
     }
@@ -556,7 +575,7 @@ fn find_explicit_items(
         .entry(ExplicitType { ty, kind })
     {
         Entry::Vacant(entry) => {
-            entry.insert(if fun.is_deleted {
+            entry.insert(if matches!(fun.is_deleted, DeletedOrDefaulted::Deleted) {
                 ExplicitFound::Deleted
             } else {
                 ExplicitFound::UserDefined(fun.cpp_vis)
@@ -575,7 +594,8 @@ fn find_explicit_items(
                         kind: FnKind::Method { impl_for, .. },
                         param_details,
                         ignore_reason:
-                            Ok(()) | Err(ConvertErrorWithContext(ConvertError::AssignmentOperator, _)),
+                            Ok(())
+                            | Err(ConvertErrorWithContext(ConvertErrorFromCpp::AssignmentOperator, _)),
                         ..
                     },
                 fun,

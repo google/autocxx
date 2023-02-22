@@ -23,7 +23,7 @@ use crate::{
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
         parse::BindgenSemanticAttributes,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     types::{Namespace, QualifiedName},
 };
@@ -43,7 +43,12 @@ pub(crate) struct PodAnalysis {
     /// because otherwise we don't know whether they're
     /// abstract or not.
     pub(crate) castable_bases: HashSet<QualifiedName>,
+    /// All field types. e.g. for std::unique_ptr<A>, this would include
+    /// both std::unique_ptr and A
     pub(crate) field_deps: HashSet<QualifiedName>,
+    /// Types within fields where we need a definition, e.g. for
+    /// std::unique_ptr<A> it would just be std::unique_ptr.
+    pub(crate) field_definition_deps: HashSet<QualifiedName>,
     pub(crate) field_info: Vec<FieldInfo>,
     pub(crate) is_generic: bool,
     pub(crate) in_anonymous_namespace: bool,
@@ -65,7 +70,7 @@ impl AnalysisPhase for PodPhase {
 pub(crate) fn analyze_pod_apis(
     apis: ApiVec<TypedefPhase>,
     config: &IncludeCppConfig,
-) -> Result<ApiVec<PodPhase>, ConvertError> {
+) -> Result<ApiVec<PodPhase>, ConvertErrorFromCpp> {
     // This next line will return an error if any of the 'generate_pod'
     // directives from the user can't be met because, for instance,
     // a type contains a std::string or some other type which can't be
@@ -138,12 +143,14 @@ fn analyze_struct(
     metadata.check_for_fatal_attrs(&id)?;
     let bases = get_bases(&details.item);
     let mut field_deps = HashSet::new();
+    let mut field_definition_deps = HashSet::new();
     let mut field_info = Vec::new();
     let field_conversion_errors = get_struct_field_types(
         type_converter,
         name.name.get_namespace(),
         &details.item,
         &mut field_deps,
+        &mut field_definition_deps,
         &mut field_info,
         extra_apis,
     );
@@ -152,7 +159,7 @@ fn analyze_struct(
         // Let's not allow anything to be POD if it's got rvalue reference fields.
         if details.has_rvalue_reference_fields {
             return Err(ConvertErrorWithContext(
-                ConvertError::RValueReferenceField,
+                ConvertErrorFromCpp::RValueReferenceField,
                 Some(ErrorContext::new_for_item(id)),
             ));
         }
@@ -186,6 +193,7 @@ fn analyze_struct(
             bases: bases.into_keys().collect(),
             castable_bases,
             field_deps,
+            field_definition_deps,
             field_info,
             is_generic,
             in_anonymous_namespace,
@@ -198,9 +206,10 @@ fn get_struct_field_types(
     ns: &Namespace,
     s: &ItemStruct,
     field_deps: &mut HashSet<QualifiedName>,
+    field_definition_deps: &mut HashSet<QualifiedName>,
     field_info: &mut Vec<FieldInfo>,
     extra_apis: &mut ApiVec<NullPhase>,
-) -> Vec<ConvertError> {
+) -> Vec<ConvertErrorFromCpp> {
     let mut convert_errors = Vec::new();
     let struct_type_params = s
         .generics
@@ -225,6 +234,14 @@ fn get_struct_field_types(
                     .unwrap_or(false)
                 {
                     field_deps.extend(r.types_encountered);
+                    if let Type::Path(typ) = &r.ty {
+                        // Later analyses need to know about the field
+                        // types where we need full definitions, as opposed
+                        // to just declarations. That means just the outermost
+                        // type path.
+                        // TODO: consider arrays.
+                        field_definition_deps.insert(QualifiedName::from_type_path(typ));
+                    }
                     field_info.push(FieldInfo {
                         ty: r.ty,
                         type_kind: r.kind,

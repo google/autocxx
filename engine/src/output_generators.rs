@@ -19,7 +19,7 @@ pub struct RsOutput<'a> {
 
 /// Creates an on-disk archive (actually a JSON file) of the Rust side of the bindings
 /// for multiple `include_cpp` macros. If you use this, you will want to tell
-/// `autocxx_macro` how to find this file using the `AUTOCXX_RS_ARCHIVE`
+/// `autocxx_macro` how to find this file using the `AUTOCXX_RS_JSON_ARCHIVE`
 /// environment variable.
 pub fn generate_rs_archive<'a>(rs_outputs: impl Iterator<Item = RsOutput<'a>>) -> String {
     let mut multi_bindings = MultiBindings::default();

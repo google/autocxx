@@ -57,6 +57,9 @@ pub enum RsFindMode {
     AutocxxRs,
     AutocxxRsArchive,
     AutocxxRsFile,
+    /// This just calls the callback instead of setting any environment variables. The callback
+    /// receives the path to the temporary directory.
+    Custom(Box<dyn FnOnce(&Path)>),
 }
 
 /// API to test building pre-generated files.
@@ -159,7 +162,7 @@ impl LinkableTryBuilder {
             );
         }
         let temp_path = self.temp_dir.path().to_str().unwrap();
-        let mut rustflags = format!("-L {}", temp_path);
+        let mut rustflags = format!("-L {temp_path}");
         if std::env::var_os("AUTOCXX_ASAN").is_some() {
             rustflags.push_str(" -Z sanitizer=address -Clinker=clang++ -Clink-arg=-fuse-ld=lld");
         }
@@ -174,6 +177,7 @@ impl LinkableTryBuilder {
                 "AUTOCXX_RS_FILE",
                 self.temp_dir.path().join("gen0.include.rs"),
             ),
+            RsFindMode::Custom(f) => f(self.temp_dir.path()),
         };
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();
@@ -206,6 +210,7 @@ pub fn run_test(
         None,
         None,
         "unsafe_ffi",
+        None,
     )
     .unwrap()
 }
@@ -261,6 +266,7 @@ pub fn run_test_ex(
         code_checker,
         extra_rust,
         "unsafe_ffi",
+        None,
     )
     .unwrap()
 }
@@ -293,6 +299,7 @@ pub fn run_test_expect_fail(
         None,
         None,
         "unsafe_ffi",
+        None,
     )
     .expect_err("Unexpected success");
 }
@@ -315,6 +322,7 @@ pub fn run_test_expect_fail_ex(
         code_checker,
         extra_rust,
         "unsafe_ffi",
+        None,
     )
     .expect_err("Unexpected success");
 }
@@ -365,10 +373,13 @@ pub fn do_run_test(
     rust_code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
     safety_policy: &str,
+    module_attributes: Option<TokenStream>,
 ) -> Result<(), TestError> {
     let hexathorpe = Token![#](Span::call_site());
     let safety_policy = format_ident!("{}", safety_policy);
     let unexpanded_rust = quote! {
+            #module_attributes
+
             use autocxx::prelude::*;
 
             include_cpp!(
@@ -412,11 +423,7 @@ pub fn do_run_test_manual(
     const HEADER_NAME: &str = "input.h";
     // Step 2: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
-    write_to_file(
-        &tdir,
-        HEADER_NAME,
-        &format!("#pragma once\n{}", header_code),
-    );
+    write_to_file(&tdir, HEADER_NAME, &format!("#pragma once\n{header_code}"));
     write_to_file(&tdir, "cxx.h", HEADER);
 
     rust_code.append_all(quote! {
@@ -427,7 +434,7 @@ pub fn do_run_test_manual(
 
     let write_rust_to_file = |ts: &TokenStream| -> PathBuf {
         // Step 3: Write the Rust code to a temp file
-        let rs_code = format!("{}", ts);
+        let rs_code = format!("{ts}");
         write_to_file(&tdir, "input.rs", &rs_code)
     };
 
@@ -437,7 +444,7 @@ pub fn do_run_test_manual(
     let rs_path = write_rust_to_file(&rust_code);
 
     info!("Path is {:?}", tdir.path());
-    let builder = Builder::<TestBuilderContext>::new(&rs_path, &[tdir.path()])
+    let builder = Builder::<TestBuilderContext>::new(&rs_path, [tdir.path()])
         .custom_gendir(target_dir.clone());
     let builder = if let Some(builder_modifier) = &builder_modifier {
         builder_modifier.modify_autocxx_builder(builder)
@@ -466,7 +473,7 @@ pub fn do_run_test_manual(
     if !cxx_code.is_empty() {
         // Step 4: Write the C++ code snippet to a .cc file, along with a #include
         //         of the header emitted in step 5.
-        let cxx_code = format!("#include \"input.h\"\n#include \"cxxgen.h\"\n{}", cxx_code);
+        let cxx_code = format!("#include \"input.h\"\n#include \"cxxgen.h\"\n{cxx_code}");
         let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
         b.file(cxx_path);
     }
@@ -481,7 +488,7 @@ pub fn do_run_test_manual(
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
     if KEEP_TEMPDIRS {
-        println!("Generated .rs files: {:?}", generated_rs_files);
+        println!("Generated .rs files: {generated_rs_files:?}");
     }
     // Step 8: use the trybuild crate to build the Rust file.
     let r = get_builder().lock().unwrap().build(

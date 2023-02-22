@@ -7,6 +7,7 @@
 // except according to those terms.
 
 mod bindgen_semantic_attributes;
+mod extern_fun_signatures;
 mod parse_bindgen;
 mod parse_foreign_mod;
 

@@ -63,11 +63,11 @@ impl TypeConversionPolicy {
             }
             RustConversionType::FromPinMaybeUninitToPtr => {
                 let ty = match self.cxxbridge_type() {
-                    Type::Ptr(TypePtr { elem, .. }) => &*elem,
+                    Type::Ptr(TypePtr { elem, .. }) => elem,
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! {
-                    ::std::pin::Pin<&mut ::std::mem::MaybeUninit< #ty >>
+                    ::core::pin::Pin<&mut ::core::mem::MaybeUninit< #ty >>
                 };
                 RustParamConversion::Param {
                     ty,
@@ -80,17 +80,17 @@ impl TypeConversionPolicy {
             }
             RustConversionType::FromPinMoveRefToPtr => {
                 let ty = match self.cxxbridge_type() {
-                    Type::Ptr(TypePtr { elem, .. }) => &*elem,
+                    Type::Ptr(TypePtr { elem, .. }) => elem,
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! {
-                    ::std::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
+                    ::core::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
                 };
                 RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
-                        { let r: &mut _ = ::std::pin::Pin::into_inner_unchecked(#var.as_mut());
+                        { let r: &mut _ = ::core::pin::Pin::into_inner_unchecked(#var.as_mut());
                             r
                         }
                     },
@@ -99,7 +99,7 @@ impl TypeConversionPolicy {
             }
             RustConversionType::FromTypeToPtr => {
                 let ty = match self.cxxbridge_type() {
-                    Type::Ptr(TypePtr { elem, .. }) => &*elem,
+                    Type::Ptr(TypePtr { elem, .. }) => elem,
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! { &mut #ty };
@@ -124,7 +124,7 @@ impl TypeConversionPolicy {
                 let param_trait = make_ident(param_trait);
                 let var_counter = *counter;
                 *counter += 1;
-                let space_var_name = format!("space{}", var_counter);
+                let space_var_name = format!("space{var_counter}");
                 let space_var_name = make_ident(space_var_name);
                 let ty = self.cxxbridge_type();
                 let ty = parse_quote! { impl autocxx::#param_trait<#ty> };
@@ -138,10 +138,10 @@ impl TypeConversionPolicy {
                         ),
                         MaybeUnsafeStmt::binary(
                             quote! { let mut #space_var_name =
-                                unsafe { ::std::pin::Pin::new_unchecked(&mut #space_var_name) };
+                                unsafe { ::core::pin::Pin::new_unchecked(&mut #space_var_name) };
                             },
                             quote! { let mut #space_var_name =
-                                ::std::pin::Pin::new_unchecked(&mut #space_var_name);
+                                ::core::pin::Pin::new_unchecked(&mut #space_var_name);
                             },
                         ),
                         MaybeUnsafeStmt::needs_unsafe(
@@ -172,16 +172,16 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a pointer"),
                 };
                 let (ty, wrapper_name) = if is_mut {
-                    (parse_quote! { CppMutRef<'a, #ty> }, "CppMutRef")
+                    (parse_quote! { autocxx::CppMutRef<'a, #ty> }, "CppMutRef")
                 } else {
-                    (parse_quote! { CppRef<'a, #ty> }, "CppRef")
+                    (parse_quote! { autocxx::CppRef<'a, #ty> }, "CppRef")
                 };
                 let wrapper_name = make_ident(wrapper_name);
                 RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
-                        #wrapper_name (#var, std::marker::PhantomData)
+                        autocxx::#wrapper_name::from_ptr (#var)
                     },
                     conversion_requires_unsafe: false,
                 }
@@ -194,15 +194,21 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a pointer"),
                 };
                 let ty = if is_mut {
-                    parse_quote! { &mut CppMutRef<'a, #ty> }
+                    parse_quote! { &mut autocxx::CppMutRef<'a, #ty> }
                 } else {
-                    parse_quote! { &CppRef<'a, #ty> }
+                    parse_quote! { &autocxx::CppRef<'a, #ty> }
                 };
                 RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
-                    conversion: quote! {
-                        #var .0
+                    conversion: if is_mut {
+                        quote! {
+                            #var .as_mut_ptr()
+                        }
+                    } else {
+                        quote! {
+                            #var .as_ptr()
+                        }
                     },
                     conversion_requires_unsafe: false,
                 }

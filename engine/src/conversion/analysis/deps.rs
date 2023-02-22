@@ -37,13 +37,9 @@ impl HasDependencies for Api<FnPrePhase1> {
                 ..
             } => Box::new(old_tyname.iter().chain(deps.iter())),
             Api::Struct {
-                analysis:
-                    PodAnalysis {
-                        kind: TypeKind::Pod,
-                        bases,
-                        field_deps,
-                        ..
-                    },
+                analysis: PodAnalysis {
+                    bases, field_deps, ..
+                },
                 ..
             } => Box::new(field_deps.iter().chain(bases.iter())),
             Api::Function { analysis, .. } => Box::new(analysis.deps.iter()),
@@ -52,7 +48,7 @@ impl HasDependencies for Api<FnPrePhase1> {
                 superclass,
             } => Box::new(std::iter::once(superclass)),
             Api::RustSubclassFn { details, .. } => Box::new(details.dependencies.iter()),
-            Api::RustFn { receiver, .. } => Box::new(receiver.iter()),
+            Api::RustFn { deps, .. } => Box::new(deps.iter()),
             _ => Box::new(std::iter::empty()),
         }
     }
@@ -105,7 +101,7 @@ impl HasDependencies for Api<FnPhase> {
                 superclass,
             } => Box::new(std::iter::once(superclass)),
             Api::RustSubclassFn { details, .. } => Box::new(details.dependencies.iter()),
-            Api::RustFn { receiver, .. } => Box::new(receiver.iter()),
+            Api::RustFn { deps, .. } => Box::new(deps.iter()),
             _ => Box::new(std::iter::empty()),
         }
     }

@@ -238,7 +238,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
                 .generate_h_and_cxx(&self.cpp_codegen_options)
                 .map_err(BuilderError::InvalidCxx)?;
             for filepair in generated_code.0 {
-                let fname = format!("gen{}.cxx", counter);
+                let fname = format!("gen{counter}.cxx");
                 counter += 1;
                 if let Some(implementation) = &filepair.implementation {
                     let gen_cxx_path = write_to_file(&cxxdir, &fname, implementation)?;
@@ -285,6 +285,13 @@ where
 
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) -> Result<PathBuf, BuilderError> {
     let path = dir.join(filename);
+    if let Ok(existing_contents) = std::fs::read(&path) {
+        // Avoid altering timestamps on disk if the file already exists,
+        // to stop downstream build steps recurring.
+        if existing_contents == content {
+            return Ok(path);
+        }
+    }
     try_write_to_file(&path, content).map_err(|e| BuilderError::FileWriteFail(e, path.clone()))?;
     Ok(path)
 }

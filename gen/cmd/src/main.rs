@@ -74,7 +74,11 @@ filenames, then you should use
 instead of
   --gen-rs-include
 and you will need to give AUTOCXX_RS_JSON_ARCHIVE when building the Rust code.
-The output filename is named gen.rs.json.
+The output filename is named gen.rs.json. AUTOCXX_RS_JSON_ARCHIVE should be set
+to the path to gen.rs.json. It may optionally have multiple paths separated the
+way as the PATH environment variable for the current platform, see
+[`std::env::split_paths`] for details. The first path which is successfully
+opened will be used.
 
 This teaches rustc (and the autocxx macro) that all the different Rust bindings
 for multiple different autocxx macros have been archived into this single file.
@@ -128,7 +132,7 @@ fn main() -> miette::Result<()> {
         .arg(
             Arg::new("gen-rs-include")
                 .long("gen-rs-include")
-                .help("whether to generate Rust files for inclusion using autocxx_macro (suffix will be .include.rs)")
+                .help("whether to generate Rust files for inclusion using autocxx_macro")
         )
         .arg(
             Arg::new("gen-rs-archive")
@@ -152,7 +156,7 @@ fn main() -> miette::Result<()> {
         .arg(
             Arg::new("fix-rs-include-name")
                 .long("fix-rs-include-name")
-                .help("Make the name of the .rs file predictable. You must set AUTOCXX_RS_FILE during Rust build time to educate autocxx_macro about your choice.")
+                .help("Make the name of the .rs file predictable (suffix will be .include.rs). You must set AUTOCXX_RS_FILE during Rust build time to educate autocxx_macro about your choice.")
                 .requires("gen-rs-include")
         )
         .arg(
@@ -279,6 +283,14 @@ fn main() -> miette::Result<()> {
 
     // Finally start to write the C++ and Rust out.
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
+
+    if !outdir.exists() {
+        use miette::WrapErr as _;
+        std::fs::create_dir_all(&outdir)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to create `outdir` '{}'", outdir.display()))?;
+    }
+
     let mut writer = FileWriter {
         depfile: &depfile,
         outdir: &outdir,
@@ -286,7 +298,7 @@ fn main() -> miette::Result<()> {
     };
     if matches.is_present("gen-cpp") {
         let cpp = matches.value_of("cpp-extension").unwrap();
-        let name_cc_file = |counter| format!("gen{}.{}", counter, cpp);
+        let name_cc_file = |counter| format!("gen{counter}.{cpp}");
         let mut counter = 0usize;
         for include_cxx in parsed_files
             .iter()
@@ -352,15 +364,15 @@ fn main() -> miette::Result<()> {
 }
 
 fn name_autocxxgen_h(counter: usize) -> String {
-    format!("autocxxgen{}.h", counter)
+    format!("autocxxgen{counter}.h")
 }
 
 fn name_cxxgen_h(counter: usize) -> String {
-    format!("gen{}.h", counter)
+    format!("gen{counter}.h")
 }
 
 fn name_include_rs(counter: usize) -> String {
-    format!("gen{}.include.rs", counter)
+    format!("gen{counter}.include.rs")
 }
 
 fn get_dependency_recorder(depfile: Rc<RefCell<Depfile>>) -> Box<dyn RebuildDependencyRecorder> {
@@ -416,7 +428,7 @@ impl<'a> FileWriter<'a> {
         let mut f = File::create(&path).into_diagnostic()?;
         f.write_all(content).into_diagnostic()?;
         if self.written.contains(&filename) {
-            return Err(miette::Report::msg(format!("autocxx_gen would write two files entitled '{}' which would have conflicting contents. Consider using --generate-exact.", filename)));
+            return Err(miette::Report::msg(format!("autocxx_gen would write two files entitled '{filename}' which would have conflicting contents. Consider using --generate-exact.")));
         }
         self.written.insert(filename);
         Ok(())

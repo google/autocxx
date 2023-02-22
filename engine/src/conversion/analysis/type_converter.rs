@@ -11,7 +11,7 @@ use crate::{
         api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
         apivec::ApiVec,
         codegen_cpp::type_to_cpp::type_to_cpp,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     known_types::{known_types, CxxGenericType},
     types::{make_ident, Namespace, QualifiedName},
@@ -109,14 +109,9 @@ impl TypeConversionContext {
         matches!(self, Self::WithinReference)
     }
     fn allowed_generic_type(&self, ident: &Ident) -> bool {
-        match self {
+        !matches!(self,
             Self::WithinStructField { struct_type_params }
-                if struct_type_params.contains(ident) =>
-            {
-                false
-            }
-            _ => true,
-        }
+                if struct_type_params.contains(ident))
     }
 }
 
@@ -157,7 +152,7 @@ impl<'a> TypeConverter<'a> {
         ty: Box<Type>,
         ns: &Namespace,
         ctx: &TypeConversionContext,
-    ) -> Result<Annotated<Box<Type>>, ConvertError> {
+    ) -> Result<Annotated<Box<Type>>, ConvertErrorFromCpp> {
         Ok(self.convert_type(*ty, ns, ctx)?.map(Box::new))
     }
 
@@ -166,7 +161,7 @@ impl<'a> TypeConverter<'a> {
         ty: Type,
         ns: &Namespace,
         ctx: &TypeConversionContext,
-    ) -> Result<Annotated<Type>, ConvertError> {
+    ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         let result = match ty {
             Type::Path(p) => {
                 let newp = self.convert_type_path(p, ns, ctx)?;
@@ -175,7 +170,7 @@ impl<'a> TypeConverter<'a> {
                     if !ctx.allow_instantiation_of_forward_declaration()
                         && self.forward_declarations.contains(&qn)
                     {
-                        return Err(ConvertError::TypeContainingForwardDeclaration(qn));
+                        return Err(ConvertErrorFromCpp::TypeContainingForwardDeclaration(qn));
                     }
                     // Special handling because rust_Str (as emitted by bindgen)
                     // doesn't simply get renamed to a different type _identifier_.
@@ -220,7 +215,11 @@ impl<'a> TypeConverter<'a> {
                 )
             }
             Type::Ptr(ptr) => self.convert_ptr(ptr, ns, ctx.pointer_treatment())?,
-            _ => return Err(ConvertError::UnknownType(ty.to_token_stream().to_string())),
+            _ => {
+                return Err(ConvertErrorFromCpp::UnknownType(
+                    ty.to_token_stream().to_string(),
+                ))
+            }
         };
         Ok(result)
     }
@@ -230,7 +229,7 @@ impl<'a> TypeConverter<'a> {
         mut typ: TypePath,
         ns: &Namespace,
         ctx: &TypeConversionContext,
-    ) -> Result<Annotated<Type>, ConvertError> {
+    ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         // First, qualify any unqualified paths.
         if typ.path.segments.iter().next().unwrap().ident != "root" {
             let ty = QualifiedName::from_type_path(&typ);
@@ -241,7 +240,7 @@ impl<'a> TypeConverter<'a> {
             if !known_types().is_known_type(&ty) {
                 let num_segments = typ.path.segments.len();
                 if num_segments > 1 {
-                    return Err(ConvertError::UnsupportedBuiltInType(ty));
+                    return Err(ConvertErrorFromCpp::UnsupportedBuiltInType(ty));
                 }
                 if !self.types_found.contains(&ty) {
                     typ.path.segments = std::iter::once(&"root".to_string())
@@ -257,9 +256,11 @@ impl<'a> TypeConverter<'a> {
         }
 
         let original_tn = QualifiedName::from_type_path(&typ);
-        original_tn.validate_ok_for_cxx()?;
+        original_tn
+            .validate_ok_for_cxx()
+            .map_err(ConvertErrorFromCpp::InvalidIdent)?;
         if self.config.is_on_blocklist(&original_tn.to_cpp_name()) {
-            return Err(ConvertError::Blocked(original_tn));
+            return Err(ConvertErrorFromCpp::Blocked(original_tn));
         }
         let mut deps = HashSet::new();
 
@@ -331,7 +332,9 @@ impl<'a> TypeConverter<'a> {
                     )?;
                     deps.extend(innerty.types_encountered.drain(..));
                 } else {
-                    return Err(ConvertError::TemplatedTypeContainingNonPathArg(tn.clone()));
+                    return Err(ConvertErrorFromCpp::TemplatedTypeContainingNonPathArg(
+                        tn.clone(),
+                    ));
                 }
             } else {
                 // Oh poop. It's a generic type which cxx won't be able to handle.
@@ -347,7 +350,9 @@ impl<'a> TypeConverter<'a> {
                                     if typ.path.segments.len() == 1
                                         && !ctx.allowed_generic_type(&seg.ident)
                                     {
-                                        return Err(ConvertError::ReferringToGenericTypeParam);
+                                        return Err(
+                                            ConvertErrorFromCpp::ReferringToGenericTypeParam,
+                                        );
                                     }
                                 }
                             }
@@ -361,7 +366,7 @@ impl<'a> TypeConverter<'a> {
                 // this a bit.
                 let qn = QualifiedName::from_type_path(&typ); // ignores generic params
                 if self.ignored_types.contains(&qn) {
-                    return Err(ConvertError::ConcreteVersionOfIgnoredTemplate);
+                    return Err(ConvertErrorFromCpp::ConcreteVersionOfIgnoredTemplate);
                 }
                 let (new_tn, api) = self.get_templated_typename(&Type::Path(typ))?;
                 extra_apis.extend(api.into_iter());
@@ -385,7 +390,7 @@ impl<'a> TypeConverter<'a> {
         pun: Punctuated<GenericArgument, P>,
         ns: &Namespace,
         ctx: &TypeConversionContext,
-    ) -> Result<Annotated<Punctuated<GenericArgument, P>>, ConvertError>
+    ) -> Result<Annotated<Punctuated<GenericArgument, P>>, ConvertErrorFromCpp>
     where
         P: Default,
     {
@@ -411,7 +416,10 @@ impl<'a> TypeConverter<'a> {
         ))
     }
 
-    fn resolve_typedef<'b>(&'b self, tn: &QualifiedName) -> Result<Option<&'b Type>, ConvertError> {
+    fn resolve_typedef<'b>(
+        &'b self,
+        tn: &QualifiedName,
+    ) -> Result<Option<&'b Type>, ConvertErrorFromCpp> {
         let mut encountered = HashSet::new();
         let mut tn = tn.clone();
         let mut previous_typ = None;
@@ -422,7 +430,7 @@ impl<'a> TypeConverter<'a> {
                     previous_typ = r;
                     let new_tn = QualifiedName::from_type_path(typ);
                     if encountered.contains(&new_tn) {
-                        return Err(ConvertError::InfinitelyRecursiveTypedef(tn.clone()));
+                        return Err(ConvertErrorFromCpp::InfinitelyRecursiveTypedef(tn.clone()));
                     }
                     if typ
                         .path
@@ -430,7 +438,7 @@ impl<'a> TypeConverter<'a> {
                         .iter()
                         .any(|seg| seg.ident.to_string().starts_with("_bindgen_mod"))
                     {
-                        return Err(ConvertError::TypedefToTypeInAnonymousNamespace);
+                        return Err(ConvertErrorFromCpp::TypedefToTypeInAnonymousNamespace);
                     }
                     encountered.insert(new_tn.clone());
                     tn = new_tn;
@@ -446,10 +454,10 @@ impl<'a> TypeConverter<'a> {
         mut ptr: TypePtr,
         ns: &Namespace,
         pointer_treatment: PointerTreatment,
-    ) -> Result<Annotated<Type>, ConvertError> {
+    ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         match pointer_treatment {
             PointerTreatment::Pointer => {
-                crate::known_types::ensure_pointee_is_valid(&ptr)?;
+                Self::ensure_pointee_is_valid(&ptr)?;
                 let innerty =
                     self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
                 ptr.elem = innerty.ty;
@@ -470,7 +478,7 @@ impl<'a> TypeConverter<'a> {
                 // be a plain value. We should detect and abort.
                 let mut outer = elem.map(|elem| match mutability {
                     Some(_) => Type::Path(parse_quote! {
-                        ::std::pin::Pin < & #mutability #elem >
+                        ::core::pin::Pin < & #mutability #elem >
                     }),
                     None => Type::Reference(parse_quote! {
                         & #elem
@@ -484,7 +492,7 @@ impl<'a> TypeConverter<'a> {
                 Ok(outer)
             }
             PointerTreatment::RValueReference => {
-                crate::known_types::ensure_pointee_is_valid(&ptr)?;
+                Self::ensure_pointee_is_valid(&ptr)?;
                 let innerty =
                     self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
                 ptr.elem = innerty.ty;
@@ -498,10 +506,17 @@ impl<'a> TypeConverter<'a> {
         }
     }
 
+    fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertErrorFromCpp> {
+        match *ptr.elem {
+            Type::Path(..) => Ok(()),
+            _ => Err(ConvertErrorFromCpp::InvalidPointee),
+        }
+    }
+
     fn get_templated_typename(
         &mut self,
         rs_definition: &Type,
-    ) -> Result<(QualifiedName, Option<UnanalyzedApi>), ConvertError> {
+    ) -> Result<(QualifiedName, Option<UnanalyzedApi>), ConvertErrorFromCpp> {
         let count = self.concrete_templates.len();
         // We just use this as a hash key, essentially.
         // TODO: Once we've completed the TypeConverter refactoring (see #220),
@@ -530,10 +545,10 @@ impl<'a> TypeConverter<'a> {
                     .find(|s| s == &synthetic_ident)
                 {
                     None => synthetic_ident,
-                    Some(_) => format!("AutocxxConcrete{}", count),
+                    Some(_) => format!("AutocxxConcrete{count}"),
                 };
                 let api = UnanalyzedApi::ConcreteType {
-                    name: ApiName::new_in_root_namespace(make_ident(&synthetic_ident)),
+                    name: ApiName::new_in_root_namespace(make_ident(synthetic_ident)),
                     cpp_definition: cpp_definition.clone(),
                     rs_definition: Some(Box::new(rs_definition.clone())),
                 };
@@ -550,21 +565,25 @@ impl<'a> TypeConverter<'a> {
         desc: &QualifiedName,
         generic_behavior: CxxGenericType,
         forward_declarations_ok: bool,
-    ) -> Result<TypeKind, ConvertError> {
+    ) -> Result<TypeKind, ConvertErrorFromCpp> {
         for inner in path_args {
             match inner {
                 GenericArgument::Type(Type::Path(typ)) => {
                     let inner_qn = QualifiedName::from_type_path(typ);
                     if !forward_declarations_ok && self.forward_declarations.contains(&inner_qn) {
-                        return Err(ConvertError::TypeContainingForwardDeclaration(inner_qn));
+                        return Err(ConvertErrorFromCpp::TypeContainingForwardDeclaration(
+                            inner_qn,
+                        ));
                     }
                     match generic_behavior {
                         CxxGenericType::Rust => {
                             if !inner_qn.get_namespace().is_empty() {
-                                return Err(ConvertError::RustTypeWithAPath(inner_qn));
+                                return Err(ConvertErrorFromCpp::RustTypeWithAPath(inner_qn));
                             }
                             if !self.config.is_rust_type(&inner_qn.get_final_ident()) {
-                                return Err(ConvertError::BoxContainingNonRustType(inner_qn));
+                                return Err(ConvertErrorFromCpp::BoxContainingNonRustType(
+                                    inner_qn,
+                                ));
                             }
                             if self
                                 .config
@@ -577,12 +596,12 @@ impl<'a> TypeConverter<'a> {
                         }
                         CxxGenericType::CppPtr => {
                             if !known_types().permissible_within_unique_ptr(&inner_qn) {
-                                return Err(ConvertError::InvalidTypeForCppPtr(inner_qn));
+                                return Err(ConvertErrorFromCpp::InvalidTypeForCppPtr(inner_qn));
                             }
                         }
                         CxxGenericType::CppVector => {
                             if !known_types().permissible_within_vector(&inner_qn) {
-                                return Err(ConvertError::InvalidTypeForCppVector(inner_qn));
+                                return Err(ConvertErrorFromCpp::InvalidTypeForCppVector(inner_qn));
                             }
                             if matches!(
                                 typ.path.segments.last().map(|ps| &ps.arguments),
@@ -591,14 +610,14 @@ impl<'a> TypeConverter<'a> {
                                         | PathArguments::AngleBracketed(_)
                                 )
                             ) {
-                                return Err(ConvertError::GenericsWithinVector);
+                                return Err(ConvertErrorFromCpp::GenericsWithinVector);
                             }
                         }
                         _ => {}
                     }
                 }
                 _ => {
-                    return Err(ConvertError::TemplatedTypeContainingNonPathArg(
+                    return Err(ConvertErrorFromCpp::TemplatedTypeContainingNonPathArg(
                         desc.clone(),
                     ))
                 }

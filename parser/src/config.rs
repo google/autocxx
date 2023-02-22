@@ -29,7 +29,7 @@ use crate::{directives::get_directives, RustPath};
 
 use quote::quote;
 
-#[derive(PartialEq, Clone, Debug, Hash)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
     AllFunctionsSafe,
     AllFunctionsUnsafe,
@@ -101,7 +101,7 @@ impl AllowlistEntry {
     fn to_bindgen_item(&self) -> String {
         match self {
             AllowlistEntry::Item(i) => i.clone(),
-            AllowlistEntry::Namespace(ns) => format!("{}::.*", ns),
+            AllowlistEntry::Namespace(ns) => format!("{ns}::.*"),
         }
     }
 }
@@ -165,7 +165,7 @@ pub struct Subclass {
 pub struct RustFun {
     pub path: RustPath,
     pub sig: Signature,
-    pub receiver: Option<Ident>,
+    pub has_receiver: bool,
 }
 
 impl std::fmt::Debug for RustFun {
@@ -250,7 +250,7 @@ impl Parse for IncludeCppConfig {
                 None => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("expected {}", all_possible),
+                        format!("expected {all_possible}"),
                     ));
                 }
                 Some(directive) => directive.parse(to_parse, &mut config, &ident.span())?,
@@ -258,7 +258,7 @@ impl Parse for IncludeCppConfig {
             if parse_completely && !to_parse.is_empty() {
                 return Err(syn::Error::new(
                     ident.span(),
-                    format!("found unexpected input within the directive {}", ident_str),
+                    format!("found unexpected input within the directive {ident_str}"),
                 ));
             }
             if input.is_empty() {
@@ -362,6 +362,7 @@ impl IncludeCppConfig {
             || self.is_subclass_holder(cpp_name)
             || self.is_subclass_cpp(cpp_name)
             || self.is_rust_fun(cpp_name)
+            || self.is_rust_type_name(cpp_name)
             || self.is_concrete_type(cpp_name)
             || match &self.allowlist {
                 Allowlist::Unspecified(_) => panic!("Eek no allowlist yet"),
@@ -408,10 +409,14 @@ impl IncludeCppConfig {
     }
 
     pub fn is_rust_type(&self, id: &Ident) -> bool {
+        let id_string = id.to_string();
+        self.is_rust_type_name(&id_string) || self.is_subclass_holder(&id_string)
+    }
+
+    fn is_rust_type_name(&self, possible_ty: &str) -> bool {
         self.rust_types
             .iter()
-            .any(|rt| rt.get_final_ident() == &id.to_string())
-            || self.is_subclass_holder(&id.to_string())
+            .any(|rt| rt.get_final_ident() == possible_ty)
     }
 
     fn is_rust_fun(&self, possible_fun: &str) -> bool {

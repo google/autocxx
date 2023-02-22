@@ -7,15 +7,20 @@
 # except according to those terms.
 
 [package]
-name = "autocxx-non-trivial-type-on-stack-example"
+name = "cpp_calling_rust"
 version = "0.1.0"
-authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 cxx = "1.0.78"
-autocxx = { path = "../..", version = "0.24.0" }
+autocxx = { path = "../..", version="0.24.0" }
+uwuify = "0.2.2"
+textwrap = "0.14"
+fastrand = "1.5.0"
 
 [build-dependencies]
-autocxx-build = { path = "../../gen/build", version = "0.24.0" }
-miette = { version = "5", features = ["fancy"] }
+autocxx-build = { path = "../../gen/build", version="0.24.0" }
+regex = "1.5.4"
+miette = { version="5", features = [ "fancy" ] }

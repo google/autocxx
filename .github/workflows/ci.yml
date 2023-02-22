@@ -32,9 +32,10 @@ jobs:
           - name: macOS
             rust: nightly
             os: macos
-          - name: Windows (gnu)
-            rust: nightly-x86_64-pc-windows-gnu
-            os: windows
+          # Windows GNU disabled due to https://github.com/google/autocxx/issues/1134
+          # - name: Windows (gnu)
+          #    rust: nightly-x86_64-pc-windows-gnu
+          #    os: windows
           - name: Windows (msvc)
             rust: nightly-x86_64-pc-windows-msvc
             os: windows
@@ -141,6 +142,10 @@ jobs:
         run: cargo build
       - name: Build reference-wrappers example
         working-directory: ./examples/reference-wrappers
+        if: matrix.rust == 'nightly'
+        run: cargo build
+      - name: Build cpp_calling_rust example
+        working-directory: ./examples/cpp_calling_rust
         run: cargo build
         # We do not build the LLVM example because even 'apt-get install llvm-13-dev'
         # does not work to install the LLVM 13 headers.

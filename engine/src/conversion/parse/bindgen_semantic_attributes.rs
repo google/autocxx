@@ -14,9 +14,9 @@ use syn::{
 };
 
 use crate::conversion::{
-    api::{CppVisibility, Layout, References, SpecialMemberKind, Virtualness},
+    api::{CppVisibility, DeletedOrDefaulted, Layout, References, SpecialMemberKind, Virtualness},
     convert_error::{ConvertErrorWithContext, ErrorContext},
-    ConvertError,
+    ConvertErrorFromCpp,
 };
 
 /// The set of all annotations that autocxx_bindgen has added
@@ -58,12 +58,12 @@ impl BindgenSemanticAttributes {
     ) -> Result<(), ConvertErrorWithContext> {
         if self.has_attr("unused_template_param") {
             Err(ConvertErrorWithContext(
-                ConvertError::UnusedTemplateParam,
+                ConvertErrorFromCpp::UnusedTemplateParam,
                 Some(ErrorContext::new_for_item(id_for_context.clone())),
             ))
         } else if self.get_cpp_visibility() != CppVisibility::Public {
             Err(ConvertErrorWithContext(
-                ConvertError::NonPublicNestedType,
+                ConvertErrorFromCpp::NonPublicNestedType,
                 Some(ErrorContext::new_for_item(id_for_context.clone())),
             ))
         } else {
@@ -99,6 +99,16 @@ impl BindgenSemanticAttributes {
             Virtualness::Virtual
         } else {
             Virtualness::None
+        }
+    }
+
+    pub(super) fn get_deleted_or_defaulted(&self) -> DeletedOrDefaulted {
+        if self.has_attr("deleted") {
+            DeletedOrDefaulted::Deleted
+        } else if self.has_attr("defaulted") {
+            DeletedOrDefaulted::Defaulted
+        } else {
+            DeletedOrDefaulted::Neither
         }
     }
 
