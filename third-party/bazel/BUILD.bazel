@@ -26,8 +26,20 @@ filegroup(
 
 # Workspace Member Dependencies
 alias(
+    name = "anyhow",
+    actual = "@vendor__anyhow-1.0.66//:anyhow",
+    tags = ["manual"],
+)
+
+alias(
     name = "aquamarine",
     actual = "@vendor__aquamarine-0.1.12//:aquamarine",
+    tags = ["manual"],
+)
+
+alias(
+    name = "assert_cmd",
+    actual = "@vendor__assert_cmd-2.0.5//:assert_cmd",
     tags = ["manual"],
 )
 
@@ -39,7 +51,7 @@ alias(
 
 alias(
     name = "cc",
-    actual = "@vendor__cc-1.0.79//:cc",
+    actual = "@vendor__cc-1.0.74//:cc",
     tags = ["manual"],
 )
 
@@ -51,31 +63,37 @@ alias(
 
 alias(
     name = "cxx",
-    actual = "@vendor__cxx-1.0.91//:cxx",
+    actual = "@vendor__cxx-1.0.80//:cxx",
     tags = ["manual"],
 )
 
 alias(
     name = "cxx-gen",
-    actual = "@vendor__cxx-gen-0.7.91//:cxx_gen",
+    actual = "@vendor__cxx-gen-0.7.80//:cxx_gen",
     tags = ["manual"],
 )
 
 alias(
     name = "env_logger",
-    actual = "@vendor__env_logger-0.9.3//:env_logger",
+    actual = "@vendor__env_logger-0.9.1//:env_logger",
+    tags = ["manual"],
+)
+
+alias(
+    name = "gag",
+    actual = "@vendor__gag-1.0.0//:gag",
     tags = ["manual"],
 )
 
 alias(
     name = "indexmap",
-    actual = "@vendor__indexmap-1.9.2//:indexmap",
+    actual = "@vendor__indexmap-1.9.1//:indexmap",
     tags = ["manual"],
 )
 
 alias(
     name = "indoc",
-    actual = "@vendor__indoc-1.0.9//:indoc",
+    actual = "@vendor__indoc-1.0.7//:indoc",
     tags = ["manual"],
 )
 
@@ -86,14 +104,26 @@ alias(
 )
 
 alias(
+    name = "link-cplusplus",
+    actual = "@vendor__link-cplusplus-1.0.7//:link_cplusplus",
+    tags = ["manual"],
+)
+
+alias(
     name = "log",
     actual = "@vendor__log-0.4.17//:log",
     tags = ["manual"],
 )
 
 alias(
+    name = "mdbook",
+    actual = "@vendor__mdbook-0.4.21//:mdbook",
+    tags = ["manual"],
+)
+
+alias(
     name = "miette",
-    actual = "@vendor__miette-5.5.0//:miette",
+    actual = "@vendor__miette-5.4.1//:miette",
     tags = ["manual"],
 )
 
@@ -105,7 +135,7 @@ alias(
 
 alias(
     name = "once_cell",
-    actual = "@vendor__once_cell-1.17.1//:once_cell",
+    actual = "@vendor__once_cell-1.16.0//:once_cell",
     tags = ["manual"],
 )
 
@@ -117,7 +147,7 @@ alias(
 
 alias(
     name = "prettyplease",
-    actual = "@vendor__prettyplease-0.1.23//:prettyplease",
+    actual = "@vendor__prettyplease-0.1.21//:prettyplease",
     tags = ["manual"],
 )
 
@@ -129,37 +159,61 @@ alias(
 
 alias(
     name = "proc-macro2",
-    actual = "@vendor__proc-macro2-1.0.51//:proc_macro2",
+    actual = "@vendor__proc-macro2-1.0.47//:proc_macro2",
     tags = ["manual"],
 )
 
 alias(
     name = "quote",
-    actual = "@vendor__quote-1.0.23//:quote",
+    actual = "@vendor__quote-1.0.21//:quote",
+    tags = ["manual"],
+)
+
+alias(
+    name = "rayon",
+    actual = "@vendor__rayon-1.5.3//:rayon",
     tags = ["manual"],
 )
 
 alias(
     name = "regex",
-    actual = "@vendor__regex-1.7.1//:regex",
+    actual = "@vendor__regex-1.6.0//:regex",
+    tags = ["manual"],
+)
+
+alias(
+    name = "rust_info",
+    actual = "@vendor__rust_info-0.3.2//:rust_info",
     tags = ["manual"],
 )
 
 alias(
     name = "rustversion",
-    actual = "@vendor__rustversion-1.0.11//:rustversion",
+    actual = "@vendor__rustversion-1.0.9//:rustversion",
     tags = ["manual"],
 )
 
 alias(
     name = "serde",
-    actual = "@vendor__serde-1.0.152//:serde",
+    actual = "@vendor__serde-1.0.147//:serde",
+    tags = ["manual"],
+)
+
+alias(
+    name = "serde_derive",
+    actual = "@vendor__serde_derive-1.0.147//:serde_derive",
     tags = ["manual"],
 )
 
 alias(
     name = "serde_json",
-    actual = "@vendor__serde_json-1.0.93//:serde_json",
+    actual = "@vendor__serde_json-1.0.87//:serde_json",
+    tags = ["manual"],
+)
+
+alias(
+    name = "static_assertions",
+    actual = "@vendor__static_assertions-1.1.0//:static_assertions",
     tags = ["manual"],
 )
 
@@ -171,7 +225,7 @@ alias(
 
 alias(
     name = "syn",
-    actual = "@vendor__syn-1.0.107//:syn",
+    actual = "@vendor__syn-1.0.103//:syn",
     tags = ["manual"],
 )
 
@@ -182,8 +236,20 @@ alias(
 )
 
 alias(
+    name = "test-log",
+    actual = "@vendor__test-log-0.2.11//:test_log",
+    tags = ["manual"],
+)
+
+alias(
     name = "thiserror",
-    actual = "@vendor__thiserror-1.0.38//:thiserror",
+    actual = "@vendor__thiserror-1.0.37//:thiserror",
+    tags = ["manual"],
+)
+
+alias(
+    name = "trybuild",
+    actual = "@vendor__trybuild-1.0.71//:trybuild",
     tags = ["manual"],
 )
 

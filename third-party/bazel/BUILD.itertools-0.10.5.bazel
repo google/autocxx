@@ -43,6 +43,6 @@ rust_library(
     ],
     version = "0.10.5",
     deps = [
-        "@vendor__either-1.8.1//:either",
+        "@vendor__either-1.8.0//:either",
     ],
 )

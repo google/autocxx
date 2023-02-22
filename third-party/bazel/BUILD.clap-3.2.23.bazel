@@ -52,10 +52,10 @@ rust_library(
         "@vendor__atty-0.2.14//:atty",
         "@vendor__bitflags-1.3.2//:bitflags",
         "@vendor__clap_lex-0.2.4//:clap_lex",
-        "@vendor__indexmap-1.9.2//:indexmap",
-        "@vendor__once_cell-1.17.1//:once_cell",
+        "@vendor__indexmap-1.9.1//:indexmap",
+        "@vendor__once_cell-1.16.0//:once_cell",
         "@vendor__strsim-0.10.0//:strsim",
-        "@vendor__termcolor-1.2.0//:termcolor",
+        "@vendor__termcolor-1.1.3//:termcolor",
         "@vendor__textwrap-0.16.0//:textwrap",
     ],
 )

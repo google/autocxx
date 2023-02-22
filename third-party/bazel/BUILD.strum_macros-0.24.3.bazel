@@ -30,7 +30,7 @@ rust_proc_macro(
     crate_root = "src/lib.rs",
     edition = "2018",
     proc_macro_deps = [
-        "@vendor__rustversion-1.0.11//:rustversion",
+        "@vendor__rustversion-1.0.9//:rustversion",
     ],
     rustc_flags = ["--cap-lints=allow"],
     tags = [
@@ -41,9 +41,9 @@ rust_proc_macro(
     ],
     version = "0.24.3",
     deps = [
-        "@vendor__heck-0.4.1//:heck",
-        "@vendor__proc-macro2-1.0.51//:proc_macro2",
-        "@vendor__quote-1.0.23//:quote",
-        "@vendor__syn-1.0.107//:syn",
+        "@vendor__heck-0.4.0//:heck",
+        "@vendor__proc-macro2-1.0.47//:proc_macro2",
+        "@vendor__quote-1.0.21//:quote",
+        "@vendor__syn-1.0.103//:syn",
     ],
 )

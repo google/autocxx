@@ -27,7 +27,12 @@ rust_library(
             "WORKSPACE.bazel",
         ],
     ),
-    crate_features = ["raw"],
+    crate_features = [
+        "ahash",
+        "default",
+        "inline-more",
+        "raw",
+    ],
     crate_root = "src/lib.rs",
     edition = "2021",
     rustc_flags = ["--cap-lints=allow"],
@@ -38,4 +43,7 @@ rust_library(
         "norustfmt",
     ],
     version = "0.12.3",
+    deps = [
+        "@vendor__ahash-0.7.6//:ahash",
+    ],
 )
