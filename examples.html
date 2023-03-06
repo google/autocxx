@@ -70,10 +70,12 @@
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
             var html = document.querySelector('html');
-            var sidebar = 'hidden';
+            var sidebar = null;
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
             }
             html.classList.remove('sidebar-visible');
             html.classList.add("sidebar-" + sidebar);
@@ -151,7 +153,7 @@
 <li><a href="https://github.com/google/autocxx/tree/main/examples/s2">S2 example</a> - example using S2 geometry library</li>
 <li><a href="https://github.com/google/autocxx/tree/main/examples/steam-mini">Steam example</a> - example using (something like) the Steam client library</li>
 <li><a href="https://github.com/google/autocxx/tree/main/examples/subclass">Subclass example</a> - example using subclasses</li>
-<li><a href="https://github.com/google/autocxx/blob/main/integration-tests/src/tests.rs">Integration tests</a>
+<li><a href="https://github.com/google/autocxx/blob/main/integration-tests/tests/integration_test.rs">Integration tests</a>
 <ul>
 <li>hundreds of small snippets</li>
 </ul>
