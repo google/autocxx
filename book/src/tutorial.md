@@ -21,11 +21,11 @@ First, add `autocxx` *and `cxx`* to your `dependencies` and `autocxx-build` to y
 
 ```toml
 [dependencies]
-autocxx = "0.24.0"
+autocxx = "0.25.0"
 cxx = "1.0"
 
 [build-dependencies]
-autocxx-build = "0.24.0"
+autocxx-build = "0.25.0"
 miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!
 ```
 
