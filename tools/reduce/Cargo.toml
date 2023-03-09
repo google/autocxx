@@ -20,7 +20,7 @@ autocxx-parser = { version = "=0.25.0", path = "../../parser", features = [
     "reproduction_case",
 ] }
 clap = { version = "3.1.2", features = ["cargo"] }
-tempfile = "3.1"
+tempfile = "3.4"
 indoc = "1.0"
 itertools = "0.10"
 serde_json = "1.0"
