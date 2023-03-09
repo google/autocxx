@@ -35,7 +35,7 @@ autocxx-engine = { version = "=0.25.0", path = "../engine", features = [
 ] }
 moveit = { version = "0.5", features = [ "cxx" ] }
 link-cplusplus = "1.0"
-tempfile = "3.1"
+tempfile = "3.4"
 indoc = "1.0"
 log = "0.4"
 cxx = "1.0.78"
