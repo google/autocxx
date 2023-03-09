@@ -243,11 +243,11 @@ sometimes extra steps are required to handle cases like null pointers or convert
 <p>The rest of this 'getting started' section assumes Cargo - if you're using something else, see the <a href="building.html">building</a> section.</p>
 <p>First, add <code>autocxx</code> <em>and <code>cxx</code></em> to your <code>dependencies</code> and <code>autocxx-build</code> to your <code>build-dependencies</code> in your <code>Cargo.toml</code>. <strong>You must specify both.</strong></p>
 <pre><code class="language-toml">[dependencies]
-autocxx = &quot;0.24.0&quot;
+autocxx = &quot;0.25.0&quot;
 cxx = &quot;1.0&quot;
 
 [build-dependencies]
-autocxx-build = &quot;0.24.0&quot;
+autocxx-build = &quot;0.25.0&quot;
 miette = { version = &quot;5&quot;, features = [&quot;fancy&quot;] } # optional but gives nicer error messages!
 </code></pre>
 <p>Now, add a <code>build.rs</code> next to your <code>Cargo.toml</code> (this is a standard <code>cargo</code> <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html">build script</a>). This is where you need your include path:</p>
