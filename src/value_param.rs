@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use cxx::{memory::UniquePtrTarget, UniquePtr};
-use moveit::{CopyNew, DerefMove, MoveNew, New};
+use moveit::{AsMove, CopyNew, MoveNew, New};
 use std::{marker::PhantomPinned, mem::MaybeUninit, ops::Deref, pin::Pin};
 
 /// A trait representing a parameter to a C++ function which is received
@@ -205,9 +205,9 @@ where
 }
 
 /// Explicitly force a value parameter to be taken using C++ move semantics.
-pub fn as_mov<P: DerefMove + Deref<Target = T>, T>(ptr: P) -> impl ValueParam<T>
+pub fn as_mov<P, T>(ptr: P) -> impl ValueParam<T>
 where
-    P: DerefMove,
+    P: AsMove + Deref<Target = T>,
     P::Target: MoveNew,
 {
     ByNew(crate::moveit::new::mov(ptr))
