@@ -1092,8 +1092,7 @@ dependencies = [
 [[package]]
 name = "moveit"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7d756ffe4e38013507d35bf726a93fcdae2cae043ab5ce477f13857a335030d"
+source = "git+https://github.com/silvanshade/moveit?branch=fix-deref-move-soundness-hole#7b6493fc7dbb7b3f94dc9abab7b11dd01a5bbcd4"
 dependencies = [
  "cxx",
 ]
