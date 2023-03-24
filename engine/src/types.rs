@@ -53,11 +53,15 @@ impl Namespace {
     pub(crate) fn depth(&self) -> usize {
         self.0.len()
     }
+
+    pub(crate) fn to_cpp_path(&self) -> String {
+        self.0.join("::")
+    }
 }
 
 impl Display for Namespace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0.join("::"))
+        f.write_str(&self.to_cpp_path())
     }
 }
 
@@ -170,14 +174,6 @@ impl QualifiedName {
         match special_cpp_name {
             Some(name) => name,
             None => self.0.iter().chain(std::iter::once(&self.1)).join("::"),
-        }
-    }
-
-    pub(crate) fn get_final_cpp_item(&self) -> String {
-        let special_cpp_name = known_types().special_cpp_name(self);
-        match special_cpp_name {
-            Some(name) => Self::new_from_cpp_name(&name).1,
-            None => self.1.to_string(),
         }
     }
 
