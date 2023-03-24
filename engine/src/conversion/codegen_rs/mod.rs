@@ -1135,9 +1135,7 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn generate_extern_type_impl(&self, type_kind: TypeKind, tyname: &QualifiedName) -> Vec<Item> {
-        let tynamestring = self
-            .original_name_map
-            .namespaced_name_using_original_name_map(tyname);
+        let tynamestring = self.original_name_map.map(tyname);
         let fulltypath = tyname.get_bindgen_path_idents();
         let kind_item = match type_kind {
             TypeKind::Pod => "Trivial",

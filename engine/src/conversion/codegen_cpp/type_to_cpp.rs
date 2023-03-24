@@ -41,10 +41,7 @@ impl CppNameMap {
     /// Imagine a nested struct in namespace::outer::inner
     /// This function converts from the bindgen name, namespace::outer_inner,
     /// to namespace::outer::inner.
-    pub(crate) fn namespaced_name_using_original_name_map(
-        &self,
-        qual_name: &QualifiedName,
-    ) -> String {
+    pub(crate) fn map(&self, qual_name: &QualifiedName) -> String {
         if let Some(cpp_name) = self.0.get(qual_name) {
             qual_name
                 .get_namespace()
@@ -77,7 +74,7 @@ impl CppNameMap {
                 // If this is a std::unique_ptr we do need to pass
                 // its argument through.
                 let qual_name = QualifiedName::from_type_path(typ);
-                let root = self.namespaced_name_using_original_name_map(&qual_name);
+                let root = self.map(&qual_name);
                 if root == "Pin" {
                     // Strip all Pins from type names when describing them in C++.
                     let inner_type = &typ.path.segments.last().unwrap().arguments;

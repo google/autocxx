@@ -483,9 +483,7 @@ impl<'a> CppCodeGenerator<'a> {
                 CppFunctionBody::Destructor(ns, id) => {
                     let full_name = QualifiedName::new(ns, id.clone());
                     let ty_id = self.original_name_map.get_final_item(&full_name);
-                    let full_name = self
-                        .original_name_map
-                        .namespaced_name_using_original_name_map(&full_name);
+                    let full_name = self.original_name_map.map(&full_name);
                     (
                         format!("{arg_list}->{full_name}::~{ty_id}()"),
                         "".to_string(),
@@ -602,8 +600,7 @@ impl<'a> CppCodeGenerator<'a> {
     }
 
     fn namespaced_name(&self, name: &QualifiedName) -> String {
-        self.original_name_map
-            .namespaced_name_using_original_name_map(name)
+        self.original_name_map.map(name)
     }
 
     fn generate_ctype_typedef(&mut self, tn: &QualifiedName) {
