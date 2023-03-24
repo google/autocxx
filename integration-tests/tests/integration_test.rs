@@ -12065,6 +12065,20 @@ fn test_issue_1229() {
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
+#[test]
+fn test_ignore_va_list() {
+    let hdr = indoc! {"
+        #include <stdarg.h>
+        class A {
+        public:
+            A() {}
+            void fn(va_list) {}
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
