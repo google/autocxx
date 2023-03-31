@@ -18,7 +18,7 @@ use crate::{
 };
 use autocxx_integration_tests::{
     directives_from_lists, do_run_test, do_run_test_manual, run_generate_all_test, run_test,
-    run_test_ex, run_test_expect_fail, run_test_expect_fail_ex, TestError,
+    run_test_ex, run_test_expect_fail, run_test_expect_fail_ex, BuilderModifier, TestError,
 };
 use indoc::indoc;
 use itertools::Itertools;
@@ -842,8 +842,7 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
     run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
 }
 
-#[test]
-fn test_take_char_by_ptr_in_wrapped_method() {
+fn run_char_test(builder_modifier: Option<BuilderModifier>) {
     let hdr = indoc! {"
         #include <cstdint>
         #include <memory>
@@ -873,7 +872,25 @@ fn test_take_char_by_ptr_in_wrapped_method() {
         assert_eq!(unsafe { ch.as_ref()}.unwrap(), &104i8);
         assert_eq!(unsafe { a.as_ref().unwrap().take_char(ch, c2) }, 104);
     };
-    run_test("", hdr, rs, &["A", "C"], &[]);
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["A", "C"], &[], None),
+        builder_modifier,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_take_char_by_ptr_in_wrapped_method() {
+    run_char_test(None)
+}
+
+#[test]
+fn test_take_char_by_ptr_in_wrapped_method_with_unsigned_chars() {
+    run_char_test(make_clang_arg_adder(&["-funsigned-char"]))
 }
 
 #[test]
