@@ -5029,7 +5029,7 @@ fn test_type_aliased_anonymous_struct_ignored() {
         typedef struct {
             int a;
         } Struct;
-        };
+    };
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["test::Struct"], &[]);

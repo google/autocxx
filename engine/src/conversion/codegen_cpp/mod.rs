@@ -483,12 +483,19 @@ impl<'a> CppCodeGenerator<'a> {
                 CppFunctionBody::Destructor(ns, id) => {
                     let full_name = QualifiedName::new(ns, id.clone());
                     let ty_id = self.original_name_map.get_final_item(&full_name);
-                    let full_name = self.original_name_map.map(&full_name);
-                    (
-                        format!("{arg_list}->{full_name}::~{ty_id}()"),
-                        "".to_string(),
-                        false,
-                    )
+                    let destructor_call = format!("{arg_list}->{ty_id}::~{ty_id}()");
+                    let destructor_call = if ns.is_empty() {
+                        destructor_call
+                    } else {
+                        // Annoyingly, there seems to be no way to fully qualify
+                        // a destructor name for an unnamed struct (e.g.
+                        // typedef struct { .. } A) if it's in a namepace.
+                        // We have to bring the type into scope so we can call
+                        // its destructor name.
+                        let path = self.original_name_map.map(&full_name);
+                        format!("{{ using {path}; {destructor_call}; }}")
+                    };
+                    (destructor_call, "".to_string(), false)
                 }
                 CppFunctionBody::FunctionCall(ns, id) => match receiver {
                     Some(receiver) => (
