@@ -4998,6 +4998,77 @@ fn test_union_ignored() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
+#[test]
+fn test_union_nonpod() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    union A {
+        uint32_t a;
+        float b;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_union_pod() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    union A {
+        uint32_t a;
+        float b;
+    };
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &[], &["A"]);
+}
+
+#[test]
+fn test_type_aliased_anonymous_union_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    namespace test {
+        typedef union {
+        int a;
+        } Union;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["test::Union"], &[]);
+}
+
+#[test]
+fn test_type_aliased_anonymous_struct_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    namespace test {
+        typedef struct {
+            int a;
+        } Struct;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["test::Struct"], &[]);
+}
+
+#[test]
+fn test_type_aliased_anonymous_nested_struct_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    namespace test {
+        struct Outer {
+            typedef struct {
+                int a;
+            } Struct;
+            int b;
+        };
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["test::Outer_Struct"], &[]);
+}
+
 #[ignore] // https://github.com/google/autocxx/issues/1251
 #[test]
 fn test_double_underscores_ignored() {

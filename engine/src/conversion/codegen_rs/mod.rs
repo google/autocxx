@@ -55,9 +55,7 @@ use super::{
 use super::{
     api::{Layout, Provenance, RustSubclassFnDetails, SuperclassMethod, TraitImplSignature},
     apivec::ApiVec,
-    codegen_cpp::type_to_cpp::{
-        namespaced_name_using_original_name_map, original_name_map_from_apis, CppNameMap,
-    },
+    codegen_cpp::type_to_cpp::CppNameMap,
 };
 use super::{convert_error::ErrorContext, ConvertErrorFromCpp};
 use quote::quote;
@@ -163,7 +161,7 @@ impl<'a> RsCodeGenerator<'a> {
             unsafe_policy,
             include_list,
             bindgen_mod,
-            original_name_map: original_name_map_from_apis(&all_apis),
+            original_name_map: CppNameMap::new_from_apis(&all_apis),
             config,
             header_name,
         };
@@ -1137,7 +1135,7 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn generate_extern_type_impl(&self, type_kind: TypeKind, tyname: &QualifiedName) -> Vec<Item> {
-        let tynamestring = namespaced_name_using_original_name_map(tyname, &self.original_name_map);
+        let tynamestring = self.original_name_map.map(tyname);
         let fulltypath = tyname.get_bindgen_path_idents();
         let kind_item = match type_kind {
             TypeKind::Pod => "Trivial",
