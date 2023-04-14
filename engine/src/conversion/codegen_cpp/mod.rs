@@ -493,7 +493,7 @@ impl<'a> CppCodeGenerator<'a> {
                         // We have to bring the type into scope so we can call
                         // its destructor name.
                         let path = self.original_name_map.map(&full_name);
-                        format!("{{ using {path}; {destructor_call}; }}")
+                        format!("{{ using {ty_id} = {path}; {destructor_call}; }}")
                     };
                     (destructor_call, "".to_string(), false)
                 }
