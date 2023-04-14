@@ -18,7 +18,7 @@ use crate::{
 };
 use autocxx_integration_tests::{
     directives_from_lists, do_run_test, do_run_test_manual, run_generate_all_test, run_test,
-    run_test_ex, run_test_expect_fail, run_test_expect_fail_ex, TestError,
+    run_test_ex, run_test_expect_fail, run_test_expect_fail_ex, BuilderModifier, TestError,
 };
 use indoc::indoc;
 use itertools::Itertools;
@@ -842,8 +842,7 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
     run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
 }
 
-#[test]
-fn test_take_char_by_ptr_in_wrapped_method() {
+fn run_char_test(builder_modifier: Option<BuilderModifier>) {
     let hdr = indoc! {"
         #include <cstdint>
         #include <memory>
@@ -873,7 +872,25 @@ fn test_take_char_by_ptr_in_wrapped_method() {
         assert_eq!(unsafe { ch.as_ref()}.unwrap(), &104i8);
         assert_eq!(unsafe { a.as_ref().unwrap().take_char(ch, c2) }, 104);
     };
-    run_test("", hdr, rs, &["A", "C"], &[]);
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["A", "C"], &[], None),
+        builder_modifier,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_take_char_by_ptr_in_wrapped_method() {
+    run_char_test(None)
+}
+
+#[test]
+fn test_take_char_by_ptr_in_wrapped_method_with_unsigned_chars() {
+    run_char_test(make_clang_arg_adder(&["-funsigned-char"]))
 }
 
 #[test]
@@ -4979,6 +4996,77 @@ fn test_union_ignored() {
         assert_eq!(b.get_a(), 2);
     };
     run_test("", hdr, rs, &["B"], &[]);
+}
+
+#[test]
+fn test_union_nonpod() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    union A {
+        uint32_t a;
+        float b;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_union_pod() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    union A {
+        uint32_t a;
+        float b;
+    };
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &[], &["A"]);
+}
+
+#[test]
+fn test_type_aliased_anonymous_union_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    namespace test {
+        typedef union {
+        int a;
+        } Union;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["test::Union"], &[]);
+}
+
+#[test]
+fn test_type_aliased_anonymous_struct_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    namespace test {
+        typedef struct {
+            int a;
+        } Struct;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["test::Struct"], &[]);
+}
+
+#[test]
+fn test_type_aliased_anonymous_nested_struct_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    namespace test {
+        struct Outer {
+            typedef struct {
+                int a;
+            } Struct;
+            int b;
+        };
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["test::Outer_Struct"], &[]);
 }
 
 #[ignore] // https://github.com/google/autocxx/issues/1251
@@ -12114,6 +12202,20 @@ fn test_issue_1265() {
             }
         }),
     )
+}
+
+#[test]
+fn test_ignore_va_list() {
+    let hdr = indoc! {"
+        #include <stdarg.h>
+        class A {
+        public:
+            A() {}
+            void fn(va_list) {}
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
 }
 
 // Yet to test:

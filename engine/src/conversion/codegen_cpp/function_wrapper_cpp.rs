@@ -14,7 +14,7 @@ use crate::conversion::{
     ConvertErrorFromCpp,
 };
 
-use super::type_to_cpp::{type_to_cpp, CppNameMap};
+use super::type_to_cpp::CppNameMap;
 
 impl TypeConversionPolicy {
     pub(super) fn unconverted_type(
@@ -49,7 +49,7 @@ impl TypeConversionPolicy {
                 Ok(format!(
                     "{}{}*",
                     const_string,
-                    type_to_cpp(ty, cpp_name_map)?
+                    cpp_name_map.type_to_cpp(ty)?
                 ))
             }
             _ => self.unwrapped_type_as_string(cpp_name_map),
@@ -60,7 +60,7 @@ impl TypeConversionPolicy {
         &self,
         cpp_name_map: &CppNameMap,
     ) -> Result<String, ConvertErrorFromCpp> {
-        type_to_cpp(self.cxxbridge_type(), cpp_name_map)
+        cpp_name_map.type_to_cpp(self.cxxbridge_type())
     }
 
     pub(crate) fn is_a_pointer(&self) -> Pointerness {

@@ -204,7 +204,7 @@ where
     ByNew(crate::moveit::new::copy(ptr))
 }
 
-/// Explicitly force a value parameter to be taken usign C++ move semantics.
+/// Explicitly force a value parameter to be taken using C++ move semantics.
 pub fn as_mov<P: DerefMove + Deref<Target = T>, T>(ptr: P) -> impl ValueParam<T>
 where
     P: DerefMove,

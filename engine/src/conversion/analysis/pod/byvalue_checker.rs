@@ -152,6 +152,12 @@ impl ByValueChecker {
         let fieldlist = Self::get_field_types(def);
         for ty_id in &fieldlist {
             match self.results.get(ty_id) {
+                None if ty_id.get_final_item() == "__BindgenUnionField" => {
+                    field_safety_problem = PodState::UnsafeToBePod(format!(
+                        "Type {tyname} could not be POD because it is a union"
+                    ));
+                    break;
+                }
                 None => {
                     field_safety_problem = PodState::UnsafeToBePod(format!(
                         "Type {tyname} could not be POD because its dependent type {ty_id} isn't known"

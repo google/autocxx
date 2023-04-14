@@ -10,7 +10,7 @@ use crate::{
     conversion::{
         api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
         apivec::ApiVec,
-        codegen_cpp::type_to_cpp::type_to_cpp,
+        codegen_cpp::type_to_cpp::CppNameMap,
         ConvertErrorFromCpp,
     },
     known_types::{known_types, CxxGenericType},
@@ -130,6 +130,7 @@ pub(crate) struct TypeConverter<'a> {
     forward_declarations: HashSet<QualifiedName>,
     ignored_types: HashSet<QualifiedName>,
     config: &'a IncludeCppConfig,
+    original_name_map: CppNameMap,
 }
 
 impl<'a> TypeConverter<'a> {
@@ -144,6 +145,7 @@ impl<'a> TypeConverter<'a> {
             forward_declarations: Self::find_incomplete_types(apis),
             ignored_types: Self::find_ignored_types(apis),
             config,
+            original_name_map: CppNameMap::new_from_apis(apis),
         }
     }
 
@@ -509,7 +511,11 @@ impl<'a> TypeConverter<'a> {
     fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertErrorFromCpp> {
         match *ptr.elem {
             Type::Path(..) => Ok(()),
-            _ => Err(ConvertErrorFromCpp::InvalidPointee),
+            Type::Array(..) => Err(ConvertErrorFromCpp::InvalidArrayPointee),
+            Type::Ptr(..) => Err(ConvertErrorFromCpp::InvalidPointerPointee),
+            _ => Err(ConvertErrorFromCpp::InvalidPointee(
+                ptr.elem.to_token_stream().to_string(),
+            )),
         }
     }
 
@@ -521,7 +527,7 @@ impl<'a> TypeConverter<'a> {
         // We just use this as a hash key, essentially.
         // TODO: Once we've completed the TypeConverter refactoring (see #220),
         // pass in an actual original_name_map here.
-        let cpp_definition = type_to_cpp(rs_definition, &HashMap::new())?;
+        let cpp_definition = self.original_name_map.type_to_cpp(rs_definition)?;
         let e = self.concrete_templates.get(&cpp_definition);
         match e {
             Some(tn) => Ok((tn.clone(), None)),

@@ -20,11 +20,7 @@ use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 use itertools::Itertools;
 use std::borrow::Cow;
-use type_to_cpp::{original_name_map_from_apis, type_to_cpp, CppNameMap};
-
-use self::type_to_cpp::{
-    final_ident_using_original_name_map, namespaced_name_using_original_name_map,
-};
+use type_to_cpp::CppNameMap;
 
 use super::{
     analysis::{
@@ -124,7 +120,7 @@ impl<'a> CppCodeGenerator<'a> {
         let mut gen = CppCodeGenerator {
             additional_functions: Vec::new(),
             inclusions,
-            original_name_map: original_name_map_from_apis(apis),
+            original_name_map: CppNameMap::new_from_apis(apis),
             config,
             cpp_codegen_options,
             cxxgen_header_name,
@@ -172,7 +168,7 @@ impl<'a> CppCodeGenerator<'a> {
                 } => {
                     let effective_cpp_definition = match rs_definition {
                         Some(rs_definition) => {
-                            Cow::Owned(type_to_cpp(rs_definition, &self.original_name_map)?)
+                            Cow::Owned(self.original_name_map.type_to_cpp(rs_definition)?)
                         }
                         None => Cow::Borrowed(cpp_definition),
                     };
@@ -486,9 +482,34 @@ impl<'a> CppCodeGenerator<'a> {
                 )
             }
             CppFunctionBody::Destructor(ns, id) => {
-                let ty_id = QualifiedName::new(ns, id.clone());
-                let ty_id = final_ident_using_original_name_map(&ty_id, &self.original_name_map);
-                (format!("{arg_list}->~{ty_id}()"), "".to_string(), false)
+                let full_name = QualifiedName::new(ns, id.clone());
+                let ty_id = self.original_name_map.get_final_item(&full_name);
+                let is_a_nested_struct = self.original_name_map.get(&full_name).is_some();
+                // This is all super duper fiddly.
+                // All we want to do is call a destructor. Constraints:
+                // * an unnamed struct, e.g. typedef struct { .. } A, does not
+                //   have any way of fully qualifying its destructor name.
+                //   We have to use a 'using' statement.
+                // * we don't get enough information from bindgen to distinguish
+                //   typedef struct { .. } A  // unnamed struct
+                //   from
+                //   struct A { .. }          // named struct
+                // * we can only do 'using A::B::C' if 'B' is a namespace,
+                //   as opposed to a type with an inner type.
+                // * we can always do 'using C = A::B::C' but then SOME C++
+                //   compilers complain that it's unused, iff it's a named struct.
+                let destructor_call = format!("{arg_list}->{ty_id}::~{ty_id}()");
+                let destructor_call = if ns.is_empty() {
+                    destructor_call
+                } else {
+                    let path = self.original_name_map.map(&full_name);
+                    if is_a_nested_struct {
+                        format!("{{ using {ty_id} = {path}; {destructor_call}; {ty_id}* pointless; (void)pointless; }}")
+                    } else {
+                        format!("{{ using {path}; {destructor_call}; }}")
+                    }
+                };
+                (destructor_call, "".to_string(), false)
             }
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
                 Some(receiver) => (
@@ -554,7 +575,7 @@ impl<'a> CppCodeGenerator<'a> {
 
             underlying_function_call = match placement_param {
                 Some(placement_param) => {
-                    let tyname = type_to_cpp(ret.cxxbridge_type(), &self.original_name_map)?;
+                    let tyname = self.original_name_map.type_to_cpp(ret.cxxbridge_type())?;
                     format!("new({placement_param}) {tyname}({call_itself})")
                 }
                 None => format!("return {call_itself}"),
@@ -600,7 +621,7 @@ impl<'a> CppCodeGenerator<'a> {
     }
 
     fn namespaced_name(&self, name: &QualifiedName) -> String {
-        namespaced_name_using_original_name_map(name, &self.original_name_map)
+        self.original_name_map.map(name)
     }
 
     fn generate_ctype_typedef(&mut self, tn: &QualifiedName) {
