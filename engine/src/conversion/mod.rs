@@ -249,17 +249,16 @@ impl<'a> BridgeConverter<'a> {
             .filter(|api| !matches!(api, Api::IgnoredItem { .. }))
             .map(|api| api.effective_cpp_qualified_name())
             .collect();
-        log::info!("Names {:?}", successful_api_names);
         for generate_directive in self.config.must_generate_list() {
-            // Try to give a specific error message if we can.
-            if let Some(error) = fail_api_reasons.get(&generate_directive) {
-                return Err(ConvertError::ExplicitlyRequestedApiWasIgnored(
-                    generate_directive,
-                    error.clone(),
-                ));
-            }
             if !successful_api_names.contains(&generate_directive) {
-                return Err(ConvertError::DidNotGenerateAnything(generate_directive));
+                // Try to give a specific error message if we can.
+                return Err(match fail_api_reasons.get(&generate_directive) {
+                    Some(error) => ConvertError::ExplicitlyRequestedApiWasIgnored(
+                        generate_directive,
+                        error.clone(),
+                    ),
+                    None => ConvertError::DidNotGenerateAnything(generate_directive),
+                });
             }
         }
         Ok(())
