@@ -19,8 +19,14 @@ use syn::{Token, Type};
 /// Map from QualifiedName to original C++ name. Original C++ name does not
 /// include the namespace; this can be assumed to be the same as the namespace
 /// in the QualifiedName.
+///
+/// This is a temporary hash table which can be built from the information
+/// stored in any [`ApiVec`].
+///
 /// The "original C++ name" is mostly relevant in the case of nested types,
-/// where the typename might be A::B within a namespace C::D.
+/// where the typename might be A::B within a namespace C::D. We also store
+/// the original name in here for functions where we've generated a wrapper
+/// function, so we can compare the name against the original allowlist.
 pub(crate) struct CppNameMap(HashMap<QualifiedName, String>);
 
 impl CppNameMap {

@@ -238,14 +238,14 @@ impl<'a> BridgeConverter<'a> {
         let fail_api_reasons: HashMap<_, _> = apis
             .iter()
             .filter_map(|api| match api {
-                Api::IgnoredItem { err, .. } => Some((api.name().to_cpp_name(), err.clone())),
+                Api::IgnoredItem { err, .. } => Some((api.effective_cpp_name().to_string(), err.clone())),
                 _ => None,
             })
             .collect();
         let successful_api_names: HashSet<_> = apis
             .iter()
             .filter(|api| !matches!(api, Api::IgnoredItem { .. }))
-            .map(|api| api.name().to_cpp_name())
+            .map(|api| api.effective_cpp_name().to_string())
             .collect();
         for generate_directive in self.config.must_generate_list() {
             // Try to give a specific error message if we can.
