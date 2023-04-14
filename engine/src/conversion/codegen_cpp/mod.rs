@@ -468,72 +468,60 @@ impl<'a> CppCodeGenerator<'a> {
         } else {
             arg_list.join(", ")
         };
-        let (mut underlying_function_call, field_assignments, need_allocators) =
-            match &details.payload {
-                CppFunctionBody::Cast => (arg_list, "".to_string(), false),
-                CppFunctionBody::PlacementNew(ns, id) => {
-                    let ty_id = QualifiedName::new(ns, id.clone());
-                    let ty_id = self.namespaced_name(&ty_id);
-                    (
-                        format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
-                        "".to_string(),
-                        false,
-                    )
-                }
-                CppFunctionBody::Destructor(ns, id) => {
-                    let full_name = QualifiedName::new(ns, id.clone());
-                    let ty_id = self.original_name_map.get_final_item(&full_name);
-                    let is_a_nested_struct = self.original_name_map.get(&full_name).is_some();
-                    // This is all super duper fiddly.
-                    // All we want to do is call a destructor. Constraints:
-                    // * an unnamed struct, e.g. typedef struct { .. } A, does not
-                    //   have any way of fully qualifying its destructor name.
-                    //   We have to use a 'using' statement.
-                    // * we don't get enough information from bindgen to distinguish
-                    //   typedef struct { .. } A  // unnamed struct
-                    //   from
-                    //   struct A { .. }          // named struct
-                    // * we can only do 'using A::B::C' if 'B' is a namespace,
-                    //   as opposed to a type with an inner type.
-                    // * we can always do 'using C = A::B::C' but then SOME C++
-                    //   compilers complain that it's unused, iff it's a named struct.
-                    let destructor_call = format!("{arg_list}->{ty_id}::~{ty_id}()");
-                    let destructor_call = if ns.is_empty() {
-                        destructor_call
+        let (mut underlying_function_call, field_assignments, need_allocators) = match &details
+            .payload
+        {
+            CppFunctionBody::Cast => (arg_list, "".to_string(), false),
+            CppFunctionBody::PlacementNew(ns, id) => {
+                let ty_id = QualifiedName::new(ns, id.clone());
+                let ty_id = self.namespaced_name(&ty_id);
+                (
+                    format!("new ({}) {}({})", receiver.unwrap(), ty_id, arg_list),
+                    "".to_string(),
+                    false,
+                )
+            }
+            CppFunctionBody::Destructor(ns, id) => {
+                let full_name = QualifiedName::new(ns, id.clone());
+                let ty_id = self.original_name_map.get_final_item(&full_name);
+                let is_a_nested_struct = self.original_name_map.get(&full_name).is_some();
+                // This is all super duper fiddly.
+                // All we want to do is call a destructor. Constraints:
+                // * an unnamed struct, e.g. typedef struct { .. } A, does not
+                //   have any way of fully qualifying its destructor name.
+                //   We have to use a 'using' statement.
+                // * we don't get enough information from bindgen to distinguish
+                //   typedef struct { .. } A  // unnamed struct
+                //   from
+                //   struct A { .. }          // named struct
+                // * we can only do 'using A::B::C' if 'B' is a namespace,
+                //   as opposed to a type with an inner type.
+                // * we can always do 'using C = A::B::C' but then SOME C++
+                //   compilers complain that it's unused, iff it's a named struct.
+                let destructor_call = format!("{arg_list}->{ty_id}::~{ty_id}()");
+                let destructor_call = if ns.is_empty() {
+                    destructor_call
+                } else {
+                    let path = self.original_name_map.map(&full_name);
+                    if is_a_nested_struct {
+                        format!("{{ using {ty_id} = {path}; {destructor_call}; {ty_id}* pointless; (void)pointless; }}")
                     } else {
-                        let path = self.original_name_map.map(&full_name);
-                        if is_a_nested_struct {
-                            format!("{{ using {ty_id} = {path}; {destructor_call}; {ty_id}* pointless; (void)pointless; }}")
-                        } else {
-                            format!("{{ using {path}; {destructor_call}; }}")
-                        }
-                    };
-                    (destructor_call, "".to_string(), false)
-                }
-                CppFunctionBody::FunctionCall(ns, id) => match receiver {
-                    Some(receiver) => (
-                        format!("{receiver}.{id}({arg_list})"),
-                        "".to_string(),
-                        false,
-                    ),
-                    None => {
-                        let underlying_function_call = ns
-                            .into_iter()
-                            .cloned()
-                            .chain(std::iter::once(id.to_string()))
-                            .join("::");
-                        (
-                            format!("{underlying_function_call}({arg_list})"),
-                            "".to_string(),
-                            false,
-                        )
+                        format!("{{ using {path}; {destructor_call}; }}")
                     }
-                },
-                CppFunctionBody::StaticMethodCall(ns, ty_id, fn_id) => {
+                };
+                (destructor_call, "".to_string(), false)
+            }
+            CppFunctionBody::FunctionCall(ns, id) => match receiver {
+                Some(receiver) => (
+                    format!("{receiver}.{id}({arg_list})"),
+                    "".to_string(),
+                    false,
+                ),
+                None => {
                     let underlying_function_call = ns
                         .into_iter()
                         .cloned()
-                        .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
+                        .chain(std::iter::once(id.to_string()))
                         .join("::");
                     (
                         format!("{underlying_function_call}({arg_list})"),
@@ -541,21 +529,34 @@ impl<'a> CppCodeGenerator<'a> {
                         false,
                     )
                 }
-                CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list, false),
-                CppFunctionBody::AllocUninitialized(ty) => {
-                    let namespaced_ty = self.namespaced_name(ty);
-                    (
-                        format!("new_appropriately<{namespaced_ty}>();",),
-                        "".to_string(),
-                        true,
-                    )
-                }
-                CppFunctionBody::FreeUninitialized(ty) => (
-                    format!("delete_appropriately<{}>(arg0);", self.namespaced_name(ty)),
+            },
+            CppFunctionBody::StaticMethodCall(ns, ty_id, fn_id) => {
+                let underlying_function_call = ns
+                    .into_iter()
+                    .cloned()
+                    .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
+                    .join("::");
+                (
+                    format!("{underlying_function_call}({arg_list})"),
+                    "".to_string(),
+                    false,
+                )
+            }
+            CppFunctionBody::ConstructSuperclass(_) => ("".to_string(), arg_list, false),
+            CppFunctionBody::AllocUninitialized(ty) => {
+                let namespaced_ty = self.namespaced_name(ty);
+                (
+                    format!("new_appropriately<{namespaced_ty}>();",),
                     "".to_string(),
                     true,
-                ),
-            };
+                )
+            }
+            CppFunctionBody::FreeUninitialized(ty) => (
+                format!("delete_appropriately<{}>(arg0);", self.namespaced_name(ty)),
+                "".to_string(),
+                true,
+            ),
+        };
         if let Some(ret) = &details.return_conversion {
             let call_itself = match conversion_direction {
                 ConversionDirection::RustCallsCpp => {
