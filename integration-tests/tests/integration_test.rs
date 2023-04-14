@@ -5991,6 +5991,18 @@ fn test_error_generated_for_pod_with_nontrivial_destructor() {
 }
 
 #[test]
+fn test_error_generated_for_double_underscore() {
+    // take_a is necessary here because cxx won't generate the required
+    // static assertions unless the type is actually used in some context
+    // where cxx needs to decide it's trivial or non-trivial.
+    let hdr = indoc! {"
+        inline void __thingy() {}
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &["__thingy"], &[]);
+}
+
+#[test]
 fn test_error_generated_for_pod_with_nontrivial_move_constructor() {
     // take_a is necessary here because cxx won't generate the required
     // static assertions unless the type is actually used in some context
