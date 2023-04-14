@@ -113,45 +113,49 @@ impl TypeConversionPolicy {
                 }
             }
             RustConversionType::FromValueParamToPtr | RustConversionType::FromRValueParamToPtr => {
-                let (handler_type, param_trait) = match self.rust_conversion {
-                    RustConversionType::FromValueParamToPtr => ("ValueParamHandler", "ValueParam"),
-                    RustConversionType::FromRValueParamToPtr => {
-                        ("RValueParamHandler", "RValueParam")
-                    }
-                    _ => unreachable!(),
-                };
-                let handler_type = make_ident(handler_type);
-                let param_trait = make_ident(param_trait);
-                let var_counter = *counter;
-                *counter += 1;
-                let space_var_name = format!("space{var_counter}");
-                let space_var_name = make_ident(space_var_name);
                 let ty = self.cxxbridge_type();
-                let ty = parse_quote! { impl autocxx::#param_trait<#ty> };
-                // This is the usual trick to put something on the stack, then
-                // immediately shadow the variable name so it can't be accessed or moved.
-                RustParamConversion::Param {
-                    ty,
-                    local_variables: vec![
-                        MaybeUnsafeStmt::new(
-                            quote! { let mut #space_var_name = autocxx::#handler_type::default(); },
-                        ),
-                        MaybeUnsafeStmt::binary(
-                            quote! { let mut #space_var_name =
-                                unsafe { ::core::pin::Pin::new_unchecked(&mut #space_var_name) };
+                match self.rust_conversion {
+                    RustConversionType::FromValueParamToPtr => {
+                        let var_counter = *counter;
+                        *counter += 1;
+                        let space_var_name = format!("space{var_counter}");
+                        let space_var_name = make_ident(space_var_name);
+                        let ty = parse_quote! { impl autocxx::ValueParam<#ty> };
+                        // This is the usual trick to put something on the stack, then
+                        // immediately shadow the variable name so it can't be accessed or moved.
+                        RustParamConversion::Param {
+                            ty,
+                            local_variables: vec![
+                                MaybeUnsafeStmt::new(
+                                    quote! { let mut #space_var_name = autocxx::ValueParamHandler::default(); },
+                                ),
+                                MaybeUnsafeStmt::binary(
+                                    quote! { let mut #space_var_name =
+                                        unsafe { ::core::pin::Pin::new_unchecked(&mut #space_var_name) };
+                                    },
+                                    quote! { let mut #space_var_name =
+                                        ::core::pin::Pin::new_unchecked(&mut #space_var_name);
+                                    },
+                                ),
+                                MaybeUnsafeStmt::needs_unsafe(
+                                    quote! { #space_var_name.as_mut().populate(#var); },
+                                ),
+                            ],
+                            conversion: quote! {
+                                #space_var_name.get_ptr()
                             },
-                            quote! { let mut #space_var_name =
-                                ::core::pin::Pin::new_unchecked(&mut #space_var_name);
-                            },
-                        ),
-                        MaybeUnsafeStmt::needs_unsafe(
-                            quote! { #space_var_name.as_mut().populate(#var); },
-                        ),
-                    ],
-                    conversion: quote! {
-                        #space_var_name.get_ptr()
+                            conversion_requires_unsafe: false,
+                        }
+                    }
+                    RustConversionType::FromRValueParamToPtr => RustParamConversion::Param {
+                        ty: ty.clone(),
+                        local_variables: Vec::new(),
+                        conversion: quote! {
+                            autocxx::RValueParam::get_ptr(::core::pin::Pin::new_unchecked(&mut #var))
+                        },
+                        conversion_requires_unsafe: false,
                     },
-                    conversion_requires_unsafe: false,
+                    _ => unreachable!(),
                 }
             }
             // This type of conversion means that this function parameter appears in the cxx::bridge

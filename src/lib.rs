@@ -656,7 +656,6 @@ use cxx::memory::UniquePtrTarget;
 use cxx::UniquePtr;
 use moveit::New;
 pub use rvalue_param::RValueParam;
-pub use rvalue_param::RValueParamHandler;
 pub use value_param::as_copy;
 pub use value_param::as_mov;
 pub use value_param::as_new;
