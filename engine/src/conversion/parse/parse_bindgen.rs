@@ -85,8 +85,6 @@ impl<'a> ParseBindgen<'a> {
             .map_err(ConvertError::Rust)?;
         let root_ns = Namespace::new();
         self.parse_mod_items(items, root_ns);
-        self.confirm_all_generate_directives_obeyed()
-            .map_err(ConvertError::Cpp)?;
         self.replace_extern_cpp_types();
         Ok(self.apis)
     }
@@ -389,21 +387,5 @@ impl<'a> ParseBindgen<'a> {
         s.iter()
             .filter_map(|f| f.ident.as_ref())
             .any(|id| id == desired_id)
-    }
-
-    fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertErrorFromCpp> {
-        let api_names: HashSet<_> = self
-            .apis
-            .iter()
-            .map(|api| api.name().to_cpp_name())
-            .collect();
-        for generate_directive in self.config.must_generate_list() {
-            if !api_names.contains(&generate_directive) {
-                return Err(ConvertErrorFromCpp::DidNotGenerateAnything(
-                    generate_directive,
-                ));
-            }
-        }
-        Ok(())
     }
 }

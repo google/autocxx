@@ -24,6 +24,8 @@ use autocxx_parser::IncludeCppConfig;
 pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use convert_error::ConvertError;
 use convert_error::ConvertErrorFromCpp;
+use indexmap::IndexMap as HashMap;
+use indexmap::IndexSet as HashSet;
 use itertools::Itertools;
 use syn::{Item, ItemMod};
 
@@ -45,7 +47,7 @@ use self::{
         replace_hopeless_typedef_targets,
         tdef::convert_typedef_targets,
     },
-    api::AnalysisPhase,
+    api::{AnalysisPhase, Api},
     apivec::ApiVec,
     codegen_rs::RsCodeGenerator,
     parse::ParseBindgen,
@@ -191,6 +193,11 @@ impl<'a> BridgeConverter<'a> {
                 // Determine what variably-sized C types (e.g. int) we need to include
                 analysis::ctypes::append_ctype_information(&mut analyzed_apis);
                 Self::dump_apis_with_deps("GC", &analyzed_apis);
+                // If at any stage we found any problem with a given API,
+                // we will have replaced it with an Api::IgnoredItem. If any of
+                // those were `generate!` directives, then we want to turn that
+                // into a hard error.
+                self.confirm_all_generate_directives_obeyed(&analyzed_apis)?;
                 // And finally pass them to the code gen phases, which outputs
                 // code suitable for cxx to consume.
                 let cxxgen_header_name = codegen_options
@@ -220,5 +227,38 @@ impl<'a> BridgeConverter<'a> {
                 })
             }
         }
+    }
+
+    /// See if we created Api::IgnoredItems for anything which was explicitly
+    /// requested with a generate! call.
+    fn confirm_all_generate_directives_obeyed(
+        &self,
+        apis: &ApiVec<FnPhase>,
+    ) -> Result<(), ConvertError> {
+        let fail_api_reasons: HashMap<_, _> = apis
+            .iter()
+            .filter_map(|api| match api {
+                Api::IgnoredItem { err, .. } => Some((api.name().to_cpp_name(), err.clone())),
+                _ => None,
+            })
+            .collect();
+        let successful_api_names: HashSet<_> = apis
+            .iter()
+            .filter(|api| !matches!(api, Api::IgnoredItem { .. }))
+            .map(|api| api.name().to_cpp_name())
+            .collect();
+        for generate_directive in self.config.must_generate_list() {
+            // Try to give a specific error message if we can.
+            if let Some(error) = fail_api_reasons.get(&generate_directive) {
+                return Err(ConvertError::ExplicitlyRequestedApiWasIgnored(
+                    generate_directive,
+                    error.clone(),
+                ));
+            }
+            if !successful_api_names.contains(&generate_directive) {
+                return Err(ConvertError::DidNotGenerateAnything(generate_directive));
+            }
+        }
+        Ok(())
     }
 }
