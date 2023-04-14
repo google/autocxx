@@ -40,8 +40,8 @@ use itertools::Itertools;
 use proc_macro2::Span;
 use quote::quote;
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, ReturnType, Type,
-    TypePath, TypePtr, TypeReference, Visibility,
+    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, PatType, ReturnType,
+    Type, TypePath, TypePtr, TypeReference, Visibility,
 };
 
 use crate::{
@@ -748,6 +748,10 @@ impl<'a> FnAnalyzer<'a> {
                     sophistication,
                     false,
                 )
+                .map_err(|err| ConvertErrorFromCpp::Argument {
+                    arg: describe_arg(i),
+                    err: Box::new(err),
+                })
             })
             .partition(Result::is_ok);
         let (mut params, mut param_details): (Punctuated<_, Comma>, Vec<_>) =
@@ -2325,5 +2329,16 @@ impl HasFieldsAndBases for Api<FnPrePhase2> {
             } => Box::new(field_definition_deps.iter().chain(bases.iter())),
             _ => Box::new(std::iter::empty()),
         }
+    }
+}
+
+/// Stringify a function argument for diagnostics
+fn describe_arg(arg: &FnArg) -> String {
+    match arg {
+        FnArg::Receiver(_) => "the function receiver (this/self paramter)".into(),
+        FnArg::Typed(PatType { pat, .. }) => match pat.as_ref() {
+            Pat::Ident(pti) => pti.ident.to_string(),
+            _ => "another argument we don't know how to describe".into(),
+        },
     }
 }

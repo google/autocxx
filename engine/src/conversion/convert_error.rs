@@ -75,8 +75,12 @@ pub enum ConvertErrorFromCpp {
     UnexpectedUseStatement(Option<String>),
     #[error("Type {} was parameterized over something complex which we don't yet support", .0.to_cpp_name())]
     TemplatedTypeContainingNonPathArg(QualifiedName),
-    #[error("Pointer pointed to something unsupported")]
-    InvalidPointee,
+    #[error("Pointer pointed to an array, which is not yet supported")]
+    InvalidArrayPointee,
+    #[error("Pointer pointed to another pointer, which is not yet supported")]
+    InvalidPointerPointee,
+    #[error("Pointer pointed to something unsupported (autocxx only supports pointers to named types): {0}")]
+    InvalidPointee(String),
     #[error("The 'generate' or 'generate_pod' directive for '{0}' did not result in any code being generated. Perhaps this was mis-spelled or you didn't qualify the name with any namespaces? Otherwise please report a bug.")]
     DidNotGenerateAnything(String),
     #[error("Found an attempt at using a forward declaration ({}) inside a templated cxx type such as UniquePtr or CxxVector. If the forward declaration is a typedef, perhaps autocxx wasn't sure whether or not it involved a forward declaration. If you're sure it didn't, then you may be able to solve this by using instantiable!.", .0.to_cpp_name())]
@@ -149,6 +153,12 @@ pub enum ConvertErrorFromCpp {
     ReferringToGenericTypeParam,
     #[error("This forward declaration was nested within another struct/class. autocxx is unable to represent inner types if they are forward declarations.")]
     ForwardDeclaredNestedType,
+    #[error("Problem handling function argument {arg}: {err}")]
+    Argument {
+        arg: String,
+        #[source]
+        err: Box<ConvertErrorFromCpp>,
+    },
 }
 
 /// Error types derived from Rust code. This is separate from [`ConvertError`] because these

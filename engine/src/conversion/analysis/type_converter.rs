@@ -509,7 +509,11 @@ impl<'a> TypeConverter<'a> {
     fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertErrorFromCpp> {
         match *ptr.elem {
             Type::Path(..) => Ok(()),
-            _ => Err(ConvertErrorFromCpp::InvalidPointee),
+            Type::Array(..) => Err(ConvertErrorFromCpp::InvalidArrayPointee),
+            Type::Ptr(..) => Err(ConvertErrorFromCpp::InvalidPointerPointee),
+            _ => Err(ConvertErrorFromCpp::InvalidPointee(
+                ptr.elem.to_token_stream().to_string(),
+            )),
         }
     }
 
