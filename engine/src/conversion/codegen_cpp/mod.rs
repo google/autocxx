@@ -484,20 +484,29 @@ impl<'a> CppCodeGenerator<'a> {
                     let full_name = QualifiedName::new(ns, id.clone());
                     let ty_id = self.original_name_map.get_final_item(&full_name);
                     let is_a_nested_struct = self.original_name_map.get(&full_name).is_some();
+                    // This is all super duper fiddly.
+                    // All we want to do is call a destructor. Constraints:
+                    // * an unnamed struct, e.g. typedef struct { .. } A, does not
+                    //   have any way of fully qualifying its destructor name.
+                    //   We have to use a 'using' statement.
+                    // * we don't get enough information from bindgen to distinguish
+                    //   typedef struct { .. } A  // unnamed struct
+                    //   from
+                    //   struct A { .. }          // named struct
+                    // * we can only do 'using A::B::C' if 'B' is a namespace,
+                    //   as opposed to a type with an inner type.
+                    // * we can always do 'using C = A::B::C' but then SOME C++
+                    //   compilers complain that it's unused, iff it's a named struct.
                     let destructor_call = format!("{arg_list}->{ty_id}::~{ty_id}()");
                     let destructor_call = if ns.is_empty() {
                         destructor_call
-                    } else if is_a_nested_struct {
-                        let path = self.original_name_map.map(&full_name);
-                        format!("{{ using {ty_id} = {path}; {destructor_call}; }}")
                     } else {
-                        // Annoyingly, there seems to be no way to fully qualify
-                        // a destructor name for an unnamed struct (e.g.
-                        // typedef struct { .. } A) if it's in a namepace.
-                        // We have to bring the type into scope so we can call
-                        // its destructor name.
                         let path = self.original_name_map.map(&full_name);
-                        format!("{{ using {path}; {destructor_call}; }}")
+                        if is_a_nested_struct {
+                            format!("{{ using {ty_id} = {path}; {destructor_call}; {ty_id}* pointless; (void)pointless; }}")
+                        } else {
+                            format!("{{ using {path}; {destructor_call}; }}")
+                        }
                     };
                     (destructor_call, "".to_string(), false)
                 }
