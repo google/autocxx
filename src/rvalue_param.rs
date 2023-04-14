@@ -78,6 +78,13 @@ unsafe impl<'a, T> RValueParam<T> for Pin<MoveRef<'a, T>> {
 /// need to pass a value parameter into C++, and will take responsibility
 /// for extracting that value parameter from the [`RValueParam`] and doing
 /// any later cleanup.
+///
+/// Because C++ move constructors may modify the original object, we consume
+/// the object and store it, pinned, until the call completes. This avoids any
+/// risk that C++ will mutate objects elsewhere in Rust-land, which could cause
+/// problems in the case of re-entrancy as references might exist to those
+/// other objects and Rust assumes there are no unexpected mutations of objects
+/// where references exist.
 #[doc(hidden)]
 pub struct RValueParamHandler<T, RVP>
 where
