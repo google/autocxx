@@ -12,14 +12,15 @@ use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
     RebuildDependencyRecorder,
 };
-use crate::{CodegenOptions, CppCodegenOptions, LocatedSynError};
+use crate::{proc_macro_span_to_miette_span, CodegenOptions, CppCodegenOptions, LocatedSynError};
 use autocxx_parser::directive_names::SUBCLASS;
 use autocxx_parser::{AllowlistEntry, RustPath, Subclass, SubclassAttrs};
 use indexmap::set::IndexSet as HashSet;
-use miette::Diagnostic;
+use miette::{Diagnostic, SourceSpan};
 use quote::ToTokens;
 use std::{io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
+use syn::spanned::Spanned;
 use syn::{token::Brace, Item, ItemMod};
 use thiserror::Error;
 
@@ -39,6 +40,8 @@ pub enum ParseError {
     #[error("the subclass attribute couldn't be parsed: {0}")]
     #[diagnostic(transparent)]
     SubclassSyntax(LocatedSynError),
+    #[error("the subclass attribute macro with a superclass attribute requires the Builder::auto_allowlist option to be specified (probably in your build script). This is not recommended - instead you can specify subclass! within your include_cpp!.")]
+    SubclassSuperclassWithoutAutoAllowlist(#[source_code] String, #[label("here")] SourceSpan),
     /// The include CPP macro could not be expanded into
     /// Rust bindings to C++, because of some problem during the conversion
     /// process. This could be anything from a C++ parsing error to some
@@ -149,7 +152,7 @@ fn parse_file_contents(
                         Segment::Other(Item::Mod(itm))
                     }
                 }
-                Item::Struct(ref its) if self.auto_allowlist => {
+                Item::Struct(ref its) => {
                     let attrs = &its.attrs;
                     let is_superclass_attr = attrs.iter().find(|attr| {
                         attr.path
@@ -169,6 +172,14 @@ fn parse_file_contents(
                                     ))
                                 })?;
                             if let Some(superclass) = args.superclass {
+                                if !self.auto_allowlist {
+                                    return Err(
+                                        ParseError::SubclassSuperclassWithoutAutoAllowlist(
+                                            file_contents.to_string(),
+                                            proc_macro_span_to_miette_span(&its.span()),
+                                        ),
+                                    );
+                                }
                                 self.extra_superclasses.push(Subclass {
                                     superclass,
                                     subclass,
