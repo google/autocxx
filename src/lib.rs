@@ -82,7 +82,7 @@ pub use reference_wrapper::{AsCppMutRef, AsCppRef, CppMutRef, CppPin, CppRef, Cp
 ///
 /// * *Recommended*: provide various [`generate`] directives in the
 ///   [`include_cpp`] macro. This can specify functions or types.
-/// * *Not recommended*: in your `build.rs`, call [`Builder::auto_allowlist`].
+/// * *Not recommended*: in your `build.rs`, call `Builder::auto_allowlist`.
 ///   This will attempt to spot _uses_ of FFI bindings anywhere in your Rust code
 ///   and build the allowlist that way. This is experimental and has known limitations.
 /// * *Strongly not recommended*: use [`generate_all`]. This will attempt to
