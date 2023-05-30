@@ -123,8 +123,6 @@ public:
     virtual ~Dinosaur() {}
 };
 
-// Currently, autocxx requires at least one 'generate!' call.
-inline void do_a_thing() {};
 ",
 {
 use autocxx::prelude::*;
@@ -135,16 +133,15 @@ include_cpp! {
     safety!(unsafe_ffi)
     subclass!("Dinosaur", TRex)
     subclass!("Dinosaur", Diplodocus)
-    generate!("do_a_thing")
 }
 
 use ffi::*;
 
-#[is_subclass(superclass("Dinosaur"))]
+#[subclass]
 #[derive(Default)]
 pub struct TRex;
 
-#[is_subclass(superclass("Dinosaur"))]
+#[subclass]
 #[derive(Default)]
 pub struct Diplodocus;
 
