@@ -588,8 +588,8 @@ pub trait WithinBox {
 
 use cxx::kind::Trivial;
 use cxx::ExternType;
+use moveit::Emplace;
 use moveit::MakeCppStorage;
-use moveit::{Emplace, EmplaceUnpinned};
 
 impl<N, T> WithinUniquePtr for N
 where
@@ -697,7 +697,6 @@ pub mod prelude {
     pub use moveit::moveit;
     pub use moveit::new::New;
     pub use moveit::Emplace;
-    pub use moveit::EmplaceUnpinned;
 }
 
 /// Re-export moveit for ease of consumers.
