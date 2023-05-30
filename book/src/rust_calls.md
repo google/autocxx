@@ -61,7 +61,7 @@ include_cpp! {
 
 use ffi::*;
 
-#[is_subclass(superclass("GoatObserver"))]
+#[subclass]
 #[derive(Default)]
 pub struct MyGoatObserver;
 
