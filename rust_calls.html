@@ -190,7 +190,7 @@ include_cpp! {
 
 use ffi::*;
 
-#[is_subclass(superclass(&quot;GoatObserver&quot;))]
+#[subclass]
 #[derive(Default)]
 pub struct MyGoatObserver;
 
@@ -243,8 +243,6 @@ public:
     virtual ~Dinosaur() {}
 };
 
-// Currently, autocxx requires at least one 'generate!' call.
-inline void do_a_thing() {};
 
 </code></pre>
 <h4 id="rust-1"><a class="header" href="#rust-1">Rust:</a></h4>
@@ -257,16 +255,15 @@ include_cpp! {
     safety!(unsafe_ffi)
     subclass!(&quot;Dinosaur&quot;, TRex)
     subclass!(&quot;Dinosaur&quot;, Diplodocus)
-    generate!(&quot;do_a_thing&quot;)
 }
 
 use ffi::*;
 
-#[is_subclass(superclass(&quot;Dinosaur&quot;))]
+#[subclass]
 #[derive(Default)]
 pub struct TRex;
 
-#[is_subclass(superclass(&quot;Dinosaur&quot;))]
+#[subclass]
 #[derive(Default)]
 pub struct Diplodocus;
 
