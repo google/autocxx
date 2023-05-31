@@ -192,7 +192,7 @@ dependencies = [
  "autocxx-engine",
  "env_logger 0.9.3",
  "indexmap",
- "syn 1.0.109",
+ "syn 2.0.18",
 ]
 
 [[package]]
@@ -227,7 +227,7 @@ dependencies = [
  "rustversion",
  "serde_json",
  "strum_macros",
- "syn 1.0.109",
+ "syn 2.0.18",
  "tempfile",
  "thiserror",
  "version_check",
@@ -286,7 +286,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.18",
 ]
 
 [[package]]
@@ -319,7 +319,7 @@ dependencies = [
  "quote",
  "serde",
  "serde_json",
- "syn 1.0.109",
+ "syn 2.0.18",
  "thiserror",
 ]
 
@@ -341,7 +341,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "syn 1.0.109",
+ "syn 2.0.18",
  "tempfile",
 ]
 
@@ -1250,12 +1250,12 @@ dependencies = [
 
 [[package]]
 name = "prettyplease"
-version = "0.1.25"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c8646e95016a7a6c4adea95bafa8a16baab64b583356217f2c85db4a39d9a86"
+checksum = "3b69d39aab54d069e7f2fe8cb970493e7834601ca2d8c65fd7bbd183578080d1"
 dependencies = [
  "proc-macro2",
- "syn 1.0.109",
+ "syn 2.0.18",
 ]
 
 [[package]]

@@ -58,7 +58,7 @@ impl Parse for RustPath {
     fn parse(input: ParseStream) -> ParseResult<Self> {
         let id: Ident = input.parse()?;
         let mut p = RustPath::new_from_ident(id);
-        while input.parse::<Option<syn::token::Colon2>>()?.is_some() {
+        while input.parse::<Option<syn::token::PathSep>>()?.is_some() {
             let id: Ident = input.parse()?;
             p = p.append(id);
         }

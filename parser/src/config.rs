@@ -240,7 +240,7 @@ impl Parse for IncludeCppConfig {
             let (possible_directives, to_parse, parse_completely) = if has_hexathorpe {
                 (&get_directives().need_hexathorpe, input, false)
             } else {
-                input.parse::<Option<syn::token::Bang>>()?;
+                input.parse::<Option<syn::token::Not>>()?;
                 syn::parenthesized!(args in input);
                 (&get_directives().need_exclamation, &args, true)
             };
