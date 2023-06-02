@@ -144,7 +144,7 @@ impl<'a> CodeCheckerFns for CppMatcher<'a> {
         for filename in cpp {
             let file = File::open(filename).unwrap();
             let lines = BufReader::new(file).lines();
-            for l in lines.filter_map(|l| l.ok()) {
+            for l in lines.map_while(Result::ok) {
                 if self.negative_matches.iter().any(|neg| l.contains(neg)) {
                     return Err(TestError::CppCodeExaminationFail);
                 }
