@@ -4240,6 +4240,29 @@ fn test_abstract_nested_type() {
 }
 
 #[test]
+fn test_nested_unnamed_enum() {
+    let hdr = indoc! {"
+        namespace N {
+            struct A {
+                enum {
+                    LOW_VAL = 1,
+                    HIGH_VAL = 1000,
+                };
+            };
+        }
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_ns!("N")},
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
 fn test_nested_type_constructor() {
     let hdr = indoc! {"
         #include <string>
