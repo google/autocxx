@@ -12,7 +12,7 @@ use syn::Attribute;
 pub(super) fn get_doc_attrs(attrs: &[Attribute]) -> Vec<Attribute> {
     attrs
         .iter()
-        .filter(|a| a.path.get_ident().iter().any(|p| *p == "doc"))
+        .filter(|a| a.path().get_ident().iter().any(|p| *p == "doc"))
         .cloned()
         .collect()
 }

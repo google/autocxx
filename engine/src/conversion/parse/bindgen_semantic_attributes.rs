@@ -31,7 +31,7 @@ impl BindgenSemanticAttributes {
     // item can't be processed.
     pub(crate) fn new_retaining_others(attrs: &mut Vec<Attribute>) -> Self {
         let metadata = Self::new(attrs);
-        attrs.retain(|a| a.path.segments.last().unwrap().ident != "cpp_semantics");
+        attrs.retain(|a| a.path().segments.last().unwrap().ident != "cpp_semantics");
         metadata
     }
 
@@ -40,7 +40,7 @@ impl BindgenSemanticAttributes {
             attrs
                 .iter()
                 .filter_map(|attr| {
-                    if attr.path.segments.last().unwrap().ident == "cpp_semantics" {
+                    if attr.path().segments.last().unwrap().ident == "cpp_semantics" {
                         let r: Result<BindgenSemanticAttribute, syn::Error> = attr.parse_args();
                         r.ok()
                     } else {

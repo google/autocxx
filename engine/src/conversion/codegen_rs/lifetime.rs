@@ -91,17 +91,17 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     match new_return_type {
         None => (None, params, ret_type),
         Some(new_return_type) => {
-            for mut param in params.iter_mut() {
-                if let FnArg::Typed(PatType { ty, .. }) = &mut param {
-                    match ty.as_mut() {
-                        Type::Path(TypePath {
-                            path: Path { segments, .. },
-                            ..
-                        }) => add_lifetime_to_pinned_reference(segments).unwrap_or(()),
-                        Type::Reference(tyr) => add_lifetime_to_reference(tyr),
-                        Type::ImplTrait(tyit) => add_lifetime_to_impl_trait(tyit),
-                        _ => {}
-                    }
+            for FnArg::Typed(PatType { ty, .. }) | FnArg::Receiver(syn::Receiver { ty, .. }) in
+                params.iter_mut()
+            {
+                match ty.as_mut() {
+                    Type::Path(TypePath {
+                        path: Path { segments, .. },
+                        ..
+                    }) => add_lifetime_to_pinned_reference(segments).unwrap_or(()),
+                    Type::Reference(tyr) => add_lifetime_to_reference(tyr),
+                    Type::ImplTrait(tyit) => add_lifetime_to_impl_trait(tyit),
+                    _ => {}
                 }
             }
 
@@ -158,7 +158,7 @@ enum AddLifetimeError {
 }
 
 fn add_lifetime_to_pinned_reference(
-    segments: &mut Punctuated<PathSegment, syn::token::Colon2>,
+    segments: &mut Punctuated<PathSegment, syn::token::PathSep>,
 ) -> Result<(), AddLifetimeError> {
     static EXPECTED_SEGMENTS: &[(&[&str], bool)] = &[
         (&["std", "core"], false),

@@ -112,10 +112,9 @@ fn parse_file_contents(
                     )
                 }
                 Item::Mod(itm)
-                    if itm
-                        .attrs
-                        .iter()
-                        .any(|attr| attr.path.to_token_stream().to_string() == "cxx :: bridge") =>
+                    if itm.attrs.iter().any(|attr| {
+                        attr.path().to_token_stream().to_string() == "cxx :: bridge"
+                    }) =>
                 {
                     Segment::Cxx(CxxBridge::from(itm))
                 }
@@ -155,14 +154,14 @@ fn parse_file_contents(
                 Item::Struct(ref its) => {
                     let attrs = &its.attrs;
                     let is_superclass_attr = attrs.iter().find(|attr| {
-                        attr.path
+                        attr.path()
                             .segments
                             .last()
                             .map(|seg| seg.ident == "is_subclass" || seg.ident == SUBCLASS)
                             .unwrap_or(false)
                     });
                     if let Some(is_superclass_attr) = is_superclass_attr {
-                        if !is_superclass_attr.tokens.is_empty() {
+                        if is_superclass_attr.meta.require_path_only().is_err() {
                             let subclass = its.ident.clone();
                             let args: SubclassAttrs =
                                 is_superclass_attr.parse_args().map_err(|e| {

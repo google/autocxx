@@ -55,7 +55,7 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct, layout: Option<Layout>) {
     let doc_attr = s
         .attrs
         .iter()
-        .filter(|a| a.path.get_ident().iter().any(|p| *p == "doc"))
+        .filter(|a| a.path().get_ident().iter().any(|p| *p == "doc"))
         .cloned();
     let repr_attr = if let Some(layout) = &layout {
         let align = make_lit_int(layout.align);

@@ -111,7 +111,7 @@ impl ParseForeignMod {
             _ => return,
         };
         for i in imp.items {
-            if let ImplItem::Method(itm) = i {
+            if let ImplItem::Fn(itm) = i {
                 let effective_fun_name = match get_called_function(&itm.block) {
                     Some(id) => id.clone(),
                     None => itm.sig.ident,
@@ -151,7 +151,7 @@ impl ParseForeignMod {
 /// name of the actual function call inside the block's body.
 fn get_called_function(block: &Block) -> Option<&Ident> {
     match block.stmts.first() {
-        Some(Stmt::Expr(Expr::Call(ExprCall { func, .. }))) => match **func {
+        Some(Stmt::Expr(Expr::Call(ExprCall { func, .. }), _)) => match **func {
             Expr::Path(ref exp) => exp.path.segments.first().map(|ps| &ps.ident),
             _ => None,
         },

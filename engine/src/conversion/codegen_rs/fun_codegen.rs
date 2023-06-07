@@ -408,7 +408,7 @@ impl<'a> FnGenerator<'a> {
             },
         };
         Box::new(ImplBlockDetails {
-            item: ImplItem::Method(parse_quote! {
+            item: ImplItem::Fn(parse_quote! {
                 #(#doc_attrs)*
                 pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                     #call_body
@@ -456,7 +456,7 @@ impl<'a> FnGenerator<'a> {
                 }
         };
         Box::new(ImplBlockDetails {
-            item: ImplItem::Method(parse_quote! { #stuff }),
+            item: ImplItem::Fn(parse_quote! { #stuff }),
             ty: ImplBlockKey { ty, lifetime: None },
         })
     }
