@@ -352,10 +352,23 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Const(const_item) => {
                 let annotations = BindgenSemanticAttributes::new(&const_item.attrs);
-                self.apis.push(UnanalyzedApi::Const {
-                    name: api_name(ns, const_item.ident.clone(), &annotations),
-                    const_item,
-                });
+                // Bindgen generates const expressions for nested unnamed enums,
+                // but autcxx will refuse to expand those enums, making these consts
+                // invalid.
+                let mut enum_type_name_valid = true;
+                if let Type::Path(p) = &*const_item.ty {
+                    if let Some(p) = &p.path.segments.last() {
+                        if validate_ident_ok_for_cxx(&p.ident.to_string()).is_err() {
+                            enum_type_name_valid = false;
+                        }
+                    }
+                }
+                if enum_type_name_valid {
+                    self.apis.push(UnanalyzedApi::Const {
+                        name: api_name(ns, const_item.ident.clone(), &annotations),
+                        const_item,
+                    });
+                }
                 Ok(())
             }
             Item::Type(ity) => {
