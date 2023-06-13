@@ -140,9 +140,9 @@ impl<'a, T> CppRef<'a, T> {
 }
 
 impl<'a, T> core::ops::Deref for CppRef<'a, T> {
-    type Target = T;
+    type Target = *const T;
     #[inline]
-    fn deref(&self) -> &T {
+    fn deref(&self) -> &Self::Target {
         // With `inline_const` we can simplify this to:
         // const { panic!("you shouldn't deref CppRef!") }
         struct C<T>(T);
@@ -211,9 +211,9 @@ impl<'a, T> CppMutRef<'a, T> {
 }
 
 impl<'a, T> core::ops::Deref for CppMutRef<'a, T> {
-    type Target = T;
+    type Target = *const T;
     #[inline]
-    fn deref(&self) -> &T {
+    fn deref(&self) -> &Self::Target {
         // With `inline_const` we can simplify this to:
         // const { panic!("you shouldn't deref CppRef!") }
         struct C<T>(T);
