@@ -67,7 +67,7 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// unstable Rust `arbitrary_self_types` features uses to determine callable
 /// methods. However, actually calling `Deref::deref` is not permitted and will
 /// result in a compilation failure. If you wish to create a Rust reference
-/// from the C++ reference, see [`as_ref`].
+/// from the C++ reference, see [`CppRef::as_ref`].
 ///
 /// # Nullness
 ///
