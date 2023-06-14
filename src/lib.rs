@@ -1,8 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-#![feature(dispatch_from_dyn)]
-#![feature(unsize)]
-
 // Copyright 2020 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
