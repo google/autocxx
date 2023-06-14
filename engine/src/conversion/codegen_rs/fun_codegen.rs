@@ -320,6 +320,17 @@ impl<'a> FnGenerator<'a> {
             || self.always_unsafe_due_to_trait_definition;
         let (call_body, ret_type) = match self.ret_conversion {
             Some(ret_conversion) if ret_conversion.rust_work_needed() => {
+                // There's a potential lurking bug below. If the return type conversion requires
+                // unsafe, then we'll end up doing something like
+                //   unsafe { do_return_conversion( unsafe { call_body() })}
+                // and the generated code will get warnings about nested unsafe blocks.
+                // That's because we convert the call body to tokens in the following
+                // line without considering the fact it's embedded in another expression.
+                // At the moment this is OK because no return type conversions require
+                // unsafe, but if this happens in future, we should do:
+                //   let temp_ret_val = unsafe { call_body() };
+                //   do_return_conversion(temp_ret_val)
+                // by returning a vector of MaybeUnsafes within call_body.
                 let expr = maybe_unsafes_to_tokens(vec![call_body], context_is_unsafe);
                 let conv =
                     ret_conversion.rust_conversion(parse_quote! { #expr }, &mut variable_counter);
