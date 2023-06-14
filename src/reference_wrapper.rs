@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{marker::PhantomData, pin::Pin};
+use core::{marker::PhantomData, ops::Deref, pin::Pin};
 
 use cxx::{memory::UniquePtrTarget, UniquePtr};
 
@@ -30,7 +30,8 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 ///
 /// As noted, one of the main reasons for this type is to call methods.
 /// Unfortunately, that depends on unstable Rust features. If you can't
-/// call methods on one of these references, check you're using nightly.
+/// call methods on one of these references, check you're using nightly
+/// and add `#![feature(arbitrary_self_types)]` to your crate.
 ///
 /// # Lifetimes and cloneability
 ///
@@ -60,9 +61,28 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// store a [`CppPin`] in a struct field, get a `CppRef` to its referent, then
 /// use a setter to reset that field of the struct.)
 ///
+/// # Deref
+///
+/// This type implements [`Deref`] because that's the mechanism that the
+/// unstable Rust `arbitrary_self_types` features uses to determine callable
+/// methods. However, actually calling `Deref::deref` is not permitted and will
+/// result in a compilation failure. If you wish to create a Rust reference
+/// from the C++ reference, see [`as_ref`].
+///
+/// # Nullness
+///
+/// Creation of a null C++ reference is undefined behavior (because such
+/// a reference can only be created by dereferencing a null pointer.)
+/// However, in practice, they exist, and we need to be compatible with
+/// pre-existing C++ APIs even if they do naughty things like this.
+/// Therefore this `CppRef` type does allow null values. This is a bit
+/// unfortunate because it means `Option<CppRef<T>>`
+/// occupies more space than `CppRef<T>`.
+///
 /// # Implementation notes
 ///
-/// Internally, this is represented as a raw pointer in Rust.
+/// Internally, this is represented as a raw pointer in Rust. See the note above
+/// about Nullness for why we don't use [`core::ptr::NonNull`].
 #[repr(transparent)]
 pub struct CppRef<'a, T> {
     ptr: *const T,
@@ -83,6 +103,9 @@ impl<'a, T> CppRef<'a, T> {
     /// C++ or Rust code while the returned reference exists. Callers must
     /// also guarantee that no mutable Rust reference is created to the
     /// referent while the returned reference exists.
+    ///
+    /// Callers must also be sure that the C++ reference is properly
+    /// aligned, not null, pointing to valid data, etc.
     pub unsafe fn as_ref(&self) -> &T {
         &*self.as_ptr()
     }
@@ -139,7 +162,7 @@ impl<'a, T> CppRef<'a, T> {
     }
 }
 
-impl<'a, T> core::ops::Deref for CppRef<'a, T> {
+impl<'a, T> Deref for CppRef<'a, T> {
     type Target = *const T;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -191,6 +214,9 @@ impl<'a, T> CppMutRef<'a, T> {
     /// C++ or Rust code while the returned reference exists. Callers must
     /// also guarantee that no other Rust reference is created to the referent
     /// while the returned reference exists.
+    ///
+    /// Callers must also be sure that the C++ reference is properly
+    /// aligned, not null, pointing to valid data, etc.
     pub unsafe fn as_mut(&mut self) -> &mut T {
         &mut *self.as_mut_ptr()
     }
@@ -210,7 +236,7 @@ impl<'a, T> CppMutRef<'a, T> {
     }
 }
 
-impl<'a, T> core::ops::Deref for CppMutRef<'a, T> {
+impl<'a, T> Deref for CppMutRef<'a, T> {
     type Target = *const T;
     #[inline]
     fn deref(&self) -> &Self::Target {
