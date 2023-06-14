@@ -336,7 +336,11 @@ impl IncludeCppEngine {
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
             })
-            .rustfmt_bindings(log::log_enabled!(log::Level::Info))
+            .formatter(if log::log_enabled!(log::Level::Info) {
+                bindgen::Formatter::Rustfmt
+            } else {
+                bindgen::Formatter::None
+            })
             .size_t_is_usize(true)
             .enable_cxx_namespaces()
             .generate_inline_functions(true)
