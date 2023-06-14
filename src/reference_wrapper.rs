@@ -84,7 +84,7 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// Internally, this is represented as a raw pointer in Rust. See the note above
 /// about Nullness for why we don't use [`core::ptr::NonNull`].
 #[repr(transparent)]
-pub struct CppRef<'a, T> {
+pub struct CppRef<'a, T: ?Sized> {
     ptr: *const T,
     phantom: PhantomData<&'a T>,
 }
@@ -195,7 +195,7 @@ impl<'a, T> Clone for CppRef<'a, T> {
 ///
 /// You can convert this to a [`CppRef`] using the [`std::convert::Into`] trait.
 #[repr(transparent)]
-pub struct CppMutRef<'a, T> {
+pub struct CppMutRef<'a, T: ?Sized> {
     ptr: *mut T,
     phantom: PhantomData<&'a T>,
 }
