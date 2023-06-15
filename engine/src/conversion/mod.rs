@@ -17,6 +17,7 @@ mod convert_error;
 mod doc_attr;
 mod error_reporter;
 mod parse;
+mod type_helpers;
 mod utilities;
 
 use analysis::fun::FnAnalyzer;
