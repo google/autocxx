@@ -1,4 +1,6 @@
 #![doc = include_str!("../README.md")]
+#![cfg_attr(nightly, feature(unsize))]
+#![cfg_attr(nightly, feature(dispatch_from_dyn))]
 
 // Copyright 2020 Google LLC
 //
@@ -575,6 +577,7 @@ pub trait PinMut<T>: AsRef<T> {
 /// and implemented by any (autocxx-related) [`moveit::New`].
 pub trait WithinUniquePtr {
     type Inner: UniquePtrTarget + MakeCppStorage;
+    /// Create this item within a [`cxx::UniquePtr`].
     fn within_unique_ptr(self) -> cxx::UniquePtr<Self::Inner>;
 }
 
@@ -583,7 +586,17 @@ pub trait WithinUniquePtr {
 /// and implemented by any (autocxx-related) [`moveit::New`].
 pub trait WithinBox {
     type Inner;
+    /// Create this item inside a pinned box. This is a good option if you
+    /// want to own this object within Rust, and want to create Rust references
+    /// to it.
     fn within_box(self) -> Pin<Box<Self::Inner>>;
+    /// Create this item inside a [`CppPin`]. This is a good option if you
+    /// want to own this option within Rust, but you want to create [`CppRef`]
+    /// C++ references to it. You'd only want to choose that option if you have
+    /// enabled the C++ reference wrapper support by using the
+    /// `safety!(unsafe_references_wrapped`) directive. If you haven't done
+    /// that, ignore this function.
+    fn within_cpp_pin(self) -> CppPin<Self::Inner>;
 }
 
 use cxx::kind::Trivial;
@@ -609,6 +622,9 @@ where
     type Inner = T;
     fn within_box(self) -> Pin<Box<T>> {
         Box::emplace(self)
+    }
+    fn within_cpp_pin(self) -> CppPin<Self::Inner> {
+        CppPin::from_pinned_box(Box::emplace(self))
     }
 }
 
