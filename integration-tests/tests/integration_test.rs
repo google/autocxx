@@ -9464,7 +9464,7 @@ fn test_uniqueptr_moveit() {
     };
     "};
     let rs = quote! {
-        use autocxx::moveit::EmplaceUnpinned;
+        use autocxx::moveit::Emplace;
         let mut up_obj = cxx::UniquePtr::emplace(ffi::A::new());
         up_obj.as_mut().unwrap().set(42);
         assert_eq!(up_obj.get(), 42);
@@ -9488,7 +9488,6 @@ fn test_various_emplacement() {
     };
     "};
     let rs = quote! {
-        use autocxx::moveit::EmplaceUnpinned;
         use autocxx::moveit::Emplace;
         let mut up_obj = cxx::UniquePtr::emplace(ffi::A::new());
         up_obj.pin_mut().set(666);
@@ -9552,7 +9551,7 @@ fn test_emplace_uses_overridden_new_and_delete() {
         assert!(ffi::was_delete_called());
         ffi::reset_flags();
         {
-            use autocxx::moveit::EmplaceUnpinned;
+            use autocxx::moveit::Emplace;
             let _ = cxx::UniquePtr::emplace(ffi::A::new());
         }
         assert!(ffi::was_delete_called());
