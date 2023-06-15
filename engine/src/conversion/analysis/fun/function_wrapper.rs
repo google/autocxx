@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use crate::{
-    conversion::api::SubclassName,
+    conversion::{api::SubclassName, type_helpers::extract_pinned_mutable_reference_type},
     types::{Namespace, QualifiedName},
 };
 use quote::ToTokens;
@@ -118,7 +118,14 @@ impl TypeConversionPolicy {
             Type::Reference(TypeReference {
                 elem, mutability, ..
             }) => (*elem, mutability.is_some()),
-            _ => panic!("Not a ptr: {}", ty.to_token_stream()),
+            Type::Path(ref tp) => {
+                if let Some(unwrapped_type) = extract_pinned_mutable_reference_type(tp) {
+                    (unwrapped_type.clone(), true)
+                } else {
+                    panic!("Path was not a mutable reference: {}", ty.to_token_stream())
+                }
+            }
+            _ => panic!("Not a reference: {}", ty.to_token_stream()),
         };
         TypeConversionPolicy {
             unwrapped_type: if is_mut {
