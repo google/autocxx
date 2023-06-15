@@ -33,7 +33,7 @@ autocxx = { path = "..", version = "=0.25.0" }
 autocxx-engine = { version = "=0.25.0", path = "../engine", features = [
     "build",
 ] }
-moveit = { version = "0.5", features = [ "cxx" ] }
+moveit = { version = "0.6", features = [ "cxx" ] }
 link-cplusplus = "1.0"
 tempfile = "3.4"
 indoc = "1.0"
