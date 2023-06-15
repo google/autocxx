@@ -12177,6 +12177,58 @@ fn test_issue_1229() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/1265
+fn test_issue_1265() {
+    let hdr = indoc! {"
+        #include <string>
+
+        class Test
+        {
+        public:
+          explicit Test(std::string string)
+            : string(std::move(string))
+          {
+          }
+
+          Test() = delete;
+
+          [[nodiscard]] auto get_string() const -> std::string const& { return this->string; }
+
+        private:
+          std::string string;
+        };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            run();
+        },
+        directives_from_lists(&["Test"], &[], None),
+        None,
+        None,
+        Some(quote! {
+            fn run() {
+                let str0 = "string";
+                let str1 = "another string";
+                let ptr0 = UniquePtr::emplace(ffi::Test::new(str0));
+                let ptr1 = UniquePtr::emplace(ffi::Test::new(str1));
+                println!("0: {}", ptr0.get_string());
+                println!("1: {}", ptr1.get_string());
+                moveit!(let mut ref0 = &move *ptr0);
+                moveit!(let mut ref1 = &move *ptr1);
+                println!("0: {}", ref0.get_string());
+                println!("1: {}", ref1.get_string());
+                println!("swap");
+                core::mem::swap(&mut *ref0, &mut *ref1);
+                println!("0: {}", ref0.get_string());
+                println!("1: {}", ref1.get_string());
+            }
+        }),
+    )
+}
+
+#[test]
 fn test_ignore_va_list() {
     let hdr = indoc! {"
         #include <stdarg.h>
