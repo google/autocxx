@@ -38,6 +38,26 @@ include_cpp! {
     generate!("Field")
 }
 
+impl ffi::Goat {
+    // Methods can be called on a CppRef<T> or &CppRef<T>
+    fn bleat(self: CppRef<Self>) {
+        println!("Bleat");
+    }
+}
+
+trait FarmProduce {
+    // Traits can be defined on a CppRef<T> so long as Self: Sized
+    fn sell(self: &CppRef<Self>)
+    where
+        Self: Sized;
+}
+
+impl FarmProduce for ffi::Goat {
+    fn sell(self: &CppRef<Self>) {
+        println!("Selling goat");
+    }
+}
+
 fn main() {
     // Create a cxx::UniquePtr as normal for a Field object.
     let field = ffi::Field::new().within_unique_ptr();
@@ -58,6 +78,8 @@ fn main() {
     // However, we can take C++ references. And use such references
     // to call methods...
     let another_goat = field.as_cpp_ref().get_goat();
+    another_goat.clone().bleat();
+    another_goat.sell();
     // The 'get_goat' method in C++ returns a reference, so this is
     // another CppRef, not a Rust reference.
     assert_eq!(
