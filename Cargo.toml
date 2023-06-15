@@ -28,7 +28,7 @@ resolver = "2"
 autocxx-macro = { path="macro", version="0.25.0" }
 cxx = "1.0.78" # ... also needed because expansion of type_id refers to ::cxx
 aquamarine = "0.1" # docs
-moveit = { version = "0.5", features = [ "cxx" ] }
+moveit = { version = "0.6", features = [ "cxx" ] }
 
 [workspace]
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce", "tools/mdbook-preprocessor", "integration-tests"]
@@ -39,3 +39,4 @@ exclude = ["examples/s2", "examples/steam-mini", "examples/subclass", "examples/
 #cxx-gen = { path="../cxx/gen/lib" }
 #autocxx-bindgen = { path="../bindgen" }
 #moveit = { path="../moveit" }
+#moveit = { git = "https://github.com/silvanshade/moveit", branch = "fix-deref-move-soundness-hole" }
