@@ -728,7 +728,7 @@ impl<'a> FnAnalyzer<'a> {
         // and it would be nice to have some idea of the function name
         // for diagnostics whilst we do that.
         let initial_rust_name = fun.ident.to_string();
-        let diagnostic_display_name = cpp_name.as_ref().unwrap_or(&initial_rust_name);
+        let diagnostic_display_name = cpp_name.as_ref().unwrap_or(&initial_rust_name).clone();
 
         // Now let's analyze all the parameters.
         // See if any have annotations which our fork of bindgen has craftily inserted...
@@ -739,7 +739,7 @@ impl<'a> FnAnalyzer<'a> {
                 self.convert_fn_arg(
                     i,
                     ns,
-                    diagnostic_display_name,
+                    &diagnostic_display_name,
                     &fun.synthesized_this_type,
                     &fun.references,
                     true,
@@ -1310,6 +1310,9 @@ impl<'a> FnAnalyzer<'a> {
                 self.config
                     .uniquify_name_per_mod(&format!("{cxxbridge_name}{joiner}autocxx_wrapper")),
             );
+            // Retain a memory of the original C++ name so that we can compare
+            // against allowlists etc. later.
+            cpp_name = Some(diagnostic_display_name.clone());
             let (payload, cpp_function_kind) = match fun.synthetic_cpp.as_ref().cloned() {
                 Some((payload, cpp_function_kind)) => (payload, cpp_function_kind),
                 None => match kind {

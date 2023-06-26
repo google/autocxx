@@ -634,6 +634,17 @@ impl<T: AnalysisPhase> Api<T> {
             .unwrap_or_else(|| self.name().get_final_item())
     }
 
+    /// The full qualified C++ name, for use in matching against allowlist
+    /// or blocklists.
+    pub(crate) fn effective_cpp_qualified_name(&self) -> String {
+        let effective_cpp_name = self.effective_cpp_name();
+        self.name()
+            .ns_segment_iter()
+            .map(|s| s.as_str())
+            .chain(std::iter::once(effective_cpp_name))
+            .join("::")
+    }
+
     /// If this API turns out to have the same QualifiedName as another,
     /// whether it's OK to just discard it?
     pub(crate) fn discard_duplicates(&self) -> bool {

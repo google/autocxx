@@ -6014,6 +6014,28 @@ fn test_error_generated_for_pod_with_nontrivial_destructor() {
 }
 
 #[test]
+fn test_error_generated_for_double_underscore() {
+    let hdr = indoc! {"
+        inline void __thingy() {}
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &["__thingy"], &[]);
+}
+
+#[test]
+fn test_error_generated_for_double_underscore_take_value() {
+    // Forces wrapper generation
+    let hdr = indoc! {"
+        struct A {
+            int a;
+        };
+        inline void __thingy(A a) {}
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &["__thingy"], &[]);
+}
+
+#[test]
 fn test_error_generated_for_pod_with_nontrivial_move_constructor() {
     // take_a is necessary here because cxx won't generate the required
     // static assertions unless the type is actually used in some context
