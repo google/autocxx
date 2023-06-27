@@ -11,6 +11,7 @@ use autocxx::prelude::*;
 include_cpp! {
     // C++ headers we want to include.
     #include "s2/r2rect.h"
+    #include "s2/s2cell.h"
     #include "extras.h"
     // Safety policy. We are marking that this whole C++ inclusion is unsafe
     // which means the functions themselves do not need to be marked
