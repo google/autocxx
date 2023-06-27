@@ -12248,20 +12248,13 @@ fn test_reference_const_char_cast() {
 
         class Bytes {
           public:
-            typedef char value_type;
-            typedef std::size_t size_type;
             typedef const char& reference;
           private:
-            const value_type *d_ptr;
-            size_type d_length;
+            const char *d_ptr;
+            std::size_t d_length;
           public:
-            reference front() const;
+            reference front() const { return d_ptr[0]; }
         };
-
-        inline Bytes::reference Bytes::front() const
-        {
-            return d_ptr[0];
-        }
     "};
     let rs = quote! {};
     run_test("", hdr, rs, &["Bytes"], &[]);
