@@ -12244,14 +12244,11 @@ fn test_ignore_va_list() {
 #[test]
 fn test_reference_const_char_cast() {
     let hdr = indoc! {"
-        #include <cstddef>
-
         class Bytes {
           public:
             typedef const char& reference;
           private:
             const char *d_ptr;
-            std::size_t d_length;
           public:
             reference front() const { return d_ptr[0]; }
         };
