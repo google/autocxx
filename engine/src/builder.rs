@@ -63,8 +63,16 @@ pub trait BuilderContext {
 
 /// An object to allow building of bindings from a `build.rs` file.
 ///
-/// It would be unusual to use this directly - see the `autocxx_build` or
+/// It would be unusual to create this directly - see the `autocxx_build` or
 /// `autocxx_gen` crates.
+///
+/// Once you've got one of these objects, you may set some configuration
+/// options but then you're likely to want to call the [`build`] method.
+///
+/// # Setting C++ version
+///
+/// Ensure you use [`extra_clang_args`] as well as giving an appropriate
+/// option to the [`cc::Build`] which you receive from the [`build`] function.
 #[cfg_attr(feature = "nightly", doc(cfg(feature = "build")))]
 pub struct Builder<'a, BuilderContext> {
     rs_file: PathBuf,
@@ -113,7 +121,9 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         }
     }
 
-    /// Specify extra arguments for clang.
+    /// Specify extra arguments for clang. These are used when parsing
+    /// C++ headers. For example, you might want to provide
+    /// `-std=c++17` to specify C++17.
     pub fn extra_clang_args(mut self, extra_clang_args: &[&str]) -> Self {
         self.extra_clang_args = extra_clang_args.iter().map(|s| s.to_string()).collect();
         self
@@ -189,6 +199,17 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
     /// so if you use the `miette` crate and its `fancy` feature, then simply
     /// return a `miette::Result` from your main function, you should get nicely
     /// printed diagnostics.
+    ///
+    /// As this is a [`cc::Build`] there are lots of options you can apply to
+    /// the resulting options, but please bear in mind that these only apply
+    /// to the build process for the generated code - such options will not
+    /// influence autocxx's process for parsing header files.
+    ///
+    /// For example, if you wish to set the C++ version to C++17, you might
+    /// be tempted to use [`cc::Build::flag_if_supported`] to add the
+    /// `-std=c++17` flag. However, this won't affect the header parsing which
+    /// autocxx does internally (by means of bindgen) so you _additionally_
+    /// should call [`extra_clang_args`] with that same option.
     pub fn build(self) -> Result<BuilderBuild, BuilderError> {
         self.build_listing_files().map(|r| r.0)
     }
