@@ -34,6 +34,7 @@ use crate::{
         },
         api::{Pointerness, UnsafetyNeeded},
     },
+    minisyn::minisynize_vec,
     types::{Namespace, QualifiedName},
 };
 use crate::{
@@ -104,7 +105,7 @@ pub(super) fn gen_function(
     let params = analysis.params;
     let vis = analysis.vis;
     let kind = analysis.kind;
-    let doc_attrs = fun.doc_attrs;
+    let doc_attrs = minisynize_vec(fun.doc_attrs);
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
@@ -169,10 +170,10 @@ pub(super) fn gen_function(
         FnKind::Method { .. } | FnKind::TraitMethod { .. } => None,
         FnKind::Function => match analysis.rust_rename_strategy {
             _ if analysis.rust_wrapper_needed => {
-                Some(Use::SpecificNameFromBindgen(make_ident(rust_name)))
+                Some(Use::SpecificNameFromBindgen(make_ident(rust_name).into()))
             }
             RustRenameStrategy::RenameInOutputMod(ref alias) => {
-                Some(Use::UsedFromCxxBridgeWithAlias(alias.clone()))
+                Some(Use::UsedFromCxxBridgeWithAlias(alias.clone().into()))
             }
             _ => Some(Use::UsedFromCxxBridge),
         },
@@ -262,10 +263,10 @@ impl<'a> FnGenerator<'a> {
         let mut any_conversion_requires_unsafe = false;
         let mut variable_counter = 0usize;
         for pd in self.param_details {
-            let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
+            let wrapper_arg_name: syn::Pat = if pd.self_type.is_some() && !avoid_self {
                 parse_quote!(self)
             } else {
-                pd.name.clone()
+                pd.name.clone().into()
             };
             let rust_for_param = pd
                 .conversion

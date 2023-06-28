@@ -17,6 +17,7 @@ mod ast_discoverer;
 mod conversion;
 mod cxxbridge;
 mod known_types;
+mod minisyn;
 mod output_generators;
 mod parse_callbacks;
 mod parse_file;

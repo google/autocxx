@@ -6,12 +6,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::Ident;
 use itertools::Itertools;
 use proc_macro2::Span;
 use quote::ToTokens;
 use std::iter::Peekable;
 use std::{fmt::Display, sync::Arc};
-use syn::{parse_quote, Ident, PathSegment, TypePath};
+use syn::{parse_quote, PathSegment, TypePath};
 use thiserror::Error;
 
 use crate::known_types::known_types;
@@ -85,7 +86,7 @@ impl<'a> IntoIterator for &'a Namespace {
 /// either. It doesn't directly have functionality to convert
 /// from one to the other; `replace_type_path_without_arguments`
 /// does that.
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
+#[derive(PartialEq, PartialOrd, Eq, Hash, Clone)]
 pub struct QualifiedName(Namespace, String);
 
 impl QualifiedName {
@@ -222,6 +223,12 @@ impl Display for QualifiedName {
             f.write_str("::")?;
         }
         f.write_str(&self.1)
+    }
+}
+
+impl std::fmt::Debug for QualifiedName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
     }
 }
 

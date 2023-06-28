@@ -24,6 +24,7 @@ use crate::{
     types::QualifiedName,
 };
 
+#[derive(std::fmt::Debug)]
 pub(crate) struct TypedefAnalysis {
     pub(crate) kind: TypedefKind,
     pub(crate) deps: HashSet<QualifiedName>,
@@ -31,6 +32,7 @@ pub(crate) struct TypedefAnalysis {
 
 /// Analysis phase where typedef analysis has been performed but no other
 /// analyses just yet.
+#[derive(std::fmt::Debug)]
 pub(crate) struct TypedefPhase;
 
 impl AnalysisPhase for TypedefPhase {
@@ -57,7 +59,7 @@ pub(crate) fn convert_typedef_targets(
             Ok(Box::new(std::iter::once(match item {
                 TypedefKind::Type(ity) => get_replacement_typedef(
                     name,
-                    ity,
+                    ity.into(),
                     old_tyname,
                     &mut type_converter,
                     &mut extra_apis,
@@ -116,10 +118,10 @@ fn get_replacement_typedef(
             extra_apis.append(&mut final_type.extra_apis);
             Ok(Api::Typedef {
                 name,
-                item: TypedefKind::Type(ity),
+                item: TypedefKind::Type(ity.into()),
                 old_tyname,
                 analysis: TypedefAnalysis {
-                    kind: TypedefKind::Type(converted_type),
+                    kind: TypedefKind::Type(converted_type.into()),
                     deps: final_type.types_encountered,
                 },
             })

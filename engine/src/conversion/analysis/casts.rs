@@ -6,9 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::FnArg;
 use itertools::Itertools;
 use quote::quote;
-use syn::{parse_quote, FnArg};
+use syn::parse_quote;
 
 use crate::{
     conversion::{

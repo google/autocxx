@@ -29,6 +29,7 @@ use crate::{
         error_reporter::{convert_apis, report_any_error},
     },
     known_types::known_types,
+    minisyn::minisynize_punctuated,
     types::validate_ident_ok_for_rust,
 };
 use indexmap::map::IndexMap as HashMap;
@@ -86,7 +87,7 @@ pub(crate) enum MethodKind {
     PureVirtual(ReceiverMutability),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum TraitMethodKind {
     CopyConstructor,
     MoveConstructor,
@@ -96,11 +97,11 @@ pub(crate) enum TraitMethodKind {
     Dealloc,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct TraitMethodDetails {
     pub(crate) trt: TraitImplSignature,
     pub(crate) avoid_self: bool,
-    pub(crate) method_name: Ident,
+    pub(crate) method_name: crate::minisyn::Ident,
     /// For traits, where we're trying to implement a specific existing
     /// interface, we may need to reorder the parameters to fit that
     /// interface.
@@ -110,7 +111,7 @@ pub(crate) struct TraitMethodDetails {
     pub(crate) trait_call_is_unsafe: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum FnKind {
     Function,
     Method {
@@ -130,31 +131,31 @@ pub(crate) enum FnKind {
 
 /// Strategy for ensuring that the final, callable, Rust name
 /// is what the user originally expected.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 
 pub(crate) enum RustRenameStrategy {
     /// cxx::bridge name matches user expectations
     None,
     /// Even the #[rust_name] attribute would cause conflicts, and we need
     /// to use a 'use XYZ as ABC'
-    RenameInOutputMod(Ident),
+    RenameInOutputMod(crate::minisyn::Ident),
     /// This function requires us to generate a Rust function to do
     /// parameter conversion.
     RenameUsingWrapperFunction,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct FnAnalysis {
     /// Each entry in the cxx::bridge needs to have a unique name, even if
     /// (from the perspective of Rust and C++) things are in different
     /// namespaces/mods.
-    pub(crate) cxxbridge_name: Ident,
+    pub(crate) cxxbridge_name: crate::minisyn::Ident,
     /// ... so record also the name under which we wish to expose it in Rust.
     pub(crate) rust_name: String,
     pub(crate) rust_rename_strategy: RustRenameStrategy,
     pub(crate) params: Punctuated<FnArg, Comma>,
     pub(crate) kind: FnKind,
-    pub(crate) ret_type: ReturnType,
+    pub(crate) ret_type: crate::minisyn::ReturnType,
     pub(crate) param_details: Vec<ArgumentAnalysis>,
     pub(crate) ret_conversion: Option<TypeConversionPolicy>,
     pub(crate) requires_unsafe: UnsafetyNeeded,
@@ -173,10 +174,10 @@ pub(crate) struct FnAnalysis {
     pub(crate) rust_wrapper_needed: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct ArgumentAnalysis {
     pub(crate) conversion: TypeConversionPolicy,
-    pub(crate) name: Pat,
+    pub(crate) name: crate::minisyn::Pat,
     pub(crate) self_type: Option<(QualifiedName, ReceiverMutability)>,
     pub(crate) has_lifetime: bool,
     pub(crate) is_mutable_reference: bool,
@@ -207,6 +208,7 @@ impl Default for ReturnTypeAnalysis {
     }
 }
 
+#[derive(std::fmt::Debug)]
 pub(crate) struct PodAndConstructorAnalysis {
     pub(crate) pod: PodAnalysis,
     pub(crate) constructors: PublicConstructors,
@@ -214,6 +216,7 @@ pub(crate) struct PodAndConstructorAnalysis {
 
 /// An analysis phase where we've analyzed each function, but
 /// haven't yet determined which constructors/etc. belong to each type.
+#[derive(std::fmt::Debug)]
 pub(crate) struct FnPrePhase1;
 
 impl AnalysisPhase for FnPrePhase1 {
@@ -224,6 +227,7 @@ impl AnalysisPhase for FnPrePhase1 {
 
 /// An analysis phase where we've analyzed each function, and identified
 /// what implicit constructors/destructors are present in each type.
+#[derive(std::fmt::Debug)]
 pub(crate) struct FnPrePhase2;
 
 impl AnalysisPhase for FnPrePhase2 {
@@ -232,6 +236,7 @@ impl AnalysisPhase for FnPrePhase2 {
     type FunAnalysis = FnAnalysis;
 }
 
+#[derive(Debug)]
 pub(crate) struct PodAndDepAnalysis {
     pub(crate) pod: PodAnalysis,
     pub(crate) constructor_and_allocator_deps: Vec<QualifiedName>,
@@ -240,6 +245,7 @@ pub(crate) struct PodAndDepAnalysis {
 
 /// Analysis phase after we've finished analyzing functions and determined
 /// which constructors etc. belong to them.
+#[derive(std::fmt::Debug)]
 pub(crate) struct FnPhase;
 
 /// Indicates which kinds of public constructors are known to exist for a type.
@@ -879,7 +885,7 @@ impl<'a> FnAnalyzer<'a> {
                             impl_for: self_ty,
                             details: Box::new(TraitMethodDetails {
                                 trt: TraitImplSignature {
-                                    ty,
+                                    ty: ty.into(),
                                     trait_signature: parse_quote! {
                                         autocxx::moveit::new:: #trait_id
                                     },
@@ -915,7 +921,7 @@ impl<'a> FnAnalyzer<'a> {
                         impl_for: self_ty,
                         details: Box::new(TraitMethodDetails {
                             trt: TraitImplSignature {
-                                ty,
+                                ty: ty.into(),
                                 trait_signature: parse_quote! {
                                     Drop
                                 },
@@ -1370,10 +1376,10 @@ impl<'a> FnAnalyzer<'a> {
             params.clear();
             for pd in &param_details {
                 let type_name = pd.conversion.converted_rust_type();
-                let arg_name = if pd.self_type.is_some() {
+                let arg_name: syn::Pat = if pd.self_type.is_some() {
                     parse_quote!(autocxx_gen_this)
                 } else {
-                    pd.name.clone()
+                    pd.name.clone().into()
                 };
                 params.push(parse_quote!(
                     #arg_name: #type_name
@@ -1432,10 +1438,10 @@ impl<'a> FnAnalyzer<'a> {
             params,
             ret_conversion: ret_type_conversion,
             kind,
-            ret_type,
+            ret_type: ret_type.into(),
             param_details,
             requires_unsafe,
-            vis,
+            vis: vis.into(),
             cpp_wrapper,
             deps,
             ignore_reason,
@@ -1557,7 +1563,7 @@ impl<'a> FnAnalyzer<'a> {
                         impl_for: from_type.clone(),
                         details: Box::new(TraitMethodDetails {
                             trt: TraitImplSignature {
-                                ty,
+                                ty: ty.into(),
                                 trait_signature,
                                 unsafety: None,
                             },
@@ -1601,7 +1607,7 @@ impl<'a> FnAnalyzer<'a> {
                 impl_for: ty.clone(),
                 details: Box::new(TraitMethodDetails {
                     trt: TraitImplSignature {
-                        ty: Type::Path(typ),
+                        ty: Type::Path(typ).into(),
                         trait_signature: parse_quote! { autocxx::moveit::MakeCppStorage },
                         unsafety: Some(parse_quote! { unsafe }),
                     },
@@ -1699,7 +1705,7 @@ impl<'a> FnAnalyzer<'a> {
                     syn::Pat::Ident(pp) => {
                         validate_ident_ok_for_cxx(&pp.ident.to_string())
                             .map_err(ConvertErrorFromCpp::InvalidIdent)?;
-                        pointer_treatment = references.param_treatment(&pp.ident);
+                        pointer_treatment = references.param_treatment(&pp.ident.clone().into());
                         syn::Pat::Ident(pp)
                     }
                     _ => old_pat,
@@ -1736,7 +1742,7 @@ impl<'a> FnAnalyzer<'a> {
                     FnArg::Typed(pt),
                     ArgumentAnalysis {
                         self_type,
-                        name: new_pat,
+                        name: new_pat.into(),
                         conversion,
                         has_lifetime: matches!(
                             annotated_type.kind,
@@ -2152,9 +2158,12 @@ impl<'a> FnAnalyzer<'a> {
                     Box::new(FuncToConvert {
                         self_ty: Some(self_ty.clone()),
                         ident,
-                        doc_attrs: make_doc_attrs(format!("Synthesized {special_member}.")),
-                        inputs,
-                        output: ReturnType::Default,
+                        doc_attrs: make_doc_attrs(format!("Synthesized {special_member}."))
+                            .into_iter()
+                            .map(Into::into)
+                            .collect(),
+                        inputs: minisynize_punctuated(inputs),
+                        output: ReturnType::Default.into(),
                         vis: parse_quote! { pub },
                         virtualness: Virtualness::None,
                         cpp_vis: CppVisibility::Public,
@@ -2253,7 +2262,7 @@ impl Api<FnPhase> {
         )
     }
 
-    pub(crate) fn cxxbridge_name(&self) -> Option<Ident> {
+    pub(crate) fn cxxbridge_name(&self) -> Option<crate::minisyn::Ident> {
         match self {
             Api::Function { ref analysis, .. } => Some(analysis.cxxbridge_name.clone()),
             Api::StringConstructor { .. }

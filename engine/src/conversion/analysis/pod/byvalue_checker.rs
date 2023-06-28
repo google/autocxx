@@ -102,7 +102,7 @@ impl ByValueChecker {
                             _ => None,
                         },
                         TypedefKind::Use(_, ref ty) => match **ty {
-                            Type::Path(ref typ) => {
+                            crate::minisyn::Type(Type::Path(ref typ)) => {
                                 let target_tn = QualifiedName::from_type_path(typ);
                                 known_types().consider_substitution(&target_tn)
                             }
@@ -147,7 +147,7 @@ impl ByValueChecker {
 
     fn ingest_struct(&mut self, def: &ItemStruct, ns: &Namespace) {
         // For this struct, work out whether it _could_ be safe as a POD.
-        let tyname = QualifiedName::new(ns, def.ident.clone());
+        let tyname = QualifiedName::new(ns, def.ident.clone().into());
         let mut field_safety_problem = PodState::SafeToBePod;
         let fieldlist = Self::get_field_types(def);
         for ty_id in &fieldlist {
@@ -272,10 +272,11 @@ impl ByValueChecker {
 #[cfg(test)]
 mod tests {
     use super::ByValueChecker;
+    use crate::minisyn::ItemStruct;
     use crate::types::{Namespace, QualifiedName};
-    use syn::{parse_quote, Ident, ItemStruct};
+    use syn::parse_quote;
 
-    fn ty_from_ident(id: &Ident) -> QualifiedName {
+    fn ty_from_ident(id: &syn::Ident) -> QualifiedName {
         QualifiedName::new_from_cpp_name(&id.to_string())
     }
 

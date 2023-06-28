@@ -6,6 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::ops::DerefMut;
+
 use indexmap::map::IndexMap as HashMap;
 
 use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
@@ -17,6 +19,7 @@ use crate::conversion::api::{
     SubclassName, SuperclassMethod, UnsafetyNeeded, Virtualness,
 };
 use crate::conversion::apivec::ApiVec;
+use crate::minisyn::minisynize_punctuated;
 use crate::{
     conversion::{
         analysis::fun::function_wrapper::{
@@ -85,6 +88,7 @@ pub(super) fn create_subclass_trait_item(
         .param_details
         .iter()
         .map(|pd| pd.name.clone())
+        .map(Into::into)
         .collect();
     let requires_unsafe = if matches!(unsafe_policy, UnsafePolicy::AllFunctionsUnsafe) {
         UnsafetyNeeded::Always
@@ -95,7 +99,7 @@ pub(super) fn create_subclass_trait_item(
         name,
         details: SuperclassMethod {
             name: make_ident(&analysis.rust_name),
-            params: analysis.params.clone(),
+            params: minisynize_punctuated(analysis.params.clone()),
             ret_type: analysis.ret_type.clone(),
             param_names,
             receiver_mutability: *receiver_mutability,
@@ -122,10 +126,10 @@ pub(super) fn create_subclass_function(
         sub.0.name.get_final_item(),
         name.name.get_final_item()
     ));
-    let params = std::iter::once(parse_quote! {
+    let params = std::iter::once(crate::minisyn::FnArg(parse_quote! {
         me: & #holder_name
-    })
-    .chain(analysis.params.iter().skip(1).cloned())
+    }))
+    .chain(analysis.params.iter().skip(1).cloned().map(Into::into))
     .collect();
     let kind = if matches!(receiver_mutability, ReceiverMutability::Mutable) {
         CppFunctionKind::Method
@@ -213,7 +217,9 @@ pub(super) fn create_subclass_constructor(
     let subclass_constructor_name =
         make_ident(format!("{}_{}", cpp.get_final_item(), cpp.get_final_item()));
     let mut existing_params = fun.inputs.clone();
-    if let Some(FnArg::Typed(PatType { ty, .. })) = existing_params.first_mut() {
+    if let Some(FnArg::Typed(PatType { ty, .. })) =
+        existing_params.first_mut().map(DerefMut::deref_mut)
+    {
         if let Type::Ptr(TypePtr { elem, .. }) = &mut **ty {
             *elem = Box::new(Type::Path(sub.cpp().to_type_path()));
         } else {
@@ -229,7 +235,7 @@ pub(super) fn create_subclass_constructor(
     };
     let inputs = self_param
         .into_iter()
-        .chain(std::iter::once(boxed_holder_param))
+        .chain(std::iter::once(boxed_holder_param.into()))
         .chain(existing_params)
         .collect();
     let maybe_wrap = Box::new(FuncToConvert {
