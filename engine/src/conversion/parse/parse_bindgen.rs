@@ -333,7 +333,6 @@ impl<'a> ParseBindgen<'a> {
                                     },
                                     Box::new(Type::Path(old_path).into()),
                                 ),
-                                is_reference: false,
                                 old_tyname: Some(old_tyname),
                                 analysis: (),
                             });
@@ -374,14 +373,12 @@ impl<'a> ParseBindgen<'a> {
             }
             Item::Type(ity) => {
                 let annotations = BindgenSemanticAttributes::new(&ity.attrs);
-                let is_reference = annotations.has_attr("reference");
                 // It's known that sometimes bindgen will give us duplicate typedefs with the
                 // same name - see test_issue_264.
                 self.apis.push(UnanalyzedApi::Typedef {
                     name: api_name(ns, ity.ident.clone(), &annotations),
                     item: TypedefKind::Type(ity.into()),
                     old_tyname: None,
-                    is_reference,
                     analysis: (),
                 });
                 Ok(())

@@ -511,7 +511,6 @@ pub(crate) enum Api<T: AnalysisPhase> {
         name: ApiName,
         item: TypedefKind,
         old_tyname: Option<QualifiedName>,
-        is_reference: bool,
         analysis: T::TypedefAnalysis,
     },
     /// An enum encountered in the
@@ -667,7 +666,6 @@ impl<T: AnalysisPhase> Api<T> {
         name: ApiName,
         item: TypedefKind,
         old_tyname: Option<QualifiedName>,
-        is_reference: bool,
         analysis: T::TypedefAnalysis,
     ) -> Result<Box<dyn Iterator<Item = Api<T>>>, ConvertErrorWithContext>
     where
@@ -677,7 +675,6 @@ impl<T: AnalysisPhase> Api<T> {
             name,
             item,
             old_tyname,
-            is_reference,
             analysis,
         })))
     }

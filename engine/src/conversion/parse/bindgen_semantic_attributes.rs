@@ -72,7 +72,7 @@ impl BindgenSemanticAttributes {
     }
 
     /// Whether the given attribute is present.
-    pub(super) fn has_attr(&self, attr_name: &str) -> bool {
+    pub(crate) fn has_attr(&self, attr_name: &str) -> bool {
         self.0.iter().any(|a| a.is_ident(attr_name))
     }
 

@@ -24,9 +24,12 @@ use crate::{
     types::QualifiedName,
 };
 
+use super::{type_converter::TypedefTargetType, PointerTreatment};
+
 #[derive(std::fmt::Debug)]
 pub(crate) struct TypedefAnalysis {
     pub(crate) kind: TypedefKind,
+    pub(crate) target: TypedefTargetType,
     pub(crate) deps: HashSet<QualifiedName>,
 }
 
@@ -64,12 +67,16 @@ pub(crate) fn convert_typedef_targets(
                     &mut type_converter,
                     &mut extra_apis,
                 )?,
-                TypedefKind::Use { .. } => Api::Typedef {
+                TypedefKind::Use(ref _itu, ref boxed_type) => Api::Typedef {
                     name,
                     item: item.clone(),
                     old_tyname,
                     analysis: TypedefAnalysis {
-                        kind: item,
+                        kind: item.clone(),
+                        target: TypedefTargetType {
+                            ty: boxed_type.as_ref().clone(),
+                            is_reference: false,
+                        },
                         deps: HashSet::new(),
                     },
                 },
@@ -96,10 +103,18 @@ fn get_replacement_typedef(
     let mut converted_type = ity.clone();
     let metadata = BindgenSemanticAttributes::new_retaining_others(&mut converted_type.attrs);
     metadata.check_for_fatal_attrs(&ity.ident)?;
+    let is_reference = metadata.has_attr("reference");
+    let type_conversion_context = if is_reference {
+        TypeConversionContext::OuterType {
+            pointer_treatment: PointerTreatment::Reference,
+        }
+    } else {
+        TypeConversionContext::WithinReference
+    };
     let type_conversion_results = type_converter.convert_type(
         (*ity.ty).clone(),
         name.name.get_namespace(),
-        &TypeConversionContext::WithinReference,
+        &type_conversion_context,
     );
     match type_conversion_results {
         Err(err) => Err(ConvertErrorWithContext(
@@ -120,9 +135,12 @@ fn get_replacement_typedef(
                 name,
                 item: TypedefKind::Type(ity.into()),
                 old_tyname,
-                is_reference,
                 analysis: TypedefAnalysis {
                     kind: TypedefKind::Type(converted_type.into()),
+                    target: TypedefTargetType {
+                        ty: final_type.ty.into(),
+                        is_reference: final_type.kind.is_reference(),
+                    },
                     deps: final_type.types_encountered,
                 },
             })

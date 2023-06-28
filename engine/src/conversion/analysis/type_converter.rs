@@ -8,7 +8,7 @@
 
 use crate::{
     conversion::{
-        api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
+        api::{AnalysisPhase, Api, ApiName, NullPhase, UnanalyzedApi},
         apivec::ApiVec,
         codegen_cpp::type_to_cpp::CppNameMap,
         ConvertErrorFromCpp,
@@ -38,6 +38,15 @@ pub(crate) enum TypeKind {
     Reference,
     RValueReference,
     MutableReference,
+}
+
+impl TypeKind {
+    pub(crate) fn is_reference(&self) -> bool {
+        matches!(
+            self,
+            Self::Reference | Self::RValueReference | Self::MutableReference
+        )
+    }
 }
 
 /// Results of some type conversion, annotated with a list of every type encountered,
@@ -125,7 +134,7 @@ impl TypeConversionContext {
 /// inspecting the pre-existing list of APIs.
 pub(crate) struct TypeConverter<'a> {
     types_found: HashSet<QualifiedName>,
-    typedefs: HashMap<QualifiedName, Type>,
+    typedefs: HashMap<QualifiedName, TypedefTargetType>,
     concrete_templates: HashMap<String, QualifiedName>,
     forward_declarations: HashSet<QualifiedName>,
     ignored_types: HashSet<QualifiedName>,
@@ -271,20 +280,33 @@ impl<'a> TypeConverter<'a> {
         // First let's see if this is a typedef.
         let (typ, tn) = match self.resolve_typedef(&original_tn)? {
             None => (typ, original_tn),
-            Some(Type::Path(resolved_tp)) => {
+            Some(TypedefTargetType {
+                ty: crate::minisyn::Type(Type::Path(resolved_tp)),
+                ..
+            }) => {
                 let resolved_tn = QualifiedName::from_type_path(resolved_tp);
                 deps.insert(resolved_tn.clone());
                 (resolved_tp.clone(), resolved_tn)
             }
-            Some(Type::Ptr(resolved_tp)) => {
+            Some(TypedefTargetType {
+                ty: crate::minisyn::Type(Type::Ptr(resolved_tp)),
+                is_reference,
+            }) => {
                 return Ok(Annotated::new(
                     Type::Ptr(resolved_tp.clone()),
                     deps,
                     ApiVec::new(),
-                    TypeKind::Pointer,
+                    if *is_reference {
+                        TypeKind::Reference
+                    } else {
+                        TypeKind::Pointer
+                    },
                 ))
             }
-            Some(other) => {
+            Some(TypedefTargetType {
+                ty: crate::minisyn::Type(other),
+                ..
+            }) => {
                 return Ok(Annotated::new(
                     other.clone(),
                     deps,
@@ -421,14 +443,17 @@ impl<'a> TypeConverter<'a> {
     fn resolve_typedef<'b>(
         &'b self,
         tn: &QualifiedName,
-    ) -> Result<Option<&'b Type>, ConvertErrorFromCpp> {
+    ) -> Result<Option<&'b TypedefTargetType>, ConvertErrorFromCpp> {
         let mut encountered = HashSet::new();
         let mut tn = tn.clone();
         let mut previous_typ = None;
         loop {
             let r = self.typedefs.get(&tn);
             match r {
-                Some(Type::Path(typ)) => {
+                Some(TypedefTargetType {
+                    ty: crate::minisyn::Type(Type::Path(typ)),
+                    is_reference: false,
+                }) => {
                     previous_typ = r;
                     let new_tn = QualifiedName::from_type_path(typ);
                     if encountered.contains(&new_tn) {
@@ -445,6 +470,10 @@ impl<'a> TypeConverter<'a> {
                     encountered.insert(new_tn.clone());
                     tn = new_tn;
                 }
+                Some(TypedefTargetType {
+                    ty: crate::minisyn::Type(Type::Path(_)),
+                    is_reference: true,
+                }) => panic!("Only Type::Pointer should be a reference"),
                 None => return Ok(previous_typ),
                 _ => return Ok(r),
             }
@@ -632,7 +661,9 @@ impl<'a> TypeConverter<'a> {
         Ok(TypeKind::Regular)
     }
 
-    fn find_typedefs<A: AnalysisPhase>(apis: &ApiVec<A>) -> HashMap<QualifiedName, Type>
+    fn find_typedefs<A: AnalysisPhase>(
+        apis: &ApiVec<A>,
+    ) -> HashMap<QualifiedName, TypedefTargetType>
     where
         A::TypedefAnalysis: TypedefTarget,
     {
@@ -705,22 +736,27 @@ pub(crate) fn add_analysis<A: AnalysisPhase>(api: UnanalyzedApi) -> Api<A> {
         _ => panic!("Function analysis created an unexpected type of extra API"),
     }
 }
+
+/// Target type of a typedef.
+#[derive(Debug, Clone)]
+pub(crate) struct TypedefTargetType {
+    pub(crate) ty: crate::minisyn::Type,
+    pub(crate) is_reference: bool,
+}
+
 pub(crate) trait TypedefTarget {
-    fn get_target(&self) -> Option<&Type>;
+    fn get_target(&self) -> Option<&TypedefTargetType>;
 }
 
 impl TypedefTarget for () {
-    fn get_target(&self) -> Option<&Type> {
+    fn get_target(&self) -> Option<&TypedefTargetType> {
         None
     }
 }
 
 impl TypedefTarget for TypedefAnalysis {
-    fn get_target(&self) -> Option<&Type> {
-        Some(match self.kind {
-            TypedefKind::Type(ref ty) => &ty.ty,
-            TypedefKind::Use(_, ref ty) => ty,
-        })
+    fn get_target(&self) -> Option<&TypedefTargetType> {
+        Some(&self.target)
     }
 }
 
