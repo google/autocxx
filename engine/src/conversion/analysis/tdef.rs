@@ -120,6 +120,7 @@ fn get_replacement_typedef(
                 name,
                 item: TypedefKind::Type(ity.into()),
                 old_tyname,
+                is_reference,
                 analysis: TypedefAnalysis {
                     kind: TypedefKind::Type(converted_type.into()),
                     deps: final_type.types_encountered,

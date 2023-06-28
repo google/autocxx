@@ -83,6 +83,7 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
         ApiName,
         TypedefKind,
         Option<QualifiedName>,
+        bool,
         A::TypedefAnalysis,
     ) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext>,
 {
@@ -172,8 +173,9 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                 name,
                 item,
                 old_tyname,
+                is_reference,
                 analysis,
-            } => typedef_conversion(name, item, old_tyname, analysis),
+            } => typedef_conversion(name, item, old_tyname, is_reference, analysis),
             Api::Function {
                 name,
                 fun,
