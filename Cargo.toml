@@ -39,4 +39,3 @@ exclude = ["examples/s2", "examples/steam-mini", "examples/subclass", "examples/
 #cxx-gen = { path="../cxx/gen/lib" }
 #autocxx-bindgen = { path="../bindgen" }
 #moveit = { path="../moveit" }
-#moveit = { git = "https://github.com/silvanshade/moveit", branch = "fix-deref-move-soundness-hole" }
