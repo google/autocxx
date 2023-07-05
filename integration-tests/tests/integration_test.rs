@@ -12276,9 +12276,8 @@ fn test_cpp_union_pod() {
             } value;
         } CorrelationId_t;
     "};
-
-    let rs = quote! {};
-    run_test("", hdr, rs, &[], &["CorrelationId_t_"]);
+    run_test("", hdr, quote! {}, &["CorrelationId_t_"], &[]);
+    run_test_expect_fail("", hdr, quote! {}, &[], &["CorrelationId_t_"]);
 }
 
 // Yet to test:
