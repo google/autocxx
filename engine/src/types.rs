@@ -236,6 +236,10 @@ impl std::fmt::Debug for QualifiedName {
 /// cxx.
 #[derive(Error, Clone, Debug)]
 pub enum InvalidIdentError {
+    #[error("Union are not supported by autocxx (and their bindgen names have __ so are not acceptable to cxx)")]
+    Union,
+    #[error("Bitfields are not supported by autocxx (and their bindgen names have __ so are not acceptable to cxx)")]
+    Bitfield,
     #[error("Names containing __ are reserved by C++ so not acceptable to cxx")]
     TooManyUnderscores,
     #[error("bindgen decided to call this type _bindgen_ty_N because it couldn't deduce the correct name for it. That means we can't generate C++ bindings to it.")]
@@ -251,7 +255,12 @@ pub enum InvalidIdentError {
 /// where code will be output as part of the `#[cxx::bridge]` mod.
 pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), InvalidIdentError> {
     validate_ident_ok_for_rust(id)?;
-    if id.contains("__") {
+    // Provide a couple of more specific diagnostics if we can.
+    if id.starts_with("__BindgenBitfieldUnit") {
+        Err(InvalidIdentError::Bitfield)
+    } else if id.starts_with("__BindgenUnionField") {
+        Err(InvalidIdentError::Union)
+    } else if id.contains("__") {
         Err(InvalidIdentError::TooManyUnderscores)
     } else if id.starts_with("_bindgen_ty_") {
         Err(InvalidIdentError::BindgenTy)
