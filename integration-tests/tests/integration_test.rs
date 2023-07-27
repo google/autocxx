@@ -12241,6 +12241,22 @@ fn test_ignore_va_list() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+#[test]
+fn test_reference_const_char_cast() {
+    let hdr = indoc! {"
+        class Bytes {
+          public:
+            typedef const char& reference;
+          private:
+            const char *d_ptr;
+          public:
+            reference front() const { return d_ptr[0]; }
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["Bytes"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
