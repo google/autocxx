@@ -28,6 +28,21 @@ use syn::{parse_quote, Token};
 use test_log::test;
 
 #[test]
+fn test_moveit_with_alloc() {
+    let cxx = indoc! {
+        ""
+    };
+    let hdr = indoc! {"
+        struct DataBuf {
+            void alloc();
+        };
+    "};
+    let rs = quote! {
+    };
+    run_test(cxx, hdr, rs, &["DataBuf"], &[]);
+}
+
+#[test]
 fn test_return_void() {
     let cxx = indoc! {"
         void do_nothing() {
