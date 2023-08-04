@@ -2961,6 +2961,28 @@ fn test_conflicting_up_wrapper_methods_in_ns() {
 }
 
 #[test]
+fn test_conflicting_overload_rename() {
+    let cxx = indoc! {
+        ""
+    };
+    let hdr = indoc! {"
+        #include <stdlib.h>
+        #include <stdint.h>
+        class DataBuf;
+        class Image {
+        public:
+            static uint64_t byteSwap(uint64_t value, bool bSwap);
+            static uint32_t byteSwap(uint32_t value, bool bSwap);
+            static uint16_t byteSwap(uint16_t value, bool bSwap);
+            static uint16_t byteSwap2(const DataBuf& buf, size_t offset, bool bSwap);
+        };
+    "};
+    let rs = quote! {
+    };
+    run_test(cxx, hdr, rs, &["Image"], &[]);
+}
+
+#[test]
 fn test_ns_struct_pod_request() {
     let hdr = indoc! {"
         #include <cstdint>
