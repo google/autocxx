@@ -12241,6 +12241,45 @@ fn test_ignore_va_list() {
     run_test("", hdr, rs, &["A"], &[]);
 }
 
+#[test]
+fn test_cpp_union_pod() {
+    let hdr = indoc! {"
+        typedef unsigned long long UInt64_t;
+        struct ManagedPtr_t_;
+        typedef struct ManagedPtr_t_ ManagedPtr_t;
+        
+        typedef int (*ManagedPtr_ManagerFunction_t)(
+                ManagedPtr_t *managedPtr,
+                const ManagedPtr_t *srcPtr,
+                int operation);
+        
+        typedef union {
+            int intValue;
+            void *ptr;
+        } ManagedPtr_t_data_;
+        
+        struct ManagedPtr_t_ {
+            void *pointer;
+            ManagedPtr_t_data_ userData[4];
+            ManagedPtr_ManagerFunction_t manager;
+        };
+        
+        typedef struct CorrelationId_t_ {
+            unsigned int size : 8;
+            unsigned int valueType : 4;
+            unsigned int classId : 16;
+            unsigned int reserved : 4;
+        
+            union {
+                UInt64_t intValue;
+                ManagedPtr_t ptrValue;
+            } value;
+        } CorrelationId_t;
+    "};
+    run_test("", hdr, quote! {}, &["CorrelationId_t_"], &[]);
+    run_test_expect_fail("", hdr, quote! {}, &[], &["CorrelationId_t_"]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers

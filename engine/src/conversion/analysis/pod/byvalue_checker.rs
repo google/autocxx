@@ -158,6 +158,12 @@ impl ByValueChecker {
                     ));
                     break;
                 }
+                None if ty_id.get_final_item() == "__BindgenBitfieldUnit" => {
+                    field_safety_problem = PodState::UnsafeToBePod(format!(
+                        "Type {tyname} could not be POD because it is a bitfield"
+                    ));
+                    break;
+                }
                 None => {
                     field_safety_problem = PodState::UnsafeToBePod(format!(
                         "Type {tyname} could not be POD because its dependent type {ty_id} isn't known"
