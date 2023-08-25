@@ -12242,6 +12242,19 @@ fn test_ignore_va_list() {
 }
 
 #[test]
+fn test_badly_named_alloc() {
+    let hdr = indoc! {"
+        #include <stdarg.h>
+        class A {
+        public:
+            void alloc();
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
 fn test_cpp_union_pod() {
     let hdr = indoc! {"
         typedef unsigned long long UInt64_t;
