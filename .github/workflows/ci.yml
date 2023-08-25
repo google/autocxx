@@ -68,14 +68,13 @@ jobs:
         if: matrix.os == 'windows'
         run: echo "LIBCLANG_PATH=$((gcm clang).source -replace "clang.exe")" >> $env:GITHUB_ENV
       - name: Exclude failing targets and tests
-        # no creduce on Windows, so exclude tests needing creduce there
         run: |
           echo RUSTFLAGS=$RUSTFLAGS >> $GITHUB_ENV
-          echo "name=exclude::${{runner.os == 'Windows' && '--exclude autocxx-reduce --exclude autocxx-gen' || ''}}" >> $GITHUB_OUTPUT
         env:
+          # no creduce on Windows, so exclude tests needing creduce there
           # non-linux failures https://github.com/google/autocxx/issues/819
           # beta failing tests https://github.com/google/autocxx/issues/818
-          RUSTFLAGS: ${{matrix.name == 'Windows (msvc)' && '--cfg skip_windows_msvc_failing_tests' || ''}} ${{matrix.name == 'Windows (gnu)' && '--cfg skip_windows_gnu_failing_tests' || ''}}
+          RUSTFLAGS: ${{matrix.name == 'Windows (msvc)' && '--cfg skip_windows_msvc_failing_tests --exclude autocxx-reduce --exclude autocxx-gen' || ''}} ${{matrix.name == 'Windows (gnu)' && '--cfg skip_windows_gnu_failing_tests' || ''}}
         id: testsuite
         shell: bash
       - run: cargo test --workspace ${{steps.testsuite.outputs.exclude}}
