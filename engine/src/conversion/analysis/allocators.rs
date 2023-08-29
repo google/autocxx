@@ -101,11 +101,11 @@ fn create_alloc_and_free(ty_name: QualifiedName) -> impl Iterator<Item = Api<Pod
 }
 
 pub(crate) fn get_alloc_name(ty_name: &QualifiedName) -> QualifiedName {
-    get_name(ty_name, "alloc")
+    get_name(ty_name, "autocxx_alloc")
 }
 
 pub(crate) fn get_free_name(ty_name: &QualifiedName) -> QualifiedName {
-    get_name(ty_name, "free")
+    get_name(ty_name, "autocxx_free")
 }
 
 fn get_name(ty_name: &QualifiedName, label: &str) -> QualifiedName {
