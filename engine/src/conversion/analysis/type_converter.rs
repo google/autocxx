@@ -251,7 +251,7 @@ impl<'a> TypeConverter<'a> {
                             let i = make_ident(s);
                             parse_quote! { #i }
                         })
-                        .chain(typ.path.segments.into_iter())
+                        .chain(typ.path.segments)
                         .collect();
                 }
             }

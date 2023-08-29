@@ -114,7 +114,7 @@ impl<'a> BridgeConverter<'a> {
             None => Err(ConvertError::NoContent),
             Some((_, items)) => {
                 // Parse the bindgen mod.
-                let items_to_process = items.drain(..).collect();
+                let items_to_process = std::mem::take(items);
                 let parser = ParseBindgen::new(self.config);
                 let apis = parser.parse_items(items_to_process, source_file_contents)?;
                 Self::dump_apis("parsing", &apis);
