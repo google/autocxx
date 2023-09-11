@@ -2280,8 +2280,28 @@ fn test_overload_functions() {
 }
 
 #[test]
-#[ignore] // At present, bindgen generates two separate 'daft1'
-          // functions here, and there's not much we can do about that.
+fn test_overload_single_numeric_function() {
+    let cxx = indoc! {"
+        void daft1(uint32_t) {}
+        void daft(float) {}
+        void daft(uint32_t) {}
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        void daft1(uint32_t a);
+        void daft(uint32_t a);
+        void daft(float a);
+    "};
+    let rs = quote! {
+        use ffi::ToCppString;
+        ffi::daft(32);
+        ffi::daft1(8);
+        ffi::daft_autocxx_overload1(3.2);
+    };
+    run_test(cxx, hdr, rs, &["daft", "daft1"], &[]);
+}
+
+#[test]
 fn test_overload_numeric_functions() {
     // Because bindgen deals with conflicting overloaded functions by
     // appending a numeric suffix, let's see if we can cope.

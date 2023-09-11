@@ -7,6 +7,14 @@
 // except according to those terms.
 
 use indexmap::IndexMap as HashMap;
+use indexmap::IndexSet as HashSet;
+
+use crate::conversion::analysis::pod::PodPhase;
+use crate::conversion::api::Api;
+use crate::conversion::apivec::ApiVec;
+use crate::types::Namespace;
+
+use super::FnAnalyzer;
 
 type Offsets = HashMap<String, usize>;
 
@@ -20,13 +28,40 @@ type Offsets = HashMap<String, usize>;
 /// If bindgen adds a suffix it will be included in 'found_name'
 /// but not 'original_name' which is an annotation added by our autocxx-bindgen
 /// fork.
-#[derive(Default)]
 pub(crate) struct OverloadTracker {
+    names_to_avoid: HashSet<String>,
+    names_to_avoid_by_type: HashMap<String, HashSet<String>>,
     offset_by_name: Offsets,
     offset_by_type_and_name: HashMap<String, Offsets>,
 }
 
 impl OverloadTracker {
+    pub(crate) fn new(apis: &ApiVec<PodPhase>, namespace: &Namespace) -> Self {
+        let mut names_to_avoid = HashSet::new();
+        let mut names_to_avoid_by_type: HashMap<String, HashSet<String>> = HashMap::new();
+        for api in apis
+            .iter()
+            .filter(|api| api.name().get_namespace() == namespace)
+        {
+            if let Api::Function { name, fun, .. } = api {
+                let ideal = FnAnalyzer::ideal_rust_name(name, fun);
+                let set_to_change = match fun.self_ty {
+                    None => &mut names_to_avoid,
+                    Some(ref self_ty) => names_to_avoid_by_type
+                        .entry(self_ty.get_final_item().to_string())
+                        .or_default(),
+                };
+                set_to_change.insert(ideal);
+            }
+        }
+        Self {
+            names_to_avoid,
+            names_to_avoid_by_type,
+            offset_by_name: Default::default(),
+            offset_by_type_and_name: Default::default(),
+        }
+    }
+
     pub(crate) fn get_function_real_name(&mut self, found_name: String) -> String {
         self.get_name(None, found_name)
     }
@@ -36,39 +71,57 @@ impl OverloadTracker {
     }
 
     fn get_name(&mut self, type_name: Option<&str>, cpp_method_name: String) -> String {
-        let registry = match type_name {
-            Some(type_name) => self
-                .offset_by_type_and_name
-                .entry(type_name.to_string())
-                .or_default(),
-            None => &mut self.offset_by_name,
+        let empty_set = HashSet::new();
+        let (registry, to_avoid) = match type_name {
+            Some(type_name) => (
+                self.offset_by_type_and_name
+                    .entry(type_name.to_string())
+                    .or_default(),
+                self.names_to_avoid_by_type
+                    .get(&type_name.to_string())
+                    .unwrap_or(&empty_set),
+            ),
+            None => (&mut self.offset_by_name, &self.names_to_avoid),
         };
+        log::info!(
+            "Considering {:?}, {}, to avoid contains {:?}",
+            type_name,
+            cpp_method_name,
+            to_avoid
+        );
         let offset = registry.entry(cpp_method_name.clone()).or_default();
         let this_offset = *offset;
         *offset += 1;
         if this_offset == 0 {
             cpp_method_name
         } else {
-            format!("{cpp_method_name}{this_offset}")
+            let provisional = format!("{cpp_method_name}{this_offset}");
+            if to_avoid.contains(&provisional) {
+                format!("{cpp_method_name}_autocxx_overload{this_offset}")
+            } else {
+                provisional
+            }
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::{conversion::apivec::ApiVec, types::Namespace};
+
     use super::OverloadTracker;
 
     #[test]
     fn test_by_function() {
-        let mut ot = OverloadTracker::default();
-        assert_eq!(ot.get_function_real_name("bob".into()), "bob");
+        let mut ot = OverloadTracker::new(&ApiVec::new(), &Namespace::new());
+        assert_eq!(ot.get_function_real_name("bob".into()), "bob",);
         assert_eq!(ot.get_function_real_name("bob".into()), "bob1");
         assert_eq!(ot.get_function_real_name("bob".into()), "bob2");
     }
 
     #[test]
     fn test_by_method() {
-        let mut ot = OverloadTracker::default();
+        let mut ot = OverloadTracker::new(&ApiVec::new(), &Namespace::new());
         assert_eq!(ot.get_method_real_name("Ty1", "bob".into()), "bob");
         assert_eq!(ot.get_method_real_name("Ty1", "bob".into()), "bob1");
         assert_eq!(ot.get_method_real_name("Ty2", "bob".into()), "bob");

@@ -309,7 +309,7 @@ impl<'a> FnAnalyzer<'a> {
             type_converter: TypeConverter::new(config, &apis),
             bridge_name_tracker: BridgeNameTracker::new(),
             config,
-            overload_trackers_by_mod: HashMap::new(),
+            overload_trackers_by_mod: Self::build_overload_trackers(&apis),
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             moveit_safe_types: Self::build_correctly_sized_type_set(&apis),
             subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
@@ -362,6 +362,20 @@ impl<'a> FnAnalyzer<'a> {
                         },
                     ),
             )
+            .collect()
+    }
+
+    /// For calculation of subsequent overloads, we want to work out the
+    /// names that we ideally would use. e.g. if we find func(int)
+    /// and func(float) we would normally call them func and func1,
+    /// but if there's already a func1 in the data structure returned
+    /// by this function then we'll call it something else.
+    fn build_overload_trackers(apis: &ApiVec<PodPhase>) -> HashMap<Namespace, OverloadTracker> {
+        let all_namespaces: HashSet<&Namespace> =
+            apis.iter().map(|api| api.name().get_namespace()).collect();
+        all_namespaces
+            .into_iter()
+            .map(|ns| (ns.clone(), OverloadTracker::new(apis, ns)))
             .collect()
     }
 
@@ -704,6 +718,36 @@ impl<'a> FnAnalyzer<'a> {
         name.name
     }
 
+    /// Work out the ideal Rust name for a given function, taking account
+    /// of overloads and Rust idents.
+    pub(crate) fn ideal_rust_name(name: &ApiName, fun: &FuncToConvert) -> String {
+        let cpp_name = name.cpp_name_if_present().cloned();
+        // bindgen may have mangled the name either because it's invalid Rust
+        // syntax (e.g. a keyword like 'async') or it's an overload.
+        // If the former, we respect that mangling. If the latter, we don't,
+        // because we'll add our own overload counting mangling later.
+        // Cases:
+        //   function, IRN=foo,    CN=<none>                    output: foo    case 1
+        //   function, IRN=move_,  CN=move   (keyword problem)  output: move_  case 2
+        //   function, IRN=foo1,   CN=foo    (overload)         output: foo    case 3
+        //   method,   IRN=A_foo,  CN=foo                       output: foo    case 4
+        //   method,   IRN=A_move, CN=move   (keyword problem)  output: move_  case 5
+        //   method,   IRN=A_foo1, CN=foo    (overload)         output: foo    case 6
+        let initial_rust_name = fun.ident.to_string();
+        match &cpp_name {
+            None => initial_rust_name, // case 1
+            Some(cpp_name) => {
+                if initial_rust_name.ends_with('_') {
+                    initial_rust_name // case 2
+                } else if validate_ident_ok_for_rust(cpp_name).is_err() {
+                    format!("{cpp_name}_") // case 5
+                } else {
+                    cpp_name.to_string() // cases 3, 4, 6
+                }
+            }
+        }
+    }
+
     /// Determine how to materialize a function.
     ///
     /// The main job here is to determine whether a function can simply be noted
@@ -775,29 +819,9 @@ impl<'a> FnAnalyzer<'a> {
 
         // End of parameter processing.
         // Work out naming, part one.
-        // bindgen may have mangled the name either because it's invalid Rust
-        // syntax (e.g. a keyword like 'async') or it's an overload.
-        // If the former, we respect that mangling. If the latter, we don't,
-        // because we'll add our own overload counting mangling later.
-        // Cases:
-        //   function, IRN=foo,    CN=<none>                    output: foo    case 1
-        //   function, IRN=move_,  CN=move   (keyword problem)  output: move_  case 2
-        //   function, IRN=foo1,   CN=foo    (overload)         output: foo    case 3
-        //   method,   IRN=A_foo,  CN=foo                       output: foo    case 4
-        //   method,   IRN=A_move, CN=move   (keyword problem)  output: move_  case 5
-        //   method,   IRN=A_foo1, CN=foo    (overload)         output: foo    case 6
-        let ideal_rust_name = match &cpp_name {
-            None => initial_rust_name, // case 1
-            Some(cpp_name) => {
-                if initial_rust_name.ends_with('_') {
-                    initial_rust_name // case 2
-                } else if validate_ident_ok_for_rust(cpp_name).is_err() {
-                    format!("{cpp_name}_") // case 5
-                } else {
-                    cpp_name.to_string() // cases 3, 4, 6
-                }
-            }
-        };
+        // See what we'd ideally call this in Rust, which we might
+        // later need to alter based on overloads.
+        let ideal_rust_name = Self::ideal_rust_name(&name, fun);
 
         // Let's spend some time figuring out the kind of this function (i.e. method,
         // virtual function, etc.)
@@ -1510,7 +1534,7 @@ impl<'a> FnAnalyzer<'a> {
     }
 
     fn get_overload_name(&mut self, ns: &Namespace, type_ident: &str, rust_name: String) -> String {
-        let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
+        let overload_tracker = self.overload_trackers_by_mod.get_mut(ns).unwrap();
         overload_tracker.get_method_real_name(type_ident, rust_name)
     }
 
@@ -1624,7 +1648,7 @@ impl<'a> FnAnalyzer<'a> {
     }
 
     fn get_function_overload_name(&mut self, ns: &Namespace, ideal_rust_name: String) -> String {
-        let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
+        let overload_tracker = self.overload_trackers_by_mod.get_mut(ns).unwrap();
         overload_tracker.get_function_real_name(ideal_rust_name)
     }
 
