@@ -7772,6 +7772,58 @@ fn test_pv_subclass_ptr_param() {
 }
 
 #[test]
+fn test_pv_subclass_opaque_param() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    typedef uint32_t MyUnsupportedType[4];
+
+    struct MySupportedType {
+        uint32_t a;
+    };
+
+    class MySuperType {
+    public:
+        virtual void foo(const MyUnsupportedType* foo, const MySupportedType* bar) const = 0;
+        virtual ~MySuperType() = default;
+    };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            MySubType::new_rust_owned(MySubType { a: 3, cpp_peer: Default::default() });
+        },
+        quote! {
+            subclass!("MySuperType",MySubType)
+            extern_cpp_opaque_type!("MyUnsupportedType", crate::ffi2::MyUnsupportedType)
+        },
+        None,
+        None,
+        Some(quote! {
+
+            #[cxx::bridge]
+            pub mod ffi2 {
+                unsafe extern "C++" {
+                    include!("input.h");
+                    type MyUnsupportedType;
+                }
+            }
+            use autocxx::subclass::CppSubclass;
+            use ffi::MySuperType_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MySubType {
+                a: u32
+            }
+            impl MySuperType_methods for MySubType {
+                unsafe fn foo(&self, _foo: *const ffi2::MyUnsupportedType, _bar: *const ffi::MySupportedType) {
+                }
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_pv_subclass_return() {
     let hdr = indoc! {"
     #include <cstdint>
