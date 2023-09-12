@@ -105,6 +105,8 @@ pub enum ConvertErrorFromCpp {
     RustTypeWithAPath(QualifiedName),
     #[error("This type is nested within another struct/class, yet is abstract (or is not on the allowlist so we can't be sure). This is not yet supported by autocxx. If you don't believe this type is abstract, add it to the allowlist.")]
     AbstractNestedType,
+    #[error("This type is nested within another struct/class, yet is not destructible (private or deleted destructor). This is not yet supported by autocxx.")]
+    NonDestructibleNestedType,
     #[error("This typedef was nested within another struct/class. autocxx is unable to represent inner types if they might be abstract. Unfortunately, autocxx couldn't prove that this type isn't abstract, so it can't represent it.")]
     NestedOpaqueTypedef,
     #[error(
