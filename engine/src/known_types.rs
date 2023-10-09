@@ -12,7 +12,7 @@ use indoc::indoc;
 use once_cell::sync::OnceCell;
 use syn::{parse_quote, TypePath};
 
-//// The behavior of the type.
+/// The behavior of the type.
 #[derive(Debug)]
 enum Behavior {
     CxxContainerPtr,
