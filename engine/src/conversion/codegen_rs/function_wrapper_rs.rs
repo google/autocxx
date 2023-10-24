@@ -50,7 +50,8 @@ impl TypeConversionPolicy {
                 let holder_type = sub.holder();
                 let id = sub.id();
                 let ty = parse_quote! { autocxx::subclass::CppSubclassRustPeerHolder<
-                    super::super::super:: #id>
+                    super::super::super:: #id,
+                    std::rc::Rc<std::cell::RefCell<super::super::super:: #id>>>
                 };
                 RustParamConversion::Param {
                     ty,

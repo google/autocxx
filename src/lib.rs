@@ -1,3 +1,4 @@
+#![feature(return_position_impl_trait_in_trait)]
 #![doc = include_str!("../README.md")]
 #![cfg_attr(nightly, feature(unsize))]
 #![cfg_attr(nightly, feature(dispatch_from_dyn))]

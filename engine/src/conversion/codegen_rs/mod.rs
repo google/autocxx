@@ -672,7 +672,7 @@ impl<'a> RsCodeGenerator<'a> {
                 pub use cxxbridge::#cpp_id;
             },
             parse_quote! {
-                pub struct #holder(pub autocxx::subclass::CppSubclassRustPeerHolder<super::super::super::#id>);
+                pub struct #holder(pub autocxx::subclass::CppSubclassRustPeerHolder<super::super::super::#id, std::rc::Rc<std::cell::RefCell<super::super::super:: #id>>>);
             },
             parse_quote! {
                 impl autocxx::subclass::CppSubclassCppPeer for #cpp_id {
@@ -726,8 +726,8 @@ impl<'a> RsCodeGenerator<'a> {
         }
         if generate_peer_constructor {
             bindgen_mod_items.push(parse_quote! {
-                impl autocxx::subclass::CppPeerConstructor<#cpp_id> for super::super::super::#id {
-                    fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<#cpp_path> {
+                impl autocxx::subclass::CppPeerConstructor<#cpp_id, std::rc::Rc<std::cell::RefCell<super::super::super::#id>>> for super::super::super::#id {
+                    fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self, std::rc::Rc<std::cell::RefCell<Self>>>) -> cxx::UniquePtr<#cpp_path> {
                         use autocxx::moveit::Emplace;
                         cxx::UniquePtr::emplace(#cpp_id :: new(peer_holder))
                     }
@@ -823,11 +823,11 @@ impl<'a> RsCodeGenerator<'a> {
         let methods_trait = SubclassName::get_methods_trait_name(&details.superclass);
         let methods_trait = methods_trait.to_type_path();
         let (deref_ty, deref_call, borrow, mut_token) = match details.receiver_mutability {
-            ReceiverMutability::Const => ("Deref", "deref", "try_borrow", None),
+            ReceiverMutability::Const => ("Deref", "deref", "try_get_ref", None),
             ReceiverMutability::Mutable => (
                 "DerefMut",
                 "deref_mut",
-                "try_borrow_mut",
+                "try_get_mut",
                 Some(syn::token::Mut(Span::call_site())),
             ),
         };
@@ -839,11 +839,11 @@ impl<'a> RsCodeGenerator<'a> {
         RsCodegenResult {
             global_items: vec![parse_quote! {
                 #global_def {
-                    let rc = me.0
+                    use autocxx::subclass::CppSubclassPeerPtr;
+                    let mut ptr = me.0
                         .get()
                         .expect(#destroy_panic_msg);
-                    let #mut_token b = rc
-                        .as_ref()
+                    let #mut_token b = ptr
                         .#borrow()
                         .expect(#reentrancy_panic_msg);
                     let r = ::core::ops::#deref_ty::#deref_call(& #mut_token b);

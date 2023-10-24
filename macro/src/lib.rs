@@ -24,12 +24,27 @@ pub fn include_cpp_impl(input: TokenStream) -> TokenStream {
     TokenStream::from(include_cpp.generate_rs())
 }
 
+enum SubclassThreadingOption {
+    SingleThreaded,
+    MultiThreaded,
+}
+
 /// Attribute to state that a Rust `struct` is a C++ subclass.
 /// This adds an additional field to the struct which autocxx uses to
 /// track a C++ instantiation of this Rust subclass.
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
+    subclass_impl(attr, item, SubclassThreadingOption::SingleThreaded)
+}
+
+#[proc_macro_error]
+#[proc_macro_attribute]
+pub fn subclass_multithreaded(attr: TokenStream, item: TokenStream) -> TokenStream {
+    subclass_impl(attr, item, SubclassThreadingOption::MultiThreaded)
+}
+
+fn subclass_impl(attr: TokenStream, item: TokenStream, threading: SubclassThreadingOption) -> TokenStream {
     let mut s: ItemStruct =
         syn::parse(item).unwrap_or_else(|_| abort!(Span::call_site(), "Expected a struct"));
     if !matches!(s.vis, Visibility::Public(..)) {
@@ -38,6 +53,10 @@ pub fn subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
     let id = &s.ident;
     let cpp_ident = Ident::new(&format!("{id}Cpp"), Span::call_site());
+    let ptr_ident = match threading {
+        SubclassThreadingOption::SingleThreaded => quote! { std::rc::Rc<std::cell::RefCell<#id>> },
+        SubclassThreadingOption::MultiThreaded => quote! { std::sync::Arc<std::sync::RwLock<#id>> },
+    };
     let input = quote! {
         cpp_peer: autocxx::subclass::CppSubclassCppPeerHolder<ffi:: #cpp_ident>
     };
@@ -59,7 +78,7 @@ pub fn subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
         .unwrap_or_else(|_| abort!(Span::call_site(), "Unable to parse attributes"));
     let self_owned_bit = if subclass_attrs.self_owned {
         Some(quote! {
-            impl autocxx::subclass::CppSubclassSelfOwned<ffi::#cpp_ident> for #id {}
+            impl autocxx::subclass::CppSubclassSelfOwned<ffi::#cpp_ident, #ptr_ident> for #id {}
         })
     } else {
         None
@@ -67,7 +86,7 @@ pub fn subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
     let toks = quote! {
         #s
 
-        impl autocxx::subclass::CppSubclass<ffi::#cpp_ident> for #id {
+        impl autocxx::subclass::CppSubclass<ffi::#cpp_ident, #ptr_ident> for #id {
             fn peer_holder_mut(&mut self) -> &mut autocxx::subclass::CppSubclassCppPeerHolder<ffi::#cpp_ident> {
                 &mut self.cpp_peer
             }
