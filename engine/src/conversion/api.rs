@@ -581,8 +581,8 @@ pub(crate) struct SubclassDetails {
 impl SubclassDetails {
     pub(crate) fn ptr_path(&self, path: TypePath) -> TypePath {
         match self.multithreaded {
-            true => parse_quote! { std::sync::Arc<std::sync::RwLock<#path>> },
-            false => parse_quote! { std::rc::Rc<std::cell::RefCell<#path>> },
+            true => parse_quote! { ::std::sync::Arc<::std::sync::RwLock<#path>> },
+            false => parse_quote! { ::std::rc::Rc<::std::cell::RefCell<#path>> },
         }
     }
 }

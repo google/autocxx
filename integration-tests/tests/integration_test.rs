@@ -8164,10 +8164,10 @@ fn test_subclass_no_safety() {
 
         use autocxx::subclass::{CppSubclass, CppPeerConstructor, CppSubclassRustPeerHolder};
         use cxx::UniquePtr;
-        impl CppPeerConstructor<ffi::MyObserverCpp> for MyObserver {
+        impl CppPeerConstructor<ffi::MyObserverCpp, std::rc::Rc<std::cell::RefCell<MyObserver>>> for MyObserver {
             fn make_peer(
                 &mut self,
-                peer_holder: CppSubclassRustPeerHolder<Self>,
+                peer_holder: CppSubclassRustPeerHolder<Self, std::rc::Rc<std::cell::RefCell<Self>>>,
             ) -> UniquePtr<ffi::MyObserverCpp> {
                 UniquePtr::emplace(unsafe { ffi::MyObserverCpp::new(peer_holder) })
             }

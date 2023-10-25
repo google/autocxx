@@ -58,8 +58,8 @@ fn subclass_impl(
     let id = &s.ident;
     let cpp_ident = Ident::new(&format!("{id}Cpp"), Span::call_site());
     let ptr_ident = match threading {
-        SubclassThreadingOption::SingleThreaded => quote! { std::rc::Rc<std::cell::RefCell<#id>> },
-        SubclassThreadingOption::MultiThreaded => quote! { std::sync::Arc<std::sync::RwLock<#id>> },
+        SubclassThreadingOption::SingleThreaded => quote! { ::std::rc::Rc<::std::cell::RefCell<#id>> },
+        SubclassThreadingOption::MultiThreaded => quote! { ::std::sync::Arc<::std::sync::RwLock<#id>> },
     };
     let input = quote! {
         cpp_peer: autocxx::subclass::CppSubclassCppPeerHolder<ffi:: #cpp_ident>
