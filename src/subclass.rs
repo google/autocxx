@@ -58,6 +58,7 @@ pub use autocxx_macro::subclass as is_subclass;
 /// multiple steps you need to take to be able to make Rust
 /// subclasses of a C++ class.
 pub use autocxx_macro::subclass;
+pub use autocxx_macro::subclass_multithreaded;
 
 /// A prelude containing all the traits and macros required to create
 /// Rust subclasses of C++ classes. It's recommended that you:
@@ -67,7 +68,7 @@ pub use autocxx_macro::subclass;
 /// ```
 pub mod prelude {
     pub use super::{
-        is_subclass, subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault,
+        is_subclass, subclass, subclass_multithreaded, CppPeerConstructor, CppSubclass, CppSubclassDefault,
         CppSubclassRustPeerHolder, CppSubclassSelfOwned, CppSubclassSelfOwnedDefault,
     };
 }
@@ -334,22 +335,26 @@ pub trait CppSubclass<CppPeer, CppPeerPtr>: CppPeerConstructor<CppPeer, CppPeerP
 }
 
 pub trait CppSubclassPeerPtr<T> {
-    type Ptr : Clone;
+    type Ptr: Clone;
     type WeakPtr;
+    type Ref<'a>: Deref<Target=T> where T: 'a, Self: 'a;
+    type RefMut<'a>: DerefMut<Target=T> where T: 'a, Self: 'a;
 
     fn new(val: T) -> Self;
     fn upgrade(ptr: &Self::WeakPtr) -> Option<Self::Ptr>;
     fn downgrade(ptr: &Self::Ptr) -> Self::WeakPtr;
-    fn get_ref(&self) -> impl Deref<Target=T>;
-    fn get_mut(&mut self) -> impl DerefMut<Target=T>;
-    fn try_get_ref(&self) -> Result<impl Deref<Target=T>, impl Error>;
-    fn try_get_mut(&mut self) -> Result<impl DerefMut<Target=T>, impl Error>;
+    fn get_ref(&self) -> Self::Ref<'_>;
+    fn get_mut(&mut self) -> Self::RefMut<'_>;
+    fn try_get_ref<'a>(&'a self) -> Result<Self::Ref<'a>, Box<dyn Error + 'a>>;
+    fn try_get_mut<'a>(&'a mut self) -> Result<Self::RefMut<'a>, Box<dyn Error + 'a>>;
     fn clone(&self) -> Self::Ptr;
 }
 
-impl <T> CppSubclassPeerPtr<T> for Rc<RefCell<T>> {
+impl<T> CppSubclassPeerPtr<T> for Rc<RefCell<T>> {
     type Ptr = Self;
     type WeakPtr = Weak<RefCell<T>>;
+    type Ref<'a> = Ref<'a, T> where T: 'a;
+    type RefMut<'a> = RefMut<'a, T> where T: 'a;
 
     fn new(val: T) -> Self::Ptr {
         Rc::new(RefCell::new(val))
@@ -363,20 +368,20 @@ impl <T> CppSubclassPeerPtr<T> for Rc<RefCell<T>> {
         Rc::downgrade(ptr)
     }
 
-    fn get_ref(&self) -> impl Deref<Target=T> {
+    fn get_ref(&self) -> Self::Ref<'_> {
         self.borrow()
     }
 
-    fn get_mut(&mut self) -> impl DerefMut<Target=T> {
+    fn get_mut(&mut self) -> Self::RefMut<'_> {
         self.borrow_mut()
     }
 
-    fn try_get_ref(&self) -> Result<impl Deref<Target=T>, impl Error> {
-        self.try_borrow()
+    fn try_get_ref<'a>(&'a self) -> Result<Self::Ref<'a>, Box<dyn Error + 'a>> {
+        self.try_borrow().map_err(|e| Box::new(e) as Box<dyn Error>)
     }
 
-    fn try_get_mut(&mut self) -> Result<impl DerefMut<Target=T>, impl Error> {
-        self.try_borrow_mut()
+    fn try_get_mut<'a>(&'a mut self) -> Result<Self::RefMut<'a>, Box<dyn Error + 'a>> {
+        self.try_borrow_mut().map_err(move |e| Box::new(e) as Box<dyn Error>)
     }
 
     fn clone(&self) -> Self::Ptr {
@@ -384,9 +389,11 @@ impl <T> CppSubclassPeerPtr<T> for Rc<RefCell<T>> {
     }
 }
 
-impl <T> CppSubclassPeerPtr<T> for Arc<RwLock<T>> {
+impl<T> CppSubclassPeerPtr<T> for Arc<RwLock<T>> {
     type Ptr = Self;
     type WeakPtr = std::sync::Weak<RwLock<T>>;
+    type Ref<'a> = std::sync::RwLockReadGuard<'a, T> where T: 'a;
+    type RefMut<'a> = std::sync::RwLockWriteGuard<'a, T> where T: 'a;
 
     fn new(val: T) -> Self::Ptr {
         Arc::new(RwLock::new(val))
@@ -400,41 +407,26 @@ impl <T> CppSubclassPeerPtr<T> for Arc<RwLock<T>> {
         Arc::downgrade(ptr)
     }
 
-    fn get_ref(&self) -> impl Deref<Target=T> {
+    fn get_ref(&self) -> Self::Ref<'_> {
         self.read().unwrap()
     }
 
-    fn get_mut(&mut self) -> impl DerefMut<Target=T> {
+    fn get_mut(&mut self) -> Self::RefMut<'_> {
         self.write().unwrap()
     }
 
-    fn try_get_ref(&self) -> Result<impl Deref<Target=T>, impl Error> {
-        self.read().map_err(|e| Box::new(e))
+    fn try_get_ref<'a>(&'a self) -> Result<Self::Ref<'a>, Box<dyn Error + 'a>> {
+        self.read().map_err(move |e| Box::new(e) as Box<dyn Error>)
     }
 
-    fn try_get_mut(&mut self) -> Result<impl DerefMut<Target=T>, impl Error> {
-        self.write()
+    fn try_get_mut<'a>(&'a mut self) -> Result<Self::RefMut<'a>, Box<dyn Error + 'a>> {
+        self.write().map_err(move |e| Box::new(e) as Box<dyn Error>)
     }
 
 
     fn clone(&self) -> Self::Ptr {
         <Arc<RwLock<T>> as Clone>::clone(self)
     }
-}
-
-pub trait CppSubclassPeerGuard<'a, T: 'a>: Deref {
-    type Ref : 'a;
-    type RefMut : 'a;
-}
-
-impl <'a, T: 'a> CppSubclassPeerGuard<'a, T> for Rc<RefCell<T>> {
-    type Ref = Ref<'a, T>;
-    type RefMut = RefMut<'a, T>;
-}
-
-impl <'a, T: 'a> CppSubclassPeerGuard<'a, T> for Arc<RwLock<T>> {
-    type Ref = std::sync::RwLockReadGuard<'a, T>;
-    type RefMut = std::sync::RwLockWriteGuard<'a, T>;
 }
 
 /// Trait to be implemented by subclasses which are self-owned, i.e. not owned
