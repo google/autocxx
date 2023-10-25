@@ -13,7 +13,7 @@ use crate::{
     RebuildDependencyRecorder,
 };
 use crate::{proc_macro_span_to_miette_span, CodegenOptions, CppCodegenOptions, LocatedSynError};
-use autocxx_parser::directive_names::SUBCLASS;
+use autocxx_parser::directive_names::{SUBCLASS, SUBCLASS_MULTITHREADED};
 use autocxx_parser::{AllowlistEntry, RustPath, Subclass, SubclassAttrs};
 use indexmap::set::IndexSet as HashSet;
 use miette::{Diagnostic, SourceSpan};
@@ -153,11 +153,19 @@ fn parse_file_contents(
                 }
                 Item::Struct(ref its) => {
                     let attrs = &its.attrs;
+                    let is_multithreaded = attrs.iter().any(|attr| {
+                        attr.path()
+                            .segments
+                            .last()
+                            .map(|seg| seg.ident == SUBCLASS_MULTITHREADED)
+                            .unwrap_or(false)
+                    });
+
                     let is_superclass_attr = attrs.iter().find(|attr| {
                         attr.path()
                             .segments
                             .last()
-                            .map(|seg| seg.ident == "is_subclass" || seg.ident == SUBCLASS)
+                            .map(|seg| seg.ident == "is_subclass" || seg.ident == SUBCLASS || seg.ident == SUBCLASS_MULTITHREADED)
                             .unwrap_or(false)
                     });
                     if let Some(is_superclass_attr) = is_superclass_attr {
@@ -181,6 +189,7 @@ fn parse_file_contents(
                                 }
                                 self.extra_superclasses.push(Subclass {
                                     superclass,
+                                    multithreaded: is_multithreaded,
                                     subclass,
                                 })
                             }

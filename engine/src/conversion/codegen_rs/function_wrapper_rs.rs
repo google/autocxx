@@ -46,12 +46,14 @@ impl TypeConversionPolicy {
                 conversion: quote! ( #var .into_cpp() ),
                 conversion_requires_unsafe: false,
             },
-            RustConversionType::ToBoxedUpHolder(ref sub) => {
+            RustConversionType::ToBoxedUpHolder(ref sub, ref details) => {
                 let holder_type = sub.holder();
                 let id = sub.id();
+                let ptr_path = details.ptr_path(parse_quote! { super::super::super::#id });
                 let ty = parse_quote! { autocxx::subclass::CppSubclassRustPeerHolder<
-                    super::super::super:: #id,
-                    std::rc::Rc<std::cell::RefCell<super::super::super:: #id>>>
+                        super::super::super:: #id,
+                        #ptr_path,
+                    >
                 };
                 RustParamConversion::Param {
                     ty,

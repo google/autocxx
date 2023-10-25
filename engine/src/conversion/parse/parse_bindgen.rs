@@ -28,6 +28,7 @@ use crate::{
 };
 use autocxx_parser::{IncludeCppConfig, RustPath};
 use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
+use crate::conversion::api::SubclassDetails;
 
 use super::{
     super::utilities::generate_utilities, bindgen_semantic_attributes::BindgenSemanticAttributes,
@@ -101,6 +102,9 @@ impl<'a> ParseBindgen<'a> {
             .extend(self.config.subclasses.iter().map(|sc| Api::Subclass {
                 name: SubclassName::new(sc.subclass.clone().into()),
                 superclass: QualifiedName::new_from_cpp_name(&sc.superclass),
+                details: SubclassDetails {
+                    multithreaded: sc.multithreaded,
+                },
             }));
         for fun in &self.config.extern_rust_funs {
             let id = fun.sig.ident.clone();

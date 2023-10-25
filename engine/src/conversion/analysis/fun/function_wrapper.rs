@@ -13,6 +13,7 @@ use crate::{
 };
 use quote::ToTokens;
 use syn::{parse_quote, Type, TypeReference};
+use crate::conversion::api::SubclassDetails;
 
 #[derive(Clone, Debug)]
 pub(crate) enum CppConversionType {
@@ -51,7 +52,7 @@ impl CppConversionType {
 pub(crate) enum RustConversionType {
     None,
     FromStr,
-    ToBoxedUpHolder(SubclassName),
+    ToBoxedUpHolder(SubclassName, SubclassDetails),
     FromPinMaybeUninitToPtr,
     FromPinMoveRefToPtr,
     FromTypeToPtr,

@@ -52,6 +52,7 @@ use crate::{
     },
     types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},
 };
+use crate::conversion::api::SubclassDetails;
 
 use self::{
     bridge_name_tracker::BridgeNameTracker,
@@ -289,6 +290,7 @@ pub(crate) struct FnAnalyzer<'a> {
     config: &'a IncludeCppConfig,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
+    subclass_details: HashMap<SubclassName, SubclassDetails>,
     nested_type_name_map: HashMap<QualifiedName, String>,
     generic_types: HashSet<QualifiedName>,
     types_in_anonymous_namespace: HashSet<QualifiedName>,
@@ -313,6 +315,7 @@ impl<'a> FnAnalyzer<'a> {
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             moveit_safe_types: Self::build_correctly_sized_type_set(&apis),
             subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
+            subclass_details: subclass::subclass_details(&apis),
             nested_type_name_map: Self::build_nested_type_map(&apis),
             generic_types: Self::build_generic_type_set(&apis),
             existing_superclass_trait_api_names: HashSet::new(),
@@ -1786,6 +1789,7 @@ impl<'a> FnAnalyzer<'a> {
         let ty = &*annotated_type.ty;
         if let Some(holder_id) = is_subclass_holder {
             let subclass = SubclassName::from_holder_name(holder_id);
+            let details = &self.subclass_details[&subclass];
             return {
                 let ty = parse_quote! {
                     rust::Box<#holder_id>
@@ -1793,7 +1797,7 @@ impl<'a> FnAnalyzer<'a> {
                 TypeConversionPolicy::new(
                     ty,
                     CppConversionType::Move,
-                    RustConversionType::ToBoxedUpHolder(subclass),
+                    RustConversionType::ToBoxedUpHolder(subclass, details.clone()),
                 )
             };
         } else if matches!(

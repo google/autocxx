@@ -36,6 +36,7 @@ pub mod directive_names {
     pub static EXTERN_RUST_TYPE: &str = "extern_rust_type";
     pub static EXTERN_RUST_FUN: &str = "extern_rust_function";
     pub static SUBCLASS: &str = "subclass";
+    pub static SUBCLASS_MULTITHREADED: &str = "subclass_multithreaded";
 }
 
 /// Core of the autocxx engine. See `generate` for most details
