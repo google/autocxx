@@ -44,7 +44,11 @@ pub fn subclass_multithreaded(attr: TokenStream, item: TokenStream) -> TokenStre
     subclass_impl(attr, item, SubclassThreadingOption::MultiThreaded)
 }
 
-fn subclass_impl(attr: TokenStream, item: TokenStream, threading: SubclassThreadingOption) -> TokenStream {
+fn subclass_impl(
+    attr: TokenStream,
+    item: TokenStream,
+    threading: SubclassThreadingOption,
+) -> TokenStream {
     let mut s: ItemStruct =
         syn::parse(item).unwrap_or_else(|_| abort!(Span::call_site(), "Expected a struct"));
     if !matches!(s.vis, Visibility::Public(..)) {

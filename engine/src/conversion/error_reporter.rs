@@ -142,7 +142,11 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                 subclass,
                 details,
             }))),
-            Api::Subclass { name, superclass, details } => Ok(Box::new(std::iter::once(Api::Subclass {
+            Api::Subclass {
+                name,
+                superclass,
+                details,
+            } => Ok(Box::new(std::iter::once(Api::Subclass {
                 name,
                 superclass,
                 details,

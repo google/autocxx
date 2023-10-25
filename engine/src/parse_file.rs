@@ -165,7 +165,11 @@ fn parse_file_contents(
                         attr.path()
                             .segments
                             .last()
-                            .map(|seg| seg.ident == "is_subclass" || seg.ident == SUBCLASS || seg.ident == SUBCLASS_MULTITHREADED)
+                            .map(|seg| {
+                                seg.ident == "is_subclass"
+                                    || seg.ident == SUBCLASS
+                                    || seg.ident == SUBCLASS_MULTITHREADED
+                            })
                             .unwrap_or(false)
                     });
                     if let Some(is_superclass_attr) = is_superclass_attr {

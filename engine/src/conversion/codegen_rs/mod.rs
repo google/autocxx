@@ -57,8 +57,8 @@ use super::{
     codegen_cpp::type_to_cpp::CppNameMap,
 };
 use super::{convert_error::ErrorContext, ConvertErrorFromCpp};
-use quote::quote;
 use crate::conversion::api::SubclassDetails;
+use quote::quote;
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 struct ImplBlockKey {
@@ -625,7 +625,9 @@ impl<'a> RsCodeGenerator<'a> {
                 details, subclass, ..
             } => Self::generate_subclass_fn(id.into(), *details, subclass),
             Api::Subclass {
-                name, superclass, ref details,
+                name,
+                superclass,
+                ref details,
             } => {
                 let methods = associated_methods.get(&superclass);
                 let generate_peer_constructor = subclasses_with_a_single_trivial_constructor.contains(&name.0.name) &&
@@ -633,7 +635,13 @@ impl<'a> RsCodeGenerator<'a> {
                     // constructor instead? Need to create unsafe versions of everything that uses
                     // it too.
                     matches!(self.unsafe_policy, UnsafePolicy::AllFunctionsSafe);
-                self.generate_subclass(name, &superclass, details, methods, generate_peer_constructor)
+                self.generate_subclass(
+                    name,
+                    &superclass,
+                    details,
+                    methods,
+                    generate_peer_constructor,
+                )
             }
             Api::ExternCppType {
                 details: ExternCppType { rust_path, .. },

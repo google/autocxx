@@ -9,7 +9,12 @@
 use indexmap::set::IndexSet as HashSet;
 use std::fmt::Display;
 
-use syn::{parse::Parse, parse_quote, punctuated::Punctuated, token::{Comma, Unsafe}};
+use syn::{
+    parse::Parse,
+    parse_quote,
+    punctuated::Punctuated,
+    token::{Comma, Unsafe},
+};
 
 use crate::minisyn::{
     Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,

@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::conversion::api::SubclassDetails;
 use crate::minisyn::Ident;
 use crate::{
     conversion::{api::SubclassName, type_helpers::extract_pinned_mutable_reference_type},
@@ -13,7 +14,6 @@ use crate::{
 };
 use quote::ToTokens;
 use syn::{parse_quote, Type, TypeReference};
-use crate::conversion::api::SubclassDetails;
 
 #[derive(Clone, Debug)]
 pub(crate) enum CppConversionType {

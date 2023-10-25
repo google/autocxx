@@ -9,6 +9,7 @@
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 
+use crate::conversion::api::SubclassDetails;
 use crate::{
     conversion::{
         api::{Api, ApiName, NullPhase, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
@@ -28,7 +29,6 @@ use crate::{
 };
 use autocxx_parser::{IncludeCppConfig, RustPath};
 use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
-use crate::conversion::api::SubclassDetails;
 
 use super::{
     super::utilities::generate_utilities, bindgen_semantic_attributes::BindgenSemanticAttributes,

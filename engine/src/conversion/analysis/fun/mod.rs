@@ -45,6 +45,7 @@ use syn::{
     Type, TypePath, TypePtr, TypeReference, Visibility,
 };
 
+use crate::conversion::api::SubclassDetails;
 use crate::{
     conversion::{
         api::{AnalysisPhase, Api, TypeKind},
@@ -52,7 +53,6 @@ use crate::{
     },
     types::{make_ident, validate_ident_ok_for_cxx, Namespace, QualifiedName},
 };
-use crate::conversion::api::SubclassDetails;
 
 use self::{
     bridge_name_tracker::BridgeNameTracker,
