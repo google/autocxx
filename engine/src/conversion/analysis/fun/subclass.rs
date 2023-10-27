@@ -129,6 +129,7 @@ pub(super) fn create_subclass_trait_item(
 
 pub(super) fn create_subclass_function(
     sub: &SubclassName,
+    sub_details: &SubclassDetails,
     analysis: &super::FnAnalysis,
     name: &ApiName,
     receiver_mutability: &ReceiverMutability,
@@ -167,6 +168,7 @@ pub(super) fn create_subclass_function(
     Api::RustSubclassFn {
         name: ApiName::new_in_root_namespace(rust_call_name.clone()),
         subclass: sub.clone(),
+        subclass_details: sub_details.clone(),
         details: Box::new(RustSubclassFnDetails {
             params,
             ret: analysis.ret_type.clone(),

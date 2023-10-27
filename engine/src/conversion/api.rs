@@ -550,6 +550,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     RustSubclassFn {
         name: ApiName,
         subclass: SubclassName,
+        subclass_details: SubclassDetails,
         details: Box<RustSubclassFnDetails>,
     },
     /// A Rust subclass of a C++ class.

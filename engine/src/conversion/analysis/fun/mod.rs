@@ -610,6 +610,8 @@ impl<'a> FnAnalyzer<'a> {
                 Some(analysis.rust_name.clone()),
             );
             for sub in self.subclasses_by_superclass(sup) {
+                let sub_details = self.subclass_details[&sub].clone();
+
                 // For each subclass, we need to create a plain-C++ method to call its superclass
                 // and a Rust/C++ bridge API to call _that_.
                 // What we're generating here is entirely about the subclass, so the
@@ -651,6 +653,7 @@ impl<'a> FnAnalyzer<'a> {
                 results.push(create_subclass_function(
                     // RustSubclassFn
                     &sub,
+                    &sub_details,
                     &simpler_analysis,
                     &name,
                     receiver_mutability,

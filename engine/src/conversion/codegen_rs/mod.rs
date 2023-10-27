@@ -622,8 +622,8 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             }
             Api::RustSubclassFn {
-                details, subclass, ..
-            } => Self::generate_subclass_fn(id.into(), *details, subclass),
+                details, subclass, subclass_details, ..
+            } => Self::generate_subclass_fn(id.into(), *details, subclass, subclass_details),
             Api::Subclass {
                 name,
                 superclass,
@@ -819,6 +819,7 @@ impl<'a> RsCodeGenerator<'a> {
         api_name: Ident,
         details: RustSubclassFnDetails,
         subclass: SubclassName,
+        subclass_details: SubclassDetails,
     ) -> RsCodegenResult {
         let params = details.params;
         let ret = details.ret;
@@ -847,7 +848,10 @@ impl<'a> RsCodeGenerator<'a> {
         let deref_call = make_ident(deref_call);
         let borrow = make_ident(borrow);
         let destroy_panic_msg = format!("Rust subclass API (method {} of subclass {} of superclass {}) called after subclass destroyed", method_name, subclass.0.name, superclass_id);
-        let reentrancy_panic_msg = format!("Rust subclass API (method {} of subclass {} of superclass {}) called whilst subclass already borrowed - likely a re-entrant call",  method_name, subclass.0.name, superclass_id);
+        let reentrancy_panic_msg = match subclass_details.multithreaded {
+            true => format!("Rust subclass API (method {} of subclass {} of superclass {}) called whilst subclass already locked - likely a re-entrant call",  method_name, subclass.0.name, superclass_id),
+            false => format!("Rust subclass API (method {} of subclass {} of superclass {}) called whilst subclass already borrowed - likely a re-entrant call",  method_name, subclass.0.name, superclass_id),
+        };
         RsCodegenResult {
             global_items: vec![parse_quote! {
                 #global_def {

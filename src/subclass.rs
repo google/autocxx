@@ -433,11 +433,11 @@ impl<T> CppSubclassPeerPtr<T> for Arc<RwLock<T>> {
     }
 
     fn try_get_ref<'a>(&'a self) -> Result<Self::Ref<'a>, Box<dyn Error + 'a>> {
-        self.read().map_err(move |e| Box::new(e) as Box<dyn Error>)
+        self.try_read().map_err(move |e| Box::new(e) as Box<dyn Error>)
     }
 
     fn try_get_mut<'a>(&'a mut self) -> Result<Self::RefMut<'a>, Box<dyn Error + 'a>> {
-        self.write().map_err(move |e| Box::new(e) as Box<dyn Error>)
+        self.try_write().map_err(move |e| Box::new(e) as Box<dyn Error>)
     }
 
     fn clone(&self) -> Self::Ptr {
