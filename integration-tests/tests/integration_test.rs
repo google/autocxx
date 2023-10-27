@@ -8135,6 +8135,70 @@ fn test_two_superclasses_with_same_name_method() {
 }
 
 #[test]
+fn test_subclass_multithreaded_simple_read() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <thread>
+    #include <vector>
+    #include <future>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual uint32_t foo() const = 0;
+        virtual ~Observer() {}
+    };
+
+    uint32_t call_concurrently(const Observer& obs) {
+        std::vector<std::future<uint32_t>> futures;
+
+        for (int i = 0; i < 10; i++) {
+            futures.push_back(std::async(std::launch::async, [&obs]() {
+                return obs.foo();
+            }));
+        }
+
+        uint32_t res = 0;
+        for (int i = 0; i < 10; i++) {
+            res += futures[i].get();
+        }
+
+        return res;
+    }
+
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
+            let locked = obs.read().unwrap();
+            let res = ffi::call_concurrently(locked.as_ref());
+            assert_eq!(res, 30);
+        },
+        quote! {
+            generate!("call_concurrently")
+            subclass_multithreaded!("Observer",MyObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::subclass_multithreaded]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                fn foo(&self) -> u32 {
+                    self.a
+                }
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_subclass_no_safety() {
     let hdr = indoc! {"
     #include <cstdint>
