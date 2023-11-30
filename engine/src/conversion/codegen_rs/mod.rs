@@ -1130,6 +1130,7 @@ impl<'a> RsCodeGenerator<'a> {
         let segs =
             Self::find_output_mod_root(name.get_namespace()).chain(name.get_bindgen_path_idents());
         Item::Use(parse_quote! {
+            #[allow(unused_imports)]
             pub use #(#segs)::*;
         })
     }
