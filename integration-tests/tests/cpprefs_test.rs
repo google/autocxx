@@ -52,6 +52,7 @@ fn test_method_call_mut() {
         indoc! {"
         #include <string>
         #include <sstream>
+        #include <cstdint>
 
         class Goat {
             public:
@@ -80,6 +81,7 @@ fn test_method_call_const() {
         indoc! {"
         #include <string>
         #include <sstream>
+        #include <cstdint>
 
         class Goat {
             public:
