@@ -459,7 +459,7 @@ pub fn do_run_test_manual(
     let generated_rs_files = build_results.1;
 
     if let Some(code_checker) = &rust_code_checker {
-        let mut file = File::open(generated_rs_files.get(0).ok_or(TestError::NoRs)?)
+        let mut file = File::open(generated_rs_files.first().ok_or(TestError::NoRs)?)
             .map_err(TestError::RsFileOpen)?;
         let mut content = String::new();
         file.read_to_string(&mut content)
