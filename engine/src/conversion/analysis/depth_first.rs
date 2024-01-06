@@ -44,7 +44,7 @@ impl<'a, T: HasFieldsAndBases + Debug> Iterator for DepthFirstIter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let first_candidate = self.queue.get(0).map(|api| api.name());
+        let first_candidate = self.queue.front().map(|api| api.name());
         while let Some(candidate) = self.queue.pop_front() {
             if !candidate
                 .field_and_base_deps()
@@ -54,7 +54,7 @@ impl<'a, T: HasFieldsAndBases + Debug> Iterator for DepthFirstIter<'a, T> {
                 return Some(candidate);
             }
             self.queue.push_back(candidate);
-            if self.queue.get(0).map(|api| api.name()) == first_candidate {
+            if self.queue.front().map(|api| api.name()) == first_candidate {
                 panic!(
                     "Failed to find a candidate; there must be a circular dependency. Queue is {}",
                     self.queue
