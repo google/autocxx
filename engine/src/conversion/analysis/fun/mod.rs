@@ -80,7 +80,7 @@ pub(crate) enum ReceiverMutability {
 
 #[derive(Clone, Debug)]
 pub(crate) enum MethodKind {
-    Normal(ReceiverMutability),
+    Normal,
     Constructor { is_default: bool },
     Static,
     Virtual(ReceiverMutability),
@@ -964,7 +964,7 @@ impl<'a> FnAnalyzer<'a> {
                     let receiver_mutability =
                         receiver_mutability.expect("Failed to find receiver details");
                     match fun.virtualness {
-                        Virtualness::None => MethodKind::Normal(receiver_mutability),
+                        Virtualness::None => MethodKind::Normal,
                         Virtualness::Virtual => MethodKind::Virtual(receiver_mutability),
                         Virtualness::PureVirtual => MethodKind::PureVirtual(receiver_mutability),
                     }
@@ -1152,7 +1152,7 @@ impl<'a> FnAnalyzer<'a> {
                     ref impl_for,
                     method_kind:
                         MethodKind::Constructor { .. }
-                        | MethodKind::Normal(..)
+                        | MethodKind::Normal
                         | MethodKind::PureVirtual(..)
                         | MethodKind::Virtual(..),
                     ..

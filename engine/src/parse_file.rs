@@ -21,7 +21,7 @@ use quote::ToTokens;
 use std::{io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
 use syn::spanned::Spanned;
-use syn::{token::Brace, Item, ItemMod};
+use syn::Item;
 use thiserror::Error;
 
 /// Errors which may occur when parsing a Rust source file to discover
@@ -119,7 +119,7 @@ fn parse_file_contents(
                     Segment::Cxx(CxxBridge::from(itm))
                 }
                 Item::Mod(itm) => {
-                    if let Some((brace, items)) = itm.content {
+                    if let Some((_, items)) = itm.content {
                         let mut mod_state = State {
                             auto_allowlist: self.auto_allowlist,
                             ..Default::default()
@@ -137,18 +137,9 @@ fn parse_file_contents(
                         }
                         self.extra_superclasses.extend(mod_state.extra_superclasses);
                         self.discoveries.extend(mod_state.discoveries);
-                        Segment::Mod(
-                            mod_state.results,
-                            (
-                                brace,
-                                ItemMod {
-                                    content: None,
-                                    ..itm
-                                },
-                            ),
-                        )
+                        Segment::Mod(mod_state.results)
                     } else {
-                        Segment::Other(Item::Mod(itm))
+                        Segment::Other
                     }
                 }
                 Item::Struct(ref its) => {
@@ -189,13 +180,13 @@ fn parse_file_contents(
                     self.discoveries
                         .search_item(&item, mod_path)
                         .map_err(ParseError::Discovery)?;
-                    Segment::Other(item)
+                    Segment::Other
                 }
                 _ => {
                     self.discoveries
                         .search_item(&item, mod_path)
                         .map_err(ParseError::Discovery)?;
-                    Segment::Other(item)
+                    Segment::Other
                 }
             };
             self.results.push(result);
@@ -283,8 +274,8 @@ pub struct ParsedFile(Vec<Segment>);
 enum Segment {
     Autocxx(IncludeCppEngine),
     Cxx(CxxBridge),
-    Mod(Vec<Segment>, (Brace, ItemMod)),
-    Other(Item),
+    Mod(Vec<Segment>),
+    Other,
 }
 
 pub trait CppBuildable {
@@ -303,7 +294,7 @@ impl ParsedFile {
                 .flat_map(|s| -> Box<dyn Iterator<Item = &IncludeCppEngine>> {
                     match s {
                         Segment::Autocxx(includecpp) => Box::new(std::iter::once(includecpp)),
-                        Segment::Mod(segments, _) => Box::new(do_get_autocxxes(segments)),
+                        Segment::Mod(segments) => Box::new(do_get_autocxxes(segments)),
                         _ => Box::new(std::iter::empty()),
                     }
                 })
@@ -331,7 +322,7 @@ impl ParsedFile {
                         Segment::Cxx(cxxbridge) => {
                             Box::new(std::iter::once(cxxbridge as &dyn CppBuildable))
                         }
-                        Segment::Mod(segments, _) => Box::new(do_get_cpp_buildables(segments)),
+                        Segment::Mod(segments) => Box::new(do_get_cpp_buildables(segments)),
                         _ => Box::new(std::iter::empty()),
                     }
                 })
@@ -349,7 +340,7 @@ impl ParsedFile {
                 .flat_map(|s| -> Box<dyn Iterator<Item = &mut IncludeCppEngine>> {
                     match s {
                         Segment::Autocxx(includecpp) => Box::new(std::iter::once(includecpp)),
-                        Segment::Mod(segments, _) => Box::new(do_get_autocxxes_mut(segments)),
+                        Segment::Mod(segments) => Box::new(do_get_autocxxes_mut(segments)),
                         _ => Box::new(std::iter::empty()),
                     }
                 })
@@ -368,7 +359,7 @@ impl ParsedFile {
                 .flat_map(|s| -> Box<dyn Iterator<Item = &PathBuf>> {
                     match s {
                         Segment::Autocxx(includecpp) => Box::new(includecpp.include_dirs()),
-                        Segment::Mod(segments, _) => Box::new(do_get_include_dirs(segments)),
+                        Segment::Mod(segments) => Box::new(do_get_include_dirs(segments)),
                         _ => Box::new(std::iter::empty()),
                     }
                 })
