@@ -11,13 +11,14 @@ use std::fmt::Display;
 
 use syn::{
     parse::Parse,
+    parse_quote,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
 };
 
 use crate::minisyn::{
     Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
-    Pat, ReturnType, Type, Visibility,
+    Pat, ReturnType, Type, TypePath, Visibility,
 };
 use crate::types::{make_ident, Namespace, QualifiedName};
 use autocxx_parser::{ExternCppType, RustFun, RustPath};
@@ -549,12 +550,14 @@ pub(crate) enum Api<T: AnalysisPhase> {
     RustSubclassFn {
         name: ApiName,
         subclass: SubclassName,
+        subclass_details: SubclassDetails,
         details: Box<RustSubclassFnDetails>,
     },
     /// A Rust subclass of a C++ class.
     Subclass {
         name: SubclassName,
         superclass: QualifiedName,
+        details: SubclassDetails,
     },
     /// Contributions to the traits representing superclass methods that we might
     /// subclass in Rust.
@@ -569,6 +572,20 @@ pub(crate) enum Api<T: AnalysisPhase> {
         details: ExternCppType,
         pod: bool,
     },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SubclassDetails {
+    pub(crate) multithreaded: bool,
+}
+
+impl SubclassDetails {
+    pub(crate) fn ptr_path(&self, path: TypePath) -> TypePath {
+        match self.multithreaded {
+            true => parse_quote! { ::std::sync::Arc<::std::sync::RwLock<#path>> },
+            false => parse_quote! { ::std::rc::Rc<::std::cell::RefCell<#path>> },
+        }
+    }
 }
 
 #[derive(Debug)]

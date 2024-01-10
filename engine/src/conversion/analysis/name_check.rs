@@ -52,6 +52,7 @@ pub(crate) fn check_names(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
         Api::Subclass {
             name: SubclassName(ref name),
             ref superclass,
+            ..
         } => {
             validate_all_segments_ok_for_cxx(name.name.segment_iter())?;
             validate_all_segments_ok_for_cxx(superclass.segment_iter())?;

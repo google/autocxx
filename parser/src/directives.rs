@@ -15,7 +15,7 @@ use quote::{quote, ToTokens};
 use syn::parse::ParseStream;
 
 use crate::config::{Allowlist, AllowlistErr};
-use crate::directive_names::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE, SUBCLASS};
+use crate::directive_names::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE, SUBCLASS, SUBCLASS_MULTITHREADED};
 use crate::{AllowlistEntry, IncludeCppConfig};
 use crate::{ParseResult, RustFun, RustPath};
 
@@ -89,7 +89,8 @@ pub(crate) fn get_directives() -> &'static DirectivesMap {
         need_exclamation.insert("concrete".into(), Box::new(Concrete));
         need_exclamation.insert("rust_type".into(), Box::new(RustType { output: false }));
         need_exclamation.insert(EXTERN_RUST_TYPE.into(), Box::new(RustType { output: true }));
-        need_exclamation.insert(SUBCLASS.into(), Box::new(Subclass));
+        need_exclamation.insert(SUBCLASS.into(), Box::new(Subclass(false)));
+        need_exclamation.insert(SUBCLASS_MULTITHREADED.into(), Box::new(Subclass(true)));
         need_exclamation.insert(EXTERN_RUST_FUN.into(), Box::new(ExternRustFun));
         need_exclamation.insert(
             "extern_cpp_type".into(),
@@ -424,7 +425,7 @@ impl Directive for RustType {
     }
 }
 
-struct Subclass;
+struct Subclass(bool);
 
 impl Directive for Subclass {
     fn parse(
@@ -433,11 +434,13 @@ impl Directive for Subclass {
         config: &mut IncludeCppConfig,
         _ident_span: &Span,
     ) -> ParseResult<()> {
+        let Subclass(multithreaded) = *self;
         let superclass: syn::LitStr = args.parse()?;
         args.parse::<syn::token::Comma>()?;
         let subclass: syn::Ident = args.parse()?;
         config.subclasses.push(crate::config::Subclass {
             superclass: superclass.value(),
+            multithreaded,
             subclass,
         });
         Ok(())

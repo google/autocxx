@@ -8176,6 +8176,70 @@ fn test_two_superclasses_with_same_name_method() {
 }
 
 #[test]
+fn test_subclass_multithreaded_simple_read() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <thread>
+    #include <vector>
+    #include <future>
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual uint32_t foo() const = 0;
+        virtual ~Observer() {}
+    };
+
+    uint32_t call_concurrently(const Observer& obs) {
+        std::vector<std::future<uint32_t>> futures;
+
+        for (int i = 0; i < 10; i++) {
+            futures.push_back(std::async(std::launch::async, [&obs]() {
+                return obs.foo();
+            }));
+        }
+
+        uint32_t res = 0;
+        for (int i = 0; i < 10; i++) {
+            res += futures[i].get();
+        }
+
+        return res;
+    }
+
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
+            let locked = obs.read().unwrap();
+            let res = ffi::call_concurrently(locked.as_ref());
+            assert_eq!(res, 30);
+        },
+        quote! {
+            generate!("call_concurrently")
+            subclass_multithreaded!("Observer",MyObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::subclass_multithreaded]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                fn foo(&self) -> u32 {
+                    self.a
+                }
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_subclass_no_safety() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -8205,10 +8269,10 @@ fn test_subclass_no_safety() {
 
         use autocxx::subclass::{CppSubclass, CppPeerConstructor, CppSubclassRustPeerHolder};
         use cxx::UniquePtr;
-        impl CppPeerConstructor<ffi::MyObserverCpp> for MyObserver {
+        impl CppPeerConstructor<ffi::MyObserverCpp, std::rc::Rc<std::cell::RefCell<MyObserver>>> for MyObserver {
             fn make_peer(
                 &mut self,
-                peer_holder: CppSubclassRustPeerHolder<Self>,
+                peer_holder: CppSubclassRustPeerHolder<Self, std::rc::Rc<std::cell::RefCell<Self>>>,
             ) -> UniquePtr<ffi::MyObserverCpp> {
                 UniquePtr::emplace(unsafe { ffi::MyObserverCpp::new(peer_holder) })
             }
@@ -9040,6 +9104,9 @@ fn test_pv_subclass_constructors() {
         None,
         Some(quote! {
             use autocxx::subclass::prelude::*;
+            use std::rc::Rc;
+            use std::cell::RefCell;
+
             #[subclass]
             #[derive(Default)]
             pub struct MyTestObserver;
@@ -9048,8 +9115,72 @@ fn test_pv_subclass_constructors() {
                     self.peer().call_super()
                 }
             }
-            impl CppPeerConstructor<ffi::MyTestObserverCpp> for MyTestObserver {
-                fn make_peer(&mut self, peer_holder: CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<ffi::MyTestObserverCpp> {
+            impl CppPeerConstructor<ffi::MyTestObserverCpp, Rc<RefCell<MyTestObserver>>> for MyTestObserver {
+                fn make_peer(&mut self, peer_holder: CppSubclassRustPeerHolder<Self, Rc<RefCell<MyTestObserver>>>) -> cxx::UniquePtr<ffi::MyTestObserverCpp> {
+                    ffi::MyTestObserverCpp::new1(peer_holder, 3u8).within_unique_ptr()
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_constructors_multithreaded() {
+    // Also tests a Rust-side subclass type which is an empty struct
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <string>
+
+    class TestObserver {
+    public:
+        TestObserver() {}
+        TestObserver(uint8_t) {}
+        TestObserver(std::string) {}
+        virtual void call() const { }
+        virtual ~TestObserver() {}
+    };
+
+    extern TestObserver* obs;
+
+    inline void register_observer(TestObserver& a) {
+        obs = &a;
+    }
+    inline void do_a_thing() {
+        return obs->call();
+    }
+    "};
+    run_test_ex(
+        "TestObserver* obs;",
+        hdr,
+        quote! {
+            let obs = MyTestObserver::new_rust_owned(
+                MyTestObserver::default()
+            );
+            ffi::register_observer(obs.write().unwrap().pin_mut());
+            ffi::do_a_thing();
+        },
+        quote! {
+            generate!("register_observer")
+            generate!("do_a_thing")
+            subclass_multithreaded!("TestObserver",MyTestObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::prelude::*;
+            use std::sync::Arc;
+            use std::sync::RwLock;
+
+            #[subclass_multithreaded]
+            #[derive(Default)]
+            pub struct MyTestObserver;
+            impl ffi::TestObserver_methods for MyTestObserver {
+                fn call(&self) {
+                    self.peer().call_super()
+                }
+            }
+            impl CppPeerConstructor<ffi::MyTestObserverCpp, Arc<RwLock<MyTestObserver>>> for MyTestObserver {
+                fn make_peer(&mut self, peer_holder: CppSubclassRustPeerHolder<Self, Arc<RwLock<MyTestObserver>>>) -> cxx::UniquePtr<ffi::MyTestObserverCpp> {
                     ffi::MyTestObserverCpp::new1(peer_holder, 3u8).within_unique_ptr()
                 }
             }

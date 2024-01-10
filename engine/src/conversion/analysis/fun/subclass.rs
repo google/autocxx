@@ -16,7 +16,7 @@ use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability, U
 use crate::conversion::analysis::pod::PodPhase;
 use crate::conversion::api::{
     CppVisibility, FuncToConvert, Provenance, RustSubclassFnDetails, SubclassConstructorDetails,
-    SubclassName, SuperclassMethod, UnsafetyNeeded, Virtualness,
+    SubclassDetails, SubclassName, SuperclassMethod, UnsafetyNeeded, Virtualness,
 };
 use crate::conversion::apivec::ApiVec;
 use crate::minisyn::minisynize_punctuated;
@@ -38,7 +38,10 @@ pub(super) fn subclasses_by_superclass(
     let mut subclasses_per_superclass: HashMap<QualifiedName, Vec<SubclassName>> = HashMap::new();
 
     for api in apis.iter() {
-        if let Api::Subclass { name, superclass } = api {
+        if let Api::Subclass {
+            name, superclass, ..
+        } = api
+        {
             subclasses_per_superclass
                 .entry(superclass.clone())
                 .or_default()
@@ -46,6 +49,20 @@ pub(super) fn subclasses_by_superclass(
         }
     }
     subclasses_per_superclass
+}
+
+pub(super) fn subclass_details(apis: &ApiVec<PodPhase>) -> HashMap<SubclassName, SubclassDetails> {
+    let mut subclass_details: HashMap<SubclassName, SubclassDetails> = HashMap::new();
+
+    for api in apis.iter() {
+        if let Api::Subclass { name, details, .. } = api {
+            subclass_details
+                .entry(name.clone())
+                .or_insert(details.clone());
+        }
+    }
+
+    subclass_details
 }
 
 pub(super) fn create_subclass_fn_wrapper(
@@ -112,6 +129,7 @@ pub(super) fn create_subclass_trait_item(
 
 pub(super) fn create_subclass_function(
     sub: &SubclassName,
+    sub_details: &SubclassDetails,
     analysis: &super::FnAnalysis,
     name: &ApiName,
     receiver_mutability: &ReceiverMutability,
@@ -150,6 +168,7 @@ pub(super) fn create_subclass_function(
     Api::RustSubclassFn {
         name: ApiName::new_in_root_namespace(rust_call_name.clone()),
         subclass: sub.clone(),
+        subclass_details: sub_details.clone(),
         details: Box::new(RustSubclassFnDetails {
             params,
             ret: analysis.ret_type.clone(),

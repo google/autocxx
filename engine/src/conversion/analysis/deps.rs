@@ -40,6 +40,7 @@ impl HasDependencies for Api<FnPrePhase1> {
             Api::Subclass {
                 name: _,
                 superclass,
+                ..
             } => Box::new(std::iter::once(superclass)),
             Api::RustSubclassFn { details, .. } => Box::new(details.dependencies.iter()),
             Api::RustFn { deps, .. } => Box::new(deps.iter()),
@@ -93,6 +94,7 @@ impl HasDependencies for Api<FnPhase> {
             Api::Subclass {
                 name: _,
                 superclass,
+                ..
             } => Box::new(std::iter::once(superclass)),
             Api::RustSubclassFn { details, .. } => Box::new(details.dependencies.iter()),
             Api::RustFn { deps, .. } => Box::new(deps.iter()),

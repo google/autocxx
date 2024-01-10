@@ -45,6 +45,7 @@ use syn::{
     Type, TypePath, TypePtr, TypeReference, Visibility,
 };
 
+use crate::conversion::api::SubclassDetails;
 use crate::{
     conversion::{
         api::{AnalysisPhase, Api, TypeKind},
@@ -289,6 +290,7 @@ pub(crate) struct FnAnalyzer<'a> {
     config: &'a IncludeCppConfig,
     overload_trackers_by_mod: HashMap<Namespace, OverloadTracker>,
     subclasses_by_superclass: HashMap<QualifiedName, Vec<SubclassName>>,
+    subclass_details: HashMap<SubclassName, SubclassDetails>,
     nested_type_name_map: HashMap<QualifiedName, String>,
     generic_types: HashSet<QualifiedName>,
     types_in_anonymous_namespace: HashSet<QualifiedName>,
@@ -313,6 +315,7 @@ impl<'a> FnAnalyzer<'a> {
             pod_safe_types: Self::build_pod_safe_type_set(&apis),
             moveit_safe_types: Self::build_correctly_sized_type_set(&apis),
             subclasses_by_superclass: subclass::subclasses_by_superclass(&apis),
+            subclass_details: subclass::subclass_details(&apis),
             nested_type_name_map: Self::build_nested_type_map(&apis),
             generic_types: Self::build_generic_type_set(&apis),
             existing_superclass_trait_api_names: HashSet::new(),
@@ -607,6 +610,8 @@ impl<'a> FnAnalyzer<'a> {
                 Some(analysis.rust_name.clone()),
             );
             for sub in self.subclasses_by_superclass(sup) {
+                let sub_details = self.subclass_details[&sub].clone();
+
                 // For each subclass, we need to create a plain-C++ method to call its superclass
                 // and a Rust/C++ bridge API to call _that_.
                 // What we're generating here is entirely about the subclass, so the
@@ -648,6 +653,7 @@ impl<'a> FnAnalyzer<'a> {
                 results.push(create_subclass_function(
                     // RustSubclassFn
                     &sub,
+                    &sub_details,
                     &simpler_analysis,
                     &name,
                     receiver_mutability,
@@ -1786,6 +1792,7 @@ impl<'a> FnAnalyzer<'a> {
         let ty = &*annotated_type.ty;
         if let Some(holder_id) = is_subclass_holder {
             let subclass = SubclassName::from_holder_name(holder_id);
+            let details = &self.subclass_details[&subclass];
             return {
                 let ty = parse_quote! {
                     rust::Box<#holder_id>
@@ -1793,7 +1800,7 @@ impl<'a> FnAnalyzer<'a> {
                 TypeConversionPolicy::new(
                     ty,
                     CppConversionType::Move,
-                    RustConversionType::ToBoxedUpHolder(subclass),
+                    RustConversionType::ToBoxedUpHolder(subclass, details.clone()),
                 )
             };
         } else if matches!(

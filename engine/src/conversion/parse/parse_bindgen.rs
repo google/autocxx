@@ -9,6 +9,7 @@
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 
+use crate::conversion::api::SubclassDetails;
 use crate::{
     conversion::{
         api::{Api, ApiName, NullPhase, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
@@ -101,6 +102,9 @@ impl<'a> ParseBindgen<'a> {
             .extend(self.config.subclasses.iter().map(|sc| Api::Subclass {
                 name: SubclassName::new(sc.subclass.clone().into()),
                 superclass: QualifiedName::new_from_cpp_name(&sc.superclass),
+                details: SubclassDetails {
+                    multithreaded: sc.multithreaded,
+                },
             }));
         for fun in &self.config.extern_rust_funs {
             let id = fun.sig.ident.clone();

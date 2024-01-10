@@ -9,6 +9,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::cell::{Ref, RefMut};
+use std::error::Error;
+use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, RwLock};
 use std::{
     cell::RefCell,
     pin::Pin,
@@ -54,6 +58,7 @@ pub use autocxx_macro::subclass as is_subclass;
 /// multiple steps you need to take to be able to make Rust
 /// subclasses of a C++ class.
 pub use autocxx_macro::subclass;
+pub use autocxx_macro::subclass_multithreaded;
 
 /// A prelude containing all the traits and macros required to create
 /// Rust subclasses of C++ classes. It's recommended that you:
@@ -63,8 +68,9 @@ pub use autocxx_macro::subclass;
 /// ```
 pub mod prelude {
     pub use super::{
-        is_subclass, subclass, CppPeerConstructor, CppSubclass, CppSubclassDefault,
-        CppSubclassRustPeerHolder, CppSubclassSelfOwned, CppSubclassSelfOwnedDefault,
+        is_subclass, subclass, subclass_multithreaded, CppPeerConstructor, CppSubclass,
+        CppSubclassDefault, CppSubclassRustPeerHolder, CppSubclassSelfOwned,
+        CppSubclassSelfOwnedDefault,
     };
 }
 
@@ -77,22 +83,28 @@ pub trait CppSubclassCppPeer: UniquePtrTarget {
 /// A type used for how the C++ side of a Rust/C++ subclass pair refers to
 /// the Rust side.
 #[doc(hidden)]
-pub enum CppSubclassRustPeerHolder<T> {
-    Owned(Rc<RefCell<T>>),
-    Unowned(Weak<RefCell<T>>),
+pub enum CppSubclassRustPeerHolder<T, CppPeerPtr>
+where
+    CppPeerPtr: CppSubclassPeerPtr<T>,
+{
+    Owned(CppPeerPtr::Ptr),
+    Unowned(CppPeerPtr::WeakPtr),
 }
 
-impl<T> CppSubclassRustPeerHolder<T> {
-    pub fn get(&self) -> Option<Rc<RefCell<T>>> {
+impl<T, CppPeerPtr> CppSubclassRustPeerHolder<T, CppPeerPtr>
+where
+    CppPeerPtr: CppSubclassPeerPtr<T>,
+{
+    pub fn get(&self) -> Option<CppPeerPtr::Ptr> {
         match self {
             CppSubclassRustPeerHolder::Owned(strong) => Some(strong.clone()),
-            CppSubclassRustPeerHolder::Unowned(weak) => weak.upgrade(),
+            CppSubclassRustPeerHolder::Unowned(weak) => CppPeerPtr::upgrade(weak),
         }
     }
     pub fn relinquish_ownership(self) -> Self {
         match self {
             CppSubclassRustPeerHolder::Owned(strong) => {
-                CppSubclassRustPeerHolder::Unowned(Rc::downgrade(&strong))
+                CppSubclassRustPeerHolder::Unowned(CppPeerPtr::downgrade(&strong))
             }
             _ => self,
         }
@@ -143,26 +155,26 @@ impl<CppPeer: CppSubclassCppPeer> CppSubclassCppPeerHolder<CppPeer> {
     }
 }
 
-fn make_owning_peer<CppPeer, PeerConstructor, Subclass, PeerBoxer>(
+fn make_owning_peer<CppPeer, CppPeerPtr, PeerConstructor, Subclass, PeerBoxer>(
     me: Subclass,
     peer_constructor: PeerConstructor,
     peer_boxer: PeerBoxer,
-) -> Rc<RefCell<Subclass>>
+) -> CppPeerPtr::Ptr
 where
     CppPeer: CppSubclassCppPeer,
-    Subclass: CppSubclass<CppPeer>,
-    PeerConstructor:
-        FnOnce(&mut Subclass, CppSubclassRustPeerHolder<Subclass>) -> UniquePtr<CppPeer>,
-    PeerBoxer: FnOnce(Rc<RefCell<Subclass>>) -> CppSubclassRustPeerHolder<Subclass>,
+    CppPeerPtr: CppSubclassPeerPtr<Subclass>,
+    Subclass: CppSubclass<CppPeer, CppPeerPtr>,
+    PeerConstructor: FnOnce(
+        &mut Subclass,
+        CppSubclassRustPeerHolder<Subclass, CppPeerPtr>,
+    ) -> UniquePtr<CppPeer>,
+    PeerBoxer: FnOnce(CppPeerPtr::Ptr) -> CppSubclassRustPeerHolder<Subclass, CppPeerPtr>,
 {
-    let me = Rc::new(RefCell::new(me));
+    let mut me = CppPeerPtr::new(me);
     let holder = peer_boxer(me.clone());
-    let cpp_side = peer_constructor(&mut me.as_ref().borrow_mut(), holder);
-    me.as_ref()
-        .borrow_mut()
-        .peer_holder_mut()
-        .set_owned(cpp_side);
-    me
+    let cpp_side = peer_constructor(&mut me.get_mut(), holder);
+    me.get_mut().peer_holder_mut().set_owned(cpp_side);
+    me.clone()
 }
 
 /// A trait to be implemented by a subclass which knows how to construct
@@ -174,14 +186,21 @@ where
 /// a single constructor which takes parameters, you'll need to implement
 /// this trait for your subclass in order to call the correct
 /// constructor.
-pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
+pub trait CppPeerConstructor<CppPeer, CppPeerPtr>: Sized
+where
+    CppPeer: CppSubclassCppPeer,
+    CppPeerPtr: CppSubclassPeerPtr<Self>,
+{
     /// Create the C++ peer. This method will be automatically generated
     /// for you *except* in cases where the superclass has multiple constructors,
     /// or its only constructor takes parameters. In such a case you'll need
     /// to implement this by calling a `make_unique` method on the
     /// `<my subclass name>Cpp` type, passing `peer_holder` as the first
     /// argument.
-    fn make_peer(&mut self, peer_holder: CppSubclassRustPeerHolder<Self>) -> UniquePtr<CppPeer>;
+    fn make_peer(
+        &mut self,
+        peer_holder: CppSubclassRustPeerHolder<Self, CppPeerPtr>,
+    ) -> UniquePtr<CppPeer>;
 }
 
 /// A subclass of a C++ type.
@@ -274,7 +293,11 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// * *Non-trivial class hierarchies*. We don't yet consider virtual methods
 ///   on base classes of base classes. This is a temporary limitation,
 ///   [see this issue](https://github.com/google/autocxx/issues/610).
-pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> {
+pub trait CppSubclass<CppPeer, CppPeerPtr>: CppPeerConstructor<CppPeer, CppPeerPtr>
+where
+    CppPeer: CppSubclassCppPeer,
+    CppPeerPtr: CppSubclassPeerPtr<Self>,
+{
     /// Return the field which holds the C++ peer object. This is normally
     /// implemented by the #[`is_subclass`] macro, but you're welcome to
     /// implement it yourself if you prefer.
@@ -301,9 +324,9 @@ pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> 
     /// returned [`cxx::UniquePtr`] and thus would typically be returned immediately
     /// to C++ such that it can be owned on the C++ side.
     fn new_cpp_owned(me: Self) -> UniquePtr<CppPeer> {
-        let me = Rc::new(RefCell::new(me));
+        let mut me = CppPeerPtr::new(me);
         let holder = CppSubclassRustPeerHolder::Owned(me.clone());
-        let mut borrowed = me.as_ref().borrow_mut();
+        let mut borrowed = CppPeerPtr::get_mut(&mut me);
         let mut cpp_side = borrowed.make_peer(holder);
         borrowed.peer_holder_mut().set_unowned(&mut cpp_side);
         cpp_side
@@ -312,19 +335,124 @@ pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> 
     /// Creates a new instance of this subclass. This instance is not owned
     /// by C++, and therefore will be deleted when it goes out of scope in
     /// Rust.
-    fn new_rust_owned(me: Self) -> Rc<RefCell<Self>> {
+    fn new_rust_owned(me: Self) -> CppPeerPtr::Ptr {
         make_owning_peer(
             me,
             |obj, holder| obj.make_peer(holder),
-            |me| CppSubclassRustPeerHolder::Unowned(Rc::downgrade(&me)),
+            |me| CppSubclassRustPeerHolder::Unowned(CppPeerPtr::downgrade(&me)),
         )
+    }
+}
+
+pub trait CppSubclassPeerPtr<T> {
+    type Ptr: Clone;
+    type WeakPtr;
+    type Ref<'a>: Deref<Target = T>
+    where
+        T: 'a,
+        Self: 'a;
+    type RefMut<'a>: DerefMut<Target = T>
+    where
+        T: 'a,
+        Self: 'a;
+
+    fn new(val: T) -> Self;
+    fn upgrade(ptr: &Self::WeakPtr) -> Option<Self::Ptr>;
+    fn downgrade(ptr: &Self::Ptr) -> Self::WeakPtr;
+    fn get_ref(&self) -> Self::Ref<'_>;
+    fn get_mut(&mut self) -> Self::RefMut<'_>;
+    fn try_get_ref<'a>(&'a self) -> Result<Self::Ref<'a>, Box<dyn Error + 'a>>;
+    fn try_get_mut<'a>(&'a mut self) -> Result<Self::RefMut<'a>, Box<dyn Error + 'a>>;
+    fn clone(&self) -> Self::Ptr;
+}
+
+impl<T> CppSubclassPeerPtr<T> for Rc<RefCell<T>> {
+    type Ptr = Self;
+    type WeakPtr = Weak<RefCell<T>>;
+    type Ref<'a> = Ref<'a, T> where T: 'a;
+    type RefMut<'a> = RefMut<'a, T> where T: 'a;
+
+    fn new(val: T) -> Self::Ptr {
+        Rc::new(RefCell::new(val))
+    }
+
+    fn upgrade(ptr: &Self::WeakPtr) -> Option<Self::Ptr> {
+        ptr.upgrade()
+    }
+
+    fn downgrade(ptr: &Self::Ptr) -> Self::WeakPtr {
+        Rc::downgrade(ptr)
+    }
+
+    fn get_ref(&self) -> Self::Ref<'_> {
+        self.borrow()
+    }
+
+    fn get_mut(&mut self) -> Self::RefMut<'_> {
+        self.borrow_mut()
+    }
+
+    fn try_get_ref<'a>(&'a self) -> Result<Self::Ref<'a>, Box<dyn Error + 'a>> {
+        self.try_borrow().map_err(|e| Box::new(e) as Box<dyn Error>)
+    }
+
+    fn try_get_mut<'a>(&'a mut self) -> Result<Self::RefMut<'a>, Box<dyn Error + 'a>> {
+        self.try_borrow_mut()
+            .map_err(move |e| Box::new(e) as Box<dyn Error>)
+    }
+
+    fn clone(&self) -> Self::Ptr {
+        <Rc<RefCell<T>> as Clone>::clone(self)
+    }
+}
+
+impl<T> CppSubclassPeerPtr<T> for Arc<RwLock<T>> {
+    type Ptr = Self;
+    type WeakPtr = std::sync::Weak<RwLock<T>>;
+    type Ref<'a> = std::sync::RwLockReadGuard<'a, T> where T: 'a;
+    type RefMut<'a> = std::sync::RwLockWriteGuard<'a, T> where T: 'a;
+
+    fn new(val: T) -> Self::Ptr {
+        Arc::new(RwLock::new(val))
+    }
+
+    fn upgrade(ptr: &Self::WeakPtr) -> Option<Self::Ptr> {
+        ptr.upgrade()
+    }
+
+    fn downgrade(ptr: &Self::Ptr) -> Self::WeakPtr {
+        Arc::downgrade(ptr)
+    }
+
+    fn get_ref(&self) -> Self::Ref<'_> {
+        self.read().unwrap()
+    }
+
+    fn get_mut(&mut self) -> Self::RefMut<'_> {
+        self.write().unwrap()
+    }
+
+    fn try_get_ref<'a>(&'a self) -> Result<Self::Ref<'a>, Box<dyn Error + 'a>> {
+        self.try_read().map_err(move |e| Box::new(e) as Box<dyn Error>)
+    }
+
+    fn try_get_mut<'a>(&'a mut self) -> Result<Self::RefMut<'a>, Box<dyn Error + 'a>> {
+        self.try_write().map_err(move |e| Box::new(e) as Box<dyn Error>)
+    }
+
+    fn clone(&self) -> Self::Ptr {
+        <Arc<RwLock<T>> as Clone>::clone(self)
     }
 }
 
 /// Trait to be implemented by subclasses which are self-owned, i.e. not owned
 /// externally by either Rust or C++ code, and thus need the ability to delete
 /// themselves when some virtual function is called.
-pub trait CppSubclassSelfOwned<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer> {
+pub trait CppSubclassSelfOwned<CppPeer, CppPeerPtr>: CppSubclass<CppPeer, CppPeerPtr>
+where
+    CppPeer: CppSubclassCppPeer,
+    CppPeerPtr: CppSubclassPeerPtr<Self>,
+{
     /// Creates a new instance of this subclass which owns itself.
     /// This is useful
     /// for observers (etc.) which self-register to listen to events.
@@ -332,7 +460,7 @@ pub trait CppSubclassSelfOwned<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer
     /// use [`CppSubclassSelfOwned::delete_self`].
     /// The return value may be useful to register this, etc. but can ultimately
     /// be discarded without destroying this object.
-    fn new_self_owned(me: Self) -> Rc<RefCell<Self>> {
+    fn new_self_owned(me: Self) -> CppPeerPtr::Ptr {
         make_owning_peer(
             me,
             |obj, holder| obj.make_peer(holder),
@@ -349,22 +477,28 @@ pub trait CppSubclassSelfOwned<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer
 }
 
 /// Provides default constructors for subclasses which implement `Default`.
-pub trait CppSubclassDefault<CppPeer: CppSubclassCppPeer>: CppSubclass<CppPeer> + Default {
+pub trait CppSubclassDefault<CppPeer, CppPeerPtr>:
+    CppSubclass<CppPeer, CppPeerPtr> + Default
+where
+    CppPeer: CppSubclassCppPeer,
+    CppPeerPtr: CppSubclassPeerPtr<Self>,
+{
     /// Create a Rust-owned instance of this subclass, initializing with default values. See
     /// [`CppSubclass`] for more details of the ownership models available.
-    fn default_rust_owned() -> Rc<RefCell<Self>>;
+    fn default_rust_owned() -> CppPeerPtr::Ptr;
 
     /// Create a C++-owned instance of this subclass, initializing with default values. See
     /// [`CppSubclass`] for more details of the ownership models available.
     fn default_cpp_owned() -> UniquePtr<CppPeer>;
 }
 
-impl<T, CppPeer> CppSubclassDefault<CppPeer> for T
+impl<T, CppPeer, CppPeerPtr> CppSubclassDefault<CppPeer, CppPeerPtr> for T
 where
-    T: CppSubclass<CppPeer> + Default,
+    T: CppSubclass<CppPeer, CppPeerPtr> + Default,
     CppPeer: CppSubclassCppPeer,
+    CppPeerPtr: CppSubclassPeerPtr<Self>,
 {
-    fn default_rust_owned() -> Rc<RefCell<Self>> {
+    fn default_rust_owned() -> CppPeerPtr::Ptr {
         Self::new_rust_owned(Self::default())
     }
 
@@ -375,20 +509,24 @@ where
 
 /// Provides default constructors for subclasses which implement `Default`
 /// and are self-owning.
-pub trait CppSubclassSelfOwnedDefault<CppPeer: CppSubclassCppPeer>:
-    CppSubclassSelfOwned<CppPeer> + Default
+pub trait CppSubclassSelfOwnedDefault<CppPeer, CppPeerPtr>:
+    CppSubclassSelfOwned<CppPeer, CppPeerPtr> + Default
+where
+    CppPeer: CppSubclassCppPeer,
+    CppPeerPtr: CppSubclassPeerPtr<Self>,
 {
     /// Create a self-owned instance of this subclass, initializing with default values. See
     /// [`CppSubclass`] for more details of the ownership models available.
-    fn default_self_owned() -> Rc<RefCell<Self>>;
+    fn default_self_owned() -> CppPeerPtr::Ptr;
 }
 
-impl<T, CppPeer> CppSubclassSelfOwnedDefault<CppPeer> for T
+impl<T, CppPeer, CppPeerPtr> CppSubclassSelfOwnedDefault<CppPeer, CppPeerPtr> for T
 where
-    T: CppSubclassSelfOwned<CppPeer> + Default,
+    T: CppSubclassSelfOwned<CppPeer, CppPeerPtr> + Default,
     CppPeer: CppSubclassCppPeer,
+    CppPeerPtr: CppSubclassPeerPtr<Self>,
 {
-    fn default_self_owned() -> Rc<RefCell<Self>> {
+    fn default_self_owned() -> CppPeerPtr::Ptr {
         Self::new_self_owned(Self::default())
     }
 }

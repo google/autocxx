@@ -57,6 +57,7 @@ use super::{
     codegen_cpp::type_to_cpp::CppNameMap,
 };
 use super::{convert_error::ErrorContext, ConvertErrorFromCpp};
+use crate::conversion::api::SubclassDetails;
 use quote::quote;
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -621,10 +622,12 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             }
             Api::RustSubclassFn {
-                details, subclass, ..
-            } => Self::generate_subclass_fn(id.into(), *details, subclass),
+                details, subclass, subclass_details, ..
+            } => Self::generate_subclass_fn(id.into(), *details, subclass, subclass_details),
             Api::Subclass {
-                name, superclass, ..
+                name,
+                superclass,
+                ref details,
             } => {
                 let methods = associated_methods.get(&superclass);
                 let generate_peer_constructor = subclasses_with_a_single_trivial_constructor.contains(&name.0.name) &&
@@ -632,7 +635,13 @@ impl<'a> RsCodeGenerator<'a> {
                     // constructor instead? Need to create unsafe versions of everything that uses
                     // it too.
                     matches!(self.unsafe_policy, UnsafePolicy::AllFunctionsSafe);
-                self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
+                self.generate_subclass(
+                    name,
+                    &superclass,
+                    details,
+                    methods,
+                    generate_peer_constructor,
+                )
             }
             Api::ExternCppType {
                 details: ExternCppType { rust_path, .. },
@@ -651,6 +660,7 @@ impl<'a> RsCodeGenerator<'a> {
         &self,
         sub: SubclassName,
         superclass: &QualifiedName,
+        details: &SubclassDetails,
         methods: Option<&Vec<SuperclassMethod>>,
         generate_peer_constructor: bool,
     ) -> RsCodegenResult {
@@ -658,6 +668,7 @@ impl<'a> RsCodeGenerator<'a> {
         let super_path = superclass.to_type_path();
         let super_cxxxbridge_id = superclass.get_final_ident();
         let id = sub.id();
+        let ptr_path = details.ptr_path(parse_quote! { super::super::super::#id });
         let holder = sub.holder();
         let full_cpp = sub.cpp();
         let cpp_path = full_cpp.to_type_path();
@@ -672,7 +683,7 @@ impl<'a> RsCodeGenerator<'a> {
                 pub use cxxbridge::#cpp_id;
             },
             parse_quote! {
-                pub struct #holder(pub autocxx::subclass::CppSubclassRustPeerHolder<super::super::super::#id>);
+                pub struct #holder(pub autocxx::subclass::CppSubclassRustPeerHolder<super::super::super::#id, #ptr_path>);
             },
             parse_quote! {
                 impl autocxx::subclass::CppSubclassCppPeer for #cpp_id {
@@ -725,9 +736,10 @@ impl<'a> RsCodeGenerator<'a> {
             }
         }
         if generate_peer_constructor {
+            let self_ptr = details.ptr_path(parse_quote! { Self });
             bindgen_mod_items.push(parse_quote! {
-                impl autocxx::subclass::CppPeerConstructor<#cpp_id> for super::super::super::#id {
-                    fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<#cpp_path> {
+                impl autocxx::subclass::CppPeerConstructor<#cpp_id, #ptr_path> for super::super::super::#id {
+                    fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self, #self_ptr>) -> cxx::UniquePtr<#cpp_path> {
                         use autocxx::moveit::Emplace;
                         cxx::UniquePtr::emplace(#cpp_id :: new(peer_holder))
                     }
@@ -807,6 +819,7 @@ impl<'a> RsCodeGenerator<'a> {
         api_name: Ident,
         details: RustSubclassFnDetails,
         subclass: SubclassName,
+        subclass_details: SubclassDetails,
     ) -> RsCodegenResult {
         let params = details.params;
         let ret = details.ret;
@@ -823,11 +836,11 @@ impl<'a> RsCodeGenerator<'a> {
         let methods_trait = SubclassName::get_methods_trait_name(&details.superclass);
         let methods_trait = methods_trait.to_type_path();
         let (deref_ty, deref_call, borrow, mut_token) = match details.receiver_mutability {
-            ReceiverMutability::Const => ("Deref", "deref", "try_borrow", None),
+            ReceiverMutability::Const => ("Deref", "deref", "try_get_ref", None),
             ReceiverMutability::Mutable => (
                 "DerefMut",
                 "deref_mut",
-                "try_borrow_mut",
+                "try_get_mut",
                 Some(syn::token::Mut(Span::call_site())),
             ),
         };
@@ -835,15 +848,18 @@ impl<'a> RsCodeGenerator<'a> {
         let deref_call = make_ident(deref_call);
         let borrow = make_ident(borrow);
         let destroy_panic_msg = format!("Rust subclass API (method {} of subclass {} of superclass {}) called after subclass destroyed", method_name, subclass.0.name, superclass_id);
-        let reentrancy_panic_msg = format!("Rust subclass API (method {} of subclass {} of superclass {}) called whilst subclass already borrowed - likely a re-entrant call",  method_name, subclass.0.name, superclass_id);
+        let reentrancy_panic_msg = match subclass_details.multithreaded {
+            true => format!("Rust subclass API (method {} of subclass {} of superclass {}) called whilst subclass already locked - likely a re-entrant call",  method_name, subclass.0.name, superclass_id),
+            false => format!("Rust subclass API (method {} of subclass {} of superclass {}) called whilst subclass already borrowed - likely a re-entrant call",  method_name, subclass.0.name, superclass_id),
+        };
         RsCodegenResult {
             global_items: vec![parse_quote! {
                 #global_def {
-                    let rc = me.0
+                    use autocxx::subclass::CppSubclassPeerPtr;
+                    let #mut_token ptr = me.0
                         .get()
                         .expect(#destroy_panic_msg);
-                    let #mut_token b = rc
-                        .as_ref()
+                    let #mut_token b = ptr
                         .#borrow()
                         .expect(#reentrancy_panic_msg);
                     let r = ::core::ops::#deref_ty::#deref_call(& #mut_token b);

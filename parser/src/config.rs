@@ -158,6 +158,7 @@ impl Default for Allowlist {
 #[derive(Debug, Hash)]
 pub struct Subclass {
     pub superclass: String,
+    pub multithreaded: bool,
     pub subclass: Ident,
 }
 

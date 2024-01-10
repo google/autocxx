@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::conversion::api::SubclassDetails;
 use crate::minisyn::Ident;
 use crate::{
     conversion::{api::SubclassName, type_helpers::extract_pinned_mutable_reference_type},
@@ -51,7 +52,7 @@ impl CppConversionType {
 pub(crate) enum RustConversionType {
     None,
     FromStr,
-    ToBoxedUpHolder(SubclassName),
+    ToBoxedUpHolder(SubclassName, SubclassDetails),
     FromPinMaybeUninitToPtr,
     FromPinMoveRefToPtr,
     FromTypeToPtr,
