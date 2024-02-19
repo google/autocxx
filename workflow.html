@@ -190,7 +190,7 @@ context, where you may be dealing with <code>UniquePtr&lt;T&gt;</code> and <code
 <p>If you ask to generate bindings for an entire type, <code>autocxx</code> will generate bindings for as
 many methods as possible. For those methods where it can't generate bindings, it will instead
 generate some placeholder function or struct with documentation explaining what went wrong:</p>
-<p><img src="vscode2.png" alt="VSCode showing an error for an API where autocxx couldn't generate bindings" /></p>
+<p><img src="vscode2.png" alt="VSCode showing an error for an API where autocxx couldn&#39;t generate bindings" /></p>
 <p><em>This</em> is why it's crucial to use an IDE with <code>autocxx</code>.</p>
 <h2 id="how-can-i-see-what-bindings-autocxx-has-generated"><a class="header" href="#how-can-i-see-what-bindings-autocxx-has-generated">How can I see what bindings <code>autocxx</code> has generated?</a></h2>
 <p>Options:</p>
@@ -221,15 +221,15 @@ remainder where <code>autocxx</code> falls short.</p>
 <p>To do this, you'll need to use the <a href="https://cxx.rs/extern-c++.html#reusing-existing-binding-types">ability of one cxx::bridge mod to refer to types from another</a>,
 for example:</p>
 <pre><code class="language-rust ignore">autocxx::include_cpp! {
-<span class="boring">    include &quot;foo.h&quot;
+<span class="boring">    include "foo.h"
 </span>    safety!(unsafe_ffi)
-    generate!(&quot;take_A&quot;)
-    generate!(&quot;A&quot;)
+    generate!("take_A")
+    generate!("A")
 }
 #[cxx::bridge]
 mod ffi2 {
-    unsafe extern &quot;C++&quot; {
-        include!(&quot;foo.h&quot;);
+    unsafe extern "C++" {
+        include!("foo.h");
         type A = crate::ffi::A;
         fn give_A() -&gt; UniquePtr&lt;A&gt;; // in practice, autocxx could happily do this
     }
@@ -241,16 +241,16 @@ fn main() {
 <p>In the example above, we're referring <em>from</em> manual bindings <em>to</em> automated bindings.</p>
 <p>You can also do it the other way round using <code>extern_cpp_opaque_type!</code>:</p>
 <pre><code class="language-rust ignore">autocxx::include_cpp! {
-<span class="boring">    hexathorpe include &quot;input.h&quot;
+<span class="boring">    hexathorpe include "input.h"
 </span>    safety!(unsafe_ffi)
-    generate!(&quot;handle_a&quot;)
-    generate!(&quot;create_a&quot;)
-    extern_cpp_opaque_type!(&quot;A&quot;, ffi2::A)
+    generate!("handle_a")
+    generate!("create_a")
+    extern_cpp_opaque_type!("A", ffi2::A)
 }
 #[cxx::bridge]
 pub mod ffi2 {
-    unsafe extern &quot;C++&quot; {
-        include!(&quot;input.h&quot;);
+    unsafe extern "C++" {
+        include!("input.h");
         type A;
     }
     impl UniquePtr&lt;A&gt; {}

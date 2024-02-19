@@ -198,23 +198,23 @@ use autocxx::prelude::*;
 
 pub mod base {
     autocxx::include_cpp! {
-        #include &quot;input.h&quot;
+        #include "input.h"
         name!(ffi2)
         safety!(unsafe_ffi)
-        generate!(&quot;A&quot;)
-        generate!(&quot;B&quot;)
+        generate!("A")
+        generate!("B")
     }
     pub use ffi2::*;
 }
 pub mod dependent {
     autocxx::include_cpp! {
-        #include &quot;input.h&quot;
+        #include "input.h"
         safety!(unsafe_ffi)
-        generate!(&quot;handle_a&quot;)
-        generate!(&quot;create_a&quot;)
-        extern_cpp_type!(&quot;A&quot;, crate::base::A)
-        extern_cpp_type!(&quot;B&quot;, super::super::base::B)
-        pod!(&quot;B&quot;)
+        generate!("handle_a")
+        generate!("create_a")
+        extern_cpp_type!("A", crate::base::A)
+        extern_cpp_type!("B", super::super::base::B)
+        pod!("B")
     }
     pub use ffi::*;
 }

@@ -210,7 +210,7 @@ mutation, or it might have a lifetime that could disappear at any moment.
 As a human, you must promise that you understand the constraints around
 use of that pointer and that's what the <code>unsafe</code> keyword is for.</p>
 <p>Exactly the same issues apply to C++ references <em>in theory</em>, but in practice,
-they usually don't. Therefore <a href="https://cxx.rs"><code>cxx</code></a> has taken the view that we can &quot;trust&quot;
+they usually don't. Therefore <a href="https://cxx.rs"><code>cxx</code></a> has taken the view that we can "trust"
 a C++ reference to a higher degree than a pointer, and autocxx follows that
 lead (in fact we 'trust' references even slightly more than cxx).
 In practice, of course, references are rarely return values from C++

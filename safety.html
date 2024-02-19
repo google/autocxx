@@ -194,8 +194,8 @@ inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
-    generate!(&quot;do_math&quot;)
+    #include "input.h"
+    generate!("do_math")
 }
 
 fn main() {
@@ -212,9 +212,9 @@ inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe)
-    generate!(&quot;do_math&quot;)
+    generate!("do_math")
 }
 
 fn main() {
@@ -230,7 +230,7 @@ fn main() {
 <li>Rust code calling C++ with unique pointers, where the Rust single-owner model nearly always applies (but we can't <em>prove</em> that the C++ developer isn't doing something weird)</li>
 <li>Rust safe code (requires least review)</li>
 </ul>
-<p>If your project is 90% Rust code, with small bits of C++, <em>don't use this crate</em>. You need something where all C++ interaction is marked with big red &quot;this is terrifying&quot; flags. This crate is aimed at cases where there's 90% C++ and small bits of Rust, and so we want the Rust code to be pragmatically reviewable without the signal:noise ratio of <code>unsafe</code> in the Rust code becoming so bad that <code>unsafe</code> loses all value.</p>
+<p>If your project is 90% Rust code, with small bits of C++, <em>don't use this crate</em>. You need something where all C++ interaction is marked with big red "this is terrifying" flags. This crate is aimed at cases where there's 90% C++ and small bits of Rust, and so we want the Rust code to be pragmatically reviewable without the signal:noise ratio of <code>unsafe</code> in the Rust code becoming so bad that <code>unsafe</code> loses all value.</p>
 <h2 id="worked-example"><a class="header" href="#worked-example">Worked example</a></h2>
 <p>Imagine you have this C++:</p>
 <pre><code class="language-cpp">struct Thing;
@@ -248,7 +248,7 @@ reference:</p>
 <p>This crate shares the general approach to safety and soundness pioneered by cxx, but has two important differences:</p>
 <ul>
 <li>cxx requires you to specify your interface in detail, and thus think through all aspects of the language boundary. autocxx doesn't, and may autogenerate footguns.</li>
-<li>cxx may allow multiple conflicting Rust references to exist to 'trivial' data types (&quot;plain old data&quot; or POD in autocxx parlance), but they're rare. autocxx may allow conflicting Rust references to exist even to 'opaque' (non-POD) data, and they're more common. This difference exists because opaque data is zero-sized in cxx, and zero-sized references cannot conflict. (In autocxx, we tell Rust about the size in order that we can allocate such types on the stack.)</li>
+<li>cxx may allow multiple conflicting Rust references to exist to 'trivial' data types ("plain old data" or POD in autocxx parlance), but they're rare. autocxx may allow conflicting Rust references to exist even to 'opaque' (non-POD) data, and they're more common. This difference exists because opaque data is zero-sized in cxx, and zero-sized references cannot conflict. (In autocxx, we tell Rust about the size in order that we can allocate such types on the stack.)</li>
 </ul>
 <p>There are preliminary explorations to avoid this problem by using a C++ reference wrapper type. See <code>examples/reference-wrappers</code>.</p>
 

@@ -198,10 +198,10 @@ void feed_goat(Goat g); // takes goat by value
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Goat&quot;)
-    generate!(&quot;feed_goat&quot;)
+    generate!("Goat")
+    generate!("feed_goat")
 }
 
 fn main() {
@@ -235,10 +235,10 @@ void burst(Blimp b); // consumes blimp,
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Blimp&quot;)
-    generate!(&quot;burst&quot;)
+    generate!("Blimp")
+    generate!("burst")
 }
 
 fn main() {
@@ -268,10 +268,10 @@ void eat(Cake&amp;&amp; c); // consumes the cake. You can't have your cake and e
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Cake&quot;)
-    generate!(&quot;eat&quot;)
+    generate!("Cake")
+    generate!("eat")
 }
 
 fn main() {
@@ -295,7 +295,7 @@ fn main() {
 <h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
 <p>Any C++ function which returns a <a href="cpp_types.html">non-POD</a> type to Rust in fact gives you an opaque
 object implementing <a href="https://docs.rs/moveit/latest/moveit/new/trait.New.html"><code>moveit::New</code></a>.
-This enables you to &quot;emplace&quot; the resulting object either on the stack or heap,
+This enables you to "emplace" the resulting object either on the stack or heap,
 in exactly the same way as if you're constructying an object. See <a href="cpp_types.html#construction">the section on construction</a>
 for how to turn this opaque object into something useful (spoiler: just append <code>.within_unique_ptr()</code>).</p>
 <h2 id="overloads---and-identifiers-ending-in-digits"><a class="header" href="#overloads---and-identifiers-ending-in-digits">Overloads - and identifiers ending in digits</a></h2>
@@ -323,12 +323,12 @@ void saw(const Tree&amp;);
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Tree&quot;)
-    generate!(&quot;View&quot;)
-    generate!(&quot;saw&quot;)
-    generate!(&quot;saw1&quot;)
+    generate!("Tree")
+    generate!("View")
+    generate!("saw")
+    generate!("saw1")
 }
 
 fn main() {
@@ -357,9 +357,9 @@ public:
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Sloth&quot;)
+    generate!("Sloth")
 }
 
 fn main() {
@@ -386,9 +386,9 @@ public:
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Sloth&quot;)
+    generate!("Sloth")
 }
 
 fn main() {

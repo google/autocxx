@@ -182,7 +182,7 @@
 <p>You will need:</p>
 <ul>
 <li>Some C++ header files (<code>.h</code> files)</li>
-<li>The C++ &quot;include path&quot;. That is, the set of directories containing those headers. (That's not necessarily the directory in which each header <em>file</em> lives; C++ might contain <code>#include &quot;foo/bar.h&quot;</code> and so your include path would need to include the directory <em>containing</em> the <code>foo</code> directory).</li>
+<li>The C++ "include path". That is, the set of directories containing those headers. (That's not necessarily the directory in which each header <em>file</em> lives; C++ might contain <code>#include "foo/bar.h"</code> and so your include path would need to include the directory <em>containing</em> the <code>foo</code> directory).</li>
 <li>A list of the APIs (types and functions) from those header files which you wish to make available in Rust.</li>
 <li>To know how to link the C++ libraries into your Cargo project. This is beyond the scope of what <code>autocxx</code> helps with, but one solution is to emit a print from your <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib">build script</a>.</li>
 <li><a href="https://rust-lang.github.io/rust-bindgen/requirements.html">LLVM to be installed</a>.</li>
@@ -191,21 +191,21 @@
 <p>The rest of this 'getting started' section assumes Cargo - if you're using something else, see the <a href="building.html">building</a> section.</p>
 <p>First, add <code>autocxx</code> <em>and <code>cxx</code></em> to your <code>dependencies</code> and <code>autocxx-build</code> to your <code>build-dependencies</code> in your <code>Cargo.toml</code>. <strong>You must specify both.</strong></p>
 <pre><code class="language-toml">[dependencies]
-autocxx = &quot;0.26.0&quot;
-cxx = &quot;1.0&quot;
+autocxx = "0.26.0"
+cxx = "1.0"
 
 [build-dependencies]
-autocxx-build = &quot;0.26.0&quot;
-miette = { version = &quot;5&quot;, features = [&quot;fancy&quot;] } # optional but gives nicer error messages!
+autocxx-build = "0.26.0"
+miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!
 </code></pre>
 <p>Now, add a <code>build.rs</code> next to your <code>Cargo.toml</code> (this is a standard <code>cargo</code> <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html">build script</a>). This is where you need your include path:</p>
 <pre><code class="language-rust ignore">fn main() -&gt; miette::Result&lt;()&gt; {
-    let path = std::path::PathBuf::from(&quot;src&quot;); // include path
-    let mut b = autocxx_build::Builder::new(&quot;src/main.rs&quot;, &amp;[&amp;path]).build()?;
+    let path = std::path::PathBuf::from("src"); // include path
+    let mut b = autocxx_build::Builder::new("src/main.rs", &amp;[&amp;path]).build()?;
         // This assumes all your C++ bindings are in main.rs
-    b.flag_if_supported(&quot;-std=c++14&quot;)
-     .compile(&quot;autocxx-demo&quot;); // arbitrary library name, pick anything
-    println!(&quot;cargo:rerun-if-changed=src/main.rs&quot;);
+    b.flag_if_supported("-std=c++14")
+     .compile("autocxx-demo"); // arbitrary library name, pick anything
+    println!("cargo:rerun-if-changed=src/main.rs");
     // Add instructions to link to any C++ libraries you need.
     Ok(())
 }</code></pre>
@@ -214,13 +214,13 @@ miette = { version = &quot;5&quot;, features = [&quot;fancy&quot;] } # optional 
 <pre><code class="language-rust ignore">use autocxx::prelude::*; // use all the main autocxx functions
 
 include_cpp! {
-<span class="boring">    include &quot;my_header.h&quot; // your header file name
+<span class="boring">    include "my_header.h" // your header file name
 </span>    safety!(unsafe) // see details of unsafety policies described in the 'safety' section of the book
-    generate!(&quot;DeepThought&quot;) // add this line for each function or type you wish to generate
+    generate!("DeepThought") // add this line for each function or type you wish to generate
 }</code></pre>
 <p>You should then find you can call the function by referring to an <code>ffi</code> namespace:</p>
 <pre><code class="language-rust ignore">fn main() {
-    println!(&quot;The answer to Life, The Universe and Everything is {}&quot;, ffi::DeepThought());
+    println!("The answer to Life, The Universe and Everything is {}", ffi::DeepThought());
 }</code></pre>
 <p>C++ types such as <code>std::string</code> and <code>std::unique_ptr</code> are represented using the types provided by the marvellous <a href="https://cxx.rs">cxx</a> library. This provides good ergonomics and safety norms, so unlike with normal <code>bindgen</code> bindings, you won't <em>normally</em> need to write <code>unsafe</code> code for every function call.</p>
 <p>Next, read the section about <a href="workflow.html">workflows</a>.</p>

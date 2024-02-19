@@ -190,9 +190,9 @@ which do not have a predictable number of bits on different machines.</p>
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;do_math&quot;)
+    generate!("do_math")
 }
 
 fn main() {
@@ -224,18 +224,18 @@ inline uint32_t take_string(std::string a) { return a.size(); }
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;take_string&quot;)
+    generate!("take_string")
 }
 
 fn main() {
-    assert_eq!(ffi::take_string(&quot;hello&quot;), 5)
+    assert_eq!(ffi::take_string("hello"), 5)
 }
 </code></pre>
 <p>If you need to create a blank <code>UniquePtr&lt;CxxString&gt;</code> in Rust, such that
 (for example) you can pass its mutable reference or pointer into some
-pre-existing C++ API, call <code>ffi::make_string(&quot;&quot;)</code> which will return
+pre-existing C++ API, call <code>ffi::make_string("")</code> which will return
 a blank <code>UniquePtr&lt;CxxString&gt;</code>.</p>
 <p>If all you need is a <em>reference</em> to a <code>CxxString</code>, you can alternatively use
 <a href="https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html"><code>cxx::let_cxx_string</code></a>.</p>

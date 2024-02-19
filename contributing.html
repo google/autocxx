@@ -244,7 +244,7 @@ order of preference here's how we would like to hear about your problem:</p>
 <li>Raise a pull request adding a new failing integration test to
 <a href="https://github.com/google/autocxx/blob/main/integration-tests/tests/integration_test.rs"><code>integration_test.rs</code></a></li>
 <li>Minimize the test using <code>tools/reduce</code>, something like this:
-<code>target/debug/autocxx-reduce file -d &quot;safety!(unsafe_ffi)&quot; -d 'generate_pod!(&quot;A&quot;)' -I ~/my-include-dir -h my-header.h -p problem-error-message -- --remove-pass pass_line_markers</code>
+<code>target/debug/autocxx-reduce file -d "safety!(unsafe_ffi)" -d 'generate_pod!("A")' -I ~/my-include-dir -h my-header.h -p problem-error-message -- --remove-pass pass_line_markers</code>
 This is a wrapper for the amazing <code>creduce</code> which will take thousands of lines
 of C++, preprocess it, and then identify the minimum required lines to
 reproduce the same problem.</li>

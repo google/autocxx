@@ -181,13 +181,13 @@
 <p>The basics of building in a <code>cargo</code> environment are explained in <a href="tutorial.html">the tutorial</a>.</p>
 <p>If your build depends on later editions of the C++ standard library, you will need to ensure that both <code>libclang</code> and the compiler are sent the appropriate flag, like this:</p>
 <pre><code class="language-rust ignore">fn main() {
-    let path = std::path::PathBuf::from(&quot;src&quot;); // include path
-    let mut b = autocxx_build::Builder::new(&quot;src/main.rs&quot;, &amp;[&amp;path])
-        .extra_clang_args(&amp;[&quot;-std=c++17&quot;])
+    let path = std::path::PathBuf::from("src"); // include path
+    let mut b = autocxx_build::Builder::new("src/main.rs", &amp;[&amp;path])
+        .extra_clang_args(&amp;["-std=c++17"])
         .expect_build();
-    b.flag_if_supported(&quot;-std=c++17&quot;) // use &quot;-std:c++17&quot; here if using msvc on windows
-        .compile(&quot;autocxx-demo&quot;); // arbitrary library name, pick anything
-    println!(&quot;cargo:rerun-if-changed=src/main.rs&quot;);
+    b.flag_if_supported("-std=c++17") // use "-std:c++17" here if using msvc on windows
+        .compile("autocxx-demo"); // arbitrary library name, pick anything
+    println!("cargo:rerun-if-changed=src/main.rs");
     // Add instructions to link to any C++ libraries you need.
 }</code></pre>
 <h2 id="building---if-youre-not-using-cargo"><a class="header" href="#building---if-youre-not-using-cargo">Building - if you're not using cargo</a></h2>

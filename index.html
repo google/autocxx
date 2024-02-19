@@ -208,9 +208,9 @@ inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;do_math&quot;) // allowlist a function
+    generate!("do_math") // allowlist a function
 }
 
 fn main() {
@@ -238,16 +238,16 @@ private:
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Goat&quot;) // allowlist a type and all its methods
+    generate!("Goat") // allowlist a type and all its methods
 }
 
 fn main() {
     let mut goat = ffi::Goat::new().within_unique_ptr(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
     goat.pin_mut().add_a_horn();
     goat.pin_mut().add_a_horn();
-    assert_eq!(goat.describe().as_ref().unwrap().to_string_lossy(), &quot;This goat has 2 horns.&quot;);
+    assert_eq!(goat.describe().as_ref().unwrap().to_string_lossy(), "This goat has 2 horns.");
 }
 </code></pre>
 <p>This is typical <code>autocxx</code> code: the C++ objects behave much like Rust objects, but

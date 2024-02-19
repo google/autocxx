@@ -183,14 +183,14 @@ all its methods won't be generated.</p>
 <p>Rust and C++ differ in an important way:</p>
 <ul>
 <li>In Rust, the compiler is free to pick up some data and move it to somewhere else (in a <code>memcpy</code> sense). The object is none the wiser.</li>
-<li>In C++, once created, an object stays where it is, until or unless it has its &quot;move constructor&quot; invoked.</li>
+<li>In C++, once created, an object stays where it is, until or unless it has its "move constructor" invoked.</li>
 </ul>
 <p>This makes a big difference: C++ objects can have self-referential pointers, and any such pointer would be invalidated by Rust doing
 a memcpy. Such self-referential pointers are common - even some implementations of <code>std::string</code> do it.</p>
 <h2 id="pod-and-non-pod"><a class="header" href="#pod-and-non-pod">POD and non-POD</a></h2>
 <p>When asking <code>autocxx</code> to generate bindings for a type, then, you have to make a choice.</p>
 <ul>
-<li><em>This C++ type is trivial</em>. It has no destructor or move constructor (or they're trivial), and thus Rust is free to move it around the stack as it wishes. <code>autocxx</code> calls these types POD (&quot;plain old data&quot;). Alternatively,</li>
+<li><em>This C++ type is trivial</em>. It has no destructor or move constructor (or they're trivial), and thus Rust is free to move it around the stack as it wishes. <code>autocxx</code> calls these types POD ("plain old data"). Alternatively,</li>
 <li><em>This C++ type has a non-trivial destructor or move constructor, so we can't allow Rust to move this around</em>. <code>autocxx</code> calls these types non-POD.</li>
 </ul>
 <p>POD types are nicer:</p>
@@ -242,9 +242,9 @@ struct A {
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;A&quot;)
+    generate!("A")
 }
 
 fn main() {
@@ -313,11 +313,11 @@ inline void drink(const Tea&lt;Tapioca&gt;&amp;) {}
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;prepare&quot;)
-    generate!(&quot;drink&quot;)
-    concrete!(&quot;Tea&lt;Tapioca&gt;&quot;, Boba)
+    generate!("prepare")
+    generate!("drink")
+    concrete!("Tea&lt;Tapioca&gt;", Boba)
 }
 
 fn main() {
@@ -374,10 +374,14 @@ adding <code>const</code> or <code>volatile</code> qualifiers or extra arguments
 one to call from Rust gets tricky.</p>
 <div class="footnote-definition" id="member-initializers"><sup class="footnote-definition-label">2</sup>
 <p>Handling of member initializers is tracked
-<a href="https://github.com/google/autocxx/issues/816">here</a>.
-<sup class="footnote-reference"><a href="#explicitly-defaulted">3</a></sup>: Fix for explicitly defaulted special member functions
-that are deleted is tracked <a href="https://github.com/google/autocxx/issues/815">here</a>.
-<sup class="footnote-reference"><a href="#inaccessible-destructor">4</a></sup>: Discussion around what to do about inaccessible or
+<a href="https://github.com/google/autocxx/issues/816">here</a>.</p>
+</div>
+<div class="footnote-definition" id="explicitly-defaulted"><sup class="footnote-definition-label">3</sup>
+<p>Fix for explicitly defaulted special member functions
+that are deleted is tracked <a href="https://github.com/google/autocxx/issues/815">here</a>.</p>
+</div>
+<div class="footnote-definition" id="inaccessible-destructor"><sup class="footnote-definition-label">4</sup>
+<p>Discussion around what to do about inaccessible or
 deleted destructors <a href="https://github.com/google/autocxx/issues/829">here</a>.</p>
 </div>
 <h2 id="abstract-types"><a class="header" href="#abstract-types">Abstract types</a></h2>

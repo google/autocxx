@@ -184,7 +184,7 @@
 <li>Make Rust functions available to C++ using <a href="https://docs.rs/autocxx/latest/autocxx/extern_rust/attr.extern_rust_function.html"><code>extern_rust_function</code></a>.</li>
 <li>Allow Rust subclasses of C++ classes.</li>
 </ul>
-<p>This latter option is most commonly used for implementing &quot;listeners&quot; or <a href="https://en.wikipedia.org/wiki/Observer_pattern">&quot;observers&quot;</a>, so is often in practice how C++ will call into Rust. More details below.</p>
+<p>This latter option is most commonly used for implementing "listeners" or <a href="https://en.wikipedia.org/wiki/Observer_pattern">"observers"</a>, so is often in practice how C++ will call into Rust. More details below.</p>
 <h2 id="subclasses"><a class="header" href="#subclasses">Subclasses</a></h2>
 <p>There is limited and experimental support for creating Rust subclasses of
 C++ classes. (Yes, even more experimental than all the rest of this!)
@@ -209,12 +209,12 @@ use autocxx::prelude::*;
 use autocxx::subclass::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;register_observer&quot;)
-    generate!(&quot;deregister_observer&quot;)
-    generate!(&quot;feed_goat&quot;)
-    subclass!(&quot;GoatObserver&quot;, MyGoatObserver)
+    generate!("register_observer")
+    generate!("deregister_observer")
+    generate!("feed_goat")
+    subclass!("GoatObserver", MyGoatObserver)
 }
 
 use ffi::*;
@@ -225,7 +225,7 @@ pub struct MyGoatObserver;
 
 impl GoatObserver_methods for MyGoatObserver {
     fn goat_full(&amp;self) {
-        println!(&quot;BURP!&quot;);
+        println!("BURP!");
     }
 }
 
@@ -267,7 +267,7 @@ class Dinosaur {
 public:
     Dinosaur() {}
     virtual void eat() const {
-        std::cout &lt;&lt; &quot;Roarrr!! I ate you!\n&quot;;
+        std::cout &lt;&lt; "Roarrr!! I ate you!\n";
     }
     virtual ~Dinosaur() {}
 };
@@ -280,10 +280,10 @@ use autocxx::prelude::*;
 use autocxx::subclass::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    subclass!(&quot;Dinosaur&quot;, TRex)
-    subclass!(&quot;Dinosaur&quot;, Diplodocus)
+    subclass!("Dinosaur", TRex)
+    subclass!("Dinosaur", Diplodocus)
 }
 
 use ffi::*;
@@ -303,7 +303,7 @@ impl Dinosaur_methods for TRex {
 
 impl Dinosaur_methods for Diplodocus {
     fn eat(&amp;self) {
-        println!(&quot;Ahh, some nice juicy leaves.&quot;);
+        println!("Ahh, some nice juicy leaves.");
         // Could call self.eat_super() if we
         // developed unexpected carnivorous cravings.
     }

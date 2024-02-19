@@ -197,10 +197,10 @@ namespace submarines {
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;submarines::hey_boomer&quot;)
-    generate!(&quot;generations::hey_boomer&quot;)
+    generate!("submarines::hey_boomer")
+    generate!("generations::hey_boomer")
 }
 
 fn main() {
@@ -228,9 +228,9 @@ struct Turkey {
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate_pod!(&quot;Turkey_Duck_Hen&quot;)
+    generate_pod!("Turkey_Duck_Hen")
 }
 
 fn main() {

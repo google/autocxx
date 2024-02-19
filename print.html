@@ -209,9 +209,9 @@ inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;do_math&quot;) // allowlist a function
+    generate!("do_math") // allowlist a function
 }
 
 fn main() {
@@ -239,16 +239,16 @@ private:
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Goat&quot;) // allowlist a type and all its methods
+    generate!("Goat") // allowlist a type and all its methods
 }
 
 fn main() {
     let mut goat = ffi::Goat::new().within_unique_ptr(); // returns a cxx::UniquePtr, i.e. a std::unique_ptr
     goat.pin_mut().add_a_horn();
     goat.pin_mut().add_a_horn();
-    assert_eq!(goat.describe().as_ref().unwrap().to_string_lossy(), &quot;This goat has 2 horns.&quot;);
+    assert_eq!(goat.describe().as_ref().unwrap().to_string_lossy(), "This goat has 2 horns.");
 }
 </code></pre>
 <p>This is typical <code>autocxx</code> code: the C++ objects behave much like Rust objects, but
@@ -263,7 +263,7 @@ sometimes extra steps are required to handle cases like null pointers or convert
 <p>You will need:</p>
 <ul>
 <li>Some C++ header files (<code>.h</code> files)</li>
-<li>The C++ &quot;include path&quot;. That is, the set of directories containing those headers. (That's not necessarily the directory in which each header <em>file</em> lives; C++ might contain <code>#include &quot;foo/bar.h&quot;</code> and so your include path would need to include the directory <em>containing</em> the <code>foo</code> directory).</li>
+<li>The C++ "include path". That is, the set of directories containing those headers. (That's not necessarily the directory in which each header <em>file</em> lives; C++ might contain <code>#include "foo/bar.h"</code> and so your include path would need to include the directory <em>containing</em> the <code>foo</code> directory).</li>
 <li>A list of the APIs (types and functions) from those header files which you wish to make available in Rust.</li>
 <li>To know how to link the C++ libraries into your Cargo project. This is beyond the scope of what <code>autocxx</code> helps with, but one solution is to emit a print from your <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib">build script</a>.</li>
 <li><a href="https://rust-lang.github.io/rust-bindgen/requirements.html">LLVM to be installed</a>.</li>
@@ -272,21 +272,21 @@ sometimes extra steps are required to handle cases like null pointers or convert
 <p>The rest of this 'getting started' section assumes Cargo - if you're using something else, see the <a href="building.html">building</a> section.</p>
 <p>First, add <code>autocxx</code> <em>and <code>cxx</code></em> to your <code>dependencies</code> and <code>autocxx-build</code> to your <code>build-dependencies</code> in your <code>Cargo.toml</code>. <strong>You must specify both.</strong></p>
 <pre><code class="language-toml">[dependencies]
-autocxx = &quot;0.26.0&quot;
-cxx = &quot;1.0&quot;
+autocxx = "0.26.0"
+cxx = "1.0"
 
 [build-dependencies]
-autocxx-build = &quot;0.26.0&quot;
-miette = { version = &quot;5&quot;, features = [&quot;fancy&quot;] } # optional but gives nicer error messages!
+autocxx-build = "0.26.0"
+miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!
 </code></pre>
 <p>Now, add a <code>build.rs</code> next to your <code>Cargo.toml</code> (this is a standard <code>cargo</code> <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html">build script</a>). This is where you need your include path:</p>
 <pre><code class="language-rust ignore">fn main() -&gt; miette::Result&lt;()&gt; {
-    let path = std::path::PathBuf::from(&quot;src&quot;); // include path
-    let mut b = autocxx_build::Builder::new(&quot;src/main.rs&quot;, &amp;[&amp;path]).build()?;
+    let path = std::path::PathBuf::from("src"); // include path
+    let mut b = autocxx_build::Builder::new("src/main.rs", &amp;[&amp;path]).build()?;
         // This assumes all your C++ bindings are in main.rs
-    b.flag_if_supported(&quot;-std=c++14&quot;)
-     .compile(&quot;autocxx-demo&quot;); // arbitrary library name, pick anything
-    println!(&quot;cargo:rerun-if-changed=src/main.rs&quot;);
+    b.flag_if_supported("-std=c++14")
+     .compile("autocxx-demo"); // arbitrary library name, pick anything
+    println!("cargo:rerun-if-changed=src/main.rs");
     // Add instructions to link to any C++ libraries you need.
     Ok(())
 }</code></pre>
@@ -295,13 +295,13 @@ miette = { version = &quot;5&quot;, features = [&quot;fancy&quot;] } # optional 
 <pre><code class="language-rust ignore">use autocxx::prelude::*; // use all the main autocxx functions
 
 include_cpp! {
-<span class="boring">    include &quot;my_header.h&quot; // your header file name
+<span class="boring">    include "my_header.h" // your header file name
 </span>    safety!(unsafe) // see details of unsafety policies described in the 'safety' section of the book
-    generate!(&quot;DeepThought&quot;) // add this line for each function or type you wish to generate
+    generate!("DeepThought") // add this line for each function or type you wish to generate
 }</code></pre>
 <p>You should then find you can call the function by referring to an <code>ffi</code> namespace:</p>
 <pre><code class="language-rust ignore">fn main() {
-    println!(&quot;The answer to Life, The Universe and Everything is {}&quot;, ffi::DeepThought());
+    println!("The answer to Life, The Universe and Everything is {}", ffi::DeepThought());
 }</code></pre>
 <p>C++ types such as <code>std::string</code> and <code>std::unique_ptr</code> are represented using the types provided by the marvellous <a href="https://cxx.rs">cxx</a> library. This provides good ergonomics and safety norms, so unlike with normal <code>bindgen</code> bindings, you won't <em>normally</em> need to write <code>unsafe</code> code for every function call.</p>
 <p>Next, read the section about <a href="workflow.html">workflows</a>.</p>
@@ -319,7 +319,7 @@ context, where you may be dealing with <code>UniquePtr&lt;T&gt;</code> and <code
 <p>If you ask to generate bindings for an entire type, <code>autocxx</code> will generate bindings for as
 many methods as possible. For those methods where it can't generate bindings, it will instead
 generate some placeholder function or struct with documentation explaining what went wrong:</p>
-<p><img src="vscode2.png" alt="VSCode showing an error for an API where autocxx couldn't generate bindings" /></p>
+<p><img src="vscode2.png" alt="VSCode showing an error for an API where autocxx couldn&#39;t generate bindings" /></p>
 <p><em>This</em> is why it's crucial to use an IDE with <code>autocxx</code>.</p>
 <h2 id="how-can-i-see-what-bindings-autocxx-has-generated"><a class="header" href="#how-can-i-see-what-bindings-autocxx-has-generated">How can I see what bindings <code>autocxx</code> has generated?</a></h2>
 <p>Options:</p>
@@ -350,15 +350,15 @@ remainder where <code>autocxx</code> falls short.</p>
 <p>To do this, you'll need to use the <a href="https://cxx.rs/extern-c++.html#reusing-existing-binding-types">ability of one cxx::bridge mod to refer to types from another</a>,
 for example:</p>
 <pre><code class="language-rust ignore">autocxx::include_cpp! {
-<span class="boring">    include &quot;foo.h&quot;
+<span class="boring">    include "foo.h"
 </span>    safety!(unsafe_ffi)
-    generate!(&quot;take_A&quot;)
-    generate!(&quot;A&quot;)
+    generate!("take_A")
+    generate!("A")
 }
 #[cxx::bridge]
 mod ffi2 {
-    unsafe extern &quot;C++&quot; {
-        include!(&quot;foo.h&quot;);
+    unsafe extern "C++" {
+        include!("foo.h");
         type A = crate::ffi::A;
         fn give_A() -&gt; UniquePtr&lt;A&gt;; // in practice, autocxx could happily do this
     }
@@ -370,16 +370,16 @@ fn main() {
 <p>In the example above, we're referring <em>from</em> manual bindings <em>to</em> automated bindings.</p>
 <p>You can also do it the other way round using <code>extern_cpp_opaque_type!</code>:</p>
 <pre><code class="language-rust ignore">autocxx::include_cpp! {
-<span class="boring">    hexathorpe include &quot;input.h&quot;
+<span class="boring">    hexathorpe include "input.h"
 </span>    safety!(unsafe_ffi)
-    generate!(&quot;handle_a&quot;)
-    generate!(&quot;create_a&quot;)
-    extern_cpp_opaque_type!(&quot;A&quot;, ffi2::A)
+    generate!("handle_a")
+    generate!("create_a")
+    extern_cpp_opaque_type!("A", ffi2::A)
 }
 #[cxx::bridge]
 pub mod ffi2 {
-    unsafe extern &quot;C++&quot; {
-        include!(&quot;input.h&quot;);
+    unsafe extern "C++" {
+        include!("input.h");
         type A;
     }
     impl UniquePtr&lt;A&gt; {}
@@ -410,8 +410,8 @@ at least one <a href="https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.h
 <pre><code class="language-rust ignore">use autocxx::prelude::*;
 
 include_cpp! {
-<span class="boring">    include &quot;my_header.h&quot;
-</span>    generate!(&quot;MyAPIFunction&quot;)
+<span class="boring">    include "my_header.h"
+</span>    generate!("MyAPIFunction")
 }</code></pre>
 <p>You need to include <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate!</code> directives</a>
 for every <em>type</em> or <em>function</em> you wish to access from Rust. You don't need to specify this for member functions
@@ -432,13 +432,13 @@ see the chapter on <a href="cpp_types.html">C++ types</a>.</li>
 <p>The basics of building in a <code>cargo</code> environment are explained in <a href="tutorial.html">the tutorial</a>.</p>
 <p>If your build depends on later editions of the C++ standard library, you will need to ensure that both <code>libclang</code> and the compiler are sent the appropriate flag, like this:</p>
 <pre><code class="language-rust ignore">fn main() {
-    let path = std::path::PathBuf::from(&quot;src&quot;); // include path
-    let mut b = autocxx_build::Builder::new(&quot;src/main.rs&quot;, &amp;[&amp;path])
-        .extra_clang_args(&amp;[&quot;-std=c++17&quot;])
+    let path = std::path::PathBuf::from("src"); // include path
+    let mut b = autocxx_build::Builder::new("src/main.rs", &amp;[&amp;path])
+        .extra_clang_args(&amp;["-std=c++17"])
         .expect_build();
-    b.flag_if_supported(&quot;-std=c++17&quot;) // use &quot;-std:c++17&quot; here if using msvc on windows
-        .compile(&quot;autocxx-demo&quot;); // arbitrary library name, pick anything
-    println!(&quot;cargo:rerun-if-changed=src/main.rs&quot;);
+    b.flag_if_supported("-std=c++17") // use "-std:c++17" here if using msvc on windows
+        .compile("autocxx-demo"); // arbitrary library name, pick anything
+    println!("cargo:rerun-if-changed=src/main.rs");
     // Add instructions to link to any C++ libraries you need.
 }</code></pre>
 <h2 id="building---if-youre-not-using-cargo"><a class="header" href="#building---if-youre-not-using-cargo">Building - if you're not using cargo</a></h2>
@@ -492,14 +492,14 @@ all its methods won't be generated.</p>
 <p>Rust and C++ differ in an important way:</p>
 <ul>
 <li>In Rust, the compiler is free to pick up some data and move it to somewhere else (in a <code>memcpy</code> sense). The object is none the wiser.</li>
-<li>In C++, once created, an object stays where it is, until or unless it has its &quot;move constructor&quot; invoked.</li>
+<li>In C++, once created, an object stays where it is, until or unless it has its "move constructor" invoked.</li>
 </ul>
 <p>This makes a big difference: C++ objects can have self-referential pointers, and any such pointer would be invalidated by Rust doing
 a memcpy. Such self-referential pointers are common - even some implementations of <code>std::string</code> do it.</p>
 <h2 id="pod-and-non-pod"><a class="header" href="#pod-and-non-pod">POD and non-POD</a></h2>
 <p>When asking <code>autocxx</code> to generate bindings for a type, then, you have to make a choice.</p>
 <ul>
-<li><em>This C++ type is trivial</em>. It has no destructor or move constructor (or they're trivial), and thus Rust is free to move it around the stack as it wishes. <code>autocxx</code> calls these types POD (&quot;plain old data&quot;). Alternatively,</li>
+<li><em>This C++ type is trivial</em>. It has no destructor or move constructor (or they're trivial), and thus Rust is free to move it around the stack as it wishes. <code>autocxx</code> calls these types POD ("plain old data"). Alternatively,</li>
 <li><em>This C++ type has a non-trivial destructor or move constructor, so we can't allow Rust to move this around</em>. <code>autocxx</code> calls these types non-POD.</li>
 </ul>
 <p>POD types are nicer:</p>
@@ -551,9 +551,9 @@ struct A {
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;A&quot;)
+    generate!("A")
 }
 
 fn main() {
@@ -622,11 +622,11 @@ inline void drink(const Tea&lt;Tapioca&gt;&amp;) {}
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;prepare&quot;)
-    generate!(&quot;drink&quot;)
-    concrete!(&quot;Tea&lt;Tapioca&gt;&quot;, Boba)
+    generate!("prepare")
+    generate!("drink")
+    concrete!("Tea&lt;Tapioca&gt;", Boba)
 }
 
 fn main() {
@@ -683,10 +683,14 @@ adding <code>const</code> or <code>volatile</code> qualifiers or extra arguments
 one to call from Rust gets tricky.</p>
 <div class="footnote-definition" id="member-initializers"><sup class="footnote-definition-label">2</sup>
 <p>Handling of member initializers is tracked
-<a href="https://github.com/google/autocxx/issues/816">here</a>.
-<sup class="footnote-reference"><a href="#explicitly-defaulted">3</a></sup>: Fix for explicitly defaulted special member functions
-that are deleted is tracked <a href="https://github.com/google/autocxx/issues/815">here</a>.
-<sup class="footnote-reference"><a href="#inaccessible-destructor">4</a></sup>: Discussion around what to do about inaccessible or
+<a href="https://github.com/google/autocxx/issues/816">here</a>.</p>
+</div>
+<div class="footnote-definition" id="explicitly-defaulted"><sup class="footnote-definition-label">3</sup>
+<p>Fix for explicitly defaulted special member functions
+that are deleted is tracked <a href="https://github.com/google/autocxx/issues/815">here</a>.</p>
+</div>
+<div class="footnote-definition" id="inaccessible-destructor"><sup class="footnote-definition-label">4</sup>
+<p>Discussion around what to do about inaccessible or
 deleted destructors <a href="https://github.com/google/autocxx/issues/829">here</a>.</p>
 </div>
 <h2 id="abstract-types"><a class="header" href="#abstract-types">Abstract types</a></h2>
@@ -729,7 +733,7 @@ mutation, or it might have a lifetime that could disappear at any moment.
 As a human, you must promise that you understand the constraints around
 use of that pointer and that's what the <code>unsafe</code> keyword is for.</p>
 <p>Exactly the same issues apply to C++ references <em>in theory</em>, but in practice,
-they usually don't. Therefore <a href="https://cxx.rs"><code>cxx</code></a> has taken the view that we can &quot;trust&quot;
+they usually don't. Therefore <a href="https://cxx.rs"><code>cxx</code></a> has taken the view that we can "trust"
 a C++ reference to a higher degree than a pointer, and autocxx follows that
 lead (in fact we 'trust' references even slightly more than cxx).
 In practice, of course, references are rarely return values from C++
@@ -782,9 +786,9 @@ which do not have a predictable number of bits on different machines.</p>
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;do_math&quot;)
+    generate!("do_math")
 }
 
 fn main() {
@@ -816,18 +820,18 @@ inline uint32_t take_string(std::string a) { return a.size(); }
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;take_string&quot;)
+    generate!("take_string")
 }
 
 fn main() {
-    assert_eq!(ffi::take_string(&quot;hello&quot;), 5)
+    assert_eq!(ffi::take_string("hello"), 5)
 }
 </code></pre>
 <p>If you need to create a blank <code>UniquePtr&lt;CxxString&gt;</code> in Rust, such that
 (for example) you can pass its mutable reference or pointer into some
-pre-existing C++ API, call <code>ffi::make_string(&quot;&quot;)</code> which will return
+pre-existing C++ API, call <code>ffi::make_string("")</code> which will return
 a blank <code>UniquePtr&lt;CxxString&gt;</code>.</p>
 <p>If all you need is a <em>reference</em> to a <code>CxxString</code>, you can alternatively use
 <a href="https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html"><code>cxx::let_cxx_string</code></a>.</p>
@@ -852,10 +856,10 @@ namespace submarines {
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;submarines::hey_boomer&quot;)
-    generate!(&quot;generations::hey_boomer&quot;)
+    generate!("submarines::hey_boomer")
+    generate!("generations::hey_boomer")
 }
 
 fn main() {
@@ -883,9 +887,9 @@ struct Turkey {
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate_pod!(&quot;Turkey_Duck_Hen&quot;)
+    generate_pod!("Turkey_Duck_Hen")
 }
 
 fn main() {
@@ -916,10 +920,10 @@ void feed_goat(Goat g); // takes goat by value
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Goat&quot;)
-    generate!(&quot;feed_goat&quot;)
+    generate!("Goat")
+    generate!("feed_goat")
 }
 
 fn main() {
@@ -953,10 +957,10 @@ void burst(Blimp b); // consumes blimp,
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Blimp&quot;)
-    generate!(&quot;burst&quot;)
+    generate!("Blimp")
+    generate!("burst")
 }
 
 fn main() {
@@ -986,10 +990,10 @@ void eat(Cake&amp;&amp; c); // consumes the cake. You can't have your cake and e
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Cake&quot;)
-    generate!(&quot;eat&quot;)
+    generate!("Cake")
+    generate!("eat")
 }
 
 fn main() {
@@ -1013,7 +1017,7 @@ fn main() {
 <h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
 <p>Any C++ function which returns a <a href="cpp_types.html">non-POD</a> type to Rust in fact gives you an opaque
 object implementing <a href="https://docs.rs/moveit/latest/moveit/new/trait.New.html"><code>moveit::New</code></a>.
-This enables you to &quot;emplace&quot; the resulting object either on the stack or heap,
+This enables you to "emplace" the resulting object either on the stack or heap,
 in exactly the same way as if you're constructying an object. See <a href="cpp_types.html#construction">the section on construction</a>
 for how to turn this opaque object into something useful (spoiler: just append <code>.within_unique_ptr()</code>).</p>
 <h2 id="overloads---and-identifiers-ending-in-digits"><a class="header" href="#overloads---and-identifiers-ending-in-digits">Overloads - and identifiers ending in digits</a></h2>
@@ -1041,12 +1045,12 @@ void saw(const Tree&amp;);
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Tree&quot;)
-    generate!(&quot;View&quot;)
-    generate!(&quot;saw&quot;)
-    generate!(&quot;saw1&quot;)
+    generate!("Tree")
+    generate!("View")
+    generate!("saw")
+    generate!("saw1")
 }
 
 fn main() {
@@ -1075,9 +1079,9 @@ public:
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Sloth&quot;)
+    generate!("Sloth")
 }
 
 fn main() {
@@ -1104,9 +1108,9 @@ public:
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;Sloth&quot;)
+    generate!("Sloth")
 }
 
 fn main() {
@@ -1123,7 +1127,7 @@ fn main() {
 <li>Make Rust functions available to C++ using <a href="https://docs.rs/autocxx/latest/autocxx/extern_rust/attr.extern_rust_function.html"><code>extern_rust_function</code></a>.</li>
 <li>Allow Rust subclasses of C++ classes.</li>
 </ul>
-<p>This latter option is most commonly used for implementing &quot;listeners&quot; or <a href="https://en.wikipedia.org/wiki/Observer_pattern">&quot;observers&quot;</a>, so is often in practice how C++ will call into Rust. More details below.</p>
+<p>This latter option is most commonly used for implementing "listeners" or <a href="https://en.wikipedia.org/wiki/Observer_pattern">"observers"</a>, so is often in practice how C++ will call into Rust. More details below.</p>
 <h2 id="subclasses"><a class="header" href="#subclasses">Subclasses</a></h2>
 <p>There is limited and experimental support for creating Rust subclasses of
 C++ classes. (Yes, even more experimental than all the rest of this!)
@@ -1148,12 +1152,12 @@ use autocxx::prelude::*;
 use autocxx::subclass::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    generate!(&quot;register_observer&quot;)
-    generate!(&quot;deregister_observer&quot;)
-    generate!(&quot;feed_goat&quot;)
-    subclass!(&quot;GoatObserver&quot;, MyGoatObserver)
+    generate!("register_observer")
+    generate!("deregister_observer")
+    generate!("feed_goat")
+    subclass!("GoatObserver", MyGoatObserver)
 }
 
 use ffi::*;
@@ -1164,7 +1168,7 @@ pub struct MyGoatObserver;
 
 impl GoatObserver_methods for MyGoatObserver {
     fn goat_full(&amp;self) {
-        println!(&quot;BURP!&quot;);
+        println!("BURP!");
     }
 }
 
@@ -1206,7 +1210,7 @@ class Dinosaur {
 public:
     Dinosaur() {}
     virtual void eat() const {
-        std::cout &lt;&lt; &quot;Roarrr!! I ate you!\n&quot;;
+        std::cout &lt;&lt; "Roarrr!! I ate you!\n";
     }
     virtual ~Dinosaur() {}
 };
@@ -1219,10 +1223,10 @@ use autocxx::prelude::*;
 use autocxx::subclass::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe_ffi)
-    subclass!(&quot;Dinosaur&quot;, TRex)
-    subclass!(&quot;Dinosaur&quot;, Diplodocus)
+    subclass!("Dinosaur", TRex)
+    subclass!("Dinosaur", Diplodocus)
 }
 
 use ffi::*;
@@ -1242,7 +1246,7 @@ impl Dinosaur_methods for TRex {
 
 impl Dinosaur_methods for Diplodocus {
     fn eat(&amp;self) {
-        println!(&quot;Ahh, some nice juicy leaves.&quot;);
+        println!("Ahh, some nice juicy leaves.");
         // Could call self.eat_super() if we
         // developed unexpected carnivorous cravings.
     }
@@ -1275,10 +1279,10 @@ At present there is no way to do compile-time disablement of code
 <p>Whether from a preprocessor symbol or from a C++ <code>char*</code> constant,
 strings appear as <code>[u8]</code> with a null terminator. To get a Rust string,
 do this:</p>
-<pre><code class="language-cpp">#define BOB &quot;Hello&quot;
+<pre><code class="language-cpp">#define BOB "Hello"
 </code></pre>
 <pre><code># mod ffi { pub static BOB: [u8; 6] = [72u8, 101u8, 108u8, 108u8, 111u8, 0u8]; }
-assert_eq!(std::str::from_utf8(&amp;ffi::BOB).unwrap().trim_end_matches(char::from(0)), &quot;Hello&quot;);
+assert_eq!(std::str::from_utf8(&amp;ffi::BOB).unwrap().trim_end_matches(char::from(0)), "Hello");
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="safety"><a class="header" href="#safety">Safety</a></h1>
 <h2 id="unsafety-policies"><a class="header" href="#unsafety-policies">Unsafety policies</a></h2>
@@ -1298,8 +1302,8 @@ inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
-    generate!(&quot;do_math&quot;)
+    #include "input.h"
+    generate!("do_math")
 }
 
 fn main() {
@@ -1316,9 +1320,9 @@ inline uint32_t do_math(uint32_t a, uint32_t b) { return a+b; }
 use autocxx::prelude::*;
 
 include_cpp! {
-    #include &quot;input.h&quot;
+    #include "input.h"
     safety!(unsafe)
-    generate!(&quot;do_math&quot;)
+    generate!("do_math")
 }
 
 fn main() {
@@ -1334,7 +1338,7 @@ fn main() {
 <li>Rust code calling C++ with unique pointers, where the Rust single-owner model nearly always applies (but we can't <em>prove</em> that the C++ developer isn't doing something weird)</li>
 <li>Rust safe code (requires least review)</li>
 </ul>
-<p>If your project is 90% Rust code, with small bits of C++, <em>don't use this crate</em>. You need something where all C++ interaction is marked with big red &quot;this is terrifying&quot; flags. This crate is aimed at cases where there's 90% C++ and small bits of Rust, and so we want the Rust code to be pragmatically reviewable without the signal:noise ratio of <code>unsafe</code> in the Rust code becoming so bad that <code>unsafe</code> loses all value.</p>
+<p>If your project is 90% Rust code, with small bits of C++, <em>don't use this crate</em>. You need something where all C++ interaction is marked with big red "this is terrifying" flags. This crate is aimed at cases where there's 90% C++ and small bits of Rust, and so we want the Rust code to be pragmatically reviewable without the signal:noise ratio of <code>unsafe</code> in the Rust code becoming so bad that <code>unsafe</code> loses all value.</p>
 <h2 id="worked-example"><a class="header" href="#worked-example">Worked example</a></h2>
 <p>Imagine you have this C++:</p>
 <pre><code class="language-cpp">struct Thing;
@@ -1352,7 +1356,7 @@ reference:</p>
 <p>This crate shares the general approach to safety and soundness pioneered by cxx, but has two important differences:</p>
 <ul>
 <li>cxx requires you to specify your interface in detail, and thus think through all aspects of the language boundary. autocxx doesn't, and may autogenerate footguns.</li>
-<li>cxx may allow multiple conflicting Rust references to exist to 'trivial' data types (&quot;plain old data&quot; or POD in autocxx parlance), but they're rare. autocxx may allow conflicting Rust references to exist even to 'opaque' (non-POD) data, and they're more common. This difference exists because opaque data is zero-sized in cxx, and zero-sized references cannot conflict. (In autocxx, we tell Rust about the size in order that we can allocate such types on the stack.)</li>
+<li>cxx may allow multiple conflicting Rust references to exist to 'trivial' data types ("plain old data" or POD in autocxx parlance), but they're rare. autocxx may allow conflicting Rust references to exist even to 'opaque' (non-POD) data, and they're more common. This difference exists because opaque data is zero-sized in cxx, and zero-sized references cannot conflict. (In autocxx, we tell Rust about the size in order that we can allocate such types on the stack.)</li>
 </ul>
 <p>There are preliminary explorations to avoid this problem by using a C++ reference wrapper type. See <code>examples/reference-wrappers</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="using-the-generated-bindings"><a class="header" href="#using-the-generated-bindings">Using the generated bindings</a></h1>
@@ -1387,23 +1391,23 @@ use autocxx::prelude::*;
 
 pub mod base {
     autocxx::include_cpp! {
-        #include &quot;input.h&quot;
+        #include "input.h"
         name!(ffi2)
         safety!(unsafe_ffi)
-        generate!(&quot;A&quot;)
-        generate!(&quot;B&quot;)
+        generate!("A")
+        generate!("B")
     }
     pub use ffi2::*;
 }
 pub mod dependent {
     autocxx::include_cpp! {
-        #include &quot;input.h&quot;
+        #include "input.h"
         safety!(unsafe_ffi)
-        generate!(&quot;handle_a&quot;)
-        generate!(&quot;create_a&quot;)
-        extern_cpp_type!(&quot;A&quot;, crate::base::A)
-        extern_cpp_type!(&quot;B&quot;, super::super::base::B)
-        pod!(&quot;B&quot;)
+        generate!("handle_a")
+        generate!("create_a")
+        extern_cpp_type!("A", crate::base::A)
+        extern_cpp_type!("B", super::super::base::B)
+        pod!("B")
     }
     pub use ffi::*;
 }
@@ -1428,7 +1432,7 @@ fn main() {
 <div style="break-before: page; page-break-before: always;"></div><h1 id="credits"><a class="header" href="#credits">Credits</a></h1>
 <p>David Tolnay did much of the hard work here, by inventing the underlying cxx crate, and in fact nearly all of the parsing infrastructure on which this crate depends. <code>bindgen</code> is also awesome. This crate stands on the shoulders of giants!</p>
 <p>Miguel Young also did all the hard thinking about whether non-trivial C++ objects can safely exist on the Rust
-stack. They can! He also draws nifty cartoons. </p>
+stack. They can! He also draws nifty cartoons.</p>
 <p>Thanks to all the other contributors to cxx, bindgen and autocxx.</p>
 <p>And thanks to <a href="https://www.chromium.org/Home/chromium-security/memory-safety/rust-and-c-interoperability/">all in the Chromium community for inspiring this tool</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-contribute"><a class="header" href="#how-to-contribute">How to Contribute</a></h1>
@@ -1499,7 +1503,7 @@ order of preference here's how we would like to hear about your problem:</p>
 <li>Raise a pull request adding a new failing integration test to
 <a href="https://github.com/google/autocxx/blob/main/integration-tests/tests/integration_test.rs"><code>integration_test.rs</code></a></li>
 <li>Minimize the test using <code>tools/reduce</code>, something like this:
-<code>target/debug/autocxx-reduce file -d &quot;safety!(unsafe_ffi)&quot; -d 'generate_pod!(&quot;A&quot;)' -I ~/my-include-dir -h my-header.h -p problem-error-message -- --remove-pass pass_line_markers</code>
+<code>target/debug/autocxx-reduce file -d "safety!(unsafe_ffi)" -d 'generate_pod!("A")' -I ~/my-include-dir -h my-header.h -p problem-error-message -- --remove-pass pass_line_markers</code>
 This is a wrapper for the amazing <code>creduce</code> which will take thousands of lines
 of C++, preprocess it, and then identify the minimum required lines to
 reproduce the same problem.</li>
