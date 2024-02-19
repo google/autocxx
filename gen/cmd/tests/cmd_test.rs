@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{convert::TryInto, fs::File, io::Write, path::Path};
+use std::{fs::File, io::Write, path::Path};
 
 use indexmap::map::IndexMap as HashMap;
 
