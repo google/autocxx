@@ -105,7 +105,7 @@ mod test {
             QualifiedName::new_from_cpp_name("c"),
             vec![QualifiedName::new_from_cpp_name("a")],
         );
-        let api_list = vec![a, b, c];
+        let api_list = [a, b, c];
         let mut it = fields_and_bases_first(api_list.iter());
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("a"));
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("c"));
