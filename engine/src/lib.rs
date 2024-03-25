@@ -604,7 +604,8 @@ pub fn do_cxx_cpp_generation(
     cxxgen_header_name: String,
 ) -> Result<CppFilePair, cxx_gen::Error> {
     let mut opt = cxx_gen::Opt::default();
-    opt.cxx_impl_annotations = cpp_codegen_options.cxx_impl_annotations.clone();
+    opt.cxx_impl_annotations
+        .clone_from(&cpp_codegen_options.cxx_impl_annotations);
     let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
     Ok(CppFilePair {
         header: strip_system_headers(
