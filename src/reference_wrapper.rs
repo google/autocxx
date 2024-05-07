@@ -412,7 +412,7 @@ impl<T: ?Sized> CppPin<T> {
         // to
         //   Box<CppPinContents<T>>
         // is safe.
-        let contents = unsafe { std::mem::transmute(item) };
+        let contents = unsafe { std::mem::transmute::<Box<T>, Box<CppPinContents<T>>>(item) };
         Self(contents)
     }
 
