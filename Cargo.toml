@@ -24,6 +24,9 @@ exclude = [ ".github", "book", "tools" ]
 # where we are depending on such features.
 resolver = "2"
 
+[features]
+arbitrary_self_types = []
+
 [dependencies]
 autocxx-macro = { path="macro", version="0.26.0" }
 cxx = "1.0.78" # ... also needed because expansion of type_id refers to ::cxx
