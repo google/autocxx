@@ -354,6 +354,7 @@ impl IncludeCppConfig {
     /// 1) As directives to bindgen
     /// 2) After bindgen has generated code, to filter the APIs which
     ///    we pass to cxx.
+    ///
     /// This second pass may seem redundant. But sometimes bindgen generates
     /// unnecessary stuff.
     pub fn is_on_allowlist(&self, cpp_name: &str) -> bool {

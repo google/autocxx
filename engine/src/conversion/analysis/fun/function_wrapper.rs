@@ -80,6 +80,7 @@ impl RustConversionType {
 /// * C++ wrapper function converts `std::unique_ptr<std::string>` to just
 ///   `std::string`
 /// * Finally, the actual C++ API receives a `std::string` by value.
+///
 /// The implementation here is distributed across this file, and
 /// `function_wrapper_rs` and `function_wrapper_cpp`.
 /// TODO: we should make this into a single enum, with the Type as enum

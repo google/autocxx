@@ -375,6 +375,7 @@ macro_rules! subclass {
 /// * the 'something else' can't be fully inspected by autocxx, possibly
 ///   becaue it relies on dependent qualified types or some other template
 ///   arrangement that bindgen cannot fully understand.
+///
 /// In such circumstances, autocxx normally has to err on the side of caution
 /// and assume that some type within the 'something else' is itself a forward
 /// declaration. That means, the opaque typedef won't be storable within
