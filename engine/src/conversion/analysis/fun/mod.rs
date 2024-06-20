@@ -715,7 +715,8 @@ impl<'a> FnAnalyzer<'a> {
     ///   to [cxx::UniquePtr]
     /// * We'll need a Rust wrapper if we've got a C++ wrapper and it's a method.
     /// * We may need wrappers if names conflict.
-    /// etc.
+    /// * etc.
+    ///
     /// The other major thing we do here is figure out naming for the function.
     /// This depends on overloads, and what other functions are floating around.
     /// The output of this analysis phase is used by both Rust and C++ codegen.
