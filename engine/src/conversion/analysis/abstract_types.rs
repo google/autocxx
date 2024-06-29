@@ -18,7 +18,7 @@ use super::{
 };
 use crate::conversion::{
     analysis::{depth_first::fields_and_bases_first, fun::ReceiverMutability},
-    api::{ApiName, TypeKind},
+    api::{ApiName, CppVisibility, DeletedOrDefaulted, FuncToConvert, TypeKind},
     error_reporter::{convert_apis, convert_item_apis},
     ConvertErrorFromCpp,
 };
@@ -147,6 +147,40 @@ pub(crate) fn mark_types_abstract(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhas
         }
     }
 
+    // While we're here, we'll look for types which are non-destructible.
+    let non_destructible_types: HashSet<QualifiedName> = apis
+        .iter()
+        .filter_map(|api| match api {
+            Api::Function {
+                fun,
+                analysis:
+                    FnAnalysis {
+                        kind:
+                            FnKind::TraitMethod {
+                                kind: TraitMethodKind::Destructor,
+                                impl_for,
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            } if matches!(
+                fun.as_ref(),
+                FuncToConvert {
+                    cpp_vis: CppVisibility::Private,
+                    ..
+                } | FuncToConvert {
+                    is_deleted: DeletedOrDefaulted::Deleted,
+                    ..
+                }
+            ) =>
+            {
+                Some(impl_for.clone())
+            }
+            _ => None,
+        })
+        .collect();
+
     // mark abstract types as abstract
     let mut apis: ApiVec<_> = apis
         .into_iter()
@@ -154,6 +188,8 @@ pub(crate) fn mark_types_abstract(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhas
             if let Api::Struct { name, analysis, .. } = &mut api {
                 if abstract_classes.contains(&name.name) {
                     analysis.pod.kind = TypeKind::Abstract;
+                } else if non_destructible_types.contains(&name.name) {
+                    analysis.pod.kind = TypeKind::NotDestructible;
                 }
             }
             api
@@ -172,7 +208,7 @@ pub(crate) fn mark_types_abstract(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhas
                         ..
                     },
                     ..
-            } if abstract_classes.contains(self_ty)
+            } if abstract_classes.contains(self_ty) || non_destructible_types.contains(self_ty)
         )
     });
 
@@ -205,6 +241,25 @@ pub(crate) fn mark_types_abstract(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhas
             .unwrap_or_default() =>
         {
             Err(ConvertErrorFromCpp::AbstractNestedType)
+        }
+        Api::Struct {
+            analysis:
+                PodAndConstructorAnalysis {
+                    pod:
+                        PodAnalysis {
+                            kind: TypeKind::NotDestructible,
+                            ..
+                        },
+                    ..
+                },
+            ..
+        } if api
+            .cpp_name()
+            .as_ref()
+            .map(|n| n.contains("::"))
+            .unwrap_or_default() =>
+        {
+            Err(ConvertErrorFromCpp::NonDestructibleNestedType)
         }
         _ => Ok(Box::new(std::iter::once(api))),
     });
