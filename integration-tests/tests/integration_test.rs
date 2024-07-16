@@ -2603,6 +2603,21 @@ fn test_nested_with_destructor() {
     run_test("", hdr, rs, &["A", "A_B"], &[]);
 }
 
+#[test]
+fn test_nested_with_static_call() {
+    let hdr = indoc! {"
+        struct A {
+            struct B {
+                static void f() {}
+            };
+        };
+    "};
+    let rs = quote! {
+        ffi::A_B::new().within_unique_ptr();
+    };
+    run_test("", hdr, rs, &["A", "A_B"], &[]);
+}
+
 // Even without a `safety!`, we still need to generate a safe `fn drop`.
 #[test]
 fn test_destructor_no_safety() {
