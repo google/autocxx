@@ -606,6 +606,7 @@ impl<'a> FnAnalyzer<'a> {
                 TypeConversionSophistication::SimpleForSubclasses,
                 Some(analysis.rust_name.clone()),
             );
+            
             for sub in self.subclasses_by_superclass(sup) {
                 // For each subclass, we need to create a plain-C++ method to call its superclass
                 // and a Rust/C++ bridge API to call _that_.
@@ -676,7 +677,7 @@ impl<'a> FnAnalyzer<'a> {
                 }
             }
         }
-
+        
         results.push(Api::Function {
             fun,
             analysis,

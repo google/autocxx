@@ -38,6 +38,7 @@ pub(super) fn subclasses_by_superclass(
     let mut subclasses_per_superclass: HashMap<QualifiedName, Vec<SubclassName>> = HashMap::new();
 
     for api in apis.iter() {
+        
         if let Api::Subclass { name, superclass } = api {
             subclasses_per_superclass
                 .entry(superclass.clone())

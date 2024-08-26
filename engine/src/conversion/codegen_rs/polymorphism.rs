@@ -1,3 +1,4 @@
+use crate::conversion::api::Virtualness;
 use crate::types::QualifiedName;
 use itertools::Itertools;
 use proc_macro2::Span;
@@ -207,6 +208,7 @@ fn polymorphise_methods(
     if let Some(impll) = imp {
         if let ImplItem::Fn(f) = impll.item.clone()
             && let Some(FnArg::Receiver(r)) = f.sig.inputs.first()
+            && !impll.virt //ignore virtual methods for now because they get get generated multiple times when overridden
         {
             let handler = if let Stmt::Expr(e, _) = f.block.stmts.get(0).unwrap()
                 && let Expr::Call(c) = e
@@ -300,7 +302,6 @@ fn polymorphise_functions(
                 &format!("{}_poly", sig.ident.to_string()),
                 Span::call_site(),
             );
-
             if analyze_function(&sig, &fnname, impls_to_trait, results.0.clone()) {
                 *vis = parse_quote!();
                 let mut fnargs = sig.inputs.clone();
