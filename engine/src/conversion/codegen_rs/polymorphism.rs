@@ -11,21 +11,6 @@ use syn::{
 
 use super::{RsCodegenResult, Use};
 
-
-#[doc = "Converts the type of references to the impl Types for polymorphism"]
-pub(crate) fn convert_refs(typ: Box<Type>) -> Box<Type> {
-    match *typ {
-        Type::Reference(re) => {
-            let typ = *re.elem;
-            Box::new(match re.mutability {
-                Some(_) => parse_quote! {impl CppPinMutRef <'_,  #typ >},
-                None => parse_quote! {impl CppConstRef <'_,  #typ >},
-            })
-        },
-        _ => typ
-    }
-}
-
 #[doc = "Goes trough the entire codegen and modifies it to support polymorphism for refences and methods."]
 pub(crate) fn polymorphise(rs_codegen_results: &mut Vec<(QualifiedName, RsCodegenResult)>) {
     let mut impls_to_trait = RequiredPolyMethods::default();
@@ -356,7 +341,7 @@ fn params_from_fnargs(fnargs: &Punctuated<syn::FnArg, syn::token::Comma>) -> Vec
                     syn::Pat::Ident(patty) => &patty.ident,
                     _ => todo!(),
                 };
-                Some(if let Type::ImplTrait(it) = &*t.ty {
+                Some(if let Type::Reference(r) = &*t.ty && let Type::ImplTrait(it) = &*r.elem {
                     if let Some(syn::TypeParamBound::Trait(t)) = it.bounds.first() {
                         if t.path.segments.last().unwrap().ident.to_string() == "CppConstRef" {
                             parse_quote!( #argname .as_cpp_ref() )
@@ -390,10 +375,10 @@ fn try_get_pin_type(p: &TypePath) -> Option<&TypePath> {
 }
 
 #[doc = "Given a function parameter turns it into polymorphic impl parameter if it is a reference"]
-fn conv_ref_args(t: &mut PatType, mutability: bool) {
+pub(crate) fn conv_ref_args(t: &mut PatType, mutability: bool) {
     if let Type::Path(p) = &mut *t.ty {
         if let Some(ty) = try_get_pin_type(&p) {
-            *t.ty = parse_quote! { impl crate::CppPinMutRef<'_, #ty> };
+            *t.ty = parse_quote! { &mut impl crate::CppPinMutRef<#ty> };
             if mutability && let Pat::Ident(i) = &mut *t.pat {
                 i.mutability = Some(Mut::default())
             }
@@ -401,6 +386,9 @@ fn conv_ref_args(t: &mut PatType, mutability: bool) {
     }
     if let Type::Reference(r) = &mut *t.ty {
         let ty = &*r.elem;
-        *t.ty = parse_quote! { impl crate::CppConstRef<'_, #ty> };
+        if let Type::ImplTrait(_)=ty {
+        } else {
+            *t.ty = parse_quote! { &impl crate::CppConstRef<#ty> };
+        }
     }
 }

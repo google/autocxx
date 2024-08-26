@@ -21,7 +21,7 @@ use indexmap::set::IndexSet as HashSet;
 use autocxx_parser::{ExternCppType, IncludeCppConfig, RustFun, UnsafePolicy};
 
 use itertools::Itertools;
-use polymorphism::{convert_refs, polymorphise};
+use polymorphism::{conv_ref_args, polymorphise};
 use proc_macro2::{Span, TokenStream};
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem, ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Lifetime, TraitItem, Type, TypePath
@@ -832,7 +832,7 @@ impl<'a> RsCodeGenerator<'a> {
         for p in &mut params {
             match p {
                 FnArg::Typed(ref mut pt) => {
-                    pt.ty = convert_refs(pt.ty.clone());
+                    conv_ref_args(pt, true)
                 },
                 _ => {},
             }

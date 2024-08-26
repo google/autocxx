@@ -674,19 +674,19 @@ where
         Pin::new(Box::new(self))
     }
 }
-pub trait CppPinMutRef<'c, Base> : 'c {
-    fn as_cpp_mut(&mut self) -> Pin<&'c mut Base>;
+pub trait CppPinMutRef<Base> {
+    fn as_cpp_mut<'c>(&'c mut self) -> Pin<&'c mut Base>;
 }
-pub trait CppConstRef<'c, Base> : 'c {
-    fn as_cpp_ref(&self) -> &'c Base;
+pub trait CppConstRef<Base> {
+    fn as_cpp_ref<'c>(&'c self) -> &'c Base;
 }
-impl<'c, Base, Child : Deref<Target = C> + 'c, C: 'c + ToBaseClass<Base>> CppConstRef<'c, Base> for Child {
-    fn as_cpp_ref(&self) -> &'c Base {
+impl<Base, Child : Deref<Target = C>, C: ToBaseClass<Base>> CppConstRef<Base> for Child {
+    fn as_cpp_ref<'c>(&'c self) -> &'c Base {
         unsafe { transmute(self.deref().as_base()) } //TODO: Why safe?
     }
 }
-impl<'c, Base, Child, C: 'c + ToBaseClass<Base>> CppPinMutRef<'c, Base> for Pin<Child> where Child: DerefMut<Target = C> + 'c {
-    fn as_cpp_mut(&mut self) -> Pin<&'c mut Base> {
+impl<Base, Child, C: ToBaseClass<Base>> CppPinMutRef<Base> for Pin<Child> where Child: DerefMut<Target = C> {
+    fn as_cpp_mut<'c>(&'c mut self) -> Pin<&'c mut Base> {
         let ptr = self.as_mut();
         let raw_ptr = unsafe { ptr.get_unchecked_mut() };
         unsafe { transmute(raw_ptr.as_base_mut()) }
@@ -748,8 +748,7 @@ pub mod prelude {
     pub use crate::CppConstRef;
     pub use crate::ToBaseClass;
 }
-
-impl<Base, Child: AsRef<Base>> ToBaseClass<Base> for Child {
+impl<Base, Child> ToBaseClass<Base> for Child where  Child: AsRef<Base>{
     fn as_base(&self)-> &Base {
         self.as_ref()
     }

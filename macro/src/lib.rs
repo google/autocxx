@@ -14,7 +14,7 @@ use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
 use syn::parse::Parser;
-use syn::{parse_macro_input, parse_quote, Fields, Item, ItemStruct, Visibility};
+use syn::{parse_macro_input, parse_quote, Fields, Item, ItemEnum, ItemFn, ItemStruct, Visibility};
 
 /// Implementation of the `include_cpp` macro. See documentation for `autocxx` crate.
 #[proc_macro_error]
@@ -91,11 +91,34 @@ pub fn extern_rust_type(attr: TokenStream, input: TokenStream) -> TokenStream {
     }
     let i: Item =
         syn::parse(input.clone()).unwrap_or_else(|_| abort!(Span::call_site(), "Expected an item"));
-    match i {
-        Item::Struct(..) | Item::Enum(..) | Item::Fn(..) => {}
+    
+    let ty = match &i {
+        Item::Struct(ItemStruct { ident, .. }) => {
+            ident
+        },
+        Item::Enum(ItemEnum { ident, .. }) => {
+            ident
+        },
+        Item::Fn(ItemFn{ .. }) => {
+            return quote! { #i  }.into();
+        },
         _ => abort!(Span::call_site(), "Expected a struct or enum"),
-    }
-    input
+    };
+           
+    quote!(
+        #i
+        
+        impl CppConstRef<#ty> for #ty {
+            fn as_cpp_ref<'c>(&'c self) -> &'c #ty {
+                self
+            }
+        }
+        /* impl CppPinMutRef<#ty> for #ty {
+            fn as_cpp_mut<'c>(&'c mut self) -> std::pin::Pin<&'c mut #ty> {
+                self
+            }
+        } */
+    ).into()
 }
 
 /// Attribute to state that a Rust function is to be exported to C++
