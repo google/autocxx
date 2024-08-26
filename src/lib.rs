@@ -1,3 +1,5 @@
+#![feature(anonymous_lifetime_in_impl_trait)]
+
 #![doc = include_str!("../README.md")]
 #![cfg_attr(nightly, feature(unsize))]
 #![cfg_attr(nightly, feature(dispatch_from_dyn))]
@@ -407,6 +409,9 @@ macro_rules! usage {
     };
 }
 
+use std::mem::transmute;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::pin::Pin;
 
 #[doc(hidden)]
@@ -669,6 +674,28 @@ where
         Pin::new(Box::new(self))
     }
 }
+pub trait CppPinMutRef<'c, Base> : 'c {
+    fn as_cpp_mut(&mut self) -> Pin<&'c mut Base>;
+}
+pub trait CppConstRef<'c, Base> : 'c {
+    fn as_cpp_ref(&self) -> &'c Base;
+}
+impl<'c, Base, Child : Deref<Target = C> + 'c, C: 'c + ToBaseClass<Base>> CppConstRef<'c, Base> for Child {
+    fn as_cpp_ref(&self) -> &'c Base {
+        unsafe { transmute(self.deref().as_base()) } //TODO: Why safe?
+    }
+}
+impl<'c, Base, Child, C: 'c + ToBaseClass<Base>> CppPinMutRef<'c, Base> for Pin<Child> where Child: DerefMut<Target = C> + 'c {
+    fn as_cpp_mut(&mut self) -> Pin<&'c mut Base> {
+        let ptr = self.as_mut();
+        let raw_ptr = unsafe { ptr.get_unchecked_mut() };
+        unsafe { transmute(raw_ptr.as_base_mut()) }
+    }
+}
+pub trait ToBaseClass<T> {
+    fn as_base(&self)-> &T;
+    fn as_base_mut(&mut self)-> Pin<&mut T>;
+}
 
 use cxx::memory::UniquePtrTarget;
 use cxx::UniquePtr;
@@ -715,8 +742,22 @@ pub mod prelude {
     pub use moveit::moveit;
     pub use moveit::new::New;
     pub use moveit::Emplace;
+
+    //Polymorphism
+    pub use crate::CppPinMutRef;
+    pub use crate::CppConstRef;
+    pub use crate::ToBaseClass;
 }
 
+impl<Base, Child: AsRef<Base>> ToBaseClass<Base> for Child {
+    fn as_base(&self)-> &Base {
+        self.as_ref()
+    }
+
+    fn as_base_mut(&mut self)-> Pin<&mut Base> {
+        unsafe { transmute(self.as_ref()) }
+    }
+}
 /// Re-export moveit for ease of consumers.
 pub use moveit;
 

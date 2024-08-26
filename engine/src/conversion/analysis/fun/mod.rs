@@ -1279,7 +1279,7 @@ impl<'a> FnAnalyzer<'a> {
         // C++ API and we need to create a C++ wrapper function which is more cxx-compliant.
         // That wrapper function is included in the cxx::bridge, and calls through to the
         // original function.
-        let wrapper_function_needed = match kind {
+        let mut wrapper_function_needed = match kind {
             FnKind::Method {
                 method_kind:
                     MethodKind::Static
@@ -1303,6 +1303,9 @@ impl<'a> FnAnalyzer<'a> {
             _ if self.force_wrapper_generation => true,
             _ => false,
         };
+        if param_details.iter_mut().filter(|p| p.has_lifetime).count() != 0 {
+            wrapper_function_needed = true;
+        }
 
         let cpp_wrapper = if wrapper_function_needed {
             // Generate a new layer of C++ code to wrap/unwrap parameters

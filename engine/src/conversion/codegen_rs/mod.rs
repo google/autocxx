@@ -13,6 +13,7 @@ mod lifetime;
 mod namespace_organizer;
 mod non_pod_struct;
 pub(crate) mod unqualify;
+mod polymorphism;
 
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
@@ -20,11 +21,10 @@ use indexmap::set::IndexSet as HashSet;
 use autocxx_parser::{ExternCppType, IncludeCppConfig, RustFun, UnsafePolicy};
 
 use itertools::Itertools;
+use polymorphism::{convert_refs, polymorphise};
 use proc_macro2::{Span, TokenStream};
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Lifetime, TraitItem, Type,
-    TypePath,
+    parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem, ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Lifetime, TraitItem, Type, TypePath
 };
 
 use crate::{
@@ -176,7 +176,7 @@ impl<'a> RsCodeGenerator<'a> {
             find_trivially_constructed_subclasses(&all_apis);
         let non_pod_types = find_non_pod_types(&all_apis);
         // Now let's generate the Rust code.
-        let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
+        let (mut rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
                 let more_cpp_needed = api.needs_cpp_codegen();
@@ -190,6 +190,9 @@ impl<'a> RsCodeGenerator<'a> {
                 ((name, gen), more_cpp_needed)
             })
             .unzip();
+        
+        polymorphise(&mut rs_codegen_results_and_namespaces);
+
         // First, the hierarchy of mods containing lots of 'use' statements
         // which is the final API exposed as 'ffi'.
         let mut use_statements =
@@ -420,6 +423,7 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             }))
         }
+        let mut unique_types = HashSet::new();
         for (key, entries) in trait_impl_entries_by_trait_and_ty.into_iter() {
             let unsafety = key.unsafety;
             let ty = key.ty;
@@ -428,7 +432,17 @@ impl<'a> RsCodeGenerator<'a> {
                 #unsafety impl #trt for #ty {
                     #(#entries)*
                 }
-            }))
+            }));
+            unique_types.insert(ty.clone());
+        }
+        for ty in unique_types {
+            output_items.push(Item::Impl(parse_quote! {
+                impl AsRef< #ty > for #ty {
+                    fn as_ref(self: & #ty) -> & #ty {
+                        self
+                    }
+                }
+            }));
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
             let new_ns = ns.push((*child_name).clone());
@@ -812,9 +826,17 @@ impl<'a> RsCodeGenerator<'a> {
         let ret = details.ret;
         let unsafe_token = details.requires_unsafe.wrapper_token();
         let global_def = quote! { #unsafe_token fn #api_name(#params) #ret };
-        let params = unqualify_params(minisynize_punctuated(params));
+        let mut params = unqualify_params(minisynize_punctuated(params));
         let ret = unqualify_ret_type(ret.into());
         let method_name = details.method_name;
+        for p in &mut params {
+            match p {
+                FnArg::Typed(ref mut pt) => {
+                    pt.ty = convert_refs(pt.ty.clone());
+                },
+                _ => {},
+            }
+        }
         let cxxbridge_decl: ForeignItemFn =
             parse_quote! { #unsafe_token fn #api_name(#params) #ret; };
         let args: Punctuated<Expr, Comma> =
