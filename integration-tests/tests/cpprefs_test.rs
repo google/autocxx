@@ -39,7 +39,7 @@ fn run_cpprefs_test(
         None,
         "unsafe_references_wrapped",
         Some(quote! {
-            #![feature(arbitrary_self_types)]
+            #![feature(arbitrary_self_types_pointers)]
         }),
     )
     .unwrap()
