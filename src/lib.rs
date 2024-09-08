@@ -270,7 +270,7 @@ macro_rules! concrete {
 /// them to be wrapped in a `CppRef` type: see [`CppRef`].
 /// This only works on nightly Rust because it
 /// depends upon an unstable feature
-/// (`arbitrary_self_types`). However, it should
+/// (`arbitrary_self_types_pointers`). However, it should
 /// eliminate all undefined behavior related to Rust's
 /// stricter aliasing rules than C++.
 #[macro_export]

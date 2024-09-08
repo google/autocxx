@@ -26,7 +26,7 @@ fn run_cpprefs_test(
     generate_pods: &[&str],
 ) {
     if !arbitrary_self_types_supported() {
-        // "unsafe_references_wrapped" requires arbitrary_self_types, which requires nightly.
+        // "unsafe_references_wrapped" requires arbitrary_self_types_pointers, which requires nightly.
         return;
     }
     do_run_test(

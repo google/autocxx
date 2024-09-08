@@ -38,7 +38,7 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// As noted, one of the main reasons for this type is to call methods.
 /// Unfortunately, that depends on unstable Rust features. If you can't
 /// call methods on one of these references, check you're using nightly
-/// and add `#![feature(arbitrary_self_types)]` to your crate.
+/// and add `#![feature(arbitrary_self_types_pointers)]` to your crate.
 ///
 /// # Lifetimes and cloneability
 ///
@@ -566,7 +566,7 @@ impl<T: ?Sized> AsCppMutRef<T> for PhantomReferentMut<T> {
     }
 }
 
-#[cfg(all(feature = "arbitrary_self_types", test))]
+#[cfg(all(feature = "arbitrary_self_types_pointers", test))]
 mod tests {
     use super::*;
 
