@@ -12386,6 +12386,20 @@ fn test_cpp_union_pod() {
     run_test_expect_fail("", hdr, quote! {}, &[], &["CorrelationId_t_"]);
 }
 
+#[test]
+fn test_override_typedef_fn() {
+    let hdr = indoc! {"
+        #include <map>
+        typedef std::shared_ptr<std::map<int, int>> Arg;
+        class Foo {
+        public:
+          void *createFoo(const int);
+          void *createFoo(const int, Arg &arg);
+        };
+    "};
+    run_test("", hdr, quote! {}, &["Foo"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
