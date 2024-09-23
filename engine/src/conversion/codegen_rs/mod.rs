@@ -1068,7 +1068,7 @@ impl<'a> RsCodeGenerator<'a> {
     /// explaining why a given type or function couldn't have bindings
     /// generated.
     fn generate_error_entry(err: ConvertErrorFromCpp, ctx: ErrorContext) -> RsCodegenResult {
-        let err = format!("autocxx bindings couldn't be generated: {err}");
+        let err = format!(" autocxx bindings couldn't be generated: {err}");
         let (impl_entry, bindgen_mod_item, materialization) = match ctx.into_type() {
             ErrorContextType::Item(id) => (
                 // Populate within bindgen mod because impl blocks may attach.
