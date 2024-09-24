@@ -12386,6 +12386,39 @@ fn test_cpp_union_pod() {
     run_test_expect_fail("", hdr, quote! {}, &[], &["CorrelationId_t_"]);
 }
 
+#[test]
+fn test_cpp_static_template() {
+    let hdr = indoc! {"
+      #pragma once
+      
+      template <typename T>
+      class Toto
+      {
+      public:
+      	static int test()
+      	{
+            return 1;
+      	}
+      };
+      
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! {
+            concrete!("Toto<int>", TotoInt)
+        },
+        None,
+        None,
+        Some(quote! {
+            fn run() {
+                ffi::TotoInt::test();
+            }
+        }),
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
