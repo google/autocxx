@@ -12387,14 +12387,17 @@ fn test_cpp_union_pod() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/1382
 fn test_override_typedef_fn() {
     let hdr = indoc! {"
         #include <map>
+        #include <memory>
         typedef std::shared_ptr<std::map<int, int>> Arg;
+            // bindgen currently outputs  pub type Arg = u8;
         class Foo {
         public:
-          void *createFoo(const int);
           void *createFoo(const int, Arg &arg);
+        //   void *createFoo(const int, std::shared_ptr<std::map<int, int>> &arg); // works
         };
     "};
     run_test("", hdr, quote! {}, &["Foo"], &[]);
