@@ -192,7 +192,7 @@ impl<'a, T: ?Sized> CppRef<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Deref for CppRef<'a, T> {
+impl<T: ?Sized> Deref for CppRef<'_, T> {
     type Target = *const T;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -208,7 +208,7 @@ impl<'a, T: ?Sized> Deref for CppRef<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Clone for CppRef<'a, T> {
+impl<T: ?Sized> Clone for CppRef<'_, T> {
     fn clone(&self) -> Self {
         Self {
             ptr: self.ptr,
@@ -233,7 +233,7 @@ pub struct CppMutRef<'a, T: ?Sized> {
     phantom: PhantomData<&'a T>,
 }
 
-impl<'a, T: ?Sized> CppMutRef<'a, T> {
+impl<T: ?Sized> CppMutRef<'_, T> {
     /// Retrieve the underlying C++ pointer.
     pub fn as_mut_ptr(&self) -> *mut T {
         self.ptr
@@ -269,7 +269,7 @@ impl<'a, T: ?Sized> CppMutRef<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Deref for CppMutRef<'a, T> {
+impl<T: ?Sized> Deref for CppMutRef<'_, T> {
     type Target = *const T;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -283,7 +283,7 @@ impl<'a, T: ?Sized> Deref for CppMutRef<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Clone for CppMutRef<'a, T> {
+impl<T: ?Sized> Clone for CppMutRef<'_, T> {
     fn clone(&self) -> Self {
         Self {
             ptr: self.ptr,
@@ -316,7 +316,7 @@ pub trait AsCppMutRef<T: ?Sized>: AsCppRef<T> {
     fn as_cpp_mut_ref(&mut self) -> CppMutRef<T>;
 }
 
-impl<'a, T: ?Sized> AsCppRef<T> for CppMutRef<'a, T> {
+impl<T: ?Sized> AsCppRef<T> for CppMutRef<'_, T> {
     fn as_cpp_ref(&self) -> CppRef<T> {
         CppRef::from_ptr(self.ptr)
     }

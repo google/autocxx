@@ -11,8 +11,6 @@ use syn::{
     ReturnType, Token, Type, TypePath,
 };
 
-/// Mod to handle stripping paths off the front of types.
-
 fn unqualify_type_path(typ: TypePath) -> TypePath {
     // If we've still got more than one
     // path segment then this is referring to a type within
