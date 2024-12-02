@@ -150,11 +150,12 @@ pub(super) fn gen_function(
                 ref method_kind,
                 ..
             } => {
-                // Method, or static method.
                 impl_entry = Some(fn_generator.generate_method_impl(
                     matches!(method_kind, MethodKind::Constructor { .. }),
+                    matches!(method_kind, MethodKind::Virtual { .. }),
                     impl_for,
                 ));
+                
             }
             FnKind::TraitMethod { ref details, .. } => {
                 trait_impl_entry = Some(fn_generator.generate_trait_impl(details));
@@ -216,6 +217,7 @@ pub(super) fn gen_function(
         #(#doc_attrs)*
         #vis #bridge_unsafety fn #cxxbridge_name #lifetime_tokens ( #params ) #ret_type;
     ));
+    
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
         bindgen_mod_items,
@@ -387,6 +389,7 @@ impl<'a> FnGenerator<'a> {
     fn generate_method_impl(
         &self,
         avoid_self: bool,
+        virt: bool,
         impl_block_type_name: &QualifiedName,
     ) -> Box<ImplBlockDetails> {
         let (lifetime_tokens, wrapper_params, ret_type, call_body) =
@@ -427,6 +430,7 @@ impl<'a> FnGenerator<'a> {
                 }
             }),
             ty,
+            virt
         })
     }
 
@@ -470,6 +474,7 @@ impl<'a> FnGenerator<'a> {
         Box::new(ImplBlockDetails {
             item: ImplItem::Fn(parse_quote! { #stuff }),
             ty: ImplBlockKey { ty, lifetime: None },
+            virt: false,
         })
     }
 

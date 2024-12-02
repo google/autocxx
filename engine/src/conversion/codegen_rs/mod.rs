@@ -13,6 +13,7 @@ mod lifetime;
 mod namespace_organizer;
 mod non_pod_struct;
 pub(crate) mod unqualify;
+mod polymorphism;
 
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
@@ -20,11 +21,10 @@ use indexmap::set::IndexSet as HashSet;
 use autocxx_parser::{ExternCppType, IncludeCppConfig, RustFun, UnsafePolicy};
 
 use itertools::Itertools;
+use polymorphism::{conv_ref_args, polymorphise};
 use proc_macro2::{Span, TokenStream};
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Lifetime, TraitItem, Type,
-    TypePath,
+    parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem, ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Lifetime, TraitItem, Type, TypePath
 };
 
 use crate::{
@@ -47,7 +47,7 @@ use super::{
         fun::{FnPhase, PodAndDepAnalysis, ReceiverMutability},
         pod::PodAnalysis,
     },
-    api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind},
+    api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind, Virtualness},
     convert_error::ErrorContextType,
     doc_attr::get_doc_attrs,
 };
@@ -69,6 +69,7 @@ struct ImplBlockKey {
 struct ImplBlockDetails {
     item: ImplItem,
     ty: ImplBlockKey,
+    virt: bool,
 }
 
 struct TraitImplBlockDetails {
@@ -167,7 +168,7 @@ impl<'a> RsCodeGenerator<'a> {
         c.rs_codegen(all_apis)
     }
 
-    fn rs_codegen(mut self, all_apis: ApiVec<FnPhase>) -> Vec<Item> {
+    fn rs_codegen(mut self, mut all_apis: ApiVec<FnPhase>) -> Vec<Item> {
         // ... and now let's start to generate the output code.
         // First off, when we generate structs we may need to add some methods
         // if they're superclasses.
@@ -175,8 +176,9 @@ impl<'a> RsCodeGenerator<'a> {
         let subclasses_with_a_single_trivial_constructor =
             find_trivially_constructed_subclasses(&all_apis);
         let non_pod_types = find_non_pod_types(&all_apis);
+
         // Now let's generate the Rust code.
-        let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
+        let (mut rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
                 let more_cpp_needed = api.needs_cpp_codegen();
@@ -190,6 +192,9 @@ impl<'a> RsCodeGenerator<'a> {
                 ((name, gen), more_cpp_needed)
             })
             .unzip();
+        
+        polymorphise(&mut rs_codegen_results_and_namespaces);
+
         // First, the hierarchy of mods containing lots of 'use' statements
         // which is the final API exposed as 'ffi'.
         let mut use_statements =
@@ -220,7 +225,7 @@ impl<'a> RsCodeGenerator<'a> {
         // Items for the [cxx::bridge] mod...
         let mut bridge_items: Vec<Item> = bridge_items.into_iter().flatten().collect();
         // Things to include in the "extern "C"" mod passed within the cxx::bridge
-        let mut extern_c_mod_items: Vec<ForeignItem> =
+        let mut extern_c_mod_items: Vec<_> =
             extern_c_mod_items.into_iter().flatten().collect();
         // The same for extern "Rust"
         let mut extern_rust_mod_items = extern_rust_mod_items.into_iter().flatten().collect();
@@ -420,6 +425,7 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             }))
         }
+        let mut unique_types = HashSet::new();
         for (key, entries) in trait_impl_entries_by_trait_and_ty.into_iter() {
             let unsafety = key.unsafety;
             let ty = key.ty;
@@ -428,7 +434,17 @@ impl<'a> RsCodeGenerator<'a> {
                 #unsafety impl #trt for #ty {
                     #(#entries)*
                 }
-            }))
+            }));
+            unique_types.insert(ty.clone());
+        }
+        for ty in unique_types {
+            output_items.push(Item::Impl(parse_quote! {
+                impl AsRef< #ty > for #ty {
+                    fn as_ref(self: & #ty) -> & #ty {
+                        self
+                    }
+                }
+            }));
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
             let new_ns = ns.push((*child_name).clone());
@@ -682,7 +698,7 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             },
         ];
-        let mut extern_c_mod_items = vec![
+        let mut extern_c_mod_items: Vec<ForeignItem> = vec![
             self.generate_cxxbridge_type(&full_cpp, false, Vec::new()),
             parse_quote! {
                 fn #relinquish_ownership_call(self: &#cpp_id);
@@ -812,9 +828,17 @@ impl<'a> RsCodeGenerator<'a> {
         let ret = details.ret;
         let unsafe_token = details.requires_unsafe.wrapper_token();
         let global_def = quote! { #unsafe_token fn #api_name(#params) #ret };
-        let params = unqualify_params(minisynize_punctuated(params));
+        let mut params = unqualify_params(minisynize_punctuated(params));
         let ret = unqualify_ret_type(ret.into());
         let method_name = details.method_name;
+        for p in &mut params {
+            match p {
+                FnArg::Typed(ref mut pt) => {
+                    conv_ref_args(pt, true)
+                },
+                _ => {},
+            }
+        }
         let cxxbridge_decl: ForeignItemFn =
             parse_quote! { #unsafe_token fn #api_name(#params) #ret; };
         let args: Punctuated<Expr, Comma> =
@@ -1099,6 +1123,7 @@ impl<'a> RsCodeGenerator<'a> {
                         ty: parse_quote! { #self_ty },
                         lifetime: None,
                     },
+                    virt: false,
                 })),
                 None,
                 None,

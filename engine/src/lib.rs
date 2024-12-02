@@ -13,6 +13,8 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(feature = "nightly", feature(doc_cfg))]
 
+#![feature(let_chains)]
+
 mod ast_discoverer;
 mod conversion;
 mod cxxbridge;
