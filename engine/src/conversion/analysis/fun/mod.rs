@@ -1264,7 +1264,7 @@ impl<'a> FnAnalyzer<'a> {
         let param_conversion_needed = param_details.iter().any(|b| b.conversion.cpp_work_needed());
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
-            .map_or(false, |x| x.cpp_work_needed());
+            .is_some_and(|x| x.cpp_work_needed());
         let return_needs_rust_conversion = ret_type_conversion
             .as_ref()
             .map(|ra| ra.rust_work_needed())

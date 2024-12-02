@@ -138,7 +138,7 @@ impl<'a> CppMatcher<'a> {
     }
 }
 
-impl<'a> CodeCheckerFns for CppMatcher<'a> {
+impl CodeCheckerFns for CppMatcher<'_> {
     fn check_cpp(&self, cpp: &[PathBuf]) -> Result<(), TestError> {
         let mut positives_needed = self.positive_matches.to_vec();
         for filename in cpp {
