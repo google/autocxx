@@ -153,6 +153,28 @@ jobs:
         if: matrix.os == ''
         run: sudo apt-get install llvm-13-dev && cargo build
 
+  bazel:
+    name: Bazel
+    runs-on: ubuntu-latest
+    # cxx repo disables to run the bazel job due to GitHub Actions's remote issue.
+    # It might be better to disable it here as well.
+    # See: https://github.com/dtolnay/cxx/commit/42c1ee806f186da58d1bddc8efea7d071a1c54af
+    #
+    # if: github.event_name != 'pull_request'
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Bazel
+        run: |
+          wget -q -O install.sh https://github.com/bazelbuild/bazel/releases/download/6.0.0/bazel-6.0.0-installer-linux-x86_64.sh
+          chmod +x install.sh
+          ./install.sh --user
+          echo $HOME/bin >> $GITHUB_PATH
+      - run: bazel run //third-party:vendor
+      - name: Check third-party/bazel up to date.
+        run: git diff --exit-code
+      - run: bazel run //demo:autocxx-demo --verbose_failures --noshow_progress
+
   sanitizer:
     name: Address Sanitizer
     runs-on: ubuntu-latest
