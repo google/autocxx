@@ -12403,6 +12403,26 @@ fn test_override_typedef_fn() {
     run_test("", hdr, quote! {}, &["Foo"], &[]);
 }
 
+#[test]
+fn test_namespaced_string() {
+    let hdr = indoc! {"
+        namespace a {
+            // Replacing `String` with another non-conflicting name will pass
+            class String {};
+        } // namespace tester
+
+        class Foo {
+            public:
+               	a::String create_custom_string() {
+              		return a::String();
+               	}
+        };
+
+    "};
+
+    run_test("", hdr, quote! {}, &["Foo"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
