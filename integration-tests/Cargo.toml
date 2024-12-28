@@ -20,6 +20,9 @@ categories = ["development-tools::ffi", "api-bindings"]
 
 [dependencies]
 proc-macro2 = "1.0.11"
+# More recent versions of trybuild don't work due to
+# https://github.com/dtolnay/trybuild/issues/283
+# There are some workarounds suggested there if needs be.
 trybuild = "=1.0.81"
 test-log = "0.2.2"
 env_logger = "0.9.0"
