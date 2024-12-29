@@ -382,6 +382,7 @@ pub fn do_run_test(
             #module_attributes
 
             use autocxx::prelude::*;
+            use crate::ffi::*;
 
             include_cpp!(
                 #hexathorpe include "input.h"
