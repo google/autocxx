@@ -12429,6 +12429,33 @@ fn test_override_typedef_fn() {
     run_test("", hdr, quote! {}, &["Foo"], &[]);
 }
 
+#[test]
+fn test_double_template_w_default() {
+    let hdr = indoc! {"
+        class Widget {};
+
+        template <class T>
+        class RefPtr {
+        private:
+            T* m_ptr;
+        };
+
+        class FakeAlloc {};
+
+        template <typename T, typename A=FakeAlloc>
+        class Holder {
+            A alloc;
+        };
+
+        typedef Holder<RefPtr<Widget>> WidgetRefHolder;
+        class Problem {
+        public:
+            WidgetRefHolder& getWidgets();
+        };
+    "};
+    run_test("", hdr, quote! {}, &["Problem"], &[]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers

@@ -372,7 +372,10 @@ impl<'a> TypeConverter<'a> {
                 }
                 let (new_tn, api) = self.get_templated_typename(&Type::Path(typ))?;
                 extra_apis.extend(api.into_iter());
-                deps.remove(&tn);
+                // Although it's tempting to remove the dep on the original type,
+                // this means we wouldn't spot cases where the original type can't
+                // be represented in C++, e.g. because it has an unused template parameter.
+                // So we keep the original dep too.
                 typ = new_tn.to_type_path();
                 deps.insert(new_tn);
             }
