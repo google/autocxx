@@ -12387,6 +12387,32 @@ fn test_cpp_union_pod() {
 }
 
 #[test]
+fn test_using_string_function() {
+    let hdr = indoc! {"
+        #include <string>
+        using std::string;
+        void foo(const string &a);
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["foo"], &[]);
+}
+
+#[test]
+fn test_using_string_method() {
+    let hdr = indoc! {"
+        #include <string>
+        using std::string;
+        class Foo
+        {
+        public:
+            Foo bar(const string &a);
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["Foo"], &[]);
+}
+
+#[test]
 #[ignore] // https://github.com/google/autocxx/issues/1382
 fn test_override_typedef_fn() {
     let hdr = indoc! {"
