@@ -179,13 +179,16 @@ miette = { version = "5", features = ["fancy"] } # optional but gives nicer erro
 </code></pre>
 <p>Now, add a <code>build.rs</code> next to your <code>Cargo.toml</code> (this is a standard <code>cargo</code> <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html">build script</a>). This is where you need your include path:</p>
 <pre><code class="language-rust ignore">fn main() -&gt; miette::Result&lt;()&gt; {
-    let path = std::path::PathBuf::from("src"); // include path
-    let mut b = autocxx_build::Builder::new("src/main.rs", &amp;[&amp;path]).build()?;
-        // This assumes all your C++ bindings are in main.rs
+    let include_path = std::path::PathBuf::from("src");
+
+    // This assumes all your C++ bindings are in main.rs
+    let mut b = autocxx_build::Builder::new("src/main.rs", &amp;[&amp;include_path]).build()?;
     b.flag_if_supported("-std=c++14")
      .compile("autocxx-demo"); // arbitrary library name, pick anything
     println!("cargo:rerun-if-changed=src/main.rs");
+
     // Add instructions to link to any C++ libraries you need.
+
     Ok(())
 }</code></pre>
 <p>See <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script">the standard cargo build script output mechanisms for how you can direct Rust to link against pre-existing libraries</a>, and see the <a href="building.html">building section of this book for more details about build options - for example, enabling C++17</a>.</p>
