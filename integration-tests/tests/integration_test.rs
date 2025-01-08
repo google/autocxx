@@ -12414,10 +12414,6 @@ fn test_double_template_w_default() {
             T* m_ptr;
         };
 
-        class Container {
-            void* data_;
-        };
-
         class FakeAlloc {};
 
         template <typename T, typename A=FakeAlloc>
