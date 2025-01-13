@@ -233,37 +233,14 @@ impl<'a> TypeConverter<'a> {
         ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         // First, qualify any unqualified paths.
-        if typ.path.segments.iter().next().unwrap().ident != "root" {
-            let ty = QualifiedName::from_type_path(&typ);
-            // If the type looks like it is unqualified, check we know it
-            // already, and if not, qualify it according to the current
-            // namespace. This is a bit of a shortcut compared to having a full
-            // resolution pass which can search all known namespaces.
-            if !known_types().is_known_type(&ty) {
-                let num_segments = typ.path.segments.len();
-                if num_segments > 1 {
-                    return Err(ConvertErrorFromCpp::UnsupportedBuiltInType(ty));
-                }
-                if !self.types_found.contains(&ty) {
-                    typ.path.segments = std::iter::once(&"root".to_string())
-                        .chain(ns.iter())
-                        .map(|s| {
-                            let i = make_ident(s);
-                            parse_quote! { #i }
-                        })
-                        .chain(typ.path.segments)
-                        .collect();
-                }
-            }
-        }
-
-        let original_tn = QualifiedName::from_type_path(&typ);
+        let original_tn = self.qualified_name_from_bindgen_output_type_path(&mut typ, ns)?;
         original_tn
             .validate_ok_for_cxx()
             .map_err(ConvertErrorFromCpp::InvalidIdent)?;
         if self.config.is_on_blocklist(&original_tn.to_cpp_name()) {
             return Err(ConvertErrorFromCpp::Blocked(original_tn));
         }
+
         let mut deps = HashSet::new();
 
         // Now convert this type itself.
@@ -370,7 +347,7 @@ impl<'a> TypeConverter<'a> {
                 if self.ignored_types.contains(&qn) {
                     return Err(ConvertErrorFromCpp::ConcreteVersionOfIgnoredTemplate);
                 }
-                let (new_tn, api) = self.get_templated_typename(&Type::Path(typ))?;
+                let (new_tn, api) = self.get_templated_typename(&Type::Path(typ), &qn, ns)?;
                 extra_apis.extend(api.into_iter());
                 // Although it's tempting to remove the dep on the original type,
                 // this means we wouldn't spot cases where the original type can't
@@ -383,11 +360,85 @@ impl<'a> TypeConverter<'a> {
         Ok(Annotated::new(Type::Path(typ), deps, extra_apis, kind))
     }
 
+    fn qualified_name_from_bindgen_output_type_path(
+        &self,
+        typ: &mut TypePath,
+        ns: &Namespace,
+    ) -> Result<QualifiedName, ConvertErrorFromCpp> {
+        if typ.path.segments.iter().next().unwrap().ident != "root" {
+            let ty = QualifiedName::from_type_path(&typ);
+            // If the type looks like it is unqualified, check we know it
+            // already, and if not, qualify it according to the current
+            // namespace. This is a bit of a shortcut compared to having a full
+            // resolution pass which can search all known namespaces.
+            if !known_types().is_known_type(&ty) {
+                let num_segments = typ.path.segments.len();
+                if num_segments > 1 {
+                    return Err(ConvertErrorFromCpp::UnsupportedBuiltInType(ty));
+                }
+                if !self.types_found.contains(&ty) {
+                    typ.path.segments = std::iter::once(&"root".to_string())
+                        .chain(ns.iter())
+                        .map(|s| {
+                            let i = make_ident(s);
+                            parse_quote! { #i }
+                        })
+                        .chain(typ.path.segments.clone())
+                        .collect();
+                }
+            }
+        }
+
+        Ok(QualifiedName::from_type_path(&typ))
+    }
+
     fn get_generic_args(typ: &mut TypePath) -> Option<&mut PathSegment> {
         match typ.path.segments.last_mut() {
             Some(s) if !s.arguments.is_empty() => Some(s),
             _ => None,
         }
+    }
+
+    fn type_params_depend_on_forward_declarations(&self, ty: &Type, ns: &Namespace ) -> bool {
+        if let Type::Path(typ) = ty {
+            let type_params = self.get_type_params(&mut typ.clone(), ns);
+            !type_params.is_disjoint(&self.forward_declarations)    
+        } else {
+            false // FIXME do better
+        }
+    }
+
+    /// Get the names of any type parameters in this type path.
+    fn get_type_params(&self, typ: &mut TypePath, ns: &Namespace) -> HashSet<QualifiedName> {
+        typ.path
+            .segments
+            .iter_mut()
+            .map(|seg| match seg.arguments {
+                PathArguments::AngleBracketed(ref mut angle_bracketed_generic_arguments) => {
+                    Box::new(
+                        angle_bracketed_generic_arguments
+                            .args
+                            .iter_mut()
+                            .filter_map(|arg| match arg {
+                                GenericArgument::Type(Type::Path(ref mut inner_typ)) => {
+                                    // Disregard any errors during this process, for now.
+                                    // We are looking for types which we have previously
+                                    // recorded as forward declarations. If we can't
+                                    // figure out the name of this type now, we probably
+                                    // couldn't have done so in the past when we
+                                    // recorded it as a forward declaration, so it wouldn't
+                                    // have matched anyway.
+                                    self.qualified_name_from_bindgen_output_type_path(inner_typ, ns)
+                                        .ok()
+                                }
+                                _ => None,
+                            }),
+                    ) as Box<dyn Iterator<Item = QualifiedName>>
+                }
+                _ => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = QualifiedName>>,
+            })
+            .flatten()
+            .collect()
     }
 
     fn convert_punctuated<P>(
@@ -525,6 +576,8 @@ impl<'a> TypeConverter<'a> {
     fn get_templated_typename(
         &mut self,
         rs_definition: &Type,
+        qn: &QualifiedName,
+        ns: &Namespace,
     ) -> Result<(QualifiedName, Option<UnanalyzedApi>), ConvertErrorFromCpp> {
         let count = self.concrete_templates.len();
         // We just use this as a hash key, essentially.
@@ -556,10 +609,13 @@ impl<'a> TypeConverter<'a> {
                     None => synthetic_ident,
                     Some(_) => format!("AutocxxConcrete{count}"),
                 };
+
+                let depends_on_forward_declaration = self.forward_declarations.contains(qn) || self.type_params_depend_on_forward_declarations(&rs_definition, ns);
                 let api = UnanalyzedApi::ConcreteType {
                     name: ApiName::new_in_root_namespace(make_ident(synthetic_ident)),
                     cpp_definition: cpp_definition.clone(),
                     rs_definition: Some(Box::new(rs_definition.clone().into())),
+                    depends_on_forward_declaration,
                 };
                 self.concrete_templates
                     .insert(cpp_definition, api.name().clone());
@@ -670,6 +726,10 @@ impl<'a> TypeConverter<'a> {
                 | Api::OpaqueTypedef {
                     forward_declaration: true,
                     ..
+                }
+                | Api::ConcreteType {
+                    depends_on_forward_declaration: true,
+                    ..
                 } => Some(api.name()),
                 _ => None,
             })
@@ -699,10 +759,12 @@ pub(crate) fn add_analysis<A: AnalysisPhase>(api: UnanalyzedApi) -> Api<A> {
             name,
             rs_definition,
             cpp_definition,
+            depends_on_forward_declaration,
         } => Api::ConcreteType {
             name,
             rs_definition,
             cpp_definition,
+            depends_on_forward_declaration,
         },
         Api::IgnoredItem { name, err, ctx } => Api::IgnoredItem { name, err, ctx },
         _ => panic!("Function analysis created an unexpected type of extra API"),

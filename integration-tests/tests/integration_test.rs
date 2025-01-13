@@ -11656,13 +11656,43 @@ fn test_typedef_unsupported_type_pub() {
 }
 
 #[test]
-fn test_typedef_unsupported_type_pri() {
+fn test_typedef_unsupported_type_pri_prob() {
     let hdr = indoc! {"
         #include <set>
         namespace NS{
             class cls{
                 private:
                     typedef std::set<int> InnerType;
+                };
+        }
+    "};
+
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_ns!("NS") },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_typedef_unsupported_type_pri_self_contained() {
+    let hdr = indoc! {"
+        namespace fakestd {
+            struct less {};
+            struct allocator {};
+            template<typename Key, typename Compare=less, typename Alloc=allocator>
+            struct set {
+                Key key;
+            };
+        }
+        namespace NS{
+            class cls{
+                private:
+                    typedef fakestd::set<int> InnerType;
                 };
         }
     "};

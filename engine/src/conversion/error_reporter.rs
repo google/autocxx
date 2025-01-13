@@ -94,17 +94,22 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B>(
                 name,
                 rs_definition,
                 cpp_definition,
+                depends_on_forward_declaration,
             } => Ok(Box::new(std::iter::once(Api::ConcreteType {
                 name,
                 rs_definition,
                 cpp_definition,
+                depends_on_forward_declaration,
             }))),
-            Api::ForwardDeclaration { name, err } => {
-                Ok(Box::new(std::iter::once(Api::ForwardDeclaration {
-                    name,
-                    err,
-                })))
-            }
+            Api::ForwardDeclaration {
+                name,
+                is_templated,
+                err,
+            } => Ok(Box::new(std::iter::once(Api::ForwardDeclaration {
+                name,
+                is_templated,
+                err,
+            }))),
             Api::OpaqueTypedef {
                 name,
                 forward_declaration,
