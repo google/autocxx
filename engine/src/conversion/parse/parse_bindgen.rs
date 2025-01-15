@@ -132,6 +132,7 @@ impl<'a> ParseBindgen<'a> {
                         name,
                         cpp_definition: cpp_definition.clone(),
                         rs_definition: None,
+                        depends_on_forward_declaration: false,
                     }
                 }),
         );
@@ -221,15 +222,9 @@ impl<'a> ParseBindgen<'a> {
                 let mut err = annotations.check_for_fatal_attrs(&s.ident).err();
                 let api = if ns.is_empty() && self.config.is_rust_type(&s.ident) {
                     None
-                } else if Self::spot_forward_declaration(&s.fields)
-                    || (Self::spot_zero_length_struct(&s.fields) && err.is_some())
-                {
+                } else if Self::spot_forward_declaration(&s.fields) {
                     // Forward declarations are recorded especially because we can't
                     // store them in UniquePtr or similar.
-                    // Templated forward declarations don't appear with an _unused field (which is what
-                    // we spot in the previous clause) but instead with an _address field.
-                    // So, solely in the case where we're storing up an error about such
-                    // a templated type, we'll also treat such cases as forward declarations.
                     //
                     // We'll also at this point check for one specific problem with
                     // forward declarations.
@@ -239,7 +234,12 @@ impl<'a> ParseBindgen<'a> {
                             Some(ErrorContext::new_for_item(s.ident.into())),
                         ));
                     }
-                    Some(UnanalyzedApi::ForwardDeclaration { name, err })
+                    let is_templated = Self::spot_field(&s.fields, "_phantom_0");
+                    Some(UnanalyzedApi::ForwardDeclaration {
+                        name,
+                        err,
+                        is_templated,
+                    })
                 } else {
                     let has_rvalue_reference_fields = s.fields.iter().any(|f| {
                         BindgenSemanticAttributes::new(&f.attrs).has_attr("rvalue_reference")
@@ -391,11 +391,10 @@ impl<'a> ParseBindgen<'a> {
     }
 
     fn spot_forward_declaration(s: &Fields) -> bool {
-        Self::spot_field(s, "_unused")
-    }
-
-    fn spot_zero_length_struct(s: &Fields) -> bool {
-        Self::spot_field(s, "_address")
+        // Non-templated forward declaration
+        Self::spot_field(s, "_unused") ||
+        // Templated forward declaration
+        (Self::spot_field(s, "_address") && Self::spot_field(s, "_phantom_0"))
     }
 
     fn spot_field(s: &Fields, desired_id: &str) -> bool {

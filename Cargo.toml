@@ -38,8 +38,8 @@ moveit = { version = "0.6", features = [ "cxx" ] }
 members = ["parser", "engine", "gen/cmd", "gen/build", "macro", "demo", "tools/reduce", "tools/mdbook-preprocessor", "integration-tests"]
 exclude = ["examples/s2", "examples/steam-mini", "examples/subclass", "examples/chromium-fake-render-frame-host", "examples/pod", "examples/non-trivial-type-on-stack", "examples/llvm", "examples/reference-wrappers", "examples/cpp_calling_rust", "tools/stress-test"]
 
-#[patch.crates-io]
+[patch.crates-io]
 #cxx = { path="../cxx" }
 #cxx-gen = { path="../cxx/gen/lib" }
-#autocxx-bindgen = { path="../bindgen" }
+#autocxx-bindgen = { path="../bindgen/bindgen" }
 #moveit = { path="../moveit" }

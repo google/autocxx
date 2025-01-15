@@ -56,12 +56,7 @@ impl BindgenSemanticAttributes {
         &self,
         id_for_context: &Ident,
     ) -> Result<(), ConvertErrorWithContext> {
-        if self.has_attr("unused_template_param") {
-            Err(ConvertErrorWithContext(
-                ConvertErrorFromCpp::UnusedTemplateParam,
-                Some(ErrorContext::new_for_item(id_for_context.clone().into())),
-            ))
-        } else if self.get_cpp_visibility() != CppVisibility::Public {
+        if self.get_cpp_visibility() != CppVisibility::Public {
             Err(ConvertErrorWithContext(
                 ConvertErrorFromCpp::NonPublicNestedType,
                 Some(ErrorContext::new_for_item(id_for_context.clone().into())),

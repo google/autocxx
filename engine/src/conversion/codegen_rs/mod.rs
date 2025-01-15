@@ -550,23 +550,31 @@ impl<'a> RsCodeGenerator<'a> {
                     false,
                 )
             }
+            Api::ForwardDeclaration {
+                is_templated: false,
+                ..
+            }
+            | Api::OpaqueTypedef { .. }
+            | Api::ConcreteType {
+                depends_on_forward_declaration: true,
+                ..
+            } => self.generate_type(
+                &name,
+                id,
+                TypeKind::Abstract,
+                false, // these types can't be kept in a Vector
+                false, // these types can't be put in a smart pointer
+                || None,
+                associated_methods,
+                None,
+                false,
+            ),
             Api::ConcreteType { .. } => self.generate_type(
                 &name,
                 id,
                 TypeKind::Abstract,
                 false, // assume for now that these types can't be kept in a Vector
                 true,  // assume for now that these types can be put in a smart pointer
-                || None,
-                associated_methods,
-                None,
-                false,
-            ),
-            Api::ForwardDeclaration { .. } | Api::OpaqueTypedef { .. } => self.generate_type(
-                &name,
-                id,
-                TypeKind::Abstract,
-                false, // these types can't be kept in a Vector
-                false, // these types can't be put in a smart pointer
                 || None,
                 associated_methods,
                 None,
@@ -643,7 +651,11 @@ impl<'a> RsCodeGenerator<'a> {
                 ctx: Some(ctx),
                 ..
             } => Self::generate_error_entry(err, ctx),
-            Api::IgnoredItem { .. } | Api::SubclassTraitItem { .. } => RsCodegenResult::default(),
+            Api::IgnoredItem { .. }
+            | Api::SubclassTraitItem { .. }
+            | Api::ForwardDeclaration {
+                is_templated: true, ..
+            } => RsCodegenResult::default(),
         }
     }
 
