@@ -196,7 +196,6 @@ impl<'a> BridgeConverter<'a> {
                 .map_err(ConvertError::Cpp)?;
                 let rs = RsCodeGenerator::generate_rs_code(
                     analyzed_apis,
-                    &unsafe_policy,
                     self.include_list,
                     bindgen_mod,
                     self.config,

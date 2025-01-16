@@ -1541,13 +1541,15 @@ impl<'a> FnAnalyzer<'a> {
                 let from_type = self_ty.as_ref().unwrap();
                 let from_type_path = from_type.to_type_path();
                 let to_type = to_type.to_type_path();
-                let (trait_signature, ty, method_name) = match *mutable {
+                let (trait_signature, ty, method_name): (_, Type, _) = match *mutable {
                     CastMutability::ConstToConst => (
                         parse_quote! {
-                            AsRef < #to_type >
+                            autocxx::AsCppRef < #to_type >
                         },
-                        Type::Path(from_type_path),
-                        "as_ref",
+                        parse_quote! {
+                            autocxx::CppRef< #from_type_path >
+                        },
+                        "as_cpp_ref",
                     ),
                     CastMutability::MutToConst => (
                         parse_quote! {

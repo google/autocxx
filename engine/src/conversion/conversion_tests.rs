@@ -33,7 +33,7 @@ fn do_test(input: ItemMod) {
     bc.convert(
         input,
         parse_callback_results,
-        UnsafePolicy::AllFunctionsSafe,
+        UnsafePolicy::ReferencesWrappedAllFunctionsSafe,
         inclusions,
         &CodegenOptions::default(),
         "",

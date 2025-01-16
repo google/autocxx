@@ -22,10 +22,6 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// UB here cannot manifest within Rust, but only across in C++, and therefore
 /// they are equivalently safe to using C++ references in pure-C++ codebases.
 ///
-/// *Important*: you might be wondering why you've never encountered this type.
-/// These exist in autocxx-generated bindings only if the `unsafe_references_wrapped`
-/// safety policy is given. This may become the default in future.
-///
 /// # Usage
 ///
 /// These types of references are pretty useless in Rust. You can't do

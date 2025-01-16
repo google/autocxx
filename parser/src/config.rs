@@ -31,7 +31,6 @@ use quote::quote;
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
-    AllFunctionsSafe,
     AllFunctionsUnsafe,
     ReferencesWrappedAllFunctionsSafe,
 }
@@ -45,12 +44,12 @@ impl Default for UnsafePolicy {
 impl Parse for UnsafePolicy {
     fn parse(input: ParseStream) -> ParseResult<Self> {
         if input.parse::<Option<Token![unsafe]>>()?.is_some() {
-            return Ok(UnsafePolicy::AllFunctionsSafe);
+            return Ok(UnsafePolicy::ReferencesWrappedAllFunctionsSafe);
         }
         let r = match input.parse::<Option<syn::Ident>>()? {
             Some(id) => {
                 if id == "unsafe_ffi" {
-                    Ok(UnsafePolicy::AllFunctionsSafe)
+                    Ok(UnsafePolicy::ReferencesWrappedAllFunctionsSafe)
                 } else if id == "unsafe_references_wrapped" {
                     Ok(UnsafePolicy::ReferencesWrappedAllFunctionsSafe)
                 } else {
@@ -74,9 +73,7 @@ impl Parse for UnsafePolicy {
 
 impl ToTokens for UnsafePolicy {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        if *self == UnsafePolicy::AllFunctionsSafe {
-            tokens.extend(quote! { unsafe })
-        } else if *self == UnsafePolicy::ReferencesWrappedAllFunctionsSafe {
+        if *self == UnsafePolicy::ReferencesWrappedAllFunctionsSafe {
             tokens.extend(quote! { unsafe_references_wrapped })
         }
     }
@@ -503,7 +500,7 @@ mod parse_tests {
         let us: UnsafePolicy = parse_quote! {
             unsafe
         };
-        assert_eq!(us, UnsafePolicy::AllFunctionsSafe)
+        assert_eq!(us, UnsafePolicy::ReferencesWrappedAllFunctionsSafe)
     }
 
     #[test]
@@ -511,7 +508,7 @@ mod parse_tests {
         let us: UnsafePolicy = parse_quote! {
             unsafe_ffi
         };
-        assert_eq!(us, UnsafePolicy::AllFunctionsSafe)
+        assert_eq!(us, UnsafePolicy::ReferencesWrappedAllFunctionsSafe)
     }
 
     #[test]
