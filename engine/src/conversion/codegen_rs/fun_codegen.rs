@@ -93,6 +93,7 @@ pub(super) fn gen_function(
     non_pod_types: &HashSet<QualifiedName>,
     config: &IncludeCppConfig,
 ) -> RsCodegenResult {
+    eprintln!("===DBG{{gen_function}}=== ns={ns}, fun={fun:?}, cpp_call_name={cpp_call_name}");
     if analysis.ignore_reason.is_err() || !analysis.externally_callable {
         return RsCodegenResult::default();
     }
@@ -196,6 +197,16 @@ pub(super) fn gen_function(
     // which the user has declared.
     let params = unqualify_params(params);
     let ret_type = unqualify_ret_type(ret_type.into_owned());
+
+    let ret_type = if analysis.throwable {
+        match ret_type {
+            ReturnType::Default => parse_quote!(-> Result<()>),
+            ReturnType::Type(_, ty) => parse_quote!(-> Result< #ty >),
+        }
+    } else {
+        ret_type
+    };
+
     // And we need to make an attribute for the namespace that the function
     // itself is in.
     let namespace_attr = if ns.is_empty() || wrapper_function_needed {

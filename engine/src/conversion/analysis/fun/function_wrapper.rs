@@ -60,6 +60,7 @@ pub(crate) enum RustConversionType {
     FromRValueParamToPtr,
     FromReferenceWrapperToPointer, // unwrapped_type is always Type::Ptr
     FromPointerToReferenceWrapper, // unwrapped_type is always Type::Ptr
+    WrapResult(Box<RustConversionType>),
 }
 
 impl RustConversionType {
@@ -159,6 +160,14 @@ impl TypeConversionPolicy {
         }
     }
 
+    pub(crate) fn wrap_result(self) -> Self {
+        let inner_conversion = Box::new(self.rust_conversion);
+        TypeConversionPolicy {
+            rust_conversion: RustConversionType::WrapResult(inner_conversion),
+            ..self
+        }
+    }
+
     pub(crate) fn cpp_work_needed(&self) -> bool {
         !matches!(self.cpp_conversion, CppConversionType::None)
     }
@@ -187,6 +196,13 @@ impl TypeConversionPolicy {
         let innerty = &self.unwrapped_type;
         parse_quote! {
             cxx::UniquePtr < #innerty >
+        }
+    }
+
+    pub(crate) fn make_result_type(&self) -> Type {
+        let innerty = &self.unwrapped_type;
+        parse_quote! {
+            Result< #innerty , cxx::Exception >
         }
     }
 

@@ -369,6 +369,12 @@ macro_rules! subclass {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// See [`subclass::subclass`].
+#[macro_export]
+macro_rules! throws {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 /// Indicates that a C++ type can definitely be instantiated. This has effect
 /// only in a very specific case:
 /// * the type is a typedef to something else

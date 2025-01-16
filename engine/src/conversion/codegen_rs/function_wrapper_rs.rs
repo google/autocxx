@@ -33,7 +33,17 @@ pub(super) enum RustParamConversion {
 
 impl TypeConversionPolicy {
     pub(super) fn rust_conversion(&self, var: Expr, counter: &mut usize) -> RustParamConversion {
-        match self.rust_conversion {
+        let mut wrap_result = false;
+        let rust_conversion =
+            if let RustConversionType::WrapResult(ref inner) = self.rust_conversion {
+                wrap_result = true;
+                inner.as_ref()
+            } else {
+                &self.rust_conversion
+            };
+
+        let base_conversion = match rust_conversion {
+            RustConversionType::WrapResult(_) => panic!("Nested Results are not supported!"),
             RustConversionType::None => RustParamConversion::Param {
                 ty: self.converted_rust_type(),
                 local_variables: Vec::new(),
@@ -213,6 +223,30 @@ impl TypeConversionPolicy {
                     conversion_requires_unsafe: false,
                 }
             }
+        };
+
+        if wrap_result {
+            match base_conversion {
+                RustParamConversion::ReturnValue { ty } => RustParamConversion::ReturnValue {
+                    ty: parse_quote!( ::std::result::Result< #ty, ::cxx::Exception> ),
+                },
+                RustParamConversion::Param {
+                    ty,
+                    local_variables,
+                    conversion,
+                    conversion_requires_unsafe,
+                } => {
+                    let ty = parse_quote!( ::std::result::Result< #ty, ::cxx::Exception> );
+                    RustParamConversion::Param {
+                        ty,
+                        local_variables,
+                        conversion,
+                        conversion_requires_unsafe,
+                    }
+                }
+            }
+        } else {
+            base_conversion
         }
     }
 }

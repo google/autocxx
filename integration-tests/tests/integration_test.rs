@@ -119,6 +119,83 @@ fn test_take_i32() {
 }
 
 #[test]
+fn test_exception_pod() {
+    let hdr = indoc! {r#"
+        #include <stdint.h>
+        #include <string>
+        #include <stdexcept>
+
+        struct B { uint32_t x; };
+
+        void do_nothing();
+        uint32_t get_integer();
+        uint32_t get_wrapped_integer();
+        B get_wrapped_struct();
+        uint32_t throw_exception();
+    "#};
+    let cxx = indoc! {r#"
+        void do_nothing() {
+        }
+
+        uint32_t get_integer() {
+            return 5;
+        }
+
+        uint32_t get_wrapped_integer() {
+            return 5;
+        }
+
+        B get_wrapped_struct() {
+            return B { 5 };
+        }
+
+        uint32_t throw_exception() {
+            throw std::invalid_argument("EXCEPTION");
+        }
+    "#};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        mod mylib {
+            use autocxx::prelude::*;
+            include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                pod!("B")
+                generate!("do_nothing")
+                generate!("get_integer")
+                generate!("get_wrapped_integer")
+                generate!("get_wrapped_struct")
+                generate!("throw_exception")
+                throws!("do_nothing")
+                throws!("get_wrapped_integer")
+                throws!("get_wrapped_struct")
+                throws!("throw_exception")
+            }
+            pub use ffi::*;
+        }
+        fn main() {
+            let maybe_nothing = mylib::do_nothing();
+            assert!(maybe_nothing.is_ok());
+            assert_eq!(maybe_nothing.unwrap(), ());
+
+            assert_eq!(mylib::get_integer(), 5);
+
+            let maybe_int = mylib::get_wrapped_integer();
+            assert!(maybe_int.is_ok());
+            assert_eq!(maybe_int.unwrap(), 5);
+
+            let maybe_b = mylib::get_wrapped_struct();
+            assert!(maybe_b.is_ok());
+            let b = maybe_b.unwrap();
+            assert_eq!(b.x, 5);
+
+            assert!(mylib::throw_exception().is_err());
+        }
+    };
+    do_run_test_manual(cxx, hdr, rs, None, None).unwrap();
+}
+
+#[test]
 fn test_nested_module() {
     let cxx = indoc! {"
         void do_nothing() {
