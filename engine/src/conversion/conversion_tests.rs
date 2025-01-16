@@ -31,7 +31,7 @@ fn do_test(input: ItemMod) {
     let inclusions = "".into();
     bc.convert(
         input,
-        UnsafePolicy::AllFunctionsSafe,
+        UnsafePolicy::ReferencesWrappedAllFunctionsSafe,
         inclusions,
         &CodegenOptions::default(),
         "",
