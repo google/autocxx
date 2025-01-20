@@ -245,8 +245,10 @@ fn test_exception_uniqueptr() {
 fn test_exception_moveit() {
     let hdr = indoc! {r#"
         #include <string>
+        #include <stdexcept>
         class B {
         public:
+            B() { throw std::invalid_argument("EXCEPTION"); }
             B(std::string s) : s(s) {}
         private:
             std::string s;
@@ -254,6 +256,7 @@ fn test_exception_moveit() {
 
         B get_b();
         B try_get_b();
+        B throw_exception();
     "#};
     let cxx = indoc! {r#"
         B get_b() {
@@ -262,6 +265,10 @@ fn test_exception_moveit() {
 
         B try_get_b() {
             return get_b();
+        }
+
+        B throw_exception() {
+            return B();
         }
     "#};
     let hexathorpe = Token![#](Span::call_site());
@@ -274,14 +281,20 @@ fn test_exception_moveit() {
                 generate!("B")
                 generate!("get_b")
                 generate!("try_get_b")
+                generate!("throw_exception")
                 throws!("try_get_b")
+                throws!("throw_exception")
             }
             pub use ffi::*;
         }
         fn main() {
             use autocxx::WithinBox;
+            use autocxx::TryWithinBox;
             let _ = a::get_b().within_box();
-            let maybe_b = a::try_get_b();
+            let maybe_b = a::try_get_b().try_within_box();
+            assert!(maybe_b.is_ok());
+            let maybe_b = a::throw_exception().try_within_box();
+            assert!(maybe_b.is_err());
         }
     };
     do_run_test_manual(cxx, hdr, rs, None, None).unwrap();
