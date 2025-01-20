@@ -673,6 +673,36 @@ where
     }
 }
 
+pub trait TryWithinUniquePtrTrivial {
+    type Inner: UniquePtrTarget + Sized + Unpin;
+    fn try_within_unique_ptr(self) -> Result<cxx::UniquePtr<Self::Inner>, cxx::Exception>;
+}
+
+impl<T> TryWithinUniquePtrTrivial for Result<T, cxx::Exception>
+where
+    T: UniquePtrTarget + ExternType<Kind = Trivial> + Sized + Unpin,
+{
+    type Inner = T;
+    fn try_within_unique_ptr(self) -> Result<cxx::UniquePtr<Self::Inner>, cxx::Exception> {
+        self.map(UniquePtr::new)
+    }
+}
+
+pub trait TryWithinBoxTrivial {
+    type Inner: Sized + Unpin;
+    fn try_within_box(self) -> Result<Pin<Box<Self::Inner>>, cxx::Exception>;
+}
+
+impl<T> TryWithinBoxTrivial for Result<T, cxx::Exception>
+where
+    T: ExternType<Kind = Trivial> + Sized + Unpin,
+{
+    type Inner = T;
+    fn try_within_box(self) -> Result<Pin<Box<Self::Inner>>, cxx::Exception> {
+        self.map(Box::pin)
+    }
+}
+
 /// Emulates the [`WithinUniquePtr`] trait, but for trivial (plain old data) types.
 /// This allows such types to behave identically if a type is changed from
 /// `generate!` to `generate_pod!`.
@@ -750,6 +780,10 @@ pub mod prelude {
     pub use crate::CppUniquePtrPin;
     pub use crate::PinMut;
     pub use crate::RValueParam;
+    pub use crate::TryWithinBox;
+    pub use crate::TryWithinBoxTrivial;
+    pub use crate::TryWithinUniquePtr;
+    pub use crate::TryWithinUniquePtrTrivial;
     pub use crate::ValueParam;
     pub use crate::WithinBox;
     pub use crate::WithinBoxTrivial;
