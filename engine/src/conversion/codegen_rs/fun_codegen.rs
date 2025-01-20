@@ -144,7 +144,8 @@ pub(super) fn gen_function(
                 ..
             } => {
                 // Constructor.
-                impl_entry = Some(fn_generator.generate_constructor_impl(impl_for));
+                impl_entry =
+                    Some(fn_generator.generate_constructor_impl(impl_for, analysis.throwable));
             }
             FnKind::Method {
                 ref impl_for,
@@ -478,8 +479,13 @@ impl<'a> FnGenerator<'a> {
     fn generate_constructor_impl(
         &self,
         impl_block_type_name: &QualifiedName,
+        throwable: bool,
     ) -> Box<ImplBlockDetails> {
-        let ret_type: ReturnType = parse_quote! { -> impl autocxx::moveit::new::New<Output=Self> };
+        let ret_type: ReturnType = if throwable {
+            parse_quote! { -> impl autocxx::moveit::new::TryNew<Output=Self, Error = cxx::Exception> }
+        } else {
+            parse_quote! { -> impl autocxx::moveit::new::New<Output=Self> }
+        };
         let (lifetime_tokens, wrapper_params, ret_type, call_body) =
             self.common_parts(true, &None, Some(ret_type));
         let rust_name = make_ident(self.rust_name);

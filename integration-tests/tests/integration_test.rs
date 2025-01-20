@@ -301,6 +301,43 @@ fn test_exception_moveit() {
 }
 
 #[test]
+fn test_exception_constructor() {
+    let hdr = indoc! {r#"
+        #include <string>
+        #include <stdexcept>
+        class B {
+        public:
+            B() { throw std::invalid_argument("EXCEPTION"); }
+            B(std::string s) : s(s) {}
+        private:
+            std::string s;
+        };
+    "#};
+    let cxx = indoc! {""};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        mod a {
+            use autocxx::prelude::*;
+            include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                generate!("B")
+                throws!("B::B")
+            }
+            pub use ffi::*;
+        }
+        fn main() {
+            use autocxx::TryWithinBox;
+            let b = a::B::new().try_within_box();
+            assert!(b.is_err());
+            let b = a::B::new1("foobar").try_within_box();
+            assert!(b.is_ok());
+        }
+    };
+    do_run_test_manual(cxx, hdr, rs, None, None).unwrap();
+}
+
+#[test]
 fn test_nested_module() {
     let cxx = indoc! {"
         void do_nothing() {
