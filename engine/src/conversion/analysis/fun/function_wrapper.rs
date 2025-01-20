@@ -199,13 +199,6 @@ impl TypeConversionPolicy {
         }
     }
 
-    pub(crate) fn make_result_type(&self) -> Type {
-        let innerty = &self.unwrapped_type;
-        parse_quote! {
-            Result< #innerty , cxx::Exception >
-        }
-    }
-
     pub(crate) fn rust_work_needed(&self) -> bool {
         !matches!(self.rust_conversion, RustConversionType::None)
     }
