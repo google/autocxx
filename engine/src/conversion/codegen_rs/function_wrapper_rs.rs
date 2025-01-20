@@ -236,7 +236,7 @@ impl TypeConversionPolicy {
                     conversion,
                     conversion_requires_unsafe,
                 } => {
-                    let ty = parse_quote!( ::std::result::Result< #ty, ::cxx::Exception> );
+                    let ty = parse_quote!( impl autocxx::moveit::new::TryNew<Output = #ty, Error =::cxx::Exception> );
                     RustParamConversion::Param {
                         ty,
                         local_variables,

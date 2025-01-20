@@ -93,7 +93,6 @@ pub(super) fn gen_function(
     non_pod_types: &HashSet<QualifiedName>,
     config: &IncludeCppConfig,
 ) -> RsCodegenResult {
-    eprintln!("===DBG{{gen_function}}=== ns={ns}, fun={fun:?}, cpp_call_name={cpp_call_name}");
     if analysis.ignore_reason.is_err() || !analysis.externally_callable {
         return RsCodegenResult::default();
     }
@@ -120,6 +119,7 @@ pub(super) fn gen_function(
         param_details: &param_details,
         cxxbridge_name: &cxxbridge_name,
         rust_name,
+        throwable: analysis.throwable,
         unsafety: &analysis.requires_unsafe,
         always_unsafe_due_to_trait_definition,
         doc_attrs: &doc_attrs,
@@ -243,6 +243,7 @@ struct FnGenerator<'a> {
     param_details: &'a [ArgumentAnalysis],
     ret_conversion: &'a Option<TypeConversionPolicy>,
     ret_type: &'a ReturnType,
+    throwable: bool,
     cxxbridge_name: &'a Ident,
     rust_name: &'a str,
     unsafety: &'a UnsafetyNeeded,
@@ -304,8 +305,14 @@ impl<'a> FnGenerator<'a> {
                 }
                 RustParamConversion::ReturnValue { ty } => {
                     ptr_arg_name = Some(pd.name.to_token_stream());
-                    ret_type = Cow::Owned(parse_quote! {
-                        -> impl autocxx::moveit::new::New<Output = #ty>
+                    ret_type = Cow::Owned(if self.throwable {
+                        parse_quote! {
+                            -> impl autocxx::moveit::new::TryNew<Output = #ty, Error = cxx::Exception>
+                        }
+                    } else {
+                        parse_quote! {
+                            -> impl autocxx::moveit::new::New<Output = #ty>
+                        }
                     });
                     arg_list.push(pd.name.to_token_stream());
                 }
@@ -380,10 +387,18 @@ impl<'a> FnGenerator<'a> {
             ));
             closure_stmts.push(call_body);
             let closure_stmts = maybe_unsafes_to_tokens(closure_stmts, true);
-            vec![MaybeUnsafeStmt::needs_unsafe(parse_quote! {
-                autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
-                    #closure_stmts
-                })
+            vec![MaybeUnsafeStmt::needs_unsafe(if self.throwable {
+                parse_quote! {
+                    autocxx::moveit::new::try_by_raw(move |#ptr_arg_name| {
+                        #closure_stmts
+                    })
+                }
+            } else {
+                parse_quote! {
+                    autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
+                        #closure_stmts
+                    })
+                }
             })]
         } else {
             let mut call_stmts = local_variables;

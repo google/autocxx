@@ -589,6 +589,11 @@ pub trait WithinUniquePtr {
     fn within_unique_ptr(self) -> cxx::UniquePtr<Self::Inner>;
 }
 
+pub trait TryWithinUniquePtr {
+    type Inner: UniquePtrTarget + MakeCppStorage;
+    fn try_within_unique_ptr(self) -> Result<cxx::UniquePtr<Self::Inner>, cxx::Exception>;
+}
+
 /// Provides utility functions to emplace any [`moveit::New`] into a
 /// [`Box`]. Automatically imported by the autocxx prelude
 /// and implemented by any (autocxx-related) [`moveit::New`].
@@ -605,6 +610,12 @@ pub trait WithinBox {
     /// `safety!(unsafe_references_wrapped`) directive. If you haven't done
     /// that, ignore this function.
     fn within_cpp_pin(self) -> CppPin<Self::Inner>;
+}
+
+pub trait TryWithinBox {
+    type Inner;
+    fn try_within_box(self) -> Result<Pin<Box<Self::Inner>>, cxx::Exception>;
+    fn try_within_cpp_pin(self) -> Result<CppPin<Self::Inner>, cxx::Exception>;
 }
 
 use cxx::kind::Trivial;
@@ -633,6 +644,32 @@ where
     }
     fn within_cpp_pin(self) -> CppPin<Self::Inner> {
         CppPin::from_pinned_box(Box::emplace(self))
+    }
+}
+
+impl<N, T> TryWithinUniquePtr for N
+where
+    N: TryNew<Output = T, Error = cxx::Exception>,
+    T: UniquePtrTarget + MakeCppStorage,
+{
+    type Inner = T;
+    fn try_within_unique_ptr(self) -> Result<cxx::UniquePtr<T>, cxx::Exception> {
+        UniquePtr::try_emplace(self)
+    }
+}
+
+impl<N, T> TryWithinBox for N
+where
+    N: TryNew<Output = T, Error = cxx::Exception>,
+{
+    type Inner = T;
+
+    fn try_within_box(self) -> Result<Pin<Box<T>>, cxx::Exception> {
+        Box::try_emplace(self)
+    }
+
+    fn try_within_cpp_pin(self) -> Result<CppPin<T>, cxx::Exception> {
+        Box::try_emplace(self).map(CppPin::from_pinned_box)
     }
 }
 
@@ -679,6 +716,7 @@ where
 use cxx::memory::UniquePtrTarget;
 use cxx::UniquePtr;
 use moveit::New;
+use moveit::TryNew;
 pub use rvalue_param::RValueParam;
 pub use rvalue_param::RValueParamHandler;
 pub use value_param::as_copy;

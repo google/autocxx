@@ -155,7 +155,7 @@ fn test_exception_pod() {
     "#};
     let hexathorpe = Token![#](Span::call_site());
     let rs = quote! {
-        mod mylib {
+        mod a {
             use autocxx::prelude::*;
             include_cpp! {
                 #hexathorpe include "input.h"
@@ -174,22 +174,114 @@ fn test_exception_pod() {
             pub use ffi::*;
         }
         fn main() {
-            let maybe_nothing = mylib::do_nothing();
+            let maybe_nothing = a::do_nothing();
             assert!(maybe_nothing.is_ok());
             assert_eq!(maybe_nothing.unwrap(), ());
 
-            assert_eq!(mylib::get_integer(), 5);
+            assert_eq!(a::get_integer(), 5);
 
-            let maybe_int = mylib::get_wrapped_integer();
+            let maybe_int = a::get_wrapped_integer();
             assert!(maybe_int.is_ok());
             assert_eq!(maybe_int.unwrap(), 5);
 
-            let maybe_b = mylib::get_wrapped_struct();
+            let maybe_b = a::get_wrapped_struct();
             assert!(maybe_b.is_ok());
             let b = maybe_b.unwrap();
             assert_eq!(b.x, 5);
 
-            assert!(mylib::throw_exception().is_err());
+            assert!(a::throw_exception().is_err());
+        }
+    };
+    do_run_test_manual(cxx, hdr, rs, None, None).unwrap();
+}
+
+#[test]
+fn test_exception_uniqueptr() {
+    let hdr = indoc! {r#"
+        #include <string>
+        #include <stdexcept>
+
+        std::string get_str();
+        std::string try_get_str();
+        std::string throw_exception();
+    "#};
+    let cxx = indoc! {r#"
+        std::string get_str() {
+            return std::string("foobar");
+        }
+
+        std::string try_get_str() {
+            return get_str();
+        }
+
+        std::string throw_exception() {
+            throw std::invalid_argument("EXCEPTION");
+        }
+    "#};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        mod a {
+            use autocxx::prelude::*;
+            include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                generate!("get_str")
+                generate!("try_get_str")
+                generate!("throw_exception")
+                throws!("try_get_str")
+                throws!("throw_exception")
+            }
+            pub use ffi::*;
+        }
+        fn main() {
+            assert!(a::try_get_str().is_ok());
+            assert!(a::throw_exception().is_err());
+        }
+    };
+    do_run_test_manual(cxx, hdr, rs, None, None).unwrap();
+}
+
+#[test]
+fn test_exception_moveit() {
+    let hdr = indoc! {r#"
+        #include <string>
+        class B {
+        public:
+            B(std::string s) : s(s) {}
+        private:
+            std::string s;
+        };
+
+        B get_b();
+        B try_get_b();
+    "#};
+    let cxx = indoc! {r#"
+        B get_b() {
+            return B("foobar");
+        }
+
+        B try_get_b() {
+            return get_b();
+        }
+    "#};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        mod a {
+            use autocxx::prelude::*;
+            include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                generate!("B")
+                generate!("get_b")
+                generate!("try_get_b")
+                throws!("try_get_b")
+            }
+            pub use ffi::*;
+        }
+        fn main() {
+            use autocxx::WithinBox;
+            let _ = a::get_b().within_box();
+            let maybe_b = a::try_get_b();
         }
     };
     do_run_test_manual(cxx, hdr, rs, None, None).unwrap();

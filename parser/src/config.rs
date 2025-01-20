@@ -417,9 +417,7 @@ impl IncludeCppConfig {
     }
 
     pub fn is_throwable(&self, fun: &str) -> bool {
-        let r = self.throwlist.iter().any(|f| f == fun);
-        eprintln!("===DBG{{is_throwable}}=== {fun} == {r:?}");
-        r
+        self.throwlist.iter().any(|f| f == fun)
     }
 
     fn is_rust_type_name(&self, possible_ty: &str) -> bool {
