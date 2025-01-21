@@ -12,6 +12,7 @@ use autocxx_integration_tests::{directives_from_lists, do_run_test};
 use indoc::indoc;
 use proc_macro2::TokenStream;
 use quote::quote;
+use test_log::test;
 
 const fn arbitrary_self_types_supported() -> bool {
     rustversion::cfg!(nightly)
