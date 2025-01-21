@@ -167,6 +167,8 @@ pub(crate) struct FnAnalysis {
     /// subclass entries for them. But we do not want to have them
     /// be externally callable.
     pub(crate) ignore_reason: Result<(), ConvertErrorWithContext>,
+    /// Whether this method can throw an exception
+    pub(crate) throwable: bool,
     /// Whether this can be called by external code. Not so for
     /// protected methods.
     pub(crate) externally_callable: bool,
@@ -825,7 +827,7 @@ impl<'a> FnAnalyzer<'a> {
         );
         let (kind, error_context, rust_name) = if let Some(trait_details) = trait_details {
             trait_details
-        } else if let Some(self_ty) = self_ty {
+        } else if let Some(ref self_ty) = self_ty {
             // Some kind of method or static method.
             let type_ident = self_ty.get_final_item();
             // bindgen generates methods with the name:
@@ -837,7 +839,7 @@ impl<'a> FnAnalyzer<'a> {
             let mut rust_name = ideal_rust_name;
             let nested_type_ident = self
                 .nested_type_name_map
-                .get(&self_ty)
+                .get(self_ty)
                 .map(|s| s.as_str())
                 .unwrap_or_else(|| self_ty.get_final_item());
             if matches!(
@@ -851,7 +853,7 @@ impl<'a> FnAnalyzer<'a> {
                 }
                 rust_name = predetermined_rust_name
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
-                let error_context = self.error_context_for_method(&self_ty, &rust_name);
+                let error_context = self.error_context_for_method(self_ty, &rust_name);
 
                 // If this is 'None', then something weird is going on. We'll check for that
                 // later when we have enough context to generate useful errors.
@@ -883,7 +885,7 @@ impl<'a> FnAnalyzer<'a> {
                     (
                         FnKind::TraitMethod {
                             kind,
-                            impl_for: self_ty,
+                            impl_for: self_ty.clone(),
                             details: Box::new(TraitMethodDetails {
                                 trt: TraitImplSignature {
                                     ty: ty.into(),
@@ -904,7 +906,7 @@ impl<'a> FnAnalyzer<'a> {
                 } else {
                     (
                         FnKind::Method {
-                            impl_for: self_ty,
+                            impl_for: self_ty.clone(),
                             method_kind: MethodKind::Constructor { is_default: false },
                         },
                         error_context,
@@ -914,12 +916,12 @@ impl<'a> FnAnalyzer<'a> {
             } else if matches!(fun.special_member, Some(SpecialMemberKind::Destructor)) {
                 rust_name = predetermined_rust_name
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
-                let error_context = self.error_context_for_method(&self_ty, &rust_name);
+                let error_context = self.error_context_for_method(self_ty, &rust_name);
                 let ty = Type::Path(self_ty.to_type_path());
                 (
                     FnKind::TraitMethod {
                         kind: TraitMethodKind::Destructor,
-                        impl_for: self_ty,
+                        impl_for: self_ty.clone(),
                         details: Box::new(TraitMethodDetails {
                             trt: TraitImplSignature {
                                 ty: ty.into(),
@@ -973,10 +975,10 @@ impl<'a> FnAnalyzer<'a> {
                 // Disambiguate overloads.
                 let rust_name = predetermined_rust_name
                     .unwrap_or_else(|| self.get_overload_name(ns, type_ident, rust_name));
-                let error_context = self.error_context_for_method(&self_ty, &rust_name);
+                let error_context = self.error_context_for_method(self_ty, &rust_name);
                 (
                     FnKind::Method {
-                        impl_for: self_ty,
+                        impl_for: self_ty.clone(),
                         method_kind,
                     },
                     error_context,
@@ -1195,6 +1197,16 @@ impl<'a> FnAnalyzer<'a> {
             cpp_name = Some(rust_name.clone());
         }
         let mut cxxbridge_name = make_ident(&cxxbridge_name);
+
+        let friendly_name = {
+            let ns_pfx = (!ns.is_empty())
+                .then_some(format!("{ns}::"))
+                .unwrap_or_default();
+            let ty_pfx = self_ty.map_or(String::default(), |ty| format!("{ty}::"));
+
+            format!("{ns_pfx}{ty_pfx}{}", name.cpp_name())
+        };
+        let throwable = self.config.is_throwable(&friendly_name);
 
         // Analyze the return type, just as we previously did for the
         // parameters.
@@ -1432,6 +1444,12 @@ impl<'a> FnAnalyzer<'a> {
             _ => RustRenameStrategy::None,
         };
 
+        let ret_type_conversion = if throwable {
+            ret_type_conversion.map(|c| c.wrap_result())
+        } else {
+            ret_type_conversion
+        };
+
         let analysis = FnAnalysis {
             cxxbridge_name: cxxbridge_name.clone(),
             rust_name: rust_name.clone(),
@@ -1444,6 +1462,7 @@ impl<'a> FnAnalyzer<'a> {
             requires_unsafe,
             vis: vis.into(),
             cpp_wrapper,
+            throwable,
             deps,
             ignore_reason,
             externally_callable,
