@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use autocxx_parser::IncludeCppConfig;
 use indexmap::set::IndexSet as HashSet;
 use std::borrow::Cow;
 
@@ -24,7 +23,7 @@ use super::{
     function_wrapper_rs::RustParamConversion,
     maybe_unsafes_to_tokens,
     unqualify::{unqualify_params, unqualify_ret_type},
-    ImplBlockDetails, ImplBlockKey, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
+    ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
 };
 use crate::{
     conversion::{
@@ -32,7 +31,7 @@ use crate::{
             function_wrapper::TypeConversionPolicy, ArgumentAnalysis, FnAnalysis, FnKind,
             MethodKind, RustRenameStrategy, TraitMethodDetails,
         },
-        api::{Pointerness, UnsafetyNeeded},
+        api::UnsafetyNeeded,
     },
     minisyn::minisynize_vec,
     types::{Namespace, QualifiedName},
@@ -91,7 +90,6 @@ pub(super) fn gen_function(
     analysis: FnAnalysis,
     cpp_call_name: String,
     non_pod_types: &HashSet<QualifiedName>,
-    config: &IncludeCppConfig,
 ) -> RsCodegenResult {
     if analysis.ignore_reason.is_err() || !analysis.externally_callable {
         return RsCodegenResult::default();
@@ -125,7 +123,6 @@ pub(super) fn gen_function(
         non_pod_types,
         ret_type: &ret_type,
         ret_conversion: &ret_conversion,
-        reference_wrappers: config.unsafe_policy.requires_cpprefs(),
     };
     // In rare occasions, we might need to give an explicit lifetime.
     let (lifetime_tokens, params, ret_type) = add_explicit_lifetime_if_necessary(
@@ -133,6 +130,7 @@ pub(super) fn gen_function(
         params,
         Cow::Borrowed(&ret_type),
         non_pod_types,
+        &ret_conversion,
     );
 
     if analysis.rust_wrapper_needed {
@@ -238,7 +236,6 @@ struct FnGenerator<'a> {
     always_unsafe_due_to_trait_definition: bool,
     doc_attrs: &'a Vec<Attribute>,
     non_pod_types: &'a HashSet<QualifiedName>,
-    reference_wrappers: bool,
 }
 
 impl<'a> FnGenerator<'a> {
@@ -308,6 +305,7 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             ret_type,
             self.non_pod_types,
+            self.ret_conversion,
         );
 
         let cxxbridge_name = self.cxxbridge_name;
@@ -394,31 +392,7 @@ impl<'a> FnGenerator<'a> {
         let rust_name = make_ident(self.rust_name);
         let unsafety = self.unsafety.wrapper_token();
         let doc_attrs = self.doc_attrs;
-        let receiver_pointerness = self
-            .param_details
-            .iter()
-            .next()
-            .map(|pd| pd.conversion.is_a_pointer())
-            .unwrap_or(Pointerness::Not);
         let ty = impl_block_type_name.get_final_ident();
-        let ty = match receiver_pointerness {
-            Pointerness::MutPtr if self.reference_wrappers => ImplBlockKey {
-                ty: parse_quote! {
-                    #ty
-                },
-                lifetime: Some(parse_quote! { 'a }),
-            },
-            Pointerness::ConstPtr if self.reference_wrappers => ImplBlockKey {
-                ty: parse_quote! {
-                    #ty
-                },
-                lifetime: Some(parse_quote! { 'a }),
-            },
-            _ => ImplBlockKey {
-                ty: parse_quote! { # ty },
-                lifetime: None,
-            },
-        };
         Box::new(ImplBlockDetails {
             item: ImplItem::Fn(parse_quote! {
                 #(#doc_attrs)*
@@ -426,7 +400,7 @@ impl<'a> FnGenerator<'a> {
                     #call_body
                 }
             }),
-            ty,
+            ty: parse_quote! { # ty },
         })
     }
 
@@ -469,7 +443,7 @@ impl<'a> FnGenerator<'a> {
         };
         Box::new(ImplBlockDetails {
             item: ImplItem::Fn(parse_quote! { #stuff }),
-            ty: ImplBlockKey { ty, lifetime: None },
+            ty,
         })
     }
 

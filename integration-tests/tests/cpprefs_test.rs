@@ -12,6 +12,7 @@ use autocxx_integration_tests::{directives_from_lists, do_run_test};
 use indoc::indoc;
 use proc_macro2::TokenStream;
 use quote::quote;
+use test_log::test;
 
 const fn arbitrary_self_types_supported() -> bool {
     rustversion::cfg!(nightly)
@@ -106,4 +107,29 @@ fn test_method_call_const() {
         &["Goat"],
         &[],
     )
+}
+
+#[test]
+fn test_return_reference_cpprefs() {
+    let cxx = indoc! {"
+        const Bob& give_bob(const Bob& input_bob) {
+            return input_bob;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        const Bob& give_bob(const Bob& input_bob);
+    "};
+    let rs = quote! {
+        let b = CppPin::new(ffi::Bob { a: 3, b: 4 });
+        let b_ref = b.as_cpp_ref();
+        let bob = ffi::give_bob(&b_ref);
+        let val = unsafe { bob.as_ref() };
+        assert_eq!(val.b, 4);
+    };
+    run_cpprefs_test(cxx, hdr, rs, &["give_bob"], &["Bob"]);
 }

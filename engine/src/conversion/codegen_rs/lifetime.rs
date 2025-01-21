@@ -7,7 +7,8 @@
 // except according to those terms.
 use crate::{
     conversion::analysis::fun::{
-        function_wrapper::RustConversionType, ArgumentAnalysis, ReceiverMutability,
+        function_wrapper::{RustConversionType, TypeConversionPolicy},
+        ArgumentAnalysis, ReceiverMutability,
     },
     types::QualifiedName,
 };
@@ -22,7 +23,7 @@ use syn::{
 
 /// Function which can add explicit lifetime parameters to function signatures
 /// where necessary, based on analysis of parameters and return types.
-/// This is necessary in three cases:
+/// This is necessary in four cases:
 /// 1) where the parameter is a Pin<&mut T>
 ///    and the return type is some kind of reference - because lifetime elision
 ///    is not smart enough to see inside a Pin.
@@ -31,11 +32,13 @@ use syn::{
 ///    built-in type
 /// 3) Any parameter is any form of reference, and we're returning an `impl New`
 ///    3a) an 'impl ValueParam' counts as a reference.
+/// 4) If we're using CppRef<'a, T> as a param or return type
 pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     param_details: &[ArgumentAnalysis],
     mut params: Punctuated<FnArg, Comma>,
     ret_type: Cow<'r, ReturnType>,
     non_pod_types: &HashSet<QualifiedName>,
+    ret_conversion: &Option<TypeConversionPolicy>,
 ) -> (
     Option<TokenStream>,
     Punctuated<FnArg, Comma>,
@@ -53,12 +56,31 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                 RustConversionType::FromValueParamToPtr
             )
     });
+
+    let any_param_is_cppref = param_details.iter().any(|pd| {
+        matches!(
+            pd.conversion.rust_conversion,
+            RustConversionType::FromReferenceWrapperToPointer
+        )
+    });
     let return_type_is_impl = return_type_is_impl(&ret_type);
+    let return_type_is_cppref = matches!(
+        ret_conversion,
+        Some(TypeConversionPolicy {
+            rust_conversion: RustConversionType::FromPointerToReferenceWrapper,
+            ..
+        })
+    );
     let non_pod_ref_param = reference_parameter_is_non_pod_reference(&params, non_pod_types);
     let ret_type_pod = return_type_is_pod_or_known_type_reference(&ret_type, non_pod_types);
     let returning_impl_with_a_reference_param = return_type_is_impl && any_param_is_reference;
     let hits_1024_bug = non_pod_ref_param && ret_type_pod;
-    if !(has_mutable_receiver || hits_1024_bug || returning_impl_with_a_reference_param) {
+    if !(has_mutable_receiver
+        || hits_1024_bug
+        || returning_impl_with_a_reference_param
+        || return_type_is_cppref
+        || any_param_is_cppref)
+    {
         return (None, params, ret_type);
     }
     let new_return_type = match ret_type.as_ref() {
@@ -89,6 +111,9 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     };
 
     match new_return_type {
+        None if return_type_is_cppref || any_param_is_cppref => {
+            (Some(quote! { <'a> }), params, ret_type)
+        }
         None => (None, params, ret_type),
         Some(new_return_type) => {
             for FnArg::Typed(PatType { ty, .. }) | FnArg::Receiver(syn::Receiver { ty, .. }) in
