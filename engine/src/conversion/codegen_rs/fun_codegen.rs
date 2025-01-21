@@ -96,7 +96,6 @@ pub(super) fn gen_function(
     }
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = &analysis.rust_name;
-    eprintln!("GENERATING {rust_name}");
     let ret_type = analysis.ret_type;
     let ret_conversion = analysis.ret_conversion;
     let param_details = analysis.param_details;
