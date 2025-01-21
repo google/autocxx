@@ -719,10 +719,3 @@ impl<T: AnalysisPhase> Api<T> {
         Ok(Box::new(std::iter::once(Api::Enum { name, item })))
     }
 }
-
-/// Whether a type is a pointer of some kind.
-pub(crate) enum Pointerness {
-    Not,
-    ConstPtr,
-    MutPtr,
-}

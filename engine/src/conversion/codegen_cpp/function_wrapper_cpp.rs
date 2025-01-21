@@ -10,7 +10,6 @@ use syn::{Type, TypePtr};
 
 use crate::conversion::{
     analysis::fun::function_wrapper::{CppConversionType, TypeConversionPolicy},
-    api::Pointerness,
     ConvertErrorFromCpp,
 };
 
@@ -61,17 +60,6 @@ impl TypeConversionPolicy {
         cpp_name_map: &CppNameMap,
     ) -> Result<String, ConvertErrorFromCpp> {
         cpp_name_map.type_to_cpp(self.cxxbridge_type())
-    }
-
-    pub(crate) fn is_a_pointer(&self) -> Pointerness {
-        match self.cxxbridge_type() {
-            Type::Ptr(TypePtr {
-                mutability: Some(_),
-                ..
-            }) => Pointerness::MutPtr,
-            Type::Ptr(_) => Pointerness::ConstPtr,
-            _ => Pointerness::Not,
-        }
     }
 
     fn unique_ptr_wrapped_type(

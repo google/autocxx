@@ -32,7 +32,7 @@ use syn::{
 ///    built-in type
 /// 3) Any parameter is any form of reference, and we're returning an `impl New`
 ///    3a) an 'impl ValueParam' counts as a reference.
-/// 4) If we're using CppRef<'a, T> as a return type
+/// 4) If we're using CppRef<'a, T> as a param or return type
 pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     param_details: &[ArgumentAnalysis],
     mut params: Punctuated<FnArg, Comma>,
@@ -56,6 +56,13 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                 RustConversionType::FromValueParamToPtr
             )
     });
+
+    let any_param_is_cppref = param_details.iter().any(|pd| {
+        matches!(
+            pd.conversion.rust_conversion,
+            RustConversionType::FromReferenceWrapperToPointer
+        )
+    });
     let return_type_is_impl = return_type_is_impl(&ret_type);
     let return_type_is_cppref = matches!(
         ret_conversion,
@@ -71,7 +78,8 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
     if !(has_mutable_receiver
         || hits_1024_bug
         || returning_impl_with_a_reference_param
-        || return_type_is_cppref)
+        || return_type_is_cppref
+        || any_param_is_cppref)
     {
         return (None, params, ret_type);
     }
@@ -97,18 +105,15 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
                     #rarrow #old_tyit + 'a
                 })
             }
-            Type::Ptr(_) if return_type_is_cppref => {
-                // The ptr will be converted to CppRef<'a, T> elsewhere, so we
-                // just need to return the return type as-is such that the
-                // next match statement adds <'a> to the function.
-                Some(ret_type.clone().into_owned())
-            }
             _ => None,
         },
         _ => None,
     };
 
     match new_return_type {
+        None if return_type_is_cppref || any_param_is_cppref => {
+            (Some(quote! { <'a> }), params, ret_type)
+        }
         None => (None, params, ret_type),
         Some(new_return_type) => {
             for FnArg::Typed(PatType { ty, .. }) | FnArg::Receiver(syn::Receiver { ty, .. }) in
