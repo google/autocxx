@@ -431,7 +431,7 @@ pub fn do_run_test_manual(
 
     rust_code.append_all(quote! {
         #[link(name="autocxx-demo")]
-        extern {}
+        extern "C" {}
     });
     info!("Unexpanded Rust: {}", rust_code);
 
