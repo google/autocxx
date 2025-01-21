@@ -133,6 +133,7 @@ pub(super) fn gen_function(
         params,
         Cow::Borrowed(&ret_type),
         non_pod_types,
+        &ret_conversion,
     );
 
     if analysis.rust_wrapper_needed {
@@ -308,6 +309,7 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             ret_type,
             self.non_pod_types,
+            self.ret_conversion,
         );
 
         let cxxbridge_name = self.cxxbridge_name;

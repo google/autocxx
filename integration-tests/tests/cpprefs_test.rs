@@ -124,8 +124,11 @@ fn test_return_reference_cpprefs() {
         const Bob& give_bob(const Bob& input_bob);
     "};
     let rs = quote! {
-        let b = ffi::Bob { a: 3, b: 4 };
-        assert_eq!(ffi::give_bob(&b).b, 4);
+        let b = CppPin::new(ffi::Bob { a: 3, b: 4 });
+        let b_ref = b.as_cpp_ref();
+        let bob = ffi::give_bob(&b_ref);
+        let val = unsafe { bob.as_ref() };
+        assert_eq!(val.b, 4);
     };
     run_cpprefs_test(cxx, hdr, rs, &["give_bob"], &["Bob"]);
 }
