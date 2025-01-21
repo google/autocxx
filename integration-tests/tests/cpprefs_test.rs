@@ -107,3 +107,25 @@ fn test_method_call_const() {
         &[],
     )
 }
+
+#[test]
+fn test_return_reference_cpprefs() {
+    let cxx = indoc! {"
+        const Bob& give_bob(const Bob& input_bob) {
+            return input_bob;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bob {
+            uint32_t a;
+            uint32_t b;
+        };
+        const Bob& give_bob(const Bob& input_bob);
+    "};
+    let rs = quote! {
+        let b = ffi::Bob { a: 3, b: 4 };
+        assert_eq!(ffi::give_bob(&b).b, 4);
+    };
+    run_cpprefs_test(cxx, hdr, rs, &["give_bob"], &["Bob"]);
+}
