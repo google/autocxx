@@ -466,6 +466,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// A forward declaration, which we mustn't store in a UniquePtr.
     ForwardDeclaration {
         name: ApiName,
+        is_templated: bool,
         /// If we found a problem parsing this forward declaration, we'll
         /// ephemerally store the error here, as opposed to immediately
         /// converting it to an `IgnoredItem`. That's because the
@@ -490,6 +491,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
         name: ApiName,
         rs_definition: Option<Box<Type>>,
         cpp_definition: String,
+        depends_on_forward_declaration: bool,
     },
     /// A simple note that we want to make a constructor for
     /// a `std::string` on the heap.

@@ -93,6 +93,7 @@ pub(crate) fn replace_hopeless_typedef_targets(
             Api::ForwardDeclaration {
                 name,
                 err: Some(ConvertErrorWithContext(err, ctx)),
+                ..
             } => Api::IgnoredItem { name, err, ctx },
             _ => api,
         })
