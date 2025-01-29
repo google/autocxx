@@ -15,7 +15,7 @@ pub trait HasNs {
 
 pub struct NamespaceEntries<'a, T: HasNs> {
     entries: Vec<&'a T>,
-    children: BTreeMap<&'a String, NamespaceEntries<'a, T>>,
+    children: BTreeMap<&'a str, NamespaceEntries<'a, T>>,
 }
 
 impl<'a, T: HasNs> NamespaceEntries<'a, T> {
@@ -32,7 +32,7 @@ impl<'a, T: HasNs> NamespaceEntries<'a, T> {
         &self.entries
     }
 
-    pub(crate) fn children(&self) -> impl Iterator<Item = (&&String, &NamespaceEntries<T>)> {
+    pub(crate) fn children(&self) -> impl Iterator<Item = (&&str, &NamespaceEntries<T>)> {
         self.children.iter()
     }
 

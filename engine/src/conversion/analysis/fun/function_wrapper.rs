@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::conversion::CppEffectiveName;
 use crate::minisyn::Ident;
 use crate::{
     conversion::{api::SubclassName, type_helpers::extract_pinned_mutable_reference_type},
@@ -233,8 +234,8 @@ impl TypeConversionPolicy {
 
 #[derive(Clone, Debug)]
 pub(crate) enum CppFunctionBody {
-    FunctionCall(Namespace, Ident),
-    StaticMethodCall(Namespace, Ident, Ident),
+    FunctionCall(Namespace, CppEffectiveName),
+    StaticMethodCall(Namespace, Ident, CppEffectiveName),
     PlacementNew(Namespace, Ident),
     ConstructSuperclass(String),
     Cast,
@@ -256,7 +257,7 @@ pub(crate) enum CppFunctionKind {
 pub(crate) struct CppFunction {
     pub(crate) payload: CppFunctionBody,
     pub(crate) wrapper_function_name: crate::minisyn::Ident,
-    pub(crate) original_cpp_name: String,
+    pub(crate) original_cpp_name: CppEffectiveName,
     pub(crate) return_conversion: Option<TypeConversionPolicy>,
     pub(crate) argument_conversion: Vec<TypeConversionPolicy>,
     pub(crate) kind: CppFunctionKind,

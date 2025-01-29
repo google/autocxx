@@ -11,5 +11,5 @@ mod extern_fun_signatures;
 mod parse_bindgen;
 mod parse_foreign_mod;
 
-pub(crate) use bindgen_semantic_attributes::BindgenSemanticAttributes;
+pub(crate) use bindgen_semantic_attributes::{BindgenSemanticAttributes, CppOriginalName};
 pub(crate) use parse_bindgen::ParseBindgen;

@@ -24,9 +24,9 @@ use crate::{
             TraitSynthesis, UnsafetyNeeded, Virtualness,
         },
         apivec::ApiVec,
-        convert_error::ErrorContext,
-        convert_error::{ConvertErrorWithContext, ErrorContextType},
+        convert_error::{ConvertErrorWithContext, ErrorContext, ErrorContextType},
         error_reporter::{convert_apis, report_any_error},
+        CppEffectiveName, CppOriginalName,
     },
     known_types::known_types,
     minisyn::minisynize_punctuated,
@@ -421,15 +421,10 @@ impl<'a> FnAnalyzer<'a> {
     fn build_nested_type_map(apis: &ApiVec<PodPhase>) -> HashMap<QualifiedName, String> {
         apis.iter()
             .filter_map(|api| match api {
-                Api::Struct { name, .. } | Api::Enum { name, .. } => {
-                    let cpp_name = name
-                        .cpp_name_if_present()
-                        .cloned()
-                        .unwrap_or_else(|| name.name.get_final_item().to_string());
-                    cpp_name
-                        .rsplit_once("::")
-                        .map(|(_, suffix)| (name.name.clone(), suffix.to_string()))
-                }
+                Api::Struct { name, .. } | Api::Enum { name, .. } => name
+                    .cpp_name()
+                    .final_segment_if_any()
+                    .map(|suffix| (name.name.clone(), suffix.to_string())),
                 _ => None,
             })
             .collect()
@@ -727,7 +722,10 @@ impl<'a> FnAnalyzer<'a> {
         sophistication: TypeConversionSophistication,
         predetermined_rust_name: Option<String>,
     ) -> (FnAnalysis, ApiName) {
-        let mut cpp_name = name.cpp_name_if_present().cloned();
+        let mut cpp_name = name
+            .cpp_name_if_present()
+            .cloned()
+            .map(|n| n.to_effective_name());
         let ns = name.name.get_namespace();
 
         // Let's gather some pre-wisdom about the name of the function.
@@ -735,7 +733,10 @@ impl<'a> FnAnalyzer<'a> {
         // and it would be nice to have some idea of the function name
         // for diagnostics whilst we do that.
         let initial_rust_name = fun.ident.to_string();
-        let diagnostic_display_name = cpp_name.as_ref().unwrap_or(&initial_rust_name);
+        let diagnostic_display_name = cpp_name
+            .as_ref()
+            .map(|n| n.diagnostic_display_name())
+            .unwrap_or(&initial_rust_name);
 
         // Now let's analyze all the parameters.
         // See if any have annotations which our fork of bindgen has craftily inserted...
@@ -793,9 +794,9 @@ impl<'a> FnAnalyzer<'a> {
                 if initial_rust_name.ends_with('_') {
                     initial_rust_name // case 2
                 } else if validate_ident_ok_for_rust(cpp_name).is_err() {
-                    format!("{cpp_name}_") // case 5
+                    format!("{}_", cpp_name.to_string_for_rust_name()) // case 5
                 } else {
-                    cpp_name.to_string() // cases 3, 4, 6
+                    cpp_name.to_string_for_rust_name() // cases 3, 4, 6
                 }
             }
         };
@@ -1192,7 +1193,7 @@ impl<'a> FnAnalyzer<'a> {
             ns,
         );
         if cxxbridge_name != rust_name && cpp_name.is_none() {
-            cpp_name = Some(rust_name.clone());
+            cpp_name = Some(CppEffectiveName::from_rust_name(rust_name.clone()));
         }
         let mut cxxbridge_name = make_ident(&cxxbridge_name);
 
@@ -1271,9 +1272,10 @@ impl<'a> FnAnalyzer<'a> {
             .unwrap_or_default();
 
         // See https://github.com/dtolnay/cxx/issues/878 for the reason for this next line.
-        let effective_cpp_name = cpp_name.as_ref().unwrap_or(&rust_name);
+        let effective_cpp_name =
+            CppEffectiveName::from_cpp_name_and_rust_name(cpp_name.as_ref(), &rust_name);
         let cpp_name_incompatible_with_cxx =
-            validate_ident_ok_for_rust(effective_cpp_name).is_err();
+            validate_ident_ok_for_rust(&effective_cpp_name).is_err();
         // If possible, we'll put knowledge of the C++ API directly into the cxx::bridge
         // mod. However, there are various circumstances where cxx can't work with the existing
         // C++ API and we need to create a C++ wrapper function which is more cxx-compliant.
@@ -1307,7 +1309,6 @@ impl<'a> FnAnalyzer<'a> {
         let cpp_wrapper = if wrapper_function_needed {
             // Generate a new layer of C++ code to wrap/unwrap parameters
             // and return values into/out of std::unique_ptrs.
-            let cpp_construction_ident = make_ident(effective_cpp_name);
             let joiner = if cxxbridge_name.to_string().ends_with('_') {
                 ""
             } else {
@@ -1349,16 +1350,16 @@ impl<'a> FnAnalyzer<'a> {
                         CppFunctionBody::StaticMethodCall(
                             ns.clone(),
                             impl_for.get_final_ident(),
-                            cpp_construction_ident,
+                            effective_cpp_name,
                         ),
                         CppFunctionKind::Function,
                     ),
                     FnKind::Method { .. } => (
-                        CppFunctionBody::FunctionCall(ns.clone(), cpp_construction_ident),
+                        CppFunctionBody::FunctionCall(ns.clone(), effective_cpp_name),
                         CppFunctionKind::Method,
                     ),
                     _ => (
-                        CppFunctionBody::FunctionCall(ns.clone(), cpp_construction_ident),
+                        CppFunctionBody::FunctionCall(ns.clone(), effective_cpp_name),
                         CppFunctionKind::Function,
                     ),
                 },
@@ -1390,10 +1391,9 @@ impl<'a> FnAnalyzer<'a> {
             Some(CppFunction {
                 payload,
                 wrapper_function_name: cxxbridge_name.clone(),
-                original_cpp_name: cpp_name
-                    .as_ref()
-                    .cloned()
-                    .unwrap_or_else(|| cxxbridge_name.to_string()),
+                original_cpp_name: cpp_name.clone().unwrap_or_else(|| {
+                    CppEffectiveName::from_cxxbridge_name(cxxbridge_name.clone())
+                }),
                 return_conversion: ret_type_conversion.clone(),
                 argument_conversion: param_details.iter().map(|d| d.conversion.clone()).collect(),
                 kind: cpp_function_kind,
@@ -1449,7 +1449,11 @@ impl<'a> FnAnalyzer<'a> {
             externally_callable,
             rust_wrapper_needed,
         };
-        let name = ApiName::new_with_cpp_name(ns, cxxbridge_name, cpp_name);
+        let name = ApiName::new_with_cpp_name(
+            ns,
+            cxxbridge_name,
+            cpp_name.map(CppOriginalName::from_effective_name),
+        );
         (analysis, name)
     }
 
@@ -2144,6 +2148,7 @@ impl<'a> FnAnalyzer<'a> {
                 .get(&self_ty.name)
                 .cloned()
                 .or_else(|| Some(self_ty.name.get_final_item().to_string()))
+                .map(CppOriginalName::from_string_for_constructor)
         } else {
             None
         };

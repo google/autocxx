@@ -19,6 +19,8 @@ use crate::conversion::api::{
     SubclassName, SuperclassMethod, UnsafetyNeeded, Virtualness,
 };
 use crate::conversion::apivec::ApiVec;
+use crate::conversion::parse::CppOriginalName;
+use crate::conversion::CppEffectiveName;
 use crate::minisyn::minisynize_punctuated;
 use crate::{
     conversion::{
@@ -121,11 +123,11 @@ pub(super) fn create_subclass_function(
 ) -> Api<FnPrePhase1> {
     let cpp = sub.cpp();
     let holder_name = sub.holder();
-    let rust_call_name = make_ident(format!(
+    let rust_call_name = format!(
         "{}_{}",
         sub.0.name.get_final_item(),
         name.name.get_final_item()
-    ));
+    );
     let params = std::iter::once(crate::minisyn::FnArg(parse_quote! {
         me: & #holder_name
     }))
@@ -148,14 +150,17 @@ pub(super) fn create_subclass_function(
         UnsafetyNeeded::from_param_details(&analysis.param_details, false)
     };
     Api::RustSubclassFn {
-        name: ApiName::new_in_root_namespace(rust_call_name.clone()),
+        name: ApiName::new_in_root_namespace(make_ident(rust_call_name.clone())),
         subclass: sub.clone(),
         details: Box::new(RustSubclassFnDetails {
             params,
             ret: analysis.ret_type.clone(),
             method_name: make_ident(&analysis.rust_name),
             cpp_impl: CppFunction {
-                payload: CppFunctionBody::FunctionCall(Namespace::new(), rust_call_name),
+                payload: CppFunctionBody::FunctionCall(
+                    Namespace::new(),
+                    CppEffectiveName::from_subclass_function_name(rust_call_name),
+                ),
                 wrapper_function_name: make_ident(&analysis.rust_name),
                 original_cpp_name: name.cpp_name(),
                 return_conversion: analysis.ret_conversion.clone(),
@@ -206,7 +211,9 @@ pub(super) fn create_subclass_constructor(
         kind: CppFunctionKind::SynthesizedConstructor,
         pass_obs_field: false,
         qualification: Some(cpp.clone()),
-        original_cpp_name: cpp.to_cpp_name(),
+        original_cpp_name: CppEffectiveName::from_fully_qualified_name_for_subclass(
+            &cpp.to_cpp_name(),
+        ),
     };
     let subclass_constructor_details = Box::new(SubclassConstructorDetails {
         subclass: sub.clone(),
@@ -261,7 +268,7 @@ pub(super) fn create_subclass_constructor(
     let subclass_constructor_name = ApiName::new_with_cpp_name(
         &Namespace::new(),
         subclass_constructor_name,
-        Some(sub.cpp().get_final_item().to_string()),
+        Some(CppOriginalName::from_final_item_of_pre_existing_qualified_name(&sub.cpp())),
     );
     (maybe_wrap, subclass_constructor_name)
 }

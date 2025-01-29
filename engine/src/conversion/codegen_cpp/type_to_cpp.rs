@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use crate::{
-    conversion::{apivec::ApiVec, AnalysisPhase, ConvertErrorFromCpp},
+    conversion::{apivec::ApiVec, AnalysisPhase, ConvertErrorFromCpp, CppOriginalName},
     types::QualifiedName,
 };
 use indexmap::map::IndexMap as HashMap;
@@ -21,7 +21,7 @@ use syn::{Token, Type};
 /// in the QualifiedName.
 /// The "original C++ name" is mostly relevant in the case of nested types,
 /// where the typename might be A::B within a namespace C::D.
-pub(crate) struct CppNameMap(HashMap<QualifiedName, String>);
+pub(crate) struct CppNameMap(HashMap<QualifiedName, CppOriginalName>);
 
 impl CppNameMap {
     /// Look through the APIs we've found to assemble the original name
@@ -46,7 +46,7 @@ impl CppNameMap {
             qual_name
                 .get_namespace()
                 .iter()
-                .chain(once(cpp_name))
+                .chain(once(cpp_name.for_original_name_map()))
                 .join("::")
         } else {
             qual_name.to_cpp_name()
@@ -59,8 +59,9 @@ impl CppNameMap {
     /// such as inner() or destructors such as ~inner()
     pub(crate) fn get_final_item<'b>(&'b self, qual_name: &'b QualifiedName) -> &'b str {
         match self.get(qual_name) {
-            Some(n) => match n.rsplit_once("::") {
-                Some((_, suffix)) => suffix,
+            // Some(n) => match
+            Some(n) => match n.get_final_segment_for_special_members() {
+                Some(s) => s,
                 None => qual_name.get_final_item(),
             },
             None => qual_name.get_final_item(),
@@ -140,7 +141,7 @@ impl CppNameMap {
 
     /// Check an individual item in the name map. Returns a thing if
     /// it's an inner type, otherwise returns none.
-    pub(crate) fn get(&self, name: &QualifiedName) -> Option<&String> {
+    pub(crate) fn get(&self, name: &QualifiedName) -> Option<&CppOriginalName> {
         self.0.get(name)
     }
 }

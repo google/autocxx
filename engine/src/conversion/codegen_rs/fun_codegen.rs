@@ -32,6 +32,7 @@ use crate::{
             MethodKind, RustRenameStrategy, TraitMethodDetails,
         },
         api::UnsafetyNeeded,
+        CppEffectiveName,
     },
     minisyn::minisynize_vec,
     types::{Namespace, QualifiedName},
@@ -88,7 +89,7 @@ pub(super) fn gen_function(
     ns: &Namespace,
     fun: FuncToConvert,
     analysis: FnAnalysis,
-    cpp_call_name: String,
+    cpp_call_name: CppEffectiveName,
     non_pod_types: &HashSet<QualifiedName>,
 ) -> RsCodegenResult {
     if analysis.ignore_reason.is_err() || !analysis.externally_callable {
@@ -176,11 +177,9 @@ pub(super) fn gen_function(
             _ => Some(Use::UsedFromCxxBridge),
         },
     };
-    if cxxbridge_name != cpp_call_name && !wrapper_function_needed {
+    if cpp_call_name.does_not_match_cxxbridge_name(&cxxbridge_name) && !wrapper_function_needed {
         cpp_name_attr = Attribute::parse_outer
-            .parse2(quote!(
-                #[cxx_name = #cpp_call_name]
-            ))
+            .parse2(cpp_call_name.generate_cxxbridge_name_attribute())
             .unwrap();
     }
 
