@@ -63,7 +63,7 @@ unsafe impl<T> RValueParam<T> for Pin<Box<T>> {
     }
 }
 
-unsafe impl<'a, T> RValueParam<T> for Pin<MoveRef<'a, T>> {
+unsafe impl<T> RValueParam<T> for Pin<MoveRef<'_, T>> {
     fn get_ptr(stack: Pin<&mut Self>) -> *mut T {
         // Safety: we won't move/swap the contents of the outer pin, nor of the
         // type stored within the UniquePtr.

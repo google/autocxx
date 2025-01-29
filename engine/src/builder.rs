@@ -155,6 +155,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
     /// * You've got usages scattered across files beyond that with the
     ///   `include_cpp` invocation
     /// * You're using `use` statements to rename mods or items. If this
+    ///
     /// proves to be a promising or helpful direction, autocxx would be happy
     /// to accept pull requests to remove some of these limitations.
     pub fn auto_allowlist(mut self, do_it: bool) -> Self {

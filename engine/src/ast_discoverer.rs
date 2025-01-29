@@ -74,7 +74,7 @@ struct PerModDiscoveries<'a> {
     mod_path: Option<RustPath>,
 }
 
-impl<'b> PerModDiscoveries<'b> {
+impl PerModDiscoveries<'_> {
     fn deeper_path(&self, id: &Ident) -> RustPath {
         match &self.mod_path {
             None => RustPath::new_from_ident(id.clone()),
@@ -517,7 +517,7 @@ impl<'a> SelfSubstituter<'a> {
     }
 }
 
-impl<'a> VisitMut for SelfSubstituter<'a> {
+impl VisitMut for SelfSubstituter<'_> {
     fn visit_type_path_mut(&mut self, i: &mut syn::TypePath) {
         if i.qself.is_none() && i.path.is_ident("Self") {
             i.path = Path::from(self.self_ty.clone());
@@ -672,7 +672,7 @@ mod tests {
             }
         };
         discoveries.search_item(&itm, None).unwrap();
-        assert!(discoveries.extern_rust_funs.get(0).unwrap().sig.ident == "bar");
+        assert!(discoveries.extern_rust_funs.first().unwrap().sig.ident == "bar");
     }
 
     #[test]
@@ -686,7 +686,7 @@ mod tests {
             }
         };
         discoveries.search_item(&itm, None).unwrap();
-        assert!(discoveries.extern_rust_funs.get(0).unwrap().sig.ident == "bar");
+        assert!(discoveries.extern_rust_funs.first().unwrap().sig.ident == "bar");
     }
 
     #[test]
@@ -702,7 +702,7 @@ mod tests {
         assert!(
             discoveries
                 .extern_rust_types
-                .get(0)
+                .first()
                 .unwrap()
                 .get_final_ident()
                 == "Bar"

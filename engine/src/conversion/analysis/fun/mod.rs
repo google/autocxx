@@ -80,7 +80,7 @@ pub(crate) enum ReceiverMutability {
 
 #[derive(Clone, Debug)]
 pub(crate) enum MethodKind {
-    Normal(ReceiverMutability),
+    Normal,
     Constructor { is_default: bool },
     Static,
     Virtual(ReceiverMutability),
@@ -715,7 +715,8 @@ impl<'a> FnAnalyzer<'a> {
     ///   to [cxx::UniquePtr]
     /// * We'll need a Rust wrapper if we've got a C++ wrapper and it's a method.
     /// * We may need wrappers if names conflict.
-    /// etc.
+    /// * etc.
+    ///
     /// The other major thing we do here is figure out naming for the function.
     /// This depends on overloads, and what other functions are floating around.
     /// The output of this analysis phase is used by both Rust and C++ codegen.
@@ -964,7 +965,7 @@ impl<'a> FnAnalyzer<'a> {
                     let receiver_mutability =
                         receiver_mutability.expect("Failed to find receiver details");
                     match fun.virtualness {
-                        Virtualness::None => MethodKind::Normal(receiver_mutability),
+                        Virtualness::None => MethodKind::Normal,
                         Virtualness::Virtual => MethodKind::Virtual(receiver_mutability),
                         Virtualness::PureVirtual => MethodKind::PureVirtual(receiver_mutability),
                     }
@@ -1152,7 +1153,7 @@ impl<'a> FnAnalyzer<'a> {
                     ref impl_for,
                     method_kind:
                         MethodKind::Constructor { .. }
-                        | MethodKind::Normal(..)
+                        | MethodKind::Normal
                         | MethodKind::PureVirtual(..)
                         | MethodKind::Virtual(..),
                     ..
@@ -1263,7 +1264,7 @@ impl<'a> FnAnalyzer<'a> {
         let param_conversion_needed = param_details.iter().any(|b| b.conversion.cpp_work_needed());
         let ret_type_conversion_needed = ret_type_conversion
             .as_ref()
-            .map_or(false, |x| x.cpp_work_needed());
+            .is_some_and(|x| x.cpp_work_needed());
         let return_needs_rust_conversion = ret_type_conversion
             .as_ref()
             .map(|ra| ra.rust_work_needed())

@@ -8,7 +8,7 @@
 
 [package]
 name = "autocxx-integration-tests"
-version = "0.26.0"
+version = "0.27.1"
 autotests = false
 edition = "2021"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
@@ -20,7 +20,10 @@ categories = ["development-tools::ffi", "api-bindings"]
 
 [dependencies]
 proc-macro2 = "1.0.11"
-trybuild = "1.0.53"
+# More recent versions of trybuild don't work due to
+# https://github.com/dtolnay/trybuild/issues/283
+# There are some workarounds suggested there if needs be.
+trybuild = "=1.0.81"
 test-log = "0.2.2"
 env_logger = "0.9.0"
 rust_info = "0.3.1"
@@ -29,8 +32,8 @@ quote = "1.0"
 once_cell = "1.7"
 # This is necessary for building the projects created
 # by the trybuild test system...
-autocxx = { path = "..", version = "=0.26.0" }
-autocxx-engine = { version = "=0.26.0", path = "../engine", features = [
+autocxx = { path = "..", version = "=0.27.1" }
+autocxx-engine = { version = "=0.27.1", path = "../engine", features = [
     "build",
 ] }
 moveit = { version = "0.6", features = [ "cxx" ] }

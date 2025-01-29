@@ -23,8 +23,7 @@ use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
-    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, Lifetime, TraitItem, Type,
-    TypePath,
+    ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, TraitItem, Type, TypePath,
 };
 
 use crate::{
@@ -59,16 +58,10 @@ use super::{
 use super::{convert_error::ErrorContext, ConvertErrorFromCpp};
 use quote::quote;
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-struct ImplBlockKey {
-    ty: Type,
-    lifetime: Option<Lifetime>,
-}
-
 /// An entry which needs to go into an `impl` block for a given type.
 struct ImplBlockDetails {
     item: ImplItem,
-    ty: ImplBlockKey,
+    ty: Type,
 }
 
 struct TraitImplBlockDetails {
@@ -412,10 +405,8 @@ impl<'a> RsCodeGenerator<'a> {
             }
         }
         for (ty, entries) in impl_entries_by_type.into_iter() {
-            let lt = ty.lifetime.map(|lt| quote! { < #lt > });
-            let ty = ty.ty;
             output_items.push(Item::Impl(parse_quote! {
-                impl #lt #ty {
+                impl #ty {
                     #(#entries)*
                 }
             }))
@@ -494,7 +485,6 @@ impl<'a> RsCodeGenerator<'a> {
                 analysis,
                 cpp_call_name,
                 non_pod_types,
-                self.config,
             ),
             Api::Const { const_item, .. } => RsCodegenResult {
                 bindgen_mod_items: vec![Item::Const(const_item.into())],
@@ -1068,7 +1058,7 @@ impl<'a> RsCodeGenerator<'a> {
     /// explaining why a given type or function couldn't have bindings
     /// generated.
     fn generate_error_entry(err: ConvertErrorFromCpp, ctx: ErrorContext) -> RsCodegenResult {
-        let err = format!("autocxx bindings couldn't be generated: {err}");
+        let err = format!(" autocxx bindings couldn't be generated: {err}");
         let (impl_entry, bindgen_mod_item, materialization) = match ctx.into_type() {
             ErrorContextType::Item(id) => (
                 // Populate within bindgen mod because impl blocks may attach.
@@ -1095,10 +1085,7 @@ impl<'a> RsCodeGenerator<'a> {
                         fn #method(_uhoh: autocxx::BindingGenerationFailure) {
                         }
                     },
-                    ty: ImplBlockKey {
-                        ty: parse_quote! { #self_ty },
-                        lifetime: None,
-                    },
+                    ty: parse_quote! { #self_ty },
                 })),
                 None,
                 None,
@@ -1130,6 +1117,7 @@ impl<'a> RsCodeGenerator<'a> {
         let segs =
             Self::find_output_mod_root(name.get_namespace()).chain(name.get_bindgen_path_idents());
         Item::Use(parse_quote! {
+            #[allow(unused_imports)]
             pub use #(#segs)::*;
         })
     }

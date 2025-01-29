@@ -38,7 +38,7 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// As noted, one of the main reasons for this type is to call methods.
 /// Unfortunately, that depends on unstable Rust features. If you can't
 /// call methods on one of these references, check you're using nightly
-/// and add `#![feature(arbitrary_self_types)]` to your crate.
+/// and add `#![feature(arbitrary_self_types_pointers)]` to your crate.
 ///
 /// # Lifetimes and cloneability
 ///
@@ -192,7 +192,7 @@ impl<'a, T: ?Sized> CppRef<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Deref for CppRef<'a, T> {
+impl<T: ?Sized> Deref for CppRef<'_, T> {
     type Target = *const T;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -208,7 +208,7 @@ impl<'a, T: ?Sized> Deref for CppRef<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Clone for CppRef<'a, T> {
+impl<T: ?Sized> Clone for CppRef<'_, T> {
     fn clone(&self) -> Self {
         Self {
             ptr: self.ptr,
@@ -233,7 +233,7 @@ pub struct CppMutRef<'a, T: ?Sized> {
     phantom: PhantomData<&'a T>,
 }
 
-impl<'a, T: ?Sized> CppMutRef<'a, T> {
+impl<T: ?Sized> CppMutRef<'_, T> {
     /// Retrieve the underlying C++ pointer.
     pub fn as_mut_ptr(&self) -> *mut T {
         self.ptr
@@ -269,7 +269,7 @@ impl<'a, T: ?Sized> CppMutRef<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Deref for CppMutRef<'a, T> {
+impl<T: ?Sized> Deref for CppMutRef<'_, T> {
     type Target = *const T;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -283,7 +283,7 @@ impl<'a, T: ?Sized> Deref for CppMutRef<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Clone for CppMutRef<'a, T> {
+impl<T: ?Sized> Clone for CppMutRef<'_, T> {
     fn clone(&self) -> Self {
         Self {
             ptr: self.ptr,
@@ -316,7 +316,7 @@ pub trait AsCppMutRef<T: ?Sized>: AsCppRef<T> {
     fn as_cpp_mut_ref(&mut self) -> CppMutRef<T>;
 }
 
-impl<'a, T: ?Sized> AsCppRef<T> for CppMutRef<'a, T> {
+impl<T: ?Sized> AsCppRef<T> for CppMutRef<'_, T> {
     fn as_cpp_ref(&self) -> CppRef<T> {
         CppRef::from_ptr(self.ptr)
     }
@@ -412,7 +412,7 @@ impl<T: ?Sized> CppPin<T> {
         // to
         //   Box<CppPinContents<T>>
         // is safe.
-        let contents = unsafe { std::mem::transmute(item) };
+        let contents = unsafe { std::mem::transmute::<Box<T>, Box<CppPinContents<T>>>(item) };
         Self(contents)
     }
 
@@ -566,7 +566,7 @@ impl<T: ?Sized> AsCppMutRef<T> for PhantomReferentMut<T> {
     }
 }
 
-#[cfg(all(feature = "arbitrary_self_types", test))]
+#[cfg(all(feature = "arbitrary_self_types_pointers", test))]
 mod tests {
     use super::*;
 

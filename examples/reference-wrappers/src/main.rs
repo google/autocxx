@@ -25,7 +25,7 @@
 
 // Necessary to be able to call methods on reference wrappers.
 // For that reason, this example only builds on nightly Rust.
-#![feature(arbitrary_self_types)]
+#![feature(arbitrary_self_types_pointers)]
 
 use autocxx::prelude::*;
 use std::pin::Pin;

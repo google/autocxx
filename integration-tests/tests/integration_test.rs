@@ -4490,6 +4490,7 @@ fn test_cycle_up_of_vec() {
 fn test_typedef_to_std() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         typedef std::string my_string;
         inline uint32_t take_str(my_string a) {
             return a.size();
@@ -4523,6 +4524,7 @@ fn test_typedef_to_up_in_fn_call() {
 fn test_typedef_in_pod_struct() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         typedef uint32_t my_int;
         struct A {
             my_int a;
@@ -4544,6 +4546,7 @@ fn test_typedef_in_pod_struct() {
 fn test_cint_in_pod_struct() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         struct A {
             int a;
         };
@@ -4613,6 +4616,7 @@ fn test_up_in_struct() {
 fn test_typedef_to_std_in_struct() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         typedef std::string my_string;
         struct A {
             my_string a;
@@ -4995,6 +4999,43 @@ fn test_take_array_in_struct() {
         assert_eq!(ffi::take_array(c), 40);
     };
     run_test("", hdr, rs, &["take_array"], &["data"]);
+}
+
+#[test]
+fn test_take_struct_built_array_in_function() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    struct data {
+        char a[4];
+    };
+    uint32_t take_array(char a[4]) {
+        return a[0] + a[2];
+    }
+    "};
+    let rs = quote! {
+        let mut c = ffi::data { a: [ 10, 20, 30, 40 ] };
+        unsafe {
+            assert_eq!(ffi::take_array(c.a.as_mut_ptr()), 40);
+        }
+    };
+    run_test("", hdr, rs, &["take_array"], &["data"]);
+}
+
+#[test]
+fn test_take_array_in_function() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    uint32_t take_array(char a[4]) {
+        return a[0] + a[2];
+    }
+    "};
+    let rs = quote! {
+        let mut a: [i8; 4] = [ 10, 20, 30, 40 ];
+        unsafe {
+            assert_eq!(ffi::take_array(a.as_mut_ptr()), 40);
+        }
+    };
+    run_test("", hdr, rs, &["take_array"], &[]);
 }
 
 #[test]
@@ -7765,6 +7806,58 @@ fn test_pv_subclass_ptr_param() {
                 unsafe fn foo(&self, a: *const ffi::A) {
                     use ffi::Observer_supers;
                     self.foo_super(a)
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_opaque_param() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    typedef uint32_t MyUnsupportedType[4];
+
+    struct MySupportedType {
+        uint32_t a;
+    };
+
+    class MySuperType {
+    public:
+        virtual void foo(const MyUnsupportedType* foo, const MySupportedType* bar) const = 0;
+        virtual ~MySuperType() = default;
+    };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            MySubType::new_rust_owned(MySubType { a: 3, cpp_peer: Default::default() });
+        },
+        quote! {
+            subclass!("MySuperType",MySubType)
+            extern_cpp_opaque_type!("MyUnsupportedType", crate::ffi2::MyUnsupportedType)
+        },
+        None,
+        None,
+        Some(quote! {
+
+            #[cxx::bridge]
+            pub mod ffi2 {
+                unsafe extern "C++" {
+                    include!("input.h");
+                    type MyUnsupportedType;
+                }
+            }
+            use autocxx::subclass::CppSubclass;
+            use ffi::MySuperType_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MySubType {
+                a: u32
+            }
+            impl MySuperType_methods for MySubType {
+                unsafe fn foo(&self, _foo: *const ffi2::MyUnsupportedType, _bar: *const ffi::MySupportedType) {
                 }
             }
         }),
@@ -12344,6 +12437,75 @@ fn test_private_destructor() {
         &["A", "get_a"],
         &[],
     );
+ 
+#[test]
+fn test_using_string_function() {
+    let hdr = indoc! {"
+        #include <string>
+        using std::string;
+        void foo(const string &a);
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["foo"], &[]);
+}
+
+#[test]
+fn test_using_string_method() {
+    let hdr = indoc! {"
+        #include <string>
+        using std::string;
+        class Foo
+        {
+        public:
+            Foo bar(const string &a);
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["Foo"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/1382
+fn test_override_typedef_fn() {
+    let hdr = indoc! {"
+        #include <map>
+        #include <memory>
+        typedef std::shared_ptr<std::map<int, int>> Arg;
+            // bindgen currently outputs  pub type Arg = u8;
+        class Foo {
+        public:
+          void *createFoo(const int, Arg &arg);
+        //   void *createFoo(const int, std::shared_ptr<std::map<int, int>> &arg); // works
+        };
+    "};
+    run_test("", hdr, quote! {}, &["Foo"], &[]);
+}
+
+#[test]
+fn test_double_template_w_default() {
+    let hdr = indoc! {"
+        class Widget {};
+
+        template <class T>
+        class RefPtr {
+        private:
+            T* m_ptr;
+        };
+
+        class FakeAlloc {};
+
+        template <typename T, typename A=FakeAlloc>
+        class Holder {
+            A alloc;
+        };
+
+        typedef Holder<RefPtr<Widget>> WidgetRefHolder;
+        class Problem {
+        public:
+            WidgetRefHolder& getWidgets();
+        };
+    "};
+    run_test("", hdr, quote! {}, &["Problem"], &[]);
 }
 
 // Yet to test:

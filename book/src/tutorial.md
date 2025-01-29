@@ -21,11 +21,11 @@ First, add `autocxx` *and `cxx`* to your `dependencies` and `autocxx-build` to y
 
 ```toml
 [dependencies]
-autocxx = "0.26.0"
+autocxx = "0.27.1"
 cxx = "1.0"
 
 [build-dependencies]
-autocxx-build = "0.26.0"
+autocxx-build = "0.27.1"
 miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!
 ```
 
@@ -33,13 +33,16 @@ Now, add a `build.rs` next to your `Cargo.toml` (this is a standard `cargo` [bui
 
 ```rust,ignore
 fn main() -> miette::Result<()> {
-    let path = std::path::PathBuf::from("src"); // include path
-    let mut b = autocxx_build::Builder::new("src/main.rs", &[&path]).build()?;
-        // This assumes all your C++ bindings are in main.rs
+    let include_path = std::path::PathBuf::from("src");
+
+    // This assumes all your C++ bindings are in main.rs
+    let mut b = autocxx_build::Builder::new("src/main.rs", &[&include_path]).build()?;
     b.flag_if_supported("-std=c++14")
      .compile("autocxx-demo"); // arbitrary library name, pick anything
     println!("cargo:rerun-if-changed=src/main.rs");
+
     // Add instructions to link to any C++ libraries you need.
+
     Ok(())
 }
 ```

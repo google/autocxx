@@ -9,6 +9,7 @@
 // It would be nice to use the rustversion crate here instead,
 // but that doesn't work with inner attributes.
 fn main() {
+    println!("cargo::rustc-check-cfg=cfg(nightly)");
     if let Some(ver) = rustc_version() {
         if ver.contains("nightly") {
             println!("cargo:rustc-cfg=nightly")
