@@ -38,13 +38,21 @@ use super::{
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum TypeKind {
-    Pod,    // trivial. Can be moved and copied in Rust.
-    NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
+    Pod,      // trivial. Can be moved and copied in Rust.
+    NonPod,   // has destructor or non-trivial move constructors. Can only hold by UniquePtr
     Abstract, // has pure virtual members - can't even generate UniquePtr.
-            // It's possible that the type itself isn't pure virtual, but it inherits from
-            // some other type which is pure virtual. Alternatively, maybe we just don't
-            // know if the base class is pure virtual because it wasn't on the allowlist,
-            // in which case we'll err on the side of caution.
+    // It's possible that the type itself isn't pure virtual, but it inherits from
+    // some other type which is pure virtual. Alternatively, maybe we just don't
+    // know if the base class is pure virtual because it wasn't on the allowlist,
+    // in which case we'll err on the side of caution.
+    NotDestructible, // private or deleted destructor. We treat it the same as Abstract.
+}
+
+impl TypeKind {
+    /// Whether this TypeKind can be instantiated.
+    pub(crate) fn is_instantiable(&self) -> bool {
+        !matches!(self, Self::Abstract | Self::NotDestructible)
+    }
 }
 
 /// C++ visibility.
