@@ -20,7 +20,7 @@ use crate::conversion::{
     analysis::{depth_first::fields_and_bases_first, fun::ReceiverMutability},
     api::{ApiName, TypeKind},
     error_reporter::{convert_apis, convert_item_apis},
-    ConvertErrorFromCpp,
+    ConvertErrorFromCpp, CppEffectiveName,
 };
 use crate::{
     conversion::{api::Api, apivec::ApiVec},
@@ -30,7 +30,7 @@ use indexmap::set::IndexSet as HashSet;
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
 struct Signature {
-    name: String,
+    name: CppEffectiveName,
     args: Vec<syn::Type>,
     constness: ReceiverMutability,
 }
@@ -201,7 +201,7 @@ pub(crate) fn mark_types_abstract(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhas
         } if api
             .cpp_name()
             .as_ref()
-            .map(|n| n.contains("::"))
+            .map(|n| n.is_nested())
             .unwrap_or_default() =>
         {
             Err(ConvertErrorFromCpp::AbstractNestedType)

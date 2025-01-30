@@ -6,6 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::fmt::Display;
+
 use proc_macro2::{Ident, TokenStream};
 use syn::{
     parenthesized,
@@ -13,11 +15,73 @@ use syn::{
     Attribute, LitStr,
 };
 
-use crate::conversion::{
-    api::{CppVisibility, DeletedOrDefaulted, Layout, References, SpecialMemberKind, Virtualness},
-    convert_error::{ConvertErrorWithContext, ErrorContext},
-    ConvertErrorFromCpp,
+use crate::{
+    conversion::{
+        api::{
+            CppVisibility, DeletedOrDefaulted, Layout, References, SpecialMemberKind, Virtualness,
+        },
+        convert_error::{ConvertErrorWithContext, ErrorContext},
+        ConvertErrorFromCpp, CppEffectiveName,
+    },
+    types::QualifiedName,
 };
+
+/// Newtype wrapper for a C++ "original name"; that is, an annotation
+/// derived from bindgen that this is the original name of the C++ item.
+///
+/// At present these various newtype wrappers for kinds of names
+/// (Rust, C++, cxx::bridge) have various conversions between them that
+/// are probably not safe. They're marked with FIXMEs. Over time we should
+/// remove them, or make them safe by doing name validation at the point
+/// of conversion.
+#[derive(PartialEq, PartialOrd, Eq, Hash, Clone, Debug)]
+pub struct CppOriginalName(String);
+
+impl Display for CppOriginalName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl CppOriginalName {
+    pub(crate) fn is_nested(&self) -> bool {
+        self.0.contains("::")
+    }
+
+    pub(crate) fn from_final_item_of_pre_existing_qualified_name(name: &QualifiedName) -> Self {
+        Self(name.get_final_item().to_string())
+    }
+
+    pub(crate) fn to_qualified_name(&self) -> QualifiedName {
+        QualifiedName::new_from_cpp_name(&self.0)
+    }
+
+    pub(crate) fn to_effective_name(&self) -> CppEffectiveName {
+        CppEffectiveName(self.0.clone())
+    }
+
+    /// FIXME: it's not clear what this output is for
+    pub(crate) fn for_original_name_map(&self) -> &str {
+        &self.0
+    }
+
+    /// Used to give the final part of the name which can be used
+    /// to figure out the name for constructors, destructors etc.
+    pub(crate) fn get_final_segment_for_special_members(&self) -> Option<&str> {
+        self.0.rsplit_once("::").map(|(_, suffix)| suffix)
+    }
+
+    /// FIXME: this is probably OK but we should see if we can improve
+    pub(crate) fn from_string_for_constructor(name: String) -> Self {
+        Self(name)
+    }
+
+    /// FIXME - we shouldn't be going backwards like this from an effective
+    /// name to an original name.
+    pub(crate) fn from_effective_name(n: CppEffectiveName) -> CppOriginalName {
+        Self(n.0)
+    }
+}
 
 /// The set of all annotations that autocxx_bindgen has added
 /// for our benefit.
@@ -126,8 +190,8 @@ impl BindgenSemanticAttributes {
     }
 
     /// The original C++ name, which bindgen may have changed.
-    pub(super) fn get_original_name(&self) -> Option<String> {
-        self.string_if_present("original_name")
+    pub(super) fn get_original_name(&self) -> Option<CppOriginalName> {
+        self.string_if_present("original_name").map(CppOriginalName)
     }
 
     /// Whether this is a move constructor or other special member.
