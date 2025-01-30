@@ -200,8 +200,8 @@ remainder where <code>autocxx</code> falls short.</p>
 <p>To do this, you'll need to use the <a href="https://cxx.rs/extern-c++.html#reusing-existing-binding-types">ability of one cxx::bridge mod to refer to types from another</a>,
 for example:</p>
 <pre><code class="language-rust ignore">autocxx::include_cpp! {
-<span class="boring">    include "foo.h"
-</span>    safety!(unsafe_ffi)
+    #include "foo.h"
+    safety!(unsafe_ffi)
     generate!("take_A")
     generate!("A")
 }
@@ -220,8 +220,8 @@ fn main() {
 <p>In the example above, we're referring <em>from</em> manual bindings <em>to</em> automated bindings.</p>
 <p>You can also do it the other way round using <code>extern_cpp_opaque_type!</code>:</p>
 <pre><code class="language-rust ignore">autocxx::include_cpp! {
-<span class="boring">    hexathorpe include "input.h"
-</span>    safety!(unsafe_ffi)
+    #hexathorpe include "input.h"
+    safety!(unsafe_ffi)
     generate!("handle_a")
     generate!("create_a")
     extern_cpp_opaque_type!("A", ffi2::A)

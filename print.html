@@ -277,8 +277,8 @@ miette = { version = "5", features = ["fancy"] } # optional but gives nicer erro
 <pre><code class="language-rust ignore">use autocxx::prelude::*; // use all the main autocxx functions
 
 include_cpp! {
-<span class="boring">    include "my_header.h" // your header file name
-</span>    safety!(unsafe) // see details of unsafety policies described in the 'safety' section of the book
+    #include "my_header.h" // your header file name
+    safety!(unsafe) // see details of unsafety policies described in the 'safety' section of the book
     generate!("DeepThought") // add this line for each function or type you wish to generate
 }</code></pre>
 <p>You should then find you can call the function by referring to an <code>ffi</code> namespace:</p>
@@ -332,8 +332,8 @@ remainder where <code>autocxx</code> falls short.</p>
 <p>To do this, you'll need to use the <a href="https://cxx.rs/extern-c++.html#reusing-existing-binding-types">ability of one cxx::bridge mod to refer to types from another</a>,
 for example:</p>
 <pre><code class="language-rust ignore">autocxx::include_cpp! {
-<span class="boring">    include "foo.h"
-</span>    safety!(unsafe_ffi)
+    #include "foo.h"
+    safety!(unsafe_ffi)
     generate!("take_A")
     generate!("A")
 }
@@ -352,8 +352,8 @@ fn main() {
 <p>In the example above, we're referring <em>from</em> manual bindings <em>to</em> automated bindings.</p>
 <p>You can also do it the other way round using <code>extern_cpp_opaque_type!</code>:</p>
 <pre><code class="language-rust ignore">autocxx::include_cpp! {
-<span class="boring">    hexathorpe include "input.h"
-</span>    safety!(unsafe_ffi)
+    #hexathorpe include "input.h"
+    safety!(unsafe_ffi)
     generate!("handle_a")
     generate!("create_a")
     extern_cpp_opaque_type!("A", ffi2::A)
@@ -392,8 +392,8 @@ at least one <a href="https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.h
 <pre><code class="language-rust ignore">use autocxx::prelude::*;
 
 include_cpp! {
-<span class="boring">    include "my_header.h"
-</span>    generate!("MyAPIFunction")
+    #include "my_header.h"
+    generate!("MyAPIFunction")
 }</code></pre>
 <p>You need to include <a href="https://docs.rs/autocxx/latest/autocxx/macro.generate.html"><code>generate!</code> directives</a>
 for every <em>type</em> or <em>function</em> you wish to access from Rust. You don't need to specify this for member functions
