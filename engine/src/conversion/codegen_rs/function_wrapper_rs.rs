@@ -172,9 +172,12 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a pointer"),
                 };
                 let (ty, wrapper_name) = if is_mut {
-                    (parse_quote! { autocxx::CppMutRef<'a, #ty> }, "CppMutRef")
+                    (
+                        parse_quote! { autocxx::CppMutLtRef<'a, #ty> },
+                        "CppMutLtRef",
+                    )
                 } else {
-                    (parse_quote! { autocxx::CppRef<'a, #ty> }, "CppRef")
+                    (parse_quote! { autocxx::CppLtRef<'a, #ty> }, "CppLtRef")
                 };
                 let wrapper_name = make_ident(wrapper_name);
                 RustParamConversion::Param {
@@ -194,9 +197,9 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a pointer"),
                 };
                 let ty = if is_mut {
-                    parse_quote! { &mut autocxx::CppMutRef<'a, #ty> }
+                    parse_quote! { autocxx::CppMutRef<#ty> }
                 } else {
-                    parse_quote! { &autocxx::CppRef<'a, #ty> }
+                    parse_quote! { autocxx::CppRef<#ty> }
                 };
                 RustParamConversion::Param {
                     ty,

@@ -27,7 +27,7 @@ fn run_cpprefs_test(
     generate_pods: &[&str],
 ) {
     if !arbitrary_self_types_supported() {
-        // "unsafe_references_wrapped" requires arbitrary_self_types_pointers, which requires nightly.
+        // "unsafe_references_wrapped" requires arbitrary_self_types, which requires nightly.
         return;
     }
     do_run_test(
@@ -127,7 +127,7 @@ fn test_return_reference_cpprefs() {
     let rs = quote! {
         let b = CppPin::new(ffi::Bob { a: 3, b: 4 });
         let b_ref = b.as_cpp_ref();
-        let bob = ffi::give_bob(&b_ref);
+        let bob = ffi::give_bob(b_ref);
         let val = unsafe { bob.as_ref() };
         assert_eq!(val.b, 4);
     };
