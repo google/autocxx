@@ -936,7 +936,7 @@ impl<'a> RsCodeGenerator<'a> {
                     }
                 }
             }
-            TypeKind::Abstract => {
+            TypeKind::Abstract | TypeKind::NotDestructible => {
                 if is_generic {
                     RsCodegenResult::default()
                 } else {

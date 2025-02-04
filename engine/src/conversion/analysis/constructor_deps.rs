@@ -10,7 +10,7 @@ use indexmap::map::IndexMap as HashMap;
 
 use crate::{
     conversion::{
-        api::{Api, ApiName, StructDetails, TypeKind},
+        api::{Api, ApiName, StructDetails},
         apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
         error_reporter::convert_apis,
@@ -51,8 +51,7 @@ fn decorate_struct(
     constructors_and_allocators_by_type: &mut HashMap<QualifiedName, Vec<QualifiedName>>,
 ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
     let pod = fn_struct.pod;
-    let is_abstract = matches!(pod.kind, TypeKind::Abstract);
-    let constructor_and_allocator_deps = if is_abstract || pod.is_generic {
+    let constructor_and_allocator_deps = if !pod.kind.is_instantiable() || pod.is_generic {
         Vec::new()
     } else {
         constructors_and_allocators_by_type

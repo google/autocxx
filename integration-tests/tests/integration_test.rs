@@ -12387,6 +12387,58 @@ fn test_cpp_union_pod() {
 }
 
 #[test]
+fn test_deleted_destructor() {
+    let hdr = indoc! {"
+        #include <stdarg.h>
+        class A {
+        public:
+            void foo();
+            ~A() = delete;
+        };
+        inline A* get_a() {
+            static A* a = new A();
+            return a;
+        }
+    "};
+    run_test("", hdr, quote! {}, &["A", "get_a"], &[]);
+    run_test_expect_fail(
+        "",
+        hdr,
+        quote! {
+            let _ = ffi::A::within_unique_ptr();
+        },
+        &["A", "get_a"],
+        &[],
+    );
+}
+
+#[test]
+fn test_private_destructor() {
+    let hdr = indoc! {"
+        #include <stdarg.h>
+        class A {
+        public:
+            void foo();
+        private:
+            ~A() {};
+        };
+        inline A* get_a() {
+            static A* a = new A();
+            return a;
+        }
+    "};
+    run_test("", hdr, quote! {}, &["A", "get_a"], &[]);
+    run_test_expect_fail(
+        "",
+        hdr,
+        quote! {
+            let _ = ffi::A::within_unique_ptr();
+        },
+        &["A", "get_a"],
+        &[],
+    );
+ 
+#[test]
 fn test_using_string_function() {
     let hdr = indoc! {"
         #include <string>
