@@ -212,6 +212,14 @@ impl<'a> BridgeConverter<'a> {
 
 /// Newtype wrapper for a C++ "effective name", i.e. the name we'll use
 /// when generating C++ code.
+/// This name may contain several segments if it's an inner type,
+/// e.g.
+/// ```cpp
+/// struct Outer {
+///   struct Inner {
+///   }
+/// }
+/// ```
 /// At present these various newtype wrappers for kinds of names
 /// (Rust, C++, cxx::bridge) have various conversions between them that
 /// are probably not safe. They're marked with FIXMEs. Over time we should
@@ -282,11 +290,6 @@ impl CppEffectiveName {
 
     fn is_nested(&self) -> bool {
         self.0.contains("::")
-    }
-
-    /// FIXME: shouldn't be needed
-    fn to_string_to_make_qualified_name(&self) -> &str {
-        &self.0
     }
 
     pub(crate) fn does_not_match_cxxbridge_name(&self, cxxbridge_name: &Ident) -> bool {

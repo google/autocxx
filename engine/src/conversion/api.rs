@@ -359,17 +359,18 @@ impl ApiName {
         Self::new(&Namespace::new(), id)
     }
 
+    /// Return the C++ name to use here, which will use the Rust
+    /// name unless it's been overridden by a C++ name.
     pub(crate) fn cpp_name(&self) -> CppEffectiveName {
         CppEffectiveName::from_api_details(&self.cpp_name, &self.name)
     }
 
     pub(crate) fn qualified_cpp_name(&self) -> String {
-        let cpp_name = self.cpp_name();
         self.name
             .ns_segment_iter()
             .chain(std::iter::once(
-                cpp_name
-                    .to_string_to_make_qualified_name()
+                self.cpp_name()
+                    .to_string_for_cpp_generation()
                     .to_string()
                     .as_str(),
             ))
