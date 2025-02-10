@@ -9,6 +9,7 @@
 use std::fmt::Display;
 
 use proc_macro2::{Ident, TokenStream};
+use quote::quote;
 use syn::{
     parenthesized,
     parse::{Parse, Parser},
@@ -60,7 +61,9 @@ impl CppOriginalName {
         CppEffectiveName(self.0.clone())
     }
 
-    /// FIXME: it's not clear what this output is for
+    /// This is the main output of this type; it's fed into a mapping
+    /// from <weird bindgen name format> to
+    /// <sensible namespace::outer::inner format>; this contributes "inner".
     pub(crate) fn for_original_name_map(&self) -> &str {
         &self.0
     }
@@ -71,15 +74,44 @@ impl CppOriginalName {
         self.0.rsplit_once("::").map(|(_, suffix)| suffix)
     }
 
-    /// FIXME: this is probably OK but we should see if we can improve
-    pub(crate) fn from_string_for_constructor(name: String) -> Self {
+    pub(crate) fn from_type_name_for_constructor(name: String) -> Self {
         Self(name)
     }
 
-    /// FIXME - we shouldn't be going backwards like this from an effective
-    /// name to an original name.
-    pub(crate) fn from_effective_name(n: CppEffectiveName) -> CppOriginalName {
-        Self(n.0)
+    /// Work out what to call a Rust-side API given a C++-side name.
+    pub(crate) fn to_string_for_rust_name(&self) -> String {
+        self.0.clone()
+    }
+
+    /// Return the string inside for validation purposes.
+    pub(crate) fn for_validation(&self) -> &str {
+        &self.0
+    }
+
+    /// Used for diagnostics early in function analysis before we establish
+    /// the correct naming.
+    pub(crate) fn diagnostic_display_name(&self) -> &String {
+        &self.0
+    }
+
+    // FIXME - remove
+    pub(crate) fn from_rust_name(string: String) -> Self {
+        Self(string)
+    }
+
+    /// Determines whether we need to generate a cxxbridge::name attribute
+    pub(crate) fn does_not_match_cxxbridge_name(
+        &self,
+        cxxbridge_name: &crate::minisyn::Ident,
+    ) -> bool {
+        cxxbridge_name.0 != self.0
+    }
+
+    pub(crate) fn generate_cxxbridge_name_attribute(&self) -> proc_macro2::TokenStream {
+        let cpp_call_name = &self.to_string_for_rust_name();
+        quote!(
+            #[cxx_name = #cpp_call_name]
+        )
     }
 }
 

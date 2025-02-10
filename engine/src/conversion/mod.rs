@@ -27,10 +27,9 @@ pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use convert_error::ConvertError;
 use convert_error::ConvertErrorFromCpp;
 use itertools::Itertools;
-use quote::quote;
 use syn::{Item, ItemMod};
 
-use crate::{minisyn::Ident, types::QualifiedName, CodegenOptions, CppFilePair, UnsafePolicy};
+use crate::{types::QualifiedName, CodegenOptions, CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
@@ -212,6 +211,14 @@ impl<'a> BridgeConverter<'a> {
 
 /// Newtype wrapper for a C++ "effective name", i.e. the name we'll use
 /// when generating C++ code.
+/// This name may contain several segments if it's an inner type,
+/// e.g.
+/// ```cpp
+/// struct Outer {
+///   struct Inner {
+///   }
+/// }
+/// ```
 /// At present these various newtype wrappers for kinds of names
 /// (Rust, C++, cxx::bridge) have various conversions between them that
 /// are probably not safe. They're marked with FIXMEs. Over time we should
@@ -222,31 +229,17 @@ pub struct CppEffectiveName(String);
 impl CppEffectiveName {
     /// FIXME: document what we're doing here, just as soon as I've figured
     /// it out
-    fn from_cpp_name_and_rust_name(cpp_name: Option<&CppEffectiveName>, rust_name: &str) -> Self {
-        cpp_name.cloned().unwrap_or(Self(rust_name.to_string()))
+    fn from_cpp_name_and_rust_name(cpp_name: Option<&CppOriginalName>, rust_name: &str) -> Self {
+        cpp_name
+            .map(|cpp| cpp.to_effective_name())
+            .unwrap_or(Self(rust_name.to_string()))
     }
 
     fn from_api_details(original_name: &Option<CppOriginalName>, api_name: &QualifiedName) -> Self {
-        Self::from_cpp_name_and_rust_name(
-            original_name
-                .as_ref()
-                .map(|on| on.to_effective_name())
-                .as_ref(),
-            api_name.get_final_item(),
-        )
-    }
-
-    /// Return the string inside for validation purposes.
-    pub(crate) fn for_validation(&self) -> &str {
-        &self.0
+        Self::from_cpp_name_and_rust_name(original_name.as_ref(), api_name.get_final_item())
     }
 
     fn to_string_for_cpp_generation(&self) -> &str {
-        &self.0
-    }
-
-    /// FIXME: the output here is not just used for diagnostics.
-    pub(crate) fn diagnostic_display_name(&self) -> &str {
         &self.0
     }
 
@@ -256,14 +249,10 @@ impl CppEffectiveName {
         Self(rust_call_name)
     }
 
-    /// Work out what to call a Rust-side API given a C++-side name.
-    fn to_string_for_rust_name(&self) -> String {
-        self.0.clone()
-    }
-
-    /// FIXME: work out why we're creating C++ names from Rust cxx::bridge
-    /// names.
-    fn from_cxxbridge_name(cxxbridge_name: crate::minisyn::Ident) -> CppEffectiveName {
+    /// It seems as though we record the C++ name that subclasses need
+    /// to call back into. That might be a call into the cxx API (?)
+    /// and that's why we create a CppEffectiveName from a Rust name like this.
+    fn from_cxxbridge_name(cxxbridge_name: &crate::minisyn::Ident) -> CppEffectiveName {
         Self(cxxbridge_name.to_string())
     }
 
@@ -282,21 +271,5 @@ impl CppEffectiveName {
 
     fn is_nested(&self) -> bool {
         self.0.contains("::")
-    }
-
-    /// FIXME: shouldn't be needed
-    fn to_string_to_make_qualified_name(&self) -> &str {
-        &self.0
-    }
-
-    pub(crate) fn does_not_match_cxxbridge_name(&self, cxxbridge_name: &Ident) -> bool {
-        *cxxbridge_name != self.to_string_for_rust_name()
-    }
-
-    pub(crate) fn generate_cxxbridge_name_attribute(&self) -> proc_macro2::TokenStream {
-        let cpp_call_name = &self.to_string_for_rust_name();
-        quote!(
-            #[cxx_name = #cpp_call_name]
-        )
     }
 }

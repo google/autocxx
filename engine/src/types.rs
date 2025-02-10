@@ -17,7 +17,7 @@ use thiserror::Error;
 
 use crate::known_types::known_types;
 
-use crate::conversion::CppEffectiveName;
+use crate::conversion::CppOriginalName;
 
 pub(crate) fn make_ident<S: AsRef<str>>(id: S) -> Ident {
     Ident::new(id.as_ref(), Span::call_site())
@@ -274,7 +274,7 @@ pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), InvalidIdentError> {
     }
 }
 
-pub fn validate_ident_ok_for_rust(label: &CppEffectiveName) -> Result<(), InvalidIdentError> {
+pub fn validate_ident_ok_for_rust(label: &CppOriginalName) -> Result<(), InvalidIdentError> {
     validate_str_ok_for_rust(label.for_validation())
 }
 
