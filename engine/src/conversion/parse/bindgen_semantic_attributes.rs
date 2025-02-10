@@ -60,7 +60,9 @@ impl CppOriginalName {
         CppEffectiveName(self.0.clone())
     }
 
-    /// FIXME: it's not clear what this output is for
+    /// This is the main output of this type; it's fed into a mapping
+    /// from <weird bindgen name format> to
+    /// <sensible namespace::outer::inner format>; this contributes "inner".
     pub(crate) fn for_original_name_map(&self) -> &str {
         &self.0
     }
@@ -71,8 +73,7 @@ impl CppOriginalName {
         self.0.rsplit_once("::").map(|(_, suffix)| suffix)
     }
 
-    /// FIXME: this is probably OK but we should see if we can improve
-    pub(crate) fn from_string_for_constructor(name: String) -> Self {
+    pub(crate) fn from_type_name_for_constructor(name: String) -> Self {
         Self(name)
     }
 

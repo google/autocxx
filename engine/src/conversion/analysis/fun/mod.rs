@@ -2148,7 +2148,7 @@ impl<'a> FnAnalyzer<'a> {
                 .get(&self_ty.name)
                 .cloned()
                 .or_else(|| Some(self_ty.name.get_final_item().to_string()))
-                .map(CppOriginalName::from_string_for_constructor)
+                .map(CppOriginalName::from_type_name_for_constructor)
         } else {
             None
         };
