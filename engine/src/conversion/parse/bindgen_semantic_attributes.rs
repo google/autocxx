@@ -104,7 +104,7 @@ impl CppOriginalName {
         &self,
         cxxbridge_name: &crate::minisyn::Ident,
     ) -> bool {
-        cxxbridge_name.0.to_string() != self.0
+        cxxbridge_name.0 != self.0
     }
 
     pub(crate) fn generate_cxxbridge_name_attribute(&self) -> proc_macro2::TokenStream {
