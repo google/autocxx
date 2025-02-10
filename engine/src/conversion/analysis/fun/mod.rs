@@ -152,6 +152,9 @@ pub(crate) struct FnAnalysis {
     pub(crate) cxxbridge_name: crate::minisyn::Ident,
     /// ... so record also the name under which we wish to expose it in Rust.
     pub(crate) rust_name: String,
+    /// And also the name of the underlying C++ function if it differs
+    /// from the cxxbridge_name.
+    pub(crate) cpp_call_name: Option<CppOriginalName>,
     pub(crate) rust_rename_strategy: RustRenameStrategy,
     pub(crate) params: Punctuated<FnArg, Comma>,
     pub(crate) kind: FnKind,
@@ -1450,6 +1453,7 @@ impl<'a> FnAnalyzer<'a> {
         let analysis = FnAnalysis {
             cxxbridge_name: cxxbridge_name.clone(),
             rust_name: rust_name.clone(),
+            cpp_call_name: api_name_cpp_override,
             rust_rename_strategy,
             params,
             ret_conversion: ret_type_conversion,
@@ -1464,7 +1468,11 @@ impl<'a> FnAnalyzer<'a> {
             externally_callable,
             rust_wrapper_needed,
         };
-        let name = ApiName::new_with_cpp_name(ns, cxxbridge_name, api_name_cpp_override);
+        // For everything other than functions, the API name is immutable.
+        // It would be nice to get to that point with functions, but at present
+        // the API name is used in Rust codegen to generate "use" statements,
+        // so we override it.
+        let name = ApiName::new_with_cpp_name(ns, cxxbridge_name, cpp_original_name.cloned());
         (analysis, name)
     }
 

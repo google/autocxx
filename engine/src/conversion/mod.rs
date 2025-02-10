@@ -27,10 +27,9 @@ pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use convert_error::ConvertError;
 use convert_error::ConvertErrorFromCpp;
 use itertools::Itertools;
-use quote::quote;
 use syn::{Item, ItemMod};
 
-use crate::{minisyn::Ident, types::QualifiedName, CodegenOptions, CppFilePair, UnsafePolicy};
+use crate::{types::QualifiedName, CodegenOptions, CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
@@ -272,20 +271,5 @@ impl CppEffectiveName {
 
     fn is_nested(&self) -> bool {
         self.0.contains("::")
-    }
-
-    pub(crate) fn does_not_match_cxxbridge_name(&self, cxxbridge_name: &Ident) -> bool {
-        *cxxbridge_name != self.to_string_for_rust_name()
-    }
-
-    pub(crate) fn generate_cxxbridge_name_attribute(&self) -> proc_macro2::TokenStream {
-        let cpp_call_name = &self.to_string_for_rust_name();
-        quote!(
-            #[cxx_name = #cpp_call_name]
-        )
-    }
-
-    fn to_string_for_rust_name(&self) -> &str {
-        &self.0
     }
 }

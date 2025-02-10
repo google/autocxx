@@ -9,6 +9,7 @@
 use std::fmt::Display;
 
 use proc_macro2::{Ident, TokenStream};
+use quote::quote;
 use syn::{
     parenthesized,
     parse::{Parse, Parser},
@@ -96,6 +97,21 @@ impl CppOriginalName {
     // FIXME - remove
     pub(crate) fn from_rust_name(string: String) -> Self {
         Self(string)
+    }
+
+    /// Determines whether we need to generate a cxxbridge::name attribute
+    pub(crate) fn does_not_match_cxxbridge_name(
+        &self,
+        cxxbridge_name: &crate::minisyn::Ident,
+    ) -> bool {
+        cxxbridge_name.0.to_string() != self.0
+    }
+
+    pub(crate) fn generate_cxxbridge_name_attribute(&self) -> proc_macro2::TokenStream {
+        let cpp_call_name = &self.to_string_for_rust_name();
+        quote!(
+            #[cxx_name = #cpp_call_name]
+        )
     }
 }
 
