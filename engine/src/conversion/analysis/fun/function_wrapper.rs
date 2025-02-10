@@ -257,6 +257,8 @@ pub(crate) enum CppFunctionKind {
 pub(crate) struct CppFunction {
     pub(crate) payload: CppFunctionBody,
     pub(crate) wrapper_function_name: crate::minisyn::Ident,
+    /// The following field is apparently only used for
+    /// subclass calls.
     pub(crate) original_cpp_name: CppEffectiveName,
     pub(crate) return_conversion: Option<TypeConversionPolicy>,
     pub(crate) argument_conversion: Vec<TypeConversionPolicy>,

@@ -77,10 +77,25 @@ impl CppOriginalName {
         Self(name)
     }
 
-    /// FIXME - we shouldn't be going backwards like this from an effective
-    /// name to an original name.
-    pub(crate) fn from_effective_name(n: CppEffectiveName) -> CppOriginalName {
-        Self(n.0)
+    /// Work out what to call a Rust-side API given a C++-side name.
+    pub(crate) fn to_string_for_rust_name(&self) -> String {
+        self.0.clone()
+    }
+
+    /// Return the string inside for validation purposes.
+    pub(crate) fn for_validation(&self) -> &str {
+        &self.0
+    }
+
+    /// Used for diagnostics early in function analysis before we establish
+    /// the correct naming.
+    pub(crate) fn diagnostic_display_name(&self) -> &String {
+        &self.0
+    }
+
+    // FIXME - remove
+    pub(crate) fn from_rust_name(string: String) -> Self {
+        Self(string)
     }
 }
 
