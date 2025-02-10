@@ -20,6 +20,7 @@ mod parse;
 mod type_helpers;
 mod utilities;
 
+pub(crate) use crate::conversion::parse::CppOriginalName;
 use analysis::fun::FnAnalyzer;
 use autocxx_parser::IncludeCppConfig;
 pub(crate) use codegen_cpp::CppCodeGenerator;
@@ -28,7 +29,7 @@ use convert_error::ConvertErrorFromCpp;
 use itertools::Itertools;
 use syn::{Item, ItemMod};
 
-use crate::{CodegenOptions, CppFilePair, UnsafePolicy};
+use crate::{types::QualifiedName, CodegenOptions, CppFilePair, UnsafePolicy};
 
 use self::{
     analysis::{
@@ -205,5 +206,70 @@ impl<'a> BridgeConverter<'a> {
                 })
             }
         }
+    }
+}
+
+/// Newtype wrapper for a C++ "effective name", i.e. the name we'll use
+/// when generating C++ code.
+/// This name may contain several segments if it's an inner type,
+/// e.g.
+/// ```cpp
+/// struct Outer {
+///   struct Inner {
+///   }
+/// }
+/// ```
+/// At present these various newtype wrappers for kinds of names
+/// (Rust, C++, cxx::bridge) have various conversions between them that
+/// are probably not safe. They're marked with FIXMEs. Over time we should
+/// remove them, or make them safe by doing name validation at the point
+/// of conversion.
+#[derive(PartialEq, PartialOrd, Eq, Hash, Clone, Debug)]
+pub struct CppEffectiveName(String);
+impl CppEffectiveName {
+    /// FIXME: document what we're doing here, just as soon as I've figured
+    /// it out
+    fn from_cpp_name_and_rust_name(cpp_name: Option<&CppOriginalName>, rust_name: &str) -> Self {
+        cpp_name
+            .map(|cpp| cpp.to_effective_name())
+            .unwrap_or(Self(rust_name.to_string()))
+    }
+
+    fn from_api_details(original_name: &Option<CppOriginalName>, api_name: &QualifiedName) -> Self {
+        Self::from_cpp_name_and_rust_name(original_name.as_ref(), api_name.get_final_item())
+    }
+
+    fn to_string_for_cpp_generation(&self) -> &str {
+        &self.0
+    }
+
+    /// FIXME: this may not be quite right. It's not quite clear where
+    /// this string comes from or whether it's a Rusty or C++y string.
+    fn from_subclass_function_name(rust_call_name: String) -> CppEffectiveName {
+        Self(rust_call_name)
+    }
+
+    /// It seems as though we record the C++ name that subclasses need
+    /// to call back into. That might be a call into the cxx API (?)
+    /// and that's why we create a CppEffectiveName from a Rust name like this.
+    fn from_cxxbridge_name(cxxbridge_name: &crate::minisyn::Ident) -> CppEffectiveName {
+        Self(cxxbridge_name.to_string())
+    }
+
+    /// FIXME: work out why we're creating C++ names from Rust names.
+    fn from_rust_name(rust_name: String) -> CppEffectiveName {
+        Self(rust_name)
+    }
+
+    fn from_fully_qualified_name_for_subclass(to_cpp_name: &str) -> CppEffectiveName {
+        Self(to_cpp_name.to_string())
+    }
+
+    fn final_segment_if_any(&self) -> Option<&str> {
+        self.0.rsplit_once("::").map(|(_, suffix)| suffix)
+    }
+
+    fn is_nested(&self) -> bool {
+        self.0.contains("::")
     }
 }

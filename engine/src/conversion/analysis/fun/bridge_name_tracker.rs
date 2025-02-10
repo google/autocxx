@@ -90,11 +90,11 @@ impl BridgeNameTracker {
             *count += 1;
             return found_name.to_string();
         }
+        let type_name = type_name.map(|s| s.to_string());
         let prefix = ns
             .iter()
-            .cloned()
-            .chain(type_name.iter().map(|x| x.to_string()))
-            .chain(std::iter::once(found_name.to_string()))
+            .chain(type_name.iter().map(|s| s.as_str()))
+            .chain(std::iter::once(found_name))
             .join("_");
         let count = self
             .next_cxx_bridge_name_for_prefix

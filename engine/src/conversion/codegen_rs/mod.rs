@@ -422,7 +422,7 @@ impl<'a> RsCodeGenerator<'a> {
             }))
         }
         for (child_name, child_ns_entries) in ns_entries.children() {
-            let new_ns = ns.push((*child_name).clone());
+            let new_ns = ns.push(child_name.to_string());
             let child_id = make_ident(child_name);
 
             let mut inner_output_items = Vec::new();
@@ -464,7 +464,6 @@ impl<'a> RsCodeGenerator<'a> {
     ) -> RsCodegenResult {
         let name = api.name().clone();
         let id = name.get_final_ident();
-        let cpp_call_name = api.effective_cpp_name().to_string();
         match api {
             Api::StringConstructor { .. } => {
                 let make_string_name = make_ident(self.config.get_makestring_name());
@@ -479,13 +478,9 @@ impl<'a> RsCodeGenerator<'a> {
                     ..Default::default()
                 }
             }
-            Api::Function { fun, analysis, .. } => gen_function(
-                name.get_namespace(),
-                *fun,
-                analysis,
-                cpp_call_name,
-                non_pod_types,
-            ),
+            Api::Function { fun, analysis, .. } => {
+                gen_function(name.get_namespace(), *fun, analysis, non_pod_types)
+            }
             Api::Const { const_item, .. } => RsCodegenResult {
                 bindgen_mod_items: vec![Item::Const(const_item.into())],
                 materializations: vec![Use::UsedFromBindgen],
@@ -1150,12 +1145,12 @@ impl<'a> RsCodeGenerator<'a> {
         // If we have a nested class, B::C, within namespace A,
         // we actually have to tell cxx that we have nested class C
         // within namespace A.
-        let mut ns_components: Vec<_> = ns.iter().cloned().collect();
+        let mut ns_components: Vec<_> = ns.iter().map(|s| s.to_string()).collect();
         let mut cxx_name = None;
         if let Some(cpp_name) = self.original_name_map.get(name) {
-            let cpp_name = QualifiedName::new_from_cpp_name(cpp_name);
+            let cpp_name = cpp_name.to_qualified_name();
             cxx_name = Some(cpp_name.get_final_item().to_string());
-            ns_components.extend(cpp_name.ns_segment_iter().cloned());
+            ns_components.extend(cpp_name.ns_segment_iter().map(|s| s.to_string()));
         };
 
         let mut for_extern_c_ts = if !ns_components.is_empty() {

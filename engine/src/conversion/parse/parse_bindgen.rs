@@ -233,7 +233,7 @@ impl<'a> ParseBindgen<'a> {
                     //
                     // We'll also at this point check for one specific problem with
                     // forward declarations.
-                    if err.is_none() && name.cpp_name().contains("::") {
+                    if err.is_none() && name.cpp_name().is_nested() {
                         err = Some(ConvertErrorWithContext(
                             ConvertErrorFromCpp::ForwardDeclaredNestedType,
                             Some(ErrorContext::new_for_item(s.ident.into())),

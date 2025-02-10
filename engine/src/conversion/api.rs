@@ -33,7 +33,8 @@ use super::{
         PointerTreatment,
     },
     convert_error::{ConvertErrorWithContext, ErrorContext},
-    ConvertErrorFromCpp,
+    parse::CppOriginalName,
+    ConvertErrorFromCpp, CppEffectiveName,
 };
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -282,7 +283,7 @@ pub(crate) struct FuncToConvert {
     pub(crate) special_member: Option<SpecialMemberKind>,
     pub(crate) unused_template_param: bool,
     pub(crate) references: References,
-    pub(crate) original_name: Option<String>,
+    pub(crate) original_name: Option<CppOriginalName>,
     /// Used for static functions only. For all other functons,
     /// this is figured out from the receiver type in the inputs.
     pub(crate) self_ty: Option<QualifiedName>,
@@ -328,7 +329,7 @@ pub(crate) enum TypedefKind {
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ApiName {
     pub(crate) name: QualifiedName,
-    cpp_name: Option<String>,
+    cpp_name: Option<CppOriginalName>,
 }
 
 impl ApiName {
@@ -336,7 +337,11 @@ impl ApiName {
         Self::new_from_qualified_name(QualifiedName::new(ns, id))
     }
 
-    pub(crate) fn new_with_cpp_name(ns: &Namespace, id: Ident, cpp_name: Option<String>) -> Self {
+    pub(crate) fn new_with_cpp_name(
+        ns: &Namespace,
+        id: Ident,
+        cpp_name: Option<CppOriginalName>,
+    ) -> Self {
         Self {
             name: QualifiedName::new(ns, id),
             cpp_name,
@@ -354,23 +359,25 @@ impl ApiName {
         Self::new(&Namespace::new(), id)
     }
 
-    pub(crate) fn cpp_name(&self) -> String {
-        self.cpp_name
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| self.name.get_final_item().to_string())
+    /// Return the C++ name to use here, which will use the Rust
+    /// name unless it's been overridden by a C++ name.
+    pub(crate) fn cpp_name(&self) -> CppEffectiveName {
+        CppEffectiveName::from_api_details(&self.cpp_name, &self.name)
     }
 
     pub(crate) fn qualified_cpp_name(&self) -> String {
-        let cpp_name = self.cpp_name();
         self.name
             .ns_segment_iter()
-            .cloned()
-            .chain(std::iter::once(cpp_name))
+            .chain(std::iter::once(
+                self.cpp_name()
+                    .to_string_for_cpp_generation()
+                    .to_string()
+                    .as_str(),
+            ))
             .join("::")
     }
 
-    pub(crate) fn cpp_name_if_present(&self) -> Option<&String> {
+    pub(crate) fn cpp_name_if_present(&self) -> Option<&CppOriginalName> {
         self.cpp_name.as_ref()
     }
 }
@@ -626,16 +633,14 @@ impl<T: AnalysisPhase> Api<T> {
 
     /// The name recorded for use in C++, if and only if
     /// it differs from Rust.
-    pub(crate) fn cpp_name(&self) -> &Option<String> {
+    pub(crate) fn cpp_name(&self) -> &Option<CppOriginalName> {
         &self.name_info().cpp_name
     }
 
     /// The name for use in C++, whether or not it differs
     /// from Rust.
-    pub(crate) fn effective_cpp_name(&self) -> &str {
-        self.cpp_name()
-            .as_deref()
-            .unwrap_or_else(|| self.name().get_final_item())
+    pub(crate) fn effective_cpp_name(&self) -> CppEffectiveName {
+        self.name_info().cpp_name()
     }
 
     /// If this API turns out to have the same QualifiedName as another,

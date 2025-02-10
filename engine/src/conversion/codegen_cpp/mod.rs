@@ -12,7 +12,7 @@ pub(crate) mod type_to_cpp;
 
 use crate::{
     conversion::analysis::fun::{function_wrapper::CppFunctionKind, FnAnalysis},
-    types::{make_ident, QualifiedName},
+    types::QualifiedName,
     CppCodegenOptions, CppFilePair,
 };
 use autocxx_parser::IncludeCppConfig;
@@ -32,7 +32,7 @@ use super::{
     },
     api::{Api, Provenance, SubclassName, TypeKind},
     apivec::ApiVec,
-    ConvertErrorFromCpp,
+    ConvertErrorFromCpp, CppEffectiveName,
 };
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
@@ -336,7 +336,7 @@ impl<'a> CppCodeGenerator<'a> {
         avoid_this: bool,
         conversion_direction: ConversionDirection,
         requires_rust_declarations: bool,
-        force_name: Option<&str>,
+        force_name: Option<&CppEffectiveName>,
     ) -> Result<ExtraCpp, ConvertErrorFromCpp> {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
@@ -353,7 +353,7 @@ impl<'a> CppCodeGenerator<'a> {
                     | CppFunctionKind::Constructor
             );
         let name = match force_name {
-            Some(n) => n.to_string(),
+            Some(n) => n.to_string_for_cpp_generation().to_string(),
             None => details.wrapper_function_name.to_string(),
         };
         let get_arg_name = |counter: usize| -> String {
@@ -513,7 +513,10 @@ impl<'a> CppCodeGenerator<'a> {
             }
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
                 Some(receiver) => (
-                    format!("{receiver}.{id}({arg_list})"),
+                    format!(
+                        "{receiver}.{}({arg_list})",
+                        id.to_string_for_cpp_generation()
+                    ),
                     "".to_string(),
                     false,
                 ),
@@ -521,7 +524,9 @@ impl<'a> CppCodeGenerator<'a> {
                     let underlying_function_call = ns
                         .into_iter()
                         .cloned()
-                        .chain(std::iter::once(id.to_string()))
+                        .chain(std::iter::once(
+                            id.to_string_for_cpp_generation().to_string(),
+                        ))
                         .join("::");
                     (
                         format!("{underlying_function_call}({arg_list})"),
@@ -534,7 +539,14 @@ impl<'a> CppCodeGenerator<'a> {
                 let underlying_function_call = ns
                     .into_iter()
                     .cloned()
-                    .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
+                    .chain(
+                        [
+                            ty_id.to_string(),
+                            fn_id.to_string_for_cpp_generation().to_string(),
+                        ]
+                        .iter()
+                        .cloned(),
+                    )
                     .join("::");
                 (
                     format!("{underlying_function_call}({arg_list})"),
@@ -673,7 +685,7 @@ impl<'a> CppCodeGenerator<'a> {
                 super_method.payload = CppFunctionBody::StaticMethodCall(
                     superclass.get_namespace().clone(),
                     superclass.get_final_ident(),
-                    make_ident(&method.fun.original_cpp_name),
+                    method.fun.original_cpp_name.clone(),
                 );
                 let mut super_fn_impl = self.generate_cpp_function_inner(
                     &super_method,

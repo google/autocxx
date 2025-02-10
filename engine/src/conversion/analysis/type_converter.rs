@@ -245,7 +245,7 @@ impl<'a> TypeConverter<'a> {
                     return Err(ConvertErrorFromCpp::UnsupportedBuiltInType(ty));
                 }
                 if !self.types_found.contains(&ty) {
-                    typ.path.segments = std::iter::once(&"root".to_string())
+                    typ.path.segments = std::iter::once("root")
                         .chain(ns.iter())
                         .map(|s| {
                             let i = make_ident(s);
