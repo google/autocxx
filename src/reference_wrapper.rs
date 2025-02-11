@@ -230,7 +230,7 @@ impl<T: ?Sized + Unsize<U>, U: ?Sized> DispatchFromDyn<CppRef<'_, U>> for CppRef
 #[repr(transparent)]
 pub struct CppMutRef<'a, T: ?Sized> {
     ptr: *mut T,
-    phantom: PhantomData<&'a T>,
+    phantom: PhantomData<&'a mut T>,
 }
 
 impl<T: ?Sized> CppMutRef<'_, T> {
