@@ -162,7 +162,7 @@ impl<'a, T: ?Sized> CppRef<'a, T> {
     pub fn const_cast(&self) -> CppMutRef<'a, T> {
         CppMutRef {
             ptr: self.ptr as *mut T,
-            phantom: self.phantom,
+            phantom: PhantomData,
         }
     }
 
@@ -296,7 +296,7 @@ impl<'a, T> From<CppMutRef<'a, T>> for CppRef<'a, T> {
     fn from(mutable: CppMutRef<'a, T>) -> Self {
         Self {
             ptr: mutable.ptr,
-            phantom: mutable.phantom,
+            phantom: PhantomData,
         }
     }
 }
