@@ -16,12 +16,12 @@ use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability, U
 use crate::conversion::analysis::pod::PodPhase;
 use crate::conversion::api::{
     CppVisibility, FuncToConvert, Provenance, RustSubclassFnDetails, SubclassConstructorDetails,
-    SubclassName, SuperclassMethod, UnsafetyNeeded, Virtualness,
+    SubclassName, SuperclassMethod, UnsafetyNeeded,
 };
 use crate::conversion::apivec::ApiVec;
-use crate::conversion::parse::CppOriginalName;
 use crate::conversion::CppEffectiveName;
 use crate::minisyn::minisynize_punctuated;
+use crate::parse_callbacks::CppOriginalName;
 use crate::{
     conversion::{
         analysis::fun::function_wrapper::{
@@ -64,12 +64,10 @@ pub(super) fn create_subclass_fn_wrapper(
         inputs: fun.inputs.clone(),
         output: fun.output.clone(),
         vis: fun.vis.clone(),
-        virtualness: Virtualness::None,
+        virtualness: None,
         cpp_vis: CppVisibility::Public,
         special_member: None,
-        unused_template_param: fun.unused_template_param,
         original_name: None,
-        references: fun.references.clone(),
         add_to_trait: fun.add_to_trait.clone(),
         is_deleted: fun.is_deleted,
         synthetic_cpp: None,
@@ -251,12 +249,10 @@ pub(super) fn create_subclass_constructor(
         inputs,
         output: fun.output.clone(),
         vis: fun.vis.clone(),
-        virtualness: Virtualness::None,
+        virtualness: None,
         cpp_vis: CppVisibility::Public,
-        special_member: fun.special_member.clone(),
+        special_member: fun.special_member,
         original_name: None,
-        unused_template_param: fun.unused_template_param,
-        references: fun.references.clone(),
         synthesized_this_type: Some(cpp.clone()),
         self_ty: Some(cpp),
         add_to_trait: None,

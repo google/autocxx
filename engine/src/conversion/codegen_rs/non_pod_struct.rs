@@ -6,8 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::conversion::api::Layout;
 use crate::types::make_ident;
+use autocxx_bindgen::callbacks::Layout;
 use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::parse::Parser;

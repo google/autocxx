@@ -7,6 +7,7 @@
 // except according to those terms.
 
 use crate::minisyn::Ident;
+use crate::parse_callbacks::CppOriginalName;
 use itertools::Itertools;
 use proc_macro2::Span;
 use quote::ToTokens;
@@ -16,8 +17,6 @@ use syn::{parse_quote, PathSegment, TypePath};
 use thiserror::Error;
 
 use crate::known_types::known_types;
-
-use crate::conversion::CppOriginalName;
 
 pub(crate) fn make_ident<S: AsRef<str>>(id: S) -> Ident {
     Ident::new(id.as_ref(), Span::call_site())
@@ -265,7 +264,7 @@ pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), InvalidIdentError> {
         Err(InvalidIdentError::Bitfield)
     } else if id.starts_with("__BindgenUnionField") {
         Err(InvalidIdentError::Union)
-    } else if id.contains("__") {
+    } else if id.contains("__") && !id.starts_with("__bindgen_marker") {
         Err(InvalidIdentError::TooManyUnderscores)
     } else if id.starts_with("_bindgen_ty_") {
         Err(InvalidIdentError::BindgenTy)

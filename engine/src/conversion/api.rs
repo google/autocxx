@@ -6,34 +6,33 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use indexmap::set::IndexSet as HashSet;
-use std::fmt::Display;
+use autocxx_bindgen::callbacks::{Explicitness, Layout, SpecialMemberKind, Virtualness};
 
 use syn::{
-    parse::Parse,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
 };
 
-use crate::minisyn::{
-    Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
-    Pat, ReturnType, Type, Visibility,
-};
 use crate::types::{make_ident, Namespace, QualifiedName};
+use crate::{
+    minisyn::{
+        Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, Pat,
+        ReturnType, Type, Visibility,
+    },
+    parse_callbacks::CppOriginalName,
+};
 use autocxx_parser::{ExternCppType, RustFun, RustPath};
 use itertools::Itertools;
 use quote::ToTokens;
 
+pub(crate) use autocxx_bindgen::callbacks::Visibility as CppVisibility;
+
 use super::{
-    analysis::{
-        fun::{
-            function_wrapper::{CppFunction, CppFunctionBody, CppFunctionKind},
-            ReceiverMutability,
-        },
-        PointerTreatment,
+    analysis::fun::{
+        function_wrapper::{CppFunction, CppFunctionBody, CppFunctionKind},
+        ReceiverMutability,
     },
     convert_error::{ConvertErrorWithContext, ErrorContext},
-    parse::CppOriginalName,
     ConvertErrorFromCpp, CppEffectiveName,
 };
 
@@ -48,53 +47,12 @@ pub(crate) enum TypeKind {
             // in which case we'll err on the side of caution.
 }
 
-/// C++ visibility.
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub(crate) enum CppVisibility {
-    Public,
-    Protected,
-    Private,
-}
-
 /// Details about a C++ struct.
 #[derive(Debug)]
 pub(crate) struct StructDetails {
     pub(crate) item: ItemStruct,
     pub(crate) layout: Option<Layout>,
     pub(crate) has_rvalue_reference_fields: bool,
-}
-
-/// Layout of a type, equivalent to the same type in ir/layout.rs in bindgen
-#[derive(Clone, Debug)]
-pub(crate) struct Layout {
-    /// The size (in bytes) of this layout.
-    pub(crate) size: usize,
-    /// The alignment (in bytes) of this layout.
-    pub(crate) align: usize,
-    /// Whether this layout's members are packed or not.
-    pub(crate) packed: bool,
-}
-
-impl Parse for Layout {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let size: LitInt = input.parse()?;
-        input.parse::<syn::token::Comma>()?;
-        let align: LitInt = input.parse()?;
-        input.parse::<syn::token::Comma>()?;
-        let packed: LitBool = input.parse()?;
-        Ok(Layout {
-            size: size.base10_parse().unwrap(),
-            align: align.base10_parse().unwrap(),
-            packed: packed.value(),
-        })
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum Virtualness {
-    None,
-    Virtual,
-    PureVirtual,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -141,45 +99,6 @@ pub(crate) struct SuperclassMethod {
     pub(crate) is_pure_virtual: bool,
 }
 
-/// Information about references (as opposed to pointers) to be found
-/// within the function signature. This is derived from bindgen annotations
-/// which is why it's not within `FuncToConvert::inputs`
-#[derive(Default, Clone, Debug)]
-pub(crate) struct References {
-    pub(crate) rvalue_ref_params: HashSet<Ident>,
-    pub(crate) ref_params: HashSet<Ident>,
-    pub(crate) ref_return: bool,
-    pub(crate) rvalue_ref_return: bool,
-}
-
-impl References {
-    pub(crate) fn new_with_this_and_return_as_reference() -> Self {
-        Self {
-            ref_return: true,
-            ref_params: [make_ident("this")].into_iter().collect(),
-            ..Default::default()
-        }
-    }
-    pub(crate) fn param_treatment(&self, param: &Ident) -> PointerTreatment {
-        if self.rvalue_ref_params.contains(param) {
-            PointerTreatment::RValueReference
-        } else if self.ref_params.contains(param) {
-            PointerTreatment::Reference
-        } else {
-            PointerTreatment::Pointer
-        }
-    }
-    pub(crate) fn return_treatment(&self) -> PointerTreatment {
-        if self.rvalue_ref_return {
-            PointerTreatment::RValueReference
-        } else if self.ref_return {
-            PointerTreatment::Reference
-        } else {
-            PointerTreatment::Pointer
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct TraitImplSignature {
     pub(crate) ty: Type,
@@ -220,43 +139,10 @@ impl std::hash::Hash for TraitImplSignature {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum SpecialMemberKind {
-    DefaultConstructor,
-    CopyConstructor,
-    MoveConstructor,
-    Destructor,
-    AssignmentOperator,
-}
-
-impl Display for SpecialMemberKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                SpecialMemberKind::DefaultConstructor => "default constructor",
-                SpecialMemberKind::CopyConstructor => "copy constructor",
-                SpecialMemberKind::MoveConstructor => "move constructor",
-                SpecialMemberKind::Destructor => "destructor",
-                SpecialMemberKind::AssignmentOperator => "assignment operator",
-            }
-        )
-    }
-}
-
-#[derive(Clone, Debug)]
 pub(crate) enum Provenance {
     Bindgen,
     SynthesizedOther,
     SynthesizedSubclassConstructor(Box<SubclassConstructorDetails>),
-}
-
-/// Whether a function has =delete or =default
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum DeletedOrDefaulted {
-    Neither,
-    Deleted,
-    Defaulted,
 }
 
 /// A C++ function for which we need to generate bindings, but haven't
@@ -278,11 +164,9 @@ pub(crate) struct FuncToConvert {
     pub(crate) variadic: bool,
     pub(crate) output: ReturnType,
     pub(crate) vis: Visibility,
-    pub(crate) virtualness: Virtualness,
+    pub(crate) virtualness: Option<Virtualness>,
     pub(crate) cpp_vis: CppVisibility,
     pub(crate) special_member: Option<SpecialMemberKind>,
-    pub(crate) unused_template_param: bool,
-    pub(crate) references: References,
     pub(crate) original_name: Option<CppOriginalName>,
     /// Used for static functions only. For all other functons,
     /// this is figured out from the receiver type in the inputs.
@@ -296,8 +180,8 @@ pub(crate) struct FuncToConvert {
     /// If Some, this function didn't really exist in the original
     /// C++ and instead we're synthesizing it.
     pub(crate) synthetic_cpp: Option<(CppFunctionBody, CppFunctionKind)>,
-    /// =delete
-    pub(crate) is_deleted: DeletedOrDefaulted,
+    /// =delete or =default
+    pub(crate) is_deleted: Option<Explicitness>,
 }
 
 /// Layers of analysis which may be applied to decorate each API.

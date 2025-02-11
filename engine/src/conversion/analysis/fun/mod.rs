@@ -19,19 +19,21 @@ use crate::{
             type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         },
         api::{
-            ApiName, CastMutability, CppVisibility, DeletedOrDefaulted, FuncToConvert, NullPhase,
-            Provenance, References, SpecialMemberKind, SubclassName, TraitImplSignature,
-            TraitSynthesis, UnsafetyNeeded, Virtualness,
+            ApiName, CastMutability, FuncToConvert, NullPhase, Provenance, SubclassName,
+            TraitImplSignature, TraitSynthesis, UnsafetyNeeded,
         },
         apivec::ApiVec,
         convert_error::{ConvertErrorWithContext, ErrorContext, ErrorContextType},
         error_reporter::{convert_apis, report_any_error},
+        type_helpers::{type_has_unused_template_param, type_is_reference, unwrap_has_opaque},
         CppEffectiveName, CppOriginalName,
     },
     known_types::known_types,
     minisyn::{minisynize_punctuated, FnArg},
     types::validate_ident_ok_for_rust,
 };
+use autocxx_bindgen::callbacks::Visibility as CppVisibility;
+use autocxx_bindgen::callbacks::{Explicitness, SpecialMemberKind, Virtualness};
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 
@@ -69,7 +71,7 @@ use super::{
     doc_label::make_doc_attrs,
     pod::{PodAnalysis, PodPhase},
     tdef::TypedefAnalysis,
-    type_converter::{Annotated, PointerTreatment},
+    type_converter::Annotated,
 };
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -437,9 +439,8 @@ impl<'a> FnAnalyzer<'a> {
         &mut self,
         ty: Box<Type>,
         ns: &Namespace,
-        pointer_treatment: PointerTreatment,
     ) -> Result<Annotated<Box<Type>>, ConvertErrorFromCpp> {
-        let ctx = TypeConversionContext::OuterType { pointer_treatment };
+        let ctx = TypeConversionContext::OuterType {};
         let mut annotated = self.type_converter.convert_boxed_type(ty, ns, &ctx)?;
         self.extra_apis.append(&mut annotated.extra_apis);
         Ok(annotated)
@@ -524,7 +525,7 @@ impl<'a> FnAnalyzer<'a> {
                     **fun,
                     FuncToConvert {
                         special_member: Some(SpecialMemberKind::Destructor),
-                        is_deleted: DeletedOrDefaulted::Neither | DeletedOrDefaulted::Defaulted,
+                        is_deleted: None | Some(Explicitness::Defaulted),
                         cpp_vis: CppVisibility::Public,
                         ..
                     }
@@ -750,7 +751,6 @@ impl<'a> FnAnalyzer<'a> {
                     ns,
                     &diagnostic_name,
                     &fun.synthesized_this_type,
-                    &fun.references,
                     true,
                     false,
                     None,
@@ -967,9 +967,11 @@ impl<'a> FnAnalyzer<'a> {
                     let receiver_mutability =
                         receiver_mutability.expect("Failed to find receiver details");
                     match fun.virtualness {
-                        Virtualness::None => MethodKind::Normal,
-                        Virtualness::Virtual => MethodKind::Virtual(receiver_mutability),
-                        Virtualness::PureVirtual => MethodKind::PureVirtual(receiver_mutability),
+                        None => MethodKind::Normal,
+                        Some(Virtualness::Virtual) => MethodKind::Virtual(receiver_mutability),
+                        Some(Virtualness::PureVirtual) => {
+                            MethodKind::PureVirtual(receiver_mutability)
+                        }
                     }
                 };
                 // Disambiguate overloads.
@@ -1133,7 +1135,7 @@ impl<'a> FnAnalyzer<'a> {
                 Ok(_) => panic!("No error in the error"),
                 Err(problem) => set_ignore_reason(problem),
             }
-        } else if fun.unused_template_param {
+        } else if any_type_has_unused_template_param(&fun.inputs, &fun.output) {
             // This indicates that bindgen essentially flaked out because templates
             // were too complex.
             set_ignore_reason(ConvertErrorFromCpp::UnusedTemplateParam)
@@ -1145,9 +1147,9 @@ impl<'a> FnAnalyzer<'a> {
             // treat it as an assignment operator, but anything below we still consider when
             // deciding which other C++ special member functions are implicitly defined.
             set_ignore_reason(ConvertErrorFromCpp::AssignmentOperator)
-        } else if fun.references.rvalue_ref_return {
+        } else if return_type_is_reference(&fun.output) {
             set_ignore_reason(ConvertErrorFromCpp::RValueReturn)
-        } else if matches!(fun.is_deleted, DeletedOrDefaulted::Deleted) {
+        } else if matches!(fun.is_deleted, Some(Explicitness::Deleted)) {
             set_ignore_reason(ConvertErrorFromCpp::Deleted)
         } else {
             match kind {
@@ -1210,13 +1212,7 @@ impl<'a> FnAnalyzer<'a> {
         // Analyze the return type, just as we previously did for the
         // parameters.
         let mut return_analysis = self
-            .convert_return_type(
-                &fun.output,
-                ns,
-                &diagnostic_name,
-                &fun.references,
-                sophistication,
-            )
+            .convert_return_type(&fun.output, ns, &diagnostic_name, sophistication)
             .unwrap_or_else(|err| {
                 set_ignore_reason(err);
                 ReturnTypeAnalysis::default()
@@ -1510,7 +1506,6 @@ impl<'a> FnAnalyzer<'a> {
             ns,
             diagnostic_name,
             &fun.synthesized_this_type,
-            &fun.references,
             false,
             is_move_constructor,
             force_rust_conversion,
@@ -1666,7 +1661,6 @@ impl<'a> FnAnalyzer<'a> {
         ns: &Namespace,
         diagnostic_name: &QualifiedName,
         virtual_this: &Option<QualifiedName>,
-        references: &References,
         treat_this_as_reference: bool,
         is_move_constructor: bool,
         force_rust_conversion: Option<RustConversionType>,
@@ -1678,15 +1672,20 @@ impl<'a> FnAnalyzer<'a> {
                 let mut pt = pt.clone();
                 let mut self_type = None;
                 let old_pat = *pt.pat;
-                let mut pointer_treatment = PointerTreatment::Pointer;
                 let mut is_placement_return_destination = false;
-                let new_pat = match old_pat {
+                let (new_pat, ty_to_convert) = match old_pat {
                     syn::Pat::Ident(mut pp) if pp.ident == "this" => {
                         let this_type = match pt.ty.as_ref() {
                             Type::Ptr(TypePtr {
                                 elem, mutability, ..
                             }) => match elem.as_ref() {
                                 Type::Path(typ) => {
+                                    let typ = unwrap_has_opaque(typ)
+                                        .and_then(|ty| match ty {
+                                            Type::Path(typ) => Some(typ),
+                                            _ => None,
+                                        })
+                                        .unwrap_or(typ);
                                     let receiver_mutability = if mutability.is_some() {
                                         ReceiverMutability::Mutable
                                     } else {
@@ -1721,17 +1720,23 @@ impl<'a> FnAnalyzer<'a> {
                         is_placement_return_destination = construct_into_self;
                         if treat_this_as_reference {
                             pp.ident = Ident::new("self", pp.ident.span());
-                            pointer_treatment = PointerTreatment::Reference;
+                            let pt_ty = pt.ty.as_ref();
+                            (
+                                syn::Pat::Ident(pp),
+                                Box::new(
+                                    syn::parse_quote! { __bindgen_marker_Reference < #pt_ty >},
+                                ),
+                            )
+                        } else {
+                            (syn::Pat::Ident(pp), pt.ty)
                         }
-                        syn::Pat::Ident(pp)
                     }
                     syn::Pat::Ident(pp) => {
                         validate_ident_ok_for_cxx(&pp.ident.to_string())
                             .map_err(ConvertErrorFromCpp::InvalidIdent)?;
-                        pointer_treatment = references.param_treatment(&pp.ident.clone().into());
-                        syn::Pat::Ident(pp)
+                        (syn::Pat::Ident(pp), pt.ty)
                     }
-                    _ => old_pat,
+                    _ => (old_pat, pt.ty),
                 };
 
                 let is_placement_return_destination = is_placement_return_destination
@@ -1739,7 +1744,7 @@ impl<'a> FnAnalyzer<'a> {
                         force_rust_conversion,
                         Some(RustConversionType::FromPlacementParamToNewReturn)
                     );
-                let annotated_type = self.convert_boxed_type(pt.ty, ns, pointer_treatment)?;
+                let annotated_type = self.convert_boxed_type(ty_to_convert, ns)?;
                 let conversion = self.argument_conversion_details(
                     &annotated_type,
                     is_move_constructor,
@@ -1943,14 +1948,12 @@ impl<'a> FnAnalyzer<'a> {
         rt: &ReturnType,
         ns: &Namespace,
         diagnostic_name: &QualifiedName,
-        references: &References,
         sophistication: TypeConversionSophistication,
     ) -> Result<ReturnTypeAnalysis, ConvertErrorFromCpp> {
         Ok(match rt {
             ReturnType::Default => ReturnTypeAnalysis::default(),
             ReturnType::Type(rarrow, boxed_type) => {
-                let annotated_type =
-                    self.convert_boxed_type(boxed_type.clone(), ns, references.return_treatment())?;
+                let annotated_type = self.convert_boxed_type(boxed_type.clone(), ns)?;
                 let boxed_type = annotated_type.ty;
                 let ty: &Type = boxed_type.as_ref();
                 match ty {
@@ -1976,7 +1979,6 @@ impl<'a> FnAnalyzer<'a> {
                                 ns,
                                 diagnostic_name,
                                 &None,
-                                &References::default(),
                                 false,
                                 false,
                                 Some(RustConversionType::FromPlacementParamToNewReturn),
@@ -2076,7 +2078,6 @@ impl<'a> FnAnalyzer<'a> {
                     &mut apis,
                     SpecialMemberKind::DefaultConstructor,
                     parse_quote! { this: *mut #path },
-                    References::default(),
                 );
             }
             if items_found.implicit_move_constructor_needed() {
@@ -2085,11 +2086,7 @@ impl<'a> FnAnalyzer<'a> {
                     "move_ctor",
                     &mut apis,
                     SpecialMemberKind::MoveConstructor,
-                    parse_quote! { this: *mut #path, other: *mut #path },
-                    References {
-                        rvalue_ref_params: [make_ident("other")].into_iter().collect(),
-                        ..Default::default()
-                    },
+                    parse_quote! { this: *mut #path, other: __bindgen_marker_RValueReference < *mut #path > },
                 )
             }
             if items_found.implicit_copy_constructor_needed() {
@@ -2098,11 +2095,7 @@ impl<'a> FnAnalyzer<'a> {
                     "const_copy_ctor",
                     &mut apis,
                     SpecialMemberKind::CopyConstructor,
-                    parse_quote! { this: *mut #path, other: *const #path },
-                    References {
-                        ref_params: [make_ident("other")].into_iter().collect(),
-                        ..Default::default()
-                    },
+                    parse_quote! { this: *mut #path, other: __bindgen_marker_Reference < *const #path > },
                 )
             }
             if items_found.implicit_destructor_needed() {
@@ -2112,7 +2105,6 @@ impl<'a> FnAnalyzer<'a> {
                     &mut apis,
                     SpecialMemberKind::Destructor,
                     parse_quote! { this: *mut #path },
-                    References::default(),
                 );
             }
         }
@@ -2152,7 +2144,6 @@ impl<'a> FnAnalyzer<'a> {
         apis: &mut ApiVec<FnPrePhase1>,
         special_member: SpecialMemberKind,
         inputs: Punctuated<FnArg, Comma>,
-        references: References,
     ) {
         let self_ty = items_found.name.as_ref().unwrap();
         let ident = make_ident(self.config.uniquify_name_per_mod(&format!(
@@ -2178,26 +2169,25 @@ impl<'a> FnAnalyzer<'a> {
         let mut any_errors = ApiVec::new();
         apis.extend(
             report_any_error(&ns, &mut any_errors, || {
+                let special_member_desc = special_member_to_string(special_member);
                 self.analyze_foreign_fn_and_subclasses(
                     fake_api_name,
                     Box::new(FuncToConvert {
                         self_ty: Some(self_ty.clone()),
                         ident,
-                        doc_attrs: make_doc_attrs(format!("Synthesized {special_member}."))
+                        doc_attrs: make_doc_attrs(format!("Synthesized {special_member_desc}."))
                             .into_iter()
                             .map(Into::into)
                             .collect(),
                         inputs: minisynize_punctuated(inputs),
                         output: ReturnType::Default.into(),
                         vis: parse_quote! { pub },
-                        virtualness: Virtualness::None,
+                        virtualness: None,
                         cpp_vis: CppVisibility::Public,
                         special_member: Some(special_member),
-                        unused_template_param: false,
-                        references,
                         original_name: None,
                         synthesized_this_type: None,
-                        is_deleted: DeletedOrDefaulted::Neither,
+                        is_deleted: None,
                         add_to_trait: None,
                         synthetic_cpp: None,
                         provenance: Provenance::SynthesizedOther,
@@ -2209,6 +2199,31 @@ impl<'a> FnAnalyzer<'a> {
             .flatten(),
         );
         apis.append(&mut any_errors);
+    }
+}
+
+fn any_type_has_unused_template_param(
+    inputs: &Punctuated<FnArg, Comma>,
+    output: &crate::minisyn::ReturnType,
+) -> bool {
+    if let ReturnType::Type(_, ty) = &output.0 {
+        if type_has_unused_template_param(ty.as_ref()) {
+            return true;
+        }
+    }
+    inputs.iter().any(|input| match &input.0 {
+        syn::FnArg::Receiver(_) => false,
+        syn::FnArg::Typed(PatType { ty, .. }) => type_has_unused_template_param(ty.as_ref()),
+    })
+}
+
+fn special_member_to_string(special_member: SpecialMemberKind) -> &'static str {
+    match special_member {
+        SpecialMemberKind::DefaultConstructor => "default constructor",
+        SpecialMemberKind::CopyConstructor => "copy constructor",
+        SpecialMemberKind::MoveConstructor => "move constructor",
+        SpecialMemberKind::Destructor => "destructor",
+        SpecialMemberKind::AssignmentOperator => "assignment operator",
     }
 }
 
@@ -2296,6 +2311,14 @@ impl Api<FnPhase> {
             | Api::RustSubclassFn { .. } => None,
             _ => Some(self.name().get_final_ident()),
         }
+    }
+}
+
+fn return_type_is_reference(output: &crate::minisyn::ReturnType) -> bool {
+    if let ReturnType::Type(_, ty) = &output.0 {
+        type_is_reference(ty.as_ref(), true)
+    } else {
+        false
     }
 }
 
