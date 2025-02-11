@@ -19,6 +19,20 @@ use crate::known_types::known_types;
 
 use crate::conversion::CppOriginalName;
 
+/// Types that are built into cxx so we can't accommodate types of these names.
+/// In the future we might do fancier renaming to allow this, but for now,
+/// we just reject any other types called these things.
+const RESERVED_CXX_TYPES: [&str; 8] = [
+    "String",
+    "str",
+    "UniquePtr",
+    "CxxVector",
+    "CxxString",
+    "Box",
+    "SharedPtr",
+    "Vec",
+];
+
 pub(crate) fn make_ident<S: AsRef<str>>(id: S) -> Ident {
     Ident::new(id.as_ref(), Span::call_site())
 }
@@ -251,6 +265,8 @@ pub enum InvalidIdentError {
     BindgenTy,
     #[error("The item name '{0}' is a reserved word in Rust.")]
     ReservedName(String),
+    #[error("The item name '{0}' is a reserved type name in cxx.")]
+    CxxReservedName(String),
 }
 
 /// cxx doesn't allow identifiers containing __. These are OK elsewhere
@@ -269,6 +285,12 @@ pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), InvalidIdentError> {
         Err(InvalidIdentError::TooManyUnderscores)
     } else if id.starts_with("_bindgen_ty_") {
         Err(InvalidIdentError::BindgenTy)
+    } else if RESERVED_CXX_TYPES
+        .iter()
+        .find(|item| **item == id)
+        .is_some()
+    {
+        Err(InvalidIdentError::CxxReservedName(id.to_string()))
     } else {
         Ok(())
     }
