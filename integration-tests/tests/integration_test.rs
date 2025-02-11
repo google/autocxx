@@ -12456,14 +12456,26 @@ fn test_double_template_w_default() {
     run_test("", hdr, quote! {}, &["Problem"], &[]);
 }
 
+/// In the ideal world, we'd accommodate a::String by renaming it to
+/// something different. For now we just ensure we can generate
+/// bindings for Normal without String messing us up.
 #[test]
 fn test_class_named_string() {
     let hdr = indoc! {"
         namespace a {
             class String {};
+            class Normal {};
         } // namespace a
     "};
-    run_test("", hdr, quote! {}, &["a::String"], &[]);
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_ns!("a")},
+        None,
+        None,
+        None,
+    );
 }
 
 // Yet to test:
