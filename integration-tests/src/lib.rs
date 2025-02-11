@@ -380,6 +380,7 @@ pub fn do_run_test(
     let safety_policy = format_ident!("{}", safety_policy);
     let unexpanded_rust = quote! {
             #module_attributes
+            #![feature(arbitrary_self_types)]
 
             use autocxx::prelude::*;
 

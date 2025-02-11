@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(nightly, feature(unsize))]
 #![cfg_attr(nightly, feature(dispatch_from_dyn))]
+#![cfg_attr(nightly, feature(arbitrary_self_types))]
 
 // Copyright 2020 Google LLC
 //
@@ -21,7 +22,9 @@ mod rvalue_param;
 pub mod subclass;
 mod value_param;
 
-pub use reference_wrapper::{AsCppMutRef, AsCppRef, CppMutRef, CppPin, CppRef, CppUniquePtrPin};
+pub use reference_wrapper::{
+    AsCppMutRef, AsCppRef, CppLtRef, CppMutLtRef, CppMutRef, CppPin, CppRef, CppUniquePtrPin,
+};
 
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// Include some C++ headers in your Rust project.
@@ -270,7 +273,7 @@ macro_rules! concrete {
 /// them to be wrapped in a `CppRef` type: see [`CppRef`].
 /// This only works on nightly Rust because it
 /// depends upon an unstable feature
-/// (`arbitrary_self_types_pointers`). However, it should
+/// (`arbitrary_self_types`). However, it should
 /// eliminate all undefined behavior related to Rust's
 /// stricter aliasing rules than C++.
 #[macro_export]
@@ -594,10 +597,7 @@ pub trait WithinBox {
     fn within_box(self) -> Pin<Box<Self::Inner>>;
     /// Create this item inside a [`CppPin`]. This is a good option if you
     /// want to own this option within Rust, but you want to create [`CppRef`]
-    /// C++ references to it. You'd only want to choose that option if you have
-    /// enabled the C++ reference wrapper support by using the
-    /// `safety!(unsafe_references_wrapped`) directive. If you haven't done
-    /// that, ignore this function.
+    /// C++ references to it.
     fn within_cpp_pin(self) -> CppPin<Self::Inner>;
 }
 
