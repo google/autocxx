@@ -12,6 +12,8 @@ use autocxx_engine::{BuilderContext, RebuildDependencyRecorder};
 use indexmap::set::IndexSet as HashSet;
 use std::{io::Write, sync::Mutex};
 
+pub use autocxx_engine::{BuilderError, BuilderSuccess};
+
 pub type Builder = autocxx_engine::Builder<'static, CargoBuilderContext>;
 
 #[doc(hidden)]
