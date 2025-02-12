@@ -29,7 +29,7 @@ use crate::{
         CppEffectiveName, CppOriginalName,
     },
     known_types::known_types,
-    minisyn::minisynize_punctuated,
+    minisyn::{minisynize_punctuated, FnArg},
     types::validate_ident_ok_for_rust,
 };
 use indexmap::map::IndexMap as HashMap;
@@ -41,8 +41,8 @@ use itertools::Itertools;
 use proc_macro2::Span;
 use quote::quote;
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, FnArg, Ident, Pat, PatType, ReturnType,
-    Type, TypePath, TypePtr, TypeReference, Visibility,
+    parse_quote, punctuated::Punctuated, token::Comma, Ident, Pat, PatType, ReturnType, Type,
+    TypePath, TypePtr, TypeReference, Visibility,
 };
 
 use crate::{
@@ -1673,8 +1673,8 @@ impl<'a> FnAnalyzer<'a> {
         sophistication: TypeConversionSophistication,
         construct_into_self: bool,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertErrorFromCpp> {
-        Ok(match arg {
-            FnArg::Typed(pt) => {
+        Ok(match &arg.0 {
+            syn::FnArg::Typed(pt) => {
                 let mut pt = pt.clone();
                 let mut self_type = None;
                 let old_pat = *pt.pat;
@@ -1762,7 +1762,7 @@ impl<'a> FnAnalyzer<'a> {
                         UnsafetyNeeded::None
                     };
                 (
-                    FnArg::Typed(pt),
+                    syn::FnArg::Typed(pt).into(),
                     ArgumentAnalysis {
                         self_type,
                         name: new_pat.into(),
@@ -2367,10 +2367,10 @@ impl HasFieldsAndBases for Api<FnPrePhase2> {
 }
 
 /// Stringify a function argument for diagnostics
-fn describe_arg(arg: &FnArg) -> String {
+fn describe_arg(arg: &syn::FnArg) -> String {
     match arg {
-        FnArg::Receiver(_) => "the function receiver (this/self paramter)".into(),
-        FnArg::Typed(PatType { pat, .. }) => match pat.as_ref() {
+        syn::FnArg::Receiver(_) => "the function receiver (this/self paramter)".into(),
+        syn::FnArg::Typed(PatType { pat, .. }) => match pat.as_ref() {
             Pat::Ident(pti) => pti.ident.to_string(),
             _ => "another argument we don't know how to describe".into(),
         },
