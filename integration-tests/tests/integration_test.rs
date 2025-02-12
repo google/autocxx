@@ -4218,6 +4218,20 @@ fn test_nested_enum_in_namespace() {
 }
 
 #[test]
+fn test_abstract_subclass() {
+    let hdr = indoc! {"
+        struct A
+        {
+            virtual int f() = 0;
+        };
+
+        struct B : virtual public A {};
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["B"], &[]);
+}
+
+#[test]
 fn test_abstract_nested_type() {
     let hdr = indoc! {"
         namespace N {
