@@ -16,13 +16,13 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
-    Attribute, FnArg, ForeignItem, Ident, ImplItem, Item, ReturnType,
+    Attribute, ForeignItem, Ident, ImplItem, Item, ReturnType,
 };
 
 use super::{
     function_wrapper_rs::RustParamConversion,
     maybe_unsafes_to_tokens,
-    unqualify::{unqualify_params, unqualify_ret_type},
+    unqualify::{unqualify_params_minisyn, unqualify_ret_type},
     ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
 };
 use crate::{
@@ -33,7 +33,7 @@ use crate::{
         },
         api::UnsafetyNeeded,
     },
-    minisyn::minisynize_vec,
+    minisyn::{minisynize_vec, FnArg},
     types::{Namespace, QualifiedName},
 };
 use crate::{
@@ -193,7 +193,7 @@ pub(super) fn gen_function(
     // well-known types should be unqualified already (e.g. just UniquePtr)
     // and the following code will act to unqualify only those types
     // which the user has declared.
-    let params = unqualify_params(params);
+    let params = unqualify_params_minisyn(params);
     let ret_type = unqualify_ret_type(ret_type.into_owned());
     // And we need to make an attribute for the namespace that the function
     // itself is in.

@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use indexmap::map::IndexMap as HashMap;
-use syn::{punctuated::Punctuated, token::Comma, FnArg};
+use syn::{punctuated::Punctuated, token::Comma};
 
 use super::{
     fun::{
@@ -16,11 +16,14 @@ use super::{
     },
     pod::PodAnalysis,
 };
-use crate::conversion::{
-    analysis::{depth_first::fields_and_bases_first, fun::ReceiverMutability},
-    api::{ApiName, TypeKind},
-    error_reporter::{convert_apis, convert_item_apis},
-    ConvertErrorFromCpp, CppEffectiveName,
+use crate::{
+    conversion::{
+        analysis::{depth_first::fields_and_bases_first, fun::ReceiverMutability},
+        api::{ApiName, TypeKind},
+        error_reporter::{convert_apis, convert_item_apis},
+        ConvertErrorFromCpp, CppEffectiveName,
+    },
+    minisyn::FnArg,
 };
 use crate::{
     conversion::{api::Api, apivec::ApiVec},
@@ -47,7 +50,7 @@ impl Signature {
                 .iter()
                 .skip(1) // skip `this` implicit argument
                 .filter_map(|p| {
-                    if let FnArg::Typed(t) = p {
+                    if let syn::FnArg::Typed(t) = &p.0 {
                         Some((*t.ty).clone())
                     } else {
                         None
