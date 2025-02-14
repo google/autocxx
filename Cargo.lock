@@ -154,8 +154,9 @@ dependencies = [
 
 [[package]]
 name = "autocxx-bindgen"
-version = "0.71.1"
-source = "git+https://github.com/adetaylor/rust-bindgen?branch=switch-from-attributes-to-callbacks#90fc72d464f4b789d21a28ffb90369165555246c"
+version = "0.72.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "537ef6dffea4311d04a313f645bdd04d2c88b356a6eb7afd4258e5aee70dea8c"
 dependencies = [
  "bitflags 2.6.0",
  "cexpr",
