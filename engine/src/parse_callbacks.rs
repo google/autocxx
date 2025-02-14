@@ -194,13 +194,12 @@ impl ParseCallbackResults {
             .iter()
             .filter(|(_item, parent)| **parent == search_key.parent)
             .map(|(item, _parent)| item)
-            .filter(|item| {
+            .find(|item| {
                 self.names
                     .get(*item)
                     .map(|n| n == &search_key.name)
                     .unwrap_or_default()
             })
-            .next()
             .cloned()
     }
 
@@ -229,7 +228,8 @@ impl ParseCallbackResults {
         eprintln!("Asking if {:?} discards template param", name);
         let id = self.id_by_name(name);
         eprintln!("id is {:?}", id);
-        let r = self.id_by_name(name)
+        let r = self
+            .id_by_name(name)
             .map(|id| self.discards_template_param.contains(&id))
             .unwrap_or_default();
         eprintln!("r = {:?}", r);
