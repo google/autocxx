@@ -16,6 +16,7 @@ use crate::conversion::{
     convert_error::ErrorContext,
 };
 use crate::minisyn::{minisynize_punctuated, minisynize_vec};
+use crate::ParseCallbackResults;
 use crate::{
     conversion::ConvertErrorFromCpp,
     types::{Namespace, QualifiedName},
@@ -23,12 +24,10 @@ use crate::{
 use std::collections::HashMap;
 use syn::{Block, Expr, ExprCall, ForeignItem, Ident, ImplItem, ItemImpl, Stmt, Type};
 
-use super::bindgen_semantic_attributes::BindgenSemanticAttributes;
-
 /// Parses a given bindgen-generated 'mod' into suitable
 /// [Api]s. In bindgen output, a given mod concerns
 /// a specific C++ namespace.
-pub(crate) struct ParseForeignMod {
+pub(crate) struct ParseForeignMod<'a> {
     ns: Namespace,
     // We mostly act upon the functions we see within the 'extern "C"'
     // block of bindgen output, but we can't actually do this until
@@ -41,15 +40,17 @@ pub(crate) struct ParseForeignMod {
     // function name to type name.
     method_receivers: HashMap<Ident, QualifiedName>,
     ignored_apis: ApiVec<NullPhase>,
+    parse_callback_results: &'a ParseCallbackResults,
 }
 
-impl ParseForeignMod {
-    pub(crate) fn new(ns: Namespace) -> Self {
+impl<'a> ParseForeignMod<'a> {
+    pub(crate) fn new(ns: Namespace, parse_callback_results: &'a ParseCallbackResults) -> Self {
         Self {
             ns,
             funcs_to_convert: Vec::new(),
             method_receivers: HashMap::new(),
             ignored_apis: ApiVec::new(),
+            parse_callback_results,
         }
     }
 
@@ -68,8 +69,8 @@ impl ParseForeignMod {
     fn parse_foreign_item(&mut self, i: ForeignItem) -> Result<(), ConvertErrorWithContext> {
         match i {
             ForeignItem::Fn(item) => {
-                let annotations = BindgenSemanticAttributes::new(&item.attrs);
                 let doc_attrs = get_doc_attrs(&item.attrs);
+                let qn = QualifiedName::new(&self.ns, item.sig.ident.clone().into());
                 self.funcs_to_convert.push(FuncToConvert {
                     provenance: Provenance::Bindgen,
                     self_ty: None,
@@ -78,16 +79,13 @@ impl ParseForeignMod {
                     inputs: minisynize_punctuated(item.sig.inputs),
                     output: item.sig.output.into(),
                     vis: item.vis.into(),
-                    virtualness: annotations.get_virtualness(),
-                    cpp_vis: annotations.get_cpp_visibility(),
-                    special_member: annotations.special_member_kind(),
-                    unused_template_param: annotations
-                        .has_attr("incomprehensible_param_in_arg_or_return"),
-                    references: annotations.get_reference_parameters_and_return(),
-                    original_name: annotations.get_original_name(),
+                    virtualness: self.parse_callback_results.get_virtualness(&qn),
+                    cpp_vis: self.parse_callback_results.get_cpp_visibility(&qn),
+                    special_member: self.parse_callback_results.special_member_kind(&qn),
+                    original_name: self.parse_callback_results.get_fn_original_name(&qn),
                     synthesized_this_type: None,
                     add_to_trait: None,
-                    is_deleted: annotations.get_deleted_or_defaulted(),
+                    is_deleted: self.parse_callback_results.get_deleted_or_defaulted(&qn),
                     synthetic_cpp: None,
                     variadic: item.sig.variadic.is_some(),
                 });

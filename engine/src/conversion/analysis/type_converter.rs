@@ -11,6 +11,7 @@ use crate::{
         api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
         apivec::ApiVec,
         codegen_cpp::type_to_cpp::CppNameMap,
+        type_helpers::{unwrap_has_opaque, unwrap_has_unused_template_param, unwrap_reference},
         ConvertErrorFromCpp,
     },
     known_types::{known_types, CxxGenericType},
@@ -42,6 +43,7 @@ pub(crate) enum TypeKind {
 
 /// Results of some type conversion, annotated with a list of every type encountered,
 /// and optionally any extra APIs we need in order to use this type.
+#[derive(Debug)]
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<QualifiedName>,
@@ -74,14 +76,6 @@ impl<T> Annotated<T> {
     }
 }
 
-/// How to interpret a pointer which we encounter during type conversion.
-#[derive(Clone, Copy)]
-pub(crate) enum PointerTreatment {
-    Pointer,
-    Reference,
-    RValueReference,
-}
-
 /// Options when converting a type.
 /// It's possible we could add more policies here in future.
 /// For example, Rust in general allows type names containing
@@ -93,18 +87,10 @@ pub(crate) enum TypeConversionContext {
     WithinReference,
     WithinStructField { struct_type_params: HashSet<Ident> },
     WithinContainer,
-    OuterType { pointer_treatment: PointerTreatment },
+    OuterType,
 }
 
 impl TypeConversionContext {
-    fn pointer_treatment(&self) -> PointerTreatment {
-        match self {
-            Self::WithinReference | Self::WithinContainer | Self::WithinStructField { .. } => {
-                PointerTreatment::Pointer
-            }
-            Self::OuterType { pointer_treatment } => *pointer_treatment,
-        }
-    }
     fn allow_instantiation_of_forward_declaration(&self) -> bool {
         matches!(self, Self::WithinReference)
     }
@@ -165,35 +151,7 @@ impl<'a> TypeConverter<'a> {
         ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         let result = match ty {
-            Type::Path(p) => {
-                let newp = self.convert_type_path(p, ns, ctx)?;
-                if let Type::Path(newpp) = &newp.ty {
-                    let qn = QualifiedName::from_type_path(newpp);
-                    if !ctx.allow_instantiation_of_forward_declaration()
-                        && self.forward_declarations.contains(&qn)
-                    {
-                        return Err(ConvertErrorFromCpp::TypeContainingForwardDeclaration(qn));
-                    }
-                    // Special handling because rust_Str (as emitted by bindgen)
-                    // doesn't simply get renamed to a different type _identifier_.
-                    // This plain type-by-value (as far as bindgen is concerned)
-                    // is actually a &str.
-                    if known_types().should_dereference_in_cpp(&qn) {
-                        Annotated::new(
-                            Type::Reference(parse_quote! {
-                                &str
-                            }),
-                            newp.types_encountered,
-                            newp.extra_apis,
-                            TypeKind::Reference,
-                        )
-                    } else {
-                        newp
-                    }
-                } else {
-                    newp
-                }
-            }
+            Type::Path(p) => self.convert_type_path(p, ns, ctx)?,
             Type::Reference(mut r) => {
                 let innerty =
                     self.convert_boxed_type(r.elem, ns, &TypeConversionContext::WithinReference)?;
@@ -216,7 +174,7 @@ impl<'a> TypeConverter<'a> {
                     TypeKind::Regular,
                 )
             }
-            Type::Ptr(ptr) => self.convert_ptr(ptr, ns, ctx.pointer_treatment())?,
+            Type::Ptr(ptr) => self.convert_ptr(ptr, ns)?,
             _ => {
                 return Err(ConvertErrorFromCpp::UnknownType(
                     ty.to_token_stream().to_string(),
@@ -227,6 +185,92 @@ impl<'a> TypeConverter<'a> {
     }
 
     fn convert_type_path(
+        &mut self,
+        typ: TypePath,
+        ns: &Namespace,
+        ctx: &TypeConversionContext,
+    ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
+        // First we try to spot if these are the special marker paths that
+        // bindgen uses to denote references or other things.
+        if let Some(ty) = unwrap_has_unused_template_param(&typ) {
+            self.convert_type(ty.clone(), ns, ctx)
+        } else if let Some(ty) = unwrap_has_opaque(&typ) {
+            self.convert_type(ty.clone(), ns, ctx)
+        } else if let Some(ptr) = unwrap_reference(&typ, false) {
+            // LValue reference
+            let mutability = ptr.mutability;
+            let elem = self.convert_boxed_type(
+                ptr.elem.clone(),
+                ns,
+                &TypeConversionContext::WithinReference,
+            )?;
+            // TODO - in the future, we should check if this is a rust::Str and throw
+            // a wobbler if not. rust::Str should only be seen _by value_ in C++
+            // headers; it manifests as &str in Rust but on the C++ side it must
+            // be a plain value. We should detect and abort.
+            let mut outer = elem.map(|elem| match mutability {
+                Some(_) => Type::Path(parse_quote! {
+                    ::core::pin::Pin < & #mutability #elem >
+                }),
+                None => Type::Reference(parse_quote! {
+                    & #elem
+                }),
+            });
+            outer.kind = if mutability.is_some() {
+                TypeKind::MutableReference
+            } else {
+                TypeKind::Reference
+            };
+            Ok(outer)
+        } else if let Some(ptr) = unwrap_reference(&typ, true) {
+            // RValue reference
+            Self::ensure_pointee_is_valid(ptr)?;
+            let innerty = self.convert_boxed_type(
+                ptr.elem.clone(),
+                ns,
+                &TypeConversionContext::WithinReference,
+            )?;
+            let mut ptr = ptr.clone();
+            ptr.elem = innerty.ty;
+            Ok(Annotated::new(
+                Type::Ptr(ptr),
+                innerty.types_encountered,
+                innerty.extra_apis,
+                TypeKind::RValueReference,
+            ))
+        } else {
+            // An actual path
+            let newp = self.convert_type_path_which_is_not_a_reference(typ, ns, ctx)?;
+            if let Type::Path(newpp) = &newp.ty {
+                let qn = QualifiedName::from_type_path(newpp);
+                if !ctx.allow_instantiation_of_forward_declaration()
+                    && self.forward_declarations.contains(&qn)
+                {
+                    return Err(ConvertErrorFromCpp::TypeContainingForwardDeclaration(qn));
+                }
+                // Special handling because rust_Str (as emitted by bindgen)
+                // doesn't simply get renamed to a different type _identifier_.
+                // This plain type-by-value (as far as bindgen is concerned)
+                // is actually a &str.
+                if known_types().should_dereference_in_cpp(&qn) {
+                    Ok(Annotated::new(
+                        Type::Reference(parse_quote! {
+                            &str
+                        }),
+                        newp.types_encountered,
+                        newp.extra_apis,
+                        TypeKind::Reference,
+                    ))
+                } else {
+                    Ok(newp)
+                }
+            } else {
+                Ok(newp)
+            }
+        }
+    }
+
+    fn convert_type_path_which_is_not_a_reference(
         &mut self,
         mut typ: TypePath,
         ns: &Namespace,
@@ -458,57 +502,17 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         mut ptr: TypePtr,
         ns: &Namespace,
-        pointer_treatment: PointerTreatment,
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
-        match pointer_treatment {
-            PointerTreatment::Pointer => {
-                Self::ensure_pointee_is_valid(&ptr)?;
-                let innerty =
-                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
-                ptr.elem = innerty.ty;
-                Ok(Annotated::new(
-                    Type::Ptr(ptr),
-                    innerty.types_encountered,
-                    innerty.extra_apis,
-                    TypeKind::Pointer,
-                ))
-            }
-            PointerTreatment::Reference => {
-                let mutability = ptr.mutability;
-                let elem =
-                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
-                // TODO - in the future, we should check if this is a rust::Str and throw
-                // a wobbler if not. rust::Str should only be seen _by value_ in C++
-                // headers; it manifests as &str in Rust but on the C++ side it must
-                // be a plain value. We should detect and abort.
-                let mut outer = elem.map(|elem| match mutability {
-                    Some(_) => Type::Path(parse_quote! {
-                        ::core::pin::Pin < & #mutability #elem >
-                    }),
-                    None => Type::Reference(parse_quote! {
-                        & #elem
-                    }),
-                });
-                outer.kind = if mutability.is_some() {
-                    TypeKind::MutableReference
-                } else {
-                    TypeKind::Reference
-                };
-                Ok(outer)
-            }
-            PointerTreatment::RValueReference => {
-                Self::ensure_pointee_is_valid(&ptr)?;
-                let innerty =
-                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
-                ptr.elem = innerty.ty;
-                Ok(Annotated::new(
-                    Type::Ptr(ptr),
-                    innerty.types_encountered,
-                    innerty.extra_apis,
-                    TypeKind::RValueReference,
-                ))
-            }
-        }
+        Self::ensure_pointee_is_valid(&ptr)?;
+        let innerty =
+            self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
+        ptr.elem = innerty.ty;
+        Ok(Annotated::new(
+            Type::Ptr(ptr),
+            innerty.types_encountered,
+            innerty.extra_apis,
+            TypeKind::Pointer,
+        ))
     }
 
     fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertErrorFromCpp> {

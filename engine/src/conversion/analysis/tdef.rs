@@ -16,12 +16,13 @@ use crate::{
         analysis::type_converter::{add_analysis, Annotated, TypeConversionContext, TypeConverter},
         api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind},
         apivec::ApiVec,
+        check_for_fatal_attrs,
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
-        parse::BindgenSemanticAttributes,
         ConvertErrorFromCpp,
     },
     types::QualifiedName,
+    ParseCallbackResults,
 };
 
 #[derive(std::fmt::Debug)]
@@ -45,6 +46,7 @@ impl AnalysisPhase for TypedefPhase {
 pub(crate) fn convert_typedef_targets(
     config: &IncludeCppConfig,
     apis: ApiVec<NullPhase>,
+    parse_callback_results: &ParseCallbackResults,
 ) -> ApiVec<TypedefPhase> {
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut extra_apis = ApiVec::new();
@@ -63,6 +65,7 @@ pub(crate) fn convert_typedef_targets(
                     old_tyname,
                     &mut type_converter,
                     &mut extra_apis,
+                    parse_callback_results,
                 )?,
                 TypedefKind::Use { .. } => Api::Typedef {
                     name,
@@ -86,6 +89,7 @@ fn get_replacement_typedef(
     old_tyname: Option<QualifiedName>,
     type_converter: &mut TypeConverter,
     extra_apis: &mut ApiVec<NullPhase>,
+    parse_callback_results: &ParseCallbackResults,
 ) -> Result<Api<TypedefPhase>, ConvertErrorWithContext> {
     if !ity.generics.params.is_empty() {
         return Err(ConvertErrorWithContext(
@@ -94,8 +98,7 @@ fn get_replacement_typedef(
         ));
     }
     let mut converted_type = ity.clone();
-    let metadata = BindgenSemanticAttributes::new_retaining_others(&mut converted_type.attrs);
-    metadata.check_for_fatal_attrs(&ity.ident)?;
+    check_for_fatal_attrs(parse_callback_results, &name.name)?;
     let type_conversion_results = type_converter.convert_type(
         (*ity.ty).clone(),
         name.name.get_namespace(),

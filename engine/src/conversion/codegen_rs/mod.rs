@@ -14,6 +14,7 @@ mod namespace_organizer;
 mod non_pod_struct;
 pub(crate) mod unqualify;
 
+use autocxx_bindgen::callbacks::Layout;
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 
@@ -51,7 +52,7 @@ use super::{
     doc_attr::get_doc_attrs,
 };
 use super::{
-    api::{Layout, Provenance, RustSubclassFnDetails, SuperclassMethod, TraitImplSignature},
+    api::{Provenance, RustSubclassFnDetails, SuperclassMethod, TraitImplSignature},
     apivec::ApiVec,
     codegen_cpp::type_to_cpp::CppNameMap,
 };
@@ -508,7 +509,7 @@ impl<'a> RsCodeGenerator<'a> {
                 ..
             } => {
                 let doc_attrs = get_doc_attrs(&details.item.attrs);
-                let layout = details.layout.clone();
+                let layout = details.layout;
                 self.generate_type(
                     &name,
                     id,

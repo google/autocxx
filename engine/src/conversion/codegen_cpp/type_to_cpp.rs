@@ -7,7 +7,8 @@
 // except according to those terms.
 
 use crate::{
-    conversion::{apivec::ApiVec, AnalysisPhase, ConvertErrorFromCpp, CppOriginalName},
+    conversion::{apivec::ApiVec, AnalysisPhase, ConvertErrorFromCpp},
+    parse_callbacks::CppOriginalName,
     types::QualifiedName,
 };
 use indexmap::map::IndexMap as HashMap;
