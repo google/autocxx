@@ -13,11 +13,15 @@ use crate::{
     conversion::{
         api::{Api, ApiName, NullPhase, StructDetails, SubclassName, TypedefKind, UnanalyzedApi},
         apivec::ApiVec,
+        check_for_fatal_attrs,
         convert_error::LocatedConvertErrorFromRust,
+        type_helpers::type_is_reference,
+        utilities::generate_utilities,
         ConvertError, ConvertErrorFromCpp,
     },
-    types::Namespace,
-    types::QualifiedName,
+    minisyn,
+    types::{Namespace, QualifiedName},
+    ParseCallbackResults,
 };
 use crate::{
     conversion::{
@@ -29,26 +33,25 @@ use crate::{
 use autocxx_parser::{IncludeCppConfig, RustPath};
 use syn::{parse_quote, Fields, Ident, Item, Type, TypePath, UseTree};
 
-use super::{
-    super::utilities::generate_utilities, bindgen_semantic_attributes::BindgenSemanticAttributes,
-};
-
 use super::parse_foreign_mod::ParseForeignMod;
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
     config: &'a IncludeCppConfig,
     apis: ApiVec<NullPhase>,
+    parse_callback_results: &'a ParseCallbackResults,
 }
 
-fn api_name(ns: &Namespace, id: Ident, attrs: &BindgenSemanticAttributes) -> ApiName {
-    ApiName::new_with_cpp_name(ns, id.into(), attrs.get_original_name())
+fn api_name(ns: &Namespace, id: Ident, callback_results: &ParseCallbackResults) -> ApiName {
+    let qn = QualifiedName::new(ns, minisyn::Ident(id.clone()));
+    // TODO FIXME squash reduncancy
+    ApiName::new_with_cpp_name(ns, id.into(), callback_results.get_original_name(&qn))
 }
 
 pub(crate) fn api_name_qualified(
     ns: &Namespace,
     id: Ident,
-    attrs: &BindgenSemanticAttributes,
+    callback_results: &ParseCallbackResults,
 ) -> Result<ApiName, ConvertErrorWithContext> {
     match validate_ident_ok_for_cxx(&id.to_string()) {
         Err(e) => {
@@ -58,15 +61,19 @@ pub(crate) fn api_name_qualified(
                 Some(ctx),
             ))
         }
-        Ok(..) => Ok(api_name(ns, id, attrs)),
+        Ok(..) => Ok(api_name(ns, id, callback_results)),
     }
 }
 
 impl<'a> ParseBindgen<'a> {
-    pub(crate) fn new(config: &'a IncludeCppConfig) -> Self {
+    pub(crate) fn new(
+        config: &'a IncludeCppConfig,
+        parse_callback_results: &'a ParseCallbackResults,
+    ) -> Self {
         ParseBindgen {
             config,
             apis: ApiVec::new(),
+            parse_callback_results,
         }
     }
 
@@ -188,7 +195,9 @@ impl<'a> ParseBindgen<'a> {
     fn parse_mod_items(&mut self, items: Vec<Item>, ns: Namespace) {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
-        let mut mod_converter = ParseForeignMod::new(ns.clone());
+        // TODO - ideally we'd get rid of this clone
+        let parse_callback_results = self.parse_callback_results.clone();
+        let mut mod_converter = ParseForeignMod::new(ns.clone(), &parse_callback_results);
         let mut more_apis = ApiVec::new();
         for item in items {
             report_any_error(&ns, &mut more_apis, || {
@@ -214,11 +223,10 @@ impl<'a> ParseBindgen<'a> {
                 if s.ident.to_string().ends_with("__bindgen_vtable") {
                     return Ok(());
                 }
-                let annotations = BindgenSemanticAttributes::new(&s.attrs);
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
-                let name = api_name_qualified(ns, s.ident.clone(), &annotations)?;
-                let mut err = annotations.check_for_fatal_attrs(&s.ident).err();
+                let name = api_name_qualified(ns, s.ident.clone(), self.parse_callback_results)?;
+                let mut err = check_for_fatal_attrs(self.parse_callback_results, &name.name).err();
                 let api = if ns.is_empty() && self.config.is_rust_type(&s.ident) {
                     None
                 } else if Self::spot_forward_declaration(&s.fields)
@@ -241,13 +249,12 @@ impl<'a> ParseBindgen<'a> {
                     }
                     Some(UnanalyzedApi::ForwardDeclaration { name, err })
                 } else {
-                    let has_rvalue_reference_fields = s.fields.iter().any(|f| {
-                        BindgenSemanticAttributes::new(&f.attrs).has_attr("rvalue_reference")
-                    });
+                    let has_rvalue_reference_fields = Self::spot_rvalue_reference_fields(&s.fields);
+                    let layout = self.parse_callback_results.get_layout(&name.name);
                     Some(UnanalyzedApi::Struct {
                         name,
                         details: Box::new(StructDetails {
-                            layout: annotations.get_layout(),
+                            layout,
                             item: s.into(),
                             has_rvalue_reference_fields,
                         }),
@@ -262,9 +269,8 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Enum(e) => {
-                let annotations = BindgenSemanticAttributes::new(&e.attrs);
                 let api = UnanalyzedApi::Enum {
-                    name: api_name_qualified(ns, e.ident.clone(), &annotations)?,
+                    name: api_name_qualified(ns, e.ident.clone(), self.parse_callback_results)?,
                     item: e.into(),
                 };
                 if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
@@ -324,9 +330,8 @@ impl<'a> ParseBindgen<'a> {
                                     Some(ErrorContext::new_for_item(new_id.clone().into())),
                                 ));
                             }
-                            let annotations = BindgenSemanticAttributes::new(&use_item.attrs);
                             self.apis.push(UnanalyzedApi::Typedef {
-                                name: api_name(ns, new_id.clone(), &annotations),
+                                name: api_name(ns, new_id.clone(), self.parse_callback_results),
                                 item: TypedefKind::Use(
                                     parse_quote! {
                                         pub use #old_path as #new_id;
@@ -351,7 +356,6 @@ impl<'a> ParseBindgen<'a> {
                 Ok(())
             }
             Item::Const(const_item) => {
-                let annotations = BindgenSemanticAttributes::new(&const_item.attrs);
                 // Bindgen generates const expressions for nested unnamed enums,
                 // but autcxx will refuse to expand those enums, making these consts
                 // invalid.
@@ -365,18 +369,17 @@ impl<'a> ParseBindgen<'a> {
                 }
                 if enum_type_name_valid {
                     self.apis.push(UnanalyzedApi::Const {
-                        name: api_name(ns, const_item.ident.clone(), &annotations),
+                        name: api_name(ns, const_item.ident.clone(), self.parse_callback_results),
                         const_item: const_item.into(),
                     });
                 }
                 Ok(())
             }
             Item::Type(ity) => {
-                let annotations = BindgenSemanticAttributes::new(&ity.attrs);
                 // It's known that sometimes bindgen will give us duplicate typedefs with the
                 // same name - see test_issue_264.
                 self.apis.push(UnanalyzedApi::Typedef {
-                    name: api_name(ns, ity.ident.clone(), &annotations),
+                    name: api_name(ns, ity.ident.clone(), self.parse_callback_results),
                     item: TypedefKind::Type(ity.into()),
                     old_tyname: None,
                     analysis: (),
@@ -402,6 +405,10 @@ impl<'a> ParseBindgen<'a> {
         s.iter()
             .filter_map(|f| f.ident.as_ref())
             .any(|id| id == desired_id)
+    }
+
+    fn spot_rvalue_reference_fields(s: &Fields) -> bool {
+        s.iter().any(|f| type_is_reference(&f.ty, true))
     }
 
     fn confirm_all_generate_directives_obeyed(&self) -> Result<(), ConvertErrorFromCpp> {

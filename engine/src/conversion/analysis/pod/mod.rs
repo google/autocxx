@@ -20,12 +20,13 @@ use crate::{
         analysis::type_converter::{self, add_analysis, TypeConversionContext, TypeConverter},
         api::{AnalysisPhase, Api, ApiName, NullPhase, StructDetails, TypeKind},
         apivec::ApiVec,
+        check_for_fatal_attrs,
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
-        parse::BindgenSemanticAttributes,
         ConvertErrorFromCpp,
     },
     types::{Namespace, QualifiedName},
+    ParseCallbackResults,
 };
 
 use super::tdef::{TypedefAnalysis, TypedefPhase};
@@ -74,6 +75,7 @@ impl AnalysisPhase for PodPhase {
 pub(crate) fn analyze_pod_apis(
     apis: ApiVec<TypedefPhase>,
     config: &IncludeCppConfig,
+    parse_callback_results: &ParseCallbackResults,
 ) -> Result<ApiVec<PodPhase>, ConvertErrorFromCpp> {
     // This next line will return an error if any of the 'generate_pod'
     // directives from the user can't be met because, for instance,
@@ -95,9 +97,10 @@ pub(crate) fn analyze_pod_apis(
                 name,
                 details,
                 config,
+                parse_callback_results,
             )
         },
-        analyze_enum,
+        |name, item| analyze_enum(name, item, parse_callback_results),
         Api::typedef_unchanged,
     );
     // Conceivably, the process of POD-analysing the first set of APIs could result
@@ -116,9 +119,10 @@ pub(crate) fn analyze_pod_apis(
                 name,
                 details,
                 config,
+                parse_callback_results,
             )
         },
-        analyze_enum,
+        |name, item| analyze_enum(name, item, parse_callback_results),
         Api::typedef_unchanged,
     );
     assert!(more_extra_apis.is_empty());
@@ -127,10 +131,10 @@ pub(crate) fn analyze_pod_apis(
 
 fn analyze_enum(
     name: ApiName,
-    mut item: crate::minisyn::ItemEnum,
+    item: crate::minisyn::ItemEnum,
+    parse_callback_results: &ParseCallbackResults,
 ) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
-    let metadata = BindgenSemanticAttributes::new_retaining_others(&mut item.attrs);
-    metadata.check_for_fatal_attrs(&name.name.get_final_ident())?;
+    check_for_fatal_attrs(parse_callback_results, &name.name)?;
     Ok(Box::new(std::iter::once(Api::Enum { name, item })))
 }
 
@@ -139,12 +143,12 @@ fn analyze_struct(
     type_converter: &mut TypeConverter,
     extra_apis: &mut ApiVec<NullPhase>,
     name: ApiName,
-    mut details: Box<StructDetails>,
+    details: Box<StructDetails>,
     config: &IncludeCppConfig,
+    parse_callback_results: &ParseCallbackResults,
 ) -> Result<Box<dyn Iterator<Item = Api<PodPhase>>>, ConvertErrorWithContext> {
     let id = name.name.get_final_ident();
-    let metadata = BindgenSemanticAttributes::new_retaining_others(&mut details.item.attrs);
-    metadata.check_for_fatal_attrs(&id)?;
+    check_for_fatal_attrs(parse_callback_results, &name.name)?;
     let bases = get_bases(&details.item);
     let mut field_deps = HashSet::new();
     let mut field_definition_deps = HashSet::new();

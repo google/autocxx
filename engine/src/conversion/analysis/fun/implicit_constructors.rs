@@ -6,18 +6,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use autocxx_bindgen::callbacks::{Explicitness, SpecialMemberKind, Visibility as CppVisibility};
 use indexmap::map::IndexMap as HashMap;
 use indexmap::{map::Entry, set::IndexSet as HashSet};
 
-use syn::{Type, TypeArray};
+use syn::{PatType, Type, TypeArray};
 
-use crate::conversion::api::DeletedOrDefaulted;
+use crate::conversion::type_helpers::type_is_reference;
 use crate::{
     conversion::{
         analysis::{
             depth_first::fields_and_bases_first, pod::PodAnalysis, type_converter::TypeKind,
         },
-        api::{Api, ApiName, CppVisibility, FuncToConvert, SpecialMemberKind},
+        api::{Api, ApiName, FuncToConvert},
         apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
         ConvertErrorFromCpp,
@@ -575,7 +576,7 @@ fn find_explicit_items(
         .entry(ExplicitType { ty, kind })
     {
         Entry::Vacant(entry) => {
-            entry.insert(if matches!(fun.is_deleted, DeletedOrDefaulted::Deleted) {
+            entry.insert(if matches!(fun.is_deleted, Some(Explicitness::Deleted)) {
                 ExplicitFound::Deleted
             } else {
                 ExplicitFound::UserDefined(fun.cpp_vis)
@@ -605,7 +606,7 @@ fn find_explicit_items(
                 Some(SpecialMemberKind::AssignmentOperator)
             ) =>
             {
-                let is_move_assignment_operator = !fun.references.rvalue_ref_params.is_empty();
+                let is_move_assignment_operator = !any_input_is_rvalue_reference(&fun.inputs);
                 merge_fun(
                     impl_for.clone(),
                     if is_move_assignment_operator {
@@ -692,6 +693,15 @@ fn find_explicit_items(
         }
     }
     (result, unknown_types)
+}
+
+fn any_input_is_rvalue_reference(
+    inputs: &syn::punctuated::Punctuated<crate::minisyn::FnArg, syn::token::Comma>,
+) -> bool {
+    inputs.iter().any(|input| match &input.0 {
+        syn::FnArg::Receiver(_) => false,
+        syn::FnArg::Typed(PatType { ty, .. }, ..) => type_is_reference(ty.as_ref(), true),
+    })
 }
 
 /// Returns the information for a given known type.

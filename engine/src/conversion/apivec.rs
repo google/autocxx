@@ -42,6 +42,7 @@ use super::api::{AnalysisPhase, Api};
 /// of APIs within an existing `ApiVec`. But it's extremely important that
 /// the naming-uniqueness-invariant remains, so any such mutation should
 /// allow mutation only of other fields, not the name.
+#[derive(Debug)]
 pub(crate) struct ApiVec<P: AnalysisPhase> {
     apis: Vec<Api<P>>,
     names: HashSet<QualifiedName>,

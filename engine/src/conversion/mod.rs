@@ -20,16 +20,19 @@ mod parse;
 mod type_helpers;
 mod utilities;
 
-pub(crate) use crate::conversion::parse::CppOriginalName;
+pub(crate) use super::parse_callbacks::CppOriginalName;
 use analysis::fun::FnAnalyzer;
+use autocxx_bindgen::callbacks::Visibility as CppVisibility;
 use autocxx_parser::IncludeCppConfig;
 pub(crate) use codegen_cpp::CppCodeGenerator;
 pub(crate) use convert_error::ConvertError;
-use convert_error::ConvertErrorFromCpp;
+use convert_error::{ConvertErrorFromCpp, ConvertErrorWithContext, ErrorContext};
 use itertools::Itertools;
 use syn::{Item, ItemMod};
 
-use crate::{types::QualifiedName, CodegenOptions, CppFilePair, UnsafePolicy};
+use crate::{
+    types::QualifiedName, CodegenOptions, CppFilePair, ParseCallbackResults, UnsafePolicy,
+};
 
 use self::{
     analysis::{
@@ -106,6 +109,7 @@ impl<'a> BridgeConverter<'a> {
     pub(crate) fn convert(
         &self,
         mut bindgen_mod: ItemMod,
+        parse_callback_results: ParseCallbackResults,
         unsafe_policy: UnsafePolicy,
         inclusions: String,
         codegen_options: &CodegenOptions,
@@ -116,7 +120,7 @@ impl<'a> BridgeConverter<'a> {
             Some((_, items)) => {
                 // Parse the bindgen mod.
                 let items_to_process = std::mem::take(items);
-                let parser = ParseBindgen::new(self.config);
+                let parser = ParseBindgen::new(self.config, &parse_callback_results);
                 let apis = parser.parse_items(items_to_process, source_file_contents)?;
                 Self::dump_apis("parsing", &apis);
                 // Inside parse_results, we now have a list of APIs.
@@ -124,7 +128,7 @@ impl<'a> BridgeConverter<'a> {
                 // First, convert any typedefs.
                 // "Convert" means replacing bindgen-style type targets
                 // (e.g. root::std::unique_ptr) with cxx-style targets (e.g. UniquePtr).
-                let apis = convert_typedef_targets(self.config, apis);
+                let apis = convert_typedef_targets(self.config, apis, &parse_callback_results);
                 Self::dump_apis("typedefs", &apis);
                 // Now analyze which of them can be POD (i.e. trivial, movable, pass-by-value
                 // versus which need to be opaque).
@@ -132,8 +136,8 @@ impl<'a> BridgeConverter<'a> {
                 // POD really are POD, and duly mark any dependent types.
                 // This returns a new list of `Api`s, which will be parameterized with
                 // the analysis results.
-                let analyzed_apis =
-                    analyze_pod_apis(apis, self.config).map_err(ConvertError::Cpp)?;
+                let analyzed_apis = analyze_pod_apis(apis, self.config, &parse_callback_results)
+                    .map_err(ConvertError::Cpp)?;
                 Self::dump_apis("pod analysis", &analyzed_apis);
                 let analyzed_apis = replace_hopeless_typedef_targets(self.config, analyzed_apis);
                 let analyzed_apis = add_casts(analyzed_apis);
@@ -225,7 +229,7 @@ impl<'a> BridgeConverter<'a> {
 /// remove them, or make them safe by doing name validation at the point
 /// of conversion.
 #[derive(PartialEq, PartialOrd, Eq, Hash, Clone, Debug)]
-pub struct CppEffectiveName(String);
+pub struct CppEffectiveName(pub(crate) String);
 impl CppEffectiveName {
     /// FIXME: document what we're doing here, just as soon as I've figured
     /// it out
@@ -271,5 +275,28 @@ impl CppEffectiveName {
 
     fn is_nested(&self) -> bool {
         self.0.contains("::")
+    }
+}
+
+/// Some attributes indicate we can never handle a given item. Check for those.
+fn check_for_fatal_attrs(
+    callback_results: &ParseCallbackResults,
+    name: &QualifiedName,
+) -> Result<(), ConvertErrorWithContext> {
+    if callback_results.discards_template_param(name) {
+        Err(ConvertErrorWithContext(
+            ConvertErrorFromCpp::UnusedTemplateParam,
+            Some(ErrorContext::new_for_item(name.get_final_ident())),
+        ))
+    } else if !matches!(
+        callback_results.get_cpp_visibility(name),
+        CppVisibility::Public
+    ) {
+        Err(ConvertErrorWithContext(
+            ConvertErrorFromCpp::NonPublicNestedType,
+            Some(ErrorContext::new_for_item(name.get_final_ident())),
+        ))
+    } else {
+        Ok(())
     }
 }

@@ -31,7 +31,7 @@ use autocxx_bindgen::BindgenError;
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use miette::{SourceOffset, SourceSpan};
-use parse_callbacks::AutocxxParseCallbacks;
+use parse_callbacks::{AutocxxParseCallbacks, ParseCallbackResults};
 use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
 use regex::Regex;
@@ -347,9 +347,14 @@ impl IncludeCppEngine {
             .generate_inline_functions(true)
             .respect_cxx_access_specs(true)
             .use_specific_virtual_function_receiver(true)
-            .cpp_semantic_attributes(true)
+            .use_opaque_newtype_wrapper(true)
+            .use_reference_newtype_wrapper(true)
+            .use_unused_template_param_newtype_wrapper(true)
             .represent_cxx_operators(true)
             .use_distinct_char16_t(true)
+            .generate_deleted_functions(true)
+            .generate_pure_virtuals(true)
+            .generate_private_functions(true)
             .layout_tests(false); // TODO revisit later
         for item in known_types().get_initial_blocklist() {
             builder = builder.blocklist_item(item);
@@ -442,11 +447,14 @@ impl IncludeCppEngine {
             return Err(Error::WrappedReferencesButNoArbitrarySelfTypes);
         }
 
+        let parse_callback_results = Rc::new(RefCell::new(ParseCallbackResults::default()));
         let mod_name = self.config.get_mod_name();
-        let mut builder = self.make_bindgen_builder(&inc_dirs, extra_clang_args);
-        if let Some(dep_recorder) = dep_recorder {
-            builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
-        }
+        let mut builder = self
+            .make_bindgen_builder(&inc_dirs, extra_clang_args)
+            .parse_callbacks(Box::new(AutocxxParseCallbacks::new(
+                dep_recorder,
+                parse_callback_results.clone(),
+            )));
         let header_contents = self.build_header();
         self.dump_header_if_so_configured(&header_contents, &inc_dirs, extra_clang_args);
         let header_and_prelude = format!("{}\n\n{}", known_types().get_prelude(), header_contents);
@@ -455,6 +463,8 @@ impl IncludeCppEngine {
 
         let bindings = builder.generate().map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
+        let parse_callback_results = parse_callback_results.take();
+        log::info!("Parse callback results: {:?}", parse_callback_results);
 
         // Source code contents just used for diagnostics - if we don't have it,
         // use a blank string and miette will not attempt to annotate it nicely.
@@ -469,6 +479,7 @@ impl IncludeCppEngine {
         let conversion = converter
             .convert(
                 bindings,
+                parse_callback_results,
                 self.config.unsafe_policy.clone(),
                 header_contents,
                 codegen_options,
