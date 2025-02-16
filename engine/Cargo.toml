@@ -30,8 +30,8 @@ log = "0.4"
 proc-macro2 = "1.0.11"
 quote = "1.0"
 indoc = "1.0"
-autocxx-bindgen = { version = "=0.72.0", default-features = false, features = ["logging", "which-rustfmt"] }
-#autocxx-bindgen = { git = "https://github.com/adetaylor/rust-bindgen", branch = "switch-from-attributes-to-callbacks", default-features = false, features = ["logging", "which-rustfmt"] }
+#autocxx-bindgen = { version = "=0.72.0", default-features = false, features = ["logging", "which-rustfmt"] }
+autocxx-bindgen = { git = "https://github.com/adetaylor/rust-bindgen", branch = "upstream-roll-again", default-features = false, features = ["logging", "which-rustfmt"] }
 itertools = "0.10.3"
 cc = { version = "1.0", optional = true }
 # Note: Keep the patch-level version of cxx-gen and cxx in sync.
