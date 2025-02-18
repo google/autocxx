@@ -536,6 +536,15 @@ impl<'a> CppCodeGenerator<'a> {
                 }
             },
             CppFunctionBody::StaticMethodCall(ns, ty_id, fn_id) => {
+                // handle nested struct: A_B -> A::B
+                let full_name = QualifiedName::new(ns, ty_id.clone());
+                let using_nested_struct = self
+                    .original_name_map
+                    .get(&full_name)
+                    .map_or("".to_string(), |nested_struct| {
+                        format!("using {ty_id} = {nested_struct};")
+                    });
+
                 let underlying_function_call = ns
                     .into_iter()
                     .cloned()
@@ -549,7 +558,7 @@ impl<'a> CppCodeGenerator<'a> {
                     )
                     .join("::");
                 (
-                    format!("{underlying_function_call}({arg_list})"),
+                    format!("{using_nested_struct} {underlying_function_call}({arg_list})"),
                     "".to_string(),
                     false,
                 )
