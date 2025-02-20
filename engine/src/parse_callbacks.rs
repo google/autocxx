@@ -189,7 +189,6 @@ impl ParseCallbackResults {
     fn get_item_by_parentage(&self, search_key: &NameAndParent) -> Option<DiscoveredItemId> {
         // This is O(n), and since it will be called at least once for each item, that means autocxx
         // overall is O(n^2). We probably want to build a map here.
-        eprintln!("Searching for {search_key:?}");
         self.mods_for_items
             .iter()
             .filter(|(_item, parent)| **parent == search_key.parent)
@@ -225,15 +224,9 @@ impl ParseCallbackResults {
     }
 
     pub(crate) fn discards_template_param(&self, name: &QualifiedName) -> bool {
-        eprintln!("Asking if {:?} discards template param", name);
-        let id = self.id_by_name(name);
-        eprintln!("id is {:?}", id);
-        let r = self
-            .id_by_name(name)
+        self.id_by_name(name)
             .map(|id| self.discards_template_param.contains(&id))
-            .unwrap_or_default();
-        eprintln!("r = {:?}", r);
-        r
+            .unwrap_or_default()
     }
 }
 
@@ -295,7 +288,6 @@ impl ParseCallbacks for AutocxxParseCallbacks {
                 ..
             }
             | DiscoveredItem::Function { final_name } => {
-                eprintln!("Informed about {id:?} {final_name:?}");
                 self.results.borrow_mut().names.insert(id, final_name);
             }
             DiscoveredItem::Mod {
