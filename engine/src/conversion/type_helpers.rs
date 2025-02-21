@@ -101,10 +101,6 @@ pub(crate) fn unwrap_reference(ty: &TypePath, search_for_rvalue: bool) -> Option
     }
 }
 
-pub(crate) fn type_has_unused_template_param(ty: &syn::Type) -> bool {
-    matches_bindgen_marker(ty, "__bindgen_marker_UnusedTemplateParam")
-}
-
 pub(crate) fn unwrap_has_unused_template_param(ty: &TypePath) -> Option<&syn::Type> {
     unwrap_bindgen_marker(ty, "__bindgen_marker_UnusedTemplateParam")
 }
