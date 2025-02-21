@@ -88,7 +88,6 @@ pub(super) fn create_subclass_trait_item(
         .param_details
         .iter()
         .map(|pd| pd.name.clone())
-        .map(Into::into)
         .collect();
     let requires_unsafe = if matches!(unsafe_policy, UnsafePolicy::AllFunctionsUnsafe) {
         UnsafetyNeeded::Always
@@ -129,7 +128,7 @@ pub(super) fn create_subclass_function(
     let params = std::iter::once(crate::minisyn::FnArg(parse_quote! {
         me: & #holder_name
     }))
-    .chain(analysis.params.iter().skip(1).cloned().map(Into::into))
+    .chain(analysis.params.iter().skip(1).cloned())
     .collect();
     let kind = if matches!(receiver_mutability, ReceiverMutability::Mutable) {
         CppFunctionKind::Method
