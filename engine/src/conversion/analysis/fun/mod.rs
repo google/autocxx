@@ -25,7 +25,7 @@ use crate::{
         apivec::ApiVec,
         convert_error::{ConvertErrorWithContext, ErrorContext, ErrorContextType},
         error_reporter::{convert_apis, report_any_error},
-        type_helpers::{type_has_unused_template_param, type_is_reference, unwrap_has_opaque},
+        type_helpers::{type_is_reference, unwrap_has_opaque},
         CppEffectiveName, CppOriginalName,
     },
     known_types::known_types,
@@ -1135,10 +1135,6 @@ impl<'a> FnAnalyzer<'a> {
                 Ok(_) => panic!("No error in the error"),
                 Err(problem) => set_ignore_reason(problem),
             }
-        } else if any_type_has_unused_template_param(&fun.inputs, &fun.output) {
-            // This indicates that bindgen essentially flaked out because templates
-            // were too complex.
-            set_ignore_reason(ConvertErrorFromCpp::UnusedTemplateParam)
         } else if matches!(
             fun.special_member,
             Some(SpecialMemberKind::AssignmentOperator)
@@ -2200,21 +2196,6 @@ impl<'a> FnAnalyzer<'a> {
         );
         apis.append(&mut any_errors);
     }
-}
-
-fn any_type_has_unused_template_param(
-    inputs: &Punctuated<FnArg, Comma>,
-    output: &crate::minisyn::ReturnType,
-) -> bool {
-    if let ReturnType::Type(_, ty) = &output.0 {
-        if type_has_unused_template_param(ty.as_ref()) {
-            return true;
-        }
-    }
-    inputs.iter().any(|input| match &input.0 {
-        syn::FnArg::Receiver(_) => false,
-        syn::FnArg::Typed(PatType { ty, .. }) => type_has_unused_template_param(ty.as_ref()),
-    })
 }
 
 fn special_member_to_string(special_member: SpecialMemberKind) -> &'static str {

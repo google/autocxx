@@ -349,7 +349,6 @@ impl IncludeCppEngine {
             .use_specific_virtual_function_receiver(true)
             .use_opaque_newtype_wrapper(true)
             .use_reference_newtype_wrapper(true)
-            .use_unused_template_param_newtype_wrapper(true)
             .represent_cxx_operators(true)
             .use_distinct_char16_t(true)
             .generate_deleted_functions(true)
