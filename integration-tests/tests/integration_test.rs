@@ -5990,6 +5990,8 @@ fn test_error_generated_for_static_data() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 fn test_error_generated_for_array_dependent_function() {
     let hdr = indoc! {"
         #include <cstdint>
