@@ -11,7 +11,7 @@ use crate::{
         api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
         apivec::ApiVec,
         codegen_cpp::type_to_cpp::CppNameMap,
-        type_helpers::{unwrap_has_opaque, unwrap_reference},
+        type_helpers::{unwrap_has_opaque, unwrap_has_unused_template_param, unwrap_reference},
         ConvertErrorFromCpp,
     },
     known_types::{known_types, CxxGenericType},
@@ -192,7 +192,9 @@ impl<'a> TypeConverter<'a> {
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         // First we try to spot if these are the special marker paths that
         // bindgen uses to denote references or other things.
-        if let Some(ty) = unwrap_has_opaque(&typ) {
+        if let Some(ty) = unwrap_has_unused_template_param(&typ) {
+            self.convert_type(ty.clone(), ns, ctx)
+        } else if let Some(ty) = unwrap_has_opaque(&typ) {
             self.convert_type(ty.clone(), ns, ctx)
         } else if let Some(ptr) = unwrap_reference(&typ, false) {
             // LValue reference
