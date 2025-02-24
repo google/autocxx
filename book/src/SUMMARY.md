@@ -18,6 +18,7 @@
 - [Large codebases](large_codebase.md)
 - [Examples](examples.md)
 - [Credits](credits.md)
+- [Reporting bugs](reporting_bugs.md)
 - [Contributing](contributing.md)
 - [Code of Conduct](code-of-conduct.md)
 
