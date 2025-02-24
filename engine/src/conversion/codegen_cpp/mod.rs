@@ -35,6 +35,9 @@ use super::{
     ConvertErrorFromCpp, CppEffectiveName,
 };
 
+static GENERATED_FILE_HEADER: &str =
+    "// Generated using autocxx - do not edit directly.\n// @generated.\n\n";
+
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
 enum Header {
     System(&'static str),
@@ -230,8 +233,8 @@ impl<'a> CppCodeGenerator<'a> {
             let type_definitions = self.concat_additional_items(|x| x.type_definition.as_ref());
             let declarations = self.concat_additional_items(|x| x.declaration.as_ref());
             let declarations = format!(
-                "#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
-                headers, self.inclusions, type_definitions, declarations
+                "{}\n#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
+                GENERATED_FILE_HEADER, headers, self.inclusions, type_definitions, declarations
             );
             log::info!("Additional C++ decls:\n{}", declarations);
             let header_name = self
@@ -245,7 +248,7 @@ impl<'a> CppCodeGenerator<'a> {
             {
                 let definitions = self.concat_additional_items(|x| x.definition.as_ref());
                 let definitions =
-                    format!("#include \"{header_name}\"\n{cpp_headers}\n{definitions}");
+                    format!("{GENERATED_FILE_HEADER}\n#include \"{header_name}\"\n{cpp_headers}\n{definitions}");
                 log::info!("Additional C++ defs:\n{}", definitions);
                 Some(definitions.into_bytes())
             } else {

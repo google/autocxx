@@ -493,6 +493,8 @@ impl IncludeCppEngine {
             #[allow(dead_code)]
             #[allow(non_upper_case_globals)]
             #[allow(non_camel_case_types)]
+            #[doc = "Generated using autocxx - do not edit directly"]
+            #[doc = "@generated"]
             mod #mod_name {
                 #(#items)*
             }
