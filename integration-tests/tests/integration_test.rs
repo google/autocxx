@@ -7687,6 +7687,7 @@ fn test_pv_subclass_const() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/1435
 fn test_pv_subclass_noexcept() {
     let hdr = indoc! {"
     #include <cstdint>
