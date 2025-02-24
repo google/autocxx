@@ -187,7 +187,7 @@ impl<'a> RsCodeGenerator<'a> {
         // First, the hierarchy of mods containing lots of 'use' statements
         // which is the final API exposed as 'ffi'.
         let mut use_statements =
-            Self::generate_final_use_statements(&rs_codegen_results_and_namespaces);
+            Self::generate_final_output_items(&rs_codegen_results_and_namespaces);
         // And work out what we need for the bindgen mod.
         let bindgen_root_items =
             self.generate_final_bindgen_mods(&rs_codegen_results_and_namespaces);
@@ -309,18 +309,17 @@ impl<'a> RsCodeGenerator<'a> {
             .collect()
     }
 
-    /// Generate lots of 'use' statements to pull cxxbridge items into the output
-    /// mod hierarchy according to C++ namespaces.
-    fn generate_final_use_statements(
-        input_items: &[(QualifiedName, RsCodegenResult)],
-    ) -> Vec<Item> {
+    /// Generate the final hierarchy of mods that contain types which the user
+    /// will actually end up using. This is mostly `use` statements pointing
+    /// to either cxx items or items in the original bindgen mod.
+    fn generate_final_output_items(input_items: &[(QualifiedName, RsCodegenResult)]) -> Vec<Item> {
         let mut output_items = Vec::new();
         let ns_entries = NamespaceEntries::new(input_items);
-        Self::append_child_use_namespace(&ns_entries, &mut output_items);
+        Self::append_child_final_output_namespace(&ns_entries, &mut output_items);
         output_items
     }
 
-    fn append_child_use_namespace(
+    fn append_child_final_output_namespace(
         ns_entries: &NamespaceEntries<(QualifiedName, RsCodegenResult)>,
         output_items: &mut Vec<Item>,
     ) {
@@ -340,6 +339,41 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             }));
         }
+
+        let mut impl_entries_by_type: HashMap<_, Vec<_>> = HashMap::new();
+        let mut trait_impl_entries_by_trait_and_ty: HashMap<_, Vec<_>> = HashMap::new();
+        for item in ns_entries.entries() {
+            if let Some(impl_entry) = &item.1.impl_entry {
+                impl_entries_by_type
+                    .entry(impl_entry.ty.clone())
+                    .or_default()
+                    .push(&impl_entry.item);
+            }
+            if let Some(trait_impl_entry) = &item.1.trait_impl_entry {
+                trait_impl_entries_by_trait_and_ty
+                    .entry(trait_impl_entry.key.clone())
+                    .or_default()
+                    .push(&trait_impl_entry.item);
+            }
+        }
+        for (ty, entries) in impl_entries_by_type.into_iter() {
+            output_items.push(Item::Impl(parse_quote! {
+                impl #ty {
+                    #(#entries)*
+                }
+            }))
+        }
+        for (key, entries) in trait_impl_entries_by_trait_and_ty.into_iter() {
+            let unsafety = key.unsafety;
+            let ty = key.ty;
+            let trt = key.trait_signature;
+            output_items.push(Item::Impl(parse_quote! {
+                #unsafety impl #trt for #ty {
+                    #(#entries)*
+                }
+            }))
+        }
+
         for (child_name, child_ns_entries) in ns_entries.children() {
             if child_ns_entries.is_empty() {
                 continue;
@@ -349,7 +383,7 @@ impl<'a> RsCodeGenerator<'a> {
                 pub mod #child_id {
                 }
             );
-            Self::append_child_use_namespace(
+            Self::append_child_final_output_namespace(
                 child_ns_entries,
                 &mut new_mod.content.as_mut().unwrap().1,
             );
@@ -388,44 +422,13 @@ impl<'a> RsCodeGenerator<'a> {
         output_items: &mut Vec<Item>,
         ns: &Namespace,
     ) {
-        let mut impl_entries_by_type: HashMap<_, Vec<_>> = HashMap::new();
-        let mut trait_impl_entries_by_trait_and_ty: HashMap<_, Vec<_>> = HashMap::new();
         for item in ns_entries.entries() {
             output_items.extend(item.1.bindgen_mod_items.iter().cloned());
-            if let Some(impl_entry) = &item.1.impl_entry {
-                impl_entries_by_type
-                    .entry(impl_entry.ty.clone())
-                    .or_default()
-                    .push(&impl_entry.item);
-            }
-            if let Some(trait_impl_entry) = &item.1.trait_impl_entry {
-                trait_impl_entries_by_trait_and_ty
-                    .entry(trait_impl_entry.key.clone())
-                    .or_default()
-                    .push(&trait_impl_entry.item);
-            }
         }
-        for (ty, entries) in impl_entries_by_type.into_iter() {
-            output_items.push(Item::Impl(parse_quote! {
-                impl #ty {
-                    #(#entries)*
-                }
-            }))
-        }
-        for (key, entries) in trait_impl_entries_by_trait_and_ty.into_iter() {
-            let unsafety = key.unsafety;
-            let ty = key.ty;
-            let trt = key.trait_signature;
-            output_items.push(Item::Impl(parse_quote! {
-                #unsafety impl #trt for #ty {
-                    #(#entries)*
-                }
-            }))
-        }
+
         for (child_name, child_ns_entries) in ns_entries.children() {
             let new_ns = ns.push(child_name.to_string());
             let child_id = make_ident(child_name);
-
             let mut inner_output_items = Vec::new();
             self.append_child_bindgen_namespace(child_ns_entries, &mut inner_output_items, &new_ns);
             if !inner_output_items.is_empty() {
