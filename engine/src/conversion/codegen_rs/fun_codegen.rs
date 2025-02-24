@@ -108,7 +108,6 @@ pub(super) fn gen_function(
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
     let mut trait_impl_entry = None;
-    let mut bindgen_mod_items = Vec::new();
     let always_unsafe_due_to_trait_definition = match kind {
         FnKind::TraitMethod { ref details, .. } => details.trait_call_is_unsafe,
         _ => false,
@@ -132,6 +131,8 @@ pub(super) fn gen_function(
         non_pod_types,
         &ret_conversion,
     );
+
+    let mut materializations = Vec::new();
 
     if analysis.rust_wrapper_needed {
         match kind {
@@ -159,16 +160,18 @@ pub(super) fn gen_function(
             }
             _ => {
                 // Generate plain old function
-                bindgen_mod_items.push(fn_generator.generate_function_impl());
+                materializations.push(Use::Custom(Box::new(fn_generator.generate_function_impl())));
             }
         }
     }
 
+    // This and the 'if let' can be simplified. TODO.
     let materialization = match kind {
         FnKind::Method { .. } | FnKind::TraitMethod { .. } => None,
         FnKind::Function => match analysis.rust_rename_strategy {
             _ if analysis.rust_wrapper_needed => {
-                Some(Use::SpecificNameFromBindgen(make_ident(rust_name).into()))
+                assert!(!materializations.is_empty());
+                None
             }
             RustRenameStrategy::RenameInOutputMod(ref alias) => {
                 Some(Use::UsedFromCxxBridgeWithAlias(alias.clone().into()))
@@ -176,6 +179,10 @@ pub(super) fn gen_function(
             _ => Some(Use::UsedFromCxxBridge),
         },
     };
+    if let Some(materialization) = materialization {
+        materializations.push(materialization);
+    }
+
     if let Some(cpp_call_name) = cpp_call_name {
         if cpp_call_name.does_not_match_cxxbridge_name(&cxxbridge_name) && !wrapper_function_needed
         {
@@ -217,10 +224,9 @@ pub(super) fn gen_function(
     ));
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
-        bindgen_mod_items,
         impl_entry,
         trait_impl_entry,
-        materializations: materialization.into_iter().collect(),
+        materializations,
         ..Default::default()
     }
 }

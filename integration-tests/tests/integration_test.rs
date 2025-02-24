@@ -4143,7 +4143,7 @@ fn test_reserved_name() {
     let rs = quote! {
         assert_eq!(ffi::async_(34), 34);
     };
-    run_test("", hdr, rs, &["async_"], &[]);
+    run_test("", hdr, rs, &["async"], &[]);
 }
 
 #[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
@@ -4613,6 +4613,7 @@ fn test_up_in_struct() {
 }
 
 #[test]
+#[ignore] // https://github.com/rust-lang/rust-bindgen/issues/3158
 fn test_typedef_to_std_in_struct() {
     let hdr = indoc! {"
         #include <string>
@@ -5228,6 +5229,7 @@ fn test_typedef_to_ptr_is_marked_unsafe() {
 }
 
 #[test]
+#[ignore] // https://github.com/rust-lang/rust-bindgen/issues/3160
 fn test_issue_264() {
     let hdr = indoc! {"
     namespace a {
@@ -6127,7 +6129,7 @@ fn test_keyword_function() {
         inline void move(int) {};
     "};
     let rs = quote! {};
-    run_test("", hdr, rs, &["move_"], &[]);
+    run_test("", hdr, rs, &["move"], &[]);
 }
 
 #[test]
@@ -6377,6 +6379,8 @@ fn test_include_cpp_in_path() {
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
+// This test formerly used generate_all! but that causes
+// https://github.com/rust-lang/rust-bindgen/issues/3159
 #[test]
 fn test_bitset() {
     let hdr = indoc! {"
@@ -6405,7 +6409,7 @@ fn test_bitset() {
 
         typedef bitset<1> mybitset;
     "};
-    run_generate_all_test(hdr);
+    run_test("", hdr, quote! {}, &["mybitset"], &[]);
 }
 
 #[test]
@@ -9849,7 +9853,7 @@ fn test_no_rvo_move() {
 }
 
 #[test]
-fn test_abstract_up() {
+fn test_abstract_up_single_bridge() {
     let hdr = indoc! {"
     #include <memory>
     class A {
@@ -11635,6 +11639,8 @@ fn test_recursive_field_indirect() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
+// MSVC failure appears to be https://github.com/rust-lang/rust-bindgen/issues/3159
 fn test_typedef_unsupported_type_pub() {
     let hdr = indoc! {"
         #include <set>
@@ -11658,6 +11664,8 @@ fn test_typedef_unsupported_type_pub() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
+// MSVC failure appears to be https://github.com/rust-lang/rust-bindgen/issues/3159
 fn test_typedef_unsupported_type_pri() {
     let hdr = indoc! {"
         #include <set>
@@ -11946,6 +11954,7 @@ fn test_pass_rust_str_and_return_struct() {
 }
 
 #[test]
+#[ignore] // https://github.com/rust-lang/rust-bindgen/issues/3161
 fn test_issue_1065a() {
     let hdr = indoc! {"
         #include <memory>

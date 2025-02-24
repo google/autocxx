@@ -330,6 +330,18 @@ impl IncludeCppEngine {
         inc_dirs: &[PathBuf],
         extra_clang_args: &[&str],
     ) -> bindgen::Builder {
+        let bindgen_marker_types = ["Opaque", "Reference", "RValueReference"];
+        let raw_line = bindgen_marker_types
+            .iter()
+            .map(|t| format!("#[repr(transparent)] pub struct __bindgen_marker_{t}<T: ?Sized>(T);"))
+            .join(" ");
+        let mut all_module_raw_line = bindgen_marker_types
+            .iter()
+            .map(|t| format!("#[allow(unused_imports)] use super::__bindgen_marker_{t};"))
+            .join(" ");
+        all_module_raw_line
+            .push_str("#[allow(unused_imports)] use autocxx::c_char16_t as bindgen_cchar16_t;");
+
         let mut builder = bindgen::builder()
             .clang_args(make_clang_args(inc_dirs, extra_clang_args))
             .derive_copy(false)
@@ -349,16 +361,14 @@ impl IncludeCppEngine {
             .use_specific_virtual_function_receiver(true)
             .use_opaque_newtype_wrapper(true)
             .use_reference_newtype_wrapper(true)
-            .use_unused_template_param_newtype_wrapper(true)
             .represent_cxx_operators(true)
             .use_distinct_char16_t(true)
             .generate_deleted_functions(true)
             .generate_pure_virtuals(true)
+            .raw_line(raw_line)
+            .all_module_raw_line(all_module_raw_line)
             .generate_private_functions(true)
             .layout_tests(false); // TODO revisit later
-        for item in known_types().get_initial_blocklist() {
-            builder = builder.blocklist_item(item);
-        }
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
@@ -368,6 +378,7 @@ impl IncludeCppEngine {
                 builder = builder
                     .allowlist_type(&a)
                     .allowlist_function(&a)
+                    .allowlist_function(format!("{a}_bindgen_original"))
                     .allowlist_var(&a);
             }
         }

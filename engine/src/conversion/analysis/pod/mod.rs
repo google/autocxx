@@ -54,7 +54,7 @@ pub(crate) struct PodAnalysis {
     /// std::unique_ptr<A> it would just be std::unique_ptr.
     pub(crate) field_definition_deps: HashSet<QualifiedName>,
     pub(crate) field_info: Vec<FieldInfo>,
-    pub(crate) is_generic: bool,
+    pub(crate) num_generics: usize,
     pub(crate) in_anonymous_namespace: bool,
 }
 
@@ -188,7 +188,7 @@ fn analyze_struct(
         .filter(|base| config.is_on_allowlist(&base.to_cpp_name()))
         .cloned()
         .collect();
-    let is_generic = !details.item.generics.params.is_empty();
+    let num_generics = details.item.generics.params.len();
     let in_anonymous_namespace = name
         .name
         .ns_segment_iter()
@@ -203,7 +203,7 @@ fn analyze_struct(
             field_deps,
             field_definition_deps,
             field_info,
-            is_generic,
+            num_generics,
             in_anonymous_namespace,
         },
     })))

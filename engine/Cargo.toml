@@ -30,8 +30,8 @@ log = "0.4"
 proc-macro2 = "1.0.11"
 quote = "1.0"
 indoc = "1.0"
-autocxx-bindgen = { version = "=0.72.0", default-features = false, features = ["logging", "which-rustfmt"] }
-#autocxx-bindgen = { git = "https://github.com/adetaylor/rust-bindgen", branch = "switch-from-attributes-to-callbacks", default-features = false, features = ["logging", "which-rustfmt"] }
+#autocxx-bindgen = { version = "=0.72.0", default-features = false, features = ["logging", "which-rustfmt"] }
+autocxx-bindgen = { git = "https://github.com/adetaylor/rust-bindgen", branch = "all-modules-raw-line", default-features = false, features = ["logging", "which-rustfmt"] }
 itertools = "0.10.3"
 cc = { version = "1.0", optional = true }
 # Note: Keep the patch-level version of cxx-gen and cxx in sync.
@@ -47,6 +47,7 @@ serde_json = { version = "1.0", optional = true }
 miette = "5"
 thiserror = "1"
 regex = "1.5"
+regex_static = "0.1"
 indexmap = "1.8"
 prettyplease = { version = "0.2.6", features = ["verbatim"] }
 rustversion = "1.0"

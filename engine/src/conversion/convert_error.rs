@@ -41,8 +41,6 @@ pub enum ConvertErrorFromCpp {
     UnsafePodType(String),
     #[error("Bindgen generated some unexpected code in a foreign mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")]
     UnexpectedForeignItem,
-    #[error("Bindgen generated some unexpected code in its outermost mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")]
-    UnexpectedOuterItem,
     #[error("Bindgen generated some unexpected code in an inner namespace mod. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")]
     UnexpectedItemInMod,
     #[error("autocxx was unable to produce a typdef pointing to the complex type {0}.")]

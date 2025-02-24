@@ -101,7 +101,7 @@ impl ByValueChecker {
                             }
                             _ => None,
                         },
-                        TypedefKind::Use(_, ref ty) => match **ty {
+                        TypedefKind::Use(ref ty) => match **ty {
                             crate::minisyn::Type(Type::Path(ref typ)) => {
                                 let target_tn = QualifiedName::from_type_path(typ);
                                 known_types().consider_substitution(&target_tn)

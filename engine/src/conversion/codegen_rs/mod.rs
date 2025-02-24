@@ -11,10 +11,8 @@ mod function_wrapper_rs;
 mod impl_item_creator;
 mod lifetime;
 mod namespace_organizer;
-mod non_pod_struct;
 pub(crate) mod unqualify;
 
-use autocxx_bindgen::callbacks::Layout;
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
 
@@ -28,10 +26,7 @@ use syn::{
 };
 
 use crate::{
-    conversion::codegen_rs::{
-        non_pod_struct::{make_non_pod, new_non_pod_struct},
-        unqualify::{unqualify_params, unqualify_ret_type},
-    },
+    conversion::codegen_rs::unqualify::{unqualify_params, unqualify_ret_type},
     minisyn::minisynize_punctuated,
     types::{make_ident, Namespace, QualifiedName},
 };
@@ -47,7 +42,7 @@ use super::{
         fun::{FnPhase, PodAndDepAnalysis, ReceiverMutability},
         pod::PodAnalysis,
     },
-    api::{AnalysisPhase, Api, SubclassName, TypeKind, TypedefKind},
+    api::{AnalysisPhase, Api, SubclassName, TypeKind},
     convert_error::ErrorContextType,
     doc_attr::get_doc_attrs,
 };
@@ -80,8 +75,9 @@ enum Use {
     UsedFromCxxBridgeWithAlias(Ident),
     /// 'use' directive points to bindgen
     UsedFromBindgen,
-    /// 'use' a specific name from bindgen.
-    SpecificNameFromBindgen(Ident),
+    /// Do not expose the original item from bindgen, but instead create
+    /// an opaque struct.
+    CreateOpaqueTypeWrappingBindgen { num_generics: usize },
     /// Some kind of custom item
     Custom(Box<Item>),
 }
@@ -186,11 +182,8 @@ impl<'a> RsCodeGenerator<'a> {
             .unzip();
         // First, the hierarchy of mods containing lots of 'use' statements
         // which is the final API exposed as 'ffi'.
-        let mut use_statements =
-            Self::generate_final_use_statements(&rs_codegen_results_and_namespaces);
-        // And work out what we need for the bindgen mod.
-        let bindgen_root_items =
-            self.generate_final_bindgen_mods(&rs_codegen_results_and_namespaces);
+        let use_statements =
+            Self::generate_final_output_namespace(&rs_codegen_results_and_namespaces);
         // Both of the above ('use' hierarchy and bindgen mod) are organized into
         // sub-mods by namespace. From here on, things are flat.
         let (_, rs_codegen_results): (Vec<_>, Vec<_>) =
@@ -240,15 +233,8 @@ impl<'a> RsCodeGenerator<'a> {
         // being a performance bottleneck. If so, we might want
         // to set the 'contents' field of the ItemMod
         // structures directly.
-        if !bindgen_root_items.is_empty() {
-            self.bindgen_mod.vis = parse_quote! {};
-            self.bindgen_mod.content.as_mut().unwrap().1 = vec![Item::Mod(parse_quote! {
-                pub(super) mod root {
-                    #(#bindgen_root_items)*
-                }
-            })];
-            all_items.push(Item::Mod(self.bindgen_mod));
-        }
+        self.bindgen_mod.vis = parse_quote! {};
+        all_items.push(Item::Mod(self.bindgen_mod));
         all_items.push(Item::Mod(parse_quote! {
             #[cxx::bridge]
             mod cxxbridge {
@@ -260,7 +246,23 @@ impl<'a> RsCodeGenerator<'a> {
             #[allow(unused_imports)]
             use bindgen::root;
         }));
-        all_items.append(&mut use_statements);
+        let supers_to_use = ["cxxbridge", "bindgen", "output"];
+        let another = (!self.config.exclude_utilities()).then_some("ToCppString");
+        let supers_to_use = supers_to_use
+            .iter()
+            .chain(another.iter())
+            .map(|s| make_ident(s).0);
+        all_items.push(Item::Mod(parse_quote! {
+            mod output {
+                #[allow(unused_imports)]
+                use super::{#(#supers_to_use),*};
+                #(#use_statements)*
+            }
+        }));
+        all_items.push(Item::Use(parse_quote! {
+            #[allow(unused_imports)]
+            pub use output::*;
+        }));
         all_items
     }
 
@@ -309,18 +311,18 @@ impl<'a> RsCodeGenerator<'a> {
             .collect()
     }
 
-    /// Generate lots of 'use' statements to pull cxxbridge items into the output
-    /// mod hierarchy according to C++ namespaces.
-    fn generate_final_use_statements(
+    /// Generate the final output mod hierarchy which the user will actually
+    /// interact with. This is mostly lots of 'use' statements.
+    fn generate_final_output_namespace(
         input_items: &[(QualifiedName, RsCodegenResult)],
     ) -> Vec<Item> {
         let mut output_items = Vec::new();
         let ns_entries = NamespaceEntries::new(input_items);
-        Self::append_child_use_namespace(&ns_entries, &mut output_items);
+        Self::append_child_output_namespace(&ns_entries, &mut output_items);
         output_items
     }
 
-    fn append_child_use_namespace(
+    fn append_child_output_namespace(
         ns_entries: &NamespaceEntries<(QualifiedName, RsCodegenResult)>,
         output_items: &mut Vec<Item>,
     ) {
@@ -332,66 +334,17 @@ impl<'a> RsCodeGenerator<'a> {
                     }
                     Use::UsedFromCxxBridge => Self::generate_cxx_use_stmt(name, None),
                     Use::UsedFromBindgen => Self::generate_bindgen_use_stmt(name),
-                    Use::SpecificNameFromBindgen(id) => {
-                        let name = QualifiedName::new(name.get_namespace(), id.clone().into());
-                        Self::generate_bindgen_use_stmt(&name)
-                    }
                     Use::Custom(item) => *item.clone(),
+                    Use::CreateOpaqueTypeWrappingBindgen { num_generics } => {
+                        Self::generate_opaque_type(name, *num_generics)
+                    }
                 }
             }));
         }
-        for (child_name, child_ns_entries) in ns_entries.children() {
-            if child_ns_entries.is_empty() {
-                continue;
-            }
-            let child_id = make_ident(child_name);
-            let mut new_mod: ItemMod = parse_quote!(
-                pub mod #child_id {
-                }
-            );
-            Self::append_child_use_namespace(
-                child_ns_entries,
-                &mut new_mod.content.as_mut().unwrap().1,
-            );
-            output_items.push(Item::Mod(new_mod));
-        }
-    }
 
-    fn append_uses_for_ns(&mut self, items: &mut Vec<Item>, ns: &Namespace) {
-        let mut imports_from_super = vec!["cxxbridge"];
-        if !self.config.exclude_utilities() {
-            imports_from_super.push("ToCppString");
-        }
-        let imports_from_super = imports_from_super.into_iter().map(make_ident);
-        let super_duper = std::iter::repeat(make_ident("super")); // I'll get my coat
-        let supers = super_duper.clone().take(ns.depth() + 2);
-        items.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use self::
-                #(#supers)::*
-            ::{
-                #(#imports_from_super),*
-            };
-        }));
-        let supers = super_duper.take(ns.depth() + 1);
-        items.push(Item::Use(parse_quote! {
-            #[allow(unused_imports)]
-            use self::
-                #(#supers)::*
-            ::root;
-        }));
-    }
-
-    fn append_child_bindgen_namespace(
-        &mut self,
-        ns_entries: &NamespaceEntries<(QualifiedName, RsCodegenResult)>,
-        output_items: &mut Vec<Item>,
-        ns: &Namespace,
-    ) {
         let mut impl_entries_by_type: HashMap<_, Vec<_>> = HashMap::new();
         let mut trait_impl_entries_by_trait_and_ty: HashMap<_, Vec<_>> = HashMap::new();
         for item in ns_entries.entries() {
-            output_items.extend(item.1.bindgen_mod_items.iter().cloned());
             if let Some(impl_entry) = &item.1.impl_entry {
                 impl_entries_by_type
                     .entry(impl_entry.ty.clone())
@@ -422,38 +375,28 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             }))
         }
-        for (child_name, child_ns_entries) in ns_entries.children() {
-            let new_ns = ns.push(child_name.to_string());
-            let child_id = make_ident(child_name);
 
-            let mut inner_output_items = Vec::new();
-            self.append_child_bindgen_namespace(child_ns_entries, &mut inner_output_items, &new_ns);
-            if !inner_output_items.is_empty() {
-                let mut new_mod: ItemMod = parse_quote!(
-                    pub mod #child_id {
-                    }
-                );
-                self.append_uses_for_ns(&mut inner_output_items, &new_ns);
-                new_mod.content.as_mut().unwrap().1 = inner_output_items;
-                output_items.push(Item::Mod(new_mod));
+        for (child_name, child_ns_entries) in ns_entries.children() {
+            if child_ns_entries.is_empty() {
+                continue;
             }
+            let child_id = make_ident(child_name);
+            let mut new_mod: ItemMod = parse_quote!(
+                pub mod #child_id {
+                    #[allow(unused_imports)]
+                    use super::{cxxbridge, output, bindgen};
+                }
+            );
+            Self::append_child_output_namespace(
+                child_ns_entries,
+                &mut new_mod.content.as_mut().unwrap().1,
+            );
+            output_items.push(Item::Mod(new_mod));
         }
     }
 
     fn id_to_expr(id: &Ident) -> Expr {
         parse_quote! { #id }
-    }
-
-    fn generate_final_bindgen_mods(
-        &mut self,
-        input_items: &[(QualifiedName, RsCodegenResult)],
-    ) -> Vec<Item> {
-        let mut output_items = Vec::new();
-        let ns = Namespace::new();
-        let ns_entries = NamespaceEntries::new(input_items);
-        self.append_child_bindgen_namespace(&ns_entries, &mut output_items, &ns);
-        self.append_uses_for_ns(&mut output_items, &ns);
-        output_items
     }
 
     fn generate_rs_for_api(
@@ -482,16 +425,7 @@ impl<'a> RsCodeGenerator<'a> {
             Api::Function { fun, analysis, .. } => {
                 gen_function(name.get_namespace(), *fun, analysis, non_pod_types)
             }
-            Api::Const { const_item, .. } => RsCodegenResult {
-                bindgen_mod_items: vec![Item::Const(const_item.into())],
-                materializations: vec![Use::UsedFromBindgen],
-                ..Default::default()
-            },
-            Api::Typedef { analysis, .. } => RsCodegenResult {
-                bindgen_mod_items: vec![match analysis.kind {
-                    TypedefKind::Type(type_item) => Item::Type(type_item.into()),
-                    TypedefKind::Use(use_item, _) => Item::Use(use_item.into()),
-                }],
+            Api::Const { .. } | Api::Typedef { .. } => RsCodegenResult {
                 materializations: vec![Use::UsedFromBindgen],
                 ..Default::default()
             },
@@ -501,7 +435,7 @@ impl<'a> RsCodeGenerator<'a> {
                     PodAndDepAnalysis {
                         pod:
                             PodAnalysis {
-                                is_generic, kind, ..
+                                num_generics, kind, ..
                             },
                         constructors,
                         ..
@@ -509,7 +443,6 @@ impl<'a> RsCodeGenerator<'a> {
                 ..
             } => {
                 let doc_attrs = get_doc_attrs(&details.item.attrs);
-                let layout = details.layout;
                 self.generate_type(
                     &name,
                     id,
@@ -518,8 +451,7 @@ impl<'a> RsCodeGenerator<'a> {
                     constructors.destructor,
                     || Some((Item::Struct(details.item.into()), doc_attrs)),
                     associated_methods,
-                    layout,
-                    is_generic,
+                    num_generics,
                 )
             }
             Api::Enum { item, .. } => {
@@ -532,8 +464,7 @@ impl<'a> RsCodeGenerator<'a> {
                     true,
                     || Some((Item::Enum(item.into()), doc_attrs)),
                     associated_methods,
-                    None,
-                    false,
+                    0,
                 )
             }
             Api::ConcreteType { .. } => self.generate_type(
@@ -544,8 +475,7 @@ impl<'a> RsCodeGenerator<'a> {
                 true,  // assume for now that these types can be put in a smart pointer
                 || None,
                 associated_methods,
-                None,
-                false,
+                0,
             ),
             Api::ForwardDeclaration { .. } | Api::OpaqueTypedef { .. } => self.generate_type(
                 &name,
@@ -555,8 +485,7 @@ impl<'a> RsCodeGenerator<'a> {
                 false, // these types can't be put in a smart pointer
                 || None,
                 associated_methods,
-                None,
-                false,
+                0,
             ),
             Api::CType { .. } => RsCodegenResult {
                 extern_c_mod_items: vec![ForeignItem::Verbatim(quote! {
@@ -570,12 +499,11 @@ impl<'a> RsCodeGenerator<'a> {
                     global_items: vec![parse_quote! {
                         use super::#path;
                     }],
+                    materializations: vec![Use::Custom(Box::new(
+                        parse_quote! {#[allow(unused_imports)] use super::#id;},
+                    ))],
                     extern_rust_mod_items: vec![parse_quote! {
                         type #id;
-                    }],
-                    bindgen_mod_items: vec![parse_quote! {
-                        #[allow(unused_imports)]
-                        use super::super::#id;
                     }],
                     ..Default::default()
                 }
@@ -623,7 +551,7 @@ impl<'a> RsCodeGenerator<'a> {
             Api::ExternCppType {
                 details: ExternCppType { rust_path, .. },
                 ..
-            } => self.generate_extern_cpp_type(&name, rust_path, name.ns_segment_iter().count()),
+            } => self.generate_extern_cpp_type(&name, rust_path),
             Api::IgnoredItem {
                 err,
                 ctx: Some(ctx),
@@ -649,16 +577,13 @@ impl<'a> RsCodeGenerator<'a> {
         let cpp_path = full_cpp.to_type_path();
         let cpp_id = full_cpp.get_final_ident();
         let mut global_items = Vec::new();
-        global_items.push(parse_quote! {
-            pub use bindgen::root::#holder;
-        });
         let relinquish_ownership_call = sub.cpp_remove_ownership();
-        let mut bindgen_mod_items = vec![
+        let mut per_mod_items: Vec<Item> = vec![
             parse_quote! {
                 pub use cxxbridge::#cpp_id;
             },
             parse_quote! {
-                pub struct #holder(pub autocxx::subclass::CppSubclassRustPeerHolder<super::super::super::#id>);
+                pub struct #holder(pub autocxx::subclass::CppSubclassRustPeerHolder<super::super::#id>);
             },
             parse_quote! {
                 impl autocxx::subclass::CppSubclassCppPeer for #cpp_id {
@@ -702,17 +627,17 @@ impl<'a> RsCodeGenerator<'a> {
                 })
                 .collect();
             if !methods_impls.is_empty() {
-                bindgen_mod_items.push(parse_quote! {
+                per_mod_items.push(parse_quote! {
                     #[allow(non_snake_case)]
-                    impl #supers for super::super::super::#id {
+                    impl #supers for super::super::#id {
                         #(#methods_impls)*
                     }
                 });
             }
         }
         if generate_peer_constructor {
-            bindgen_mod_items.push(parse_quote! {
-                impl autocxx::subclass::CppPeerConstructor<#cpp_id> for super::super::super::#id {
+            per_mod_items.push(parse_quote! {
+                impl autocxx::subclass::CppPeerConstructor<#cpp_id> for super::super::#id {
                     fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<#cpp_path> {
                         use autocxx::moveit::Emplace;
                         cxx::UniquePtr::emplace(#cpp_id :: new(peer_holder))
@@ -734,8 +659,8 @@ impl<'a> RsCodeGenerator<'a> {
         extern_c_mod_items.push(parse_quote! {
             fn #as_unique_ptr_id(u: UniquePtr<#cpp_id>) -> UniquePtr<#super_cxxxbridge_id>;
         });
-        bindgen_mod_items.push(parse_quote! {
-            impl AsRef<#super_path> for super::super::super::#id {
+        per_mod_items.push(parse_quote! {
+            impl AsRef<#super_path> for super::super::#id {
                 fn as_ref(&self) -> &cxxbridge::#super_cxxxbridge_id {
                     use autocxx::subclass::CppSubclass;
                     self.peer().#as_id()
@@ -743,8 +668,8 @@ impl<'a> RsCodeGenerator<'a> {
             }
         });
         // TODO it would be nice to impl AsMut here but pin prevents us
-        bindgen_mod_items.push(parse_quote! {
-            impl super::super::super::#id {
+        per_mod_items.push(parse_quote! {
+            impl super::super::#id {
                 pub fn pin_mut(&mut self) -> ::core::pin::Pin<&mut cxxbridge::#super_cxxxbridge_id> {
                     use autocxx::subclass::CppSubclass;
                     self.peer_mut().#as_mut_id()
@@ -752,8 +677,8 @@ impl<'a> RsCodeGenerator<'a> {
             }
         });
         let rs_as_unique_ptr_id = make_ident(format!("as_{super_name}_unique_ptr"));
-        bindgen_mod_items.push(parse_quote! {
-            impl super::super::super::#id {
+        per_mod_items.push(parse_quote! {
+            impl super::super::#id {
                 pub fn #rs_as_unique_ptr_id(u: cxx::UniquePtr<#cpp_id>) -> cxx::UniquePtr<cxxbridge::#super_cxxxbridge_id> {
                     cxxbridge::#as_unique_ptr_id(u)
                 }
@@ -766,16 +691,17 @@ impl<'a> RsCodeGenerator<'a> {
                 Box::new(#holder(me.0.relinquish_ownership()))
             }
         });
+        let materializations = per_mod_items
+            .into_iter()
+            .map(|item| Use::Custom(Box::new(item)))
+            .collect();
         RsCodegenResult {
             extern_c_mod_items,
             // For now we just assume we can't keep subclasses in vectors, but we can put them in
             // smart pointers.
             // That's the reason for the 'false' and 'true'
             bridge_items: create_impl_items(&cpp_id, false, true, self.config),
-            bindgen_mod_items,
-            materializations: vec![Use::Custom(Box::new(parse_quote! {
-                pub use cxxbridge::#cpp_id;
-            }))],
+            materializations,
             global_items,
             extern_rust_mod_items: vec![
                 parse_quote! {
@@ -863,17 +789,18 @@ impl<'a> RsCodeGenerator<'a> {
         destroyable: bool,
         item_creator: F,
         associated_methods: &HashMap<QualifiedName, Vec<SuperclassMethod>>,
-        layout: Option<Layout>,
-        is_generic: bool,
+        num_generics: usize,
     ) -> RsCodegenResult
     where
         F: FnOnce() -> Option<(Item, Vec<Attribute>)>,
     {
-        let mut bindgen_mod_items = Vec::new();
-        let mut materializations = vec![Use::UsedFromBindgen];
+        let mut materializations = vec![match type_kind {
+            TypeKind::Pod => Use::UsedFromBindgen,
+            TypeKind::Abstract => Use::UsedFromCxxBridge,
+            _ => Use::CreateOpaqueTypeWrappingBindgen { num_generics },
+        }];
         Self::add_superclass_stuff_to_type(
             name,
-            &mut bindgen_mod_items,
             &mut materializations,
             associated_methods.get(name),
         );
@@ -897,55 +824,55 @@ impl<'a> RsCodeGenerator<'a> {
                 // b) for nested types such as 'A::B', there is no combination
                 //    of cxx-acceptable attributes which will inform cxx that
                 //    A is a class rather than a namespace.
-                let mut item = orig_item
-                    .expect("Instantiable types must provide instance")
-                    .0;
-                if matches!(type_kind, TypeKind::NonPod) {
-                    if let Item::Struct(ref mut s) = item {
-                        // Retain generics and doc attrs.
-                        make_non_pod(s, layout);
-                    } else {
-                        // enum
-                        item = Item::Struct(new_non_pod_struct(id.clone().into()));
-                    }
-                }
-                bindgen_mod_items.push(item);
+                // let mut item = orig_item
+                //     .expect("Instantiable types must provide instance")
+                //     .0;
+                // if matches!(type_kind, TypeKind::NonPod) {
+                //     if let Item::Struct(ref mut s) = item {
+                //         // Retain generics and doc attrs.
+                //         make_non_pod(s, layout);
+                //     } else {
+                //         // enum
+                //         item = Item::Struct(new_non_pod_struct(id.clone().into()));
+                //     }
+                // }
+                // global_items.push(item);
 
-                if is_generic {
+                if num_generics > 0 {
                     // Still generate the type as emitted by bindgen,
                     // but don't attempt to tell cxx about it
                     RsCodegenResult {
-                        bindgen_mod_items,
                         materializations,
                         ..Default::default()
                     }
                 } else {
+                    materializations.extend(
+                        self.generate_extern_type_impl(type_kind, name)
+                            .into_iter()
+                            .map(|m| Use::Custom(Box::new(m))),
+                    );
                     RsCodegenResult {
-                        global_items: self.generate_extern_type_impl(type_kind, name),
                         bridge_items: create_impl_items(&id, movable, destroyable, self.config),
                         extern_c_mod_items: vec![
                             self.generate_cxxbridge_type(name, true, doc_attrs)
                         ],
-                        bindgen_mod_items,
                         materializations,
                         ..Default::default()
                     }
                 }
             }
             TypeKind::Abstract => {
-                if is_generic {
+                if num_generics > 0 {
                     RsCodegenResult::default()
                 } else {
                     // Feed cxx "type T;"
                     // We MUST do this because otherwise cxx assumes this can be
                     // instantiated using UniquePtr etc.
-                    bindgen_mod_items.push(Item::Use(parse_quote! { pub use cxxbridge::#id; }));
                     RsCodegenResult {
                         extern_c_mod_items: vec![
                             self.generate_cxxbridge_type(name, false, doc_attrs)
                         ],
                         bridge_items: create_impl_items(&id, movable, destroyable, self.config),
-                        bindgen_mod_items,
                         materializations,
                         ..Default::default()
                     }
@@ -956,7 +883,6 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn add_superclass_stuff_to_type(
         name: &QualifiedName,
-        bindgen_mod_items: &mut Vec<Item>,
         materializations: &mut Vec<Use>,
         methods: Option<&Vec<SuperclassMethod>>,
     ) {
@@ -1002,46 +928,47 @@ impl<'a> RsCodeGenerator<'a> {
             let supers_name = SubclassName::get_supers_trait_name(name).get_final_ident();
             let methods_name = SubclassName::get_methods_trait_name(name).get_final_ident();
             if !supers.is_empty() {
-                bindgen_mod_items.push(parse_quote! {
+                materializations.push(Use::Custom(Box::new(parse_quote! {
                     #[allow(non_snake_case)]
                     pub trait #supers_name {
                         #(#supers)*
                     }
-                });
-                bindgen_mod_items.push(parse_quote! {
+                })));
+                materializations.push(Use::Custom(Box::new(parse_quote! {
                     #[allow(non_snake_case)]
                     pub trait #methods_name : #supers_name {
                         #(#mains)*
                     }
-                });
-                materializations.push(Use::SpecificNameFromBindgen(supers_name.into()));
+                })));
             } else {
-                bindgen_mod_items.push(parse_quote! {
+                materializations.push(Use::Custom(Box::new(parse_quote! {
                     #[allow(non_snake_case)]
                     pub trait #methods_name {
                         #(#mains)*
                     }
-                });
+                })));
             }
-            materializations.push(Use::SpecificNameFromBindgen(methods_name.into()));
         }
     }
 
     fn generate_extern_cpp_type(
         &self,
         name: &QualifiedName,
-        rust_path: TypePath,
-        ns_depth: usize,
+        mut rust_path: TypePath,
     ) -> RsCodegenResult {
-        let id = name.type_path_from_root();
-        let super_duper = std::iter::repeat(make_ident("super"));
-        let supers = super_duper.take(ns_depth + 2);
         let name_final = name.get_final_ident();
-        let use_statement = parse_quote! {
-            pub use #(#supers)::* :: #id;
-        };
+        // Users expect to provide a path relative to the ffi mod, but this
+        // will actually be one level deeper.
+        if rust_path
+            .path
+            .segments
+            .first()
+            .map(|seg| seg.ident == "super")
+            .unwrap_or_default()
+        {
+            rust_path.path.segments.insert(0, parse_quote! { super });
+        }
         RsCodegenResult {
-            bindgen_mod_items: vec![use_statement],
             extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, Vec::new())],
             materializations: vec![Use::Custom(Box::new(
                 parse_quote! { pub use #rust_path as #name_final; },
@@ -1055,24 +982,13 @@ impl<'a> RsCodeGenerator<'a> {
     /// generated.
     fn generate_error_entry(err: ConvertErrorFromCpp, ctx: ErrorContext) -> RsCodegenResult {
         let err = format!(" autocxx bindings couldn't be generated: {err}");
-        let (impl_entry, bindgen_mod_item, materialization) = match ctx.into_type() {
-            ErrorContextType::Item(id) => (
-                // Populate within bindgen mod because impl blocks may attach.
+        let (impl_entry, namespaced_item) = match ctx.into_type() {
+            ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => (
                 None,
                 Some(parse_quote! {
                     #[doc = #err]
                     pub struct #id;
                 }),
-                Some(Use::SpecificNameFromBindgen(id.into())),
-            ),
-            ErrorContextType::SanitizedItem(id) => (
-                // Guaranteed to be no impl blocks - populate directly in output mod.
-                None,
-                None,
-                Some(Use::Custom(Box::new(parse_quote! {
-                    #[doc = #err]
-                    pub struct #id;
-                }))),
             ),
             ErrorContextType::Method { self_ty, method } => (
                 Some(Box::new(ImplBlockDetails {
@@ -1084,13 +1000,17 @@ impl<'a> RsCodeGenerator<'a> {
                     ty: parse_quote! { #self_ty },
                 })),
                 None,
-                None,
             ),
         };
+        // The above code can be simplified to construct materializations
+        // in all cases.
+        let materializations = namespaced_item
+            .into_iter()
+            .map(|item| Use::Custom(Box::new(item)))
+            .collect();
         RsCodegenResult {
             impl_entry,
-            bindgen_mod_items: bindgen_mod_item.into_iter().collect(),
-            materializations: materialization.into_iter().collect(),
+            materializations,
             ..Default::default()
         }
     }
@@ -1118,16 +1038,39 @@ impl<'a> RsCodeGenerator<'a> {
         })
     }
 
+    fn generate_opaque_type(name: &QualifiedName, num_generics: usize) -> Item {
+        let segs =
+            Self::find_output_mod_root(name.get_namespace()).chain(name.get_bindgen_path_idents());
+        let final_name = name.get_final_ident().0;
+
+        let generics = (0usize..usize::MAX)
+            .take(num_generics)
+            .map(|num| make_ident(format!("T{num}")).0);
+        let generics = if num_generics == 0 {
+            quote! {}
+        } else {
+            quote! {
+                < #(#generics),* >
+            }
+        };
+        Item::Struct(parse_quote! {
+            #[repr(transparent)]
+            pub struct #final_name #generics {
+                _hidden_contents: #(#segs)::* #generics,
+            }
+        })
+    }
+
     fn generate_extern_type_impl(&self, type_kind: TypeKind, tyname: &QualifiedName) -> Vec<Item> {
         let tynamestring = self.original_name_map.map(tyname);
-        let fulltypath = tyname.get_bindgen_path_idents();
+        let ty_ident = tyname.get_final_ident();
         let kind_item = match type_kind {
             TypeKind::Pod => "Trivial",
             _ => "Opaque",
         };
         let kind_item = make_ident(kind_item);
         vec![Item::Impl(parse_quote! {
-            unsafe impl cxx::ExternType for #(#fulltypath)::* {
+            unsafe impl cxx::ExternType for #ty_ident {
                 type Id = cxx::type_id!(#tynamestring);
                 type Kind = cxx::kind::#kind_item;
             }
@@ -1175,7 +1118,7 @@ impl<'a> RsCodeGenerator<'a> {
 
         if references_bindgen {
             for_extern_c_ts.extend(quote! {
-                type #id = super::bindgen::root::
+                type #id = super::
             });
             for_extern_c_ts.extend(ns.iter().map(make_ident).map(|id| {
                 quote! {
@@ -1261,10 +1204,14 @@ struct RsCodegenResult {
     extern_c_mod_items: Vec<ForeignItem>,
     extern_rust_mod_items: Vec<ForeignItem>,
     bridge_items: Vec<Item>,
+    /// Items that go in the top level.
     global_items: Vec<Item>,
-    bindgen_mod_items: Vec<Item>,
     impl_entry: Option<Box<ImplBlockDetails>>,
     trait_impl_entry: Option<Box<TraitImplBlockDetails>>,
+    /// Items that go into a per-namespace mod.
+    /// These items used to be primarily `use` statements which
+    /// is why this is a bit odd, but this boils down to another
+    /// `Vec<Item>`.
     materializations: Vec<Use>,
 }
 

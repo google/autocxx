@@ -19,7 +19,7 @@ use crate::{
         utilities::generate_utilities,
         ConvertError, ConvertErrorFromCpp,
     },
-    minisyn,
+    known_types, minisyn,
     types::{Namespace, QualifiedName},
     ParseCallbackResults,
 };
@@ -174,17 +174,14 @@ impl<'a> ParseBindgen<'a> {
 
     fn find_items_in_root(items: &[Item]) -> Result<Option<&Vec<Item>>, ConvertErrorFromCpp> {
         for item in items {
-            match item {
-                Item::Mod(root_mod) => {
-                    // With namespaces enabled, bindgen always puts everything
-                    // in a mod called 'root'. We don't want to pass that
-                    // onto cxx, so jump right into it.
-                    assert!(root_mod.ident == "root");
-                    if let Some((_, items)) = &root_mod.content {
-                        return Ok(Some(items));
-                    }
+            if let Item::Mod(root_mod) = item {
+                // With namespaces enabled, bindgen always puts everything
+                // in a mod called 'root'. We don't want to pass that
+                // onto cxx, so jump right into it.
+                assert!(root_mod.ident == "root");
+                if let Some((_, items)) = &root_mod.content {
+                    return Ok(Some(items));
                 }
-                _ => return Err(ConvertErrorFromCpp::UnexpectedOuterItem),
             }
         }
         Ok(None)
@@ -225,8 +222,16 @@ impl<'a> ParseBindgen<'a> {
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
                 let name = api_name_qualified(ns, s.ident.clone(), self.parse_callback_results)?;
+                if known_types().is_known_subtitute_type(&name.name) {
+                    // This is one of the replacement types, e.g.
+                    // root::Str replacing rust::Str or
+                    // root::string replacing root::std::string
+                    return Ok(());
+                }
                 let mut err = check_for_fatal_attrs(self.parse_callback_results, &name.name).err();
-                let api = if ns.is_empty() && self.config.is_rust_type(&s.ident) {
+                let api = if (ns.is_empty() && self.config.is_rust_type(&s.ident))
+                    || known_types().is_known_type(&name.name)
+                {
                     None
                 } else if Self::spot_forward_declaration(&s.fields)
                     || (Self::spot_zero_length_struct(&s.fields) && err.is_some())
@@ -249,11 +254,9 @@ impl<'a> ParseBindgen<'a> {
                     Some(UnanalyzedApi::ForwardDeclaration { name, err })
                 } else {
                     let has_rvalue_reference_fields = Self::spot_rvalue_reference_fields(&s.fields);
-                    let layout = self.parse_callback_results.get_layout(&name.name);
                     Some(UnanalyzedApi::Struct {
                         name,
                         details: Box::new(StructDetails {
-                            layout,
                             item: s.clone().into(),
                             has_rvalue_reference_fields,
                         }),
@@ -309,6 +312,9 @@ impl<'a> ParseBindgen<'a> {
                         UseTree::Rename(urn) => {
                             let old_id = &urn.ident;
                             let new_id = &urn.rename;
+                            if new_id == "bindgen_cchar16_t" {
+                                return Ok(());
+                            }
                             let new_tyname = QualifiedName::new(ns, new_id.clone().into());
                             assert!(segs.remove(0) == "self", "Path didn't start with self");
                             assert!(
@@ -331,25 +337,13 @@ impl<'a> ParseBindgen<'a> {
                             }
                             self.apis.push(UnanalyzedApi::Typedef {
                                 name: api_name(ns, new_id.clone(), self.parse_callback_results),
-                                item: TypedefKind::Use(
-                                    parse_quote! {
-                                        pub use #old_path as #new_id;
-                                    },
-                                    Box::new(Type::Path(old_path).into()),
-                                ),
+                                item: TypedefKind::Use(Box::new(Type::Path(old_path).into())),
                                 old_tyname: Some(old_tyname),
                                 analysis: (),
                             });
                             break;
                         }
-                        _ => {
-                            return Err(ConvertErrorWithContext(
-                                ConvertErrorFromCpp::UnexpectedUseStatement(
-                                    segs.into_iter().last().map(|i| i.to_string()),
-                                ),
-                                None,
-                            ))
-                        }
+                        _ => return Ok(()),
                     }
                 }
                 Ok(())
