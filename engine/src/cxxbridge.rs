@@ -38,7 +38,8 @@ impl CppBuildable for CxxBridge {
         &self,
         cpp_codegen_options: &CppCodegenOptions,
     ) -> Result<GeneratedCpp, cxx_gen::Error> {
-        let fp = do_cxx_cpp_generation(self.tokens.clone(), cpp_codegen_options)?;
+        let header_name = cpp_codegen_options.cxxgen_header_namer.name_header();
+        let fp = do_cxx_cpp_generation(self.tokens.clone(), cpp_codegen_options, header_name)?;
         Ok(GeneratedCpp(vec![fp]))
     }
 }

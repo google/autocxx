@@ -7,65 +7,58 @@
 // except according to those terms.
 
 use crate::ast_discoverer::{Discoveries, DiscoveryErr};
-use crate::CppCodegenOptions;
+use crate::output_generators::RsOutput;
 use crate::{
     cxxbridge::CxxBridge, Error as EngineError, GeneratedCpp, IncludeCppEngine,
     RebuildDependencyRecorder,
 };
-use autocxx_parser::directives::SUBCLASS;
+use crate::{proc_macro_span_to_miette_span, CodegenOptions, CppCodegenOptions, LocatedSynError};
+use autocxx_parser::directive_names::SUBCLASS;
 use autocxx_parser::{AllowlistEntry, RustPath, Subclass, SubclassAttrs};
-use proc_macro2::{Span, TokenStream};
+use indexmap::set::IndexSet as HashSet;
+use miette::{Diagnostic, SourceSpan};
 use quote::ToTokens;
-use std::{collections::HashSet, fmt::Display, io::Read, path::PathBuf};
+use std::{io::Read, path::PathBuf};
 use std::{panic::UnwindSafe, path::Path, rc::Rc};
-use syn::{token::Brace, Item, ItemMod};
+use syn::spanned::Spanned;
+use syn::Item;
+use thiserror::Error;
 
 /// Errors which may occur when parsing a Rust source file to discover
 /// and interpret include_cxx macros.
-#[derive(Debug)]
+#[derive(Error, Diagnostic, Debug)]
 pub enum ParseError {
-    /// Unable to open the source file
+    #[error("unable to open the source file containing your autocxx bindings. (This filename is usually specified within your build.rs file.): {0}")]
     FileOpen(std::io::Error),
-    /// The .rs file couldn't be read.
+    #[error("the .rs file couldn't be read: {0}")]
     FileRead(std::io::Error),
-    /// The .rs file couldn't be parsed.
-    Syntax(syn::Error),
+    #[error("syntax error interpreting Rust code: {0}")]
+    #[diagnostic(transparent)]
+    Syntax(LocatedSynError),
+    #[error("generate!/generate_ns! was used at the same time as generate_all!")]
+    ConflictingAllowlist,
+    #[error("the subclass attribute couldn't be parsed: {0}")]
+    #[diagnostic(transparent)]
+    SubclassSyntax(LocatedSynError),
+    #[error("the subclass attribute macro with a superclass attribute requires the Builder::auto_allowlist option to be specified (probably in your build script). This is not recommended - instead you can specify subclass! within your include_cpp!.")]
+    SubclassSuperclassWithoutAutoAllowlist(#[source_code] String, #[label("here")] SourceSpan),
     /// The include CPP macro could not be expanded into
     /// Rust bindings to C++, because of some problem during the conversion
     /// process. This could be anything from a C++ parsing error to some
     /// C++ feature that autocxx can't yet handle and isn't able to skip
     /// over. It could also cover errors in your syntax of the `include_cpp`
     /// macro or the directives inside.
+    #[error("the include_cpp! macro couldn't be expanded into Rust bindings to C++: {0}")]
+    #[diagnostic(transparent)]
     AutocxxCodegenError(EngineError),
     /// There are two or more `include_cpp` macros with the same
     /// mod name.
+    #[error("there are two or more include_cpp! mods with the same mod name")]
     ConflictingModNames,
-    ZeroModsForDynamicDiscovery,
+    #[error("dynamic discovery was enabled but multiple mods were found")]
     MultipleModsForDynamicDiscovery,
+    #[error("a problem occurred while discovering C++ APIs used within the Rust: {0}")]
     Discovery(DiscoveryErr),
-}
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ParseError::FileOpen(err) => write!(f, "Unable to open file: {}", err)?,
-            ParseError::FileRead(err) => write!(f, "Unable to read file: {}", err)?,
-            ParseError::Syntax(err) => write!(f, "Syntax error parsing Rust file: {}", err)?,
-            ParseError::AutocxxCodegenError(err) =>
-                write!(f, "Unable to parse include_cpp! macro: {}", err)?,
-            ParseError::ConflictingModNames =>
-                write!(f, "There are two or more include_cpp! macros with the same output mod name. Use name!")?,
-            ParseError::ZeroModsForDynamicDiscovery =>
-                write!(f, "This file contains extra information to append to an include_cpp! but no such include_cpp! was found in this file.")?,
-            ParseError::MultipleModsForDynamicDiscovery =>
-                write!(f, "This file contains extra information to append to an include_cpp! but multiple such include_cpp! declarations were found in this file.")?,
-            ParseError::Discovery(DiscoveryErr::FoundExternRustFunOnTypeWithoutClearReceiver) => write!(f, "#[extern_rust_function] was attached to a method in an impl block that was too complex for autocxx. autocxx supports only \"impl X {{...}}\" where X is a single identifier, not a path or more complex type.")?,
-            ParseError::Discovery(DiscoveryErr::NoParameterOnMethod) => write!(f, "#[extern_rust_function] was attached to a method taking no parameters.")?,
-            ParseError::Discovery(DiscoveryErr::NonReferenceReceiver) => write!(f, "#[extern_rust_function] was attached to a method taking a receiver by value.")?,
-            ParseError::Discovery(DiscoveryErr::FoundExternRustFunWithinMod) => write!(f, "#[extern_rust_function] was in an impl block nested wihtin another block. This is only supported in the outermost mod of a file, alongside the include_cpp!.")?,
-        }
-        Ok(())
-    }
 }
 
 /// Parse a Rust file, and spot any include_cpp macros within it.
@@ -73,16 +66,21 @@ pub fn parse_file<P1: AsRef<Path>>(
     rs_file: P1,
     auto_allowlist: bool,
 ) -> Result<ParsedFile, ParseError> {
-    let mut source = String::new();
+    let mut source_code = String::new();
     let mut file = std::fs::File::open(rs_file).map_err(ParseError::FileOpen)?;
-    file.read_to_string(&mut source)
+    file.read_to_string(&mut source_code)
         .map_err(ParseError::FileRead)?;
     proc_macro2::fallback::force();
-    let source = syn::parse_file(&source).map_err(ParseError::Syntax)?;
-    parse_file_contents(source, auto_allowlist)
+    let source = syn::parse_file(&source_code)
+        .map_err(|e| ParseError::Syntax(LocatedSynError::new(e, &source_code)))?;
+    parse_file_contents(source, auto_allowlist, &source_code)
 }
 
-fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<ParsedFile, ParseError> {
+fn parse_file_contents(
+    source: syn::File,
+    auto_allowlist: bool,
+    file_contents: &str,
+) -> Result<ParsedFile, ParseError> {
     #[derive(Default)]
     struct State {
         auto_allowlist: bool,
@@ -90,8 +88,14 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
         extra_superclasses: Vec<Subclass>,
         discoveries: Discoveries,
     }
+    let file_contents = Rc::new(file_contents.to_string());
     impl State {
-        fn parse_item(&mut self, item: Item, mod_path: Option<RustPath>) -> Result<(), ParseError> {
+        fn parse_item(
+            &mut self,
+            item: Item,
+            mod_path: Option<RustPath>,
+            file_contents: Rc<String>,
+        ) -> Result<(), ParseError> {
             let result = match item {
                 Item::Macro(mac)
                     if mac
@@ -103,20 +107,19 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                         .unwrap_or(false) =>
                 {
                     Segment::Autocxx(
-                        crate::IncludeCppEngine::new_from_syn(mac.mac)
+                        crate::IncludeCppEngine::new_from_syn(mac.mac, file_contents)
                             .map_err(ParseError::AutocxxCodegenError)?,
                     )
                 }
                 Item::Mod(itm)
-                    if itm
-                        .attrs
-                        .iter()
-                        .any(|attr| attr.path.to_token_stream().to_string() == "cxx :: bridge") =>
+                    if itm.attrs.iter().any(|attr| {
+                        attr.path().to_token_stream().to_string() == "cxx :: bridge"
+                    }) =>
                 {
                     Segment::Cxx(CxxBridge::from(itm))
                 }
                 Item::Mod(itm) => {
-                    if let Some((brace, items)) = itm.content {
+                    if let Some((_, items)) = itm.content {
                         let mut mod_state = State {
                             auto_allowlist: self.auto_allowlist,
                             ..Default::default()
@@ -126,40 +129,47 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                             Some(mod_path) => mod_path.append(itm.ident.clone()),
                         };
                         for item in items {
-                            mod_state.parse_item(item, Some(mod_path.clone()))?
+                            mod_state.parse_item(
+                                item,
+                                Some(mod_path.clone()),
+                                file_contents.clone(),
+                            )?
                         }
                         self.extra_superclasses.extend(mod_state.extra_superclasses);
                         self.discoveries.extend(mod_state.discoveries);
-                        Segment::Mod(
-                            mod_state.results,
-                            (
-                                brace,
-                                ItemMod {
-                                    content: None,
-                                    ..itm
-                                },
-                            ),
-                        )
+                        Segment::Mod(mod_state.results)
                     } else {
-                        Segment::Other(Item::Mod(itm))
+                        Segment::Other
                     }
                 }
-                Item::Struct(ref its) if self.auto_allowlist => {
+                Item::Struct(ref its) => {
                     let attrs = &its.attrs;
                     let is_superclass_attr = attrs.iter().find(|attr| {
-                        attr.path
+                        attr.path()
                             .segments
                             .last()
                             .map(|seg| seg.ident == "is_subclass" || seg.ident == SUBCLASS)
                             .unwrap_or(false)
                     });
                     if let Some(is_superclass_attr) = is_superclass_attr {
-                        if !is_superclass_attr.tokens.is_empty() {
+                        if is_superclass_attr.meta.require_path_only().is_err() {
                             let subclass = its.ident.clone();
-                            let args: SubclassAttrs = is_superclass_attr
-                                .parse_args()
-                                .map_err(ParseError::Syntax)?;
+                            let args: SubclassAttrs =
+                                is_superclass_attr.parse_args().map_err(|e| {
+                                    ParseError::SubclassSyntax(LocatedSynError::new(
+                                        e,
+                                        &file_contents,
+                                    ))
+                                })?;
                             if let Some(superclass) = args.superclass {
+                                if !self.auto_allowlist {
+                                    return Err(
+                                        ParseError::SubclassSuperclassWithoutAutoAllowlist(
+                                            file_contents.to_string(),
+                                            proc_macro_span_to_miette_span(&its.span()),
+                                        ),
+                                    );
+                                }
                                 self.extra_superclasses.push(Subclass {
                                     superclass,
                                     subclass,
@@ -170,13 +180,13 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                     self.discoveries
                         .search_item(&item, mod_path)
                         .map_err(ParseError::Discovery)?;
-                    Segment::Other(item)
+                    Segment::Other
                 }
                 _ => {
                     self.discoveries
                         .search_item(&item, mod_path)
                         .map_err(ParseError::Discovery)?;
-                    Segment::Other(item)
+                    Segment::Other
                 }
             };
             self.results.push(result);
@@ -188,7 +198,7 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
         ..Default::default()
     };
     for item in source.items {
-        state.parse_item(item, None)?
+        state.parse_item(item, None, file_contents.clone())?
     }
     let State {
         auto_allowlist,
@@ -204,13 +214,18 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
     // We do not want to enter this 'if' block unless the above conditions are true,
     // since we may emit errors.
     if must_handle_discovered_things {
+        // If we have to handle discovered things but there was no include_cpp! macro,
+        // fake one.
+        if !results.iter().any(|seg| matches!(seg, Segment::Autocxx(_))) {
+            results.push(Segment::Autocxx(IncludeCppEngine::new_for_autodiscover()));
+        }
         let mut autocxx_seg_iterator = results.iter_mut().filter_map(|seg| match seg {
             Segment::Autocxx(engine) => Some(engine),
             _ => None,
         });
         let our_seg = autocxx_seg_iterator.next();
         match our_seg {
-            None => return Err(ParseError::ZeroModsForDynamicDiscovery),
+            None => panic!("We should have just added a fake mod but apparently didn't"),
             Some(engine) => {
                 engine
                     .config_mut()
@@ -221,8 +236,8 @@ fn parse_file_contents(source: syn::File, auto_allowlist: bool) -> Result<Parsed
                         engine
                             .config_mut()
                             .allowlist
-                            .push(AllowlistEntry::Item(cpp), Span::call_site())
-                            .map_err(ParseError::Syntax)?;
+                            .push(AllowlistEntry::Item(cpp))
+                            .map_err(|_| ParseError::ConflictingAllowlist)?;
                     }
                 }
                 engine
@@ -259,8 +274,8 @@ pub struct ParsedFile(Vec<Segment>);
 enum Segment {
     Autocxx(IncludeCppEngine),
     Cxx(CxxBridge),
-    Mod(Vec<Segment>, (Brace, ItemMod)),
-    Other(Item),
+    Mod(Vec<Segment>),
+    Other,
 }
 
 pub trait CppBuildable {
@@ -271,21 +286,27 @@ pub trait CppBuildable {
 }
 
 impl ParsedFile {
-    /// Get all the autocxxes in this parsed file.
-    pub fn get_rs_buildables(&self) -> impl Iterator<Item = &IncludeCppEngine> {
-        fn do_get_rs_buildables(segments: &[Segment]) -> impl Iterator<Item = &IncludeCppEngine> {
+    /// Get all the autocxx `include_cpp` macros found in this file.
+    pub fn get_autocxxes(&self) -> impl Iterator<Item = &IncludeCppEngine> {
+        fn do_get_autocxxes(segments: &[Segment]) -> impl Iterator<Item = &IncludeCppEngine> {
             segments
                 .iter()
                 .flat_map(|s| -> Box<dyn Iterator<Item = &IncludeCppEngine>> {
                     match s {
                         Segment::Autocxx(includecpp) => Box::new(std::iter::once(includecpp)),
-                        Segment::Mod(segments, _) => Box::new(do_get_rs_buildables(segments)),
+                        Segment::Mod(segments) => Box::new(do_get_autocxxes(segments)),
                         _ => Box::new(std::iter::empty()),
                     }
                 })
         }
 
-        do_get_rs_buildables(&self.0)
+        do_get_autocxxes(&self.0)
+    }
+
+    /// Get all the areas of Rust code which need to be built for these bindings.
+    /// A shortcut for `get_autocxxes()` then calling `get_rs_output` on each.
+    pub fn get_rs_outputs(&self) -> impl Iterator<Item = RsOutput> {
+        self.get_autocxxes().map(|autocxx| autocxx.get_rs_output())
     }
 
     /// Get all items which can result in C++ code
@@ -301,7 +322,7 @@ impl ParsedFile {
                         Segment::Cxx(cxxbridge) => {
                             Box::new(std::iter::once(cxxbridge as &dyn CppBuildable))
                         }
-                        Segment::Mod(segments, _) => Box::new(do_get_cpp_buildables(segments)),
+                        Segment::Mod(segments) => Box::new(do_get_cpp_buildables(segments)),
                         _ => Box::new(std::iter::empty()),
                     }
                 })
@@ -319,7 +340,7 @@ impl ParsedFile {
                 .flat_map(|s| -> Box<dyn Iterator<Item = &mut IncludeCppEngine>> {
                     match s {
                         Segment::Autocxx(includecpp) => Box::new(std::iter::once(includecpp)),
-                        Segment::Mod(segments, _) => Box::new(do_get_autocxxes_mut(segments)),
+                        Segment::Mod(segments) => Box::new(do_get_autocxxes_mut(segments)),
                         _ => Box::new(std::iter::empty()),
                     }
                 })
@@ -328,14 +349,17 @@ impl ParsedFile {
         do_get_autocxxes_mut(&mut self.0)
     }
 
-    pub fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
+    /// Determines the include dirs that were set for each include_cpp, so they can be
+    /// used as input to a `cc::Build`.
+    #[cfg(any(test, feature = "build"))]
+    pub(crate) fn include_dirs(&self) -> impl Iterator<Item = &PathBuf> {
         fn do_get_include_dirs(segments: &[Segment]) -> impl Iterator<Item = &PathBuf> {
             segments
                 .iter()
                 .flat_map(|s| -> Box<dyn Iterator<Item = &PathBuf>> {
                     match s {
                         Segment::Autocxx(includecpp) => Box::new(includecpp.include_dirs()),
-                        Segment::Mod(segments, _) => Box::new(do_get_include_dirs(segments)),
+                        Segment::Mod(segments) => Box::new(do_get_include_dirs(segments)),
                         _ => Box::new(std::iter::empty()),
                     }
                 })
@@ -349,7 +373,7 @@ impl ParsedFile {
         autocxx_inc: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-        cpp_codegen_options: &CppCodegenOptions,
+        codegen_options: &CodegenOptions,
     ) -> Result<(), ParseError> {
         let mut mods_found = HashSet::new();
         let inner_dep_recorder: Option<Rc<dyn RebuildDependencyRecorder>> =
@@ -371,43 +395,11 @@ impl ParsedFile {
                     autocxx_inc.clone(),
                     extra_clang_args,
                     dep_recorder,
-                    cpp_codegen_options,
+                    codegen_options,
                 )
                 .map_err(ParseError::AutocxxCodegenError)?
         }
         Ok(())
-    }
-}
-
-impl ToTokens for ParsedFile {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        for seg in &self.0 {
-            seg.to_tokens(tokens)
-        }
-    }
-}
-
-impl ToTokens for Segment {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            Segment::Other(item) => item.to_tokens(tokens),
-            Segment::Autocxx(autocxx) => {
-                let these_tokens = autocxx.generate_rs();
-                tokens.extend(these_tokens);
-            }
-            Segment::Cxx(cxxbridge) => cxxbridge.to_tokens(tokens),
-            Segment::Mod(segments, (brace, itemmod)) => {
-                let mod_items = segments
-                    .iter()
-                    .map(|segment| syn::parse2::<Item>(segment.to_token_stream()).unwrap())
-                    .collect();
-                let itemmod = ItemMod {
-                    content: Some((*brace, mod_items)),
-                    ..itemmod.clone()
-                };
-                Item::Mod(itemmod).to_tokens(tokens)
-            }
-        }
     }
 }
 

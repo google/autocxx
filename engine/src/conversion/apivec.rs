@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
+use indexmap::set::IndexSet as HashSet;
 
 use crate::{
-    conversion::{api::ApiName, convert_error::ErrorContext, ConvertError},
+    conversion::{api::ApiName, convert_error::ErrorContext, ConvertErrorFromCpp},
     types::QualifiedName,
 };
 
@@ -42,6 +42,7 @@ use super::api::{AnalysisPhase, Api};
 /// of APIs within an existing `ApiVec`. But it's extremely important that
 /// the naming-uniqueness-invariant remains, so any such mutation should
 /// allow mutation only of other fields, not the name.
+#[derive(Debug)]
 pub(crate) struct ApiVec<P: AnalysisPhase> {
     apis: Vec<Api<P>>,
     names: HashSet<QualifiedName>,
@@ -64,7 +65,7 @@ impl<P: AnalysisPhase> ApiVec<P> {
                 self.retain(|api| api.name() != name);
                 self.push(Api::IgnoredItem {
                     name: ApiName::new_from_qualified_name(name.clone()),
-                    err: ConvertError::DuplicateItemsFoundInParsing,
+                    err: ConvertErrorFromCpp::DuplicateItemsFoundInParsing,
                     ctx: Some(ErrorContext::new_for_item(name.get_final_ident())),
                 })
             }

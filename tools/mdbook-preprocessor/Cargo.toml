@@ -8,28 +8,28 @@
 
 [package]
 name = "autocxx-mdbook-preprocessor"
-version = "0.17.4"
+version = "0.28.0"
 authors = ["adetaylor <adetaylor@chromium.org>"]
 edition = "2021"
 
 [dependencies]
-clap = { version = "3", features = [ "cargo" ] }
+clap = { version = "3", features = ["cargo"] }
 serde_json = "1"
 itertools = "0.10"
 anyhow = "1"
 regex = "1"
-autocxx-integration-tests = { path = "../../integration-tests", version="0.1"}
+autocxx-integration-tests = { path = "../../integration-tests", version = "=0.28.0" }
 rayon = "1.5"
 gag = "1.0"
 env_logger = "0.9.0"
 
 [dependencies.syn]
 version = "1.0.39"
-features = [ "parsing" ]
+features = ["parsing"]
 
 [dependencies.proc-macro2]
 version = "1.0.11"
-features = [ "span-locations" ]
+features = ["span-locations"]
 
 [dependencies.mdbook]
 version = "0.4"

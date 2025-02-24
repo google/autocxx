@@ -209,7 +209,7 @@ impl<'a> Deref for RenderFrameHostRefMut<'a> {
     }
 }
 
-#[is_subclass(superclass("content::WebContentsObserver"))]
+#[subclass(superclass("content::WebContentsObserver"))]
 #[doc(hidden)]
 pub struct RenderFrameHostForWebContents {
     rfh: *mut ffi::content::RenderFrameHost,

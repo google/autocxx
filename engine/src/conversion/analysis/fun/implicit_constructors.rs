@@ -6,17 +6,22 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{hash_map, HashMap, HashSet};
+use autocxx_bindgen::callbacks::{Explicitness, SpecialMemberKind, Visibility as CppVisibility};
+use indexmap::map::IndexMap as HashMap;
+use indexmap::{map::Entry, set::IndexSet as HashSet};
 
-use syn::Type;
+use syn::{PatType, Type, TypeArray};
 
+use crate::conversion::type_helpers::type_is_reference;
 use crate::{
     conversion::{
-        analysis::{depth_first::depth_first, pod::PodAnalysis, type_converter::TypeKind},
-        api::{Api, ApiName, CppVisibility, FuncToConvert, SpecialMemberKind},
+        analysis::{
+            depth_first::fields_and_bases_first, pod::PodAnalysis, type_converter::TypeKind,
+        },
+        api::{Api, ApiName, FuncToConvert},
         apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     known_types::{known_types, KnownTypeConstructorDetails},
     types::QualifiedName,
@@ -176,6 +181,13 @@ pub(super) fn find_constructors_present(
     apis: &ApiVec<FnPrePhase1>,
 ) -> HashMap<QualifiedName, ItemsFound> {
     let (explicits, unknown_types) = find_explicit_items(apis);
+    let enums: HashSet<QualifiedName> = apis
+        .iter()
+        .filter_map(|api| match api {
+            Api::Enum { name, .. } => Some(name.name.clone()),
+            _ => None,
+        })
+        .collect();
 
     // These contain all the classes we've seen so far with the relevant properties on their
     // constructors of each kind. We iterate via [`depth_first`], so analyzing later classes
@@ -188,12 +200,17 @@ pub(super) fn find_constructors_present(
     // These analyses include all bases and members of each class.
     let mut all_items_found: HashMap<QualifiedName, ItemsFound> = HashMap::new();
 
-    for api in depth_first(apis.iter()) {
+    for api in fields_and_bases_first(apis.iter()) {
         if let Api::Struct {
             name,
-            analysis: PodAnalysis {
-                bases, field_info, ..
-            },
+            analysis:
+                PodAnalysis {
+                    bases,
+                    field_info,
+                    is_generic: false,
+                    in_anonymous_namespace: false,
+                    ..
+                },
             details,
             ..
         } = api
@@ -205,7 +222,17 @@ pub(super) fn find_constructors_present(
                 })
             };
             let get_items_found = |qn: &QualifiedName| -> Option<ItemsFound> {
-                if let Some(constructor_details) = known_types().get_constructor_details(qn) {
+                if enums.contains(qn) {
+                    Some(ItemsFound {
+                        default_constructor: SpecialMemberFound::NotPresent,
+                        destructor: SpecialMemberFound::Implicit,
+                        const_copy_constructor: SpecialMemberFound::Implicit,
+                        non_const_copy_constructor: SpecialMemberFound::NotPresent,
+                        move_constructor: SpecialMemberFound::Implicit,
+                        name: Some(name.clone()),
+                    })
+                } else if let Some(constructor_details) = known_types().get_constructor_details(qn)
+                {
                     Some(known_type_items_found(constructor_details))
                 } else {
                     all_items_found.get(qn).cloned()
@@ -217,21 +244,28 @@ pub(super) fn find_constructors_present(
                 .filter_map(|field_info| match field_info.type_kind {
                     TypeKind::Regular | TypeKind::SubclassHolder(_) => match field_info.ty {
                         Type::Path(ref qn) => get_items_found(&QualifiedName::from_type_path(qn)),
+                        Type::Array(TypeArray { ref elem, .. }) => match elem.as_ref() {
+                            Type::Path(ref qn) => {
+                                get_items_found(&QualifiedName::from_type_path(qn))
+                            }
+                            _ => None,
+                        },
                         _ => None,
                     },
                     // TODO: https://github.com/google/autocxx/issues/865 Figure out how to
                     // differentiate between pointers and references coming from C++. Pointers
                     // have a default constructor.
-                    TypeKind::Pointer | TypeKind::Reference | TypeKind::MutableReference => {
-                        Some(ItemsFound {
-                            default_constructor: SpecialMemberFound::NotPresent,
-                            destructor: SpecialMemberFound::Implicit,
-                            const_copy_constructor: SpecialMemberFound::Implicit,
-                            non_const_copy_constructor: SpecialMemberFound::NotPresent,
-                            move_constructor: SpecialMemberFound::Implicit,
-                            name: Some(name.clone()),
-                        })
-                    }
+                    TypeKind::Pointer
+                    | TypeKind::Reference
+                    | TypeKind::MutableReference
+                    | TypeKind::RValueReference => Some(ItemsFound {
+                        default_constructor: SpecialMemberFound::NotPresent,
+                        destructor: SpecialMemberFound::Implicit,
+                        const_copy_constructor: SpecialMemberFound::Implicit,
+                        non_const_copy_constructor: SpecialMemberFound::NotPresent,
+                        move_constructor: SpecialMemberFound::Implicit,
+                        name: Some(name.clone()),
+                    }),
                 })
                 .collect();
             let has_rvalue_reference_fields = details.has_rvalue_reference_fields;
@@ -526,8 +560,7 @@ pub(super) fn find_constructors_present(
                 all_items_found
                     .insert(name.name.clone(), items_found)
                     .is_none(),
-                "Duplicate struct: {:?}",
-                name
+                "Duplicate struct: {name:?}"
             );
         }
     }
@@ -542,14 +575,14 @@ fn find_explicit_items(
     let mut merge_fun = |ty: QualifiedName, kind: ExplicitKind, fun: &FuncToConvert| match result
         .entry(ExplicitType { ty, kind })
     {
-        hash_map::Entry::Vacant(entry) => {
-            entry.insert(if fun.is_deleted {
+        Entry::Vacant(entry) => {
+            entry.insert(if matches!(fun.is_deleted, Some(Explicitness::Deleted)) {
                 ExplicitFound::Deleted
             } else {
                 ExplicitFound::UserDefined(fun.cpp_vis)
             });
         }
-        hash_map::Entry::Occupied(mut entry) => {
+        Entry::Occupied(mut entry) => {
             entry.insert(ExplicitFound::Multiple);
         }
     };
@@ -562,7 +595,8 @@ fn find_explicit_items(
                         kind: FnKind::Method { impl_for, .. },
                         param_details,
                         ignore_reason:
-                            Ok(()) | Err(ConvertErrorWithContext(ConvertError::AssignmentOperator, _)),
+                            Ok(())
+                            | Err(ConvertErrorWithContext(ConvertErrorFromCpp::AssignmentOperator, _)),
                         ..
                     },
                 fun,
@@ -572,7 +606,7 @@ fn find_explicit_items(
                 Some(SpecialMemberKind::AssignmentOperator)
             ) =>
             {
-                let is_move_assignment_operator = !fun.references.rvalue_ref_params.is_empty();
+                let is_move_assignment_operator = !any_input_is_rvalue_reference(&fun.inputs);
                 merge_fun(
                     impl_for.clone(),
                     if is_move_assignment_operator {
@@ -659,6 +693,15 @@ fn find_explicit_items(
         }
     }
     (result, unknown_types)
+}
+
+fn any_input_is_rvalue_reference(
+    inputs: &syn::punctuated::Punctuated<crate::minisyn::FnArg, syn::token::Comma>,
+) -> bool {
+    inputs.iter().any(|input| match &input.0 {
+        syn::FnArg::Receiver(_) => false,
+        syn::FnArg::Typed(PatType { ty, .. }, ..) => type_is_reference(ty.as_ref(), true),
+    })
 }
 
 /// Returns the information for a given known type.

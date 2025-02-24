@@ -31,7 +31,7 @@ pub use autocxx_macro::subclass as is_subclass;
 ///   #[subclass(superclass("MyCppSuperclass"))]
 ///   struct Bar {};
 ///   ```
-/// * as a directive within the [include_cpp] macro, in which case you
+/// * as a directive within the [crate::include_cpp] macro, in which case you
 ///   must provide two arguments of the superclass and then the
 ///   subclass:
 ///   ```
@@ -102,16 +102,12 @@ impl<T> CppSubclassRustPeerHolder<T> {
 /// A type showing how the Rust side of a Rust/C++ subclass pair refers to
 /// the C++ side.
 #[doc(hidden)]
+#[derive(Default)]
 pub enum CppSubclassCppPeerHolder<CppPeer: CppSubclassCppPeer> {
+    #[default]
     Empty,
     Owned(Box<UniquePtr<CppPeer>>),
     Unowned(*mut CppPeer),
-}
-
-impl<CppPeer: CppSubclassCppPeer> Default for CppSubclassCppPeerHolder<CppPeer> {
-    fn default() -> Self {
-        CppSubclassCppPeerHolder::Empty
-    }
 }
 
 impl<CppPeer: CppSubclassCppPeer> CppSubclassCppPeerHolder<CppPeer> {
@@ -169,22 +165,19 @@ where
     me
 }
 
-/// A trait to be implemented by a subclass which knows how to construct
-/// its C++ peer object. Specifically, the implementation here will
-/// arrange to call one or other of the `make_unique` methods to be
-/// found on the superclass of the C++ object. If the superclass
-/// has a single trivial constructor, then this is implemented
-/// automatically for you. If there are multiple constructors, or
-/// a single constructor which takes parameters, you'll need to implement
-/// this trait for your subclass in order to call the correct
-/// constructor.
+/// A trait to be implemented by a subclass which knows how to construct its C++
+/// peer object. Specifically, the implementation here will arrange to call one
+/// or other of the `new` methods to be found on the peer type. If the C++
+/// superclass has a single trivial constructor, then this is implemented
+/// automatically for you. If there are multiple constructors, or a single
+/// constructor which takes parameters, you'll need to implement this trait for
+/// your subclass in order to call the correct constructor.
 pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
     /// Create the C++ peer. This method will be automatically generated
     /// for you *except* in cases where the superclass has multiple constructors,
-    /// or its only constructor takes parameters. In such a case you'll need
-    /// to implement this by calling a `make_unique` method on the
-    /// `<my subclass name>Cpp` type, passing `peer_holder` as the first
-    /// argument.
+    /// or its only constructor takes parameters. In such a case you'll need to
+    /// implement this by calling a `new` method on the `<my subclass name>Cpp`
+    /// type, passing `peer_holder` as the first argument.
     fn make_peer(&mut self, peer_holder: CppSubclassRustPeerHolder<Self>) -> UniquePtr<CppPeer>;
 }
 
@@ -207,8 +200,9 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// * You _may_ need to implement [`CppPeerConstructor`] for your subclass,
 ///   but only if autocxx determines that there are multiple possible superclass
 ///   constructors so you need to call one explicitly (or if there's a single
-///   non-trivial superclass constructor.) autocxx will implemente this trait
-///   for you if there's no ambiguity.
+///   non-trivial superclass constructor.) autocxx will implement this trait
+///   for you if there's no ambiguity and FFI functions are safe to call due to
+///   `autocxx::safety!` being used.
 ///
 /// # How to access your Rust structure from outside
 ///

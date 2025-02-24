@@ -6,31 +6,34 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashSet;
+use indexmap::set::IndexSet as HashSet;
+use std::borrow::Cow;
 
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{
     parse::Parser,
     parse_quote,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
-    Attribute, FnArg, ForeignItem, Ident, ImplItem, Item, ReturnType,
+    Attribute, ForeignItem, Ident, ImplItem, Item, ReturnType,
 };
 
 use super::{
-    unqualify::{unqualify_params, unqualify_ret_type},
-    ImplBlockDetails, RsCodegenResult, TraitImplBlockDetails, Use,
+    function_wrapper_rs::RustParamConversion,
+    maybe_unsafes_to_tokens,
+    unqualify::{unqualify_params_minisyn, unqualify_ret_type},
+    ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
 };
 use crate::{
     conversion::{
         analysis::fun::{
-            ArgumentAnalysis, FnAnalysis, FnKind, MethodKind, RustRenameStrategy,
-            TraitMethodDetails,
+            function_wrapper::TypeConversionPolicy, ArgumentAnalysis, FnAnalysis, FnKind,
+            MethodKind, RustRenameStrategy, TraitMethodDetails,
         },
         api::UnsafetyNeeded,
-        codegen_rs::lifetime::add_lifetime_to_all_reference_params,
     },
+    minisyn::{minisynize_vec, FnArg},
     types::{Namespace, QualifiedName},
 };
 use crate::{
@@ -53,11 +56,13 @@ impl UnsafetyNeeded {
         }
     }
 
-    pub(crate) fn from_param_details(params: &[ArgumentAnalysis], ignore_receiver: bool) -> Self {
+    pub(crate) fn from_param_details(params: &[ArgumentAnalysis], ignore_placements: bool) -> Self {
         params.iter().fold(UnsafetyNeeded::None, |accumulator, pd| {
             if matches!(accumulator, UnsafetyNeeded::Always) {
                 UnsafetyNeeded::Always
-            } else if pd.self_type.is_some() && ignore_receiver {
+            } else if (pd.self_type.is_some() || pd.is_placement_return_destination)
+                && ignore_placements
+            {
                 if matches!(
                     pd.requires_unsafe,
                     UnsafetyNeeded::Always | UnsafetyNeeded::JustBridge
@@ -83,7 +88,6 @@ pub(super) fn gen_function(
     ns: &Namespace,
     fun: FuncToConvert,
     analysis: FnAnalysis,
-    cpp_call_name: String,
     non_pod_types: &HashSet<QualifiedName>,
 ) -> RsCodegenResult {
     if analysis.ignore_reason.is_err() || !analysis.externally_callable {
@@ -91,13 +95,15 @@ pub(super) fn gen_function(
     }
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = &analysis.rust_name;
+    let cpp_call_name = &analysis.cpp_call_name;
     let ret_type = analysis.ret_type;
+    let ret_conversion = analysis.ret_conversion;
     let param_details = analysis.param_details;
     let wrapper_function_needed = analysis.cpp_wrapper.is_some();
     let params = analysis.params;
     let vis = analysis.vis;
     let kind = analysis.kind;
-    let doc_attrs = fun.doc_attrs;
+    let doc_attrs = minisynize_vec(fun.doc_attrs);
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
@@ -115,10 +121,17 @@ pub(super) fn gen_function(
         always_unsafe_due_to_trait_definition,
         doc_attrs: &doc_attrs,
         non_pod_types,
+        ret_type: &ret_type,
+        ret_conversion: &ret_conversion,
     };
     // In rare occasions, we might need to give an explicit lifetime.
-    let (lifetime_tokens, params, ret_type) =
-        add_explicit_lifetime_if_necessary(&param_details, params, &ret_type, non_pod_types);
+    let (lifetime_tokens, params, ret_type) = add_explicit_lifetime_if_necessary(
+        &param_details,
+        params,
+        Cow::Borrowed(&ret_type),
+        non_pod_types,
+        &ret_conversion,
+    );
 
     if analysis.rust_wrapper_needed {
         match kind {
@@ -137,20 +150,16 @@ pub(super) fn gen_function(
             } => {
                 // Method, or static method.
                 impl_entry = Some(fn_generator.generate_method_impl(
-                    matches!(
-                        method_kind,
-                        MethodKind::MakeUnique | MethodKind::Constructor { .. }
-                    ),
+                    matches!(method_kind, MethodKind::Constructor { .. }),
                     impl_for,
-                    &ret_type,
                 ));
             }
             FnKind::TraitMethod { ref details, .. } => {
-                trait_impl_entry = Some(fn_generator.generate_trait_impl(details, &ret_type));
+                trait_impl_entry = Some(fn_generator.generate_trait_impl(details));
             }
             _ => {
                 // Generate plain old function
-                bindgen_mod_items.push(fn_generator.generate_function_impl(&ret_type));
+                bindgen_mod_items.push(fn_generator.generate_function_impl());
             }
         }
     }
@@ -159,20 +168,21 @@ pub(super) fn gen_function(
         FnKind::Method { .. } | FnKind::TraitMethod { .. } => None,
         FnKind::Function => match analysis.rust_rename_strategy {
             _ if analysis.rust_wrapper_needed => {
-                Some(Use::SpecificNameFromBindgen(make_ident(rust_name)))
+                Some(Use::SpecificNameFromBindgen(make_ident(rust_name).into()))
             }
             RustRenameStrategy::RenameInOutputMod(ref alias) => {
-                Some(Use::UsedFromCxxBridgeWithAlias(alias.clone()))
+                Some(Use::UsedFromCxxBridgeWithAlias(alias.clone().into()))
             }
             _ => Some(Use::UsedFromCxxBridge),
         },
     };
-    if cxxbridge_name != cpp_call_name && !wrapper_function_needed {
-        cpp_name_attr = Attribute::parse_outer
-            .parse2(quote!(
-                #[cxx_name = #cpp_call_name]
-            ))
-            .unwrap();
+    if let Some(cpp_call_name) = cpp_call_name {
+        if cpp_call_name.does_not_match_cxxbridge_name(&cxxbridge_name) && !wrapper_function_needed
+        {
+            cpp_name_attr = Attribute::parse_outer
+                .parse2(cpp_call_name.generate_cxxbridge_name_attribute())
+                .unwrap();
+        }
     }
 
     // Finally - namespace support. All the Types in everything
@@ -183,7 +193,7 @@ pub(super) fn gen_function(
     // well-known types should be unqualified already (e.g. just UniquePtr)
     // and the following code will act to unqualify only those types
     // which the user has declared.
-    let params = unqualify_params(params);
+    let params = unqualify_params_minisyn(params);
     let ret_type = unqualify_ret_type(ret_type.into_owned());
     // And we need to make an attribute for the namespace that the function
     // itself is in.
@@ -219,6 +229,8 @@ pub(super) fn gen_function(
 #[derive(Clone)]
 struct FnGenerator<'a> {
     param_details: &'a [ArgumentAnalysis],
+    ret_conversion: &'a Option<TypeConversionPolicy>,
+    ret_type: &'a ReturnType,
     cxxbridge_name: &'a Ident,
     rust_name: &'a str,
     unsafety: &'a UnsafetyNeeded,
@@ -228,77 +240,65 @@ struct FnGenerator<'a> {
 }
 
 impl<'a> FnGenerator<'a> {
-    fn generate_arg_lists(
-        &self,
+    fn common_parts<'b>(
+        &'b self,
         avoid_self: bool,
-    ) -> (Punctuated<FnArg, Comma>, TokenStream, Vec<TokenStream>) {
+        parameter_reordering: &Option<Vec<usize>>,
+        ret_type: Option<ReturnType>,
+    ) -> (
+        Option<TokenStream>,
+        Punctuated<FnArg, Comma>,
+        std::borrow::Cow<'b, ReturnType>,
+        TokenStream,
+    ) {
         let mut wrapper_params: Punctuated<FnArg, Comma> = Punctuated::new();
         let mut local_variables = Vec::new();
         let mut arg_list = Vec::new();
-        let wrap_unsafe_calls = self.should_wrap_unsafe_calls();
+        let mut ptr_arg_name = None;
+        let mut ret_type: Cow<'a, _> = ret_type
+            .map(Cow::Owned)
+            .unwrap_or_else(|| Cow::Borrowed(self.ret_type));
+        let mut any_conversion_requires_unsafe = false;
+        let mut variable_counter = 0usize;
         for pd in self.param_details {
-            let type_name = pd.conversion.rust_wrapper_unconverted_type();
-            let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
+            let wrapper_arg_name: syn::Pat = if pd.self_type.is_some() && !avoid_self {
                 parse_quote!(self)
             } else {
-                pd.name.clone()
+                pd.name.clone().into()
             };
-            let param_mutability = pd.conversion.rust_conversion.requires_mutability();
-            wrapper_params.push(parse_quote!(
-                #param_mutability #wrapper_arg_name: #type_name
-            ));
-            let (local_variable, actual_arg) = pd
+            let rust_for_param = pd
                 .conversion
-                .rust_conversion(wrapper_arg_name, wrap_unsafe_calls);
-            arg_list.push(actual_arg);
-            local_variables.extend(local_variable.into_iter());
-        }
-        let local_variables = quote! { #(#local_variables);* };
-        (wrapper_params, local_variables, arg_list)
-    }
-
-    /// Generate an 'impl Type { methods-go-here }' item
-    fn generate_method_impl(
-        &self,
-        avoid_self: bool,
-        impl_block_type_name: &QualifiedName,
-        ret_type: &ReturnType,
-    ) -> Box<ImplBlockDetails> {
-        let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(avoid_self);
-        let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
-            self.param_details,
-            wrapper_params,
-            ret_type,
-            self.non_pod_types,
-        );
-        let rust_name = make_ident(self.rust_name);
-        let unsafety = self.unsafety.wrapper_token();
-        let doc_attrs = self.doc_attrs;
-        let cxxbridge_name = self.cxxbridge_name;
-        let call_body = self.wrap_call_with_unsafe(quote! {
-            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-        });
-        Box::new(ImplBlockDetails {
-            item: ImplItem::Method(parse_quote! {
-                #(#doc_attrs)*
-                pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
-                    #local_variables
-                    #call_body
+                .rust_conversion(parse_quote! { #wrapper_arg_name }, &mut variable_counter);
+            match rust_for_param {
+                RustParamConversion::Param {
+                    ty,
+                    conversion,
+                    local_variables: mut these_local_variables,
+                    conversion_requires_unsafe,
+                } => {
+                    arg_list.push(conversion.clone());
+                    local_variables.append(&mut these_local_variables);
+                    if pd.is_placement_return_destination {
+                        ptr_arg_name = Some(conversion);
+                    } else {
+                        let param_mutability = pd.conversion.rust_conversion.requires_mutability();
+                        wrapper_params.push(parse_quote!(
+                            #param_mutability #wrapper_arg_name: #ty
+                        ));
+                    }
+                    any_conversion_requires_unsafe =
+                        conversion_requires_unsafe || any_conversion_requires_unsafe;
                 }
-            }),
-            ty: impl_block_type_name.get_final_ident(),
-        })
-    }
-
-    /// Generate an 'impl Trait for Type { methods-go-here }' in its entrety.
-    fn generate_trait_impl(
-        &self,
-        details: &TraitMethodDetails,
-        ret_type: &ReturnType,
-    ) -> Box<TraitImplBlockDetails> {
-        let (mut wrapper_params, local_variables, arg_list) =
-            self.generate_arg_lists(details.avoid_self);
-        if let Some(parameter_reordering) = &details.parameter_reordering {
+                RustParamConversion::ReturnValue { ty } => {
+                    ptr_arg_name = Some(pd.name.to_token_stream());
+                    ret_type = Cow::Owned(parse_quote! {
+                        -> impl autocxx::moveit::new::New<Output = #ty>
+                    });
+                    arg_list.push(pd.name.to_token_stream());
+                }
+            }
+        }
+        if let Some(parameter_reordering) = &parameter_reordering {
             wrapper_params = Self::reorder_parameters(wrapper_params, parameter_reordering);
         }
         let (lifetime_tokens, wrapper_params, ret_type) = add_explicit_lifetime_if_necessary(
@@ -306,40 +306,120 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             ret_type,
             self.non_pod_types,
+            self.ret_conversion,
         );
+
+        let cxxbridge_name = self.cxxbridge_name;
+        let call_body = MaybeUnsafeStmt::maybe_unsafe(
+            quote! {
+                cxxbridge::#cxxbridge_name ( #(#arg_list),* )
+            },
+            any_conversion_requires_unsafe || matches!(self.unsafety, UnsafetyNeeded::JustBridge),
+        );
+        let context_is_unsafe = matches!(self.unsafety, UnsafetyNeeded::Always)
+            || self.always_unsafe_due_to_trait_definition;
+        let (call_body, ret_type) = match self.ret_conversion {
+            Some(ret_conversion) if ret_conversion.rust_work_needed() => {
+                // There's a potential lurking bug below. If the return type conversion requires
+                // unsafe, then we'll end up doing something like
+                //   unsafe { do_return_conversion( unsafe { call_body() })}
+                // and the generated code will get warnings about nested unsafe blocks.
+                // That's because we convert the call body to tokens in the following
+                // line without considering the fact it's embedded in another expression.
+                // At the moment this is OK because no return type conversions require
+                // unsafe, but if this happens in future, we should do:
+                //   let temp_ret_val = unsafe { call_body() };
+                //   do_return_conversion(temp_ret_val)
+                // by returning a vector of MaybeUnsafes within call_body.
+                let expr = maybe_unsafes_to_tokens(vec![call_body], context_is_unsafe);
+                let conv =
+                    ret_conversion.rust_conversion(parse_quote! { #expr }, &mut variable_counter);
+                let (conversion, requires_unsafe, ty) = match conv {
+                    RustParamConversion::Param {
+                        local_variables, ..
+                    } if !local_variables.is_empty() => panic!("return type required variables"),
+                    RustParamConversion::Param {
+                        conversion,
+                        conversion_requires_unsafe,
+                        ty,
+                        ..
+                    } => (conversion, conversion_requires_unsafe, ty),
+                    _ => panic!(
+                        "Unexpected - return type is supposed to be converted to a return type"
+                    ),
+                };
+                (
+                    if requires_unsafe {
+                        MaybeUnsafeStmt::NeedsUnsafe(conversion)
+                    } else {
+                        MaybeUnsafeStmt::Normal(conversion)
+                    },
+                    Cow::Owned(parse_quote! { -> #ty }),
+                )
+            }
+            _ => (call_body, ret_type),
+        };
+
+        let call_stmts = if let Some(ptr_arg_name) = ptr_arg_name {
+            let mut closure_stmts = local_variables;
+            closure_stmts.push(MaybeUnsafeStmt::binary(
+                quote! { let #ptr_arg_name = unsafe { #ptr_arg_name.get_unchecked_mut().as_mut_ptr() };},
+                quote! { let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();},
+            ));
+            closure_stmts.push(call_body);
+            let closure_stmts = maybe_unsafes_to_tokens(closure_stmts, true);
+            vec![MaybeUnsafeStmt::needs_unsafe(parse_quote! {
+                autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
+                    #closure_stmts
+                })
+            })]
+        } else {
+            let mut call_stmts = local_variables;
+            call_stmts.push(call_body);
+            call_stmts
+        };
+        let call_body = maybe_unsafes_to_tokens(call_stmts, context_is_unsafe);
+        (lifetime_tokens, wrapper_params, ret_type, call_body)
+    }
+
+    /// Generate an 'impl Type { methods-go-here }' item
+    fn generate_method_impl(
+        &self,
+        avoid_self: bool,
+        impl_block_type_name: &QualifiedName,
+    ) -> Box<ImplBlockDetails> {
+        let (lifetime_tokens, wrapper_params, ret_type, call_body) =
+            self.common_parts(avoid_self, &None, None);
+        let rust_name = make_ident(self.rust_name);
+        let unsafety = self.unsafety.wrapper_token();
+        let doc_attrs = self.doc_attrs;
+        let ty = impl_block_type_name.get_final_ident();
+        Box::new(ImplBlockDetails {
+            item: ImplItem::Fn(parse_quote! {
+                #(#doc_attrs)*
+                pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
+                    #call_body
+                }
+            }),
+            ty: parse_quote! { # ty },
+        })
+    }
+
+    /// Generate an 'impl Trait for Type { methods-go-here }' in its entrety.
+    fn generate_trait_impl(&self, details: &TraitMethodDetails) -> Box<TraitImplBlockDetails> {
+        let (lifetime_tokens, wrapper_params, ret_type, call_body) =
+            self.common_parts(details.avoid_self, &details.parameter_reordering, None);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
-        let cxxbridge_name = self.cxxbridge_name;
         let key = details.trt.clone();
         let method_name = &details.method_name;
-        let call_body = self.wrap_call_with_unsafe(quote! {
-            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-        });
         let item = parse_quote! {
             #(#doc_attrs)*
             #unsafety fn #method_name #lifetime_tokens ( #wrapper_params ) #ret_type {
-                #local_variables
                 #call_body
             }
         };
         Box::new(TraitImplBlockDetails { item, key })
-    }
-
-    fn should_wrap_unsafe_calls(&self) -> bool {
-        matches!(self.unsafety, UnsafetyNeeded::JustBridge)
-            || self.always_unsafe_due_to_trait_definition
-    }
-
-    fn wrap_call_with_unsafe(&self, call: TokenStream) -> TokenStream {
-        if self.should_wrap_unsafe_calls() {
-            quote! {
-                unsafe {
-                    #call
-                }
-            }
-        } else {
-            call
-        }
     }
 
     /// Generate a 'impl Type { methods-go-here }' item which is a constructor
@@ -348,55 +428,37 @@ impl<'a> FnGenerator<'a> {
         &self,
         impl_block_type_name: &QualifiedName,
     ) -> Box<ImplBlockDetails> {
-        let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(true);
-        let mut wrapper_params: Punctuated<FnArg, Comma> =
-            wrapper_params.into_iter().skip(1).collect();
-        let ptr_arg_name = &arg_list[0];
-        let rust_name = make_ident(&self.rust_name);
-        let any_references = self.param_details.iter().any(|pd| pd.was_reference);
-        let (lifetime_param, lifetime_addition) = if any_references {
-            add_lifetime_to_all_reference_params(&mut wrapper_params);
-            (quote! { <'a> }, quote! { + 'a })
-        } else {
-            (quote! {}, quote! {})
-        };
-        let cxxbridge_name = self.cxxbridge_name;
-        let body = quote! {
-            #local_variables
-            autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
-                let #ptr_arg_name = #ptr_arg_name.get_unchecked_mut().as_mut_ptr();
-                cxxbridge::#cxxbridge_name(#(#arg_list),* )
-            })
-        };
-        let body = self.wrap_call_with_unsafe(body);
+        let ret_type: ReturnType = parse_quote! { -> impl autocxx::moveit::new::New<Output=Self> };
+        let (lifetime_tokens, wrapper_params, ret_type, call_body) =
+            self.common_parts(true, &None, Some(ret_type));
+        let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
-        Box::new(ImplBlockDetails {
-            item: ImplItem::Method(parse_quote! {
+        let ty = impl_block_type_name.get_final_ident();
+        let ty = parse_quote! { #ty };
+        let stuff = quote! {
                 #(#doc_attrs)*
-                pub #unsafety fn #rust_name #lifetime_param ( #wrapper_params ) -> impl autocxx::moveit::new::New<Output=Self> #lifetime_addition {
-                    #body
+                pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
+                    #call_body
                 }
-            }),
-            ty: impl_block_type_name.get_final_ident(),
+        };
+        Box::new(ImplBlockDetails {
+            item: ImplItem::Fn(parse_quote! { #stuff }),
+            ty,
         })
     }
 
     /// Generate a function call wrapper
-    fn generate_function_impl(&self, ret_type: &ReturnType) -> Item {
-        let (wrapper_params, local_variables, arg_list) = self.generate_arg_lists(false);
+    fn generate_function_impl(&self) -> Item {
+        let (lifetime_tokens, wrapper_params, ret_type, call_body) =
+            self.common_parts(false, &None, None);
         let rust_name = make_ident(self.rust_name);
         let doc_attrs = self.doc_attrs;
         let unsafety = self.unsafety.wrapper_token();
-        let cxxbridge_name = self.cxxbridge_name;
-        let body = self.wrap_call_with_unsafe(quote! {
-            cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-        });
         Item::Fn(parse_quote! {
             #(#doc_attrs)*
-            pub #unsafety fn #rust_name ( #wrapper_params ) #ret_type {
-                #local_variables
-                #body
+            pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
+                #call_body
             }
         })
     }

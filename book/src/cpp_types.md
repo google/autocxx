@@ -37,16 +37,30 @@ See [the chapter on storage](storage.md) for lots more detail on how you can hol
 
 ## Construction
 
-Each constructor results in _two_ Rust functions.
-
-* A `new` function exists, which
-  offers a constructor per the standards of the `moveit` crate, and thus can be used
-  to place the object on the Rust stack (as well as in various containers such as `Box`
-  and `UniquePtr`)
-* A `make_unique` function is also created, which constructs the item directly into
-  a `cxx::UniquePtr`. This is more commonly what you want.
+Constructing a POD object is simple: call its `new` associated function. [Bob's your uncle!](https://en.wikipedia.org/wiki/Bob%27s_your_uncle)
 
 Multiple constructors (aka constructor overloading) follows the same [rules as other functions](cpp_functions.html#overloads---and-identifiers-ending-in-digits).
+
+Constructing a non-POD object requires two steps.
+
+* Call the `new` associated function in the same way. This will give you something implementing [`moveit::New`](https://docs.rs/moveit/latest/moveit/new/trait.New.html)/
+* Use this to make the object on the heap or stack, in any of the following ways:
+
+| Where you want to create it | How to create it | What you get | Example |
+| --------------------------- | ---------------- | ------------ | ------- |
+| C++ heap (*recommended for simplicity*) | [`Within.within_unique_ptr()`](https://docs.rs/autocxx/latest/autocxx/trait.Within.html) or [`UniquePtr::emplace`](https://docs.rs/moveit/latest/moveit/new/trait.EmplaceUnpinned.html#method.emplace) | [`cxx::UniquePtr<T>`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html) | `let mut obj = ffi::Goldfish::new().within_unique_ptr()` or `let mut obj = UniquePtr::emplace(ffi::Goldfish::new())` |
+| Rust heap | [`Within.within_box()`](https://docs.rs/autocxx/latest/autocxx/trait.Within.html) or [`Box::emplace`](https://docs.rs/moveit/latest/moveit/new/trait.Emplace.html#method.emplace) | `Pin<Box<T>>` | `let mut obj = ffi::Goldfish::new().within_box()` or `let mut obj = Box::emplace(ffi::Goldfish::new())` |
+| Rust stack | [`moveit` macro](https://docs.rs/moveit/latest/moveit/macro.moveit.html) | `&mut T` (more or less) | `moveit! { let mut obj = ffi::Goldfish::new() }` |
+
+For heap construction, the prefix (`emplace`) and postfix (`.within_...`) forms are exactly identical. Choose whichever suits your needs best.
+
+### Should you construct on the Rust heap or the C++ heap?
+
+Use `.within_unique_ptr()` to create objects on the C++ heap. This gives you a [`cxx::UniquePtr<T>`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html) which works well with other autocxx and cxx APIs.
+
+There is a small disadvantage - [`cxx::UniquePtr<T>`](https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html) is able to store `NULL` values. Therefore, each time you use the resulting object, there is an `unwrap()` (explicit or implicit). If this bothers you, use the `Box` option instead which can never be `NULL`.
+
+### Construction sounds complicated. Do you have a code example?
 
 ```rust,ignore,autocxx,hidecpp
 autocxx_integration_tests::doctest(
@@ -77,9 +91,13 @@ fn main() {
     stack_obj.as_mut().set(42);
     assert_eq!(stack_obj.get(), 42);
 
-    let mut heap_obj = ffi::A::make_unique();
+    let mut heap_obj = ffi::A::new().within_unique_ptr();
     heap_obj.pin_mut().set(42);
     assert_eq!(heap_obj.get(), 42);
+
+    let mut another_heap_obj = ffi::A::new().within_box();
+    another_heap_obj.as_mut().set(42);
+    assert_eq!(another_heap_obj.get(), 42);
 }
 }
 )

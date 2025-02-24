@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashSet;
+use indexmap::set::IndexSet as HashSet;
 
 use autocxx_parser::IncludeCppConfig;
 use syn::ItemType;
@@ -16,14 +16,16 @@ use crate::{
         analysis::type_converter::{add_analysis, Annotated, TypeConversionContext, TypeConverter},
         api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind},
         apivec::ApiVec,
+        check_for_fatal_attrs,
         convert_error::{ConvertErrorWithContext, ErrorContext},
         error_reporter::convert_apis,
-        parse::BindgenSemanticAttributes,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
     types::QualifiedName,
+    ParseCallbackResults,
 };
 
+#[derive(std::fmt::Debug)]
 pub(crate) struct TypedefAnalysis {
     pub(crate) kind: TypedefKind,
     pub(crate) deps: HashSet<QualifiedName>,
@@ -31,6 +33,7 @@ pub(crate) struct TypedefAnalysis {
 
 /// Analysis phase where typedef analysis has been performed but no other
 /// analyses just yet.
+#[derive(std::fmt::Debug)]
 pub(crate) struct TypedefPhase;
 
 impl AnalysisPhase for TypedefPhase {
@@ -43,6 +46,7 @@ impl AnalysisPhase for TypedefPhase {
 pub(crate) fn convert_typedef_targets(
     config: &IncludeCppConfig,
     apis: ApiVec<NullPhase>,
+    parse_callback_results: &ParseCallbackResults,
 ) -> ApiVec<TypedefPhase> {
     let mut type_converter = TypeConverter::new(config, &apis);
     let mut extra_apis = ApiVec::new();
@@ -57,10 +61,11 @@ pub(crate) fn convert_typedef_targets(
             Ok(Box::new(std::iter::once(match item {
                 TypedefKind::Type(ity) => get_replacement_typedef(
                     name,
-                    ity,
+                    ity.into(),
                     old_tyname,
                     &mut type_converter,
                     &mut extra_apis,
+                    parse_callback_results,
                 )?,
                 TypedefKind::Use { .. } => Api::Typedef {
                     name,
@@ -84,14 +89,20 @@ fn get_replacement_typedef(
     old_tyname: Option<QualifiedName>,
     type_converter: &mut TypeConverter,
     extra_apis: &mut ApiVec<NullPhase>,
+    parse_callback_results: &ParseCallbackResults,
 ) -> Result<Api<TypedefPhase>, ConvertErrorWithContext> {
+    if !ity.generics.params.is_empty() {
+        return Err(ConvertErrorWithContext(
+            ConvertErrorFromCpp::TypedefTakesGenericParameters,
+            Some(ErrorContext::new_for_item(name.name.get_final_ident())),
+        ));
+    }
     let mut converted_type = ity.clone();
-    let metadata = BindgenSemanticAttributes::new_retaining_others(&mut converted_type.attrs);
-    metadata.check_for_fatal_attrs(&ity.ident)?;
+    check_for_fatal_attrs(parse_callback_results, &name.name)?;
     let type_conversion_results = type_converter.convert_type(
         (*ity.ty).clone(),
         name.name.get_namespace(),
-        &TypeConversionContext::CxxInnerType,
+        &TypeConversionContext::WithinReference,
     );
     match type_conversion_results {
         Err(err) => Err(ConvertErrorWithContext(
@@ -102,7 +113,7 @@ fn get_replacement_typedef(
             ty: syn::Type::Path(ref typ),
             ..
         }) if QualifiedName::from_type_path(typ) == name.name => Err(ConvertErrorWithContext(
-            ConvertError::InfinitelyRecursiveTypedef(name.name.clone()),
+            ConvertErrorFromCpp::InfinitelyRecursiveTypedef(name.name.clone()),
             Some(ErrorContext::new_for_item(name.name.get_final_ident())),
         )),
         Ok(mut final_type) => {
@@ -110,10 +121,10 @@ fn get_replacement_typedef(
             extra_apis.append(&mut final_type.extra_apis);
             Ok(Api::Typedef {
                 name,
-                item: TypedefKind::Type(ity),
+                item: TypedefKind::Type(ity.into()),
                 old_tyname,
                 analysis: TypedefAnalysis {
-                    kind: TypedefKind::Type(converted_type),
+                    kind: TypedefKind::Type(converted_type.into()),
                     deps: final_type.types_encountered,
                 },
             })

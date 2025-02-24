@@ -6,9 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashMap;
+use indexmap::map::IndexMap as HashMap;
 
-use syn::Ident;
+use crate::minisyn::Ident;
 
 use crate::conversion::api::ApiName;
 use crate::conversion::apivec::ApiVec;

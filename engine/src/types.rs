@@ -6,14 +6,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::Ident;
+use crate::parse_callbacks::CppOriginalName;
 use itertools::Itertools;
 use proc_macro2::Span;
 use quote::ToTokens;
 use std::iter::Peekable;
 use std::{fmt::Display, sync::Arc};
-use syn::{parse_quote, Ident, PathSegment, TypePath};
+use syn::{parse_quote, PathSegment, TypePath};
+use thiserror::Error;
 
-use crate::{conversion::ConvertError, known_types::known_types};
+use crate::known_types::known_types;
 
 pub(crate) fn make_ident<S: AsRef<str>>(id: S) -> Ident {
     Ident::new(id.as_ref(), Span::call_site())
@@ -40,8 +43,8 @@ impl Namespace {
         self.0.is_empty()
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &String> {
-        self.0.iter()
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(|s| s.as_str())
     }
 
     #[cfg(test)]
@@ -53,18 +56,14 @@ impl Namespace {
         self.0.len()
     }
 
-    pub(crate) fn to_display_suffix(&self) -> String {
-        if self.is_empty() {
-            String::new()
-        } else {
-            format!(" (in namespace {})", self)
-        }
+    pub(crate) fn to_cpp_path(&self) -> String {
+        self.0.join("::")
     }
 }
 
 impl Display for Namespace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0.join("::"))
+        f.write_str(&self.to_cpp_path())
     }
 }
 
@@ -88,7 +87,7 @@ impl<'a> IntoIterator for &'a Namespace {
 /// either. It doesn't directly have functionality to convert
 /// from one to the other; `replace_type_path_without_arguments`
 /// does that.
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
+#[derive(PartialEq, PartialOrd, Eq, Hash, Clone)]
 pub struct QualifiedName(Namespace, String);
 
 impl QualifiedName {
@@ -148,7 +147,7 @@ impl QualifiedName {
 
     /// cxx doesn't accept names containing double underscores,
     /// but these are OK elsewhere in our output mod.
-    pub(crate) fn validate_ok_for_cxx(&self) -> Result<(), ConvertError> {
+    pub(crate) fn validate_ok_for_cxx(&self) -> Result<(), InvalidIdentError> {
         validate_ident_ok_for_cxx(self.get_final_item())
     }
 
@@ -176,15 +175,11 @@ impl QualifiedName {
         let special_cpp_name = known_types().special_cpp_name(self);
         match special_cpp_name {
             Some(name) => name,
-            None => self.0.iter().chain(std::iter::once(&self.1)).join("::"),
-        }
-    }
-
-    pub(crate) fn get_final_cpp_item(&self) -> String {
-        let special_cpp_name = known_types().special_cpp_name(self);
-        match special_cpp_name {
-            Some(name) => name,
-            None => self.1.to_string(),
+            None => self
+                .0
+                .iter()
+                .chain(std::iter::once(self.1.as_str()))
+                .join("::"),
         }
     }
 
@@ -193,9 +188,9 @@ impl QualifiedName {
             known_type_path
         } else {
             let root = "root".to_string();
-            let segs = std::iter::once(&root)
+            let segs = std::iter::once(root.as_str())
                 .chain(self.ns_segment_iter())
-                .chain(std::iter::once(&self.1))
+                .chain(std::iter::once(self.1.as_str()))
                 .map(make_ident);
             parse_quote! {
                 #(#segs)::*
@@ -203,16 +198,25 @@ impl QualifiedName {
         }
     }
 
+    pub(crate) fn type_path_from_root(&self) -> TypePath {
+        let segs = self
+            .ns_segment_iter()
+            .chain(std::iter::once(self.1.as_str()))
+            .map(make_ident);
+        parse_quote! {
+            #(#segs)::*
+        }
+    }
+
     /// Iterator over segments in the namespace of this name.
-    pub(crate) fn ns_segment_iter(&self) -> impl Iterator<Item = &String> {
+    pub(crate) fn ns_segment_iter(&self) -> impl Iterator<Item = &str> {
         self.0.iter()
     }
 
     /// Iterate over all segments of this name.
-    pub(crate) fn segment_iter(&self) -> impl Iterator<Item = String> + '_ {
+    pub(crate) fn segment_iter(&self) -> impl Iterator<Item = &str> {
         self.ns_segment_iter()
-            .cloned()
-            .chain(std::iter::once(self.get_final_item().to_string()))
+            .chain(std::iter::once(self.get_final_item()))
     }
 }
 
@@ -226,24 +230,57 @@ impl Display for QualifiedName {
     }
 }
 
+impl std::fmt::Debug for QualifiedName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+/// Problems representing C++ identifiers in a way which is compatible with
+/// cxx.
+#[derive(Error, Clone, Debug)]
+pub enum InvalidIdentError {
+    #[error("Union are not supported by autocxx (and their bindgen names have __ so are not acceptable to cxx)")]
+    Union,
+    #[error("Bitfields are not supported by autocxx (and their bindgen names have __ so are not acceptable to cxx)")]
+    Bitfield,
+    #[error("Names containing __ are reserved by C++ so not acceptable to cxx")]
+    TooManyUnderscores,
+    #[error("bindgen decided to call this type _bindgen_ty_N because it couldn't deduce the correct name for it. That means we can't generate C++ bindings to it.")]
+    BindgenTy,
+    #[error("The item name '{0}' is a reserved word in Rust.")]
+    ReservedName(String),
+}
+
 /// cxx doesn't allow identifiers containing __. These are OK elsewhere
 /// in our output mod. It would be nice in future to think of a way we
 /// can enforce this using the Rust type system, e.g. a newtype
 /// wrapper for a CxxCompatibleIdent which is used in any context
 /// where code will be output as part of the `#[cxx::bridge]` mod.
-pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), ConvertError> {
-    validate_ident_ok_for_rust(id)?;
-    if id.contains("__") {
-        Err(ConvertError::TooManyUnderscores)
+pub fn validate_ident_ok_for_cxx(id: &str) -> Result<(), InvalidIdentError> {
+    validate_str_ok_for_rust(id)?;
+    // Provide a couple of more specific diagnostics if we can.
+    if id.starts_with("__BindgenBitfieldUnit") {
+        Err(InvalidIdentError::Bitfield)
+    } else if id.starts_with("__BindgenUnionField") {
+        Err(InvalidIdentError::Union)
+    } else if id.contains("__") && !id.starts_with("__bindgen_marker") {
+        Err(InvalidIdentError::TooManyUnderscores)
+    } else if id.starts_with("_bindgen_ty_") {
+        Err(InvalidIdentError::BindgenTy)
     } else {
         Ok(())
     }
 }
 
-pub fn validate_ident_ok_for_rust(label: &str) -> Result<(), ConvertError> {
+pub fn validate_ident_ok_for_rust(label: &CppOriginalName) -> Result<(), InvalidIdentError> {
+    validate_str_ok_for_rust(label.for_validation())
+}
+
+fn validate_str_ok_for_rust(label: &str) -> Result<(), InvalidIdentError> {
     let id = make_ident(label);
     syn::parse2::<syn::Ident>(id.into_token_stream())
-        .map_err(|_| ConvertError::ReservedName(label.to_string()))
+        .map_err(|_| InvalidIdentError::ReservedName(label.to_string()))
         .map(|_| ())
 }
 

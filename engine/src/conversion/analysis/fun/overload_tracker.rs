@@ -49,7 +49,7 @@ impl OverloadTracker {
         if this_offset == 0 {
             cpp_method_name
         } else {
-            format!("{}{}", cpp_method_name, this_offset)
+            format!("{cpp_method_name}{this_offset}")
         }
     }
 }

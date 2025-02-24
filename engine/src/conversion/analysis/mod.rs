@@ -19,7 +19,9 @@ pub(crate) mod gc;
 mod name_check;
 pub(crate) mod pod; // hey, that rhymes
 pub(crate) mod remove_ignored;
+mod replace_hopeless_typedef_targets;
 pub(crate) mod tdef;
 mod type_converter;
 
 pub(crate) use name_check::check_names;
+pub(crate) use replace_hopeless_typedef_targets::replace_hopeless_typedef_targets;
