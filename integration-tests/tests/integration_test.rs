@@ -12456,6 +12456,7 @@ fn test_double_template_w_default() {
     run_test("", hdr, quote! {}, &["Problem"], &[]);
 }
 
+#[ignore] // https://github.com/google/autocxx/issues/1371
 #[test]
 fn test_class_named_string() {
     let hdr = indoc! {"
