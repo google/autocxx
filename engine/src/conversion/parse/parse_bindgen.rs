@@ -195,9 +195,7 @@ impl<'a> ParseBindgen<'a> {
     fn parse_mod_items(&mut self, items: Option<&Vec<Item>>, ns: Namespace) {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
-        // TODO - ideally we'd get rid of this clone
-        let parse_callback_results = self.parse_callback_results.clone();
-        let mut mod_converter = ParseForeignMod::new(ns.clone(), &parse_callback_results);
+        let mut mod_converter = ParseForeignMod::new(ns.clone(), self.parse_callback_results);
         let mut more_apis = ApiVec::new();
         let empty_vec = vec![];
         for item in items.unwrap_or(&empty_vec) {

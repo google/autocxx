@@ -120,7 +120,7 @@ struct NameAndParent {
 /// The various accessor methods here return `None` if a
 /// given `QualifiedName` can't be found, because bindgen only tells us
 /// information when it actually has it.
-pub(crate) struct ParseCallbackResults {
+pub(crate) struct UnindexedParseCallbackResults {
     original_names: HashMap<DiscoveredItemId, CppOriginalName>,
     virtuals: HashMap<DiscoveredItemId, Virtualness>,
     root_mod: Option<DiscoveredItemId>,
@@ -133,20 +133,56 @@ pub(crate) struct ParseCallbackResults {
     mods_for_items: HashMap<DiscoveredItemId, DiscoveredItemId>,
 }
 
+impl UnindexedParseCallbackResults {
+    pub(crate) fn index(self) -> ParseCallbackResults {
+        let index = self
+            .mods_for_items
+            .iter()
+            .filter_map(|(id, parent)| {
+                self.names.get(id).map(|name| {
+                    (
+                        NameAndParent {
+                            parent: *parent,
+                            name: name.clone(),
+                        },
+                        *id,
+                    )
+                })
+            })
+            .collect();
+
+        ParseCallbackResults {
+            results: self,
+            index,
+        }
+    }
+}
+
+/// A version of [`UnindexedParseCallbackResults`] with an index constructed
+/// for efficient access.
+pub(crate) struct ParseCallbackResults {
+    results: UnindexedParseCallbackResults,
+    index: HashMap<NameAndParent, DiscoveredItemId>,
+}
+
 impl ParseCallbackResults {
+    fn get_item_by_parentage(&self, search_key: &NameAndParent) -> Option<DiscoveredItemId> {
+        self.index.get(search_key).cloned()
+    }
+
     pub(crate) fn get_fn_original_name(&self, name: &QualifiedName) -> Option<CppOriginalName> {
         self.id_by_name(name)
-            .and_then(|id| self.original_names.get(&id).cloned())
+            .and_then(|id| self.results.original_names.get(&id).cloned())
     }
 
     pub(crate) fn get_original_name(&self, name: &QualifiedName) -> Option<CppOriginalName> {
         self.id_by_name(name)
-            .and_then(|id| self.original_names.get(&id).cloned())
+            .and_then(|id| self.results.original_names.get(&id).cloned())
     }
 
     pub(crate) fn get_virtualness(&self, name: &QualifiedName) -> Option<Virtualness> {
         self.id_by_name(name)
-            .and_then(|id| self.virtuals.get(&id).cloned())
+            .and_then(|id| self.results.virtuals.get(&id).cloned())
     }
 
     fn id_by_name(&self, name: &QualifiedName) -> Option<DiscoveredItemId> {
@@ -161,7 +197,9 @@ impl ParseCallbackResults {
     }
 
     fn get_root_mod(&self) -> DiscoveredItemId {
-        self.root_mod.expect("Root mod not yet reported by bindgen")
+        self.results
+            .root_mod
+            .expect("Root mod not yet reported by bindgen")
     }
 
     fn mod_id_by_namespace(&self, namespace: &Namespace) -> Option<DiscoveredItemId> {
@@ -186,46 +224,30 @@ impl ParseCallbackResults {
         }
     }
 
-    fn get_item_by_parentage(&self, search_key: &NameAndParent) -> Option<DiscoveredItemId> {
-        // This is O(n), and since it will be called at least once for each item, that means autocxx
-        // overall is O(n^2). We probably want to build a map here.
-        self.mods_for_items
-            .iter()
-            .filter(|(_item, parent)| **parent == search_key.parent)
-            .map(|(item, _parent)| item)
-            .find(|item| {
-                self.names
-                    .get(*item)
-                    .map(|n| n == &search_key.name)
-                    .unwrap_or_default()
-            })
-            .cloned()
-    }
-
     pub(crate) fn get_layout(&self, name: &QualifiedName) -> Option<Layout> {
         self.id_by_name(name)
-            .and_then(|id| self.layouts.get(&id).cloned())
+            .and_then(|id| self.results.layouts.get(&id).cloned())
     }
 
     pub(crate) fn get_cpp_visibility(&self, name: &QualifiedName) -> Visibility {
         self.id_by_name(name)
-            .and_then(|id| self.visibility.get(&id).cloned())
+            .and_then(|id| self.results.visibility.get(&id).cloned())
             .unwrap_or(Visibility::Public)
     }
 
     pub(crate) fn special_member_kind(&self, name: &QualifiedName) -> Option<SpecialMemberKind> {
         self.id_by_name(name)
-            .and_then(|id| self.special_member_kinds.get(&id).cloned())
+            .and_then(|id| self.results.special_member_kinds.get(&id).cloned())
     }
 
     pub(crate) fn get_deleted_or_defaulted(&self, name: &QualifiedName) -> Option<Explicitness> {
         self.id_by_name(name)
-            .and_then(|id| self.explicitness.get(&id).cloned())
+            .and_then(|id| self.results.explicitness.get(&id).cloned())
     }
 
     pub(crate) fn discards_template_param(&self, name: &QualifiedName) -> bool {
         self.id_by_name(name)
-            .map(|id| self.discards_template_param.contains(&id))
+            .map(|id| self.results.discards_template_param.contains(&id))
             .unwrap_or_default()
     }
 }
@@ -233,13 +255,13 @@ impl ParseCallbackResults {
 #[derive(Debug)]
 pub(crate) struct AutocxxParseCallbacks {
     pub(crate) rebuild_dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-    pub(crate) results: Rc<RefCell<ParseCallbackResults>>,
+    pub(crate) results: Rc<RefCell<UnindexedParseCallbackResults>>,
 }
 
 impl AutocxxParseCallbacks {
     pub(crate) fn new(
         rebuild_dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-        results: Rc<RefCell<ParseCallbackResults>>,
+        results: Rc<RefCell<UnindexedParseCallbackResults>>,
     ) -> Self {
         Self {
             rebuild_dependency_recorder,
