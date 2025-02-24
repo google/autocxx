@@ -81,7 +81,7 @@ impl<'a> ParseBindgen<'a> {
     /// `Api`s together with some other data.
     pub(crate) fn parse_items(
         mut self,
-        items: Vec<Item>,
+        items: &[Item],
         source_file_contents: &str,
     ) -> Result<ApiVec<NullPhase>, ConvertError> {
         let items = Self::find_items_in_root(items).map_err(ConvertError::Cpp)?;
@@ -172,7 +172,7 @@ impl<'a> ParseBindgen<'a> {
         self.apis.extend(replacements.into_iter().map(|(_, v)| v));
     }
 
-    fn find_items_in_root(items: Vec<Item>) -> Result<Vec<Item>, ConvertErrorFromCpp> {
+    fn find_items_in_root(items: &[Item]) -> Result<Option<&Vec<Item>>, ConvertErrorFromCpp> {
         for item in items {
             match item {
                 Item::Mod(root_mod) => {
@@ -180,26 +180,27 @@ impl<'a> ParseBindgen<'a> {
                     // in a mod called 'root'. We don't want to pass that
                     // onto cxx, so jump right into it.
                     assert!(root_mod.ident == "root");
-                    if let Some((_, items)) = root_mod.content {
-                        return Ok(items);
+                    if let Some((_, items)) = &root_mod.content {
+                        return Ok(Some(items));
                     }
                 }
                 _ => return Err(ConvertErrorFromCpp::UnexpectedOuterItem),
             }
         }
-        Ok(Vec::new())
+        Ok(None)
     }
 
     /// Interpret the bindgen-generated .rs for a particular
     /// mod, which corresponds to a C++ namespace.
-    fn parse_mod_items(&mut self, items: Vec<Item>, ns: Namespace) {
+    fn parse_mod_items(&mut self, items: Option<&Vec<Item>>, ns: Namespace) {
         // This object maintains some state specific to this namespace, i.e.
         // this particular mod.
         // TODO - ideally we'd get rid of this clone
         let parse_callback_results = self.parse_callback_results.clone();
         let mut mod_converter = ParseForeignMod::new(ns.clone(), &parse_callback_results);
         let mut more_apis = ApiVec::new();
-        for item in items {
+        let empty_vec = vec![];
+        for item in items.unwrap_or(&empty_vec) {
             report_any_error(&ns, &mut more_apis, || {
                 self.parse_item(item, &mut mod_converter, &ns)
             });
@@ -210,13 +211,13 @@ impl<'a> ParseBindgen<'a> {
 
     fn parse_item(
         &mut self,
-        item: Item,
+        item: &Item,
         mod_converter: &mut ParseForeignMod,
         ns: &Namespace,
     ) -> Result<(), ConvertErrorWithContext> {
         match item {
             Item::ForeignMod(fm) => {
-                mod_converter.convert_foreign_mod_items(fm.items);
+                mod_converter.convert_foreign_mod_items(&fm.items);
                 Ok(())
             }
             Item::Struct(s) => {
@@ -244,7 +245,7 @@ impl<'a> ParseBindgen<'a> {
                     if err.is_none() && name.cpp_name().is_nested() {
                         err = Some(ConvertErrorWithContext(
                             ConvertErrorFromCpp::ForwardDeclaredNestedType,
-                            Some(ErrorContext::new_for_item(s.ident.into())),
+                            Some(ErrorContext::new_for_item(s.ident.clone().into())),
                         ));
                     }
                     Some(UnanalyzedApi::ForwardDeclaration { name, err })
@@ -255,7 +256,7 @@ impl<'a> ParseBindgen<'a> {
                         name,
                         details: Box::new(StructDetails {
                             layout,
-                            item: s.into(),
+                            item: s.clone().into(),
                             has_rvalue_reference_fields,
                         }),
                         analysis: (),
@@ -271,7 +272,7 @@ impl<'a> ParseBindgen<'a> {
             Item::Enum(e) => {
                 let api = UnanalyzedApi::Enum {
                     name: api_name_qualified(ns, e.ident.clone(), self.parse_callback_results)?,
-                    item: e.into(),
+                    item: e.clone().into(),
                 };
                 if !self.config.is_on_blocklist(&api.name().to_cpp_name()) {
                     self.apis.push(api);
@@ -286,13 +287,13 @@ impl<'a> ParseBindgen<'a> {
                 // We do however record which methods were spotted, since
                 // we have no other way of working out which functions are
                 // static methods vs plain functions.
-                mod_converter.convert_impl_items(imp);
+                mod_converter.convert_impl_items(imp.clone());
                 Ok(())
             }
             Item::Mod(itm) => {
-                if let Some((_, items)) = itm.content {
+                if let Some((_, items)) = &itm.content {
                     let new_ns = ns.push(itm.ident.to_string());
-                    self.parse_mod_items(items, new_ns);
+                    self.parse_mod_items(Some(items), new_ns);
                 }
                 Ok(())
             }
@@ -370,7 +371,7 @@ impl<'a> ParseBindgen<'a> {
                 if enum_type_name_valid {
                     self.apis.push(UnanalyzedApi::Const {
                         name: api_name(ns, const_item.ident.clone(), self.parse_callback_results),
-                        const_item: const_item.into(),
+                        const_item: const_item.clone().into(),
                     });
                 }
                 Ok(())
@@ -380,7 +381,7 @@ impl<'a> ParseBindgen<'a> {
                 // same name - see test_issue_264.
                 self.apis.push(UnanalyzedApi::Typedef {
                     name: api_name(ns, ity.ident.clone(), self.parse_callback_results),
-                    item: TypedefKind::Type(ity.into()),
+                    item: TypedefKind::Type(ity.clone().into()),
                     old_tyname: None,
                     analysis: (),
                 });

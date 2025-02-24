@@ -108,20 +108,19 @@ impl<'a> BridgeConverter<'a> {
     /// up by the `syn` crate).
     pub(crate) fn convert(
         &self,
-        mut bindgen_mod: ItemMod,
+        bindgen_mod: ItemMod,
         parse_callback_results: ParseCallbackResults,
         unsafe_policy: UnsafePolicy,
         inclusions: String,
         codegen_options: &CodegenOptions,
         source_file_contents: &str,
     ) -> Result<CodegenResults, ConvertError> {
-        match &mut bindgen_mod.content {
+        match &bindgen_mod.content {
             None => Err(ConvertError::NoContent),
             Some((_, items)) => {
                 // Parse the bindgen mod.
-                let items_to_process = std::mem::take(items);
                 let parser = ParseBindgen::new(self.config, &parse_callback_results);
-                let apis = parser.parse_items(items_to_process, source_file_contents)?;
+                let apis = parser.parse_items(items, source_file_contents)?;
                 Self::dump_apis("parsing", &apis);
                 // Inside parse_results, we now have a list of APIs.
                 // We now enter various analysis phases.

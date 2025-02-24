@@ -56,7 +56,7 @@ impl<'a> ParseForeignMod<'a> {
 
     /// Record information from foreign mod items encountered
     /// in bindgen output.
-    pub(crate) fn convert_foreign_mod_items(&mut self, foreign_mod_items: Vec<ForeignItem>) {
+    pub(crate) fn convert_foreign_mod_items(&mut self, foreign_mod_items: &Vec<ForeignItem>) {
         let mut extra_apis = ApiVec::new();
         for i in foreign_mod_items {
             report_any_error(&self.ns.clone(), &mut extra_apis, || {
@@ -66,7 +66,7 @@ impl<'a> ParseForeignMod<'a> {
         self.ignored_apis.append(&mut extra_apis);
     }
 
-    fn parse_foreign_item(&mut self, i: ForeignItem) -> Result<(), ConvertErrorWithContext> {
+    fn parse_foreign_item(&mut self, i: &ForeignItem) -> Result<(), ConvertErrorWithContext> {
         match i {
             ForeignItem::Fn(item) => {
                 let doc_attrs = get_doc_attrs(&item.attrs);
@@ -74,11 +74,11 @@ impl<'a> ParseForeignMod<'a> {
                 self.funcs_to_convert.push(FuncToConvert {
                     provenance: Provenance::Bindgen,
                     self_ty: None,
-                    ident: item.sig.ident.into(),
+                    ident: item.sig.ident.clone().into(),
                     doc_attrs: minisynize_vec(doc_attrs),
-                    inputs: minisynize_punctuated(item.sig.inputs),
-                    output: item.sig.output.into(),
-                    vis: item.vis.into(),
+                    inputs: minisynize_punctuated(item.sig.inputs.clone()),
+                    output: item.sig.output.clone().into(),
+                    vis: item.vis.clone().into(),
                     virtualness: self.parse_callback_results.get_virtualness(&qn),
                     cpp_vis: self.parse_callback_results.get_cpp_visibility(&qn),
                     special_member: self.parse_callback_results.special_member_kind(&qn),
@@ -93,7 +93,7 @@ impl<'a> ParseForeignMod<'a> {
             }
             ForeignItem::Static(item) => Err(ConvertErrorWithContext(
                 ConvertErrorFromCpp::StaticData(item.ident.to_string()),
-                Some(ErrorContext::new_for_item(item.ident.into())),
+                Some(ErrorContext::new_for_item(item.ident.clone().into())),
             )),
             _ => Err(ConvertErrorWithContext(
                 ConvertErrorFromCpp::UnexpectedForeignItem,
