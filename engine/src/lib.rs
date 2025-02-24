@@ -31,7 +31,7 @@ use autocxx_bindgen::BindgenError;
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use miette::{SourceOffset, SourceSpan};
-use parse_callbacks::{AutocxxParseCallbacks, ParseCallbackResults};
+use parse_callbacks::{AutocxxParseCallbacks, ParseCallbackResults, UnindexedParseCallbackResults};
 use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
 use regex::Regex;
@@ -447,7 +447,8 @@ impl IncludeCppEngine {
             return Err(Error::WrappedReferencesButNoArbitrarySelfTypes);
         }
 
-        let parse_callback_results = Rc::new(RefCell::new(ParseCallbackResults::default()));
+        let parse_callback_results =
+            Rc::new(RefCell::new(UnindexedParseCallbackResults::default()));
         let mod_name = self.config.get_mod_name();
         let mut builder = self
             .make_bindgen_builder(&inc_dirs, extra_clang_args)
@@ -479,7 +480,7 @@ impl IncludeCppEngine {
         let conversion = converter
             .convert(
                 bindings,
-                parse_callback_results,
+                parse_callback_results.index(),
                 self.config.unsafe_policy.clone(),
                 header_contents,
                 codegen_options,
