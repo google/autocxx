@@ -486,16 +486,16 @@ impl IncludeCppEngine {
                 &source_file_contents,
             )
             .map_err(Error::Conversion)?;
-        let mut items = conversion.rs;
-        let mut new_bindings: ItemMod = parse_quote! {
+        let items = conversion.rs;
+        let new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]
             #[allow(dead_code)]
             #[allow(non_upper_case_globals)]
             #[allow(non_camel_case_types)]
             mod #mod_name {
+                #(#items)*
             }
         };
-        new_bindings.content.as_mut().unwrap().1.append(&mut items);
         info!(
             "New bindings:\n{}",
             rust_pretty_printer::pretty_print(&new_bindings)
