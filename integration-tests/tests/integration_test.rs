@@ -12037,6 +12037,22 @@ fn test_issue_1125() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/1141
+fn test_wchar_issue_1141() {
+    let cxx = indoc! {"
+        wchar_t next_wchar(wchar_t c) {
+            return c + 1;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        wchar_t next_wchar(wchar_t c);
+    "};
+    let rs = quote! {};
+    run_test(cxx, hdr, rs, &["next_wchar"], &[]);
+}
+
+#[test]
 fn test_issue_1143() {
     let hdr = indoc! {
         "namespace mapnik {
