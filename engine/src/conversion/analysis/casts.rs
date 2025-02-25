@@ -6,13 +6,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::minisyn::FnArg;
 use itertools::Itertools;
 use quote::quote;
-use syn::{parse_quote, FnArg};
+use syn::parse_quote;
 
 use crate::{
     conversion::{
-        api::{Api, ApiName, CastMutability, Provenance, References, TraitSynthesis},
+        api::{Api, ApiName, CastMutability, Provenance, TraitSynthesis},
         apivec::ApiVec,
     },
     types::{make_ident, QualifiedName},
@@ -96,14 +97,12 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
             doc_attrs: Vec::new(),
             inputs: [fnarg].into_iter().collect(),
             output: parse_quote! {
-                -> * #return_mutability #to_typ
+                -> __bindgen_marker_Reference < * #return_mutability #to_typ >
             },
             vis: parse_quote! { pub },
-            virtualness: crate::conversion::api::Virtualness::None,
+            virtualness: None,
             cpp_vis: crate::conversion::api::CppVisibility::Public,
             special_member: None,
-            unused_template_param: false,
-            references: References::new_with_this_and_return_as_reference(),
             original_name: None,
             self_ty: Some(from.clone()),
             synthesized_this_type: None,
@@ -112,7 +111,7 @@ fn create_cast(from: &QualifiedName, to: &QualifiedName, mutable: CastMutability
                 mutable,
             }),
             synthetic_cpp: Some((CppFunctionBody::Cast, CppFunctionKind::Function)),
-            is_deleted: false,
+            is_deleted: None,
             provenance: Provenance::SynthesizedOther,
             variadic: false,
         }),

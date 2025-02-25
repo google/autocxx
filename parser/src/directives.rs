@@ -9,12 +9,20 @@
 use indexmap::map::IndexMap as HashMap;
 
 use once_cell::sync::OnceCell;
+use proc_macro2::Ident;
 use proc_macro2::Span;
-use proc_macro2::{Ident, TokenStream};
+#[cfg(feature = "reproduction_case")]
+use proc_macro2::TokenStream;
+
+#[cfg(feature = "reproduction_case")]
 use quote::{quote, ToTokens};
 use syn::parse::ParseStream;
 
-use crate::config::{Allowlist, AllowlistErr};
+use crate::config::AllowlistErr;
+
+#[cfg(feature = "reproduction_case")]
+use crate::config::Allowlist;
+
 use crate::directive_names::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE, SUBCLASS};
 use crate::{AllowlistEntry, IncludeCppConfig};
 use crate::{ParseResult, RustFun, RustPath};
@@ -115,6 +123,8 @@ pub(crate) trait Directive: Send + Sync {
         config: &mut IncludeCppConfig,
         span: &Span,
     ) -> ParseResult<()>;
+
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -135,6 +145,7 @@ impl Directive for Inclusion {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -164,6 +175,7 @@ impl Directive for Generate {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -201,6 +213,7 @@ impl Directive for GenerateNs {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -237,6 +250,7 @@ impl Directive for GenerateAll {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -262,6 +276,7 @@ impl Directive for Safety {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -275,7 +290,7 @@ impl Directive for Safety {
 }
 
 fn allowlist_err_to_syn_err(err: AllowlistErr, span: &Span) -> syn::Error {
-    syn::Error::new(*span, format!("{}", err))
+    syn::Error::new(*span, format!("{err}"))
 }
 
 struct StringList<SET, GET>(SET, GET)
@@ -299,6 +314,7 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -331,6 +347,7 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -357,6 +374,7 @@ impl Directive for ModName {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -384,6 +402,7 @@ impl Directive for Concrete {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -397,6 +416,7 @@ impl Directive for Concrete {
 }
 
 struct RustType {
+    #[allow(dead_code)]
     output: bool,
 }
 
@@ -412,6 +432,7 @@ impl Directive for RustType {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -443,6 +464,7 @@ impl Directive for Subclass {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -472,11 +494,12 @@ impl Directive for ExternRustFun {
         config.extern_rust_funs.push(RustFun {
             path,
             sig,
-            receiver: None,
+            has_receiver: false,
         });
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -513,6 +536,7 @@ impl Directive for ExternCppType {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,

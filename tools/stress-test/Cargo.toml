@@ -8,14 +8,14 @@
 
 [package]
 name = "autocxx-stress-test"
-version = "0.22.3"
+version = "0.28.0"
 authors = ["Adrian Taylor <adetaylor@chromium.org>"]
 edition = "2021"
 
 [dependencies]
-cxx = "1.0.68"
-autocxx = { path = "../..", version="0.22.3" }
+cxx = "1.0.78"
+autocxx = { path = "../..", version = "0.28.0" }
 
 [build-dependencies]
-autocxx-build = { path = "../../gen/build", version="0.22.3" }
-miette = { version="4.3", features=["fancy"]}
+autocxx-build = { path = "../../gen/build", version = "0.28.0" }
+miette = { version = "5", features = ["fancy"] }

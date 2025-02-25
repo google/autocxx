@@ -12,6 +12,8 @@ use autocxx_engine::{BuilderContext, RebuildDependencyRecorder};
 use indexmap::set::IndexSet as HashSet;
 use std::{io::Write, sync::Mutex};
 
+pub use autocxx_engine::{BuilderError, BuilderSuccess};
+
 pub type Builder = autocxx_engine::Builder<'static, CargoBuilderContext>;
 
 #[doc(hidden)]
@@ -19,9 +21,9 @@ pub struct CargoBuilderContext;
 
 impl BuilderContext for CargoBuilderContext {
     fn setup() {
-        env_logger::builder()
+        let _ = env_logger::builder()
             .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
-            .init();
+            .try_init();
     }
     fn get_dependency_recorder() -> Option<Box<dyn RebuildDependencyRecorder>> {
         Some(Box::new(CargoRebuildDependencyRecorder::new()))
@@ -45,7 +47,7 @@ impl RebuildDependencyRecorder for CargoRebuildDependencyRecorder {
     fn record_header_file_dependency(&self, filename: &str) {
         let mut already = self.printed_already.lock().unwrap();
         if already.insert(filename.into()) {
-            println!("cargo:rerun-if-changed={}", filename);
+            println!("cargo:rerun-if-changed={filename}");
         }
     }
 }

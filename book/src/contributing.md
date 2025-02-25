@@ -71,7 +71,11 @@ RUST_BACKTRACE=1 RUST_LOG=autocxx_engine=info cargo test --all test_cycle_string
 This is especially valuable to see the `bindgen` output Rust code, and then the converted Rust code which we pass into cxx. Usually, most problems are due to some mis-conversion somewhere
 in `engine/src/conversion`. See [here](https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.IncludeCppEngine.html) for documentation and diagrams on how the engine works.
 
-You may also wish to set `AUTOCXX_ASAN=1` on Linux when running tests.
+You may also wish to set `AUTOCXX_ASAN=1` on Linux when running tests. To exercise all
+the code paths related to generating both C++ and Rust side shims, you can set
+`AUTOCXX_FORCE_WRAPPER_GENERATION=1`. The test suite doesn't do this by default because
+we also want to test the normal code paths. (In the future we might want to
+parameterize the test suite to do both.)
 
 ## Reporting bugs
 
@@ -98,6 +102,17 @@ order of preference here's how we would like to hear about your problem:
   and send the _entire_ log to us. This will include two key bits of logging:
   the C++ bindings as distilled by `bindgen`, and then the version which
   we've converted and moulded to be suitable for use by `cxx`.
+
+## Bugs related to linking problems
+
+Unfortunately, _linking_ C++ binaries is a complex area subject in itself, and
+we won't be able to debug your linking issues by means of an autocxx bug report.
+Assuming you're using autocxx's build.rs support, the actual C++ build and
+managed by the [`cc`](https://crates.io/crates/cc) crate. You can find
+many of its options on its [`Build` type](https://docs.rs/cc/latest/cc/struct.Build.html).
+If you need to bring in an external library, you may also need to emit certain
+[print statements from your `build.rs`](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib)
+to instruct cargo to link against that library.
 
 ## How to contribute to this manual
 

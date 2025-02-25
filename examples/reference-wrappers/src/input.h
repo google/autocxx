@@ -18,6 +18,7 @@ public:
     Goat() : horns(0) {}
     void add_a_horn();
     std::string describe() const;
+    uint32_t& get_horns() { return horns; }
 private:
     uint32_t horns;
 };

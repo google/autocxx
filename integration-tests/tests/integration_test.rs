@@ -18,7 +18,7 @@ use crate::{
 };
 use autocxx_integration_tests::{
     directives_from_lists, do_run_test, do_run_test_manual, run_generate_all_test, run_test,
-    run_test_ex, run_test_expect_fail, run_test_expect_fail_ex, TestError,
+    run_test_ex, run_test_expect_fail, run_test_expect_fail_ex, BuilderModifier, TestError,
 };
 use indoc::indoc;
 use itertools::Itertools;
@@ -502,6 +502,7 @@ fn test_negative_take_as_pod_with_move_constructor() {
     run_test_expect_fail(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
+#[ignore] // https://github.com/google/autocxx/issues/1252
 #[test]
 fn test_take_as_pod_with_is_relocatable() {
     let cxx = indoc! {"
@@ -841,8 +842,7 @@ fn test_take_nonpod_by_ptr_in_wrapped_method() {
     run_test("", hdr, rs, &["A", "Bob", "C"], &[]);
 }
 
-#[test]
-fn test_take_char_by_ptr_in_wrapped_method() {
+fn run_char_test(builder_modifier: Option<BuilderModifier>) {
     let hdr = indoc! {"
         #include <cstdint>
         #include <memory>
@@ -872,7 +872,25 @@ fn test_take_char_by_ptr_in_wrapped_method() {
         assert_eq!(unsafe { ch.as_ref()}.unwrap(), &104i8);
         assert_eq!(unsafe { a.as_ref().unwrap().take_char(ch, c2) }, 104);
     };
-    run_test("", hdr, rs, &["A", "C"], &[]);
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["A", "C"], &[], None),
+        builder_modifier,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_take_char_by_ptr_in_wrapped_method() {
+    run_char_test(None)
+}
+
+#[test]
+fn test_take_char_by_ptr_in_wrapped_method_with_unsigned_chars() {
+    run_char_test(make_clang_arg_adder(&["-funsigned-char"]))
 }
 
 #[test]
@@ -1282,7 +1300,7 @@ fn test_define_str() {
         #define BOB \"foo\"
     "};
     let rs = quote! {
-        assert_eq!(std::str::from_utf8(ffi::BOB).unwrap().trim_end_matches(char::from(0)), "foo");
+        assert_eq!(core::str::from_utf8(ffi::BOB).unwrap().trim_end_matches(char::from(0)), "foo");
     };
     run_test(cxx, hdr, rs, &["BOB"], &[]);
 }
@@ -1429,7 +1447,7 @@ fn test_asan_working_as_expected_for_cpp_allocations() {
 #[test]
 fn test_asan_working_as_expected_for_rust_allocations() {
     perform_asan_doom_test(
-        quote! { Box::into_raw(std::pin::Pin::into_inner_unchecked(a)) },
+        quote! { Box::into_raw(core::pin::Pin::into_inner_unchecked(a)) },
         quote! { Box },
     )
 }
@@ -3043,7 +3061,7 @@ fn test_string_constant() {
         const char* STRING = \"Foo\";
     "};
     let rs = quote! {
-        let a = std::str::from_utf8(ffi::STRING).unwrap().trim_end_matches(char::from(0));
+        let a = core::str::from_utf8(ffi::STRING).unwrap().trim_end_matches(char::from(0));
         assert_eq!(a, "Foo");
     };
     run_test("", hdr, rs, &["STRING"], &[]);
@@ -4222,6 +4240,29 @@ fn test_abstract_nested_type() {
 }
 
 #[test]
+fn test_nested_unnamed_enum() {
+    let hdr = indoc! {"
+        namespace N {
+            struct A {
+                enum {
+                    LOW_VAL = 1,
+                    HIGH_VAL = 1000,
+                };
+            };
+        }
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! { generate_ns!("N")},
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
 fn test_nested_type_constructor() {
     let hdr = indoc! {"
         #include <string>
@@ -4421,9 +4462,35 @@ fn test_vector_cycle_bare() {
 }
 
 #[test]
+fn test_cycle_up_of_vec() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <vector>
+        #include <memory>
+        struct A {
+            uint32_t a;
+        };
+        inline std::unique_ptr<std::vector<A>> take_vec(std::unique_ptr<std::vector<A>> a) {
+            return a;
+        }
+        inline std::unique_ptr<std::vector<A>> get_vec() {
+            std::unique_ptr<std::vector<A>> items = std::make_unique<std::vector<A>>();
+            items->push_back(A { 3 });
+            items->push_back(A { 4 });
+            return items;
+        }
+    "};
+    let rs = quote! {
+        ffi::take_vec(ffi::get_vec());
+    };
+    run_test("", hdr, rs, &["take_vec", "get_vec"], &[]);
+}
+
+#[test]
 fn test_typedef_to_std() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         typedef std::string my_string;
         inline uint32_t take_str(my_string a) {
             return a.size();
@@ -4457,6 +4524,7 @@ fn test_typedef_to_up_in_fn_call() {
 fn test_typedef_in_pod_struct() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         typedef uint32_t my_int;
         struct A {
             my_int a;
@@ -4478,6 +4546,7 @@ fn test_typedef_in_pod_struct() {
 fn test_cint_in_pod_struct() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         struct A {
             int a;
         };
@@ -4547,6 +4616,7 @@ fn test_up_in_struct() {
 fn test_typedef_to_std_in_struct() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         typedef std::string my_string;
         struct A {
             my_string a;
@@ -4932,6 +5002,43 @@ fn test_take_array_in_struct() {
 }
 
 #[test]
+fn test_take_struct_built_array_in_function() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    struct data {
+        char a[4];
+    };
+    uint32_t take_array(char a[4]) {
+        return a[0] + a[2];
+    }
+    "};
+    let rs = quote! {
+        let mut c = ffi::data { a: [ 10, 20, 30, 40 ] };
+        unsafe {
+            assert_eq!(ffi::take_array(c.a.as_mut_ptr()), 40);
+        }
+    };
+    run_test("", hdr, rs, &["take_array"], &["data"]);
+}
+
+#[test]
+fn test_take_array_in_function() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    uint32_t take_array(char a[4]) {
+        return a[0] + a[2];
+    }
+    "};
+    let rs = quote! {
+        let mut a: [i8; 4] = [ 10, 20, 30, 40 ];
+        unsafe {
+            assert_eq!(ffi::take_array(a.as_mut_ptr()), 40);
+        }
+    };
+    run_test("", hdr, rs, &["take_array"], &[]);
+}
+
+#[test]
 fn test_union_ignored() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -4955,6 +5062,78 @@ fn test_union_ignored() {
     run_test("", hdr, rs, &["B"], &[]);
 }
 
+#[test]
+fn test_union_nonpod() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    union A {
+        uint32_t a;
+        float b;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_union_pod() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    union A {
+        uint32_t a;
+        float b;
+    };
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &[], &["A"]);
+}
+
+#[test]
+fn test_type_aliased_anonymous_union_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    namespace test {
+        typedef union {
+        int a;
+        } Union;
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["test::Union"], &[]);
+}
+
+#[test]
+fn test_type_aliased_anonymous_struct_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    namespace test {
+        typedef struct {
+            int a;
+        } Struct;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["test::Struct"], &[]);
+}
+
+#[test]
+fn test_type_aliased_anonymous_nested_struct_ignored() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    namespace test {
+        struct Outer {
+            typedef struct {
+                int a;
+            } Struct;
+            int b;
+        };
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["test::Outer_Struct"], &[]);
+}
+
+#[ignore] // https://github.com/google/autocxx/issues/1251
 #[test]
 fn test_double_underscores_ignored() {
     let hdr = indoc! {"
@@ -5811,6 +5990,8 @@ fn test_error_generated_for_static_data() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 fn test_error_generated_for_array_dependent_function() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -5932,6 +6113,7 @@ fn test_double_destruction() {
         None,
         None,
         "unsafe_ffi",
+        None,
     ) {
         Err(TestError::CppBuild(_)) => {} // be sure this fails due to a static_assert
         // rather than some runtime problem
@@ -6643,6 +6825,48 @@ fn test_extern_cpp_type_cxx_bridge() {
 }
 
 #[test]
+fn test_extern_cpp_type_different_name() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct A {
+            A() : a(0) {}
+            int a;
+        };
+        inline void handle_a(const A&) {
+        }
+        inline A create_a() {
+            A a;
+            return a;
+        }
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::prelude::*;
+        include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("handle_a")
+            generate!("create_a")
+            extern_cpp_opaque_type!("A", crate::DifferentA)
+        }
+        #[cxx::bridge]
+        pub mod ffi2 {
+            unsafe extern "C++" {
+                include!("input.h");
+                type A;
+            }
+            impl UniquePtr<A> {}
+        }
+        pub use ffi2::A as DifferentA;
+        fn main() {
+            let a = ffi::create_a();
+            ffi::handle_a(&a);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
 fn test_extern_cpp_type_two_include_cpp() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -6994,6 +7218,35 @@ fn test_extern_rust_method() {
 }
 
 #[test]
+fn test_extern_rust_fn_callback() {
+    let hdr = indoc! {"
+        struct a {};
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            generate!("a")
+        }
+
+        use ffi::a;
+        use std::pin::Pin;
+
+        #[autocxx::extern_rust::extern_rust_function]
+        pub fn called_from_cpp(_a: Pin<&mut a>) {}
+
+        fn main() {}
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+// TODO: there are various other tests for extern_rust_fn we should add:
+// 1) taking mutable and immutable references
+// 2) ensuring that types on which the signature depends as receiver,
+//    parameters and return are not garbage collected
+
+#[test]
 fn test_rust_reference_no_autodiscover() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -7013,6 +7266,55 @@ fn test_rust_reference_no_autodiscover() {
         hdr,
         rs,
         directives_from_lists(&["take_rust_reference"], &[], None),
+        None,
+        None,
+        Some(quote! {
+            #[autocxx::extern_rust::extern_rust_type]
+            pub struct RustType(i32);
+        }),
+    );
+}
+
+#[test]
+fn test_rust_box() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    #include <cxx.h>
+
+    struct RustType;
+    inline uint32_t take_rust_box(rust::Box<RustType>) {
+        return 4;
+    }
+    "};
+    let rs = quote! {
+        let foo = Box::new(RustType(3));
+        let result = ffi::take_rust_box(foo);
+        assert_eq!(result, 4);
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        directives_from_lists(&["take_rust_box"], &[], None),
+        None,
+        None,
+        Some(quote! {
+            #[autocxx::extern_rust::extern_rust_type]
+            pub struct RustType(i32);
+        }),
+    );
+}
+
+#[test]
+fn test_rust_reference_no_autodiscover_no_usage() {
+    let rs = quote! {
+        let _ = RustType(3);
+    };
+    run_test_ex(
+        "",
+        "",
+        rs,
+        directives_from_lists(&[], &[], None),
         None,
         None,
         Some(quote! {
@@ -7047,7 +7349,7 @@ fn test_cpp17() {
 }
 
 #[test]
-fn test_box() {
+fn test_box_extern_rust_type() {
     let hdr = indoc! {"
         #include <cxx.h>
         struct Foo;
@@ -7069,6 +7371,47 @@ fn test_box() {
         Some(quote! {
             pub struct Foo {
                 a: String,
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_box_return_placement_new() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct Foo;
+        struct Foo2;
+        struct Ret {};
+        inline Ret take_box(rust::Box<Foo>, rust::Box<Foo2>) {
+            return Ret{};
+        }
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let _ = ffi::take_box(
+                Box::new(Foo { a: "Hello".into() }),
+                Box::new(bar::Foo2 { a: "Goodbye".into() })
+            );
+        },
+        quote! {
+            generate!("take_box")
+            extern_rust_type!(Foo)
+            generate!("Ret")
+        },
+        None,
+        None,
+        Some(quote! {
+            pub struct Foo {
+                a: String,
+            }
+            mod bar {
+                #[autocxx::extern_rust::extern_rust_type]
+                pub struct Foo2 {
+                    pub a: String,
+                }
             }
         }),
     );
@@ -7098,6 +7441,32 @@ fn test_box_via_extern_rust() {
             }
         }),
     );
+}
+
+#[test]
+fn test_box_via_extern_rust_no_include_cpp() {
+    let hdr = indoc! {"
+        #include <cxx.h>
+        struct Foo;
+        inline void take_box(rust::Box<Foo>) {
+        }
+    "};
+    do_run_test_manual(
+        "",
+        hdr,
+        quote! {
+            #[autocxx::extern_rust::extern_rust_type]
+            pub struct Foo {
+                a: String,
+            }
+
+            fn main() {
+            }
+        },
+        Some(Box::new(EnableAutodiscover)),
+        None,
+    )
+    .unwrap();
 }
 
 #[test]
@@ -7189,14 +7558,24 @@ fn test_issue_956() {
     let hdr = indoc! {"
         #include <cstdint>
         inline void take_int(int&) {}
-        inline void take_uin16(uint16_t&) {}
-        inline void take_char16(char16_t &) {}
+        inline void take_uint16(uint16_t) {}
+        inline void take_us(unsigned short) {}
+        inline void take_char16(char16_t) {}
+        inline void take_uint16_ref(uint16_t&) {}
+        inline void take_char16_ref(char16_t &) {}
     "};
     run_test(
         "",
         hdr,
         quote! {},
-        &["take_int", "take_uin16", "take_char16"],
+        &[
+            "take_int",
+            "take_uint16",
+            "take_char16",
+            "take_uint16_ref",
+            "take_char16_ref",
+            "take_us",
+        ],
         &[],
     );
 }
@@ -7429,6 +7808,58 @@ fn test_pv_subclass_ptr_param() {
                 unsafe fn foo(&self, a: *const ffi::A) {
                     use ffi::Observer_supers;
                     self.foo_super(a)
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_opaque_param() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    typedef uint32_t MyUnsupportedType[4];
+
+    struct MySupportedType {
+        uint32_t a;
+    };
+
+    class MySuperType {
+    public:
+        virtual void foo(const MyUnsupportedType* foo, const MySupportedType* bar) const = 0;
+        virtual ~MySuperType() = default;
+    };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            MySubType::new_rust_owned(MySubType { a: 3, cpp_peer: Default::default() });
+        },
+        quote! {
+            subclass!("MySuperType",MySubType)
+            extern_cpp_opaque_type!("MyUnsupportedType", crate::ffi2::MyUnsupportedType)
+        },
+        None,
+        None,
+        Some(quote! {
+
+            #[cxx::bridge]
+            pub mod ffi2 {
+                unsafe extern "C++" {
+                    include!("input.h");
+                    type MyUnsupportedType;
+                }
+            }
+            use autocxx::subclass::CppSubclass;
+            use ffi::MySuperType_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MySubType {
+                a: u32
+            }
+            impl MySuperType_methods for MySubType {
+                unsafe fn foo(&self, _foo: *const ffi2::MyUnsupportedType, _bar: *const ffi::MySupportedType) {
                 }
             }
         }),
@@ -7919,10 +8350,10 @@ fn test_pv_subclass_allocation_not_self_owned() {
             assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
             let obs_superclass = obs.as_ref().unwrap(); // &subclass
-            let obs_superclass = unsafe { std::mem::transmute::<&ffi::MyTestObserverCpp, &ffi::TestObserver>(obs_superclass) };
+            let obs_superclass = unsafe { core::mem::transmute::<&ffi::MyTestObserverCpp, &ffi::TestObserver>(obs_superclass) };
             ffi::TriggerTestObserverA(obs_superclass);
             assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
-            std::mem::drop(obs);
+            core::mem::drop(obs);
             Lazy::force(&STATUS).lock().unwrap().a_called = false;
             assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
@@ -7939,7 +8370,7 @@ fn test_pv_subclass_allocation_not_self_owned() {
             ffi::TriggerTestObserverA(obs.as_ref().borrow().as_ref());
             assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
             Lazy::force(&STATUS).lock().unwrap().a_called = false;
-            std::mem::drop(obs);
+            core::mem::drop(obs);
             assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
@@ -8054,11 +8485,11 @@ fn test_pv_subclass_allocation_self_owned() {
             assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
             let obs_superclass = obs.as_ref().unwrap(); // &subclass
-            let obs_superclass = unsafe { std::mem::transmute::<&ffi::MyTestObserverCpp, &ffi::TestObserver>(obs_superclass) };
+            let obs_superclass = unsafe { core::mem::transmute::<&ffi::MyTestObserverCpp, &ffi::TestObserver>(obs_superclass) };
 
             ffi::TriggerTestObserverA(obs_superclass);
             assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
-            std::mem::drop(obs);
+            core::mem::drop(obs);
             Lazy::force(&STATUS).lock().unwrap().a_called = false;
             assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
@@ -8075,7 +8506,7 @@ fn test_pv_subclass_allocation_self_owned() {
 
             assert!(Lazy::force(&STATUS).lock().unwrap().a_called);
             Lazy::force(&STATUS).lock().unwrap().a_called = false;
-            std::mem::drop(obs);
+            core::mem::drop(obs);
             assert!(!Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
@@ -8087,7 +8518,7 @@ fn test_pv_subclass_allocation_self_owned() {
             let obs_superclass_ptr: *const ffi::TestObserver = obs.as_ref().borrow().as_ref();
             // Retain just a pointer on the Rust side, so there is no Rust-side
             // ownership.
-            std::mem::drop(obs);
+            core::mem::drop(obs);
             assert!(Lazy::force(&STATUS).lock().unwrap().cpp_allocated);
             assert!(Lazy::force(&STATUS).lock().unwrap().rust_allocated);
             assert!(!Lazy::force(&STATUS).lock().unwrap().a_called);
@@ -9151,7 +9582,7 @@ fn test_uniqueptr_moveit() {
     };
     "};
     let rs = quote! {
-        use autocxx::moveit::EmplaceUnpinned;
+        use autocxx::moveit::Emplace;
         let mut up_obj = cxx::UniquePtr::emplace(ffi::A::new());
         up_obj.as_mut().unwrap().set(42);
         assert_eq!(up_obj.get(), 42);
@@ -9175,7 +9606,6 @@ fn test_various_emplacement() {
     };
     "};
     let rs = quote! {
-        use autocxx::moveit::EmplaceUnpinned;
         use autocxx::moveit::Emplace;
         let mut up_obj = cxx::UniquePtr::emplace(ffi::A::new());
         up_obj.pin_mut().set(666);
@@ -9239,7 +9669,7 @@ fn test_emplace_uses_overridden_new_and_delete() {
         assert!(ffi::was_delete_called());
         ffi::reset_flags();
         {
-            use autocxx::moveit::EmplaceUnpinned;
+            use autocxx::moveit::Emplace;
             let _ = cxx::UniquePtr::emplace(ffi::A::new());
         }
         assert!(ffi::was_delete_called());
@@ -9607,8 +10037,7 @@ fn size_and_alignment_test(pod: bool) {
         ("F", "struct F { uint32_t a; uint8_t b; };"),
     ];
     let type_definitions = TYPES.iter().map(|(_, def)| *def).join("\n");
-    let function_definitions = TYPES.iter().map(|(name, _)| format!("inline size_t get_sizeof_{}() {{ return sizeof({}); }}\ninline size_t get_alignof_{}() {{ return alignof({}); }}\n",
-    name, name, name, name)).join("\n");
+    let function_definitions = TYPES.iter().map(|(name, _)| format!("inline size_t get_sizeof_{name}() {{ return sizeof({name}); }}\ninline size_t get_alignof_{name}() {{ return alignof({name}); }}\n")).join("\n");
     let hdr = format!(
         indoc! {"
         #include <cstdint>
@@ -9622,12 +10051,9 @@ fn size_and_alignment_test(pod: bool) {
     let allowlist_fns: Vec<String> = TYPES
         .iter()
         .flat_map(|(name, _)| {
-            [
-                format!("get_sizeof_{}", name),
-                format!("get_alignof_{}", name),
-            ]
-            .to_vec()
-            .into_iter()
+            [format!("get_sizeof_{name}"), format!("get_alignof_{name}")]
+                .to_vec()
+                .into_iter()
         })
         .collect_vec();
     let allowlist_types: Vec<String> = TYPES.iter().map(|(name, _)| name.to_string()).collect_vec();
@@ -9641,15 +10067,15 @@ fn size_and_alignment_test(pod: bool) {
     let allowlist_both: Vec<&str> = allowlist_both.iter().map(AsRef::as_ref).collect_vec();
     let rs = TYPES.iter().fold(quote! {}, |mut accumulator, (name, _)| {
         let get_align_symbol =
-            proc_macro2::Ident::new(&format!("get_alignof_{}", name), Span::call_site());
+            proc_macro2::Ident::new(&format!("get_alignof_{name}"), Span::call_site());
         let get_size_symbol =
-            proc_macro2::Ident::new(&format!("get_sizeof_{}", name), Span::call_site());
+            proc_macro2::Ident::new(&format!("get_sizeof_{name}"), Span::call_site());
         let type_symbol = proc_macro2::Ident::new(name, Span::call_site());
         accumulator.extend(quote! {
             let c_size = ffi::#get_size_symbol();
             let c_align = ffi::#get_align_symbol();
-            assert_eq!(std::mem::size_of::<ffi::#type_symbol>(), c_size);
-            assert_eq!(std::mem::align_of::<ffi::#type_symbol>(), c_align);
+            assert_eq!(core::mem::size_of::<ffi::#type_symbol>(), c_size);
+            assert_eq!(core::mem::align_of::<ffi::#type_symbol>(), c_align);
         });
         accumulator
     });
@@ -9744,6 +10170,24 @@ fn test_pass_superclass() {
 }
 
 #[test]
+fn test_issue_1238() {
+    let hdr = indoc! {"
+    class b;
+    class c;
+    class f {
+        b d();
+    };
+    class S2E {
+    public:
+        f e;
+        b &d(c *) const;
+    };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["S2E"], &[]);
+}
+
+#[test]
 fn test_issue486_multi_types() {
     let hdr = indoc! {"
         namespace a {
@@ -9816,6 +10260,13 @@ fn test_implicit_constructor_rules() {
     let hdr = indoc! {"
         struct AllImplicitlyDefaulted {
             void a() const {}
+        };
+
+        struct AllExplicitlyDefaulted {
+            AllExplicitlyDefaulted() = default;
+            AllExplicitlyDefaulted(const AllExplicitlyDefaulted&) = default;
+            AllExplicitlyDefaulted(AllExplicitlyDefaulted&&) = default;
+            void a() const {};
         };
 
         struct PublicDeleted {
@@ -10359,6 +10810,12 @@ fn test_implicit_constructor_rules() {
         test_movable![ffi::AllImplicitlyDefaulted];
         test_call_a![ffi::AllImplicitlyDefaulted];
 
+        test_constructible![ffi::AllExplicitlyDefaulted];
+        test_make_unique![ffi::AllExplicitlyDefaulted];
+        test_copyable![ffi::AllExplicitlyDefaulted];
+        test_movable![ffi::AllExplicitlyDefaulted];
+        test_call_a![ffi::AllExplicitlyDefaulted];
+
         test_call_a![ffi::PublicDeleted];
 
         test_copyable![ffi::PublicDeletedDefault];
@@ -10732,6 +11189,7 @@ fn test_implicit_constructor_rules() {
         rs,
         &[
             "AllImplicitlyDefaulted",
+            "AllExplicitlyDefaulted",
             "PublicDeleted",
             "PublicDeletedDefault",
             "PublicDeletedCopy",
@@ -11066,7 +11524,7 @@ fn test_doc_comments_survive() {
         "Function",
     ]
     .into_iter()
-    .flat_map(|l| [format!("{} line A", l), format!("{} line B", l)])
+    .flat_map(|l| [format!("{l} line A"), format!("{l} line B")])
     .collect_vec();
 
     run_test_ex(
@@ -11137,6 +11595,43 @@ fn test_typedef_to_ns_enum() {
         } // namespace
     "};
     run_generate_all_test(hdr);
+}
+
+#[test]
+fn test_enum_in_ns() {
+    let hdr = indoc! {"
+        namespace a {
+        enum b {};
+        } // namespace
+    "};
+    run_test("", hdr, quote! {}, &["a::b"], &[]);
+}
+
+#[test]
+fn test_recursive_field() {
+    let hdr = indoc! {"
+        #include <memory>
+        struct A {
+            std::unique_ptr<A> a;
+        };
+    "};
+    run_test("", hdr, quote! {}, &["A"], &[]);
+}
+
+#[test]
+fn test_recursive_field_indirect() {
+    let hdr = indoc! {"
+        #include <memory>
+        struct B;
+        struct A {
+            std::unique_ptr<B> a;
+        };
+        struct B {
+            std::unique_ptr<A> a1;
+            A a2;
+        };
+    "};
+    run_test("", hdr, quote! {}, &["A", "B"], &[]);
 }
 
 #[test]
@@ -11555,6 +12050,439 @@ fn test_wchar_issue_1141() {
     "};
     let rs = quote! {};
     run_test(cxx, hdr, rs, &["next_wchar"], &[]);
+}
+
+#[test]
+fn test_issue_1143() {
+    let hdr = indoc! {
+        "namespace mapnik {
+            class Map {
+            public:
+              int &a(long);
+            };
+        }"
+    };
+
+    run_test("", hdr, quote! {}, &["mapnik::Map"], &[]);
+}
+
+#[test]
+fn test_issue_1170() {
+    let hdr = indoc! {
+        "#include <vector>
+        struct a {
+            enum b {} c;
+        } Loc;
+        struct Arch {
+            std::vector<a> d();
+        } DeterministicRNG;"
+    };
+    run_test("", hdr, quote! {}, &["Arch"], &[]);
+}
+
+// https://github.com/google/autocxx/issues/774
+#[test]
+fn test_virtual_methods() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <memory>
+        class Base {
+        public:
+            Base() {}
+            virtual ~Base() {}
+
+            virtual int a() = 0;
+
+            virtual void b(int) = 0;
+            virtual void b(bool) = 0;
+
+            virtual int c() const = 0;
+            virtual int c() = 0;
+        };
+        class FullyDefined : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+            void b(bool) { }
+
+            int c() const { return 1; }
+            int c() { return 2; }
+        };
+        class Partial1 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(bool) {}
+        };
+
+        class Partial2 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+            void b(bool) { }
+
+            int c() const { return 1; }
+        };
+
+        class Partial3 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+
+            int c() const { return 1; }
+            int c() { return 2; }
+        };
+
+        class Partial4 : public Base {
+        public:
+            int a() { return 0; }
+
+            void b(int) { }
+            void b(bool) = 0;
+
+            int c() const { return 1; }
+            int c() { return 2; }
+        };
+
+        // TODO: currently this class cannot be detected as virtual as there
+        // is no metadata captured to show that this destructor is virtual
+        // uncommenting this (as well as corresponding sections below) gives a 
+        // 'instantiation of abstract class' error.
+        // class Partial5 : public Base {
+        // public:
+        //     ~Partial5() = 0;
+
+        //     int a() { return 0; }
+
+        //     void b(int) { }
+        //     void b(bool) { }
+
+        //     int c() const { return 1; }
+        //     int c() { return 2; }
+        // };
+
+    "};
+    let rs = quote! {
+        static_assertions::assert_impl_all!(ffi::FullyDefined: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial1: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial2: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial3: moveit::CopyNew);
+        static_assertions::assert_not_impl_any!(ffi::Partial4: moveit::CopyNew);
+        // static_assertions::assert_not_impl_any!(ffi::Partial5: moveit::CopyNew);
+        let _c1 = ffi::FullyDefined::new().within_unique_ptr();
+    };
+    run_test(
+        "",
+        hdr,
+        rs,
+        &[
+            "FullyDefined",
+            "Partial1",
+            "Partial2",
+            "Partial3",
+            "Partial4",
+            // "Partial5"
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn test_issue_1192() {
+    let hdr = indoc! {
+        "#include <vector>
+        #include <cstdint>
+        template <typename B>
+        struct A {
+            B a;
+        };
+        struct VecThingy {
+            A<uint32_t> contents[2];
+        };
+        struct MyStruct {
+            VecThingy vec;
+        };"
+    };
+    run_test_ex(
+        "",
+        hdr,
+        quote! {},
+        quote! {
+
+            extern_cpp_type!("VecThingy", crate::VecThingy)
+            pod!("VecThingy")
+
+            generate_pod!("MyStruct")
+        },
+        None,
+        None,
+        Some(quote! {
+            // VecThingy isn't necessarily 128 bits long.
+            // This test doesn't actually allocate one.
+            #[repr(transparent)]
+            pub struct VecThingy(pub u128);
+
+            unsafe impl cxx::ExternType for VecThingy {
+                type Id = cxx::type_id!("VecThingy");
+                type Kind = cxx::kind::Trivial;
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_issue_1214() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        enum class C: uint16_t {
+            A,
+            B,
+        };
+    "};
+    run_test("", hdr, quote! {}, &["C"], &[]);
+}
+
+#[test]
+fn test_issue_1229() {
+    let hdr = indoc! {"
+    struct Thing {
+        float id;
+    
+        Thing(float id) : id(id) {}
+    };
+
+    struct Item {
+        float id;
+    
+        Item(float id) : id(id) {}
+    };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::WithinUniquePtr;
+
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            name!(thing)
+            safety!(unsafe)
+            generate!("Thing")
+        }
+        autocxx::include_cpp! {
+            #hexathorpe include "input.h"
+            name!(item)
+            safety!(unsafe)
+            generate!("Item")
+        }
+
+        fn main() {
+            let _thing = thing::Thing::new(15.).within_unique_ptr();
+            let _item = item::Item::new(15.).within_unique_ptr();
+        }
+    };
+
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/1265
+fn test_issue_1265() {
+    let hdr = indoc! {"
+        #include <string>
+
+        class Test
+        {
+        public:
+          explicit Test(std::string string)
+            : string(std::move(string))
+          {
+          }
+
+          Test() = delete;
+
+          [[nodiscard]] auto get_string() const -> std::string const& { return this->string; }
+
+        private:
+          std::string string;
+        };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            run();
+        },
+        directives_from_lists(&["Test"], &[], None),
+        None,
+        None,
+        Some(quote! {
+            fn run() {
+                let str0 = "string";
+                let str1 = "another string";
+                let ptr0 = UniquePtr::emplace(ffi::Test::new(str0));
+                let ptr1 = UniquePtr::emplace(ffi::Test::new(str1));
+                println!("0: {}", ptr0.get_string());
+                println!("1: {}", ptr1.get_string());
+                moveit!(let mut ref0 = &move *ptr0);
+                moveit!(let mut ref1 = &move *ptr1);
+                println!("0: {}", ref0.get_string());
+                println!("1: {}", ref1.get_string());
+                println!("swap");
+                core::mem::swap(&mut *ref0, &mut *ref1);
+                println!("0: {}", ref0.get_string());
+                println!("1: {}", ref1.get_string());
+            }
+        }),
+    )
+}
+
+#[test]
+fn test_ignore_va_list() {
+    let hdr = indoc! {"
+        #include <stdarg.h>
+        class A {
+        public:
+            A() {}
+            void fn(va_list) {}
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_badly_named_alloc() {
+    let hdr = indoc! {"
+        #include <stdarg.h>
+        class A {
+        public:
+            void alloc();
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["A"], &[]);
+}
+
+#[test]
+fn test_cpp_union_pod() {
+    let hdr = indoc! {"
+        typedef unsigned long long UInt64_t;
+        struct ManagedPtr_t_;
+        typedef struct ManagedPtr_t_ ManagedPtr_t;
+        
+        typedef int (*ManagedPtr_ManagerFunction_t)(
+                ManagedPtr_t *managedPtr,
+                const ManagedPtr_t *srcPtr,
+                int operation);
+        
+        typedef union {
+            int intValue;
+            void *ptr;
+        } ManagedPtr_t_data_;
+        
+        struct ManagedPtr_t_ {
+            void *pointer;
+            ManagedPtr_t_data_ userData[4];
+            ManagedPtr_ManagerFunction_t manager;
+        };
+        
+        typedef struct CorrelationId_t_ {
+            unsigned int size : 8;
+            unsigned int valueType : 4;
+            unsigned int classId : 16;
+            unsigned int reserved : 4;
+        
+            union {
+                UInt64_t intValue;
+                ManagedPtr_t ptrValue;
+            } value;
+        } CorrelationId_t;
+    "};
+    run_test("", hdr, quote! {}, &["CorrelationId_t_"], &[]);
+    run_test_expect_fail("", hdr, quote! {}, &[], &["CorrelationId_t_"]);
+}
+
+#[test]
+fn test_using_string_function() {
+    let hdr = indoc! {"
+        #include <string>
+        using std::string;
+        void foo(const string &a);
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["foo"], &[]);
+}
+
+#[test]
+fn test_using_string_method() {
+    let hdr = indoc! {"
+        #include <string>
+        using std::string;
+        class Foo
+        {
+        public:
+            Foo bar(const string &a);
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["Foo"], &[]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/1382
+fn test_override_typedef_fn() {
+    let hdr = indoc! {"
+        #include <map>
+        #include <memory>
+        typedef std::shared_ptr<std::map<int, int>> Arg;
+            // bindgen currently outputs  pub type Arg = u8;
+        class Foo {
+        public:
+          void *createFoo(const int, Arg &arg);
+        //   void *createFoo(const int, std::shared_ptr<std::map<int, int>> &arg); // works
+        };
+    "};
+    run_test("", hdr, quote! {}, &["Foo"], &[]);
+}
+
+#[test]
+fn test_double_template_w_default() {
+    let hdr = indoc! {"
+        class Widget {};
+
+        template <class T>
+        class RefPtr {
+        private:
+            T* m_ptr;
+        };
+
+        class FakeAlloc {};
+
+        template <typename T, typename A=FakeAlloc>
+        class Holder {
+            A alloc;
+        };
+
+        typedef Holder<RefPtr<Widget>> WidgetRefHolder;
+        class Problem {
+        public:
+            WidgetRefHolder& getWidgets();
+        };
+    "};
+    run_test("", hdr, quote! {}, &["Problem"], &[]);
+}
+
+#[ignore] // https://github.com/google/autocxx/issues/1371
+#[test]
+fn test_class_named_string() {
+    let hdr = indoc! {"
+        namespace a {
+            class String {};
+        } // namespace a
+    "};
+    run_test("", hdr, quote! {}, &["a::String"], &[]);
 }
 
 // Yet to test:

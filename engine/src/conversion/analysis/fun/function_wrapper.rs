@@ -6,12 +6,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::conversion::CppEffectiveName;
+use crate::minisyn::Ident;
 use crate::{
-    conversion::api::SubclassName,
+    conversion::{api::SubclassName, type_helpers::extract_pinned_mutable_reference_type},
     types::{Namespace, QualifiedName},
 };
 use quote::ToTokens;
-use syn::{parse_quote, Ident, Type, TypeReference};
+use syn::{parse_quote, Type, TypeReference};
 
 #[derive(Clone, Debug)]
 pub(crate) enum CppConversionType {
@@ -79,15 +81,16 @@ impl RustConversionType {
 /// * C++ wrapper function converts `std::unique_ptr<std::string>` to just
 ///   `std::string`
 /// * Finally, the actual C++ API receives a `std::string` by value.
+///
 /// The implementation here is distributed across this file, and
 /// `function_wrapper_rs` and `function_wrapper_cpp`.
 /// TODO: we should make this into a single enum, with the Type as enum
 /// variant params. That would remove the possibility of various runtime
 /// panics by enforcing (for example) that conversion from a pointer always
 /// has a Type::Ptr.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct TypeConversionPolicy {
-    unwrapped_type: Type,
+    unwrapped_type: crate::minisyn::Type,
     pub(crate) cpp_conversion: CppConversionType,
     pub(crate) rust_conversion: RustConversionType,
 }
@@ -103,7 +106,7 @@ impl TypeConversionPolicy {
         rust_conversion: RustConversionType,
     ) -> Self {
         Self {
-            unwrapped_type: ty,
+            unwrapped_type: ty.into(),
             cpp_conversion,
             rust_conversion,
         }
@@ -118,7 +121,14 @@ impl TypeConversionPolicy {
             Type::Reference(TypeReference {
                 elem, mutability, ..
             }) => (*elem, mutability.is_some()),
-            _ => panic!("Not a ptr: {}", ty.to_token_stream()),
+            Type::Path(ref tp) => {
+                if let Some(unwrapped_type) = extract_pinned_mutable_reference_type(tp) {
+                    (unwrapped_type.clone(), true)
+                } else {
+                    panic!("Path was not a mutable reference: {}", ty.to_token_stream())
+                }
+            }
+            _ => panic!("Not a reference: {}", ty.to_token_stream()),
         };
         TypeConversionPolicy {
             unwrapped_type: if is_mut {
@@ -133,7 +143,7 @@ impl TypeConversionPolicy {
 
     pub(crate) fn new_to_unique_ptr(ty: Type) -> Self {
         TypeConversionPolicy {
-            unwrapped_type: ty,
+            unwrapped_type: ty.into(),
             cpp_conversion: CppConversionType::FromValueToUniquePtr,
             rust_conversion: RustConversionType::None,
         }
@@ -141,7 +151,7 @@ impl TypeConversionPolicy {
 
     pub(crate) fn new_for_placement_return(ty: Type) -> Self {
         TypeConversionPolicy {
-            unwrapped_type: ty,
+            unwrapped_type: ty.into(),
             cpp_conversion: CppConversionType::FromReturnValueToPlacementPtr,
             // Rust conversion is marked as none here, since this policy
             // will be applied to the return value, and the Rust-side
@@ -157,7 +167,7 @@ impl TypeConversionPolicy {
     pub(crate) fn unconverted_rust_type(&self) -> Type {
         match self.cpp_conversion {
             CppConversionType::FromValueToUniquePtr => self.make_unique_ptr_type(),
-            _ => self.unwrapped_type.clone(),
+            _ => self.unwrapped_type.clone().into(),
         }
     }
 
@@ -170,7 +180,7 @@ impl TypeConversionPolicy {
                     *mut #innerty
                 }
             }
-            _ => self.unwrapped_type.clone(),
+            _ => self.unwrapped_type.clone().into(),
         }
     }
 
@@ -222,10 +232,10 @@ impl TypeConversionPolicy {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum CppFunctionBody {
-    FunctionCall(Namespace, Ident),
-    StaticMethodCall(Namespace, Ident, Ident),
+    FunctionCall(Namespace, CppEffectiveName),
+    StaticMethodCall(Namespace, Ident, CppEffectiveName),
     PlacementNew(Namespace, Ident),
     ConstructSuperclass(String),
     Cast,
@@ -234,7 +244,7 @@ pub(crate) enum CppFunctionBody {
     FreeUninitialized(QualifiedName),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum CppFunctionKind {
     Function,
     Method,
@@ -243,11 +253,13 @@ pub(crate) enum CppFunctionKind {
     SynthesizedConstructor,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct CppFunction {
     pub(crate) payload: CppFunctionBody,
-    pub(crate) wrapper_function_name: Ident,
-    pub(crate) original_cpp_name: String,
+    pub(crate) wrapper_function_name: crate::minisyn::Ident,
+    /// The following field is apparently only used for
+    /// subclass calls.
+    pub(crate) original_cpp_name: CppEffectiveName,
     pub(crate) return_conversion: Option<TypeConversionPolicy>,
     pub(crate) argument_conversion: Vec<TypeConversionPolicy>,
     pub(crate) kind: CppFunctionKind,

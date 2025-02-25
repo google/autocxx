@@ -1,0 +1,26 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+# https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+# <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+# option. This file may not be copied, modified, or distributed
+# except according to those terms.
+
+[package]
+name = "cpp_calling_rust"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cxx = "1.0.78"
+autocxx = { path = "../..", version="0.28.0" }
+uwuify = "0.2.2"
+textwrap = "0.14"
+fastrand = "1.5.0"
+
+[build-dependencies]
+autocxx-build = { path = "../../gen/build", version="0.28.0" }
+regex = "1.5.4"
+miette = { version="5", features = [ "fancy" ] }

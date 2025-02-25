@@ -6,16 +6,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::{
-    conversion::ConvertError,
-    types::{make_ident, QualifiedName},
-};
+use crate::types::{make_ident, QualifiedName};
 use indexmap::map::IndexMap as HashMap;
 use indoc::indoc;
 use once_cell::sync::OnceCell;
-use syn::{parse_quote, Type, TypePath, TypePtr};
+use syn::{parse_quote, TypePath};
 
-//// The behavior of the type.
+/// The behavior of the type.
 #[derive(Debug)]
 enum Behavior {
     CxxContainerPtr,
@@ -103,12 +100,12 @@ impl TypeDetails {
         let mut segs = self.rs_name.split("::").peekable();
         if segs.peek().map(|seg| seg.is_empty()).unwrap_or_default() {
             segs.next();
-            let segs = segs.into_iter().map(make_ident);
+            let segs = segs.map(make_ident);
             parse_quote! {
                 ::#(#segs)::*
             }
         } else {
-            let segs = segs.into_iter().map(make_ident);
+            let segs = segs.map(make_ident);
             parse_quote! {
                 #(#segs)::*
             }
@@ -143,7 +140,7 @@ pub(crate) fn known_types() -> &'static TypeDatabase {
 }
 
 /// The type of payload that a cxx generic can contain.
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum CxxGenericType {
     /// Not a generic at all
     Not,
@@ -247,7 +244,9 @@ impl TypeDatabase {
             .map(|td| {
                 matches!(
                     td.behavior,
-                    Behavior::CxxContainerPtr | Behavior::CxxContainerVector
+                    Behavior::CxxContainerPtr
+                        | Behavior::CxxContainerVector
+                        | Behavior::RustContainerByValueSafe
                 )
             })
             .unwrap_or(false)
@@ -447,8 +446,8 @@ fn create_type_database() -> TypeDatabase {
     ));
     for (cpp_type, rust_type) in (4..7).map(|x| 2i32.pow(x)).flat_map(|x| {
         vec![
-            (format!("uint{}_t", x), format!("u{}", x)),
-            (format!("int{}_t", x), format!("i{}", x)),
+            (format!("uint{x}_t"), format!("u{x}")),
+            (format!("int{x}_t"), format!("i{x}")),
         ]
     }) {
         db.insert(TypeDetails::new(
@@ -470,10 +469,10 @@ fn create_type_database() -> TypeDatabase {
     ));
 
     db.insert(TypeDetails::new(
-        "std::pin::Pin",
+        "core::pin::Pin",
         "Pin",
         Behavior::RustByValue, // because this is actually Pin<&something>
-        None,
+        Some("std::pin::Pin".to_string()),
         true,
         false,
     ));
@@ -481,18 +480,18 @@ fn create_type_database() -> TypeDatabase {
     let mut insert_ctype = |cname: &str| {
         let concatenated_name = cname.replace(' ', "");
         db.insert(TypeDetails::new(
-            format!("autocxx::c_{}", concatenated_name),
+            format!("autocxx::c_{concatenated_name}"),
             cname,
             Behavior::CVariableLengthByValue,
-            Some(format!("std::os::raw::c_{}", concatenated_name)),
+            Some(format!("std::os::raw::c_{concatenated_name}")),
             true,
             true,
         ));
         db.insert(TypeDetails::new(
-            format!("autocxx::c_u{}", concatenated_name),
-            format!("unsigned {}", cname),
+            format!("autocxx::c_u{concatenated_name}"),
+            format!("unsigned {cname}"),
             Behavior::CVariableLengthByValue,
-            Some(format!("std::os::raw::c_u{}", concatenated_name)),
+            Some(format!("std::os::raw::c_u{concatenated_name}")),
             true,
             true,
         ));
@@ -552,11 +551,4 @@ fn create_type_database() -> TypeDatabase {
         false,
     ));
     db
-}
-
-pub(crate) fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertError> {
-    match *ptr.elem {
-        Type::Path(..) => Ok(()),
-        _ => Err(ConvertError::InvalidPointee),
-    }
 }

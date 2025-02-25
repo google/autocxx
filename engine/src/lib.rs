@@ -10,15 +10,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// This feature=nightly could be set by build.rs, but since we only care
-// about it for docs, we ask docs.rs to set it in the Cargo.toml.
-#![cfg_attr(feature = "nightly", feature(doc_cfg))]
 #![forbid(unsafe_code)]
+#![cfg_attr(feature = "nightly", feature(doc_cfg))]
 
 mod ast_discoverer;
 mod conversion;
 mod cxxbridge;
 mod known_types;
+mod minisyn;
 mod output_generators;
 mod parse_callbacks;
 mod parse_file;
@@ -28,14 +27,17 @@ mod types;
 #[cfg(any(test, feature = "build"))]
 mod builder;
 
+use autocxx_bindgen::BindgenError;
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use miette::{SourceOffset, SourceSpan};
-use parse_callbacks::AutocxxParseCallbacks;
+use parse_callbacks::{AutocxxParseCallbacks, ParseCallbackResults, UnindexedParseCallbackResults};
 use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
 use regex::Regex;
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::{
     fs::File,
     io::prelude::*,
@@ -113,7 +115,7 @@ impl LocatedSynError {
 #[derive(Debug, Error, Diagnostic)]
 pub enum Error {
     #[error("Bindgen was unable to generate the initial .rs bindings for this file. This may indicate a parsing problem with the C++ headers.")]
-    Bindgen(()),
+    Bindgen(BindgenError),
     #[error(transparent)]
     #[diagnostic(transparent)]
     MacroParsing(LocatedSynError),
@@ -123,7 +125,10 @@ pub enum Error {
     #[error("no C++ include directory was provided.")]
     NoAutoCxxInc,
     #[error(transparent)]
+    #[diagnostic(transparent)]
     Conversion(conversion::ConvertError),
+    #[error("Using `unsafe_references_wrapped` requires the Rust nightly `arbitrary_self_types` feature")]
+    WrappedReferencesButNoArbitrarySelfTypes,
 }
 
 /// Result type.
@@ -140,6 +145,16 @@ enum State {
     NotGenerated,
     ParseOnly,
     Generated(Box<GenerationResults>),
+}
+
+/// Code generation options.
+#[derive(Default)]
+pub struct CodegenOptions<'a> {
+    // An option used by the test suite to force a more convoluted
+    // route through our code, to uncover bugs.
+    pub force_wrapper_gen: bool,
+    /// Options about the C++ code generation.
+    pub cpp_codegen_options: CppCodegenOptions<'a>,
 }
 
 const AUTOCXX_CLANG_ARGS: &[&str; 4] = &["-x", "c++", "-std=c++14", "-DBINDGEN"];
@@ -254,6 +269,7 @@ pub trait RebuildDependencyRecorder: std::fmt::Debug {
 pub struct IncludeCppEngine {
     config: IncludeCppConfig,
     state: State,
+    source_code: Option<Rc<String>>, // so we can create diagnostics
 }
 
 impl Parse for IncludeCppEngine {
@@ -264,14 +280,31 @@ impl Parse for IncludeCppEngine {
         } else {
             State::NotGenerated
         };
-        Ok(Self { config, state })
+        Ok(Self {
+            config,
+            state,
+            source_code: None,
+        })
     }
 }
 
 impl IncludeCppEngine {
-    pub fn new_from_syn(mac: Macro, file_contents: &str) -> Result<Self> {
-        mac.parse_body::<IncludeCppEngine>()
-            .map_err(|e| Error::MacroParsing(LocatedSynError::new(e, file_contents)))
+    pub fn new_from_syn(mac: Macro, file_contents: Rc<String>) -> Result<Self> {
+        let mut this = mac
+            .parse_body::<IncludeCppEngine>()
+            .map_err(|e| Error::MacroParsing(LocatedSynError::new(e, &file_contents)))?;
+        this.source_code = Some(file_contents);
+        Ok(this)
+    }
+
+    /// Used if we find that we're asked to auto-discover extern_rust_type and similar
+    /// but didn't have any include_cpp macro at all.
+    pub fn new_for_autodiscover() -> Self {
+        Self {
+            config: IncludeCppConfig::default(),
+            state: State::NotGenerated,
+            source_code: None,
+        }
     }
 
     pub fn config_mut(&mut self) -> &mut IncludeCppConfig {
@@ -287,7 +320,7 @@ impl IncludeCppEngine {
             self.config
                 .inclusions
                 .iter()
-                .map(|path| format!("#include \"{}\"\n", path)),
+                .map(|path| format!("#include \"{path}\"\n")),
             "",
         )
     }
@@ -304,15 +337,24 @@ impl IncludeCppEngine {
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
             })
-            .rustfmt_bindings(log::log_enabled!(log::Level::Info))
+            .formatter(if log::log_enabled!(log::Level::Info) {
+                bindgen::Formatter::Rustfmt
+            } else {
+                bindgen::Formatter::None
+            })
             .size_t_is_usize(true)
             .enable_cxx_namespaces()
             .generate_inline_functions(true)
             .respect_cxx_access_specs(true)
             .use_specific_virtual_function_receiver(true)
-            .cpp_semantic_attributes(true)
+            .use_opaque_newtype_wrapper(true)
+            .use_reference_newtype_wrapper(true)
+            .use_unused_template_param_newtype_wrapper(true)
             .represent_cxx_operators(true)
             .use_distinct_char16_t(true)
+            .generate_deleted_functions(true)
+            .generate_pure_virtuals(true)
+            .generate_private_functions(true)
             .layout_tests(false); // TODO revisit later
         for item in known_types().get_initial_blocklist() {
             builder = builder.blocklist_item(item);
@@ -335,7 +377,7 @@ impl IncludeCppEngine {
             builder
                 .command_line_flags()
                 .into_iter()
-                .map(|f| format!("\"{}\"", f))
+                .map(|f| format!("\"{f}\""))
                 .join(" ")
         );
         builder
@@ -370,7 +412,7 @@ impl IncludeCppEngine {
         let bindings = bindings.to_string();
         // Manually add the mod ffi {} so that we can ask syn to parse
         // into a single construct.
-        let bindings = format!("mod bindgen {{ {} }}", bindings);
+        let bindings = format!("mod bindgen {{ {bindings} }}");
         info!("Bindings: {}", bindings);
         syn::parse_str::<ItemMod>(&bindings)
             .map_err(|e| Error::BindingsParsing(LocatedSynError::new(e, &bindings)))
@@ -386,7 +428,7 @@ impl IncludeCppEngine {
         inc_dirs: Vec<PathBuf>,
         extra_clang_args: &[&str],
         dep_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
-        cpp_codegen_options: &CppCodegenOptions,
+        codegen_options: &CodegenOptions,
     ) -> Result<()> {
         // If we are in parse only mode, do nothing. This is used for
         // doc tests to ensure the parsing is valid, but we can't expect
@@ -397,11 +439,23 @@ impl IncludeCppEngine {
             State::Generated(_) => panic!("Only call generate once"),
         }
 
-        let mod_name = self.config.get_mod_name();
-        let mut builder = self.make_bindgen_builder(&inc_dirs, extra_clang_args);
-        if let Some(dep_recorder) = dep_recorder {
-            builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
+        if matches!(
+            self.config.unsafe_policy,
+            UnsafePolicy::ReferencesWrappedAllFunctionsSafe
+        ) && !rustversion::cfg!(nightly)
+        {
+            return Err(Error::WrappedReferencesButNoArbitrarySelfTypes);
         }
+
+        let parse_callback_results =
+            Rc::new(RefCell::new(UnindexedParseCallbackResults::default()));
+        let mod_name = self.config.get_mod_name();
+        let mut builder = self
+            .make_bindgen_builder(&inc_dirs, extra_clang_args)
+            .parse_callbacks(Box::new(AutocxxParseCallbacks::new(
+                dep_recorder,
+                parse_callback_results.clone(),
+            )));
         let header_contents = self.build_header();
         self.dump_header_if_so_configured(&header_contents, &inc_dirs, extra_clang_args);
         let header_and_prelude = format!("{}\n\n{}", known_types().get_prelude(), header_contents);
@@ -410,27 +464,41 @@ impl IncludeCppEngine {
 
         let bindings = builder.generate().map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
+        let parse_callback_results = parse_callback_results.take();
+        log::info!("Parse callback results: {:?}", parse_callback_results);
+
+        // Source code contents just used for diagnostics - if we don't have it,
+        // use a blank string and miette will not attempt to annotate it nicely.
+        let source_file_contents = self
+            .source_code
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| Rc::new("".to_string()));
 
         let converter = BridgeConverter::new(&self.config.inclusions, &self.config);
 
         let conversion = converter
             .convert(
                 bindings,
+                parse_callback_results.index(),
                 self.config.unsafe_policy.clone(),
                 header_contents,
-                cpp_codegen_options,
+                codegen_options,
+                &source_file_contents,
             )
             .map_err(Error::Conversion)?;
-        let mut items = conversion.rs;
-        let mut new_bindings: ItemMod = parse_quote! {
+        let items = conversion.rs;
+        let new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]
             #[allow(dead_code)]
             #[allow(non_upper_case_globals)]
             #[allow(non_camel_case_types)]
+            #[doc = "Generated using autocxx - do not edit directly"]
+            #[doc = "@generated"]
             mod #mod_name {
+                #(#items)*
             }
         };
-        new_bindings.content.as_mut().unwrap().1.append(&mut items);
         info!(
             "New bindings:\n{}",
             rust_pretty_printer::pretty_print(&new_bindings)
@@ -484,7 +552,7 @@ impl IncludeCppEngine {
                 "header": header,
                 "config": config
             });
-            let f = File::create(&output_path).unwrap();
+            let f = File::create(output_path).unwrap();
             serde_json::to_writer(f, &json).unwrap();
         }
     }
@@ -505,12 +573,12 @@ impl IncludeCppEngine {
         // to refer to local headers on the reduction machine too.
         let suffix = ALL_KNOWN_SYSTEM_HEADERS
             .iter()
-            .map(|hdr| format!("#include <{}>\n", hdr))
+            .map(|hdr| format!("#include <{hdr}>\n"))
             .join("\n");
         let input = format!("/*\nautocxx config:\n\n{:?}\n\nend autocxx config.\nautocxx preprocessed input:\n*/\n\n{}\n\n/* autocxx: extra headers added below for completeness. */\n\n{}\n{}\n",
             self.config, header, suffix, cxx_gen::HEADER);
         let mut tf = NamedTempFile::new().unwrap();
-        write!(tf, "{}", input).unwrap();
+        write!(tf, "{input}").unwrap();
         let tp = tf.into_temp_path();
         preprocess(&tp, &PathBuf::from(output_path), inc_dirs, extra_clang_args).unwrap();
     }
@@ -550,7 +618,8 @@ pub fn do_cxx_cpp_generation(
     cxxgen_header_name: String,
 ) -> Result<CppFilePair, cxx_gen::Error> {
     let mut opt = cxx_gen::Opt::default();
-    opt.cxx_impl_annotations = cpp_codegen_options.cxx_impl_annotations.clone();
+    opt.cxx_impl_annotations
+        .clone_from(&cpp_codegen_options.cxx_impl_annotations);
     let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
     Ok(CppFilePair {
         header: strip_system_headers(
@@ -565,7 +634,11 @@ pub fn do_cxx_cpp_generation(
     })
 }
 
-pub(crate) fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool) -> Vec<u8> {
+pub fn get_cxx_header_bytes(suppress_system_headers: bool) -> Vec<u8> {
+    strip_system_headers(cxx_gen::HEADER.as_bytes().to_vec(), suppress_system_headers)
+}
+
+fn strip_system_headers(input: Vec<u8>, suppress_system_headers: bool) -> Vec<u8> {
     if suppress_system_headers {
         std::str::from_utf8(&input)
             .unwrap()
@@ -660,7 +733,7 @@ pub struct AutocxxgenHeaderNamer<'a>(pub Box<dyn 'a + Fn(String) -> String>);
 
 impl Default for AutocxxgenHeaderNamer<'static> {
     fn default() -> Self {
-        Self(Box::new(|mod_name| format!("autocxxgen_{}.h", mod_name)))
+        Self(Box::new(|mod_name| format!("autocxxgen_{mod_name}.h")))
     }
 }
 
@@ -677,7 +750,27 @@ pub struct CxxgenHeaderNamer<'a>(pub Box<dyn 'a + Fn() -> String>);
 
 impl Default for CxxgenHeaderNamer<'static> {
     fn default() -> Self {
-        Self(Box::new(|| "cxxgen.h".into()))
+        // The default implementation here is to name these headers
+        // cxxgen.h, cxxgen1.h, cxxgen2.h etc.
+        // These names are not especially predictable by callers and this
+        // behavior is not tested anywhere - so this is considered semi-
+        // supported, at best. This only comes into play in the rare case
+        // that you're generating bindings to multiple include_cpp!
+        // or a mix of include_cpp! and #[cxx::bridge] bindings.
+        let header_counter = Rc::new(RefCell::new(0));
+        Self(Box::new(move || {
+            let header_counter = header_counter.clone();
+            let header_counter_cell = header_counter.as_ref();
+            let mut header_counter = header_counter_cell.borrow_mut();
+            if *header_counter == 0 {
+                *header_counter += 1;
+                "cxxgen.h".into()
+            } else {
+                let count = *header_counter;
+                *header_counter += 1;
+                format!("cxxgen{count}.h")
+            }
+        }))
     }
 }
 
@@ -694,10 +787,10 @@ pub struct CppCodegenOptions<'a> {
     /// You may wish to do this to make a hermetic test case with no
     /// external dependencies.
     pub suppress_system_headers: bool,
-    /// Optionally, a prefix to go at `#include "<here>cxx.h". This is a header file from the `cxx`
+    /// Optionally, a prefix to go at `#include "*here*cxx.h". This is a header file from the `cxx`
     /// crate.
     pub path_to_cxx_h: Option<String>,
-    /// Optionally, a prefix to go at `#include "<here>cxxgen.h". This is a header file which we
+    /// Optionally, a prefix to go at `#include "*here*cxxgen.h". This is a header file which we
     /// generate.
     pub path_to_cxxgen_h: Option<String>,
     /// Optionally, a function called to determine the name that will be used
@@ -720,7 +813,7 @@ fn proc_macro_span_to_miette_span(span: &proc_macro2::Span) -> SourceSpan {
     // miette.
     struct Err;
     let r: Result<(usize, usize), Err> = (|| {
-        let span_desc = format!("{:?}", span);
+        let span_desc = format!("{span:?}");
         let re = Regex::new(r"(\d+)..(\d+)").unwrap();
         let captures = re.captures(&span_desc).ok_or(Err)?;
         let start = captures.get(1).ok_or(Err)?;

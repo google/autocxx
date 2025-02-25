@@ -11,7 +11,7 @@ use indexmap::set::IndexSet as HashSet;
 use super::deps::HasDependencies;
 use super::fun::{FnAnalysis, FnKind, FnPhase};
 use crate::conversion::apivec::ApiVec;
-use crate::conversion::{convert_error::ErrorContext, ConvertError};
+use crate::conversion::{convert_error::ErrorContext, ConvertErrorFromCpp};
 use crate::{conversion::api::Api, known_types};
 
 /// Remove any APIs which depend on other items which have been ignored.
@@ -44,7 +44,10 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: ApiVec<FnPhase>) -> Ap
                 if !ignored_dependents.is_empty() {
                     iterate_again = true;
                     ignored_items.insert(api.name().clone());
-                    create_ignore_item(api, ConvertError::IgnoredDependent(ignored_dependents))
+                    create_ignore_item(
+                        api,
+                        ConvertErrorFromCpp::IgnoredDependent(ignored_dependents),
+                    )
                 } else {
                     let mut missing_deps = api.deps().filter(|dep| {
                         !valid_types.contains(*dep) && !known_types().is_known_type(dep)
@@ -52,7 +55,10 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: ApiVec<FnPhase>) -> Ap
                     let first = missing_deps.next();
                     std::mem::drop(missing_deps);
                     if let Some(missing_dep) = first.cloned() {
-                        create_ignore_item(api, ConvertError::UnknownDependentType(missing_dep))
+                        create_ignore_item(
+                            api,
+                            ConvertErrorFromCpp::UnknownDependentType(missing_dep),
+                        )
                     } else {
                         api
                     }
@@ -63,7 +69,7 @@ pub(crate) fn filter_apis_by_ignored_dependents(mut apis: ApiVec<FnPhase>) -> Ap
     apis
 }
 
-fn create_ignore_item(api: Api<FnPhase>, err: ConvertError) -> Api<FnPhase> {
+fn create_ignore_item(api: Api<FnPhase>, err: ConvertErrorFromCpp) -> Api<FnPhase> {
     let id = api.name().get_final_ident();
     log::info!("Marking as ignored: {} because {}", id.to_string(), err);
     Api::IgnoredItem {

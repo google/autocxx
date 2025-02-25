@@ -9,6 +9,7 @@
 use std::{
     borrow::Cow,
     collections::HashSet,
+    ffi::OsString,
     fmt::Display,
     io::{self, Read},
     path::PathBuf,
@@ -135,11 +136,11 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
                     &case.cpp,
                     &case.hdr,
                     case.rs,
-                    args.value_of_os("manifest_dir").unwrap(),
+                    &OsString::from(args.value_of("manifest_dir").unwrap()),
                 );
                 let desc = match err {
                     Ok(_) => "passed".to_string(),
-                    Err(ref err) => format!("failed: {:?}", err),
+                    Err(ref err) => format!("failed: {err:?}"),
                 };
                 eprintln!(
                     "Doctest {}/{} at {} {}.",
@@ -164,7 +165,7 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
             .read_to_string(&mut stdout_str)
             .unwrap();
         if !stdout_str.is_empty() {
-            eprintln!("Stdout from tests:\n{}", stdout_str);
+            eprintln!("Stdout from tests:\n{stdout_str}");
         }
         if !fails.is_empty() {
             panic!(
@@ -304,7 +305,7 @@ fn handle_code_block(
 ) -> impl Iterator<Item = String> {
     let input_str = lines.join("\n");
     let fn_call = syn::parse_str::<syn::Expr>(&input_str)
-        .unwrap_or_else(|_| panic!("Unable to parse outer function at {}", location));
+        .unwrap_or_else(|_| panic!("Unable to parse outer function at {location}"));
     let fn_call = match fn_call {
         Expr::Call(expr) => expr,
         _ => panic!("Parsing unexpected"),
@@ -338,7 +339,7 @@ fn handle_code_block(
             cpp,
             hdr,
             rs: syn::parse_file(&rs)
-                .unwrap_or_else(|_| panic!("Unable to parse code at {}", location))
+                .unwrap_or_else(|_| panic!("Unable to parse code at {location}"))
                 .to_token_stream(),
             location,
         });

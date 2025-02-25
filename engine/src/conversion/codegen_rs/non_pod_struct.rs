@@ -6,8 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::conversion::api::Layout;
 use crate::types::make_ident;
+use autocxx_bindgen::callbacks::Layout;
 use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::parse::Parser;
@@ -38,6 +38,25 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct, layout: Option<Layout>) {
     // (if we have layout information from bindgen we use that instead)
     // (2) We want to ensure the type is !Unpin
     // (3) We want to ensure it's not Send or Sync
+    // In addition, we want to avoid UB:
+    // (4) By marking the data as MaybeUninit we ensure there's no UB
+    //     by Rust assuming it's initialized
+    // (5) By marking it as UnsafeCell we perhaps help reduce aliasing UB.
+    //     This is on the assumption that references to this type may pass
+    //     through C++ and get duplicated, so there may be multiple Rust
+    //     references to the same underlying data.
+    //     The correct solution to this is to put autocxx into the mode
+    //     where it uses CppRef<T> instead of Rust references, but otherwise,
+    //     using UnsafeCell here may help a bit. It definitely does not
+    //     eliminate the UB here for the following reasons:
+    //     a) The references floating around are to the outer type, not the
+    //        data stored within the UnsafeCell.
+    //     b) C++ may have multiple mutable references, or may have mutable
+    //        references coexisting with immutable references, and no amount
+    //        of UnsafeCell can make that safe.
+    //     Nevertheless the use of UnsafeCell here may (*may*) reduce the
+    //     opportunities for aliasing UB. Again, the only actual way to
+    //     eliminate UB is to use CppRef<T> everywhere instead of &T and &mut T.
     //
     // For opaque types, the Rusty opaque structure could in fact be generated
     // by three different things:
@@ -51,11 +70,18 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct, layout: Option<Layout>) {
     // much more difficult.
     // We use (c) for abstract types. For everything else, we do it ourselves
     // for maximal control. See codegen_rs/mod.rs generate_type for more notes.
+    //
+    // It is worth noting that our constraints here are a bit more severe than
+    // for cxx. In the case of cxx, C++ types are usually represented as
+    // zero-sized types within Rust. Zero-sized types, by definition, can't
+    // have overlapping references and thus can't have aliasing UB. We can't
+    // do that because we want C++ types to be representable on the Rust stack,
+    // and thus we need to tell Rust their real size and alignment.
     // First work out attributes.
     let doc_attr = s
         .attrs
         .iter()
-        .filter(|a| a.path.get_ident().iter().any(|p| *p == "doc"))
+        .filter(|a| a.path().get_ident().iter().any(|p| *p == "doc"))
         .cloned();
     let repr_attr = if let Some(layout) = &layout {
         let align = make_lit_int(layout.align);
@@ -85,9 +111,9 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct, layout: Option<Layout>) {
         .filter_map(|(counter, gp)| match gp {
             GenericParam::Type(gpt) => {
                 let id = &gpt.ident;
-                let field_name = make_ident(&format!("_phantom_{}", counter));
+                let field_name = make_ident(format!("_phantom_{counter}"));
                 let toks = quote! {
-                    #field_name: ::std::marker::PhantomData<::std::cell::UnsafeCell< #id >>
+                    #field_name: ::core::marker::PhantomData<::core::cell::UnsafeCell< #id >>
                 };
                 Some(Field::parse_named.parse2(toks).unwrap())
             }
@@ -98,7 +124,7 @@ pub(crate) fn make_non_pod(s: &mut ItemStruct, layout: Option<Layout>) {
         Some(
             syn::Field::parse_named
                 .parse2(quote! {
-                    _data: [u8; #size]
+                    _data: ::core::cell::UnsafeCell<::core::mem::MaybeUninit<[u8; #size]>>
                 })
                 .unwrap(),
         )
