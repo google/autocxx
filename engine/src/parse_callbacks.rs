@@ -8,13 +8,13 @@
 
 use std::{cell::RefCell, fmt::Display, panic::UnwindSafe, rc::Rc};
 
-use crate::types::Namespace;
+use crate::types::{strip_bindgen_original_suffix, Namespace};
 use crate::{conversion::CppEffectiveName, types::QualifiedName, RebuildDependencyRecorder};
-use autocxx_bindgen::callbacks::ParseCallbacks;
 use autocxx_bindgen::callbacks::Virtualness;
 use autocxx_bindgen::callbacks::{
-    DiscoveredItem, DiscoveredItemId, Explicitness, Layout, SpecialMemberKind, Visibility,
+    DiscoveredItem, DiscoveredItemId, Explicitness, SpecialMemberKind, Visibility,
 };
+use autocxx_bindgen::callbacks::{ItemInfo, ItemKind, ParseCallbacks};
 use indexmap::IndexMap as HashMap;
 use indexmap::IndexSet as HashSet;
 use quote::quote;
@@ -124,7 +124,6 @@ pub(crate) struct UnindexedParseCallbackResults {
     original_names: HashMap<DiscoveredItemId, CppOriginalName>,
     virtuals: HashMap<DiscoveredItemId, Virtualness>,
     root_mod: Option<DiscoveredItemId>,
-    layouts: HashMap<DiscoveredItemId, Layout>,
     visibility: HashMap<DiscoveredItemId, Visibility>,
     special_member_kinds: HashMap<DiscoveredItemId, SpecialMemberKind>,
     explicitness: HashMap<DiscoveredItemId, Explicitness>,
@@ -224,11 +223,6 @@ impl ParseCallbackResults {
         }
     }
 
-    pub(crate) fn get_layout(&self, name: &QualifiedName) -> Option<Layout> {
-        self.id_by_name(name)
-            .and_then(|id| self.results.layouts.get(&id).cloned())
-    }
-
     pub(crate) fn get_cpp_visibility(&self, name: &QualifiedName) -> Visibility {
         self.id_by_name(name)
             .and_then(|id| self.results.visibility.get(&id).cloned())
@@ -279,6 +273,22 @@ impl ParseCallbacks for AutocxxParseCallbacks {
         }
     }
 
+    fn generated_name_override(&self, _item_info: ItemInfo<'_>) -> Option<String> {
+        // We rename all functions in the original bindgen mod because
+        // we will generate alternative implementations instead. We still need
+        // to retain the functions so that we can detect them as we
+        // parse the bindgen output.
+        // For free functions, this isn't necessary: we simply avoid
+        // adding a 'use bindgen::root::some_function' in the output
+        // namespace. But for methods, we have no way to avoid conflicts
+        // if we generate an alternative implementation of a method
+        // with a given name.
+        match _item_info.kind {
+            ItemKind::Function => Some(format!("{}_bindgen_original", _item_info.name)),
+            _ => None,
+        }
+    }
+
     fn denote_cpp_name(
         &self,
         id: DiscoveredItemId,
@@ -287,6 +297,7 @@ impl ParseCallbacks for AutocxxParseCallbacks {
     ) {
         let mut results = self.results.borrow_mut();
         if let Some(original_name) = original_name {
+            let original_name = strip_bindgen_original_suffix(original_name);
             results
                 .original_names
                 .insert(id, CppOriginalName(original_name.to_string()));
@@ -310,6 +321,7 @@ impl ParseCallbacks for AutocxxParseCallbacks {
                 ..
             }
             | DiscoveredItem::Function { final_name } => {
+                let final_name = strip_bindgen_original_suffix(&final_name);
                 self.results.borrow_mut().names.insert(id, final_name);
             }
             DiscoveredItem::Mod {
@@ -326,10 +338,6 @@ impl ParseCallbacks for AutocxxParseCallbacks {
             }
             _ => {}
         }
-    }
-
-    fn denote_layout(&self, id: DiscoveredItemId, layout: &Layout) {
-        self.results.borrow_mut().layouts.insert(id, *layout);
     }
 
     fn denote_visibility(&self, id: DiscoveredItemId, visibility: Visibility) {

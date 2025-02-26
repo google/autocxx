@@ -23,7 +23,8 @@ use super::{
     function_wrapper_rs::RustParamConversion,
     maybe_unsafes_to_tokens,
     unqualify::{unqualify_params_minisyn, unqualify_ret_type},
-    ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
+    utils::generate_cxx_use_stmt,
+    ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails,
 };
 use crate::{
     conversion::{
@@ -34,7 +35,7 @@ use crate::{
         api::UnsafetyNeeded,
     },
     minisyn::{minisynize_vec, FnArg},
-    types::{Namespace, QualifiedName},
+    types::QualifiedName,
 };
 use crate::{
     conversion::{api::FuncToConvert, codegen_rs::lifetime::add_explicit_lifetime_if_necessary},
@@ -85,7 +86,7 @@ impl UnsafetyNeeded {
 }
 
 pub(super) fn gen_function(
-    ns: &Namespace,
+    name: &QualifiedName,
     fun: FuncToConvert,
     analysis: FnAnalysis,
     non_pod_types: &HashSet<QualifiedName>,
@@ -108,7 +109,6 @@ pub(super) fn gen_function(
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
     let mut trait_impl_entry = None;
-    let mut bindgen_mod_items = Vec::new();
     let always_unsafe_due_to_trait_definition = match kind {
         FnKind::TraitMethod { ref details, .. } => details.trait_call_is_unsafe,
         _ => false,
@@ -132,6 +132,8 @@ pub(super) fn gen_function(
         non_pod_types,
         &ret_conversion,
     );
+
+    let mut output_mod_items = Vec::new();
 
     if analysis.rust_wrapper_needed {
         match kind {
@@ -159,23 +161,17 @@ pub(super) fn gen_function(
             }
             _ => {
                 // Generate plain old function
-                bindgen_mod_items.push(fn_generator.generate_function_impl());
+                output_mod_items.push(fn_generator.generate_function_impl());
             }
         }
+    } else if matches!(kind, FnKind::Function) {
+        let alias = match analysis.rust_rename_strategy {
+            RustRenameStrategy::RenameInOutputMod(ref alias) => Some(&alias.0),
+            _ => None,
+        };
+        output_mod_items.push(generate_cxx_use_stmt(name, alias));
     }
 
-    let materialization = match kind {
-        FnKind::Method { .. } | FnKind::TraitMethod { .. } => None,
-        FnKind::Function => match analysis.rust_rename_strategy {
-            _ if analysis.rust_wrapper_needed => {
-                Some(Use::SpecificNameFromBindgen(make_ident(rust_name).into()))
-            }
-            RustRenameStrategy::RenameInOutputMod(ref alias) => {
-                Some(Use::UsedFromCxxBridgeWithAlias(alias.clone().into()))
-            }
-            _ => Some(Use::UsedFromCxxBridge),
-        },
-    };
     if let Some(cpp_call_name) = cpp_call_name {
         if cpp_call_name.does_not_match_cxxbridge_name(&cxxbridge_name) && !wrapper_function_needed
         {
@@ -197,10 +193,10 @@ pub(super) fn gen_function(
     let ret_type = unqualify_ret_type(ret_type.into_owned());
     // And we need to make an attribute for the namespace that the function
     // itself is in.
-    let namespace_attr = if ns.is_empty() || wrapper_function_needed {
+    let namespace_attr = if name.get_namespace().is_empty() || wrapper_function_needed {
         Vec::new()
     } else {
-        let namespace_string = ns.to_string();
+        let namespace_string = name.get_namespace().to_string();
         Attribute::parse_outer
             .parse2(quote!(
                 #[namespace = #namespace_string]
@@ -217,10 +213,9 @@ pub(super) fn gen_function(
     ));
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
-        bindgen_mod_items,
         impl_entry,
         trait_impl_entry,
-        materializations: materialization.into_iter().collect(),
+        output_mod_items,
         ..Default::default()
     }
 }

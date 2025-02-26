@@ -207,7 +207,7 @@ pub(super) fn find_constructors_present(
                 PodAnalysis {
                     bases,
                     field_info,
-                    is_generic: false,
+                    num_generics: 0usize,
                     in_anonymous_namespace: false,
                     ..
                 },

@@ -95,7 +95,7 @@ impl QualifiedName {
     pub(crate) fn from_type_path(typ: &TypePath) -> Self {
         let mut seg_iter = typ.path.segments.iter().peekable();
         let first_seg = seg_iter.next().unwrap().ident.clone();
-        if first_seg == "root" {
+        if first_seg == "root" || first_seg == "output" {
             // This is a C++ type prefixed with a namespace,
             // e.g. std::string or something the user has defined.
             Self::from_segments(seg_iter) // all but 'root'
@@ -165,7 +165,13 @@ impl QualifiedName {
         ["bindgen", "root"]
             .iter()
             .map(make_ident)
-            .chain(self.ns_segment_iter().map(make_ident))
+            .chain(self.get_root_path_idents())
+            .collect()
+    }
+
+    pub(crate) fn get_root_path_idents(&self) -> Vec<Ident> {
+        self.ns_segment_iter()
+            .map(make_ident)
             .chain(std::iter::once(self.get_final_ident()))
             .collect()
     }
@@ -183,28 +189,18 @@ impl QualifiedName {
         }
     }
 
+    /// Generates a type path prefixed with `output::`
     pub(crate) fn to_type_path(&self) -> TypePath {
         if let Some(known_type_path) = known_types().known_type_type_path(self) {
             known_type_path
         } else {
-            let root = "root".to_string();
-            let segs = std::iter::once(root.as_str())
+            let segs = std::iter::once("output")
                 .chain(self.ns_segment_iter())
                 .chain(std::iter::once(self.1.as_str()))
                 .map(make_ident);
             parse_quote! {
                 #(#segs)::*
             }
-        }
-    }
-
-    pub(crate) fn type_path_from_root(&self) -> TypePath {
-        let segs = self
-            .ns_segment_iter()
-            .chain(std::iter::once(self.1.as_str()))
-            .map(make_ident);
-        parse_quote! {
-            #(#segs)::*
         }
     }
 
@@ -284,8 +280,37 @@ fn validate_str_ok_for_rust(label: &str) -> Result<(), InvalidIdentError> {
         .map(|_| ())
 }
 
+/// When we're given a name like `some_function_bindgen_original1` returns
+/// `some_function1`
+pub(crate) fn strip_bindgen_original_suffix(effective_fun_name: &str) -> String {
+    let bindgen_original_re = regex_static::static_regex!(r"(.*)_bindgen_original(\d*)");
+    bindgen_original_re
+        .captures(effective_fun_name)
+        .map(|m| {
+            format!(
+                "{}{}",
+                m.get(1).unwrap().as_str(),
+                m.get(2).unwrap().as_str()
+            )
+        })
+        .unwrap_or_else(|| effective_fun_name.to_string())
+}
+
+/// When we're given a name like `some_function_bindgen_original1` returns
+/// `some_function1`
+pub(crate) fn strip_bindgen_original_suffix_from_ident(
+    effective_fun_name: &syn::Ident,
+) -> syn::Ident {
+    make_ident(strip_bindgen_original_suffix(
+        &effective_fun_name.to_string(),
+    ))
+    .0
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::types::strip_bindgen_original_suffix;
+
     use super::QualifiedName;
 
     #[test]
@@ -297,6 +322,20 @@ mod tests {
         assert_eq!(
             QualifiedName::new_from_cpp_name("u64").to_cpp_name(),
             "uint64_t"
+        );
+    }
+
+    #[test]
+    fn test_strip() {
+        assert_eq!(strip_bindgen_original_suffix("foo"), "foo");
+        assert_eq!(strip_bindgen_original_suffix("foo_bindgen_original"), "foo");
+        assert_eq!(
+            strip_bindgen_original_suffix("foo_bindgen_original1"),
+            "foo1"
+        );
+        assert_eq!(
+            strip_bindgen_original_suffix("foo_bindgen_original1234"),
+            "foo1234"
         );
     }
 }

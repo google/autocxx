@@ -192,6 +192,7 @@ impl<'a> TypeConverter<'a> {
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         // First we try to spot if these are the special marker paths that
         // bindgen uses to denote references or other things.
+        // TODO the next two lines can be removed
         if let Some(ty) = unwrap_has_unused_template_param(&typ) {
             self.convert_type(ty.clone(), ns, ctx)
         } else if let Some(ty) = unwrap_has_opaque(&typ) {
@@ -277,7 +278,8 @@ impl<'a> TypeConverter<'a> {
         ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         // First, qualify any unqualified paths.
-        if typ.path.segments.iter().next().unwrap().ident != "root" {
+        let first_seg = &typ.path.segments.iter().next().unwrap().ident;
+        if first_seg != "root" && first_seg != "output" {
             let ty = QualifiedName::from_type_path(&typ);
             // If the type looks like it is unqualified, check we know it
             // already, and if not, qualify it according to the current
@@ -289,7 +291,7 @@ impl<'a> TypeConverter<'a> {
                     return Err(ConvertErrorFromCpp::UnsupportedBuiltInType(ty));
                 }
                 if !self.types_found.contains(&ty) {
-                    typ.path.segments = std::iter::once("root")
+                    typ.path.segments = std::iter::once("output")
                         .chain(ns.iter())
                         .map(|s| {
                             let i = make_ident(s);
@@ -313,7 +315,7 @@ impl<'a> TypeConverter<'a> {
         // Now convert this type itself.
         deps.insert(original_tn.clone());
         // First let's see if this is a typedef.
-        let (typ, tn) = match self.resolve_typedef(&original_tn)? {
+        let (mut typ, tn) = match self.resolve_typedef(&original_tn)? {
             None => (typ, original_tn),
             Some(Type::Path(resolved_tp)) => {
                 let resolved_tn = QualifiedName::from_type_path(resolved_tp);
@@ -350,7 +352,17 @@ impl<'a> TypeConverter<'a> {
                 }
                 substitute_type
             }
-            None => typ,
+            None => {
+                // Pass through as-is, but replacing `root` with `output`
+                // in the first path element. We don't just create a whole
+                // new `TypePath` because that would discard any generics.
+                if let Some(first_seg) = typ.path.segments.get_mut(0) {
+                    if first_seg.ident == "root" {
+                        first_seg.ident = make_ident("output").0;
+                    }
+                }
+                typ
+            }
         };
 
         let mut extra_apis = ApiVec::new();
@@ -726,7 +738,7 @@ impl TypedefTarget for TypedefAnalysis {
     fn get_target(&self) -> Option<&Type> {
         Some(match self.kind {
             TypedefKind::Type(ref ty) => &ty.ty,
-            TypedefKind::Use(_, ref ty) => ty,
+            TypedefKind::Use(ref ty) => ty,
         })
     }
 }

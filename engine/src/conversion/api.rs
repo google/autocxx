@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use autocxx_bindgen::callbacks::{Explicitness, Layout, SpecialMemberKind, Virtualness};
+use autocxx_bindgen::callbacks::{Explicitness, SpecialMemberKind, Virtualness};
 
 use syn::{
     punctuated::Punctuated,
@@ -16,8 +16,8 @@ use syn::{
 use crate::types::{make_ident, Namespace, QualifiedName};
 use crate::{
     minisyn::{
-        Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, Pat,
-        ReturnType, Type, Visibility,
+        Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, Pat, ReturnType, Type,
+        Visibility,
     },
     parse_callbacks::CppOriginalName,
 };
@@ -51,7 +51,6 @@ pub(crate) enum TypeKind {
 #[derive(Debug)]
 pub(crate) struct StructDetails {
     pub(crate) item: ItemStruct,
-    pub(crate) layout: Option<Layout>,
     pub(crate) has_rvalue_reference_fields: bool,
 }
 
@@ -204,7 +203,7 @@ impl AnalysisPhase for NullPhase {
 
 #[derive(Clone, Debug)]
 pub(crate) enum TypedefKind {
-    Use(ItemUse, Box<Type>),
+    Use(Box<Type>),
     Type(ItemType),
 }
 

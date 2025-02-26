@@ -394,12 +394,9 @@ impl<'a> FnAnalyzer<'a> {
         apis.iter()
             .filter_map(|api| match api {
                 Api::Struct {
-                    analysis:
-                        PodAnalysis {
-                            is_generic: true, ..
-                        },
+                    analysis: PodAnalysis { num_generics, .. },
                     ..
-                } => Some(api.name().clone()),
+                } if *num_generics > 0 => Some(api.name().clone()),
                 _ => None,
             })
             .collect()
@@ -2224,11 +2221,11 @@ fn constructor_with_suffix<'a>(rust_name: &'a str, nested_type_ident: &str) -> O
 impl Api<FnPhase> {
     pub(crate) fn name_for_allowlist(&self) -> QualifiedName {
         match &self {
-            Api::Function { analysis, .. } => match analysis.kind {
+            Api::Function { fun, analysis, .. } => match analysis.kind {
                 FnKind::Method { ref impl_for, .. } => impl_for.clone(),
                 FnKind::TraitMethod { ref impl_for, .. } => impl_for.clone(),
                 FnKind::Function => {
-                    QualifiedName::new(self.name().get_namespace(), make_ident(&analysis.rust_name))
+                    QualifiedName::new(self.name().get_namespace(), fun.ident.clone())
                 }
             },
             Api::RustSubclassFn { subclass, .. } => subclass.0.name.clone(),

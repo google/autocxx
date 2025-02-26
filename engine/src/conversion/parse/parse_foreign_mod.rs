@@ -16,6 +16,7 @@ use crate::conversion::{
     convert_error::ErrorContext,
 };
 use crate::minisyn::{minisynize_punctuated, minisynize_vec};
+use crate::types::strip_bindgen_original_suffix_from_ident;
 use crate::ParseCallbackResults;
 use crate::{
     conversion::ConvertErrorFromCpp,
@@ -70,11 +71,12 @@ impl<'a> ParseForeignMod<'a> {
         match i {
             ForeignItem::Fn(item) => {
                 let doc_attrs = get_doc_attrs(&item.attrs);
-                let qn = QualifiedName::new(&self.ns, item.sig.ident.clone().into());
+                let unsuffixed_name = strip_bindgen_original_suffix_from_ident(&item.sig.ident);
+                let qn = QualifiedName::new(&self.ns, unsuffixed_name.clone().into());
                 self.funcs_to_convert.push(FuncToConvert {
                     provenance: Provenance::Bindgen,
                     self_ty: None,
-                    ident: item.sig.ident.clone().into(),
+                    ident: unsuffixed_name.clone().into(),
                     doc_attrs: minisynize_vec(doc_attrs),
                     inputs: minisynize_punctuated(item.sig.inputs.clone()),
                     output: item.sig.output.clone().into(),
@@ -115,6 +117,8 @@ impl<'a> ParseForeignMod<'a> {
                     Some(id) => id.clone(),
                     None => itm.sig.ident,
                 };
+                let effective_fun_name =
+                    strip_bindgen_original_suffix_from_ident(&effective_fun_name);
                 self.method_receivers.insert(
                     effective_fun_name,
                     QualifiedName::new(&self.ns, ty_id.clone().into()),
