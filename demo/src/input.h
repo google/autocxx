@@ -13,15 +13,20 @@
 #include <stdint.h>
 #include <string>
 
+/// A C++ goat.
 class Goat {
 public:
+    /// Goat constructor.
     Goat() : horns(0) {}
+    /// Add a horn to the goat.
     void add_a_horn();
+    /// Describe the goat.
     std::string describe() const;
 private:
     uint32_t horns;
 };
 
+/// Do some maths!
 inline uint32_t DoMath(uint32_t a) {
     return a * 3;
 }
