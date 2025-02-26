@@ -191,14 +191,10 @@ impl QualifiedName {
 
     /// Generates a type path prefixed with `output::`
     pub(crate) fn to_type_path(&self) -> TypePath {
-        self.type_path_relative_to("output")
-    }
-
-    fn type_path_relative_to(&self, root_name: &str) -> TypePath {
         if let Some(known_type_path) = known_types().known_type_type_path(self) {
             known_type_path
         } else {
-            let segs = std::iter::once(root_name)
+            let segs = std::iter::once("output")
                 .chain(self.ns_segment_iter())
                 .chain(std::iter::once(self.1.as_str()))
                 .map(make_ident);
