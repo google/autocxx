@@ -335,12 +335,11 @@ impl IncludeCppEngine {
             .iter()
             .map(|t| format!("#[repr(transparent)] pub struct __bindgen_marker_{t}<T: ?Sized>(T);"))
             .join(" ");
-        let mut all_module_raw_line = bindgen_marker_types
+        let use_list = bindgen_marker_types
             .iter()
-            .map(|t| format!("#[allow(unused_imports)] use super::__bindgen_marker_{t};"))
-            .join(" ");
-        all_module_raw_line
-            .push_str("#[allow(unused_imports)] use autocxx::c_char16_t as bindgen_cchar16_t;");
+            .map(|t| format!("__bindgen_marker_{t}"))
+            .join(", ");
+        let all_module_raw_line = format!("#[allow(unused_imports)] use super::{{{use_list}}}; #[allow(unused_imports)] use autocxx::c_char16_t as bindgen_cchar16_t;");
 
         let mut builder = bindgen::builder()
             .clang_args(make_clang_args(inc_dirs, extra_clang_args))
