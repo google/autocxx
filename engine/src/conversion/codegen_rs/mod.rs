@@ -12,6 +12,7 @@ mod impl_item_creator;
 mod lifetime;
 mod namespace_organizer;
 pub(crate) mod unqualify;
+mod utils;
 
 use indexmap::map::IndexMap as HashMap;
 use indexmap::set::IndexSet as HashSet;
@@ -24,6 +25,7 @@ use syn::{
     parse_quote, punctuated::Punctuated, token::Comma, Attribute, Expr, FnArg, ForeignItem,
     ForeignItemFn, Ident, ImplItem, Item, ItemForeignMod, ItemMod, TraitItem, Type, TypePath,
 };
+use utils::{find_output_mod_root, generate_cxx_use_stmt};
 
 use crate::{
     conversion::codegen_rs::unqualify::{unqualify_params, unqualify_ret_type},
@@ -63,23 +65,6 @@ struct ImplBlockDetails {
 struct TraitImplBlockDetails {
     item: TraitItem,
     key: TraitImplSignature,
-}
-
-/// Whether and how this item should be exposed in the mods constructed
-/// for actual end-user use.
-#[derive(Clone)]
-enum Use {
-    /// Uses from cxx::bridge
-    UsedFromCxxBridge,
-    /// 'use' points to cxx::bridge with a different name
-    UsedFromCxxBridgeWithAlias(Ident),
-    /// 'use' directive points to bindgen
-    UsedFromBindgen,
-    /// Do not expose the original item from bindgen, but instead create
-    /// an opaque struct.
-    CreateOpaqueTypeWrappingBindgen { num_generics: usize },
-    /// Some kind of custom item
-    Custom(Box<Item>),
 }
 
 fn get_string_items() -> Vec<Item> {
@@ -326,20 +311,8 @@ impl<'a> RsCodeGenerator<'a> {
         ns_entries: &NamespaceEntries<(QualifiedName, RsCodegenResult)>,
         output_items: &mut Vec<Item>,
     ) {
-        for (name, codegen) in ns_entries.entries() {
-            output_items.extend(codegen.materializations.iter().map(|materialization| {
-                match materialization {
-                    Use::UsedFromCxxBridgeWithAlias(ref alias) => {
-                        Self::generate_cxx_use_stmt(name, Some(alias))
-                    }
-                    Use::UsedFromCxxBridge => Self::generate_cxx_use_stmt(name, None),
-                    Use::UsedFromBindgen => Self::generate_bindgen_use_stmt(name),
-                    Use::Custom(item) => *item.clone(),
-                    Use::CreateOpaqueTypeWrappingBindgen { num_generics } => {
-                        Self::generate_opaque_type(name, *num_generics)
-                    }
-                }
-            }));
+        for (_name, codegen) in ns_entries.entries() {
+            output_items.extend(codegen.output_mod_items.iter().cloned());
         }
 
         let mut impl_entries_by_type: HashMap<_, Vec<_>> = HashMap::new();
@@ -416,17 +389,18 @@ impl<'a> RsCodeGenerator<'a> {
                         fn #make_string_name(str_: &str) -> UniquePtr<CxxString>;
                     ))],
                     global_items: get_string_items(),
-                    materializations: vec![Use::UsedFromCxxBridgeWithAlias(
-                        make_ident("make_string").into(),
+                    output_mod_items: vec![generate_cxx_use_stmt(
+                        &name,
+                        Some(&make_ident("make_string").0),
                     )],
                     ..Default::default()
                 }
             }
             Api::Function { fun, analysis, .. } => {
-                gen_function(name.get_namespace(), *fun, analysis, non_pod_types)
+                gen_function(&name, *fun, analysis, non_pod_types)
             }
             Api::Const { .. } | Api::Typedef { .. } => RsCodegenResult {
-                materializations: vec![Use::UsedFromBindgen],
+                output_mod_items: vec![Self::generate_bindgen_use_stmt(&name)],
                 ..Default::default()
             },
             Api::Struct {
@@ -499,9 +473,7 @@ impl<'a> RsCodeGenerator<'a> {
                     global_items: vec![parse_quote! {
                         use super::#path;
                     }],
-                    materializations: vec![Use::Custom(Box::new(
-                        parse_quote! {#[allow(unused_imports)] use super::#id;},
-                    ))],
+                    output_mod_items: vec![parse_quote! {#[allow(unused_imports)] use super::#id;}],
                     extern_rust_mod_items: vec![parse_quote! {
                         type #id;
                     }],
@@ -578,7 +550,7 @@ impl<'a> RsCodeGenerator<'a> {
         let cpp_id = full_cpp.get_final_ident();
         let mut global_items = Vec::new();
         let relinquish_ownership_call = sub.cpp_remove_ownership();
-        let mut per_mod_items: Vec<Item> = vec![
+        let mut output_mod_items: Vec<Item> = vec![
             parse_quote! {
                 pub use cxxbridge::#cpp_id;
             },
@@ -627,7 +599,7 @@ impl<'a> RsCodeGenerator<'a> {
                 })
                 .collect();
             if !methods_impls.is_empty() {
-                per_mod_items.push(parse_quote! {
+                output_mod_items.push(parse_quote! {
                     #[allow(non_snake_case)]
                     impl #supers for super::super::#id {
                         #(#methods_impls)*
@@ -636,7 +608,7 @@ impl<'a> RsCodeGenerator<'a> {
             }
         }
         if generate_peer_constructor {
-            per_mod_items.push(parse_quote! {
+            output_mod_items.push(parse_quote! {
                 impl autocxx::subclass::CppPeerConstructor<#cpp_id> for super::super::#id {
                     fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<#cpp_path> {
                         use autocxx::moveit::Emplace;
@@ -659,7 +631,7 @@ impl<'a> RsCodeGenerator<'a> {
         extern_c_mod_items.push(parse_quote! {
             fn #as_unique_ptr_id(u: UniquePtr<#cpp_id>) -> UniquePtr<#super_cxxxbridge_id>;
         });
-        per_mod_items.push(parse_quote! {
+        output_mod_items.push(parse_quote! {
             impl AsRef<#super_path> for super::super::#id {
                 fn as_ref(&self) -> &cxxbridge::#super_cxxxbridge_id {
                     use autocxx::subclass::CppSubclass;
@@ -668,7 +640,7 @@ impl<'a> RsCodeGenerator<'a> {
             }
         });
         // TODO it would be nice to impl AsMut here but pin prevents us
-        per_mod_items.push(parse_quote! {
+        output_mod_items.push(parse_quote! {
             impl super::super::#id {
                 pub fn pin_mut(&mut self) -> ::core::pin::Pin<&mut cxxbridge::#super_cxxxbridge_id> {
                     use autocxx::subclass::CppSubclass;
@@ -677,7 +649,7 @@ impl<'a> RsCodeGenerator<'a> {
             }
         });
         let rs_as_unique_ptr_id = make_ident(format!("as_{super_name}_unique_ptr"));
-        per_mod_items.push(parse_quote! {
+        output_mod_items.push(parse_quote! {
             impl super::super::#id {
                 pub fn #rs_as_unique_ptr_id(u: cxx::UniquePtr<#cpp_id>) -> cxx::UniquePtr<cxxbridge::#super_cxxxbridge_id> {
                     cxxbridge::#as_unique_ptr_id(u)
@@ -691,17 +663,13 @@ impl<'a> RsCodeGenerator<'a> {
                 Box::new(#holder(me.0.relinquish_ownership()))
             }
         });
-        let materializations = per_mod_items
-            .into_iter()
-            .map(|item| Use::Custom(Box::new(item)))
-            .collect();
         RsCodegenResult {
             extern_c_mod_items,
             // For now we just assume we can't keep subclasses in vectors, but we can put them in
             // smart pointers.
             // That's the reason for the 'false' and 'true'
             bridge_items: create_impl_items(&cpp_id, false, true, self.config),
-            materializations,
+            output_mod_items,
             global_items,
             extern_rust_mod_items: vec![
                 parse_quote! {
@@ -794,14 +762,14 @@ impl<'a> RsCodeGenerator<'a> {
     where
         F: FnOnce() -> Option<(Item, Vec<Attribute>)>,
     {
-        let mut materializations = vec![match type_kind {
-            TypeKind::Pod => Use::UsedFromBindgen,
-            TypeKind::Abstract => Use::UsedFromCxxBridge,
-            _ => Use::CreateOpaqueTypeWrappingBindgen { num_generics },
+        let mut output_mod_items = vec![match type_kind {
+            TypeKind::Pod => Self::generate_bindgen_use_stmt(name),
+            TypeKind::Abstract => generate_cxx_use_stmt(name, None),
+            _ => Self::generate_opaque_type(name, num_generics),
         }];
         Self::add_superclass_stuff_to_type(
             name,
-            &mut materializations,
+            &mut output_mod_items,
             associated_methods.get(name),
         );
         let orig_item = item_creator();
@@ -842,21 +810,17 @@ impl<'a> RsCodeGenerator<'a> {
                     // Still generate the type as emitted by bindgen,
                     // but don't attempt to tell cxx about it
                     RsCodegenResult {
-                        materializations,
+                        output_mod_items,
                         ..Default::default()
                     }
                 } else {
-                    materializations.extend(
-                        self.generate_extern_type_impl(type_kind, name)
-                            .into_iter()
-                            .map(|m| Use::Custom(Box::new(m))),
-                    );
+                    output_mod_items.append(&mut self.generate_extern_type_impl(type_kind, name));
                     RsCodegenResult {
                         bridge_items: create_impl_items(&id, movable, destroyable, self.config),
                         extern_c_mod_items: vec![
                             self.generate_cxxbridge_type(name, true, doc_attrs)
                         ],
-                        materializations,
+                        output_mod_items,
                         ..Default::default()
                     }
                 }
@@ -873,7 +837,7 @@ impl<'a> RsCodeGenerator<'a> {
                             self.generate_cxxbridge_type(name, false, doc_attrs)
                         ],
                         bridge_items: create_impl_items(&id, movable, destroyable, self.config),
-                        materializations,
+                        output_mod_items,
                         ..Default::default()
                     }
                 }
@@ -883,7 +847,7 @@ impl<'a> RsCodeGenerator<'a> {
 
     fn add_superclass_stuff_to_type(
         name: &QualifiedName,
-        materializations: &mut Vec<Use>,
+        output_mod_items: &mut Vec<Item>,
         methods: Option<&Vec<SuperclassMethod>>,
     ) {
         if let Some(methods) = methods {
@@ -928,25 +892,25 @@ impl<'a> RsCodeGenerator<'a> {
             let supers_name = SubclassName::get_supers_trait_name(name).get_final_ident();
             let methods_name = SubclassName::get_methods_trait_name(name).get_final_ident();
             if !supers.is_empty() {
-                materializations.push(Use::Custom(Box::new(parse_quote! {
+                output_mod_items.push(parse_quote! {
                     #[allow(non_snake_case)]
                     pub trait #supers_name {
                         #(#supers)*
                     }
-                })));
-                materializations.push(Use::Custom(Box::new(parse_quote! {
+                });
+                output_mod_items.push(parse_quote! {
                     #[allow(non_snake_case)]
                     pub trait #methods_name : #supers_name {
                         #(#mains)*
                     }
-                })));
+                });
             } else {
-                materializations.push(Use::Custom(Box::new(parse_quote! {
+                output_mod_items.push(parse_quote! {
                     #[allow(non_snake_case)]
                     pub trait #methods_name {
                         #(#mains)*
                     }
-                })));
+                });
             }
         }
     }
@@ -970,9 +934,7 @@ impl<'a> RsCodeGenerator<'a> {
         }
         RsCodegenResult {
             extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, Vec::new())],
-            materializations: vec![Use::Custom(Box::new(
-                parse_quote! { pub use #rust_path as #name_final; },
-            ))],
+            output_mod_items: vec![parse_quote! { pub use #rust_path as #name_final; }],
             ..Default::default()
         }
     }
@@ -982,13 +944,13 @@ impl<'a> RsCodeGenerator<'a> {
     /// generated.
     fn generate_error_entry(err: ConvertErrorFromCpp, ctx: ErrorContext) -> RsCodegenResult {
         let err = format!(" autocxx bindings couldn't be generated: {err}");
-        let (impl_entry, namespaced_item) = match ctx.into_type() {
+        let (impl_entry, output_mod_items) = match ctx.into_type() {
             ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => (
                 None,
-                Some(parse_quote! {
+                vec![parse_quote! {
                     #[doc = #err]
                     pub struct #id;
-                }),
+                }],
             ),
             ErrorContextType::Method { self_ty, method } => (
                 Some(Box::new(ImplBlockDetails {
@@ -999,39 +961,18 @@ impl<'a> RsCodeGenerator<'a> {
                     },
                     ty: parse_quote! { #self_ty },
                 })),
-                None,
+                vec![],
             ),
         };
-        // The above code can be simplified to construct materializations
-        // in all cases.
-        let materializations = namespaced_item
-            .into_iter()
-            .map(|item| Use::Custom(Box::new(item)))
-            .collect();
         RsCodegenResult {
             impl_entry,
-            materializations,
+            output_mod_items,
             ..Default::default()
         }
     }
 
-    fn generate_cxx_use_stmt(name: &QualifiedName, alias: Option<&Ident>) -> Item {
-        let segs = Self::find_output_mod_root(name.get_namespace())
-            .chain(std::iter::once(make_ident("cxxbridge")))
-            .chain(std::iter::once(name.get_final_ident()));
-        Item::Use(match alias {
-            None => parse_quote! {
-                pub use #(#segs)::*;
-            },
-            Some(alias) => parse_quote! {
-                pub use #(#segs)::* as #alias;
-            },
-        })
-    }
-
     fn generate_bindgen_use_stmt(name: &QualifiedName) -> Item {
-        let segs =
-            Self::find_output_mod_root(name.get_namespace()).chain(name.get_bindgen_path_idents());
+        let segs = find_output_mod_root(name.get_namespace()).chain(name.get_bindgen_path_idents());
         Item::Use(parse_quote! {
             #[allow(unused_imports)]
             pub use #(#segs)::*;
@@ -1039,8 +980,7 @@ impl<'a> RsCodeGenerator<'a> {
     }
 
     fn generate_opaque_type(name: &QualifiedName, num_generics: usize) -> Item {
-        let segs =
-            Self::find_output_mod_root(name.get_namespace()).chain(name.get_bindgen_path_idents());
+        let segs = find_output_mod_root(name.get_namespace()).chain(name.get_bindgen_path_idents());
         let final_name = name.get_final_ident().0;
 
         let generics = (0usize..usize::MAX)
@@ -1135,10 +1075,6 @@ impl<'a> RsCodeGenerator<'a> {
         }
         ForeignItem::Verbatim(for_extern_c_ts)
     }
-
-    fn find_output_mod_root(ns: &Namespace) -> impl Iterator<Item = crate::minisyn::Ident> {
-        std::iter::repeat(make_ident("super")).take(ns.depth())
-    }
 }
 
 fn find_trivially_constructed_subclasses(apis: &ApiVec<FnPhase>) -> HashSet<QualifiedName> {
@@ -1208,11 +1144,8 @@ struct RsCodegenResult {
     global_items: Vec<Item>,
     impl_entry: Option<Box<ImplBlockDetails>>,
     trait_impl_entry: Option<Box<TraitImplBlockDetails>>,
-    /// Items that go into a per-namespace mod.
-    /// These items used to be primarily `use` statements which
-    /// is why this is a bit odd, but this boils down to another
-    /// `Vec<Item>`.
-    materializations: Vec<Use>,
+    /// Items that go into a per-namespace mod exposed to the user.
+    output_mod_items: Vec<Item>,
 }
 
 /// An [`Item`] that always needs to be in an unsafe block.
