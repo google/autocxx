@@ -365,7 +365,7 @@ impl IncludeCppEngine {
             .generate_deleted_functions(true)
             .generate_pure_virtuals(true)
             .raw_line(raw_line)
-            .all_module_raw_line(all_module_raw_line)
+            .every_module_raw_line(all_module_raw_line)
             .generate_private_functions(true)
             .layout_tests(false); // TODO revisit later
 
