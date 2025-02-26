@@ -104,7 +104,7 @@ impl<'a> ParseForeignMod<'a> {
         }
     }
 
-    /// Record information from impl blocks encountered in bindgenq
+    /// Record information from impl blocks encountered in bindgen
     /// output.
     pub(crate) fn convert_impl_items(&mut self, imp: ItemImpl) {
         let ty_id = match *imp.self_ty {
