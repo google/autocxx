@@ -11,6 +11,7 @@ mod function_wrapper_rs;
 mod impl_item_creator;
 mod lifetime;
 mod namespace_organizer;
+mod non_pod_struct;
 pub(crate) mod unqualify;
 mod utils;
 
@@ -762,11 +763,7 @@ impl<'a> RsCodeGenerator<'a> {
     where
         F: FnOnce() -> Option<(Item, Vec<Attribute>)>,
     {
-        let mut output_mod_items = vec![match type_kind {
-            TypeKind::Pod => Self::generate_bindgen_use_stmt(name),
-            TypeKind::Abstract => generate_cxx_use_stmt(name, None),
-            _ => Self::generate_opaque_type(name, num_generics),
-        }];
+        let mut output_mod_items = Vec::new();
         Self::add_superclass_stuff_to_type(
             name,
             &mut output_mod_items,
@@ -792,20 +789,10 @@ impl<'a> RsCodeGenerator<'a> {
                 // b) for nested types such as 'A::B', there is no combination
                 //    of cxx-acceptable attributes which will inform cxx that
                 //    A is a class rather than a namespace.
-                // let mut item = orig_item
-                //     .expect("Instantiable types must provide instance")
-                //     .0;
-                // if matches!(type_kind, TypeKind::NonPod) {
-                //     if let Item::Struct(ref mut s) = item {
-                //         // Retain generics and doc attrs.
-                //         make_non_pod(s, layout);
-                //     } else {
-                //         // enum
-                //         item = Item::Struct(new_non_pod_struct(id.clone().into()));
-                //     }
-                // }
-                // global_items.push(item);
-
+                output_mod_items.push(match type_kind {
+                    TypeKind::Pod => Self::generate_bindgen_use_stmt(name),
+                    _ => non_pod_struct::generate_opaque_type(name, num_generics, &doc_attrs),
+                });
                 if num_generics > 0 {
                     // Still generate the type as emitted by bindgen,
                     // but don't attempt to tell cxx about it
@@ -832,6 +819,7 @@ impl<'a> RsCodeGenerator<'a> {
                     // Feed cxx "type T;"
                     // We MUST do this because otherwise cxx assumes this can be
                     // instantiated using UniquePtr etc.
+                    output_mod_items.push(generate_cxx_use_stmt(name, None));
                     RsCodegenResult {
                         extern_c_mod_items: vec![
                             self.generate_cxxbridge_type(name, false, doc_attrs)
@@ -976,28 +964,6 @@ impl<'a> RsCodeGenerator<'a> {
         Item::Use(parse_quote! {
             #[allow(unused_imports)]
             pub use #(#segs)::*;
-        })
-    }
-
-    fn generate_opaque_type(name: &QualifiedName, num_generics: usize) -> Item {
-        let segs = find_output_mod_root(name.get_namespace()).chain(name.get_bindgen_path_idents());
-        let final_name = name.get_final_ident().0;
-
-        let generics = (0usize..usize::MAX)
-            .take(num_generics)
-            .map(|num| make_ident(format!("T{num}")).0);
-        let generics = if num_generics == 0 {
-            quote! {}
-        } else {
-            quote! {
-                < #(#generics),* >
-            }
-        };
-        Item::Struct(parse_quote! {
-            #[repr(transparent)]
-            pub struct #final_name #generics {
-                _hidden_contents: #(#segs)::* #generics,
-            }
         })
     }
 
