@@ -167,8 +167,8 @@ impl<'a> RsCodeGenerator<'a> {
             })
             .unzip();
         // First, the hierarchy of mods containing lots of 'use' statements
-        // which is the final API exposed as 'ffi'.
-        let use_statements =
+        // and other items which are the final API exposed as 'ffi'.
+        let mut output_mod_items =
             Self::generate_final_output_namespace(&rs_codegen_results_and_namespaces);
         // Both of the above ('use' hierarchy and bindgen mod) are organized into
         // sub-mods by namespace. From here on, things are flat.
@@ -232,23 +232,12 @@ impl<'a> RsCodeGenerator<'a> {
             #[allow(unused_imports)]
             use bindgen::root;
         }));
-        let supers_to_use = ["cxxbridge", "bindgen", "output"];
-        let another = (!self.config.exclude_utilities()).then_some("ToCppString");
-        let supers_to_use = supers_to_use
-            .iter()
-            .chain(another.iter())
-            .map(|s| make_ident(s).0);
-        all_items.push(Item::Mod(parse_quote! {
-            mod output {
-                #[allow(unused_imports)]
-                use super::{#(#supers_to_use),*};
-                #(#use_statements)*
-            }
-        }));
+        let ffi_mod_name = self.config.get_mod_name();
         all_items.push(Item::Use(parse_quote! {
             #[allow(unused_imports)]
-            pub use output::*;
+            use super::#ffi_mod_name as output;
         }));
+        all_items.append(&mut output_mod_items);
         all_items
     }
 
@@ -474,7 +463,6 @@ impl<'a> RsCodeGenerator<'a> {
                     global_items: vec![parse_quote! {
                         use super::#path;
                     }],
-                    output_mod_items: vec![parse_quote! {#[allow(unused_imports)] use super::#id;}],
                     extern_rust_mod_items: vec![parse_quote! {
                         type #id;
                     }],
@@ -556,7 +544,7 @@ impl<'a> RsCodeGenerator<'a> {
                 pub use cxxbridge::#cpp_id;
             },
             parse_quote! {
-                pub struct #holder(pub autocxx::subclass::CppSubclassRustPeerHolder<super::super::#id>);
+                pub struct #holder(pub autocxx::subclass::CppSubclassRustPeerHolder<super::#id>);
             },
             parse_quote! {
                 impl autocxx::subclass::CppSubclassCppPeer for #cpp_id {
@@ -602,7 +590,7 @@ impl<'a> RsCodeGenerator<'a> {
             if !methods_impls.is_empty() {
                 output_mod_items.push(parse_quote! {
                     #[allow(non_snake_case)]
-                    impl #supers for super::super::#id {
+                    impl #supers for super::#id {
                         #(#methods_impls)*
                     }
                 });
@@ -610,7 +598,7 @@ impl<'a> RsCodeGenerator<'a> {
         }
         if generate_peer_constructor {
             output_mod_items.push(parse_quote! {
-                impl autocxx::subclass::CppPeerConstructor<#cpp_id> for super::super::#id {
+                impl autocxx::subclass::CppPeerConstructor<#cpp_id> for super::#id {
                     fn make_peer(&mut self, peer_holder: autocxx::subclass::CppSubclassRustPeerHolder<Self>) -> cxx::UniquePtr<#cpp_path> {
                         use autocxx::moveit::Emplace;
                         cxx::UniquePtr::emplace(#cpp_id :: new(peer_holder))
@@ -633,7 +621,7 @@ impl<'a> RsCodeGenerator<'a> {
             fn #as_unique_ptr_id(u: UniquePtr<#cpp_id>) -> UniquePtr<#super_cxxxbridge_id>;
         });
         output_mod_items.push(parse_quote! {
-            impl AsRef<#super_path> for super::super::#id {
+            impl AsRef<#super_path> for super::#id {
                 fn as_ref(&self) -> &cxxbridge::#super_cxxxbridge_id {
                     use autocxx::subclass::CppSubclass;
                     self.peer().#as_id()
@@ -642,7 +630,7 @@ impl<'a> RsCodeGenerator<'a> {
         });
         // TODO it would be nice to impl AsMut here but pin prevents us
         output_mod_items.push(parse_quote! {
-            impl super::super::#id {
+            impl super::#id {
                 pub fn pin_mut(&mut self) -> ::core::pin::Pin<&mut cxxbridge::#super_cxxxbridge_id> {
                     use autocxx::subclass::CppSubclass;
                     self.peer_mut().#as_mut_id()
@@ -651,7 +639,7 @@ impl<'a> RsCodeGenerator<'a> {
         });
         let rs_as_unique_ptr_id = make_ident(format!("as_{super_name}_unique_ptr"));
         output_mod_items.push(parse_quote! {
-            impl super::super::#id {
+            impl super::#id {
                 pub fn #rs_as_unique_ptr_id(u: cxx::UniquePtr<#cpp_id>) -> cxx::UniquePtr<cxxbridge::#super_cxxxbridge_id> {
                     cxxbridge::#as_unique_ptr_id(u)
                 }
@@ -906,20 +894,9 @@ impl<'a> RsCodeGenerator<'a> {
     fn generate_extern_cpp_type(
         &self,
         name: &QualifiedName,
-        mut rust_path: TypePath,
+        rust_path: TypePath,
     ) -> RsCodegenResult {
         let name_final = name.get_final_ident();
-        // Users expect to provide a path relative to the ffi mod, but this
-        // will actually be one level deeper.
-        if rust_path
-            .path
-            .segments
-            .first()
-            .map(|seg| seg.ident == "super")
-            .unwrap_or_default()
-        {
-            rust_path.path.segments.insert(0, parse_quote! { super });
-        }
         RsCodegenResult {
             extern_c_mod_items: vec![self.generate_cxxbridge_type(name, true, Vec::new())],
             output_mod_items: vec![parse_quote! { pub use #rust_path as #name_final; }],
