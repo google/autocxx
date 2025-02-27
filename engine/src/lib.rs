@@ -382,6 +382,18 @@ impl IncludeCppEngine {
             }
         }
 
+        // At this point it woul be great to use `Builder::opaque_type` for
+        // everything which is on the allowlist but not on the POD list.
+        // This would free us from a large proportion of bindgen bugs which
+        // are dealing with obscure templated types. Unfortunately, even
+        // for types which we expose to the user as opaque (non-POD), autocxx
+        // internally still cares about seeing what fields they've got because
+        // we make decisions about implicit constructors on that basis.
+        // So, for now, we can't do that. Perhaps in future bindgen could
+        // gain an option to generate any implicit constructors, if that
+        // information is exposed by clang. That would remove a lot of
+        // autocxx complexity and would allow us to request opaque types.
+
         log::info!(
             "Bindgen flags would be: {}",
             builder
