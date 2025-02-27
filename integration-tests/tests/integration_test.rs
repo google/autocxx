@@ -502,7 +502,6 @@ fn test_negative_take_as_pod_with_move_constructor() {
     run_test_expect_fail(cxx, hdr, rs, &["take_bob"], &["Bob"]);
 }
 
-#[ignore] // https://github.com/google/autocxx/issues/1252
 #[test]
 fn test_take_as_pod_with_is_relocatable() {
     let cxx = indoc! {"
@@ -3287,7 +3286,6 @@ fn test_conflicting_usings_with_self_declaration1() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/106
 fn test_string_templated_typedef() {
     let hdr = indoc! {"
         #include <string>
@@ -5134,7 +5132,6 @@ fn test_type_aliased_anonymous_nested_struct_ignored() {
     run_test("", hdr, rs, &["test::Outer_Struct"], &[]);
 }
 
-#[ignore] // https://github.com/google/autocxx/issues/1251
 #[test]
 fn test_double_underscores_ignored() {
     let hdr = indoc! {"
@@ -10015,7 +10012,6 @@ fn test_class_having_private_method() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/787
 fn test_chrono_problem() {
     let hdr = indoc! {"
     #include <chrono>
@@ -12008,17 +12004,6 @@ fn test_issue_1081() {
 }
 
 #[test]
-#[ignore] // This test passes under all normal builds. However
-          // it triggers a stack use-after-return in older versions of
-          // libclang which is only detected under ASAN (obviously it
-          // sometimes causes crashes the rest of the time).
-          // This UaR does not occur when the same code is processed
-          // with a HEAD version of clang itself as of June 2022. This
-          // may mean that the UaR has been fixed in later versions of
-          // the clang code, or that it only occurs when the code is used
-          // in a libclang context (not a plain clang compilation context).
-          // If the problem recurs, we should work out which of these is
-          // the case.
 fn test_issue_1125() {
     let hdr = indoc! {"
         namespace {
@@ -12296,7 +12281,6 @@ fn test_issue_1229() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/1265
 fn test_issue_1265() {
     let hdr = indoc! {"
         #include <string>
@@ -12440,7 +12424,6 @@ fn test_using_string_method() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/1382
 fn test_override_typedef_fn() {
     let hdr = indoc! {"
         #include <map>
