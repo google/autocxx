@@ -3287,7 +3287,6 @@ fn test_conflicting_usings_with_self_declaration1() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/106
 fn test_string_templated_typedef() {
     let hdr = indoc! {"
         #include <string>
@@ -10015,7 +10014,6 @@ fn test_class_having_private_method() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/787
 fn test_chrono_problem() {
     let hdr = indoc! {"
     #include <chrono>
@@ -12008,17 +12006,6 @@ fn test_issue_1081() {
 }
 
 #[test]
-#[ignore] // This test passes under all normal builds. However
-          // it triggers a stack use-after-return in older versions of
-          // libclang which is only detected under ASAN (obviously it
-          // sometimes causes crashes the rest of the time).
-          // This UaR does not occur when the same code is processed
-          // with a HEAD version of clang itself as of June 2022. This
-          // may mean that the UaR has been fixed in later versions of
-          // the clang code, or that it only occurs when the code is used
-          // in a libclang context (not a plain clang compilation context).
-          // If the problem recurs, we should work out which of these is
-          // the case.
 fn test_issue_1125() {
     let hdr = indoc! {"
         namespace {
@@ -12440,7 +12427,8 @@ fn test_using_string_method() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/1382
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 fn test_override_typedef_fn() {
     let hdr = indoc! {"
         #include <map>
