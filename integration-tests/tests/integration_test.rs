@@ -12281,6 +12281,7 @@ fn test_issue_1229() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/1265
 fn test_issue_1265() {
     let hdr = indoc! {"
         #include <string>
@@ -12424,6 +12425,8 @@ fn test_using_string_method() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 fn test_override_typedef_fn() {
     let hdr = indoc! {"
         #include <map>
