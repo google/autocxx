@@ -40,11 +40,15 @@ use super::{
 pub(crate) enum TypeKind {
     Pod,    // trivial. Can be moved and copied in Rust.
     NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
+    Opaque, // bindgen opaque data. We can't generate any constructors as we don't
+    // know what fields it has.
+    // NB you might not find references to this in the codebase - that's
+    // because `implicit_constructor.rs` acts on all the other types of TypeKind
     Abstract, // has pure virtual members - can't even generate UniquePtr.
-            // It's possible that the type itself isn't pure virtual, but it inherits from
-            // some other type which is pure virtual. Alternatively, maybe we just don't
-            // know if the base class is pure virtual because it wasn't on the allowlist,
-            // in which case we'll err on the side of caution.
+              // It's possible that the type itself isn't pure virtual, but it inherits from
+              // some other type which is pure virtual. Alternatively, maybe we just don't
+              // know if the base class is pure virtual because it wasn't on the allowlist,
+              // in which case we'll err on the side of caution.
 }
 
 /// Details about a C++ struct.

@@ -12495,6 +12495,38 @@ fn test_class_named_string() {
     run_test("", hdr, quote! {}, &["a::String"], &[]);
 }
 
+#[test]
+fn test_opaque_directive() {
+    let hdr = indoc! {"
+        #include <memory>
+        class Foo {
+        public:
+            int a;
+        };
+        Foo global_foo;
+        class Bar {
+        public:
+            const Foo& get_foo() const { return global_foo; }
+        };
+    "};
+    let rs = quote! {
+        use autocxx::prelude::*;
+        let _ = ffi::Bar::new().within_unique_ptr().get_foo();
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! {
+            generate!("Bar")
+            opaque!("Foo")
+        },
+        None,
+        None,
+        None,
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers

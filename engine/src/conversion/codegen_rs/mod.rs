@@ -780,7 +780,7 @@ impl<'a> RsCodeGenerator<'a> {
         // b) generate a concrete type definition, e.g. by using bindgen's
         //    or doing our own, and then telling cxx 'type A = bindgen::A';'
         match type_kind {
-            TypeKind::Pod | TypeKind::NonPod => {
+            TypeKind::Pod | TypeKind::NonPod | TypeKind::Opaque => {
                 // Feed cxx "type T = root::bindgen::T"
                 // For non-POD types, there might be the option of simply giving
                 // cxx a "type T;" as we do for abstract types below. There's

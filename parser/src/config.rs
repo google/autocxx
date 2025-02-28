@@ -227,6 +227,7 @@ pub struct IncludeCppConfig {
     pub extern_rust_funs: Vec<RustFun>,
     pub concretes: ConcretesMap,
     pub externs: ExternCppTypeMap,
+    pub opaquelist: Vec<String>,
 }
 
 impl Parse for IncludeCppConfig {
@@ -385,6 +386,10 @@ impl IncludeCppConfig {
 
     pub fn get_blocklist(&self) -> impl Iterator<Item = &String> {
         self.blocklist.iter()
+    }
+
+    pub fn get_opaquelist(&self) -> impl Iterator<Item = &String> {
+        self.opaquelist.iter()
     }
 
     fn is_concrete_type(&self, cpp_name: &str) -> bool {

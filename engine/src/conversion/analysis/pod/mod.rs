@@ -36,6 +36,7 @@ use super::tdef::{TypedefAnalysis, TypedefPhase};
 pub(crate) struct FieldInfo {
     pub(crate) ty: Type,
     pub(crate) type_kind: type_converter::TypeKind,
+    pub(crate) bindgen_opaque_data: bool,
 }
 
 #[derive(std::fmt::Debug)]
@@ -162,7 +163,9 @@ fn analyze_struct(
         &mut field_info,
         extra_apis,
     );
-    let type_kind = if byvalue_checker.is_pod(&name.name) {
+    let type_kind = if field_info.iter().any(|fi| fi.bindgen_opaque_data) {
+        TypeKind::Opaque
+    } else if byvalue_checker.is_pod(&name.name) {
         // It's POD so any errors encountered parsing its fields are important.
         // Let's not allow anything to be POD if it's got rvalue reference fields.
         if details.has_rvalue_reference_fields {
@@ -253,6 +256,11 @@ fn get_struct_field_types(
                     field_info.push(FieldInfo {
                         ty: r.ty,
                         type_kind: r.kind,
+                        bindgen_opaque_data: f
+                            .ident
+                            .as_ref()
+                            .map(|id| id == "_bindgen_opaque_blob")
+                            .unwrap_or_default(),
                     });
                 }
             }

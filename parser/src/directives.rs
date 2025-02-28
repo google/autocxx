@@ -59,6 +59,13 @@ pub(crate) fn get_directives() -> &'static DirectivesMap {
             )),
         );
         need_exclamation.insert(
+            "opaque".into(),
+            Box::new(StringList(
+                |config| &mut config.opaquelist,
+                |config| &config.opaquelist,
+            )),
+        );
+        need_exclamation.insert(
             "block_constructors".into(),
             Box::new(StringList(
                 |config| &mut config.constructor_blocklist,
