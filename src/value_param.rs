@@ -109,6 +109,8 @@ where
     }
 }
 
+// TODO implement for CppPin<T> and for CppRef<T: CopyNew>
+
 unsafe impl<T> ValueParam<T> for UniquePtr<T>
 where
     T: UniquePtrTarget,
