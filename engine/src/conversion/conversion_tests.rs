@@ -11,7 +11,7 @@ use autocxx_parser::UnsafePolicy;
 use syn::parse_quote;
 use syn::ItemMod;
 
-use crate::CodegenOptions;
+use crate::{CodegenOptions, UnindexedParseCallbackResults};
 
 use super::BridgeConverter;
 
@@ -29,8 +29,10 @@ fn do_test(input: ItemMod) {
     let tc = parse_quote! {};
     let bc = BridgeConverter::new(&[], &tc);
     let inclusions = "".into();
+    let parse_callback_results = UnindexedParseCallbackResults::default().index();
     bc.convert(
         input,
+        parse_callback_results,
         UnsafePolicy::AllFunctionsSafe,
         inclusions,
         &CodegenOptions::default(),

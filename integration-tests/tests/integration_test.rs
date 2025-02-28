@@ -3287,7 +3287,6 @@ fn test_conflicting_usings_with_self_declaration1() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/106
 fn test_string_templated_typedef() {
     let hdr = indoc! {"
         #include <string>
@@ -4143,7 +4142,7 @@ fn test_reserved_name() {
     let rs = quote! {
         assert_eq!(ffi::async_(34), 34);
     };
-    run_test("", hdr, rs, &["async_"], &[]);
+    run_test("", hdr, rs, &["async"], &[]);
 }
 
 #[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
@@ -4504,6 +4503,7 @@ fn test_cycle_up_of_vec() {
 fn test_typedef_to_std() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         typedef std::string my_string;
         inline uint32_t take_str(my_string a) {
             return a.size();
@@ -4537,6 +4537,7 @@ fn test_typedef_to_up_in_fn_call() {
 fn test_typedef_in_pod_struct() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         typedef uint32_t my_int;
         struct A {
             my_int a;
@@ -4558,6 +4559,7 @@ fn test_typedef_in_pod_struct() {
 fn test_cint_in_pod_struct() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         struct A {
             int a;
         };
@@ -4624,9 +4626,11 @@ fn test_up_in_struct() {
 }
 
 #[test]
+#[ignore] // https://github.com/rust-lang/rust-bindgen/issues/3158
 fn test_typedef_to_std_in_struct() {
     let hdr = indoc! {"
         #include <string>
+        #include <cstdint>
         typedef std::string my_string;
         struct A {
             my_string a;
@@ -5012,6 +5016,43 @@ fn test_take_array_in_struct() {
 }
 
 #[test]
+fn test_take_struct_built_array_in_function() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    struct data {
+        char a[4];
+    };
+    uint32_t take_array(char a[4]) {
+        return a[0] + a[2];
+    }
+    "};
+    let rs = quote! {
+        let mut c = ffi::data { a: [ 10, 20, 30, 40 ] };
+        unsafe {
+            assert_eq!(ffi::take_array(c.a.as_mut_ptr()), 40);
+        }
+    };
+    run_test("", hdr, rs, &["take_array"], &["data"]);
+}
+
+#[test]
+fn test_take_array_in_function() {
+    let hdr = indoc! {"
+    #include <cstdint>
+    uint32_t take_array(char a[4]) {
+        return a[0] + a[2];
+    }
+    "};
+    let rs = quote! {
+        let mut a: [i8; 4] = [ 10, 20, 30, 40 ];
+        unsafe {
+            assert_eq!(ffi::take_array(a.as_mut_ptr()), 40);
+        }
+    };
+    run_test("", hdr, rs, &["take_array"], &[]);
+}
+
+#[test]
 fn test_union_ignored() {
     let hdr = indoc! {"
     #include <cstdint>
@@ -5201,6 +5242,7 @@ fn test_typedef_to_ptr_is_marked_unsafe() {
 }
 
 #[test]
+#[ignore] // https://github.com/rust-lang/rust-bindgen/issues/3160
 fn test_issue_264() {
     let hdr = indoc! {"
     namespace a {
@@ -5963,6 +6005,8 @@ fn test_error_generated_for_static_data() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
 fn test_error_generated_for_array_dependent_function() {
     let hdr = indoc! {"
         #include <cstdint>
@@ -6025,6 +6069,19 @@ fn test_error_generated_for_pod_with_nontrivial_destructor() {
     "};
     let rs = quote! {};
     run_test_expect_fail("", hdr, rs, &["take_a"], &["A"]);
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/1269
+fn test_error_generated_for_double_underscore() {
+    // take_a is necessary here because cxx won't generate the required
+    // static assertions unless the type is actually used in some context
+    // where cxx needs to decide it's trivial or non-trivial.
+    let hdr = indoc! {"
+        inline void __thingy() {}
+    "};
+    let rs = quote! {};
+    run_test_expect_fail("", hdr, rs, &["__thingy"], &[]);
 }
 
 #[test]
@@ -6098,7 +6155,7 @@ fn test_keyword_function() {
         inline void move(int) {};
     "};
     let rs = quote! {};
-    run_test("", hdr, rs, &["move_"], &[]);
+    run_test("", hdr, rs, &["move"], &[]);
 }
 
 #[test]
@@ -6348,6 +6405,8 @@ fn test_include_cpp_in_path() {
     do_run_test_manual("", hdr, rs, None, None).unwrap();
 }
 
+// This test formerly used generate_all! but that causes
+// https://github.com/rust-lang/rust-bindgen/issues/3159
 #[test]
 fn test_bitset() {
     let hdr = indoc! {"
@@ -6376,7 +6435,7 @@ fn test_bitset() {
 
         typedef bitset<1> mybitset;
     "};
-    run_generate_all_test(hdr);
+    run_test("", hdr, quote! {}, &["mybitset"], &[]);
 }
 
 #[test]
@@ -7779,6 +7838,58 @@ fn test_pv_subclass_ptr_param() {
                 unsafe fn foo(&self, a: *const ffi::A) {
                     use ffi::Observer_supers;
                     self.foo_super(a)
+                }
+            }
+        }),
+    );
+}
+
+#[test]
+fn test_pv_subclass_opaque_param() {
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    typedef uint32_t MyUnsupportedType[4];
+
+    struct MySupportedType {
+        uint32_t a;
+    };
+
+    class MySuperType {
+    public:
+        virtual void foo(const MyUnsupportedType* foo, const MySupportedType* bar) const = 0;
+        virtual ~MySuperType() = default;
+    };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            MySubType::new_rust_owned(MySubType { a: 3, cpp_peer: Default::default() });
+        },
+        quote! {
+            subclass!("MySuperType",MySubType)
+            extern_cpp_opaque_type!("MyUnsupportedType", crate::ffi2::MyUnsupportedType)
+        },
+        None,
+        None,
+        Some(quote! {
+
+            #[cxx::bridge]
+            pub mod ffi2 {
+                unsafe extern "C++" {
+                    include!("input.h");
+                    type MyUnsupportedType;
+                }
+            }
+            use autocxx::subclass::CppSubclass;
+            use ffi::MySuperType_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MySubType {
+                a: u32
+            }
+            impl MySuperType_methods for MySubType {
+                unsafe fn foo(&self, _foo: *const ffi2::MyUnsupportedType, _bar: *const ffi::MySupportedType) {
                 }
             }
         }),
@@ -9768,7 +9879,7 @@ fn test_no_rvo_move() {
 }
 
 #[test]
-fn test_abstract_up() {
+fn test_abstract_up_single_bridge() {
     let hdr = indoc! {"
     #include <memory>
     class A {
@@ -9930,7 +10041,6 @@ fn test_class_having_private_method() {
 }
 
 #[test]
-#[ignore] // https://github.com/google/autocxx/issues/787
 fn test_chrono_problem() {
     let hdr = indoc! {"
     #include <chrono>
@@ -11554,6 +11664,8 @@ fn test_recursive_field_indirect() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
+// MSVC failure appears to be https://github.com/rust-lang/rust-bindgen/issues/3159
 fn test_typedef_unsupported_type_pub() {
     let hdr = indoc! {"
         #include <set>
@@ -11577,6 +11689,8 @@ fn test_typedef_unsupported_type_pub() {
 }
 
 #[test]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
+// MSVC failure appears to be https://github.com/rust-lang/rust-bindgen/issues/3159
 fn test_typedef_unsupported_type_pri() {
     let hdr = indoc! {"
         #include <set>
@@ -11865,6 +11979,7 @@ fn test_pass_rust_str_and_return_struct() {
 }
 
 #[test]
+#[ignore] // https://github.com/rust-lang/rust-bindgen/issues/3161
 fn test_issue_1065a() {
     let hdr = indoc! {"
         #include <memory>
@@ -11918,17 +12033,6 @@ fn test_issue_1081() {
 }
 
 #[test]
-#[ignore] // This test passes under all normal builds. However
-          // it triggers a stack use-after-return in older versions of
-          // libclang which is only detected under ASAN (obviously it
-          // sometimes causes crashes the rest of the time).
-          // This UaR does not occur when the same code is processed
-          // with a HEAD version of clang itself as of June 2022. This
-          // may mean that the UaR has been fixed in later versions of
-          // the clang code, or that it only occurs when the code is used
-          // in a libclang context (not a plain clang compilation context).
-          // If the problem recurs, we should work out which of these is
-          // the case.
 fn test_issue_1125() {
     let hdr = indoc! {"
         namespace {
@@ -11953,6 +12057,22 @@ fn test_issue_1125() {
         None,
         None,
     );
+}
+
+#[test]
+#[ignore] // https://github.com/google/autocxx/issues/1141
+fn test_wchar_issue_1141() {
+    let cxx = indoc! {"
+        wchar_t next_wchar(wchar_t c) {
+            return c + 1;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        wchar_t next_wchar(wchar_t c);
+    "};
+    let rs = quote! {};
+    run_test(cxx, hdr, rs, &["next_wchar"], &[]);
 }
 
 #[test]
@@ -12305,6 +12425,88 @@ fn test_cpp_union_pod() {
     "};
     run_test("", hdr, quote! {}, &["CorrelationId_t_"], &[]);
     run_test_expect_fail("", hdr, quote! {}, &[], &["CorrelationId_t_"]);
+}
+
+#[test]
+fn test_using_string_function() {
+    let hdr = indoc! {"
+        #include <string>
+        using std::string;
+        void foo(const string &a);
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["foo"], &[]);
+}
+
+#[test]
+fn test_using_string_method() {
+    let hdr = indoc! {"
+        #include <string>
+        using std::string;
+        class Foo
+        {
+        public:
+            Foo bar(const string &a);
+        };
+    "};
+    let rs = quote! {};
+    run_test("", hdr, rs, &["Foo"], &[]);
+}
+
+#[test]
+#[cfg_attr(skip_windows_gnu_failing_tests, ignore)]
+#[cfg_attr(skip_windows_msvc_failing_tests, ignore)]
+fn test_override_typedef_fn() {
+    let hdr = indoc! {"
+        #include <map>
+        #include <memory>
+        typedef std::shared_ptr<std::map<int, int>> Arg;
+            // bindgen currently outputs  pub type Arg = u8;
+        class Foo {
+        public:
+          void *createFoo(const int, Arg &arg);
+        //   void *createFoo(const int, std::shared_ptr<std::map<int, int>> &arg); // works
+        };
+    "};
+    run_test("", hdr, quote! {}, &["Foo"], &[]);
+}
+
+#[test]
+fn test_double_template_w_default() {
+    let hdr = indoc! {"
+        class Widget {};
+
+        template <class T>
+        class RefPtr {
+        private:
+            T* m_ptr;
+        };
+
+        class FakeAlloc {};
+
+        template <typename T, typename A=FakeAlloc>
+        class Holder {
+            A alloc;
+        };
+
+        typedef Holder<RefPtr<Widget>> WidgetRefHolder;
+        class Problem {
+        public:
+            WidgetRefHolder& getWidgets();
+        };
+    "};
+    run_test("", hdr, quote! {}, &["Problem"], &[]);
+}
+
+#[ignore] // https://github.com/google/autocxx/issues/1371
+#[test]
+fn test_class_named_string() {
+    let hdr = indoc! {"
+        namespace a {
+            class String {};
+        } // namespace a
+    "};
+    run_test("", hdr, quote! {}, &["a::String"], &[]);
 }
 
 // Yet to test:

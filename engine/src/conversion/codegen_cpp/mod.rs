@@ -12,7 +12,7 @@ pub(crate) mod type_to_cpp;
 
 use crate::{
     conversion::analysis::fun::{function_wrapper::CppFunctionKind, FnAnalysis},
-    types::{make_ident, QualifiedName},
+    types::QualifiedName,
     CppCodegenOptions, CppFilePair,
 };
 use autocxx_parser::IncludeCppConfig;
@@ -32,8 +32,11 @@ use super::{
     },
     api::{Api, Provenance, SubclassName, TypeKind},
     apivec::ApiVec,
-    ConvertErrorFromCpp,
+    ConvertErrorFromCpp, CppEffectiveName,
 };
+
+static GENERATED_FILE_HEADER: &str =
+    "// Generated using autocxx - do not edit directly.\n// @generated.\n\n";
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Hash)]
 enum Header {
@@ -230,8 +233,8 @@ impl<'a> CppCodeGenerator<'a> {
             let type_definitions = self.concat_additional_items(|x| x.type_definition.as_ref());
             let declarations = self.concat_additional_items(|x| x.declaration.as_ref());
             let declarations = format!(
-                "#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
-                headers, self.inclusions, type_definitions, declarations
+                "{}\n#ifndef __AUTOCXXGEN_H__\n#define __AUTOCXXGEN_H__\n\n{}\n{}\n{}\n{}#endif // __AUTOCXXGEN_H__\n",
+                GENERATED_FILE_HEADER, headers, self.inclusions, type_definitions, declarations
             );
             log::info!("Additional C++ decls:\n{}", declarations);
             let header_name = self
@@ -245,7 +248,7 @@ impl<'a> CppCodeGenerator<'a> {
             {
                 let definitions = self.concat_additional_items(|x| x.definition.as_ref());
                 let definitions =
-                    format!("#include \"{header_name}\"\n{cpp_headers}\n{definitions}");
+                    format!("{GENERATED_FILE_HEADER}\n#include \"{header_name}\"\n{cpp_headers}\n{definitions}");
                 log::info!("Additional C++ defs:\n{}", definitions);
                 Some(definitions.into_bytes())
             } else {
@@ -336,7 +339,7 @@ impl<'a> CppCodeGenerator<'a> {
         avoid_this: bool,
         conversion_direction: ConversionDirection,
         requires_rust_declarations: bool,
-        force_name: Option<&str>,
+        force_name: Option<&CppEffectiveName>,
     ) -> Result<ExtraCpp, ConvertErrorFromCpp> {
         // Even if the original function call is in a namespace,
         // we generate this wrapper in the global namespace.
@@ -353,7 +356,7 @@ impl<'a> CppCodeGenerator<'a> {
                     | CppFunctionKind::Constructor
             );
         let name = match force_name {
-            Some(n) => n.to_string(),
+            Some(n) => n.to_string_for_cpp_generation().to_string(),
             None => details.wrapper_function_name.to_string(),
         };
         let get_arg_name = |counter: usize| -> String {
@@ -513,7 +516,10 @@ impl<'a> CppCodeGenerator<'a> {
             }
             CppFunctionBody::FunctionCall(ns, id) => match receiver {
                 Some(receiver) => (
-                    format!("{receiver}.{id}({arg_list})"),
+                    format!(
+                        "{receiver}.{}({arg_list})",
+                        id.to_string_for_cpp_generation()
+                    ),
                     "".to_string(),
                     false,
                 ),
@@ -521,7 +527,9 @@ impl<'a> CppCodeGenerator<'a> {
                     let underlying_function_call = ns
                         .into_iter()
                         .cloned()
-                        .chain(std::iter::once(id.to_string()))
+                        .chain(std::iter::once(
+                            id.to_string_for_cpp_generation().to_string(),
+                        ))
                         .join("::");
                     (
                         format!("{underlying_function_call}({arg_list})"),
@@ -534,7 +542,14 @@ impl<'a> CppCodeGenerator<'a> {
                 let underlying_function_call = ns
                     .into_iter()
                     .cloned()
-                    .chain([ty_id.to_string(), fn_id.to_string()].iter().cloned())
+                    .chain(
+                        [
+                            ty_id.to_string(),
+                            fn_id.to_string_for_cpp_generation().to_string(),
+                        ]
+                        .iter()
+                        .cloned(),
+                    )
                     .join("::");
                 (
                     format!("{underlying_function_call}({arg_list})"),
@@ -673,7 +688,7 @@ impl<'a> CppCodeGenerator<'a> {
                 super_method.payload = CppFunctionBody::StaticMethodCall(
                     superclass.get_namespace().clone(),
                     superclass.get_final_ident(),
-                    make_ident(&method.fun.original_cpp_name),
+                    method.fun.original_cpp_name.clone(),
                 );
                 let mut super_fn_impl = self.generate_cpp_function_inner(
                     &super_method,

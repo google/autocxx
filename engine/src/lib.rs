@@ -31,7 +31,7 @@ use autocxx_bindgen::BindgenError;
 use autocxx_parser::{IncludeCppConfig, UnsafePolicy};
 use conversion::BridgeConverter;
 use miette::{SourceOffset, SourceSpan};
-use parse_callbacks::AutocxxParseCallbacks;
+use parse_callbacks::{AutocxxParseCallbacks, ParseCallbackResults, UnindexedParseCallbackResults};
 use parse_file::CppBuildable;
 use proc_macro2::TokenStream as TokenStream2;
 use regex::Regex;
@@ -330,6 +330,17 @@ impl IncludeCppEngine {
         inc_dirs: &[PathBuf],
         extra_clang_args: &[&str],
     ) -> bindgen::Builder {
+        let bindgen_marker_types = ["Opaque", "Reference", "RValueReference"];
+        let raw_line = bindgen_marker_types
+            .iter()
+            .map(|t| format!("#[repr(transparent)] pub struct __bindgen_marker_{t}<T: ?Sized>(T);"))
+            .join(" ");
+        let use_list = bindgen_marker_types
+            .iter()
+            .map(|t| format!("__bindgen_marker_{t}"))
+            .join(", ");
+        let all_module_raw_line = format!("#[allow(unused_imports)] use super::{{{use_list}}}; #[allow(unused_imports)] use autocxx::c_char16_t as bindgen_cchar16_t;");
+
         let mut builder = bindgen::builder()
             .clang_args(make_clang_args(inc_dirs, extra_clang_args))
             .derive_copy(false)
@@ -347,13 +358,16 @@ impl IncludeCppEngine {
             .generate_inline_functions(true)
             .respect_cxx_access_specs(true)
             .use_specific_virtual_function_receiver(true)
-            .cpp_semantic_attributes(true)
+            .use_opaque_newtype_wrapper(true)
+            .use_reference_newtype_wrapper(true)
             .represent_cxx_operators(true)
             .use_distinct_char16_t(true)
+            .generate_deleted_functions(true)
+            .generate_pure_virtuals(true)
+            .raw_line(raw_line)
+            .every_module_raw_line(all_module_raw_line)
+            .generate_private_functions(true)
             .layout_tests(false); // TODO revisit later
-        for item in known_types().get_initial_blocklist() {
-            builder = builder.blocklist_item(item);
-        }
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
@@ -363,9 +377,22 @@ impl IncludeCppEngine {
                 builder = builder
                     .allowlist_type(&a)
                     .allowlist_function(&a)
+                    .allowlist_function(format!("{a}_bindgen_original"))
                     .allowlist_var(&a);
             }
         }
+
+        // At this point it woul be great to use `Builder::opaque_type` for
+        // everything which is on the allowlist but not on the POD list.
+        // This would free us from a large proportion of bindgen bugs which
+        // are dealing with obscure templated types. Unfortunately, even
+        // for types which we expose to the user as opaque (non-POD), autocxx
+        // internally still cares about seeing what fields they've got because
+        // we make decisions about implicit constructors on that basis.
+        // So, for now, we can't do that. Perhaps in future bindgen could
+        // gain an option to generate any implicit constructors, if that
+        // information is exposed by clang. That would remove a lot of
+        // autocxx complexity and would allow us to request opaque types.
 
         log::info!(
             "Bindgen flags would be: {}",
@@ -442,11 +469,15 @@ impl IncludeCppEngine {
             return Err(Error::WrappedReferencesButNoArbitrarySelfTypes);
         }
 
+        let parse_callback_results =
+            Rc::new(RefCell::new(UnindexedParseCallbackResults::default()));
         let mod_name = self.config.get_mod_name();
-        let mut builder = self.make_bindgen_builder(&inc_dirs, extra_clang_args);
-        if let Some(dep_recorder) = dep_recorder {
-            builder = builder.parse_callbacks(Box::new(AutocxxParseCallbacks(dep_recorder)));
-        }
+        let mut builder = self
+            .make_bindgen_builder(&inc_dirs, extra_clang_args)
+            .parse_callbacks(Box::new(AutocxxParseCallbacks::new(
+                dep_recorder,
+                parse_callback_results.clone(),
+            )));
         let header_contents = self.build_header();
         self.dump_header_if_so_configured(&header_contents, &inc_dirs, extra_clang_args);
         let header_and_prelude = format!("{}\n\n{}", known_types().get_prelude(), header_contents);
@@ -455,6 +486,8 @@ impl IncludeCppEngine {
 
         let bindings = builder.generate().map_err(Error::Bindgen)?;
         let bindings = self.parse_bindings(bindings)?;
+        let parse_callback_results = parse_callback_results.take();
+        log::info!("Parse callback results: {:?}", parse_callback_results);
 
         // Source code contents just used for diagnostics - if we don't have it,
         // use a blank string and miette will not attempt to annotate it nicely.
@@ -469,22 +502,25 @@ impl IncludeCppEngine {
         let conversion = converter
             .convert(
                 bindings,
+                parse_callback_results.index(),
                 self.config.unsafe_policy.clone(),
                 header_contents,
                 codegen_options,
                 &source_file_contents,
             )
             .map_err(Error::Conversion)?;
-        let mut items = conversion.rs;
-        let mut new_bindings: ItemMod = parse_quote! {
+        let items = conversion.rs;
+        let new_bindings: ItemMod = parse_quote! {
             #[allow(non_snake_case)]
             #[allow(dead_code)]
             #[allow(non_upper_case_globals)]
             #[allow(non_camel_case_types)]
+            #[doc = "Generated using autocxx - do not edit directly"]
+            #[doc = "@generated"]
             mod #mod_name {
+                #(#items)*
             }
         };
-        new_bindings.content.as_mut().unwrap().1.append(&mut items);
         info!(
             "New bindings:\n{}",
             rust_pretty_printer::pretty_print(&new_bindings)
@@ -604,7 +640,8 @@ pub fn do_cxx_cpp_generation(
     cxxgen_header_name: String,
 ) -> Result<CppFilePair, cxx_gen::Error> {
     let mut opt = cxx_gen::Opt::default();
-    opt.cxx_impl_annotations = cpp_codegen_options.cxx_impl_annotations.clone();
+    opt.cxx_impl_annotations
+        .clone_from(&cpp_codegen_options.cxx_impl_annotations);
     let cxx_generated = cxx_gen::generate_header_and_cc(rs, &opt)?;
     Ok(CppFilePair {
         header: strip_system_headers(

@@ -407,7 +407,7 @@ struct FileWriter<'a> {
     written: IndexSet<String>,
 }
 
-impl<'a> FileWriter<'a> {
+impl FileWriter<'_> {
     fn write_placeholders<F: FnOnce(usize) -> String + Copy>(
         &mut self,
         mut counter: usize,

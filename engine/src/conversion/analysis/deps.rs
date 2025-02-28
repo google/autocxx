@@ -18,7 +18,6 @@ use super::{
 };
 
 pub(crate) trait HasDependencies {
-    fn name(&self) -> &QualifiedName;
     fn deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_>;
 }
 
@@ -45,10 +44,6 @@ impl HasDependencies for Api<FnPrePhase1> {
             Api::RustFn { deps, .. } => Box::new(deps.iter()),
             _ => Box::new(std::iter::empty()),
         }
-    }
-
-    fn name(&self) -> &QualifiedName {
-        self.name()
     }
 }
 
@@ -98,9 +93,5 @@ impl HasDependencies for Api<FnPhase> {
             Api::RustFn { deps, .. } => Box::new(deps.iter()),
             _ => Box::new(std::iter::empty()),
         }
-    }
-
-    fn name(&self) -> &QualifiedName {
-        self.name()
     }
 }

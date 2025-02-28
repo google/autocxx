@@ -165,22 +165,19 @@ where
     me
 }
 
-/// A trait to be implemented by a subclass which knows how to construct
-/// its C++ peer object. Specifically, the implementation here will
-/// arrange to call one or other of the `make_unique` methods to be
-/// found on the superclass of the C++ object. If the superclass
-/// has a single trivial constructor, then this is implemented
-/// automatically for you. If there are multiple constructors, or
-/// a single constructor which takes parameters, you'll need to implement
-/// this trait for your subclass in order to call the correct
-/// constructor.
+/// A trait to be implemented by a subclass which knows how to construct its C++
+/// peer object. Specifically, the implementation here will arrange to call one
+/// or other of the `new` methods to be found on the peer type. If the C++
+/// superclass has a single trivial constructor, then this is implemented
+/// automatically for you. If there are multiple constructors, or a single
+/// constructor which takes parameters, you'll need to implement this trait for
+/// your subclass in order to call the correct constructor.
 pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
     /// Create the C++ peer. This method will be automatically generated
     /// for you *except* in cases where the superclass has multiple constructors,
-    /// or its only constructor takes parameters. In such a case you'll need
-    /// to implement this by calling a `make_unique` method on the
-    /// `<my subclass name>Cpp` type, passing `peer_holder` as the first
-    /// argument.
+    /// or its only constructor takes parameters. In such a case you'll need to
+    /// implement this by calling a `new` method on the `<my subclass name>Cpp`
+    /// type, passing `peer_holder` as the first argument.
     fn make_peer(&mut self, peer_holder: CppSubclassRustPeerHolder<Self>) -> UniquePtr<CppPeer>;
 }
 
