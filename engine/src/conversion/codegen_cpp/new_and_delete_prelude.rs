@@ -14,7 +14,6 @@ use indoc::indoc;
 /// and so the versions which match class-specific operator new/delete
 /// will be used in preference to the general global ::operator new/delete.
 pub(super) static NEW_AND_DELETE_PRELUDE: &str = indoc! {"
-    #include <stddef.h>
     #ifndef AUTOCXX_NEW_AND_DELETE_PRELUDE
     #define AUTOCXX_NEW_AND_DELETE_PRELUDE
     // Mechanics to call custom operator new and delete

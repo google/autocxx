@@ -8,10 +8,10 @@
 
 use autocxx_parser::file_locations::FileLocationStrategy;
 use miette::Diagnostic;
-use proc_macro2::TokenStream;
 use thiserror::Error;
 
-use crate::{strip_system_headers, CppCodegenOptions, ParseError, RebuildDependencyRecorder};
+use crate::{generate_rs_single, CodegenOptions};
+use crate::{get_cxx_header_bytes, CppCodegenOptions, ParseError, RebuildDependencyRecorder};
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fs::File;
@@ -63,8 +63,16 @@ pub trait BuilderContext {
 
 /// An object to allow building of bindings from a `build.rs` file.
 ///
-/// It would be unusual to use this directly - see the `autocxx_build` or
+/// It would be unusual to create this directly - see the `autocxx_build` or
 /// `autocxx_gen` crates.
+///
+/// Once you've got one of these objects, you may set some configuration
+/// options but then you're likely to want to call the [`build`] method.
+///
+/// # Setting C++ version
+///
+/// Ensure you use [`extra_clang_args`] as well as giving an appropriate
+/// option to the [`cc::Build`] which you receive from the [`build`] function.
 #[cfg_attr(feature = "nightly", doc(cfg(feature = "build")))]
 pub struct Builder<'a, BuilderContext> {
     rs_file: PathBuf,
@@ -73,7 +81,7 @@ pub struct Builder<'a, BuilderContext> {
     dependency_recorder: Option<Box<dyn RebuildDependencyRecorder>>,
     custom_gendir: Option<PathBuf>,
     auto_allowlist: bool,
-    cpp_codegen_options: CppCodegenOptions<'a>,
+    codegen_options: CodegenOptions<'a>,
     // This member is to ensure that this type is parameterized
     // by a BuilderContext. The goal is to balance three needs:
     // (1) have most of the functionality over in autocxx_engine,
@@ -108,12 +116,14 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
             dependency_recorder: CTX::get_dependency_recorder(),
             custom_gendir: None,
             auto_allowlist: false,
-            cpp_codegen_options: CppCodegenOptions::default(),
+            codegen_options: CodegenOptions::default(),
             ctx: PhantomData,
         }
     }
 
-    /// Specify extra arguments for clang.
+    /// Specify extra arguments for clang. These are used when parsing
+    /// C++ headers. For example, you might want to provide
+    /// `-std=c++17` to specify C++17.
     pub fn extra_clang_args(mut self, extra_clang_args: &[&str]) -> Self {
         self.extra_clang_args = extra_clang_args.iter().map(|s| s.to_string()).collect();
         self
@@ -130,7 +140,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
     where
         F: FnOnce(&mut CppCodegenOptions),
     {
-        modifier(&mut self.cpp_codegen_options);
+        modifier(&mut self.codegen_options.cpp_codegen_options);
         self
     }
 
@@ -145,10 +155,20 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
     /// * You've got usages scattered across files beyond that with the
     ///   `include_cpp` invocation
     /// * You're using `use` statements to rename mods or items. If this
+    ///
     /// proves to be a promising or helpful direction, autocxx would be happy
     /// to accept pull requests to remove some of these limitations.
     pub fn auto_allowlist(mut self, do_it: bool) -> Self {
         self.auto_allowlist = do_it;
+        self
+    }
+
+    #[doc(hidden)]
+    /// Whether to force autocxx always to generate extra Rust and C++
+    /// side shims. This is only used by the integration test suite to
+    /// exercise more code paths - don't use it!
+    pub fn force_wrapper_generation(mut self, do_it: bool) -> Self {
+        self.codegen_options.force_wrapper_gen = do_it;
         self
     }
 
@@ -158,14 +178,18 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
     /// have a preprocessed header file which already contains absolutely everything
     /// that the bindings could ever need.
     pub fn suppress_system_headers(mut self, do_it: bool) -> Self {
-        self.cpp_codegen_options.suppress_system_headers = do_it;
+        self.codegen_options
+            .cpp_codegen_options
+            .suppress_system_headers = do_it;
         self
     }
 
     /// An annotation optionally to include on each C++ function.
     /// For example to export the symbol from a library.
     pub fn cxx_impl_annotations(mut self, cxx_impl_annotations: Option<String>) -> Self {
-        self.cpp_codegen_options.cxx_impl_annotations = cxx_impl_annotations;
+        self.codegen_options
+            .cpp_codegen_options
+            .cxx_impl_annotations = cxx_impl_annotations;
         self
     }
 
@@ -176,6 +200,17 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
     /// so if you use the `miette` crate and its `fancy` feature, then simply
     /// return a `miette::Result` from your main function, you should get nicely
     /// printed diagnostics.
+    ///
+    /// As this is a [`cc::Build`] there are lots of options you can apply to
+    /// the resulting options, but please bear in mind that these only apply
+    /// to the build process for the generated code - such options will not
+    /// influence autocxx's process for parsing header files.
+    ///
+    /// For example, if you wish to set the C++ version to C++17, you might
+    /// be tempted to use [`cc::Build::flag_if_supported`] to add the
+    /// `-std=c++17` flag. However, this won't affect the header parsing which
+    /// autocxx does internally (by means of bindgen) so you _additionally_
+    /// should call [`extra_clang_args`] with that same option.
     pub fn build(self) -> Result<BuilderBuild, BuilderError> {
         self.build_listing_files().map(|r| r.0)
     }
@@ -208,7 +243,11 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         write_to_file(
             &incdir,
             "cxx.h",
-            &Self::get_cxx_header_bytes(self.cpp_codegen_options.suppress_system_headers),
+            &get_cxx_header_bytes(
+                self.codegen_options
+                    .cpp_codegen_options
+                    .suppress_system_headers,
+            ),
         )?;
 
         let autocxx_inc = build_autocxx_inc(self.autocxx_incs, &incdir);
@@ -221,7 +260,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
                 autocxx_inc,
                 clang_args,
                 self.dependency_recorder,
-                &self.cpp_codegen_options,
+                &self.codegen_options,
             )
             .map_err(BuilderError::ParseError)?;
         let mut counter = 0;
@@ -235,10 +274,10 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         builder.includes(parsed_file.include_dirs());
         for include_cpp in parsed_file.get_cpp_buildables() {
             let generated_code = include_cpp
-                .generate_h_and_cxx(&self.cpp_codegen_options)
+                .generate_h_and_cxx(&self.codegen_options.cpp_codegen_options)
                 .map_err(BuilderError::InvalidCxx)?;
             for filepair in generated_code.0 {
-                let fname = format!("gen{}.cxx", counter);
+                let fname = format!("gen{counter}.cxx");
                 counter += 1;
                 if let Some(implementation) = &filepair.implementation {
                     let gen_cxx_path = write_to_file(&cxxdir, &fname, implementation)?;
@@ -250,23 +289,15 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
             }
         }
 
-        for include_cpp in parsed_file.get_rs_buildables() {
-            let rs = include_cpp.generate_rs();
-            generated_rs.push(write_rs_to_file(
-                &rsdir,
-                &include_cpp.config.get_rs_filename(),
-                rs,
-            )?);
+        for rs_output in parsed_file.get_rs_outputs() {
+            let rs = generate_rs_single(rs_output);
+            generated_rs.push(write_to_file(&rsdir, &rs.filename, rs.code.as_bytes())?);
         }
         if counter == 0 {
             Err(BuilderError::NoIncludeCxxMacrosFound)
         } else {
             Ok(BuilderSuccess(builder, generated_rs, generated_cpp))
         }
-    }
-
-    fn get_cxx_header_bytes(suppress_system_headers: bool) -> Vec<u8> {
-        strip_system_headers(crate::HEADER.as_bytes().to_vec(), suppress_system_headers)
     }
 }
 
@@ -289,6 +320,13 @@ where
 
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) -> Result<PathBuf, BuilderError> {
     let path = dir.join(filename);
+    if let Ok(existing_contents) = std::fs::read(&path) {
+        // Avoid altering timestamps on disk if the file already exists,
+        // to stop downstream build steps recurring.
+        if existing_contents == content {
+            return Ok(path);
+        }
+    }
     try_write_to_file(&path, content).map_err(|e| BuilderError::FileWriteFail(e, path.clone()))?;
     Ok(path)
 }
@@ -296,14 +334,6 @@ fn write_to_file(dir: &Path, filename: &str, content: &[u8]) -> Result<PathBuf, 
 fn try_write_to_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
     let mut f = File::create(path)?;
     f.write_all(content)
-}
-
-fn write_rs_to_file(
-    dir: &Path,
-    filename: &str,
-    content: TokenStream,
-) -> Result<PathBuf, BuilderError> {
-    write_to_file(dir, filename, content.to_string().as_bytes())
 }
 
 fn rust_version_check() {

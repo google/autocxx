@@ -6,10 +6,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-};
+use indexmap::map::IndexMap as HashMap;
+use indexmap::set::IndexSet as HashSet;
+use std::borrow::Cow;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 use itertools::Itertools;
 use proc_macro2::Span;
@@ -28,10 +29,11 @@ use crate::{directives::get_directives, RustPath};
 
 use quote::quote;
 
-#[derive(PartialEq, Clone, Debug, Hash)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum UnsafePolicy {
     AllFunctionsSafe,
     AllFunctionsUnsafe,
+    ReferencesWrappedAllFunctionsSafe,
 }
 
 impl Default for UnsafePolicy {
@@ -49,8 +51,13 @@ impl Parse for UnsafePolicy {
             Some(id) => {
                 if id == "unsafe_ffi" {
                     Ok(UnsafePolicy::AllFunctionsSafe)
+                } else if id == "unsafe_references_wrapped" {
+                    Ok(UnsafePolicy::ReferencesWrappedAllFunctionsSafe)
                 } else {
-                    Err(syn::Error::new(id.span(), "expected unsafe_ffi"))
+                    Err(syn::Error::new(
+                        id.span(),
+                        "expected unsafe_ffi or unsafe_references_wrapped",
+                    ))
                 }
             }
             None => Ok(UnsafePolicy::AllFunctionsUnsafe),
@@ -69,7 +76,17 @@ impl ToTokens for UnsafePolicy {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         if *self == UnsafePolicy::AllFunctionsSafe {
             tokens.extend(quote! { unsafe })
+        } else if *self == UnsafePolicy::ReferencesWrappedAllFunctionsSafe {
+            tokens.extend(quote! { unsafe_references_wrapped })
         }
+    }
+}
+
+impl UnsafePolicy {
+    /// Whether we are treating C++ references as a different thing from Rust
+    /// references and therefore have to generate lots of code for a CppRef type
+    pub fn requires_cpprefs(&self) -> bool {
+        matches!(self, Self::ReferencesWrappedAllFunctionsSafe)
     }
 }
 
@@ -84,7 +101,7 @@ impl AllowlistEntry {
     fn to_bindgen_item(&self) -> String {
         match self {
             AllowlistEntry::Item(i) => i.clone(),
-            AllowlistEntry::Namespace(ns) => format!("{}::.*", ns),
+            AllowlistEntry::Namespace(ns) => format!("{ns}::.*"),
         }
     }
 }
@@ -138,17 +155,17 @@ impl Default for Allowlist {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub struct Subclass {
     pub superclass: String,
     pub subclass: Ident,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash)]
 pub struct RustFun {
     pub path: RustPath,
     pub sig: Signature,
-    pub receiver: Option<Ident>,
+    pub has_receiver: bool,
 }
 
 impl std::fmt::Debug for RustFun {
@@ -160,13 +177,39 @@ impl std::fmt::Debug for RustFun {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct ExternCppType {
     pub rust_path: TypePath,
     pub opaque: bool,
 }
 
+/// Newtype wrapper so we can implement Hash.
 #[derive(Debug, Default)]
+pub struct ExternCppTypeMap(pub HashMap<String, ExternCppType>);
+
+impl std::hash::Hash for ExternCppTypeMap {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for (k, v) in &self.0 {
+            k.hash(state);
+            v.hash(state);
+        }
+    }
+}
+
+/// Newtype wrapper so we can implement Hash.
+#[derive(Debug, Default)]
+pub struct ConcretesMap(pub HashMap<String, Ident>);
+
+impl std::hash::Hash for ConcretesMap {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for (k, v) in &self.0 {
+            k.hash(state);
+            v.hash(state);
+        }
+    }
+}
+
+#[derive(Debug, Default, Hash)]
 pub struct IncludeCppConfig {
     pub inclusions: Vec<String>,
     pub unsafe_policy: UnsafePolicy,
@@ -176,13 +219,15 @@ pub struct IncludeCppConfig {
     pub allowlist: Allowlist,
     pub(crate) blocklist: Vec<String>,
     pub(crate) constructor_blocklist: Vec<String>,
+    pub instantiable: Vec<String>,
     pub(crate) exclude_utilities: bool,
     pub(crate) mod_name: Option<Ident>,
     pub rust_types: Vec<RustPath>,
     pub subclasses: Vec<Subclass>,
     pub extern_rust_funs: Vec<RustFun>,
-    pub concretes: HashMap<String, Ident>,
-    pub externs: HashMap<String, ExternCppType>,
+    pub concretes: ConcretesMap,
+    pub externs: ExternCppTypeMap,
+    pub opaquelist: Vec<String>,
 }
 
 impl Parse for IncludeCppConfig {
@@ -196,7 +241,7 @@ impl Parse for IncludeCppConfig {
             let (possible_directives, to_parse, parse_completely) = if has_hexathorpe {
                 (&get_directives().need_hexathorpe, input, false)
             } else {
-                input.parse::<Option<syn::token::Bang>>()?;
+                input.parse::<Option<syn::token::Not>>()?;
                 syn::parenthesized!(args in input);
                 (&get_directives().need_exclamation, &args, true)
             };
@@ -206,7 +251,7 @@ impl Parse for IncludeCppConfig {
                 None => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("expected {}", all_possible),
+                        format!("expected {all_possible}"),
                     ));
                 }
                 Some(directive) => directive.parse(to_parse, &mut config, &ident.span())?,
@@ -214,7 +259,7 @@ impl Parse for IncludeCppConfig {
             if parse_completely && !to_parse.is_empty() {
                 return Err(syn::Error::new(
                     ident.span(),
-                    format!("found unexpected input within the directive {}", ident_str),
+                    format!("found unexpected input within the directive {ident_str}"),
                 ));
             }
             if input.is_empty() {
@@ -288,7 +333,7 @@ impl IncludeCppConfig {
         if self.exclude_utilities {
             Vec::new()
         } else {
-            vec![self.get_makestring_name().to_string()]
+            vec![self.get_makestring_name()]
         }
     }
 
@@ -310,6 +355,7 @@ impl IncludeCppConfig {
     /// 1) As directives to bindgen
     /// 2) After bindgen has generated code, to filter the APIs which
     ///    we pass to cxx.
+    ///
     /// This second pass may seem redundant. But sometimes bindgen generates
     /// unnecessary stuff.
     pub fn is_on_allowlist(&self, cpp_name: &str) -> bool {
@@ -318,6 +364,7 @@ impl IncludeCppConfig {
             || self.is_subclass_holder(cpp_name)
             || self.is_subclass_cpp(cpp_name)
             || self.is_rust_fun(cpp_name)
+            || self.is_rust_type_name(cpp_name)
             || self.is_concrete_type(cpp_name)
             || match &self.allowlist {
                 Allowlist::Unspecified(_) => panic!("Eek no allowlist yet"),
@@ -341,29 +388,41 @@ impl IncludeCppConfig {
         self.blocklist.iter()
     }
 
+    pub fn get_opaquelist(&self) -> impl Iterator<Item = &String> {
+        self.opaquelist.iter()
+    }
+
     fn is_concrete_type(&self, cpp_name: &str) -> bool {
-        self.concretes.values().any(|val| *val == cpp_name)
+        self.concretes.0.values().any(|val| *val == cpp_name)
+    }
+
+    /// Get a hash of the contents of this `include_cpp!` block.
+    pub fn get_hash(&self) -> u64 {
+        let mut s = DefaultHasher::new();
+        self.hash(&mut s);
+        s.finish()
     }
 
     /// In case there are multiple sets of ffi mods in a single binary,
     /// endeavor to return a name which can be used to make symbols
     /// unique.
-    pub fn uniquify_name_per_mod<'a>(&self, name: &'a str) -> Cow<'a, str> {
-        match self.mod_name.as_ref() {
-            None => Cow::Borrowed(name),
-            Some(md) => Cow::Owned(format!("{}_{}", name, md)),
-        }
+    pub fn uniquify_name_per_mod(&self, name: &str) -> String {
+        format!("{}_{:#x}", name, self.get_hash())
     }
 
-    pub fn get_makestring_name(&self) -> Cow<str> {
+    pub fn get_makestring_name(&self) -> String {
         self.uniquify_name_per_mod("autocxx_make_string")
     }
 
     pub fn is_rust_type(&self, id: &Ident) -> bool {
+        let id_string = id.to_string();
+        self.is_rust_type_name(&id_string) || self.is_subclass_holder(&id_string)
+    }
+
+    fn is_rust_type_name(&self, possible_ty: &str) -> bool {
         self.rust_types
             .iter()
-            .any(|rt| rt.get_final_ident() == &id.to_string())
-            || self.is_subclass_holder(&id.to_string())
+            .any(|rt| rt.get_final_ident() == possible_ty)
     }
 
     fn is_rust_fun(&self, possible_fun: &str) -> bool {

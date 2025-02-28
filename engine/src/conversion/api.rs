@@ -6,94 +6,59 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use indexmap::set::IndexSet as HashSet;
-use std::fmt::Display;
+use autocxx_bindgen::callbacks::{Explicitness, SpecialMemberKind, Virtualness};
+
+use syn::{
+    punctuated::Punctuated,
+    token::{Comma, Unsafe},
+};
 
 use crate::types::{make_ident, Namespace, QualifiedName};
+use crate::{
+    minisyn::{
+        Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, Pat, ReturnType, Type,
+        Visibility,
+    },
+    parse_callbacks::CppOriginalName,
+};
 use autocxx_parser::{ExternCppType, RustFun, RustPath};
 use itertools::Itertools;
 use quote::ToTokens;
-use syn::{
-    parse::Parse,
-    punctuated::Punctuated,
-    token::{Comma, Unsafe},
-    Attribute, FnArg, Ident, ItemConst, ItemEnum, ItemStruct, ItemType, ItemUse, LitBool, LitInt,
-    Pat, ReturnType, Type, Visibility,
-};
+
+pub(crate) use autocxx_bindgen::callbacks::Visibility as CppVisibility;
 
 use super::{
-    analysis::{
-        fun::{
-            function_wrapper::{CppFunction, CppFunctionBody, CppFunctionKind},
-            ReceiverMutability,
-        },
-        PointerTreatment,
+    analysis::fun::{
+        function_wrapper::{CppFunction, CppFunctionBody, CppFunctionKind},
+        ReceiverMutability,
     },
     convert_error::{ConvertErrorWithContext, ErrorContext},
-    ConvertError,
+    ConvertErrorFromCpp, CppEffectiveName,
 };
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum TypeKind {
     Pod,    // trivial. Can be moved and copied in Rust.
     NonPod, // has destructor or non-trivial move constructors. Can only hold by UniquePtr
+    Opaque, // bindgen opaque data. We can't generate any constructors as we don't
+    // know what fields it has.
+    // NB you might not find references to this in the codebase - that's
+    // because `implicit_constructor.rs` acts on all the other types of TypeKind
     Abstract, // has pure virtual members - can't even generate UniquePtr.
-            // It's possible that the type itself isn't pure virtual, but it inherits from
-            // some other type which is pure virtual. Alternatively, maybe we just don't
-            // know if the base class is pure virtual because it wasn't on the allowlist,
-            // in which case we'll err on the side of caution.
-}
-
-/// C++ visibility.
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub(crate) enum CppVisibility {
-    Public,
-    Protected,
-    Private,
+              // It's possible that the type itself isn't pure virtual, but it inherits from
+              // some other type which is pure virtual. Alternatively, maybe we just don't
+              // know if the base class is pure virtual because it wasn't on the allowlist,
+              // in which case we'll err on the side of caution.
 }
 
 /// Details about a C++ struct.
+#[derive(Debug)]
 pub(crate) struct StructDetails {
-    pub(crate) vis: CppVisibility,
     pub(crate) item: ItemStruct,
-    pub(crate) layout: Option<Layout>,
     pub(crate) has_rvalue_reference_fields: bool,
 }
 
-/// Layout of a type, equivalent to the same type in ir/layout.rs in bindgen
-#[derive(Clone)]
-pub(crate) struct Layout {
-    /// The size (in bytes) of this layout.
-    pub(crate) size: usize,
-    /// The alignment (in bytes) of this layout.
-    pub(crate) align: usize,
-    /// Whether this layout's members are packed or not.
-    pub(crate) packed: bool,
-}
-
-impl Parse for Layout {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let size: LitInt = input.parse()?;
-        input.parse::<syn::token::Comma>()?;
-        let align: LitInt = input.parse()?;
-        input.parse::<syn::token::Comma>()?;
-        let packed: LitBool = input.parse()?;
-        Ok(Layout {
-            size: size.base10_parse().unwrap(),
-            align: align.base10_parse().unwrap(),
-            packed: packed.value(),
-        })
-    }
-}
-
-#[derive(Clone)]
-pub(crate) enum Virtualness {
-    None,
-    Virtual,
-    PureVirtual,
-}
-
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum CastMutability {
     ConstToConst,
     MutToConst,
@@ -102,7 +67,7 @@ pub(crate) enum CastMutability {
 
 /// Indicates that this function (which is synthetic) should
 /// be a trait implementation rather than a method or free function.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum TraitSynthesis {
     Cast {
         to_type: QualifiedName,
@@ -114,7 +79,7 @@ pub(crate) enum TraitSynthesis {
 
 /// Details of a subclass constructor.
 /// TODO: zap this; replace with an extra API.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct SubclassConstructorDetails {
     pub(crate) subclass: SubclassName,
     pub(crate) is_trivial: bool,
@@ -125,7 +90,7 @@ pub(crate) struct SubclassConstructorDetails {
 
 /// Contributions to traits representing C++ superclasses that
 /// we may implement as Rust subclasses.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct SuperclassMethod {
     pub(crate) name: Ident,
     pub(crate) receiver: QualifiedName,
@@ -137,46 +102,7 @@ pub(crate) struct SuperclassMethod {
     pub(crate) is_pure_virtual: bool,
 }
 
-/// Information about references (as opposed to pointers) to be found
-/// within the function signature. This is derived from bindgen annotations
-/// which is why it's not within `FuncToConvert::inputs`
-#[derive(Default, Clone)]
-pub(crate) struct References {
-    pub(crate) rvalue_ref_params: HashSet<Ident>,
-    pub(crate) ref_params: HashSet<Ident>,
-    pub(crate) ref_return: bool,
-    pub(crate) rvalue_ref_return: bool,
-}
-
-impl References {
-    pub(crate) fn new_with_this_and_return_as_reference() -> Self {
-        Self {
-            ref_return: true,
-            ref_params: [make_ident("this")].into_iter().collect(),
-            ..Default::default()
-        }
-    }
-    pub(crate) fn param_treatment(&self, param: &Ident) -> PointerTreatment {
-        if self.rvalue_ref_params.contains(param) {
-            PointerTreatment::RValueReference
-        } else if self.ref_params.contains(param) {
-            PointerTreatment::Reference
-        } else {
-            PointerTreatment::Pointer
-        }
-    }
-    pub(crate) fn return_treatment(&self) -> PointerTreatment {
-        if self.rvalue_ref_return {
-            PointerTreatment::RValueReference
-        } else if self.ref_return {
-            PointerTreatment::Reference
-        } else {
-            PointerTreatment::Pointer
-        }
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct TraitImplSignature {
     pub(crate) ty: Type,
     pub(crate) trait_signature: Type,
@@ -216,31 +142,6 @@ impl std::hash::Hash for TraitImplSignature {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum SpecialMemberKind {
-    DefaultConstructor,
-    CopyConstructor,
-    MoveConstructor,
-    Destructor,
-    AssignmentOperator,
-}
-
-impl Display for SpecialMemberKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                SpecialMemberKind::DefaultConstructor => "default constructor",
-                SpecialMemberKind::CopyConstructor => "copy constructor",
-                SpecialMemberKind::MoveConstructor => "move constructor",
-                SpecialMemberKind::Destructor => "destructor",
-                SpecialMemberKind::AssignmentOperator => "assignment operator",
-            }
-        )
-    }
-}
-
-#[derive(Clone)]
 pub(crate) enum Provenance {
     Bindgen,
     SynthesizedOther,
@@ -257,20 +158,19 @@ pub(crate) enum Provenance {
 /// during normal bindgen parsing. If that happens, they'll create one
 /// of these structures, and typically fill in some of the
 /// `synthesized_*` members which are not filled in from bindgen.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct FuncToConvert {
     pub(crate) provenance: Provenance,
     pub(crate) ident: Ident,
     pub(crate) doc_attrs: Vec<Attribute>,
     pub(crate) inputs: Punctuated<FnArg, Comma>,
+    pub(crate) variadic: bool,
     pub(crate) output: ReturnType,
     pub(crate) vis: Visibility,
-    pub(crate) virtualness: Virtualness,
+    pub(crate) virtualness: Option<Virtualness>,
     pub(crate) cpp_vis: CppVisibility,
     pub(crate) special_member: Option<SpecialMemberKind>,
-    pub(crate) unused_template_param: bool,
-    pub(crate) references: References,
-    pub(crate) original_name: Option<String>,
+    pub(crate) original_name: Option<CppOriginalName>,
     /// Used for static functions only. For all other functons,
     /// this is figured out from the receiver type in the inputs.
     pub(crate) self_ty: Option<QualifiedName>,
@@ -283,18 +183,20 @@ pub(crate) struct FuncToConvert {
     /// If Some, this function didn't really exist in the original
     /// C++ and instead we're synthesizing it.
     pub(crate) synthetic_cpp: Option<(CppFunctionBody, CppFunctionKind)>,
-    pub(crate) is_deleted: bool,
+    /// =delete or =default
+    pub(crate) is_deleted: Option<Explicitness>,
 }
 
 /// Layers of analysis which may be applied to decorate each API.
 /// See description of the purpose of this trait within `Api`.
-pub(crate) trait AnalysisPhase {
-    type TypedefAnalysis;
-    type StructAnalysis;
-    type FunAnalysis;
+pub(crate) trait AnalysisPhase: std::fmt::Debug {
+    type TypedefAnalysis: std::fmt::Debug;
+    type StructAnalysis: std::fmt::Debug;
+    type FunAnalysis: std::fmt::Debug;
 }
 
 /// No analysis has been applied to this API.
+#[derive(std::fmt::Debug)]
 pub(crate) struct NullPhase;
 
 impl AnalysisPhase for NullPhase {
@@ -303,9 +205,9 @@ impl AnalysisPhase for NullPhase {
     type FunAnalysis = ();
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum TypedefKind {
-    Use(ItemUse),
+    Use(Box<Type>),
     Type(ItemType),
 }
 
@@ -314,7 +216,7 @@ pub(crate) enum TypedefKind {
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub(crate) struct ApiName {
     pub(crate) name: QualifiedName,
-    cpp_name: Option<String>,
+    cpp_name: Option<CppOriginalName>,
 }
 
 impl ApiName {
@@ -322,7 +224,11 @@ impl ApiName {
         Self::new_from_qualified_name(QualifiedName::new(ns, id))
     }
 
-    pub(crate) fn new_with_cpp_name(ns: &Namespace, id: Ident, cpp_name: Option<String>) -> Self {
+    pub(crate) fn new_with_cpp_name(
+        ns: &Namespace,
+        id: Ident,
+        cpp_name: Option<CppOriginalName>,
+    ) -> Self {
         Self {
             name: QualifiedName::new(ns, id),
             cpp_name,
@@ -340,23 +246,25 @@ impl ApiName {
         Self::new(&Namespace::new(), id)
     }
 
-    pub(crate) fn cpp_name(&self) -> String {
-        self.cpp_name
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| self.name.get_final_item().to_string())
+    /// Return the C++ name to use here, which will use the Rust
+    /// name unless it's been overridden by a C++ name.
+    pub(crate) fn cpp_name(&self) -> CppEffectiveName {
+        CppEffectiveName::from_api_details(&self.cpp_name, &self.name)
     }
 
     pub(crate) fn qualified_cpp_name(&self) -> String {
-        let cpp_name = self.cpp_name();
         self.name
             .ns_segment_iter()
-            .cloned()
-            .chain(std::iter::once(cpp_name))
+            .chain(std::iter::once(
+                self.cpp_name()
+                    .to_string_for_cpp_generation()
+                    .to_string()
+                    .as_str(),
+            ))
             .join("::")
     }
 
-    pub(crate) fn cpp_name_if_present(&self) -> Option<&String> {
+    pub(crate) fn cpp_name_if_present(&self) -> Option<&CppOriginalName> {
         self.cpp_name.as_ref()
     }
 }
@@ -365,7 +273,7 @@ impl std::fmt::Debug for ApiName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
         if let Some(cpp_name) = &self.cpp_name {
-            write!(f, " (cpp={})", cpp_name)?;
+            write!(f, " (cpp={cpp_name})")?;
         }
         Ok(())
     }
@@ -418,7 +326,7 @@ impl SubclassName {
     }
     // TODO this and the following should probably include both class name and method name
     pub(crate) fn get_super_fn_name(superclass_namespace: &Namespace, id: &str) -> QualifiedName {
-        let id = make_ident(format!("{}_super", id));
+        let id = make_ident(format!("{id}_super"));
         QualifiedName::new(superclass_namespace, id)
     }
     pub(crate) fn get_methods_trait_name(superclass_name: &QualifiedName) -> QualifiedName {
@@ -434,7 +342,7 @@ impl SubclassName {
     }
 }
 
-#[derive(strum_macros::Display)]
+#[derive(std::fmt::Debug)]
 /// Different types of API we might encounter.
 ///
 /// This type is parameterized over an `ApiAnalysis`. This is any additional
@@ -445,11 +353,9 @@ impl SubclassName {
 /// because sometimes we pass on the `bindgen` output directly in the
 /// Rust codegen output.
 ///
-/// This derives from [strum_macros::Display] because we want to be
-/// able to debug-print the enum discriminant without worrying about
-/// the fact that their payloads may not be `Debug` or `Display`.
-/// (Specifically, allowing `syn` Types to be `Debug` requires
-/// enabling syn's `extra-traits` feature which increases compile time.)
+/// Any `syn` types represented in this `Api` type, or any of the types from
+/// which it is composed, should be wrapped in `crate::minisyn` equivalents
+/// to avoid excessively verbose `Debug` logging.
 pub(crate) enum Api<T: AnalysisPhase> {
     /// A forward declaration, which we mustn't store in a UniquePtr.
     ForwardDeclaration {
@@ -522,7 +428,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     /// dependent items.
     IgnoredItem {
         name: ApiName,
-        err: ConvertError,
+        err: ConvertErrorFromCpp,
         ctx: Option<ErrorContext>,
     },
     /// A Rust type which is not a C++ type.
@@ -531,7 +437,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     RustFn {
         name: ApiName,
         details: RustFun,
-        receiver: Option<QualifiedName>,
+        deps: Vec<QualifiedName>,
     },
     /// Some function for the extern "Rust" block.
     RustSubclassFn {
@@ -559,6 +465,7 @@ pub(crate) enum Api<T: AnalysisPhase> {
     },
 }
 
+#[derive(Debug)]
 pub(crate) struct RustSubclassFnDetails {
     pub(crate) params: Punctuated<FnArg, Comma>,
     pub(crate) ret: ReturnType,
@@ -613,16 +520,14 @@ impl<T: AnalysisPhase> Api<T> {
 
     /// The name recorded for use in C++, if and only if
     /// it differs from Rust.
-    pub(crate) fn cpp_name(&self) -> &Option<String> {
+    pub(crate) fn cpp_name(&self) -> &Option<CppOriginalName> {
         &self.name_info().cpp_name
     }
 
     /// The name for use in C++, whether or not it differs
     /// from Rust.
-    pub(crate) fn effective_cpp_name(&self) -> &str {
-        self.cpp_name()
-            .as_deref()
-            .unwrap_or_else(|| self.name().get_final_item())
+    pub(crate) fn effective_cpp_name(&self) -> CppEffectiveName {
+        self.name_info().cpp_name()
     }
 
     /// If this API turns out to have the same QualifiedName as another,
@@ -643,12 +548,6 @@ impl<T: AnalysisPhase> Api<T> {
             ),
             _ => Box::new(std::iter::once(self.name().clone())),
         }
-    }
-}
-
-impl<T: AnalysisPhase> std::fmt::Debug for Api<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?} (kind={})", self.name_info(), self)
     }
 }
 

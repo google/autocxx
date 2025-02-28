@@ -37,7 +37,7 @@ pub fn subclass(attr: TokenStream, item: TokenStream) -> TokenStream {
         abort!(s.vis.span(), "Rust subclasses of C++ types must by public");
     }
     let id = &s.ident;
-    let cpp_ident = Ident::new(&format!("{}Cpp", id), Span::call_site());
+    let cpp_ident = Ident::new(&format!("{id}Cpp"), Span::call_site());
     let input = quote! {
         cpp_peer: autocxx::subclass::CppSubclassCppPeerHolder<ffi:: #cpp_ident>
     };

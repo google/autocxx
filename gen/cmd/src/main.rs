@@ -10,12 +10,14 @@
 
 mod depfile;
 
-use autocxx_engine::{parse_file, HeaderNamer, RebuildDependencyRecorder};
+use autocxx_engine::{
+    generate_rs_archive, generate_rs_single, get_cxx_header_bytes, parse_file,
+    AutocxxgenHeaderNamer, CxxgenHeaderNamer, RebuildDependencyRecorder,
+};
 use clap::{crate_authors, crate_version, Arg, ArgGroup, Command};
 use depfile::Depfile;
+use indexmap::IndexSet;
 use miette::IntoDiagnostic;
-use proc_macro2::TokenStream;
-use quote::ToTokens;
 use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -35,47 +37,51 @@ which is much easier to include in build.rs build scripts. You'd likely
 use this tool only if you're using some non-Cargo build system. If
 that's you, read on.
 
-This tool has three modes: generate the C++; generate a new Rust file where
-the include_cpp! directive is *replaced* with bindings, or generate
-a Rust file which can be included by the autocxx_macro. You may specify
-multiple modes, or of course, invoke the tool multiple times.
+This tool has three modes: generate the C++; or generate
+a Rust file which can be included by the autocxx_macro; or generate an archive
+containing multiple Rust files to be expanded by different autocxx macros.
+You may specify multiple modes, or of course, invoke the tool multiple times.
 
 In any mode, you'll need to pass the source Rust file name and the C++
-include path.
+include path. You may pass multiple Rust files, each of which may contain
+multiple include_cpp! or cxx::bridge macros.
 
-For generation of the Rust side bindings, here's how to choose between
-the two modes. If you're copying the entire Rust crate to a different
-location during your build process, you may as well use --gen-rs-complete
-to generate a whole new replacement .rs file with the autocxx
-include_cpp! macro expanded.
+There are three basic ways to use this tool, depending on the flexibility
+of your build system.
 
-But in most build systems, you won't be copying all the crate source
-to a new location. In such a case, you should use --gen-rs-include
-which will generate a file that will be included by the autocxx_macro
-crate.
+Does your build system require fixed output filenames, or can it enumerate
+whatever files are generated?
 
-The second decision you must make is naming of the output files.
-If your build system is able to cope with autocxx_gen building
-unpredictable filenames, then:
-a) set AUTOCXX_RS when using autocxx_macro
-b) build all *.cc files produced by this tool.
+If it's flexible, then use
+  --gen-rs-include --gen-cpp
+An arbitrary number of .h, .cc and .rs files will be generated, depending
+on how many cxx::bridge and include_cpp macros are encountered and their contents.
+When building the rust code, simply ensure that AUTOCXX_RS or OUT_DIR is set to
+teach rustc where to find these .rs files.
 
-If your build system requires each build rule to make precise filenames
-known in advance, then you will need to:
-a) Use `--generate-exact <N> --gen-rs-complete`
-b) Teach your build system that the C++ files to compile are named `gen0.h`,
-   `gen0.cc`, `gen1.h`, `gen1.cc`, etc (through `N`), corresponding
-   to each `include_cpp!` section, plus 'cxxgen.h`. `gen.complete.rs` will also
-   be generated and should be compiled _instead of_ the original Rust file.
-c) If `N` is bigger than the number of files needed, extra no-op files will
-   be emitted. These may still be compiled normally, but won't do anything. If
-   `N` is smaller than the number of files needed, generation will fail.
+If your build system needs to be told exactly what C++ files are generated,
+additionally use --generate-exact <N> You are then guaranteed to get
+exactly 'n' files as follows:
+  gen<n>.h
+  autocxxgen<n>.h
+  gen<n>.cc
+Some of them may be blank. If the tool finds too many include_cpp or cxx::bridge
+macros to fit within that allowance, the build will fail.
 
-Note that there is currently no way to teach each `include_cpp!` section
-which `.include.rs` file to use, so the only way to get fixed output paths is
-with `--gen-rs-complete`. There are always multiple `.cc` files (even with just
-a single `include_cpp!` section), and we always generate the same number of each
-type of file.
+If your build system additionally requires that Rust files have fixed
+filenames, then you should use
+  --gen-rs-archive
+instead of
+  --gen-rs-include
+and you will need to give AUTOCXX_RS_JSON_ARCHIVE when building the Rust code.
+The output filename is named gen.rs.json. AUTOCXX_RS_JSON_ARCHIVE should be set
+to the path to gen.rs.json. It may optionally have multiple paths separated the
+way as the PATH environment variable for the current platform, see
+[`std::env::split_paths`] for details. The first path which is successfully
+opened will be used.
+
+This teaches rustc (and the autocxx macro) that all the different Rust bindings
+for multiple different autocxx macros have been archived into this single file.
 ";
 
 fn main() -> miette::Result<()> {
@@ -86,8 +92,9 @@ fn main() -> miette::Result<()> {
         .long_about(LONG_HELP)
         .arg(
             Arg::new("INPUT")
-                .help("Sets the input .rs file to use")
+                .help("Sets the input .rs files to use")
                 .required(true)
+                .multiple_occurrences(true)
         )
         .arg(
             Arg::new("outdir")
@@ -123,21 +130,21 @@ fn main() -> miette::Result<()> {
                 .help("whether to generate C++ implementation and header files")
         )
         .arg(
-            Arg::new("gen-rs-complete")
-                .long("gen-rs-complete")
-                .help("whether to generate a Rust file replacing the original file (suffix will be .complete.rs)")
-        )
-        .arg(
             Arg::new("gen-rs-include")
                 .long("gen-rs-include")
-                .help("whether to generate Rust files for inclusion using autocxx_macro (suffix will be .include.rs)")
+                .help("whether to generate Rust files for inclusion using autocxx_macro")
+        )
+        .arg(
+            Arg::new("gen-rs-archive")
+                .long("gen-rs-archive")
+                .help("whether to generate an archive of multiple sets of Rust bindings for use by autocxx_macro (suffix will be .rs.json)")
         )
         .group(ArgGroup::new("mode")
             .required(true)
             .multiple(true)
             .arg("gen-cpp")
-            .arg("gen-rs-complete")
             .arg("gen-rs-include")
+            .arg("gen-rs-archive")
         )
         .arg(
             Arg::new("generate-exact")
@@ -149,7 +156,7 @@ fn main() -> miette::Result<()> {
         .arg(
             Arg::new("fix-rs-include-name")
                 .long("fix-rs-include-name")
-                .help("Make the name of the .rs file predictable. You must set AUTOCXX_RS_FILE during Rust build time to educate autocxx_macro about your choice.")
+                .help("Make the name of the .rs file predictable (suffix will be .include.rs). You must set AUTOCXX_RS_FILE during Rust build time to educate autocxx_macro about your choice.")
                 .requires("gen-rs-include")
         )
         .arg(
@@ -168,6 +175,11 @@ fn main() -> miette::Result<()> {
                 .value_name("ANNOTATION")
                 .help("prefix for symbols to be exported from C++ bindings, e.g. __attribute__ ((visibility (\"default\")))")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::new("generate-cxx-h")
+                .long("generate-cxx-h")
+                .help("whether to generate cxx.h header file. If you already knew where to find cxx.h, consider using --cxx-h-path")
         )
         .arg(
             Arg::new("cxx-h-path")
@@ -199,15 +211,11 @@ fn main() -> miette::Result<()> {
         .get_matches();
 
     env_logger::builder().init();
-    let mut parsed_file = parse_file(
-        matches.value_of("INPUT").unwrap(),
-        matches.is_present("auto-allowlist"),
-    )?;
     let incs = matches
         .values_of("inc")
         .unwrap_or_default()
         .map(PathBuf::from)
-        .collect();
+        .collect::<Vec<_>>();
     let extra_clang_args: Vec<_> = matches
         .values_of("clang-args")
         .unwrap_or_default()
@@ -216,11 +224,21 @@ fn main() -> miette::Result<()> {
     let desired_number = matches
         .value_of("generate-exact")
         .map(|s| s.parse::<usize>().unwrap());
-    let header_counter = Cell::new(0);
-    let header_namer = if desired_number.is_some() {
-        HeaderNamer(Box::new(|_| {
-            let r = format!("gen{}.h", header_counter.get());
-            header_counter.set(header_counter.get() + 1);
+    let autocxxgen_header_counter = Cell::new(0);
+    let autocxxgen_header_namer = if desired_number.is_some() {
+        AutocxxgenHeaderNamer(Box::new(|_| {
+            let r = name_autocxxgen_h(autocxxgen_header_counter.get());
+            autocxxgen_header_counter.set(autocxxgen_header_counter.get() + 1);
+            r
+        }))
+    } else {
+        Default::default()
+    };
+    let cxxgen_header_counter = Cell::new(0);
+    let cxxgen_header_namer = if desired_number.is_some() {
+        CxxgenHeaderNamer(Box::new(|| {
+            let r = name_cxxgen_h(cxxgen_header_counter.get());
+            cxxgen_header_counter.set(cxxgen_header_counter.get() + 1);
             r
         }))
     } else {
@@ -231,7 +249,12 @@ fn main() -> miette::Result<()> {
         cxx_impl_annotations: get_option_string("cxx-impl-annotations", &matches),
         path_to_cxx_h: get_option_string("cxx-h-path", &matches),
         path_to_cxxgen_h: get_option_string("cxxgen-h-path", &matches),
-        header_namer,
+        autocxxgen_header_namer,
+        cxxgen_header_namer,
+    };
+    let codegen_options = autocxx_engine::CodegenOptions {
+        cpp_codegen_options,
+        ..Default::default()
     };
     let depfile = match matches.value_of("depfile") {
         None => None,
@@ -242,71 +265,131 @@ fn main() -> miette::Result<()> {
             )))
         }
     };
-    let dep_recorder: Option<Box<dyn RebuildDependencyRecorder>> = depfile
-        .as_ref()
-        .map(|rc| get_dependency_recorder(rc.clone()));
-    parsed_file.resolve_all(incs, &extra_clang_args, dep_recorder, &cpp_codegen_options)?;
+    let auto_allowlist = matches.is_present("auto-allowlist");
+
+    let mut parsed_files = Vec::new();
+    for input in matches.values_of("INPUT").expect("No INPUT was provided") {
+        // Parse all the .rs files we're asked to process, first.
+        // Spot any fundamental parsing or command line problems before we start
+        // to do the complex processing.
+        let parsed_file = parse_file(input, auto_allowlist)?;
+        parsed_files.push(parsed_file);
+    }
+
+    for parsed_file in parsed_files.iter_mut() {
+        // Now actually handle all the include_cpp directives we found,
+        // which is the complex bit where we interpret all the C+.
+        let dep_recorder: Option<Box<dyn RebuildDependencyRecorder>> = depfile
+            .as_ref()
+            .map(|rc| get_dependency_recorder(rc.clone()));
+        parsed_file.resolve_all(
+            incs.clone(),
+            &extra_clang_args,
+            dep_recorder,
+            &codegen_options,
+        )?;
+    }
+
+    // Finally start to write the C++ and Rust out.
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
+
+    if !outdir.exists() {
+        use miette::WrapErr as _;
+        std::fs::create_dir_all(&outdir)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to create `outdir` '{}'", outdir.display()))?;
+    }
+
+    let mut writer = FileWriter {
+        depfile: &depfile,
+        outdir: &outdir,
+        written: IndexSet::new(),
+    };
     if matches.is_present("gen-cpp") {
         let cpp = matches.value_of("cpp-extension").unwrap();
+        let name_cc_file = |counter| format!("gen{counter}.{cpp}");
         let mut counter = 0usize;
-        for include_cxx in parsed_file.get_cpp_buildables() {
+        for include_cxx in parsed_files
+            .iter()
+            .flat_map(|file| file.get_cpp_buildables())
+        {
             let generations = include_cxx
-                .generate_h_and_cxx(&cpp_codegen_options)
+                .generate_h_and_cxx(&codegen_options.cpp_codegen_options)
                 .expect("Unable to generate header and C++ code");
             for pair in generations.0 {
-                let cppname = format!("gen{}.{}", counter, cpp);
-                write_to_file(
-                    &depfile,
-                    &outdir,
-                    cppname,
-                    &pair.implementation.unwrap_or_default(),
-                );
-                write_to_file(&depfile, &outdir, pair.header_name, &pair.header);
+                let cppname = name_cc_file(counter);
+                writer.write_to_file(cppname, &pair.implementation.unwrap_or_default())?;
+                writer.write_to_file(pair.header_name, &pair.header)?;
                 counter += 1;
             }
         }
-        write_placeholders(&depfile, &outdir, counter, desired_number, cpp);
+        drop(codegen_options);
+        // Write placeholders to ensure we always make exactly 'n' of each file type.
+        writer.write_placeholders(counter, desired_number, name_cc_file)?;
+        writer.write_placeholders(
+            cxxgen_header_counter.into_inner(),
+            desired_number,
+            name_cxxgen_h,
+        )?;
+        writer.write_placeholders(
+            autocxxgen_header_counter.into_inner(),
+            desired_number,
+            name_autocxxgen_h,
+        )?;
     }
-    drop(cpp_codegen_options);
-    write_placeholders(
-        &depfile,
-        &outdir,
-        header_counter.into_inner(),
-        desired_number,
-        "h",
-    );
-    if matches.is_present("gen-rs-complete") {
-        let mut ts = TokenStream::new();
-        parsed_file.to_tokens(&mut ts);
-        write_to_file(
-            &depfile,
-            &outdir,
-            "gen.complete.rs".to_string(),
-            ts.to_string().as_bytes(),
-        );
+
+    if matches.is_present("generate-cxx-h") {
+        writer.write_to_file(
+            "cxx.h".to_string(),
+            &get_cxx_header_bytes(suppress_system_headers),
+        )?;
     }
+
     if matches.is_present("gen-rs-include") {
-        let autocxxes = parsed_file.get_rs_buildables();
+        if !matches.is_present("fix-rs-include-name") && desired_number.is_some() {
+            return Err(miette::Report::msg(
+                "gen-rs-include and generate-exact requires fix-rs-include-name.",
+            ));
+        }
         let mut counter = 0usize;
-        for include_cxx in autocxxes {
-            let ts = include_cxx.generate_rs();
+        let rust_buildables = parsed_files
+            .iter()
+            .flat_map(|parsed_file| parsed_file.get_rs_outputs());
+        for include_cxx in rust_buildables {
+            let rs_code = generate_rs_single(include_cxx);
             let fname = if matches.is_present("fix-rs-include-name") {
-                format!("gen{}.include.rs", counter)
+                name_include_rs(counter)
             } else {
-                include_cxx.get_rs_filename()
+                rs_code.filename
             };
-            write_to_file(&depfile, &outdir, fname, ts.to_string().as_bytes());
+            writer.write_to_file(fname, rs_code.code.as_bytes())?;
             counter += 1;
         }
-        if matches.is_present("fix-rs-include-name") {
-            write_placeholders(&depfile, &outdir, counter, desired_number, "include.rs");
-        }
+        writer.write_placeholders(counter, desired_number, name_include_rs)?;
+    }
+    if matches.is_present("gen-rs-archive") {
+        let rust_buildables = parsed_files
+            .iter()
+            .flat_map(|parsed_file| parsed_file.get_rs_outputs());
+        let json = generate_rs_archive(rust_buildables);
+        writer.write_to_file("gen.rs.json".into(), json.as_bytes())?;
     }
     if let Some(depfile) = depfile {
         depfile.borrow_mut().write().into_diagnostic()?;
     }
     Ok(())
+}
+
+fn name_autocxxgen_h(counter: usize) -> String {
+    format!("autocxxgen{counter}.h")
+}
+
+fn name_cxxgen_h(counter: usize) -> String {
+    format!("gen{counter}.h")
+}
+
+fn name_include_rs(counter: usize) -> String {
+    format!("gen{counter}.include.rs")
 }
 
 fn get_dependency_recorder(depfile: Rc<RefCell<Depfile>>) -> Box<dyn RebuildDependencyRecorder> {
@@ -318,47 +401,55 @@ fn get_option_string(option: &str, matches: &clap::ArgMatches) -> Option<String>
     cxx_impl_annotations
 }
 
-fn write_placeholders(
-    depfile: &Option<Rc<RefCell<Depfile>>>,
-    outdir: &Path,
-    mut counter: usize,
-    desired_number: Option<usize>,
-    extension: &str,
-) {
-    if let Some(desired_number) = desired_number {
-        if counter > desired_number {
-            panic!("More .{} files were generated than expected. Increase the value passed to --generate-exact or reduce the number of include_cpp! sections.", extension);
-        }
-        while counter < desired_number {
-            let fname = format!("gen{}.{}", counter, extension);
-            write_to_file(depfile, outdir, fname, BLANK.as_bytes());
-            counter += 1;
-        }
-    }
+struct FileWriter<'a> {
+    depfile: &'a Option<Rc<RefCell<Depfile>>>,
+    outdir: &'a Path,
+    written: IndexSet<String>,
 }
 
-fn write_to_file(
-    depfile: &Option<Rc<RefCell<Depfile>>>,
-    dir: &Path,
-    filename: String,
-    content: &[u8],
-) {
-    let path = dir.join(filename);
-    if let Some(depfile) = depfile {
-        depfile.borrow_mut().add_output(&path);
-    }
-    {
-        let f = File::open(&path);
-        if let Ok(mut f) = f {
-            let mut existing_content = Vec::new();
-            let r = f.read_to_end(&mut existing_content);
-            if r.is_ok() && existing_content == content {
-                return; // don't change timestamp on existing file unnecessarily
+impl FileWriter<'_> {
+    fn write_placeholders<F: FnOnce(usize) -> String + Copy>(
+        &mut self,
+        mut counter: usize,
+        desired_number: Option<usize>,
+        filename: F,
+    ) -> miette::Result<()> {
+        if let Some(desired_number) = desired_number {
+            if counter > desired_number {
+                return Err(miette::Report::msg(format!("{counter} files were generated. Increase the value passed to --generate-exact or reduce the number of include_cpp! sections.")));
+            }
+            while counter < desired_number {
+                let fname = filename(counter);
+                self.write_to_file(fname, BLANK.as_bytes())?;
+                counter += 1;
             }
         }
+        Ok(())
     }
-    let mut f = File::create(&path).expect("Unable to create file");
-    f.write_all(content).expect("Unable to write file");
+
+    fn write_to_file(&mut self, filename: String, content: &[u8]) -> miette::Result<()> {
+        let path = self.outdir.join(&filename);
+        if let Some(depfile) = self.depfile {
+            depfile.borrow_mut().add_output(&path);
+        }
+        {
+            let f = File::open(&path);
+            if let Ok(mut f) = f {
+                let mut existing_content = Vec::new();
+                let r = f.read_to_end(&mut existing_content);
+                if r.is_ok() && existing_content == content {
+                    return Ok(()); // don't change timestamp on existing file unnecessarily
+                }
+            }
+        }
+        let mut f = File::create(&path).into_diagnostic()?;
+        f.write_all(content).into_diagnostic()?;
+        if self.written.contains(&filename) {
+            return Err(miette::Report::msg(format!("autocxx_gen would write two files entitled '{filename}' which would have conflicting contents. Consider using --generate-exact.")));
+        }
+        self.written.insert(filename);
+        Ok(())
+    }
 }
 
 struct RecordIntoDepfile(Rc<RefCell<Depfile>>);

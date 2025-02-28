@@ -32,9 +32,10 @@ jobs:
           - name: macOS
             rust: nightly
             os: macos
-          - name: Windows (gnu)
-            rust: nightly-x86_64-pc-windows-gnu
-            os: windows
+          # Windows GNU disabled due to https://github.com/google/autocxx/issues/1134
+          # - name: Windows (gnu)
+          #    rust: nightly-x86_64-pc-windows-gnu
+          #    os: windows
           - name: Windows (msvc)
             rust: nightly-x86_64-pc-windows-msvc
             os: windows
@@ -70,7 +71,7 @@ jobs:
         # no creduce on Windows, so exclude tests needing creduce there
         run: |
           echo RUSTFLAGS=$RUSTFLAGS >> $GITHUB_ENV
-          echo ::set-output name=exclude::${{runner.os == 'Windows' && '--exclude autocxx-reduce --exclude autocxx-gen' || ''}}
+          echo exclude=${{runner.os == 'Windows' && '--exclude autocxx-reduce --exclude autocxx-gen' || ''}} >> "$GITHUB_OUTPUT"
         env:
           # non-linux failures https://github.com/google/autocxx/issues/819
           # beta failing tests https://github.com/google/autocxx/issues/818
@@ -139,8 +140,13 @@ jobs:
       - name: Build non-trivial-type-on-stack example
         working-directory: ./examples/non-trivial-type-on-stack
         run: cargo build
-        # We do not build the LLVM example because even 'apt-get install llvm-13-dev'
-        # does not work to install the LLVM 13 headers.
+      - name: Build reference-wrappers example
+        working-directory: ./examples/reference-wrappers
+        if: matrix.rust == 'nightly'
+        run: cargo build
+      - name: Build cpp_calling_rust example
+        working-directory: ./examples/cpp_calling_rust
+        run: cargo build
 
   sanitizer:
     name: Address Sanitizer
@@ -164,7 +170,18 @@ jobs:
           # leak sanitization, but we don't care about backtraces here, so long
           # as the other tests have them.
           RUST_BACKTRACE: "0"
-        run: cargo -Z build-std test --workspace --target x86_64-unknown-linux-gnu
+        run: cargo -Z build-std test --workspace --target x86_64-unknown-linux-gnu --exclude autocxx-macro
+
+  force-wrapper-generation:
+    name: Test forcing wrapper generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1
+      - name: Tests generating all possible shims
+        env:
+          AUTOCXX_FORCE_WRAPPER_GENERATION: 1
+        run: cargo test --workspace
 
   # Clippy check
   clippy:

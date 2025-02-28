@@ -6,13 +6,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use syn::ItemEnum;
+use crate::minisyn::ItemEnum;
 
 use super::{
     api::{AnalysisPhase, Api, ApiName, FuncToConvert, StructDetails, TypedefKind},
     apivec::ApiVec,
     convert_error::{ConvertErrorWithContext, ErrorContext},
-    ConvertError,
+    ConvertErrorFromCpp,
 };
 use crate::{
     conversion::convert_error::ErrorContextType,
@@ -33,7 +33,7 @@ where
     match fun() {
         Ok(result) => Some(result),
         Err(ConvertErrorWithContext(err, None)) => {
-            eprintln!("Ignored item: {}", err);
+            eprintln!("Ignored item: {err}");
             None
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
@@ -55,7 +55,7 @@ where
 /// Run some code which generates an API. Add that API, or if
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
-pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
+pub(crate) fn convert_apis<FF, SF, EF, TF, A, B>(
     in_apis: ApiVec<A>,
     out_apis: &mut ApiVec<B>,
     mut func_conversion: FF,
@@ -64,7 +64,7 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
     mut typedef_conversion: TF,
 ) where
     A: AnalysisPhase,
-    B: AnalysisPhase,
+    B: AnalysisPhase + 'static,
     FF: FnMut(
         ApiName,
         Box<FuncToConvert>,
@@ -127,11 +127,11 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
             Api::RustFn {
                 name,
                 details,
-                receiver,
+                deps,
             } => Ok(Box::new(std::iter::once(Api::RustFn {
                 name,
                 details,
-                receiver,
+                deps,
             }))),
             Api::RustSubclassFn {
                 name,
@@ -205,14 +205,11 @@ fn api_or_error<T: AnalysisPhase + 'static>(
 /// a method). Add that API, or if
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
-pub(crate) fn convert_item_apis<F, A, B: 'static>(
-    in_apis: ApiVec<A>,
-    out_apis: &mut ApiVec<B>,
-    mut fun: F,
-) where
-    F: FnMut(Api<A>) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertError>,
+pub(crate) fn convert_item_apis<F, A, B>(in_apis: ApiVec<A>, out_apis: &mut ApiVec<B>, mut fun: F)
+where
+    F: FnMut(Api<A>) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorFromCpp>,
     A: AnalysisPhase,
-    B: AnalysisPhase,
+    B: AnalysisPhase + 'static,
 {
     out_apis.extend(in_apis.into_iter().flat_map(|api| {
         let fullname = api.name_info().clone();

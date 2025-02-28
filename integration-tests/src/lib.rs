@@ -21,7 +21,7 @@ use autocxx_engine::{
 use log::info;
 use once_cell::sync::OnceCell;
 use proc_macro2::{Span, TokenStream};
-use quote::{quote, TokenStreamExt};
+use quote::{format_ident, quote, TokenStreamExt};
 use syn::Token;
 use tempfile::{tempdir, TempDir};
 
@@ -51,12 +51,24 @@ fn configure_builder(b: &mut BuilderBuild) -> &mut BuilderBuild {
         .flag_if_supported("-Werror")
 }
 
+/// What environment variables we should set in order to tell rustc how to find
+/// the Rust code.
+pub enum RsFindMode {
+    AutocxxRs,
+    AutocxxRsArchive,
+    AutocxxRsFile,
+    /// This just calls the callback instead of setting any environment variables. The callback
+    /// receives the path to the temporary directory.
+    Custom(Box<dyn FnOnce(&Path)>),
+}
+
 /// API to test building pre-generated files.
 pub fn build_from_folder(
     folder: &Path,
     main_rs_file: &Path,
     generated_rs_files: Vec<PathBuf>,
     cpp_files: &[&str],
+    rs_find_mode: RsFindMode,
 ) -> Result<(), TestError> {
     let target_dir = folder.join("target");
     std::fs::create_dir(&target_dir).unwrap();
@@ -78,6 +90,7 @@ pub fn build_from_folder(
         &["input.h", "cxx.h"],
         &main_rs_file,
         generated_rs_files,
+        rs_find_mode,
     );
     if r.is_err() {
         return Err(TestError::RsBuild); // details of Rust panic are a bit messy to include, and
@@ -125,6 +138,7 @@ impl LinkableTryBuilder {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build<P1: AsRef<Path>, P2: AsRef<Path>, P3: AsRef<Path> + RefUnwindSafe>(
         &self,
         library_path: &P1,
@@ -133,6 +147,7 @@ impl LinkableTryBuilder {
         header_names: &[&str],
         rs_path: &P3,
         generated_rs_files: Vec<PathBuf>,
+        rs_find_mode: RsFindMode,
     ) -> std::thread::Result<()> {
         // Copy all items from the source dir into our temporary dir if their name matches
         // the pattern given in `library_name`.
@@ -147,12 +162,23 @@ impl LinkableTryBuilder {
             );
         }
         let temp_path = self.temp_dir.path().to_str().unwrap();
-        let mut rustflags = format!("-L {}", temp_path);
+        let mut rustflags = format!("-L {temp_path}");
         if std::env::var_os("AUTOCXX_ASAN").is_some() {
             rustflags.push_str(" -Z sanitizer=address -Clinker=clang++ -Clink-arg=-fuse-ld=lld");
         }
         std::env::set_var("RUSTFLAGS", rustflags);
-        std::env::set_var("AUTOCXX_RS", temp_path);
+        match rs_find_mode {
+            RsFindMode::AutocxxRs => std::env::set_var("AUTOCXX_RS", temp_path),
+            RsFindMode::AutocxxRsArchive => std::env::set_var(
+                "AUTOCXX_RS_JSON_ARCHIVE",
+                self.temp_dir.path().join("gen.rs.json"),
+            ),
+            RsFindMode::AutocxxRsFile => std::env::set_var(
+                "AUTOCXX_RS_FILE",
+                self.temp_dir.path().join("gen0.include.rs"),
+            ),
+            RsFindMode::Custom(f) => f(self.temp_dir.path()),
+        };
         std::panic::catch_unwind(|| {
             let test_cases = trybuild::TestCases::new();
             test_cases.pass(rs_path)
@@ -168,6 +194,7 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
 }
 
 /// A positive test, we expect to pass.
+#[track_caller]
 pub fn run_test(
     cxx_code: &str,
     header_code: &str,
@@ -182,6 +209,8 @@ pub fn run_test(
         directives_from_lists(generate, generate_pods, None),
         None,
         None,
+        None,
+        "unsafe_ffi",
         None,
     )
     .unwrap()
@@ -237,8 +266,22 @@ pub fn run_test_ex(
         builder_modifier,
         code_checker,
         extra_rust,
+        "unsafe_ffi",
+        None,
     )
     .unwrap()
+}
+
+pub fn run_generate_all_test(header_code: &str) {
+    run_test_ex(
+        "",
+        header_code,
+        quote! {},
+        quote! { generate_all!() },
+        None,
+        None,
+        None,
+    );
 }
 
 pub fn run_test_expect_fail(
@@ -255,6 +298,8 @@ pub fn run_test_expect_fail(
         directives_from_lists(generate, generate_pods, None),
         None,
         None,
+        None,
+        "unsafe_ffi",
         None,
     )
     .expect_err("Unexpected success");
@@ -277,6 +322,8 @@ pub fn run_test_expect_fail_ex(
         builder_modifier,
         code_checker,
         extra_rust,
+        "unsafe_ffi",
+        None,
     )
     .expect_err("Unexpected success");
 }
@@ -326,14 +373,19 @@ pub fn do_run_test(
     builder_modifier: Option<BuilderModifier>,
     rust_code_checker: Option<CodeChecker>,
     extra_rust: Option<TokenStream>,
+    safety_policy: &str,
+    module_attributes: Option<TokenStream>,
 ) -> Result<(), TestError> {
     let hexathorpe = Token![#](Span::call_site());
+    let safety_policy = format_ident!("{}", safety_policy);
     let unexpanded_rust = quote! {
+            #module_attributes
+
             use autocxx::prelude::*;
 
             include_cpp!(
                 #hexathorpe include "input.h"
-                safety!(unsafe_ffi)
+                safety!(#safety_policy)
                 #directives
             );
 
@@ -369,25 +421,23 @@ pub fn do_run_test_manual(
     builder_modifier: Option<BuilderModifier>,
     rust_code_checker: Option<CodeChecker>,
 ) -> Result<(), TestError> {
+    let builder_modifier = consider_forcing_wrapper_generation(builder_modifier);
+
     const HEADER_NAME: &str = "input.h";
     // Step 2: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
-    write_to_file(
-        &tdir,
-        HEADER_NAME,
-        &format!("#pragma once\n{}", header_code),
-    );
+    write_to_file(&tdir, HEADER_NAME, &format!("#pragma once\n{header_code}"));
     write_to_file(&tdir, "cxx.h", HEADER);
 
     rust_code.append_all(quote! {
         #[link(name="autocxx-demo")]
-        extern {}
+        extern "C" {}
     });
     info!("Unexpanded Rust: {}", rust_code);
 
     let write_rust_to_file = |ts: &TokenStream| -> PathBuf {
         // Step 3: Write the Rust code to a temp file
-        let rs_code = format!("{}", ts);
+        let rs_code = format!("{ts}");
         write_to_file(&tdir, "input.rs", &rs_code)
     };
 
@@ -397,7 +447,7 @@ pub fn do_run_test_manual(
     let rs_path = write_rust_to_file(&rust_code);
 
     info!("Path is {:?}", tdir.path());
-    let builder = Builder::<TestBuilderContext>::new(&rs_path, &[tdir.path()])
+    let builder = Builder::<TestBuilderContext>::new(&rs_path, [tdir.path()])
         .custom_gendir(target_dir.clone());
     let builder = if let Some(builder_modifier) = &builder_modifier {
         builder_modifier.modify_autocxx_builder(builder)
@@ -409,7 +459,7 @@ pub fn do_run_test_manual(
     let generated_rs_files = build_results.1;
 
     if let Some(code_checker) = &rust_code_checker {
-        let mut file = File::open(generated_rs_files.get(0).ok_or(TestError::NoRs)?)
+        let mut file = File::open(generated_rs_files.first().ok_or(TestError::NoRs)?)
             .map_err(TestError::RsFileOpen)?;
         let mut content = String::new();
         file.read_to_string(&mut content)
@@ -426,7 +476,7 @@ pub fn do_run_test_manual(
     if !cxx_code.is_empty() {
         // Step 4: Write the C++ code snippet to a .cc file, along with a #include
         //         of the header emitted in step 5.
-        let cxx_code = format!("#include \"input.h\"\n#include \"cxxgen.h\"\n{}", cxx_code);
+        let cxx_code = format!("#include \"input.h\"\n#include \"cxxgen.h\"\n{cxx_code}");
         let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
         b.file(cxx_path);
     }
@@ -441,7 +491,7 @@ pub fn do_run_test_manual(
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
     if KEEP_TEMPDIRS {
-        println!("Generated .rs files: {:?}", generated_rs_files);
+        println!("Generated .rs files: {generated_rs_files:?}");
     }
     // Step 8: use the trybuild crate to build the Rust file.
     let r = get_builder().lock().unwrap().build(
@@ -451,6 +501,7 @@ pub fn do_run_test_manual(
         &["input.h", "cxx.h"],
         &rs_path,
         generated_rs_files,
+        RsFindMode::AutocxxRs,
     );
     if KEEP_TEMPDIRS {
         println!("Tempdir: {:?}", tdir.into_path().to_str());
@@ -460,4 +511,39 @@ pub fn do_run_test_manual(
                                         // not important at the moment.
     }
     Ok(())
+}
+
+/// If AUTOCXX_FORCE_WRAPPER_GENERATION is set, always force both C++
+/// and Rust side shims, for extra testing of obscure code paths.
+fn consider_forcing_wrapper_generation(
+    existing_builder_modifier: Option<BuilderModifier>,
+) -> Option<BuilderModifier> {
+    if std::env::var("AUTOCXX_FORCE_WRAPPER_GENERATION").is_err() {
+        existing_builder_modifier
+    } else {
+        Some(Box::new(ForceWrapperGeneration(existing_builder_modifier)))
+    }
+}
+
+struct ForceWrapperGeneration(Option<BuilderModifier>);
+
+impl BuilderModifierFns for ForceWrapperGeneration {
+    fn modify_autocxx_builder<'a>(
+        &self,
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
+        let builder = builder.force_wrapper_generation(true);
+        if let Some(modifier) = &self.0 {
+            modifier.modify_autocxx_builder(builder)
+        } else {
+            builder
+        }
+    }
+    fn modify_cc_builder<'a>(&self, builder: &'a mut cc::Build) -> &'a mut cc::Build {
+        if let Some(modifier) = &self.0 {
+            modifier.modify_cc_builder(builder)
+        } else {
+            builder
+        }
+    }
 }

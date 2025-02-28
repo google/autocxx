@@ -8,16 +8,16 @@
 
 use indexmap::map::IndexMap as HashMap;
 
-use syn::Ident;
+use crate::minisyn::Ident;
 
 use crate::{
     conversion::{
         api::{Api, SubclassName},
         apivec::ApiVec,
         error_reporter::convert_item_apis,
-        ConvertError,
+        ConvertErrorFromCpp,
     },
-    types::{validate_ident_ok_for_cxx, QualifiedName},
+    types::validate_ident_ok_for_cxx,
 };
 
 use super::fun::FnPhase;
@@ -43,9 +43,7 @@ pub(crate) fn check_names(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
             if let Some(cpp_name) = name.cpp_name_if_present() {
                 // The C++ name might itself be outer_type::inner_type and thus may
                 // have multiple segments.
-                validate_all_segments_ok_for_cxx(
-                    QualifiedName::new_from_cpp_name(cpp_name).segment_iter(),
-                )?;
+                validate_all_segments_ok_for_cxx(cpp_name.to_qualified_name().segment_iter())?;
             }
             Ok(Box::new(std::iter::once(api)))
         }
@@ -92,7 +90,7 @@ pub(crate) fn check_names(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
         if let Some(name) = my_name {
             let symbols_for_this_name = names_found.entry(name).or_default();
             if symbols_for_this_name.len() > 1usize {
-                Err(ConvertError::DuplicateCxxBridgeName(
+                Err(ConvertErrorFromCpp::DuplicateCxxBridgeName(
                     symbols_for_this_name.clone(),
                 ))
             } else {
@@ -105,11 +103,11 @@ pub(crate) fn check_names(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase> {
     results
 }
 
-fn validate_all_segments_ok_for_cxx(
-    items: impl Iterator<Item = String>,
-) -> Result<(), ConvertError> {
+fn validate_all_segments_ok_for_cxx<'a>(
+    items: impl Iterator<Item = &'a str>,
+) -> Result<(), ConvertErrorFromCpp> {
     for seg in items {
-        validate_ident_ok_for_cxx(&seg)?;
+        validate_ident_ok_for_cxx(seg).map_err(ConvertErrorFromCpp::InvalidIdent)?;
     }
     Ok(())
 }

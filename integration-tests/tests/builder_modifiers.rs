@@ -14,11 +14,19 @@ pub(crate) fn make_cpp17_adder() -> Option<BuilderModifier> {
     make_clang_arg_adder(&["-std=c++17"])
 }
 
-struct ClangArgAdder(Vec<String>);
+struct ClangArgAdder(Vec<String>, Vec<String>);
 
 pub(crate) fn make_clang_arg_adder(args: &[&str]) -> Option<BuilderModifier> {
+    make_clang_optional_arg_adder(args, &[])
+}
+
+pub(crate) fn make_clang_optional_arg_adder(
+    args: &[&str],
+    optional_args: &[&str],
+) -> Option<BuilderModifier> {
     let args: Vec<_> = args.iter().map(|a| a.to_string()).collect();
-    Some(Box::new(ClangArgAdder(args)))
+    let optional_args: Vec<_> = optional_args.iter().map(|a| a.to_string()).collect();
+    Some(Box::new(ClangArgAdder(args, optional_args)))
 }
 
 impl BuilderModifierFns for ClangArgAdder {
@@ -33,6 +41,9 @@ impl BuilderModifierFns for ClangArgAdder {
     fn modify_cc_builder<'a>(&self, mut builder: &'a mut cc::Build) -> &'a mut cc::Build {
         for f in &self.0 {
             builder = builder.flag(f);
+        }
+        for f in &self.1 {
+            builder = builder.flag_if_supported(f);
         }
         builder
     }

@@ -6,17 +6,22 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::ops::DerefMut;
+
 use indexmap::map::IndexMap as HashMap;
 
 use syn::{parse_quote, FnArg, PatType, Type, TypePtr};
 
-use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability};
+use crate::conversion::analysis::fun::{FnKind, MethodKind, ReceiverMutability, UnsafePolicy};
 use crate::conversion::analysis::pod::PodPhase;
 use crate::conversion::api::{
     CppVisibility, FuncToConvert, Provenance, RustSubclassFnDetails, SubclassConstructorDetails,
-    SubclassName, SuperclassMethod, UnsafetyNeeded, Virtualness,
+    SubclassName, SuperclassMethod, UnsafetyNeeded,
 };
 use crate::conversion::apivec::ApiVec;
+use crate::conversion::CppEffectiveName;
+use crate::minisyn::minisynize_punctuated;
+use crate::parse_callbacks::CppOriginalName;
 use crate::{
     conversion::{
         analysis::fun::function_wrapper::{
@@ -59,16 +64,15 @@ pub(super) fn create_subclass_fn_wrapper(
         inputs: fun.inputs.clone(),
         output: fun.output.clone(),
         vis: fun.vis.clone(),
-        virtualness: Virtualness::None,
+        virtualness: None,
         cpp_vis: CppVisibility::Public,
         special_member: None,
-        unused_template_param: fun.unused_template_param,
         original_name: None,
-        references: fun.references.clone(),
         add_to_trait: fun.add_to_trait.clone(),
         is_deleted: fun.is_deleted,
         synthetic_cpp: None,
         provenance: Provenance::SynthesizedOther,
+        variadic: fun.variadic,
     })
 }
 
@@ -78,21 +82,27 @@ pub(super) fn create_subclass_trait_item(
     receiver_mutability: &ReceiverMutability,
     receiver: QualifiedName,
     is_pure_virtual: bool,
+    unsafe_policy: &UnsafePolicy,
 ) -> Api<FnPrePhase1> {
     let param_names = analysis
         .param_details
         .iter()
         .map(|pd| pd.name.clone())
         .collect();
+    let requires_unsafe = if matches!(unsafe_policy, UnsafePolicy::AllFunctionsUnsafe) {
+        UnsafetyNeeded::Always
+    } else {
+        UnsafetyNeeded::from_param_details(&analysis.param_details, false)
+    };
     Api::SubclassTraitItem {
         name,
         details: SuperclassMethod {
             name: make_ident(&analysis.rust_name),
-            params: analysis.params.clone(),
+            params: minisynize_punctuated(analysis.params.clone()),
             ret_type: analysis.ret_type.clone(),
             param_names,
-            receiver_mutability: receiver_mutability.clone(),
-            requires_unsafe: UnsafetyNeeded::from_param_details(&analysis.param_details, false),
+            receiver_mutability: *receiver_mutability,
+            requires_unsafe,
             is_pure_virtual,
             receiver,
         },
@@ -106,17 +116,18 @@ pub(super) fn create_subclass_function(
     receiver_mutability: &ReceiverMutability,
     superclass: &QualifiedName,
     dependencies: Vec<QualifiedName>,
+    unsafe_policy: &UnsafePolicy,
 ) -> Api<FnPrePhase1> {
     let cpp = sub.cpp();
     let holder_name = sub.holder();
-    let rust_call_name = make_ident(format!(
+    let rust_call_name = format!(
         "{}_{}",
         sub.0.name.get_final_item(),
         name.name.get_final_item()
-    ));
-    let params = std::iter::once(parse_quote! {
+    );
+    let params = std::iter::once(crate::minisyn::FnArg(parse_quote! {
         me: & #holder_name
-    })
+    }))
     .chain(analysis.params.iter().skip(1).cloned())
     .collect();
     let kind = if matches!(receiver_mutability, ReceiverMutability::Mutable) {
@@ -130,15 +141,23 @@ pub(super) fn create_subclass_function(
         .skip(1)
         .map(|p| p.conversion.clone())
         .collect();
+    let requires_unsafe = if matches!(unsafe_policy, UnsafePolicy::AllFunctionsUnsafe) {
+        UnsafetyNeeded::Always
+    } else {
+        UnsafetyNeeded::from_param_details(&analysis.param_details, false)
+    };
     Api::RustSubclassFn {
-        name: ApiName::new_in_root_namespace(rust_call_name.clone()),
+        name: ApiName::new_in_root_namespace(make_ident(rust_call_name.clone())),
         subclass: sub.clone(),
         details: Box::new(RustSubclassFnDetails {
             params,
             ret: analysis.ret_type.clone(),
             method_name: make_ident(&analysis.rust_name),
             cpp_impl: CppFunction {
-                payload: CppFunctionBody::FunctionCall(Namespace::new(), rust_call_name),
+                payload: CppFunctionBody::FunctionCall(
+                    Namespace::new(),
+                    CppEffectiveName::from_subclass_function_name(rust_call_name),
+                ),
                 wrapper_function_name: make_ident(&analysis.rust_name),
                 original_cpp_name: name.cpp_name(),
                 return_conversion: analysis.ret_conversion.clone(),
@@ -148,9 +167,9 @@ pub(super) fn create_subclass_function(
                 qualification: Some(cpp),
             },
             superclass: superclass.clone(),
-            receiver_mutability: receiver_mutability.clone(),
+            receiver_mutability: *receiver_mutability,
             dependencies,
-            requires_unsafe: UnsafetyNeeded::from_param_details(&analysis.param_details, false),
+            requires_unsafe,
             is_pure_virtual: matches!(
                 analysis.kind,
                 FnKind::Method {
@@ -189,7 +208,9 @@ pub(super) fn create_subclass_constructor(
         kind: CppFunctionKind::SynthesizedConstructor,
         pass_obs_field: false,
         qualification: Some(cpp.clone()),
-        original_cpp_name: cpp.to_cpp_name(),
+        original_cpp_name: CppEffectiveName::from_fully_qualified_name_for_subclass(
+            &cpp.to_cpp_name(),
+        ),
     };
     let subclass_constructor_details = Box::new(SubclassConstructorDetails {
         subclass: sub.clone(),
@@ -200,7 +221,9 @@ pub(super) fn create_subclass_constructor(
     let subclass_constructor_name =
         make_ident(format!("{}_{}", cpp.get_final_item(), cpp.get_final_item()));
     let mut existing_params = fun.inputs.clone();
-    if let Some(FnArg::Typed(PatType { ty, .. })) = existing_params.first_mut() {
+    if let Some(FnArg::Typed(PatType { ty, .. })) =
+        existing_params.first_mut().map(DerefMut::deref_mut)
+    {
         if let Type::Ptr(TypePtr { elem, .. }) = &mut **ty {
             *elem = Box::new(Type::Path(sub.cpp().to_type_path()));
         } else {
@@ -216,7 +239,7 @@ pub(super) fn create_subclass_constructor(
     };
     let inputs = self_param
         .into_iter()
-        .chain(std::iter::once(boxed_holder_param))
+        .chain(std::iter::once(boxed_holder_param.into()))
         .chain(existing_params)
         .collect();
     let maybe_wrap = Box::new(FuncToConvert {
@@ -225,23 +248,22 @@ pub(super) fn create_subclass_constructor(
         inputs,
         output: fun.output.clone(),
         vis: fun.vis.clone(),
-        virtualness: Virtualness::None,
+        virtualness: None,
         cpp_vis: CppVisibility::Public,
-        special_member: fun.special_member.clone(),
+        special_member: fun.special_member,
         original_name: None,
-        unused_template_param: fun.unused_template_param,
-        references: fun.references.clone(),
         synthesized_this_type: Some(cpp.clone()),
         self_ty: Some(cpp),
         add_to_trait: None,
         is_deleted: fun.is_deleted,
         synthetic_cpp: None,
         provenance: Provenance::SynthesizedSubclassConstructor(subclass_constructor_details),
+        variadic: fun.variadic,
     });
     let subclass_constructor_name = ApiName::new_with_cpp_name(
         &Namespace::new(),
         subclass_constructor_name,
-        Some(sub.cpp().get_final_item().to_string()),
+        Some(CppOriginalName::from_final_item_of_pre_existing_qualified_name(&sub.cpp())),
     );
     (maybe_wrap, subclass_constructor_name)
 }

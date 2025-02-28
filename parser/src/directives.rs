@@ -9,12 +9,20 @@
 use indexmap::map::IndexMap as HashMap;
 
 use once_cell::sync::OnceCell;
+use proc_macro2::Ident;
 use proc_macro2::Span;
-use proc_macro2::{Ident, TokenStream};
+#[cfg(feature = "reproduction_case")]
+use proc_macro2::TokenStream;
+
+#[cfg(feature = "reproduction_case")]
 use quote::{quote, ToTokens};
 use syn::parse::ParseStream;
 
-use crate::config::{Allowlist, AllowlistErr};
+use crate::config::AllowlistErr;
+
+#[cfg(feature = "reproduction_case")]
+use crate::config::Allowlist;
+
 use crate::directive_names::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE, SUBCLASS};
 use crate::{AllowlistEntry, IncludeCppConfig};
 use crate::{ParseResult, RustFun, RustPath};
@@ -51,10 +59,24 @@ pub(crate) fn get_directives() -> &'static DirectivesMap {
             )),
         );
         need_exclamation.insert(
+            "opaque".into(),
+            Box::new(StringList(
+                |config| &mut config.opaquelist,
+                |config| &config.opaquelist,
+            )),
+        );
+        need_exclamation.insert(
             "block_constructors".into(),
             Box::new(StringList(
                 |config| &mut config.constructor_blocklist,
                 |config| &config.constructor_blocklist,
+            )),
+        );
+        need_exclamation.insert(
+            "instantiable".into(),
+            Box::new(StringList(
+                |config| &mut config.instantiable,
+                |config| &config.instantiable,
             )),
         );
         need_exclamation.insert(
@@ -108,6 +130,8 @@ pub(crate) trait Directive: Send + Sync {
         config: &mut IncludeCppConfig,
         span: &Span,
     ) -> ParseResult<()>;
+
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -128,6 +152,7 @@ impl Directive for Inclusion {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -157,6 +182,7 @@ impl Directive for Generate {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -194,6 +220,7 @@ impl Directive for GenerateNs {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -230,6 +257,7 @@ impl Directive for GenerateAll {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -255,22 +283,21 @@ impl Directive for Safety {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
     ) -> Box<dyn Iterator<Item = TokenStream> + 'a> {
         let policy = &config.unsafe_policy;
         match config.unsafe_policy {
-            crate::UnsafePolicy::AllFunctionsSafe => {
-                Box::new(std::iter::once(policy.to_token_stream()))
-            }
             crate::UnsafePolicy::AllFunctionsUnsafe => Box::new(std::iter::empty()),
+            _ => Box::new(std::iter::once(policy.to_token_stream())),
         }
     }
 }
 
 fn allowlist_err_to_syn_err(err: AllowlistErr, span: &Span) -> syn::Error {
-    syn::Error::new(*span, format!("{}", err))
+    syn::Error::new(*span, format!("{err}"))
 }
 
 struct StringList<SET, GET>(SET, GET)
@@ -294,6 +321,7 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -326,6 +354,7 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -352,6 +381,7 @@ impl Directive for ModName {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -375,15 +405,16 @@ impl Directive for Concrete {
         let definition: syn::LitStr = args.parse()?;
         args.parse::<syn::token::Comma>()?;
         let rust_id: syn::Ident = args.parse()?;
-        config.concretes.insert(definition.value(), rust_id);
+        config.concretes.0.insert(definition.value(), rust_id);
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
     ) -> Box<dyn Iterator<Item = TokenStream> + 'a> {
-        Box::new(config.concretes.iter().map(|(k, v)| {
+        Box::new(config.concretes.0.iter().map(|(k, v)| {
             quote! {
                 #k,#v
             }
@@ -392,6 +423,7 @@ impl Directive for Concrete {
 }
 
 struct RustType {
+    #[allow(dead_code)]
     output: bool,
 }
 
@@ -407,6 +439,7 @@ impl Directive for RustType {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -438,6 +471,7 @@ impl Directive for Subclass {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -467,11 +501,12 @@ impl Directive for ExternRustFun {
         config.extern_rust_funs.push(RustFun {
             path,
             sig,
-            receiver: None,
+            has_receiver: false,
         });
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -498,7 +533,7 @@ impl Directive for ExternCppType {
         let definition: syn::LitStr = args.parse()?;
         args.parse::<syn::token::Comma>()?;
         let rust_path: syn::TypePath = args.parse()?;
-        config.externs.insert(
+        config.externs.0.insert(
             definition.value(),
             crate::config::ExternCppType {
                 rust_path,
@@ -508,6 +543,7 @@ impl Directive for ExternCppType {
         Ok(())
     }
 
+    #[cfg(feature = "reproduction_case")]
     fn output<'a>(
         &self,
         config: &'a IncludeCppConfig,
@@ -516,6 +552,7 @@ impl Directive for ExternCppType {
         Box::new(
             config
                 .externs
+                .0
                 .iter()
                 .filter_map(move |(definition, details)| {
                     if details.opaque == opaque_needed {

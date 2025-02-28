@@ -6,25 +6,23 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use crate::{
-    conversion::ConvertError,
-    types::{make_ident, QualifiedName},
-};
+use crate::types::{make_ident, QualifiedName};
 use indexmap::map::IndexMap as HashMap;
 use indoc::indoc;
 use once_cell::sync::OnceCell;
-use syn::{parse_quote, Type, TypePath, TypePtr};
+use syn::{parse_quote, TypePath};
 
-//// The behavior of the type.
+/// The behavior of the type.
 #[derive(Debug)]
 enum Behavior {
-    CxxContainerByValueSafe,
-    CxxContainerNotByValueSafe,
+    CxxContainerPtr,
+    CxxContainerVector,
     CxxString,
     RustStr,
     RustString,
     RustByValue,
     CByValue,
+    CByValueVecSafe,
     CVariableLengthByValue,
     CVoid,
     CChar16,
@@ -71,21 +69,21 @@ impl TypeDetails {
             Behavior::RustString
             | Behavior::RustStr
             | Behavior::CxxString
-            | Behavior::CxxContainerByValueSafe
-            | Behavior::CxxContainerNotByValueSafe
+            | Behavior::CxxContainerPtr
+            | Behavior::CxxContainerVector
             | Behavior::RustContainerByValueSafe => {
                 let tn = QualifiedName::new_from_cpp_name(&self.rs_name);
                 let cxx_name = tn.get_final_item();
                 let (templating, payload) = match self.behavior {
-                    Behavior::CxxContainerByValueSafe
-                    | Behavior::CxxContainerNotByValueSafe
+                    Behavior::CxxContainerPtr
+                    | Behavior::CxxContainerVector
                     | Behavior::RustContainerByValueSafe => ("template<typename T> ", "T* ptr"),
                     _ => ("", "char* ptr"),
                 };
                 Some(format!(
                     indoc! {"
                     /**
-                    * <div rustbindgen=\"true\" replaces=\"{}\">
+                    * <div rustbindgen=\"true\" replaces=\"{}\"></div>
                     */
                     {}class {} {{
                         {};
@@ -102,12 +100,12 @@ impl TypeDetails {
         let mut segs = self.rs_name.split("::").peekable();
         if segs.peek().map(|seg| seg.is_empty()).unwrap_or_default() {
             segs.next();
-            let segs = segs.into_iter().map(make_ident);
+            let segs = segs.map(make_ident);
             parse_quote! {
                 ::#(#segs)::*
             }
         } else {
-            let segs = segs.into_iter().map(make_ident);
+            let segs = segs.map(make_ident);
             parse_quote! {
                 #(#segs)::*
             }
@@ -120,9 +118,8 @@ impl TypeDetails {
 
     fn get_generic_behavior(&self) -> CxxGenericType {
         match self.behavior {
-            Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe => {
-                CxxGenericType::Cpp
-            }
+            Behavior::CxxContainerPtr => CxxGenericType::CppPtr,
+            Behavior::CxxContainerVector => CxxGenericType::CppVector,
             Behavior::RustContainerByValueSafe => CxxGenericType::Rust,
             _ => CxxGenericType::Not,
         }
@@ -143,13 +140,16 @@ pub(crate) fn known_types() -> &'static TypeDatabase {
 }
 
 /// The type of payload that a cxx generic can contain.
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum CxxGenericType {
     /// Not a generic at all
     Not,
     /// Some generic like cxx::UniquePtr where the contents must be a
     /// complete type.
-    Cpp,
+    CppPtr,
+    /// Some generic like cxx::Vector where the contents must be a
+    /// complete type, and some types of int are allowed too.
+    CppVector,
     /// Some generic like rust::Box where forward declarations are OK
     Rust,
 }
@@ -200,17 +200,18 @@ impl TypeDatabase {
                 (
                     tn.clone(),
                     match self.get(tn).unwrap().behavior {
-                        Behavior::CxxContainerByValueSafe
+                        Behavior::CxxContainerPtr
                         | Behavior::RustStr
                         | Behavior::RustString
                         | Behavior::RustByValue
+                        | Behavior::CByValueVecSafe
                         | Behavior::CByValue
                         | Behavior::CVariableLengthByValue
                         | Behavior::CChar16
                         | Behavior::RustContainerByValueSafe => true,
-                        Behavior::CxxString
-                        | Behavior::CxxContainerNotByValueSafe
-                        | Behavior::CVoid => false,
+                        Behavior::CxxString | Behavior::CxxContainerVector | Behavior::CVoid => {
+                            false
+                        }
                     },
                 )
             })
@@ -243,7 +244,9 @@ impl TypeDatabase {
             .map(|td| {
                 matches!(
                     td.behavior,
-                    Behavior::CxxContainerByValueSafe | Behavior::CxxContainerNotByValueSafe
+                    Behavior::CxxContainerPtr
+                        | Behavior::CxxContainerVector
+                        | Behavior::RustContainerByValueSafe
                 )
             })
             .unwrap_or(false)
@@ -266,16 +269,18 @@ impl TypeDatabase {
         self.get(ty).is_some()
     }
 
-    pub(crate) fn known_type_type_path(&self, ty: &QualifiedName) -> Option<TypePath> {
-        self.get(ty).map(|td| td.to_type_path())
+    /// Whether this is the substitute type we made for some known type.
+    pub(crate) fn is_known_subtitute_type(&self, ty: &QualifiedName) -> bool {
+        if ty.get_namespace().is_empty() {
+            self.all_names()
+                .any(|n| n.get_final_item() == ty.get_final_item())
+        } else {
+            false
+        }
     }
 
-    /// Get the list of types to give to bindgen to ask it _not_ to
-    /// generate code for.
-    pub(crate) fn get_initial_blocklist(&self) -> impl Iterator<Item = &str> + '_ {
-        self.by_rs_name
-            .iter()
-            .filter_map(|(_, td)| td.get_prelude_entry().map(|_| td.cpp_name.as_str()))
+    pub(crate) fn known_type_type_path(&self, ty: &QualifiedName) -> Option<TypePath> {
+        self.get(ty).map(|td| td.to_type_path())
     }
 
     /// Whether this is one of the ctypes (mostly variable length integers)
@@ -303,6 +308,23 @@ impl TypeDatabase {
     pub(crate) fn is_cxx_acceptable_receiver(&self, ty: &QualifiedName) -> bool {
         self.get(ty).is_none() // at present, none of our known types can have
                                // methods attached.
+    }
+
+    pub(crate) fn permissible_within_vector(&self, ty: &QualifiedName) -> bool {
+        self.get(ty)
+            .map(|x| matches!(x.behavior, Behavior::CxxString | Behavior::CByValueVecSafe))
+            .unwrap_or(true)
+    }
+
+    pub(crate) fn permissible_within_unique_ptr(&self, ty: &QualifiedName) -> bool {
+        self.get(ty)
+            .map(|x| {
+                matches!(
+                    x.behavior,
+                    Behavior::CxxString | Behavior::CxxContainerVector
+                )
+            })
+            .unwrap_or(true)
     }
 
     pub(crate) fn conflicts_with_built_in_type(&self, ty: &QualifiedName) -> bool {
@@ -335,7 +357,7 @@ impl TypeDatabase {
             .filter(|tn| {
                 !matches!(
                     self.get(tn).unwrap().behavior,
-                    Behavior::CxxString | Behavior::CxxContainerNotByValueSafe
+                    Behavior::CxxString | Behavior::CxxContainerVector
                 )
             })
             .cloned()
@@ -347,7 +369,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "cxx::UniquePtr",
         "std::unique_ptr",
-        Behavior::CxxContainerByValueSafe,
+        Behavior::CxxContainerPtr,
         None,
         false,
         true,
@@ -355,7 +377,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "cxx::CxxVector",
         "std::vector",
-        Behavior::CxxContainerNotByValueSafe,
+        Behavior::CxxContainerVector,
         None,
         false,
         true,
@@ -363,7 +385,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "cxx::SharedPtr",
         "std::shared_ptr",
-        Behavior::CxxContainerByValueSafe,
+        Behavior::CxxContainerPtr,
         None,
         true,
         true,
@@ -371,7 +393,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "cxx::WeakPtr",
         "std::weak_ptr",
-        Behavior::CxxContainerByValueSafe,
+        Behavior::CxxContainerPtr,
         None,
         true,
         true,
@@ -411,7 +433,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "i8",
         "int8_t",
-        Behavior::CByValue,
+        Behavior::CByValueVecSafe,
         Some("std::os::raw::c_schar".into()),
         true,
         true,
@@ -419,21 +441,21 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "u8",
         "uint8_t",
-        Behavior::CByValue,
+        Behavior::CByValueVecSafe,
         Some("std::os::raw::c_uchar".into()),
         true,
         true,
     ));
     for (cpp_type, rust_type) in (4..7).map(|x| 2i32.pow(x)).flat_map(|x| {
         vec![
-            (format!("uint{}_t", x), format!("u{}", x)),
-            (format!("int{}_t", x), format!("i{}", x)),
+            (format!("uint{x}_t"), format!("u{x}")),
+            (format!("int{x}_t"), format!("i{x}")),
         ]
     }) {
         db.insert(TypeDetails::new(
             rust_type,
             cpp_type,
-            Behavior::CByValue,
+            Behavior::CByValueVecSafe,
             None,
             true,
             true,
@@ -449,10 +471,10 @@ fn create_type_database() -> TypeDatabase {
     ));
 
     db.insert(TypeDetails::new(
-        "std::pin::Pin",
+        "core::pin::Pin",
         "Pin",
         Behavior::RustByValue, // because this is actually Pin<&something>
-        None,
+        Some("std::pin::Pin".to_string()),
         true,
         false,
     ));
@@ -460,18 +482,18 @@ fn create_type_database() -> TypeDatabase {
     let mut insert_ctype = |cname: &str| {
         let concatenated_name = cname.replace(' ', "");
         db.insert(TypeDetails::new(
-            format!("autocxx::c_{}", concatenated_name),
+            format!("autocxx::c_{concatenated_name}"),
             cname,
             Behavior::CVariableLengthByValue,
-            Some(format!("std::os::raw::c_{}", concatenated_name)),
+            Some(format!("std::os::raw::c_{concatenated_name}")),
             true,
             true,
         ));
         db.insert(TypeDetails::new(
-            format!("autocxx::c_u{}", concatenated_name),
-            format!("unsigned {}", cname),
+            format!("autocxx::c_u{concatenated_name}"),
+            format!("unsigned {cname}"),
             Behavior::CVariableLengthByValue,
-            Some(format!("std::os::raw::c_u{}", concatenated_name)),
+            Some(format!("std::os::raw::c_u{concatenated_name}")),
             true,
             true,
         ));
@@ -485,7 +507,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "f32",
         "float",
-        Behavior::CByValue,
+        Behavior::CByValueVecSafe,
         None,
         true,
         true,
@@ -493,7 +515,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "f64",
         "double",
-        Behavior::CByValue,
+        Behavior::CByValueVecSafe,
         None,
         true,
         true,
@@ -509,7 +531,7 @@ fn create_type_database() -> TypeDatabase {
     db.insert(TypeDetails::new(
         "usize",
         "size_t",
-        Behavior::CByValue,
+        Behavior::CByValueVecSafe,
         None,
         true,
         true,
@@ -531,11 +553,4 @@ fn create_type_database() -> TypeDatabase {
         false,
     ));
     db
-}
-
-pub(crate) fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertError> {
-    match *ptr.elem {
-        Type::Path(..) => Ok(()),
-        _ => Err(ConvertError::InvalidPointee),
-    }
 }
