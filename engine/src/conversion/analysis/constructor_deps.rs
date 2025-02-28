@@ -51,7 +51,7 @@ fn decorate_struct(
     constructors_and_allocators_by_type: &mut HashMap<QualifiedName, Vec<QualifiedName>>,
 ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
     let pod = fn_struct.pod;
-    let constructor_and_allocator_deps = if !pod.kind.is_instantiable() || pod.is_generic {
+    let constructor_and_allocator_deps = if !pod.kind.is_instantiable() || pod.num_generics > 0 {
         Vec::new()
     } else {
         constructors_and_allocators_by_type

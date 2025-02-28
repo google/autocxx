@@ -16,14 +16,15 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
-    Attribute, FnArg, ForeignItem, Ident, ImplItem, Item, ReturnType,
+    Attribute, ForeignItem, Ident, ImplItem, Item, ReturnType,
 };
 
 use super::{
     function_wrapper_rs::RustParamConversion,
     maybe_unsafes_to_tokens,
-    unqualify::{unqualify_params, unqualify_ret_type},
-    ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
+    unqualify::{unqualify_params_minisyn, unqualify_ret_type},
+    utils::generate_cxx_use_stmt,
+    ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails,
 };
 use crate::{
     conversion::{
@@ -33,8 +34,8 @@ use crate::{
         },
         api::UnsafetyNeeded,
     },
-    minisyn::minisynize_vec,
-    types::{Namespace, QualifiedName},
+    minisyn::{minisynize_vec, FnArg},
+    types::QualifiedName,
 };
 use crate::{
     conversion::{api::FuncToConvert, codegen_rs::lifetime::add_explicit_lifetime_if_necessary},
@@ -85,10 +86,9 @@ impl UnsafetyNeeded {
 }
 
 pub(super) fn gen_function(
-    ns: &Namespace,
+    name: &QualifiedName,
     fun: FuncToConvert,
     analysis: FnAnalysis,
-    cpp_call_name: String,
     non_pod_types: &HashSet<QualifiedName>,
 ) -> RsCodegenResult {
     if analysis.ignore_reason.is_err() || !analysis.externally_callable {
@@ -96,6 +96,7 @@ pub(super) fn gen_function(
     }
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = &analysis.rust_name;
+    let cpp_call_name = &analysis.cpp_call_name;
     let ret_type = analysis.ret_type;
     let ret_conversion = analysis.ret_conversion;
     let param_details = analysis.param_details;
@@ -108,7 +109,6 @@ pub(super) fn gen_function(
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
     let mut trait_impl_entry = None;
-    let mut bindgen_mod_items = Vec::new();
     let always_unsafe_due_to_trait_definition = match kind {
         FnKind::TraitMethod { ref details, .. } => details.trait_call_is_unsafe,
         _ => false,
@@ -132,6 +132,8 @@ pub(super) fn gen_function(
         non_pod_types,
         &ret_conversion,
     );
+
+    let mut output_mod_items = Vec::new();
 
     if analysis.rust_wrapper_needed {
         match kind {
@@ -159,29 +161,24 @@ pub(super) fn gen_function(
             }
             _ => {
                 // Generate plain old function
-                bindgen_mod_items.push(fn_generator.generate_function_impl());
+                output_mod_items.push(fn_generator.generate_function_impl());
             }
         }
+    } else if matches!(kind, FnKind::Function) {
+        let alias = match analysis.rust_rename_strategy {
+            RustRenameStrategy::RenameInOutputMod(ref alias) => Some(&alias.0),
+            _ => None,
+        };
+        output_mod_items.push(generate_cxx_use_stmt(name, alias));
     }
 
-    let materialization = match kind {
-        FnKind::Method { .. } | FnKind::TraitMethod { .. } => None,
-        FnKind::Function => match analysis.rust_rename_strategy {
-            _ if analysis.rust_wrapper_needed => {
-                Some(Use::SpecificNameFromBindgen(make_ident(rust_name).into()))
-            }
-            RustRenameStrategy::RenameInOutputMod(ref alias) => {
-                Some(Use::UsedFromCxxBridgeWithAlias(alias.clone().into()))
-            }
-            _ => Some(Use::UsedFromCxxBridge),
-        },
-    };
-    if cxxbridge_name != cpp_call_name && !wrapper_function_needed {
-        cpp_name_attr = Attribute::parse_outer
-            .parse2(quote!(
-                #[cxx_name = #cpp_call_name]
-            ))
-            .unwrap();
+    if let Some(cpp_call_name) = cpp_call_name {
+        if cpp_call_name.does_not_match_cxxbridge_name(&cxxbridge_name) && !wrapper_function_needed
+        {
+            cpp_name_attr = Attribute::parse_outer
+                .parse2(cpp_call_name.generate_cxxbridge_name_attribute())
+                .unwrap();
+        }
     }
 
     // Finally - namespace support. All the Types in everything
@@ -192,14 +189,14 @@ pub(super) fn gen_function(
     // well-known types should be unqualified already (e.g. just UniquePtr)
     // and the following code will act to unqualify only those types
     // which the user has declared.
-    let params = unqualify_params(params);
+    let params = unqualify_params_minisyn(params);
     let ret_type = unqualify_ret_type(ret_type.into_owned());
     // And we need to make an attribute for the namespace that the function
     // itself is in.
-    let namespace_attr = if ns.is_empty() || wrapper_function_needed {
+    let namespace_attr = if name.get_namespace().is_empty() || wrapper_function_needed {
         Vec::new()
     } else {
-        let namespace_string = ns.to_string();
+        let namespace_string = name.get_namespace().to_string();
         Attribute::parse_outer
             .parse2(quote!(
                 #[namespace = #namespace_string]
@@ -216,10 +213,9 @@ pub(super) fn gen_function(
     ));
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
-        bindgen_mod_items,
         impl_entry,
         trait_impl_entry,
-        materializations: materialization.into_iter().collect(),
+        output_mod_items,
         ..Default::default()
     }
 }

@@ -83,7 +83,7 @@ impl TypeDetails {
                 Some(format!(
                     indoc! {"
                     /**
-                    * <div rustbindgen=\"true\" replaces=\"{}\">
+                    * <div rustbindgen=\"true\" replaces=\"{}\"></div>
                     */
                     {}class {} {{
                         {};
@@ -269,16 +269,18 @@ impl TypeDatabase {
         self.get(ty).is_some()
     }
 
-    pub(crate) fn known_type_type_path(&self, ty: &QualifiedName) -> Option<TypePath> {
-        self.get(ty).map(|td| td.to_type_path())
+    /// Whether this is the substitute type we made for some known type.
+    pub(crate) fn is_known_subtitute_type(&self, ty: &QualifiedName) -> bool {
+        if ty.get_namespace().is_empty() {
+            self.all_names()
+                .any(|n| n.get_final_item() == ty.get_final_item())
+        } else {
+            false
+        }
     }
 
-    /// Get the list of types to give to bindgen to ask it _not_ to
-    /// generate code for.
-    pub(crate) fn get_initial_blocklist(&self) -> impl Iterator<Item = &str> + '_ {
-        self.by_rs_name
-            .iter()
-            .filter_map(|(_, td)| td.get_prelude_entry().map(|_| td.cpp_name.as_str()))
+    pub(crate) fn known_type_type_path(&self, ty: &QualifiedName) -> Option<TypePath> {
+        self.get(ty).map(|td| td.to_type_path())
     }
 
     /// Whether this is one of the ctypes (mostly variable length integers)

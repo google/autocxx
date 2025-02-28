@@ -63,12 +63,7 @@ pub(crate) fn replace_hopeless_typedef_targets(
             // that.
             {
                 let name_id = name.name.get_final_ident();
-                if api
-                    .cpp_name()
-                    .as_ref()
-                    .map(|n| n.contains("::"))
-                    .unwrap_or_default()
-                {
+                if api.effective_cpp_name().is_nested() {
                     Api::IgnoredItem {
                         name: api.name_info().clone(),
                         err: ConvertErrorFromCpp::NestedOpaqueTypedef,

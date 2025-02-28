@@ -10,26 +10,20 @@
 
 use autocxx_engine::{BuilderContext, RebuildDependencyRecorder};
 use indexmap::set::IndexSet as HashSet;
-use std::{
-    borrow::Borrow,
-    io::Write,
-    sync::{LazyLock, Mutex},
-};
+use std::{io::Write, sync::Mutex};
+
+pub use autocxx_engine::{BuilderError, BuilderSuccess};
 
 pub type Builder = autocxx_engine::Builder<'static, CargoBuilderContext>;
 
 #[doc(hidden)]
 pub struct CargoBuilderContext;
 
-static ENV_LOGGER: LazyLock<()> = LazyLock::new(|| {
-    env_logger::builder()
-        .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
-        .init();
-});
-
 impl BuilderContext for CargoBuilderContext {
     fn setup() {
-        ENV_LOGGER.borrow();
+        let _ = env_logger::builder()
+            .format(|buf, record| writeln!(buf, "cargo:warning=MESSAGE:{}", record.args()))
+            .try_init();
     }
     fn get_dependency_recorder() -> Option<Box<dyn RebuildDependencyRecorder>> {
         Some(Box::new(CargoRebuildDependencyRecorder::new()))

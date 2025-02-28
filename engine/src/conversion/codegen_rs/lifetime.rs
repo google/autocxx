@@ -10,6 +10,7 @@ use crate::{
         function_wrapper::{RustConversionType, TypeConversionPolicy},
         ArgumentAnalysis, ReceiverMutability,
     },
+    minisyn::FnArg,
     types::QualifiedName,
 };
 use indexmap::set::IndexSet as HashSet;
@@ -17,8 +18,8 @@ use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use std::borrow::Cow;
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Comma, FnArg, GenericArgument, PatType, Path,
-    PathSegment, ReturnType, Type, TypePath, TypeReference,
+    parse_quote, punctuated::Punctuated, token::Comma, GenericArgument, PatType, Path, PathSegment,
+    ReturnType, Type, TypePath, TypeReference,
 };
 
 /// Function which can add explicit lifetime parameters to function signatures
@@ -116,8 +117,9 @@ pub(crate) fn add_explicit_lifetime_if_necessary<'r>(
         }
         None => (None, params, ret_type),
         Some(new_return_type) => {
-            for FnArg::Typed(PatType { ty, .. }) | FnArg::Receiver(syn::Receiver { ty, .. }) in
-                params.iter_mut()
+            for syn::FnArg::Typed(PatType { ty, .. })
+            | syn::FnArg::Receiver(syn::Receiver { ty, .. }) in
+                params.iter_mut().map(|minifnarg| &mut minifnarg.0)
             {
                 match ty.as_mut() {
                     Type::Path(TypePath {
@@ -139,8 +141,8 @@ fn reference_parameter_is_non_pod_reference(
     params: &Punctuated<FnArg, Comma>,
     non_pod_types: &HashSet<QualifiedName>,
 ) -> bool {
-    params.iter().any(|param| match param {
-        FnArg::Typed(PatType { ty, .. }) => match ty.as_ref() {
+    params.iter().any(|param| match &param.0 {
+        syn::FnArg::Typed(PatType { ty, .. }) => match ty.as_ref() {
             Type::Reference(TypeReference { elem, .. }) => match elem.as_ref() {
                 Type::Path(typ) => {
                     let qn = QualifiedName::from_type_path(typ);

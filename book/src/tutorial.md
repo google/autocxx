@@ -1,6 +1,6 @@
 # Tutorial
 
-If you're here, you want to call some C++ from Rust, right?
+If you're here, you want to call some C++ from Rust, right? (If you want to do things the other way round, read the [Rust calls](rust_calls.md) page.)
 
 Let's assume you're calling into some _existing_ C++ code.
 
@@ -17,15 +17,13 @@ The rest of this 'getting started' section assumes Cargo - if you're using somet
 
 First, add `autocxx` *and `cxx`* to your `dependencies` and `autocxx-build` to your `build-dependencies` in your `Cargo.toml`. **You must specify both.**
 
-
-
 ```toml
 [dependencies]
-autocxx = "0.27.1"
+autocxx = "0.29.0"
 cxx = "1.0"
 
 [build-dependencies]
-autocxx-build = "0.27.1"
+autocxx-build = "0.29.0"
 miette = { version = "5", features = ["fancy"] } # optional but gives nicer error messages!
 ```
 
