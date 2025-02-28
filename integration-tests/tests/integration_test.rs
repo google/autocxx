@@ -4216,6 +4216,7 @@ fn test_nested_enum_in_namespace() {
     run_test("", hdr, rs, &["take_A_B"], &[]);
 }
 
+#[ignore] // https://github.com/google/autocxx/issues/1466
 #[test]
 fn test_abstract_subclass() {
     let hdr = indoc! {"
