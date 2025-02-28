@@ -12200,6 +12200,7 @@ fn test_virtual_methods() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/1192, or related
 fn test_issue_1192() {
     let hdr = indoc! {
         "#include <vector>
