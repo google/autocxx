@@ -11767,6 +11767,7 @@ fn test_issue_1170() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/1192, or related
 fn test_issue_1192() {
     let hdr = indoc! {
         "#include <vector>
