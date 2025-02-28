@@ -23,8 +23,15 @@ generate some placeholder function or struct with documentation explaining what 
 
 ![VSCode showing an error for an API where autocxx couldn't generate bindings](vscode2.png)
 
-_This_ is why it's crucial to use an IDE with `autocxx`. (Alternatively, you can use
-`cargo expand`, but it's unpleasant.)
+_This_ is why it's crucial to use an IDE with `autocxx`.
+
+## How can I see what bindings `autocxx` has generated?
+
+Options:
+
+* Use an IDE. (Did we mention, you should use an IDE?)
+* Run `cargo doc --document-private-items`.
+* Use `cargo expand`.
 
 ## How to work around cases where `autocxx` can't generate bindings
 
@@ -33,6 +40,15 @@ Your options are:
 * Write extra C++ functions with simpler parameters or return types, and generate
   bindings to them, instead.
 * Write some manual `#[cxx::bridge]` bindings - see below.
+
+Usually, you can solve problems by writing a bit of additional C++ code. For example,
+supposing autocxx can't understand your type `Sandwich<Ham>`. Instead it will give
+you a fairly useless opaque type such as `Sandwich_Ham`. You can write additional
+C++ functions to unpack the opaque type into something useful:
+
+```cpp
+const Ham& get_filling(const Sandwich<Ham>& ham_sandwich);
+```
 
 ## Mixing manual and automated bindings
 
@@ -66,6 +82,32 @@ fn main() {
 }
 ```
 
+In the example above, we're referring *from* manual bindings *to* automated bindings.
+
+You can also do it the other way round using `extern_cpp_opaque_type!`:
+
+```rust,ignore
+autocxx::include_cpp! {
+    #hexathorpe include "input.h"
+    safety!(unsafe_ffi)
+    generate!("handle_a")
+    generate!("create_a")
+    extern_cpp_opaque_type!("A", ffi2::A)
+}
+#[cxx::bridge]
+pub mod ffi2 {
+    unsafe extern "C++" {
+        include!("input.h");
+        type A;
+    }
+    impl UniquePtr<A> {}
+}
+fn main() {
+    let a = ffi::create_a();
+    ffi::handle_a(&a);
+}
+```
+
 ## My build entirely failed
 
 `autocxx` should nearly always successfully parse the C++ codebase and
@@ -75,7 +117,6 @@ and rarely bails out entirely.
 If it does, you may be able to use the [`block!` macro](https://docs.rs/autocxx/latest/autocxx/macro.block.html).
 
 We'd appreciate a minimized bug report of the troublesome code - see [contributing](contributing.md).
-
 
 ## Enabling autocompletion in a rust-analyzer IDE
 

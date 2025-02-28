@@ -25,7 +25,7 @@ use ffi::ToCppString;
 
 fn main() {
     // Create some fake toy WebContents.
-    let create_params = ffi::content::CreateParams::make_unique(&"silly-frame".into_cpp());
+    let create_params = ffi::content::CreateParams::new(&"silly-frame".into_cpp()).within_unique_ptr();
     let mut frame = ffi::content::WebContents::Create(&create_params);
 
     // This object is a memory-safe handle to a RenderFrameHost.

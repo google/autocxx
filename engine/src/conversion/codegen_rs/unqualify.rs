@@ -7,11 +7,11 @@
 // except according to those terms.
 
 use syn::{
-    parse_quote, punctuated::Punctuated, FnArg, GenericArgument, PathArguments, PathSegment,
-    ReturnType, Token, Type, TypePath,
+    parse_quote, punctuated::Punctuated, GenericArgument, PathArguments, PathSegment, ReturnType,
+    Token, Type, TypePath,
 };
 
-/// Mod to handle stripping paths off the front of types.
+use crate::minisyn::FnArg;
 
 fn unqualify_type_path(typ: TypePath) -> TypePath {
     // If we've still got more than one
@@ -78,15 +78,31 @@ pub(crate) fn unqualify_ret_type(ret_type: ReturnType) -> ReturnType {
     }
 }
 
-pub(crate) fn unqualify_params(
+pub(crate) fn unqualify_params_minisyn(
     params: Punctuated<FnArg, Token![,]>,
 ) -> Punctuated<FnArg, Token![,]> {
     params
         .into_iter()
-        .map(|p| match p {
-            FnArg::Typed(mut pt) => {
+        .map(|p| match p.0 {
+            syn::FnArg::Typed(mut pt) => {
                 pt.ty = unqualify_boxed_type(pt.ty);
-                FnArg::Typed(pt)
+                syn::FnArg::Typed(pt)
+            }
+            _ => p.0,
+        })
+        .map(FnArg)
+        .collect()
+}
+
+pub(crate) fn unqualify_params(
+    params: Punctuated<syn::FnArg, Token![,]>,
+) -> Punctuated<syn::FnArg, Token![,]> {
+    params
+        .into_iter()
+        .map(|p| match p {
+            syn::FnArg::Typed(mut pt) => {
+                pt.ty = unqualify_boxed_type(pt.ty);
+                syn::FnArg::Typed(pt)
             }
             _ => p,
         })

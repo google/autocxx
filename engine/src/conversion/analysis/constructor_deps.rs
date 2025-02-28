@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashMap;
+use indexmap::map::IndexMap as HashMap;
 
 use crate::{
     conversion::{
@@ -52,7 +52,7 @@ fn decorate_struct(
 ) -> Result<Box<dyn Iterator<Item = Api<FnPhase>>>, ConvertErrorWithContext> {
     let pod = fn_struct.pod;
     let is_abstract = matches!(pod.kind, TypeKind::Abstract);
-    let constructor_and_allocator_deps = if is_abstract || pod.is_generic {
+    let constructor_and_allocator_deps = if is_abstract || pod.num_generics > 0 {
         Vec::new()
     } else {
         constructors_and_allocators_by_type

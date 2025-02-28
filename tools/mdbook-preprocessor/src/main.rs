@@ -9,6 +9,7 @@
 use std::{
     borrow::Cow,
     collections::HashSet,
+    ffi::OsString,
     fmt::Display,
     io::{self, Read},
     path::PathBuf,
@@ -48,6 +49,8 @@ autocxx_integration_tests::doctest(
 and will build and run them, while emitting better formatted markdown blocks
 for subsequent preprocessors and renderers.
 ";
+
+static RUST_MDBOOK_SINGLE_TEST: &str = "RUST_MDBOOK_SINGLE_TEST";
 
 fn main() {
     let matches = Command::new("autocxx-mdbook-preprocessor")
@@ -94,6 +97,7 @@ fn calculate_cargo_dir() -> PathBuf {
 fn preprocess(args: &ArgMatches) -> Result<(), Error> {
     let (_, mut book) = CmdPreprocessor::parse_input(io::stdin())?;
 
+    env_logger::builder().init();
     let mut test_cases = Vec::new();
 
     Book::for_each_mut(&mut book, |sec| {
@@ -116,7 +120,7 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
             .into_par_iter()
             .enumerate()
             .filter_map(|(counter, case)| {
-                if let Ok(test) = std::env::var("RUST_MDBOOK_SINGLE_TEST") {
+                if let Ok(test) = std::env::var(RUST_MDBOOK_SINGLE_TEST) {
                     let desired_id: usize = test.parse().unwrap();
                     if desired_id != (counter + 1) {
                         return None;
@@ -128,24 +132,27 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
                     num_tests,
                     &case.location
                 );
-                let failed = autocxx_integration_tests::doctest(
+                let err = autocxx_integration_tests::doctest(
                     &case.cpp,
                     &case.hdr,
                     case.rs,
-                    args.value_of_os("manifest_dir").unwrap(),
-                )
-                .is_err();
+                    &OsString::from(args.value_of("manifest_dir").unwrap()),
+                );
+                let desc = match err {
+                    Ok(_) => "passed".to_string(),
+                    Err(ref err) => format!("failed: {err:?}"),
+                };
                 eprintln!(
                     "Doctest {}/{} at {} {}.",
                     counter + 1,
                     num_tests,
                     &case.location,
-                    if failed { "failed" } else { "passed" }
+                    desc
                 );
-                if failed {
+                if err.is_err() {
                     Some(TestId {
                         location: case.location,
-                        test_id: counter,
+                        test_id: counter + 1,
                     })
                 } else {
                     None
@@ -158,12 +165,13 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
             .read_to_string(&mut stdout_str)
             .unwrap();
         if !stdout_str.is_empty() {
-            eprintln!("Stdout from tests:\n{}", stdout_str);
+            eprintln!("Stdout from tests:\n{stdout_str}");
         }
         if !fails.is_empty() {
             panic!(
-                "One or more tests failed: {}",
-                fails.into_iter().sorted().map(|s| s.to_string()).join(", ")
+                "One or more tests failed: {}. To rerun an individual test use {}.",
+                fails.into_iter().sorted().map(|s| s.to_string()).join(", "),
+                RUST_MDBOOK_SINGLE_TEST
             );
         }
     }
@@ -297,7 +305,7 @@ fn handle_code_block(
 ) -> impl Iterator<Item = String> {
     let input_str = lines.join("\n");
     let fn_call = syn::parse_str::<syn::Expr>(&input_str)
-        .unwrap_or_else(|_| panic!("Unable to parse outer function at {}", location));
+        .unwrap_or_else(|_| panic!("Unable to parse outer function at {location}"));
     let fn_call = match fn_call {
         Expr::Call(expr) => expr,
         _ => panic!("Parsing unexpected"),
@@ -331,7 +339,7 @@ fn handle_code_block(
             cpp,
             hdr,
             rs: syn::parse_file(&rs)
-                .unwrap_or_else(|_| panic!("Unable to parse code at {}", location))
+                .unwrap_or_else(|_| panic!("Unable to parse code at {location}"))
                 .to_token_stream(),
             location,
         });

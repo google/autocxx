@@ -7,7 +7,7 @@
 * By `std::unique_ptr`
 * By `std::shared_ptr`
 * By `std::weak_ptr`
-* (Soon to come) By rvalue reference (that is, as a move parameter)
+* By rvalue reference (that is, as a move parameter)
 
 (all of this is because the underlying [`cxx`](https://cxx.rs) crate has such versatility).
 Some of these have some quirks in the way they're exposed in Rust, described below.
@@ -39,12 +39,13 @@ use of that pointer and that's what the `unsafe` keyword is for.
 Exactly the same issues apply to C++ references _in theory_, but in practice,
 they usually don't. Therefore [`cxx`](https://cxx.rs) has taken the view that we can "trust"
 a C++ reference to a higher degree than a pointer, and autocxx follows that
-lead. In practice, of course, references are rarely return values from C++
+lead (in fact we 'trust' references even slightly more than cxx).
+In practice, of course, references are rarely return values from C++
 APIs so we rarely have to navel-gaze about the trustworthiness of a
 reference.
 
 (See also the discussion of [`safety`](safety.md) - if you haven't specified
-an unsafety policy, _all_ C++ APIs require `unsafe` so the discussion is moot.)
+an unsafety policy, _all_ C++ APIs require `unsafe` so the discussion is moot.
 
 If you're given a C++ object by pointer, and you want to interact with it,
 you'll need to figure out the guarantees attached to the C++ object - most
@@ -64,7 +65,3 @@ quirks which you're more likely to run into with `autocxx`.
      unsafe { ffi::TakePointerToA(std::pin::Pin::<&mut ffi::A>::into_inner_unchecked(a.pin_mut())) };
   ```
   This may be simplified in future.
-
-## Rvalue references
-
-Currently rvalue references (that is, move parameters) are not supported.

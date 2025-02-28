@@ -6,13 +6,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use syn::ItemEnum;
+use crate::minisyn::ItemEnum;
 
 use super::{
     api::{AnalysisPhase, Api, ApiName, FuncToConvert, StructDetails, TypedefKind},
     apivec::ApiVec,
     convert_error::{ConvertErrorWithContext, ErrorContext},
-    ConvertError,
+    ConvertErrorFromCpp,
 };
 use crate::{
     conversion::convert_error::ErrorContextType,
@@ -33,11 +33,10 @@ where
     match fun() {
         Ok(result) => Some(result),
         Err(ConvertErrorWithContext(err, None)) => {
-            eprintln!("Ignored item: {}", err);
+            eprintln!("Ignored item: {err}");
             None
         }
         Err(ConvertErrorWithContext(err, Some(ctx))) => {
-            eprintln!("Ignored item {}: {}", ctx, err);
             let id = match ctx.get_type() {
                 ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => id,
                 ErrorContextType::Method { self_ty, .. } => self_ty,
@@ -56,7 +55,7 @@ where
 /// Run some code which generates an API. Add that API, or if
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
-pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
+pub(crate) fn convert_apis<FF, SF, EF, TF, A, B>(
     in_apis: ApiVec<A>,
     out_apis: &mut ApiVec<B>,
     mut func_conversion: FF,
@@ -65,7 +64,7 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
     mut typedef_conversion: TF,
 ) where
     A: AnalysisPhase,
-    B: AnalysisPhase,
+    B: AnalysisPhase + 'static,
     FF: FnMut(
         ApiName,
         Box<FuncToConvert>,
@@ -100,9 +99,19 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                 rs_definition,
                 cpp_definition,
             }))),
-            Api::ForwardDeclaration { name } => {
-                Ok(Box::new(std::iter::once(Api::ForwardDeclaration { name })))
+            Api::ForwardDeclaration { name, err } => {
+                Ok(Box::new(std::iter::once(Api::ForwardDeclaration {
+                    name,
+                    err,
+                })))
             }
+            Api::OpaqueTypedef {
+                name,
+                forward_declaration,
+            } => Ok(Box::new(std::iter::once(Api::OpaqueTypedef {
+                name,
+                forward_declaration,
+            }))),
             Api::StringConstructor { name } => {
                 Ok(Box::new(std::iter::once(Api::StringConstructor { name })))
             }
@@ -115,9 +124,15 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
             Api::RustType { name, path } => {
                 Ok(Box::new(std::iter::once(Api::RustType { name, path })))
             }
-            Api::RustFn { name, sig, path } => {
-                Ok(Box::new(std::iter::once(Api::RustFn { name, sig, path })))
-            }
+            Api::RustFn {
+                name,
+                details,
+                deps,
+            } => Ok(Box::new(std::iter::once(Api::RustFn {
+                name,
+                details,
+                deps,
+            }))),
             Api::RustSubclassFn {
                 name,
                 subclass,
@@ -142,6 +157,13 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B: 'static>(
                 Ok(Box::new(std::iter::once(Api::SubclassTraitItem {
                     name,
                     details,
+                })))
+            }
+            Api::ExternCppType { name, details, pod } => {
+                Ok(Box::new(std::iter::once(Api::ExternCppType {
+                    name,
+                    details,
+                    pod,
                 })))
             }
             // Apply a mapping to the following
@@ -174,7 +196,6 @@ fn api_or_error<T: AnalysisPhase + 'static>(
     match api_or_error {
         Ok(opt) => opt,
         Err(ConvertErrorWithContext(err, ctx)) => {
-            eprintln!("Ignored {}: {}", name.cpp_name(), err);
             Box::new(std::iter::once(Api::IgnoredItem { name, err, ctx }))
         }
     }
@@ -184,14 +205,11 @@ fn api_or_error<T: AnalysisPhase + 'static>(
 /// a method). Add that API, or if
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
-pub(crate) fn convert_item_apis<F, A, B: 'static>(
-    in_apis: ApiVec<A>,
-    out_apis: &mut ApiVec<B>,
-    mut fun: F,
-) where
-    F: FnMut(Api<A>) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertError>,
+pub(crate) fn convert_item_apis<F, A, B>(in_apis: ApiVec<A>, out_apis: &mut ApiVec<B>, mut fun: F)
+where
+    F: FnMut(Api<A>) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorFromCpp>,
     A: AnalysisPhase,
-    B: AnalysisPhase,
+    B: AnalysisPhase + 'static,
 {
     out_apis.extend(in_apis.into_iter().flat_map(|api| {
         let fullname = api.name_info().clone();

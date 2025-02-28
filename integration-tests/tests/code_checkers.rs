@@ -79,18 +79,16 @@ fn find_all_non_mod_items(md: syn::ItemMod, items: &mut Vec<Item>) {
     }
 }
 
-struct StringFinder(Vec<&'static str>);
+struct StringFinder(Vec<String>);
 
 impl CodeCheckerFns for StringFinder {
     fn check_rust(&self, rs: syn::File) -> Result<(), TestError> {
-        let mut ts = TokenStream::new();
-        rs.to_tokens(&mut ts);
-        let toks = ts.to_string();
+        let toks = rs.to_token_stream().to_string();
         for msg in &self.0 {
             if !toks.contains(msg) {
-                return Err(TestError::RsCodeExaminationFail(
-                    "Couldn't find string".into(),
-                ));
+                return Err(TestError::RsCodeExaminationFail(format!(
+                    "Couldn't find string '{msg}'"
+                )));
             };
         }
         Ok(())
@@ -98,33 +96,30 @@ impl CodeCheckerFns for StringFinder {
 }
 
 /// Returns a code checker which simply hunts for a given string in the results
-pub(crate) fn make_string_finder(error_texts: Vec<&'static str>) -> CodeChecker {
+pub(crate) fn make_string_finder(error_texts: Vec<String>) -> CodeChecker {
     Box::new(StringFinder(error_texts))
 }
 
-/// Counts the number of generated C++ files.
-pub(crate) struct CppCounter {
-    cpp_count: usize,
-}
+struct RustCodeFinder(Vec<TokenStream>);
 
-impl CppCounter {
-    pub(crate) fn new(cpp_count: usize) -> Self {
-        Self { cpp_count }
-    }
-}
-
-impl CodeCheckerFns for CppCounter {
-    fn check_cpp(&self, cpp: &[PathBuf]) -> Result<(), TestError> {
-        if cpp.len() == self.cpp_count {
-            Ok(())
-        } else {
-            Err(TestError::CppCodeExaminationFail)
+impl CodeCheckerFns for RustCodeFinder {
+    fn check_rust(&self, rs: syn::File) -> Result<(), TestError> {
+        let haystack = rs.to_token_stream().to_string();
+        for msg in &self.0 {
+            let needle = msg.to_string();
+            if !haystack.contains(&needle) {
+                return Err(TestError::RsCodeExaminationFail(format!(
+                    "Couldn't find tokens '{needle}'"
+                )));
+            };
         }
+        Ok(())
     }
+}
 
-    fn skip_build(&self) -> bool {
-        true
-    }
+/// Returns a code checker which hunts for the given Rust tokens in the output
+pub(crate) fn make_rust_code_finder(code: Vec<TokenStream>) -> CodeChecker {
+    Box::new(RustCodeFinder(code))
 }
 
 /// Searches generated C++ for strings we want to find, or want _not_ to find,
@@ -143,13 +138,13 @@ impl<'a> CppMatcher<'a> {
     }
 }
 
-impl<'a> CodeCheckerFns for CppMatcher<'a> {
+impl CodeCheckerFns for CppMatcher<'_> {
     fn check_cpp(&self, cpp: &[PathBuf]) -> Result<(), TestError> {
         let mut positives_needed = self.positive_matches.to_vec();
         for filename in cpp {
             let file = File::open(filename).unwrap();
             let lines = BufReader::new(file).lines();
-            for l in lines.filter_map(|l| l.ok()) {
+            for l in lines.map_while(Result::ok) {
                 if self.negative_matches.iter().any(|neg| l.contains(neg)) {
                     return Err(TestError::CppCodeExaminationFail);
                 }

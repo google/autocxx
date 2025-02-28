@@ -12,9 +12,10 @@ use syn::{parse_quote, punctuated::Punctuated, token::Comma, FnArg, ReturnType};
 
 use crate::{
     conversion::{
-        api::{Api, ApiName, CppVisibility, FuncToConvert, Provenance, References, TraitSynthesis},
+        api::{Api, ApiName, CppVisibility, FuncToConvert, Provenance, TraitSynthesis},
         apivec::ApiVec,
     },
+    minisyn::minisynize_punctuated,
     types::{make_ident, QualifiedName},
 };
 
@@ -72,22 +73,21 @@ fn create_alloc_and_free(ty_name: QualifiedName) -> impl Iterator<Item = Api<Pod
                 name: api_name,
                 fun: Box::new(FuncToConvert {
                     ident,
-                    doc_attr: None,
-                    inputs,
-                    output,
+                    doc_attrs: Vec::new(),
+                    inputs: minisynize_punctuated(inputs),
+                    output: output.into(),
                     vis: parse_quote! { pub },
-                    virtualness: crate::conversion::api::Virtualness::None,
+                    virtualness: None,
                     cpp_vis: CppVisibility::Public,
                     special_member: None,
-                    unused_template_param: false,
-                    references: References::default(),
                     original_name: None,
                     self_ty: None,
                     synthesized_this_type: None,
                     synthetic_cpp: Some((cpp_function_body, CppFunctionKind::Function)),
                     add_to_trait: Some(synthesis),
-                    is_deleted: false,
+                    is_deleted: None,
                     provenance: Provenance::SynthesizedOther,
+                    variadic: false,
                 }),
                 analysis: (),
             }
@@ -96,11 +96,11 @@ fn create_alloc_and_free(ty_name: QualifiedName) -> impl Iterator<Item = Api<Pod
 }
 
 pub(crate) fn get_alloc_name(ty_name: &QualifiedName) -> QualifiedName {
-    get_name(ty_name, "alloc")
+    get_name(ty_name, "autocxx_alloc")
 }
 
 pub(crate) fn get_free_name(ty_name: &QualifiedName) -> QualifiedName {
-    get_name(ty_name, "free")
+    get_name(ty_name, "autocxx_free")
 }
 
 fn get_name(ty_name: &QualifiedName, label: &str) -> QualifiedName {

@@ -9,12 +9,17 @@
 #![forbid(unsafe_code)]
 
 mod config;
+mod directives;
 pub mod file_locations;
+mod multi_bindings;
 mod path;
 mod subclass_attrs;
 
-pub use config::{AllowlistEntry, IncludeCppConfig, RustFun, Subclass, UnsafePolicy};
+pub use config::{
+    AllowlistEntry, ExternCppType, IncludeCppConfig, RustFun, Subclass, UnsafePolicy,
+};
 use file_locations::FileLocationStrategy;
+pub use multi_bindings::{MultiBindings, MultiBindingsErr};
 pub use path::RustPath;
 use proc_macro2::TokenStream as TokenStream2;
 pub use subclass_attrs::SubclassAttrs;
@@ -27,9 +32,9 @@ use syn::{
 #[doc(hidden)]
 /// Ensure consistency between the `include_cpp!` parser
 /// and the standalone macro discoverer
-pub mod directives {
+pub mod directive_names {
     pub static EXTERN_RUST_TYPE: &str = "extern_rust_type";
-    pub static EXTERN_RUST_FUN: &str = "extern_rust_fun";
+    pub static EXTERN_RUST_FUN: &str = "extern_rust_function";
     pub static SUBCLASS: &str = "subclass";
 }
 
@@ -56,7 +61,7 @@ impl IncludeCpp {
         if self.config.parse_only {
             return TokenStream2::new();
         }
-        FileLocationStrategy::new().make_include(&self.config.get_rs_filename())
+        FileLocationStrategy::new().make_include(&self.config)
     }
 
     pub fn get_config(&self) -> &IncludeCppConfig {

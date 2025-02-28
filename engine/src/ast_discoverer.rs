@@ -6,21 +6,23 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashSet;
+use indexmap::set::IndexSet as HashSet;
 
 use autocxx_parser::{
-    directives::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE},
+    directive_names::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE},
     RustFun, RustPath,
 };
 use itertools::Itertools;
 use proc_macro2::Ident;
+use syn::visit_mut::{visit_type_mut, VisitMut};
 use syn::{
-    punctuated::Punctuated, Attribute, Binding, Expr, ExprAssign, ExprAssignOp, ExprAwait,
-    ExprBinary, ExprBox, ExprBreak, ExprCast, ExprField, ExprGroup, ExprLet, ExprParen,
-    ExprReference, ExprTry, ExprType, ExprUnary, ImplItem, Item, ItemEnum, ItemStruct, Pat, PatBox,
-    PatReference, PatSlice, PatTuple, Path, ReturnType, Stmt, TraitItem, Type, TypeArray,
-    TypeGroup, TypeParamBound, TypeParen, TypePtr, TypeReference, TypeSlice,
+    parse_quote, punctuated::Punctuated, AssocConst, AssocType, Attribute, Expr, ExprAssign,
+    ExprAwait, ExprBinary, ExprBlock, ExprBreak, ExprCast, ExprConst, ExprField, ExprGroup,
+    ExprLet, ExprParen, ExprReference, ExprTry, ExprUnary, ImplItem, Item, ItemEnum, ItemStruct,
+    LocalInit, Pat, PatReference, PatSlice, PatTuple, Path, ReturnType, Signature, Stmt, TraitItem,
+    Type, TypeArray, TypeGroup, TypeParamBound, TypeParen, TypePtr, TypeReference, TypeSlice,
 };
+use thiserror::Error;
 
 #[derive(Default)]
 pub(super) struct Discoveries {
@@ -29,19 +31,35 @@ pub(super) struct Discoveries {
     pub(super) extern_rust_types: Vec<RustPath>,
 }
 
+#[derive(Error, Debug)]
+pub enum DiscoveryErr {
+    #[error("#[extern_rust_function] was attached to a method in an impl block that was too complex for autocxx. autocxx supports only \"impl X {{...}}\" where X is a single identifier, not a path or more complex type.")]
+    FoundExternRustFunOnTypeWithoutClearReceiver,
+    #[error("#[extern_rust_function] was attached to a method taking a receiver by value.")]
+    NoParameterOnMethod,
+    #[error("#[extern_rust_function] was in an impl block nested wihtin another block. This is only supported in the outermost mod of a file, alongside the include_cpp!.")]
+    FoundExternRustFunWithinMod,
+}
+
 impl Discoveries {
-    pub(super) fn search_item(&mut self, item: &Item, mod_path: Option<RustPath>) {
+    pub(super) fn search_item(
+        &mut self,
+        item: &Item,
+        mod_path: Option<RustPath>,
+    ) -> Result<(), DiscoveryErr> {
         let mut this_mod = PerModDiscoveries {
             discoveries: self,
             mod_path,
         };
-        this_mod.search_item(item);
+        this_mod.search_item(item)
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.cpp_list.is_empty()
-            && self.extern_rust_funs.is_empty()
-            && self.extern_rust_types.is_empty()
+    pub(crate) fn found_allowlist(&self) -> bool {
+        !self.cpp_list.is_empty()
+    }
+
+    pub(crate) fn found_rust(&self) -> bool {
+        !self.extern_rust_funs.is_empty() || !self.extern_rust_types.is_empty()
     }
 
     pub(crate) fn extend(&mut self, other: Self) {
@@ -56,7 +74,7 @@ struct PerModDiscoveries<'a> {
     mod_path: Option<RustPath>,
 }
 
-impl<'b> PerModDiscoveries<'b> {
+impl PerModDiscoveries<'_> {
     fn deeper_path(&self, id: &Ident) -> RustPath {
         match &self.mod_path {
             None => RustPath::new_from_ident(id.clone()),
@@ -64,19 +82,19 @@ impl<'b> PerModDiscoveries<'b> {
         }
     }
 
-    fn search_item(&mut self, item: &Item) {
+    fn search_item(&mut self, item: &Item) -> Result<(), DiscoveryErr> {
         match item {
             Item::Fn(fun) => {
                 for stmt in &fun.block.stmts {
-                    self.search_stmt(stmt)
+                    self.search_stmt(stmt)?
                 }
-                self.search_return_type(&fun.sig.output);
+                self.search_return_type(&fun.sig.output)?;
                 for i in &fun.sig.inputs {
                     match i {
                         syn::FnArg::Receiver(_) => {}
                         syn::FnArg::Typed(pt) => {
-                            self.search_pat(&pt.pat);
-                            self.search_type(&pt.ty);
+                            self.search_pat(&pt.pat)?;
+                            self.search_type(&pt.ty)?;
                         }
                     }
                 }
@@ -84,12 +102,33 @@ impl<'b> PerModDiscoveries<'b> {
                     self.discoveries.extern_rust_funs.push(RustFun {
                         path: self.deeper_path(&fun.sig.ident),
                         sig: fun.sig.clone(),
+                        has_receiver: false,
                     });
                 }
             }
             Item::Impl(imp) => {
+                let receiver = match imp.trait_ {
+                    // We do not allow 'extern_rust_fun' on trait impls
+                    Some(_) => None,
+                    None => match &*imp.self_ty {
+                        Type::Path(typ) => {
+                            let mut segs = typ.path.segments.iter();
+                            let id = segs.next();
+                            if let Some(seg) = id {
+                                if segs.next().is_some() {
+                                    None
+                                } else {
+                                    Some(self.deeper_path(&seg.ident))
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    },
+                };
                 for item in &imp.items {
-                    self.search_impl_item(item)
+                    self.search_impl_item(item, receiver.as_ref())?
                 }
             }
             Item::Mod(md) => {
@@ -100,13 +139,13 @@ impl<'b> PerModDiscoveries<'b> {
                         mod_path,
                     };
                     for item in items {
-                        new_mod.search_item(item)
+                        new_mod.search_item(item)?
                     }
                 }
             }
             Item::Trait(tr) => {
                 for item in &tr.items {
-                    self.search_trait_item(item)
+                    self.search_trait_item(item)?
                 }
             }
             Item::Struct(ItemStruct { ident, attrs, .. })
@@ -119,9 +158,10 @@ impl<'b> PerModDiscoveries<'b> {
             }
             _ => {}
         }
+        Ok(())
     }
 
-    fn search_path(&mut self, path: &Path) {
+    fn search_path(&mut self, path: &Path) -> Result<(), DiscoveryErr> {
         let mut seg_iter = path.segments.iter();
         if let Some(first_seg) = seg_iter.next() {
             if first_seg.ident == "ffi" {
@@ -131,57 +171,64 @@ impl<'b> PerModDiscoveries<'b> {
             }
         }
         for seg in path.segments.iter() {
-            self.search_path_arguments(&seg.arguments);
+            self.search_path_arguments(&seg.arguments)?;
         }
+        Ok(())
     }
 
-    fn search_trait_item(&mut self, itm: &TraitItem) {
-        if let TraitItem::Method(itm) = itm {
+    fn search_trait_item(&mut self, itm: &TraitItem) -> Result<(), DiscoveryErr> {
+        if let TraitItem::Fn(itm) = itm {
             if let Some(block) = &itm.default {
-                self.search_stmts(block.stmts.iter())
+                self.search_stmts(block.stmts.iter())?
             }
         }
+        Ok(())
     }
 
-    fn search_stmts<'a>(&mut self, stmts: impl Iterator<Item = &'a Stmt>) {
+    fn search_stmts<'a>(
+        &mut self,
+        stmts: impl Iterator<Item = &'a Stmt>,
+    ) -> Result<(), DiscoveryErr> {
         for stmt in stmts {
-            self.search_stmt(stmt)
+            self.search_stmt(stmt)?
         }
+        Ok(())
     }
 
-    fn search_stmt(&mut self, stmt: &Stmt) {
+    fn search_stmt(&mut self, stmt: &Stmt) -> Result<(), DiscoveryErr> {
         match stmt {
             Stmt::Local(lcl) => {
-                if let Some((_, expr)) = &lcl.init {
-                    self.search_expr(expr)
+                if let Some(LocalInit { expr, .. }) = &lcl.init {
+                    self.search_expr(expr)?
                 }
-                self.search_pat(&lcl.pat);
+                self.search_pat(&lcl.pat)
             }
             Stmt::Item(itm) => self.search_item(itm),
-            Stmt::Expr(exp) | Stmt::Semi(exp, _) => self.search_expr(exp),
+            Stmt::Expr(exp, _) => self.search_expr(exp),
+            Stmt::Macro(_) => Ok(()),
         }
     }
 
-    fn search_expr(&mut self, expr: &Expr) {
+    fn search_expr(&mut self, expr: &Expr) -> Result<(), DiscoveryErr> {
         match expr {
             Expr::Path(exp) => {
-                self.search_path(&exp.path);
+                self.search_path(&exp.path)?;
             }
-            Expr::Macro(_) => {}
-            Expr::Array(array) => self.search_exprs(array.elems.iter()),
+            Expr::Macro(_) | Expr::Infer(_) => {}
+            Expr::Array(array) => self.search_exprs(array.elems.iter())?,
             Expr::Assign(ExprAssign { left, right, .. })
-            | Expr::AssignOp(ExprAssignOp { left, right, .. })
             | Expr::Binary(ExprBinary { left, right, .. }) => {
-                self.search_expr(left);
-                self.search_expr(right);
+                self.search_expr(left)?;
+                self.search_expr(right)?;
             }
-            Expr::Async(ass) => self.search_stmts(ass.block.stmts.iter()),
+            Expr::Async(ass) => self.search_stmts(ass.block.stmts.iter())?,
             Expr::Await(ExprAwait { base, .. }) | Expr::Field(ExprField { base, .. }) => {
-                self.search_expr(base)
+                self.search_expr(base)?
             }
-            Expr::Block(blck) => self.search_stmts(blck.block.stmts.iter()),
-            Expr::Box(ExprBox { expr, .. })
-            | Expr::Break(ExprBreak {
+            Expr::Block(ExprBlock { block, .. }) | Expr::Const(ExprConst { block, .. }) => {
+                self.search_stmts(block.stmts.iter())?
+            }
+            Expr::Break(ExprBreak {
                 expr: Some(expr), ..
             })
             | Expr::Cast(ExprCast { expr, .. })
@@ -189,186 +236,235 @@ impl<'b> PerModDiscoveries<'b> {
             | Expr::Paren(ExprParen { expr, .. })
             | Expr::Reference(ExprReference { expr, .. })
             | Expr::Try(ExprTry { expr, .. })
-            | Expr::Type(ExprType { expr, .. })
-            | Expr::Unary(ExprUnary { expr, .. }) => self.search_expr(expr),
+            | Expr::Unary(ExprUnary { expr, .. }) => self.search_expr(expr)?,
             Expr::Call(exc) => {
-                self.search_expr(&exc.func);
-                self.search_exprs(exc.args.iter());
+                self.search_expr(&exc.func)?;
+                self.search_exprs(exc.args.iter())?;
             }
-            Expr::Closure(cls) => self.search_expr(&cls.body),
+            Expr::Closure(cls) => self.search_expr(&cls.body)?,
             Expr::Continue(_)
             | Expr::Lit(_)
             | Expr::Break(ExprBreak { expr: None, .. })
             | Expr::Verbatim(_) => {}
             Expr::ForLoop(fl) => {
-                self.search_expr(&fl.expr);
-                self.search_stmts(fl.body.stmts.iter());
+                self.search_expr(&fl.expr)?;
+                self.search_stmts(fl.body.stmts.iter())?;
             }
             Expr::If(exif) => {
-                self.search_expr(&exif.cond);
-                self.search_stmts(exif.then_branch.stmts.iter());
+                self.search_expr(&exif.cond)?;
+                self.search_stmts(exif.then_branch.stmts.iter())?;
                 if let Some((_, else_branch)) = &exif.else_branch {
-                    self.search_expr(else_branch);
+                    self.search_expr(else_branch)?;
                 }
             }
             Expr::Index(exidx) => {
-                self.search_expr(&exidx.expr);
-                self.search_expr(&exidx.index);
+                self.search_expr(&exidx.expr)?;
+                self.search_expr(&exidx.index)?;
             }
             Expr::Let(ExprLet { expr, pat, .. }) => {
-                self.search_expr(expr);
-                self.search_pat(pat);
+                self.search_expr(expr)?;
+                self.search_pat(pat)?;
             }
-            Expr::Loop(exloo) => self.search_stmts(exloo.body.stmts.iter()),
+            Expr::Loop(exloo) => self.search_stmts(exloo.body.stmts.iter())?,
             Expr::Match(exm) => {
-                self.search_expr(&exm.expr);
+                self.search_expr(&exm.expr)?;
                 for a in &exm.arms {
-                    self.search_expr(&a.body);
+                    self.search_expr(&a.body)?;
                     if let Some((_, guard)) = &a.guard {
-                        self.search_expr(guard);
+                        self.search_expr(guard)?;
                     }
                 }
             }
             Expr::MethodCall(mtc) => {
-                self.search_expr(&mtc.receiver);
-                self.search_exprs(mtc.args.iter());
+                self.search_expr(&mtc.receiver)?;
+                self.search_exprs(mtc.args.iter())?;
             }
             Expr::Range(exr) => {
-                self.search_option_expr(&exr.from);
-                self.search_option_expr(&exr.to);
+                self.search_option_expr(&exr.start)?;
+                self.search_option_expr(&exr.end)?;
             }
             Expr::Repeat(exr) => {
-                self.search_expr(&exr.expr);
-                self.search_expr(&exr.len);
+                self.search_expr(&exr.expr)?;
+                self.search_expr(&exr.len)?;
             }
             Expr::Return(exret) => {
                 if let Some(expr) = &exret.expr {
-                    self.search_expr(expr);
+                    self.search_expr(expr)?;
                 }
             }
             Expr::Struct(exst) => {
                 for f in &exst.fields {
-                    self.search_expr(&f.expr);
+                    self.search_expr(&f.expr)?;
                 }
-                self.search_option_expr(&exst.rest);
+                self.search_option_expr(&exst.rest)?;
             }
-            Expr::TryBlock(extb) => self.search_stmts(extb.block.stmts.iter()),
-            Expr::Tuple(ext) => self.search_exprs(ext.elems.iter()),
-            Expr::Unsafe(exs) => self.search_stmts(exs.block.stmts.iter()),
+            Expr::TryBlock(extb) => self.search_stmts(extb.block.stmts.iter())?,
+            Expr::Tuple(ext) => self.search_exprs(ext.elems.iter())?,
+            Expr::Unsafe(exs) => self.search_stmts(exs.block.stmts.iter())?,
             Expr::While(exw) => {
-                self.search_expr(&exw.cond);
-                self.search_stmts(exw.body.stmts.iter());
+                self.search_expr(&exw.cond)?;
+                self.search_stmts(exw.body.stmts.iter())?;
             }
-            Expr::Yield(exy) => self.search_option_expr(&exy.expr),
-            Expr::__TestExhaustive(_) => {}
+            Expr::Yield(exy) => self.search_option_expr(&exy.expr)?,
+            _ => {}
         }
+        Ok(())
     }
 
-    fn search_option_expr(&mut self, expr: &Option<Box<Expr>>) {
+    fn search_option_expr(&mut self, expr: &Option<Box<Expr>>) -> Result<(), DiscoveryErr> {
         if let Some(expr) = &expr {
-            self.search_expr(expr);
+            self.search_expr(expr)?;
         }
+        Ok(())
     }
 
-    fn search_exprs<'a>(&mut self, exprs: impl Iterator<Item = &'a Expr>) {
+    fn search_exprs<'a>(
+        &mut self,
+        exprs: impl Iterator<Item = &'a Expr>,
+    ) -> Result<(), DiscoveryErr> {
         for e in exprs {
-            self.search_expr(e);
+            self.search_expr(e)?;
         }
+        Ok(())
     }
 
-    fn search_impl_item(&mut self, impl_item: &ImplItem) {
-        if let ImplItem::Method(itm) = impl_item {
+    fn search_impl_item(
+        &mut self,
+        impl_item: &ImplItem,
+        receiver: Option<&RustPath>,
+    ) -> Result<(), DiscoveryErr> {
+        if let ImplItem::Fn(itm) = impl_item {
+            if Self::has_attr(&itm.attrs, EXTERN_RUST_FUN) {
+                if self.mod_path.is_some() {
+                    return Err(DiscoveryErr::FoundExternRustFunWithinMod);
+                }
+                if let Some(receiver) = receiver {
+                    // We have a method which we want to put into the cxx::bridge's
+                    // "extern Rust" block.
+                    let sig = add_receiver(&itm.sig, receiver.get_final_ident())?;
+                    assert!(receiver.len() == 1);
+                    self.discoveries.extern_rust_funs.push(RustFun {
+                        path: self.deeper_path(&itm.sig.ident),
+                        sig,
+                        has_receiver: true,
+                    });
+                    self.discoveries.extern_rust_types.push(receiver.clone())
+                } else {
+                    return Err(DiscoveryErr::FoundExternRustFunOnTypeWithoutClearReceiver);
+                }
+            }
             for stmt in &itm.block.stmts {
-                self.search_stmt(stmt)
+                self.search_stmt(stmt)?
             }
         }
+        Ok(())
     }
 
-    fn search_pat(&mut self, pat: &Pat) {
+    fn search_pat(&mut self, pat: &Pat) -> Result<(), DiscoveryErr> {
         match pat {
-            Pat::Box(PatBox { pat, .. }) | Pat::Reference(PatReference { pat, .. }) => {
-                self.search_pat(pat)
+            Pat::Const(const_) => {
+                for stmt in &const_.block.stmts {
+                    self.search_stmt(stmt)?
+                }
+                Ok(())
             }
-            Pat::Ident(_) | Pat::Lit(_) | Pat::Macro(_) | Pat::Range(_) | Pat::Rest(_) => {}
+            Pat::Reference(PatReference { pat, .. }) => self.search_pat(pat),
+            Pat::Ident(_) | Pat::Lit(_) | Pat::Macro(_) | Pat::Range(_) | Pat::Rest(_) => Ok(()),
+            Pat::Paren(paren) => self.search_pat(&paren.pat),
             Pat::Or(pator) => {
                 for case in &pator.cases {
-                    self.search_pat(case);
+                    self.search_pat(case)?;
                 }
+                Ok(())
             }
             Pat::Path(pp) => self.search_path(&pp.path),
             Pat::Slice(PatSlice { elems, .. }) | Pat::Tuple(PatTuple { elems, .. }) => {
                 for case in elems {
-                    self.search_pat(case);
+                    self.search_pat(case)?;
                 }
+                Ok(())
             }
             Pat::Struct(ps) => {
-                self.search_path(&ps.path);
+                self.search_path(&ps.path)?;
                 for f in &ps.fields {
-                    self.search_pat(&f.pat);
+                    self.search_pat(&f.pat)?;
                 }
+                Ok(())
             }
             Pat::TupleStruct(tps) => {
-                self.search_path(&tps.path);
-                for f in &tps.pat.elems {
-                    self.search_pat(f);
+                self.search_path(&tps.path)?;
+                for f in &tps.elems {
+                    self.search_pat(f)?;
                 }
+                Ok(())
             }
             Pat::Type(pt) => {
-                self.search_pat(&pt.pat);
-                self.search_type(&pt.ty);
+                self.search_pat(&pt.pat)?;
+                self.search_type(&pt.ty)
             }
-            _ => {}
+            Pat::Verbatim(_) | Pat::Wild(_) => Ok(()),
+            _ => Ok(()),
         }
     }
 
-    fn search_type(&mut self, ty: &Type) {
+    fn search_type(&mut self, ty: &Type) -> Result<(), DiscoveryErr> {
         match ty {
             Type::Array(TypeArray { elem, .. })
             | Type::Group(TypeGroup { elem, .. })
             | Type::Paren(TypeParen { elem, .. })
             | Type::Ptr(TypePtr { elem, .. })
             | Type::Reference(TypeReference { elem, .. })
-            | Type::Slice(TypeSlice { elem, .. }) => self.search_type(elem),
+            | Type::Slice(TypeSlice { elem, .. }) => self.search_type(elem)?,
             Type::BareFn(tf) => {
                 for input in &tf.inputs {
-                    self.search_type(&input.ty);
+                    self.search_type(&input.ty)?;
                 }
-                self.search_return_type(&tf.output);
+                self.search_return_type(&tf.output)?;
             }
             Type::ImplTrait(tyit) => {
                 for b in &tyit.bounds {
                     if let syn::TypeParamBound::Trait(tyt) = b {
-                        self.search_path(&tyt.path)
+                        self.search_path(&tyt.path)?
                     }
                 }
             }
             Type::Infer(_) | Type::Macro(_) | Type::Never(_) => {}
-            Type::Path(typ) => self.search_path(&typ.path),
-            Type::TraitObject(tto) => self.search_type_param_bounds(&tto.bounds),
+            Type::Path(typ) => self.search_path(&typ.path)?,
+            Type::TraitObject(tto) => self.search_type_param_bounds(&tto.bounds)?,
             Type::Tuple(tt) => {
                 for e in &tt.elems {
-                    self.search_type(e)
+                    self.search_type(e)?
                 }
             }
             _ => {}
         }
+        Ok(())
     }
 
-    fn search_type_param_bounds(&mut self, bounds: &Punctuated<TypeParamBound, syn::token::Add>) {
+    fn search_type_param_bounds(
+        &mut self,
+        bounds: &Punctuated<TypeParamBound, syn::token::Plus>,
+    ) -> Result<(), DiscoveryErr> {
         for b in bounds {
             if let syn::TypeParamBound::Trait(tpbt) = b {
-                self.search_path(&tpbt.path)
+                self.search_path(&tpbt.path)?
             }
         }
+        Ok(())
     }
 
-    fn search_return_type(&mut self, output: &ReturnType) {
+    fn search_return_type(&mut self, output: &ReturnType) -> Result<(), DiscoveryErr> {
         if let ReturnType::Type(_, ty) = &output {
             self.search_type(ty)
+        } else {
+            Ok(())
         }
     }
 
-    fn search_path_arguments(&mut self, arguments: &syn::PathArguments) {
+    fn search_path_arguments(
+        &mut self,
+        arguments: &syn::PathArguments,
+    ) -> Result<(), DiscoveryErr> {
         match arguments {
             syn::PathArguments::None => {}
             syn::PathArguments::AngleBracketed(paab) => {
@@ -376,26 +472,33 @@ impl<'b> PerModDiscoveries<'b> {
                     match arg {
                         syn::GenericArgument::Lifetime(_) => {}
                         syn::GenericArgument::Type(ty)
-                        | syn::GenericArgument::Binding(Binding { ty, .. }) => self.search_type(ty),
-                        syn::GenericArgument::Constraint(c) => {
-                            self.search_type_param_bounds(&c.bounds)
+                        | syn::GenericArgument::AssocType(AssocType { ty, .. }) => {
+                            self.search_type(ty)?
                         }
-                        syn::GenericArgument::Const(c) => self.search_expr(c),
+                        syn::GenericArgument::Constraint(c) => {
+                            self.search_type_param_bounds(&c.bounds)?
+                        }
+                        syn::GenericArgument::Const(value)
+                        | syn::GenericArgument::AssocConst(AssocConst { value, .. }) => {
+                            self.search_expr(value)?
+                        }
+                        _ => {}
                     }
                 }
             }
             syn::PathArguments::Parenthesized(pas) => {
-                self.search_return_type(&pas.output);
+                self.search_return_type(&pas.output)?;
                 for t in &pas.inputs {
-                    self.search_type(t);
+                    self.search_type(t)?;
                 }
             }
         }
+        Ok(())
     }
 
     fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
         attrs.iter().any(|attr| {
-            attr.path
+            attr.path()
                 .segments
                 .last()
                 .map(|seg| seg.ident == attr_name)
@@ -404,9 +507,57 @@ impl<'b> PerModDiscoveries<'b> {
     }
 }
 
+struct SelfSubstituter<'a> {
+    self_ty: &'a Ident,
+}
+
+impl<'a> SelfSubstituter<'a> {
+    pub fn new(self_ty: &'a Ident) -> Self {
+        Self { self_ty }
+    }
+}
+
+impl VisitMut for SelfSubstituter<'_> {
+    fn visit_type_path_mut(&mut self, i: &mut syn::TypePath) {
+        if i.qself.is_none() && i.path.is_ident("Self") {
+            i.path = Path::from(self.self_ty.clone());
+        }
+    }
+}
+
+/// Take a method signature that may be `fn a(&self)`
+/// and turn it into `fn a(self: &A)` which is what we will
+/// need to specify to cxx.
+fn add_receiver(sig: &Signature, receiver: &Ident) -> Result<Signature, DiscoveryErr> {
+    let mut sig = sig.clone();
+    match sig.inputs.iter_mut().next() {
+        Some(first_arg) => match first_arg {
+            syn::FnArg::Receiver(rec_arg) => {
+                let mut substituted_type = rec_arg.ty.clone();
+                visit_type_mut(&mut SelfSubstituter::new(receiver), &mut substituted_type);
+                *first_arg = parse_quote! {
+                        qelf: #substituted_type
+                };
+                if let syn::FnArg::Typed(ref mut pat_type) = *first_arg {
+                    if let syn::Pat::Ident(ref mut pat_ident) = *pat_type.pat {
+                        assert_eq!(pat_ident.ident.to_string(), "qelf");
+                        pat_ident.ident = Ident::new("self", pat_ident.ident.span());
+                    }
+                }
+            }
+            syn::FnArg::Typed(_) => {}
+        },
+        None => return Err(DiscoveryErr::NoParameterOnMethod),
+    }
+    Ok(sig)
+}
+
 #[cfg(test)]
 mod tests {
-    use syn::parse_quote;
+    use quote::{quote, ToTokens};
+    use syn::{parse_quote, ImplItemFn};
+
+    use crate::{ast_discoverer::add_receiver, types::make_ident};
 
     use super::Discoveries;
 
@@ -425,7 +576,7 @@ mod tests {
                 }
             }
         };
-        discoveries.search_item(&itm, None);
+        discoveries.search_item(&itm, None).unwrap();
         assert_cpp_found(&discoveries);
     }
 
@@ -437,7 +588,7 @@ mod tests {
                 ffi::xxx()
             }
         };
-        discoveries.search_item(&itm, None);
+        discoveries.search_item(&itm, None).unwrap();
         assert_cpp_found(&discoveries);
     }
 
@@ -449,7 +600,7 @@ mod tests {
                 ffi::xxx();
             }
         };
-        discoveries.search_item(&itm, None);
+        discoveries.search_item(&itm, None).unwrap();
         assert_cpp_found(&discoveries);
     }
 
@@ -461,7 +612,7 @@ mod tests {
                 ffi::a::b::xxx();
             }
         };
-        discoveries.search_item(&itm, None);
+        discoveries.search_item(&itm, None).unwrap();
         assert!(!discoveries.cpp_list.is_empty());
         assert!(discoveries.cpp_list.iter().next().unwrap() == "a::b::xxx");
     }
@@ -474,7 +625,7 @@ mod tests {
                 a + 3 * foo(ffi::xxx());
             }
         };
-        discoveries.search_item(&itm, None);
+        discoveries.search_item(&itm, None).unwrap();
         assert_cpp_found(&discoveries);
     }
 
@@ -486,7 +637,7 @@ mod tests {
                 let foo: ffi::xxx = bar();
             }
         };
-        discoveries.search_item(&itm, None);
+        discoveries.search_item(&itm, None).unwrap();
         assert_cpp_found(&discoveries);
     }
 
@@ -497,7 +648,7 @@ mod tests {
             fn bar(a: &mut ffi::xxx) {
             }
         };
-        discoveries.search_item(&itm, None);
+        discoveries.search_item(&itm, None).unwrap();
         assert_cpp_found(&discoveries);
     }
 
@@ -508,7 +659,7 @@ mod tests {
             fn bar(a: cxx::UniquePtr<ffi::xxx>) {
             }
         };
-        discoveries.search_item(&itm, None);
+        discoveries.search_item(&itm, None).unwrap();
         assert_cpp_found(&discoveries);
     }
 
@@ -516,12 +667,26 @@ mod tests {
     fn test_extern_rust_fun() {
         let mut discoveries = Discoveries::default();
         let itm = parse_quote! {
-            #[autocxx::extern_rust::extern_rust_fun]
+            #[autocxx::extern_rust::extern_rust_function]
             fn bar(a: cxx::UniquePtr<ffi::xxx>) {
             }
         };
-        discoveries.search_item(&itm, None);
-        assert!(discoveries.extern_rust_funs.get(0).unwrap().sig.ident == "bar");
+        discoveries.search_item(&itm, None).unwrap();
+        assert!(discoveries.extern_rust_funs.first().unwrap().sig.ident == "bar");
+    }
+
+    #[test]
+    fn test_extern_rust_method() {
+        let mut discoveries = Discoveries::default();
+        let itm = parse_quote! {
+            impl A {
+                #[autocxx::extern_rust::extern_rust_function]
+                fn bar(&self) {
+                }
+            }
+        };
+        discoveries.search_item(&itm, None).unwrap();
+        assert!(discoveries.extern_rust_funs.first().unwrap().sig.ident == "bar");
     }
 
     #[test]
@@ -533,14 +698,45 @@ mod tests {
 
             }
         };
-        discoveries.search_item(&itm, None);
+        discoveries.search_item(&itm, None).unwrap();
         assert!(
             discoveries
                 .extern_rust_types
-                .get(0)
+                .first()
                 .unwrap()
                 .get_final_ident()
                 == "Bar"
         );
+    }
+
+    #[test]
+    fn test_add_receiver() {
+        let meth: ImplItemFn = parse_quote! {
+            fn a(&self) {}
+        };
+        let a = make_ident("A");
+        assert_eq!(
+            add_receiver(&meth.sig, &a)
+                .unwrap()
+                .to_token_stream()
+                .to_string(),
+            quote! { fn a(self: &A) }.to_string()
+        );
+
+        let meth: ImplItemFn = parse_quote! {
+            fn a(&mut self, b: u32) -> Foo {}
+        };
+        assert_eq!(
+            add_receiver(&meth.sig, &a)
+                .unwrap()
+                .to_token_stream()
+                .to_string(),
+            quote! { fn a(self: &mut A, b: u32) -> Foo }.to_string()
+        );
+
+        let meth: ImplItemFn = parse_quote! {
+            fn a() {}
+        };
+        assert!(add_receiver(&meth.sig, &a).is_err());
     }
 }

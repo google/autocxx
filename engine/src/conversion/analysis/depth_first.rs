@@ -6,17 +6,28 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::{HashSet, VecDeque};
+use indexmap::set::IndexSet as HashSet;
+use std::collections::VecDeque;
 use std::fmt::Debug;
 
 use itertools::Itertools;
 
 use crate::types::QualifiedName;
 
-use super::deps::HasDependencies;
+/// A little like `HasDependencies` but accounts for only direct fiele
+/// and bases.
+pub(crate) trait HasFieldsAndBases {
+    fn name(&self) -> &QualifiedName;
+    /// Return field and base class dependencies of this item.
+    /// This should only include those items where a definition is required,
+    /// not merely a declaration. So if the field type is
+    /// `std::unique_ptr<A>`, this should only return `std::unique_ptr`.
+    fn field_and_base_deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_>;
+}
 
-/// Return APIs in a depth-first order, i.e. those with no dependencies first.
-pub(super) fn depth_first<'a, T: HasDependencies + Debug + 'a>(
+/// Iterate through APIs in an order such that later APIs have no fields or bases
+/// other than those whose types have already been processed.
+pub(super) fn fields_and_bases_first<'a, T: HasFieldsAndBases + Debug + 'a>(
     inputs: impl Iterator<Item = &'a T> + 'a,
 ) -> impl Iterator<Item = &'a T> {
     let queue: VecDeque<_> = inputs.collect();
@@ -24,28 +35,35 @@ pub(super) fn depth_first<'a, T: HasDependencies + Debug + 'a>(
     DepthFirstIter { queue, yet_to_do }
 }
 
-struct DepthFirstIter<'a, T: HasDependencies + Debug> {
+struct DepthFirstIter<'a, T: HasFieldsAndBases + Debug> {
     queue: VecDeque<&'a T>,
     yet_to_do: HashSet<&'a QualifiedName>,
 }
 
-impl<'a, T: HasDependencies + Debug> Iterator for DepthFirstIter<'a, T> {
+impl<'a, T: HasFieldsAndBases + Debug> Iterator for DepthFirstIter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let first_candidate = self.queue.get(0).map(|api| api.name());
+        let first_candidate = self.queue.front().map(|api| api.name());
         while let Some(candidate) = self.queue.pop_front() {
-            if !candidate.deps().any(|d| self.yet_to_do.contains(&d)) {
+            if !candidate
+                .field_and_base_deps()
+                .any(|d| self.yet_to_do.contains(&d))
+            {
                 self.yet_to_do.remove(candidate.name());
                 return Some(candidate);
             }
             self.queue.push_back(candidate);
-            if self.queue.get(0).map(|api| api.name()) == first_candidate {
+            if self.queue.front().map(|api| api.name()) == first_candidate {
                 panic!(
                     "Failed to find a candidate; there must be a circular dependency. Queue is {}",
                     self.queue
                         .iter()
-                        .map(|item| format!("{}: {}", item.name(), item.deps().join(",")))
+                        .map(|item| format!(
+                            "{}: {}",
+                            item.name(),
+                            item.field_and_base_deps().join(",")
+                        ))
                         .join("\n")
                 );
             }
@@ -58,17 +76,17 @@ impl<'a, T: HasDependencies + Debug> Iterator for DepthFirstIter<'a, T> {
 mod test {
     use crate::types::QualifiedName;
 
-    use super::{depth_first, HasDependencies};
+    use super::{fields_and_bases_first, HasFieldsAndBases};
 
     #[derive(Debug)]
     struct Thing(QualifiedName, Vec<QualifiedName>);
 
-    impl HasDependencies for Thing {
+    impl HasFieldsAndBases for Thing {
         fn name(&self) -> &QualifiedName {
             &self.0
         }
 
-        fn deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
+        fn field_and_base_deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_> {
             Box::new(self.1.iter())
         }
     }
@@ -87,8 +105,8 @@ mod test {
             QualifiedName::new_from_cpp_name("c"),
             vec![QualifiedName::new_from_cpp_name("a")],
         );
-        let api_list = vec![a, b, c];
-        let mut it = depth_first(api_list.iter());
+        let api_list = [a, b, c];
+        let mut it = fields_and_bases_first(api_list.iter());
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("a"));
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("c"));
         assert_eq!(it.next().unwrap().0, QualifiedName::new_from_cpp_name("b"));

@@ -59,7 +59,6 @@ fn main() {
 )
 ```
 
-
 ## Pragmatism in a complex C++ codebase
 
 This crate mostly intends to follow the lead of the `cxx` crate in where and when `unsafe` is required. But, this crate is opinionated. It believes some unsafety requires more careful review than other bits, along the following spectrum:
@@ -88,4 +87,13 @@ reference:
 * It doesn't mutate it.
 * It doesn't delete it.
 * or any of the other things that you're not permitted to do in unsafe Rust.
+
+## Soundness
+
+This crate shares the general approach to safety and soundness pioneered by cxx, but has two important differences:
+
+* cxx requires you to specify your interface in detail, and thus think through all aspects of the language boundary. autocxx doesn't, and may autogenerate footguns.
+* cxx may allow multiple conflicting Rust references to exist to 'trivial' data types ("plain old data" or POD in autocxx parlance), but they're rare. autocxx may allow conflicting Rust references to exist even to 'opaque' (non-POD) data, and they're more common. This difference exists because opaque data is zero-sized in cxx, and zero-sized references cannot conflict. (In autocxx, we tell Rust about the size in order that we can allocate such types on the stack.)
+
+There are preliminary explorations to avoid this problem by using a C++ reference wrapper type. See `examples/reference-wrappers`.
 
