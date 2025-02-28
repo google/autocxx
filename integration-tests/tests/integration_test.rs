@@ -10265,13 +10265,7 @@ fn test_virtual_methods_additional() {
     let rs = quote! {
         let b = cxx::B::make_unique();
     };
-    run_test(
-        "",
-        hdr,
-        rs,
-        &["B"],
-        &[],
-    );
+    run_test("", hdr, rs, &["B"], &[]);
 }
 
 #[test]
