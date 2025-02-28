@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use autocxx_bindgen::callbacks::Explicitness;
 use indexmap::map::IndexMap as HashMap;
 use syn::{punctuated::Punctuated, token::Comma};
 
@@ -16,12 +17,12 @@ use super::{
     },
     pod::PodAnalysis,
 };
-use crate::conversion::{
+use crate::{conversion::{
     analysis::{depth_first::fields_and_bases_first, fun::ReceiverMutability},
-    api::{ApiName, CppVisibility, DeletedOrDefaulted, FuncToConvert, TypeKind},
+    api::{ApiName, CppVisibility, FuncToConvert, TypeKind},
     error_reporter::{convert_apis, convert_item_apis},
-    ConvertErrorFromCpp,
-};
+    ConvertErrorFromCpp, CppEffectiveName,
+}, minisyn::FnArg};
 use crate::{
     conversion::{api::Api, apivec::ApiVec},
     types::QualifiedName,
@@ -170,7 +171,7 @@ pub(crate) fn mark_types_abstract(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhas
                     cpp_vis: CppVisibility::Private,
                     ..
                 } | FuncToConvert {
-                    is_deleted: DeletedOrDefaulted::Deleted,
+                    is_deleted: Some(Explicitness::Deleted),
                     ..
                 }
             ) =>
@@ -256,7 +257,7 @@ pub(crate) fn mark_types_abstract(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhas
         } if api
             .cpp_name()
             .as_ref()
-            .map(|n| n.contains("::"))
+            .map(|n| n.is_nested())
             .unwrap_or_default() =>
         {
             Err(ConvertErrorFromCpp::NonDestructibleNestedType)
