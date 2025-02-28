@@ -12,7 +12,7 @@ use indoc::indoc;
 use once_cell::sync::OnceCell;
 use syn::{parse_quote, TypePath};
 
-//// The behavior of the type.
+/// The behavior of the type.
 #[derive(Debug)]
 enum Behavior {
     CxxContainerPtr,
@@ -83,7 +83,7 @@ impl TypeDetails {
                 Some(format!(
                     indoc! {"
                     /**
-                    * <div rustbindgen=\"true\" replaces=\"{}\">
+                    * <div rustbindgen=\"true\" replaces=\"{}\"></div>
                     */
                     {}class {} {{
                         {};
@@ -100,12 +100,12 @@ impl TypeDetails {
         let mut segs = self.rs_name.split("::").peekable();
         if segs.peek().map(|seg| seg.is_empty()).unwrap_or_default() {
             segs.next();
-            let segs = segs.into_iter().map(make_ident);
+            let segs = segs.map(make_ident);
             parse_quote! {
                 ::#(#segs)::*
             }
         } else {
-            let segs = segs.into_iter().map(make_ident);
+            let segs = segs.map(make_ident);
             parse_quote! {
                 #(#segs)::*
             }
@@ -244,7 +244,9 @@ impl TypeDatabase {
             .map(|td| {
                 matches!(
                     td.behavior,
-                    Behavior::CxxContainerPtr | Behavior::CxxContainerVector
+                    Behavior::CxxContainerPtr
+                        | Behavior::CxxContainerVector
+                        | Behavior::RustContainerByValueSafe
                 )
             })
             .unwrap_or(false)
@@ -267,16 +269,18 @@ impl TypeDatabase {
         self.get(ty).is_some()
     }
 
-    pub(crate) fn known_type_type_path(&self, ty: &QualifiedName) -> Option<TypePath> {
-        self.get(ty).map(|td| td.to_type_path())
+    /// Whether this is the substitute type we made for some known type.
+    pub(crate) fn is_known_subtitute_type(&self, ty: &QualifiedName) -> bool {
+        if ty.get_namespace().is_empty() {
+            self.all_names()
+                .any(|n| n.get_final_item() == ty.get_final_item())
+        } else {
+            false
+        }
     }
 
-    /// Get the list of types to give to bindgen to ask it _not_ to
-    /// generate code for.
-    pub(crate) fn get_initial_blocklist(&self) -> impl Iterator<Item = &str> + '_ {
-        self.by_rs_name
-            .iter()
-            .filter_map(|(_, td)| td.get_prelude_entry().map(|_| td.cpp_name.as_str()))
+    pub(crate) fn known_type_type_path(&self, ty: &QualifiedName) -> Option<TypePath> {
+        self.get(ty).map(|td| td.to_type_path())
     }
 
     /// Whether this is one of the ctypes (mostly variable length integers)
@@ -444,8 +448,8 @@ fn create_type_database() -> TypeDatabase {
     ));
     for (cpp_type, rust_type) in (4..7).map(|x| 2i32.pow(x)).flat_map(|x| {
         vec![
-            (format!("uint{}_t", x), format!("u{}", x)),
-            (format!("int{}_t", x), format!("i{}", x)),
+            (format!("uint{x}_t"), format!("u{x}")),
+            (format!("int{x}_t"), format!("i{x}")),
         ]
     }) {
         db.insert(TypeDetails::new(
@@ -467,10 +471,10 @@ fn create_type_database() -> TypeDatabase {
     ));
 
     db.insert(TypeDetails::new(
-        "std::pin::Pin",
+        "core::pin::Pin",
         "Pin",
         Behavior::RustByValue, // because this is actually Pin<&something>
-        None,
+        Some("std::pin::Pin".to_string()),
         true,
         false,
     ));
@@ -478,18 +482,18 @@ fn create_type_database() -> TypeDatabase {
     let mut insert_ctype = |cname: &str| {
         let concatenated_name = cname.replace(' ', "");
         db.insert(TypeDetails::new(
-            format!("autocxx::c_{}", concatenated_name),
+            format!("autocxx::c_{concatenated_name}"),
             cname,
             Behavior::CVariableLengthByValue,
-            Some(format!("std::os::raw::c_{}", concatenated_name)),
+            Some(format!("std::os::raw::c_{concatenated_name}")),
             true,
             true,
         ));
         db.insert(TypeDetails::new(
-            format!("autocxx::c_u{}", concatenated_name),
-            format!("unsigned {}", cname),
+            format!("autocxx::c_u{concatenated_name}"),
+            format!("unsigned {cname}"),
             Behavior::CVariableLengthByValue,
-            Some(format!("std::os::raw::c_u{}", concatenated_name)),
+            Some(format!("std::os::raw::c_u{concatenated_name}")),
             true,
             true,
         ));

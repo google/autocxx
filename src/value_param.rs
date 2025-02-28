@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use cxx::{memory::UniquePtrTarget, UniquePtr};
-use moveit::{CopyNew, DerefMove, MoveNew, New};
+use moveit::{AsMove, CopyNew, MoveNew, New};
 use std::{marker::PhantomPinned, mem::MaybeUninit, ops::Deref, pin::Pin};
 
 /// A trait representing a parameter to a C++ function which is received
@@ -192,22 +192,21 @@ where
 
 /// Explicitly force a value parameter to be taken using any type of [`crate::moveit::new::New`],
 /// i.e. a constructor.
-pub fn as_new<N: New<Output = T>, T>(constructor: N) -> impl ValueParam<T> {
+pub fn as_new<N: New>(constructor: N) -> impl ValueParam<N::Output> {
     ByNew(constructor)
 }
 
 /// Explicitly force a value parameter to be taken by copy.
-pub fn as_copy<P: Deref<Target = T>, T>(ptr: P) -> impl ValueParam<T>
+pub fn as_copy<P: Deref>(ptr: P) -> impl ValueParam<P::Target>
 where
-    T: CopyNew,
+    P::Target: CopyNew,
 {
     ByNew(crate::moveit::new::copy(ptr))
 }
 
-/// Explicitly force a value parameter to be taken usign C++ move semantics.
-pub fn as_mov<P: DerefMove + Deref<Target = T>, T>(ptr: P) -> impl ValueParam<T>
+/// Explicitly force a value parameter to be taken using C++ move semantics.
+pub fn as_mov<P: AsMove>(ptr: P) -> impl ValueParam<P::Target>
 where
-    P: DerefMove,
     P::Target: MoveNew,
 {
     ByNew(crate::moveit::new::mov(ptr))
@@ -216,11 +215,8 @@ where
 #[doc(hidden)]
 pub struct ByNew<N: New>(N);
 
-unsafe impl<N, T> ValueParam<T> for ByNew<N>
-where
-    N: New<Output = T>,
-{
-    type StackStorage = MaybeUninit<T>;
+unsafe impl<N: New> ValueParam<N::Output> for ByNew<N> {
+    type StackStorage = MaybeUninit<N::Output>;
 
     unsafe fn populate_stack_space(self, mut stack: Pin<&mut Option<Self::StackStorage>>) {
         // Safety: we won't move/swap things within the pin.
@@ -228,11 +224,11 @@ where
         *slot = Some(MaybeUninit::uninit());
         self.0.new(Pin::new_unchecked(slot.as_mut().unwrap()))
     }
-    fn get_ptr(stack: Pin<&mut Self::StackStorage>) -> *mut T {
-        // Safety: it's OK to (briefly) create a reference to the T because we
+    fn get_ptr(stack: Pin<&mut Self::StackStorage>) -> *mut N::Output {
+        // Safety: it's OK to (briefly) create a reference to the N::Output because we
         // populated it within `populate_stack_space`. It's OK to unpack the pin
         // because we're not going to move the contents.
-        unsafe { Pin::into_inner_unchecked(stack).assume_init_mut() as *mut T }
+        unsafe { Pin::into_inner_unchecked(stack).assume_init_mut() as *mut N::Output }
     }
 
     fn do_drop(stack: Pin<&mut Self::StackStorage>) {

@@ -101,7 +101,7 @@ impl AllowlistEntry {
     fn to_bindgen_item(&self) -> String {
         match self {
             AllowlistEntry::Item(i) => i.clone(),
-            AllowlistEntry::Namespace(ns) => format!("{}::.*", ns),
+            AllowlistEntry::Namespace(ns) => format!("{ns}::.*"),
         }
     }
 }
@@ -240,7 +240,7 @@ impl Parse for IncludeCppConfig {
             let (possible_directives, to_parse, parse_completely) = if has_hexathorpe {
                 (&get_directives().need_hexathorpe, input, false)
             } else {
-                input.parse::<Option<syn::token::Bang>>()?;
+                input.parse::<Option<syn::token::Not>>()?;
                 syn::parenthesized!(args in input);
                 (&get_directives().need_exclamation, &args, true)
             };
@@ -250,7 +250,7 @@ impl Parse for IncludeCppConfig {
                 None => {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("expected {}", all_possible),
+                        format!("expected {all_possible}"),
                     ));
                 }
                 Some(directive) => directive.parse(to_parse, &mut config, &ident.span())?,
@@ -258,7 +258,7 @@ impl Parse for IncludeCppConfig {
             if parse_completely && !to_parse.is_empty() {
                 return Err(syn::Error::new(
                     ident.span(),
-                    format!("found unexpected input within the directive {}", ident_str),
+                    format!("found unexpected input within the directive {ident_str}"),
                 ));
             }
             if input.is_empty() {
@@ -354,6 +354,7 @@ impl IncludeCppConfig {
     /// 1) As directives to bindgen
     /// 2) After bindgen has generated code, to filter the APIs which
     ///    we pass to cxx.
+    ///
     /// This second pass may seem redundant. But sometimes bindgen generates
     /// unnecessary stuff.
     pub fn is_on_allowlist(&self, cpp_name: &str) -> bool {

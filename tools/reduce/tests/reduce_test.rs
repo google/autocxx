@@ -55,9 +55,8 @@ fn test_reduce_direct_repro_case() -> Result<(), Box<dyn std::error::Error>> {
     do_reduce(
         |header, demo_code_dir| {
             let config = format!(
-                "#include \"{}\" generate_all!() block!(\"First\")
-            safety!(unsafe_ffi)",
-                header
+                "#include \"{header}\" generate_all!() block!(\"First\")
+            safety!(unsafe_ffi)"
             );
             let json = serde_json::json!({
                 "header": INPUT_H,
@@ -173,7 +172,7 @@ where
     let demo_code_dir = tmp_dir.path().join("demo");
     std::fs::create_dir(&demo_code_dir).unwrap();
     let input_header = if include_cxx_h {
-        Cow::Owned(format!("#include \"cxx.h\"\n{}", INPUT_H))
+        Cow::Owned(format!("#include \"cxx.h\"\n{INPUT_H}"))
     } else {
         Cow::Borrowed(INPUT_H)
     };
@@ -205,7 +204,7 @@ where
             cmd = cmd.arg("repro").arg("-r").arg(repro_case);
         }
     }
-    eprintln!("Running {:?}", cmd);
+    eprintln!("Running {cmd:?}");
     let o = cmd.output()?;
     println!("Reduce output: {}", std::str::from_utf8(&o.stdout).unwrap());
     println!("Reduce error: {}", std::str::from_utf8(&o.stderr).unwrap());
@@ -220,7 +219,7 @@ where
 
 fn write_to_file(dir: &Path, filename: &str, content: &[u8]) {
     let path = dir.join(filename);
-    let mut f = File::create(&path).expect("Unable to create file");
+    let mut f = File::create(path).expect("Unable to create file");
     f.write_all(content).expect("Unable to write file");
 }
 

@@ -162,7 +162,7 @@ impl LinkableTryBuilder {
             );
         }
         let temp_path = self.temp_dir.path().to_str().unwrap();
-        let mut rustflags = format!("-L {}", temp_path);
+        let mut rustflags = format!("-L {temp_path}");
         if std::env::var_os("AUTOCXX_ASAN").is_some() {
             rustflags.push_str(" -Z sanitizer=address -Clinker=clang++ -Clink-arg=-fuse-ld=lld");
         }
@@ -194,6 +194,7 @@ fn write_to_file(tdir: &TempDir, filename: &str, content: &str) -> PathBuf {
 }
 
 /// A positive test, we expect to pass.
+#[track_caller]
 pub fn run_test(
     cxx_code: &str,
     header_code: &str,
@@ -420,25 +421,23 @@ pub fn do_run_test_manual(
     builder_modifier: Option<BuilderModifier>,
     rust_code_checker: Option<CodeChecker>,
 ) -> Result<(), TestError> {
+    let builder_modifier = consider_forcing_wrapper_generation(builder_modifier);
+
     const HEADER_NAME: &str = "input.h";
     // Step 2: Write the C++ header snippet to a temp file
     let tdir = tempdir().unwrap();
-    write_to_file(
-        &tdir,
-        HEADER_NAME,
-        &format!("#pragma once\n{}", header_code),
-    );
+    write_to_file(&tdir, HEADER_NAME, &format!("#pragma once\n{header_code}"));
     write_to_file(&tdir, "cxx.h", HEADER);
 
     rust_code.append_all(quote! {
         #[link(name="autocxx-demo")]
-        extern {}
+        extern "C" {}
     });
     info!("Unexpanded Rust: {}", rust_code);
 
     let write_rust_to_file = |ts: &TokenStream| -> PathBuf {
         // Step 3: Write the Rust code to a temp file
-        let rs_code = format!("{}", ts);
+        let rs_code = format!("{ts}");
         write_to_file(&tdir, "input.rs", &rs_code)
     };
 
@@ -460,7 +459,7 @@ pub fn do_run_test_manual(
     let generated_rs_files = build_results.1;
 
     if let Some(code_checker) = &rust_code_checker {
-        let mut file = File::open(generated_rs_files.get(0).ok_or(TestError::NoRs)?)
+        let mut file = File::open(generated_rs_files.first().ok_or(TestError::NoRs)?)
             .map_err(TestError::RsFileOpen)?;
         let mut content = String::new();
         file.read_to_string(&mut content)
@@ -477,7 +476,7 @@ pub fn do_run_test_manual(
     if !cxx_code.is_empty() {
         // Step 4: Write the C++ code snippet to a .cc file, along with a #include
         //         of the header emitted in step 5.
-        let cxx_code = format!("#include \"input.h\"\n#include \"cxxgen.h\"\n{}", cxx_code);
+        let cxx_code = format!("#include \"input.h\"\n#include \"cxxgen.h\"\n{cxx_code}");
         let cxx_path = write_to_file(&tdir, "input.cxx", &cxx_code);
         b.file(cxx_path);
     }
@@ -492,7 +491,7 @@ pub fn do_run_test_manual(
         .try_compile("autocxx-demo")
         .map_err(TestError::CppBuild)?;
     if KEEP_TEMPDIRS {
-        println!("Generated .rs files: {:?}", generated_rs_files);
+        println!("Generated .rs files: {generated_rs_files:?}");
     }
     // Step 8: use the trybuild crate to build the Rust file.
     let r = get_builder().lock().unwrap().build(
@@ -512,4 +511,39 @@ pub fn do_run_test_manual(
                                         // not important at the moment.
     }
     Ok(())
+}
+
+/// If AUTOCXX_FORCE_WRAPPER_GENERATION is set, always force both C++
+/// and Rust side shims, for extra testing of obscure code paths.
+fn consider_forcing_wrapper_generation(
+    existing_builder_modifier: Option<BuilderModifier>,
+) -> Option<BuilderModifier> {
+    if std::env::var("AUTOCXX_FORCE_WRAPPER_GENERATION").is_err() {
+        existing_builder_modifier
+    } else {
+        Some(Box::new(ForceWrapperGeneration(existing_builder_modifier)))
+    }
+}
+
+struct ForceWrapperGeneration(Option<BuilderModifier>);
+
+impl BuilderModifierFns for ForceWrapperGeneration {
+    fn modify_autocxx_builder<'a>(
+        &self,
+        builder: Builder<'a, TestBuilderContext>,
+    ) -> Builder<'a, TestBuilderContext> {
+        let builder = builder.force_wrapper_generation(true);
+        if let Some(modifier) = &self.0 {
+            modifier.modify_autocxx_builder(builder)
+        } else {
+            builder
+        }
+    }
+    fn modify_cc_builder<'a>(&self, builder: &'a mut cc::Build) -> &'a mut cc::Build {
+        if let Some(modifier) = &self.0 {
+            modifier.modify_cc_builder(builder)
+        } else {
+            builder
+        }
+    }
 }

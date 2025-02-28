@@ -36,8 +36,7 @@ void feed_goat() {
     }
 }
 ",
-"#include <memory>
-class GoatObserver {
+"class GoatObserver {
 public:
     virtual void goat_full() const = 0;
     virtual ~GoatObserver() {}
@@ -62,7 +61,7 @@ include_cpp! {
 
 use ffi::*;
 
-#[is_subclass(superclass("GoatObserver"))]
+#[subclass]
 #[derive(Default)]
 pub struct MyGoatObserver;
 
@@ -124,8 +123,6 @@ public:
     virtual ~Dinosaur() {}
 };
 
-// Currently, autocxx requires at least one 'generate!' call.
-inline void do_a_thing() {};
 ",
 {
 use autocxx::prelude::*;
@@ -136,16 +133,15 @@ include_cpp! {
     safety!(unsafe_ffi)
     subclass!("Dinosaur", TRex)
     subclass!("Dinosaur", Diplodocus)
-    generate!("do_a_thing")
 }
 
 use ffi::*;
 
-#[is_subclass(superclass("Dinosaur"))]
+#[subclass]
 #[derive(Default)]
 pub struct TRex;
 
-#[is_subclass(superclass("Dinosaur"))]
+#[subclass]
 #[derive(Default)]
 pub struct Diplodocus;
 

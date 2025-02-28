@@ -77,7 +77,7 @@ impl FileLocationStrategy {
             FileLocationStrategy::Custom(_) => panic!("Should never happen in the macro"),
             FileLocationStrategy::UnknownMaybeFromOutdir | FileLocationStrategy::FromOutDir(_) => {
                 let fname = config.get_rs_filename();
-                let fname = format!("/{}/{}/{}", BUILD_DIR_NAME, RS_DIR_NAME, fname);
+                let fname = format!("/{BUILD_DIR_NAME}/{RS_DIR_NAME}/{fname}");
                 // rust-analyzer works better if we ask Rust to do the path
                 // concatenation rather than doing it in proc-macro code.
                 // proc-macro code does not itself have access to the value of

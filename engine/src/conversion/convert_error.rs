@@ -8,10 +8,10 @@
 
 use indexmap::set::IndexSet as HashSet;
 
+use crate::minisyn::Ident;
 use itertools::Itertools;
 use miette::{Diagnostic, SourceSpan};
 use proc_macro2::Span;
-use syn::Ident;
 use thiserror::Error;
 
 use crate::{
@@ -41,8 +41,6 @@ pub enum ConvertErrorFromCpp {
     UnsafePodType(String),
     #[error("Bindgen generated some unexpected code in a foreign mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")]
     UnexpectedForeignItem,
-    #[error("Bindgen generated some unexpected code in its outermost mod section. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")]
-    UnexpectedOuterItem,
     #[error("Bindgen generated some unexpected code in an inner namespace mod. You may have specified something in a 'generate' directive which is not currently compatible with autocxx.")]
     UnexpectedItemInMod,
     #[error("autocxx was unable to produce a typdef pointing to the complex type {0}.")]
@@ -55,8 +53,14 @@ pub enum ConvertErrorFromCpp {
     ConflictingTemplatedArgsWithTypedef(QualifiedName),
     #[error("Function {0} has a parameter or return type which is either on the blocklist or a forward declaration")]
     UnacceptableParam(String),
-    #[error("Function {0} has a return reference parameter, but 0 or >1 input reference parameters, so the lifetime of the output reference cannot be deduced.")]
-    NotOneInputReference(String),
+    #[error("Function {0} has a reference return value, but no reference parameters, so the lifetime of the output reference cannot be deduced.")]
+    NoInputReference(String),
+    #[error("Function {0} has a reference return value, but >1 input reference parameters, so the lifetime of the output reference cannot be deduced.")]
+    MultipleInputReferences(String),
+    #[error("Function {0} has a mutable reference return value, but no mutable reference parameters, so the lifetime of the output reference cannot be deduced.")]
+    NoMutableInputReference(String),
+    #[error("Function {0} has a mutable reference return value, but >1 input mutable reference parameters, so the lifetime of the output reference cannot be deduced.")]
+    MultipleMutableInputReferences(String),
     #[error("Encountered type not yet supported by autocxx: {0}")]
     UnsupportedType(String),
     #[error("Encountered type not yet known by autocxx: {0}")]
@@ -69,8 +73,12 @@ pub enum ConvertErrorFromCpp {
     UnexpectedUseStatement(Option<String>),
     #[error("Type {} was parameterized over something complex which we don't yet support", .0.to_cpp_name())]
     TemplatedTypeContainingNonPathArg(QualifiedName),
-    #[error("Pointer pointed to something unsupported")]
-    InvalidPointee,
+    #[error("Pointer pointed to an array, which is not yet supported")]
+    InvalidArrayPointee,
+    #[error("Pointer pointed to another pointer, which is not yet supported")]
+    InvalidPointerPointee,
+    #[error("Pointer pointed to something unsupported (autocxx only supports pointers to named types): {0}")]
+    InvalidPointee(String),
     #[error("The 'generate' or 'generate_pod' directive for '{0}' did not result in any code being generated. Perhaps this was mis-spelled or you didn't qualify the name with any namespaces? Otherwise please report a bug.")]
     DidNotGenerateAnything(String),
     #[error("Found an attempt at using a forward declaration ({}) inside a templated cxx type such as UniquePtr or CxxVector. If the forward declaration is a typedef, perhaps autocxx wasn't sure whether or not it involved a forward declaration. If you're sure it didn't, then you may be able to solve this by using instantiable!.", .0.to_cpp_name())]
@@ -143,6 +151,12 @@ pub enum ConvertErrorFromCpp {
     ReferringToGenericTypeParam,
     #[error("This forward declaration was nested within another struct/class. autocxx is unable to represent inner types if they are forward declarations.")]
     ForwardDeclaredNestedType,
+    #[error("Problem handling function argument {arg}: {err}")]
+    Argument {
+        arg: String,
+        #[source]
+        err: Box<ConvertErrorFromCpp>,
+    },
 }
 
 /// Error types derived from Rust code. This is separate from [`ConvertError`] because these
@@ -185,17 +199,17 @@ impl LocatedConvertErrorFromRust {
 
 /// Ensures that error contexts are always created using the constructors in this
 /// mod, therefore undergoing identifier sanitation.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct PhantomSanitized;
 
 /// The context of an error, e.g. whether it applies to a function or a method.
 /// This is used to generate suitable rustdoc in the output codegen so that
 /// the errors can be revealed in rust-analyzer-based IDEs, etc.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct ErrorContext(Box<ErrorContextType>, PhantomSanitized);
 
 /// All idents in this structure are guaranteed to be something we can safely codegen for.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum ErrorContextType {
     Item(Ident),
     SanitizedItem(Ident),
@@ -227,8 +241,7 @@ impl ErrorContext {
             ),
             Some(_) => Self(
                 Box::new(ErrorContextType::SanitizedItem(make_ident(format!(
-                    "{}_{}",
-                    self_ty, method
+                    "{self_ty}_{method}"
                 )))),
                 PhantomSanitized,
             ),
@@ -258,8 +271,8 @@ impl ErrorContext {
 impl std::fmt::Display for ErrorContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &*self.0 {
-            ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => write!(f, "{}", id),
-            ErrorContextType::Method { self_ty, method } => write!(f, "{}::{}", self_ty, method),
+            ErrorContextType::Item(id) | ErrorContextType::SanitizedItem(id) => write!(f, "{id}"),
+            ErrorContextType::Method { self_ty, method } => write!(f, "{self_ty}::{method}"),
         }
     }
 }

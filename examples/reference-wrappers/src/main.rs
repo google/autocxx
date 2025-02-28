@@ -25,9 +25,10 @@
 
 // Necessary to be able to call methods on reference wrappers.
 // For that reason, this example only builds on nightly Rust.
-#![feature(arbitrary_self_types)]
+#![feature(arbitrary_self_types_pointers)]
 
 use autocxx::prelude::*;
+use std::pin::Pin;
 
 include_cpp! {
     #include "input.h"
@@ -36,6 +37,36 @@ include_cpp! {
     safety!(unsafe_references_wrapped)
     generate!("Goat")
     generate!("Field")
+}
+
+impl ffi::Goat {
+    // Methods can be called on a CppRef<T> or &CppRef<T>
+    fn bleat(self: CppRef<Self>) {
+        println!("Bleat");
+    }
+}
+
+trait FarmProduce {
+    // Traits can be defined on a CppRef<T> so long as Self: Sized
+    fn sell(self: &CppRef<Self>)
+    where
+        Self: Sized;
+}
+
+impl FarmProduce for ffi::Goat {
+    fn sell(self: &CppRef<Self>) {
+        println!("Selling goat");
+    }
+}
+
+trait FarmArea {
+    fn maintain(self: CppRef<Self>);
+}
+
+impl FarmArea for ffi::Field {
+    fn maintain(self: CppRef<Self>) {
+        println!("Maintaining");
+    }
 }
 
 fn main() {
@@ -56,10 +87,20 @@ fn main() {
     // We can no longer take Rust references to the field...
     //   let _field_rust_ref = field.as_ref();
     // However, we can take C++ references. And use such references
-    // to call methods...
+    // to call methods in C++. Quite often those methods will
+    // return other references, like this.
     let another_goat = field.as_cpp_ref().get_goat();
     // The 'get_goat' method in C++ returns a reference, so this is
     // another CppRef, not a Rust reference.
+
+    // We can still use these C++ references to call Rust methods,
+    // so long as those methods have a "self" type of a
+    // C++ reference not a Rust reference.
+    another_goat.clone().bleat();
+    another_goat.sell();
+
+    // But most commonly, C++ references are simply used as the 'this'
+    // type when calling other C++ methods, like this.
     assert_eq!(
         another_goat
             .describe() // returns a UniquePtr<CxxString>, there
@@ -69,4 +110,9 @@ fn main() {
             .to_string_lossy(),
         "This goat has 0 horns."
     );
+
+    // We can even use trait objects, though it's a bit of a fiddle.
+    let farm_area: Pin<Box<dyn FarmArea>> = ffi::Field::new().within_box();
+    let farm_area = CppPin::from_pinned_box(farm_area);
+    farm_area.as_cpp_ref().maintain();
 }

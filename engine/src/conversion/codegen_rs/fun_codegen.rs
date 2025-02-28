@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use autocxx_parser::IncludeCppConfig;
 use indexmap::set::IndexSet as HashSet;
 use std::borrow::Cow;
 
@@ -17,14 +16,15 @@ use syn::{
     parse_quote,
     punctuated::Punctuated,
     token::{Comma, Unsafe},
-    Attribute, FnArg, ForeignItem, Ident, ImplItem, Item, ReturnType,
+    Attribute, ForeignItem, Ident, ImplItem, Item, ReturnType,
 };
 
 use super::{
     function_wrapper_rs::RustParamConversion,
     maybe_unsafes_to_tokens,
-    unqualify::{unqualify_params, unqualify_ret_type},
-    ImplBlockDetails, ImplBlockKey, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails, Use,
+    unqualify::{unqualify_params_minisyn, unqualify_ret_type},
+    utils::generate_cxx_use_stmt,
+    ImplBlockDetails, MaybeUnsafeStmt, RsCodegenResult, TraitImplBlockDetails,
 };
 use crate::{
     conversion::{
@@ -32,9 +32,10 @@ use crate::{
             function_wrapper::TypeConversionPolicy, ArgumentAnalysis, FnAnalysis, FnKind,
             MethodKind, RustRenameStrategy, TraitMethodDetails,
         },
-        api::{Pointerness, UnsafetyNeeded},
+        api::UnsafetyNeeded,
     },
-    types::{Namespace, QualifiedName},
+    minisyn::{minisynize_vec, FnArg},
+    types::QualifiedName,
 };
 use crate::{
     conversion::{api::FuncToConvert, codegen_rs::lifetime::add_explicit_lifetime_if_necessary},
@@ -85,18 +86,17 @@ impl UnsafetyNeeded {
 }
 
 pub(super) fn gen_function(
-    ns: &Namespace,
+    name: &QualifiedName,
     fun: FuncToConvert,
     analysis: FnAnalysis,
-    cpp_call_name: String,
     non_pod_types: &HashSet<QualifiedName>,
-    config: &IncludeCppConfig,
 ) -> RsCodegenResult {
     if analysis.ignore_reason.is_err() || !analysis.externally_callable {
         return RsCodegenResult::default();
     }
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = &analysis.rust_name;
+    let cpp_call_name = &analysis.cpp_call_name;
     let ret_type = analysis.ret_type;
     let ret_conversion = analysis.ret_conversion;
     let param_details = analysis.param_details;
@@ -104,12 +104,11 @@ pub(super) fn gen_function(
     let params = analysis.params;
     let vis = analysis.vis;
     let kind = analysis.kind;
-    let doc_attrs = fun.doc_attrs;
+    let doc_attrs = minisynize_vec(fun.doc_attrs);
 
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
     let mut trait_impl_entry = None;
-    let mut bindgen_mod_items = Vec::new();
     let always_unsafe_due_to_trait_definition = match kind {
         FnKind::TraitMethod { ref details, .. } => details.trait_call_is_unsafe,
         _ => false,
@@ -124,7 +123,6 @@ pub(super) fn gen_function(
         non_pod_types,
         ret_type: &ret_type,
         ret_conversion: &ret_conversion,
-        reference_wrappers: config.unsafe_policy.requires_cpprefs(),
     };
     // In rare occasions, we might need to give an explicit lifetime.
     let (lifetime_tokens, params, ret_type) = add_explicit_lifetime_if_necessary(
@@ -132,7 +130,10 @@ pub(super) fn gen_function(
         params,
         Cow::Borrowed(&ret_type),
         non_pod_types,
+        &ret_conversion,
     );
+
+    let mut output_mod_items = Vec::new();
 
     if analysis.rust_wrapper_needed {
         match kind {
@@ -160,29 +161,24 @@ pub(super) fn gen_function(
             }
             _ => {
                 // Generate plain old function
-                bindgen_mod_items.push(fn_generator.generate_function_impl());
+                output_mod_items.push(fn_generator.generate_function_impl());
             }
         }
+    } else if matches!(kind, FnKind::Function) {
+        let alias = match analysis.rust_rename_strategy {
+            RustRenameStrategy::RenameInOutputMod(ref alias) => Some(&alias.0),
+            _ => None,
+        };
+        output_mod_items.push(generate_cxx_use_stmt(name, alias));
     }
 
-    let materialization = match kind {
-        FnKind::Method { .. } | FnKind::TraitMethod { .. } => None,
-        FnKind::Function => match analysis.rust_rename_strategy {
-            _ if analysis.rust_wrapper_needed => {
-                Some(Use::SpecificNameFromBindgen(make_ident(rust_name)))
-            }
-            RustRenameStrategy::RenameInOutputMod(ref alias) => {
-                Some(Use::UsedFromCxxBridgeWithAlias(alias.clone()))
-            }
-            _ => Some(Use::UsedFromCxxBridge),
-        },
-    };
-    if cxxbridge_name != cpp_call_name && !wrapper_function_needed {
-        cpp_name_attr = Attribute::parse_outer
-            .parse2(quote!(
-                #[cxx_name = #cpp_call_name]
-            ))
-            .unwrap();
+    if let Some(cpp_call_name) = cpp_call_name {
+        if cpp_call_name.does_not_match_cxxbridge_name(&cxxbridge_name) && !wrapper_function_needed
+        {
+            cpp_name_attr = Attribute::parse_outer
+                .parse2(cpp_call_name.generate_cxxbridge_name_attribute())
+                .unwrap();
+        }
     }
 
     // Finally - namespace support. All the Types in everything
@@ -193,14 +189,14 @@ pub(super) fn gen_function(
     // well-known types should be unqualified already (e.g. just UniquePtr)
     // and the following code will act to unqualify only those types
     // which the user has declared.
-    let params = unqualify_params(params);
+    let params = unqualify_params_minisyn(params);
     let ret_type = unqualify_ret_type(ret_type.into_owned());
     // And we need to make an attribute for the namespace that the function
     // itself is in.
-    let namespace_attr = if ns.is_empty() || wrapper_function_needed {
+    let namespace_attr = if name.get_namespace().is_empty() || wrapper_function_needed {
         Vec::new()
     } else {
-        let namespace_string = ns.to_string();
+        let namespace_string = name.get_namespace().to_string();
         Attribute::parse_outer
             .parse2(quote!(
                 #[namespace = #namespace_string]
@@ -217,10 +213,9 @@ pub(super) fn gen_function(
     ));
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
-        bindgen_mod_items,
         impl_entry,
         trait_impl_entry,
-        materializations: materialization.into_iter().collect(),
+        output_mod_items,
         ..Default::default()
     }
 }
@@ -237,7 +232,6 @@ struct FnGenerator<'a> {
     always_unsafe_due_to_trait_definition: bool,
     doc_attrs: &'a Vec<Attribute>,
     non_pod_types: &'a HashSet<QualifiedName>,
-    reference_wrappers: bool,
 }
 
 impl<'a> FnGenerator<'a> {
@@ -262,10 +256,10 @@ impl<'a> FnGenerator<'a> {
         let mut any_conversion_requires_unsafe = false;
         let mut variable_counter = 0usize;
         for pd in self.param_details {
-            let wrapper_arg_name = if pd.self_type.is_some() && !avoid_self {
+            let wrapper_arg_name: syn::Pat = if pd.self_type.is_some() && !avoid_self {
                 parse_quote!(self)
             } else {
-                pd.name.clone()
+                pd.name.clone().into()
             };
             let rust_for_param = pd
                 .conversion
@@ -307,6 +301,7 @@ impl<'a> FnGenerator<'a> {
             wrapper_params,
             ret_type,
             self.non_pod_types,
+            self.ret_conversion,
         );
 
         let cxxbridge_name = self.cxxbridge_name;
@@ -320,6 +315,17 @@ impl<'a> FnGenerator<'a> {
             || self.always_unsafe_due_to_trait_definition;
         let (call_body, ret_type) = match self.ret_conversion {
             Some(ret_conversion) if ret_conversion.rust_work_needed() => {
+                // There's a potential lurking bug below. If the return type conversion requires
+                // unsafe, then we'll end up doing something like
+                //   unsafe { do_return_conversion( unsafe { call_body() })}
+                // and the generated code will get warnings about nested unsafe blocks.
+                // That's because we convert the call body to tokens in the following
+                // line without considering the fact it's embedded in another expression.
+                // At the moment this is OK because no return type conversions require
+                // unsafe, but if this happens in future, we should do:
+                //   let temp_ret_val = unsafe { call_body() };
+                //   do_return_conversion(temp_ret_val)
+                // by returning a vector of MaybeUnsafes within call_body.
                 let expr = maybe_unsafes_to_tokens(vec![call_body], context_is_unsafe);
                 let conv =
                     ret_conversion.rust_conversion(parse_quote! { #expr }, &mut variable_counter);
@@ -382,39 +388,15 @@ impl<'a> FnGenerator<'a> {
         let rust_name = make_ident(self.rust_name);
         let unsafety = self.unsafety.wrapper_token();
         let doc_attrs = self.doc_attrs;
-        let receiver_pointerness = self
-            .param_details
-            .iter()
-            .next()
-            .map(|pd| pd.conversion.is_a_pointer())
-            .unwrap_or(Pointerness::Not);
         let ty = impl_block_type_name.get_final_ident();
-        let ty = match receiver_pointerness {
-            Pointerness::MutPtr if self.reference_wrappers => ImplBlockKey {
-                ty: parse_quote! {
-                    #ty
-                },
-                lifetime: Some(parse_quote! { 'a }),
-            },
-            Pointerness::ConstPtr if self.reference_wrappers => ImplBlockKey {
-                ty: parse_quote! {
-                    #ty
-                },
-                lifetime: Some(parse_quote! { 'a }),
-            },
-            _ => ImplBlockKey {
-                ty: parse_quote! { # ty },
-                lifetime: None,
-            },
-        };
         Box::new(ImplBlockDetails {
-            item: ImplItem::Method(parse_quote! {
+            item: ImplItem::Fn(parse_quote! {
                 #(#doc_attrs)*
                 pub #unsafety fn #rust_name #lifetime_tokens ( #wrapper_params ) #ret_type {
                     #call_body
                 }
             }),
-            ty,
+            ty: parse_quote! { # ty },
         })
     }
 
@@ -456,8 +438,8 @@ impl<'a> FnGenerator<'a> {
                 }
         };
         Box::new(ImplBlockDetails {
-            item: ImplItem::Method(parse_quote! { #stuff }),
-            ty: ImplBlockKey { ty, lifetime: None },
+            item: ImplItem::Fn(parse_quote! { #stuff }),
+            ty,
         })
     }
 

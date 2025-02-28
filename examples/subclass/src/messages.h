@@ -12,7 +12,6 @@
 #pragma once
 
 #include <string>
-#include <memory>
 
 class MessageProducer {
 public:

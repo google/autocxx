@@ -6,8 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use itertools::Itertools;
-
 use crate::{
     conversion::api::{Api, TypeKind},
     types::QualifiedName,
@@ -20,12 +18,7 @@ use super::{
 };
 
 pub(crate) trait HasDependencies {
-    fn name(&self) -> &QualifiedName;
     fn deps(&self) -> Box<dyn Iterator<Item = &QualifiedName> + '_>;
-
-    fn format_deps(&self) -> String {
-        self.deps().join(",")
-    }
 }
 
 impl HasDependencies for Api<FnPrePhase1> {
@@ -51,10 +44,6 @@ impl HasDependencies for Api<FnPrePhase1> {
             Api::RustFn { deps, .. } => Box::new(deps.iter()),
             _ => Box::new(std::iter::empty()),
         }
-    }
-
-    fn name(&self) -> &QualifiedName {
-        self.name()
     }
 }
 
@@ -104,9 +93,5 @@ impl HasDependencies for Api<FnPhase> {
             Api::RustFn { deps, .. } => Box::new(deps.iter()),
             _ => Box::new(std::iter::empty()),
         }
-    }
-
-    fn name(&self) -> &QualifiedName {
-        self.name()
     }
 }

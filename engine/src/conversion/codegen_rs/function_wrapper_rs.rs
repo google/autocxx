@@ -50,7 +50,7 @@ impl TypeConversionPolicy {
                 let holder_type = sub.holder();
                 let id = sub.id();
                 let ty = parse_quote! { autocxx::subclass::CppSubclassRustPeerHolder<
-                    super::super::super:: #id>
+                    super:: #id>
                 };
                 RustParamConversion::Param {
                     ty,
@@ -67,7 +67,7 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! {
-                    ::std::pin::Pin<&mut ::std::mem::MaybeUninit< #ty >>
+                    ::core::pin::Pin<&mut ::core::mem::MaybeUninit< #ty >>
                 };
                 RustParamConversion::Param {
                     ty,
@@ -84,13 +84,13 @@ impl TypeConversionPolicy {
                     _ => panic!("Not a ptr"),
                 };
                 let ty = parse_quote! {
-                    ::std::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
+                    ::core::pin::Pin<autocxx::moveit::MoveRef< '_, #ty >>
                 };
                 RustParamConversion::Param {
                     ty,
                     local_variables: Vec::new(),
                     conversion: quote! {
-                        { let r: &mut _ = ::std::pin::Pin::into_inner_unchecked(#var.as_mut());
+                        { let r: &mut _ = ::core::pin::Pin::into_inner_unchecked(#var.as_mut());
                             r
                         }
                     },
@@ -124,7 +124,7 @@ impl TypeConversionPolicy {
                 let param_trait = make_ident(param_trait);
                 let var_counter = *counter;
                 *counter += 1;
-                let space_var_name = format!("space{}", var_counter);
+                let space_var_name = format!("space{var_counter}");
                 let space_var_name = make_ident(space_var_name);
                 let ty = self.cxxbridge_type();
                 let ty = parse_quote! { impl autocxx::#param_trait<#ty> };
@@ -138,10 +138,10 @@ impl TypeConversionPolicy {
                         ),
                         MaybeUnsafeStmt::binary(
                             quote! { let mut #space_var_name =
-                                unsafe { ::std::pin::Pin::new_unchecked(&mut #space_var_name) };
+                                unsafe { ::core::pin::Pin::new_unchecked(&mut #space_var_name) };
                             },
                             quote! { let mut #space_var_name =
-                                ::std::pin::Pin::new_unchecked(&mut #space_var_name);
+                                ::core::pin::Pin::new_unchecked(&mut #space_var_name);
                             },
                         ),
                         MaybeUnsafeStmt::needs_unsafe(

@@ -14,12 +14,13 @@ use autocxx_parser::{
 };
 use itertools::Itertools;
 use proc_macro2::Ident;
+use syn::visit_mut::{visit_type_mut, VisitMut};
 use syn::{
-    parse_quote, punctuated::Punctuated, Attribute, Binding, Expr, ExprAssign, ExprAssignOp,
-    ExprAwait, ExprBinary, ExprBox, ExprBreak, ExprCast, ExprField, ExprGroup, ExprLet, ExprParen,
-    ExprReference, ExprTry, ExprType, ExprUnary, ImplItem, Item, ItemEnum, ItemStruct, Pat, PatBox,
-    PatReference, PatSlice, PatTuple, Path, Receiver, ReturnType, Signature, Stmt, TraitItem, Type,
-    TypeArray, TypeGroup, TypeParamBound, TypeParen, TypePtr, TypeReference, TypeSlice,
+    parse_quote, punctuated::Punctuated, AssocConst, AssocType, Attribute, Expr, ExprAssign,
+    ExprAwait, ExprBinary, ExprBlock, ExprBreak, ExprCast, ExprConst, ExprField, ExprGroup,
+    ExprLet, ExprParen, ExprReference, ExprTry, ExprUnary, ImplItem, Item, ItemEnum, ItemStruct,
+    LocalInit, Pat, PatReference, PatSlice, PatTuple, Path, ReturnType, Signature, Stmt, TraitItem,
+    Type, TypeArray, TypeGroup, TypeParamBound, TypeParen, TypePtr, TypeReference, TypeSlice,
 };
 use thiserror::Error;
 
@@ -34,8 +35,6 @@ pub(super) struct Discoveries {
 pub enum DiscoveryErr {
     #[error("#[extern_rust_function] was attached to a method in an impl block that was too complex for autocxx. autocxx supports only \"impl X {{...}}\" where X is a single identifier, not a path or more complex type.")]
     FoundExternRustFunOnTypeWithoutClearReceiver,
-    #[error("#[extern_rust_function] was attached to a method taking no parameters.")]
-    NonReferenceReceiver,
     #[error("#[extern_rust_function] was attached to a method taking a receiver by value.")]
     NoParameterOnMethod,
     #[error("#[extern_rust_function] was in an impl block nested wihtin another block. This is only supported in the outermost mod of a file, alongside the include_cpp!.")]
@@ -75,7 +74,7 @@ struct PerModDiscoveries<'a> {
     mod_path: Option<RustPath>,
 }
 
-impl<'b> PerModDiscoveries<'b> {
+impl PerModDiscoveries<'_> {
     fn deeper_path(&self, id: &Ident) -> RustPath {
         match &self.mod_path {
             None => RustPath::new_from_ident(id.clone()),
@@ -178,7 +177,7 @@ impl<'b> PerModDiscoveries<'b> {
     }
 
     fn search_trait_item(&mut self, itm: &TraitItem) -> Result<(), DiscoveryErr> {
-        if let TraitItem::Method(itm) = itm {
+        if let TraitItem::Fn(itm) = itm {
             if let Some(block) = &itm.default {
                 self.search_stmts(block.stmts.iter())?
             }
@@ -199,13 +198,14 @@ impl<'b> PerModDiscoveries<'b> {
     fn search_stmt(&mut self, stmt: &Stmt) -> Result<(), DiscoveryErr> {
         match stmt {
             Stmt::Local(lcl) => {
-                if let Some((_, expr)) = &lcl.init {
+                if let Some(LocalInit { expr, .. }) = &lcl.init {
                     self.search_expr(expr)?
                 }
                 self.search_pat(&lcl.pat)
             }
             Stmt::Item(itm) => self.search_item(itm),
-            Stmt::Expr(exp) | Stmt::Semi(exp, _) => self.search_expr(exp),
+            Stmt::Expr(exp, _) => self.search_expr(exp),
+            Stmt::Macro(_) => Ok(()),
         }
     }
 
@@ -214,10 +214,9 @@ impl<'b> PerModDiscoveries<'b> {
             Expr::Path(exp) => {
                 self.search_path(&exp.path)?;
             }
-            Expr::Macro(_) => {}
+            Expr::Macro(_) | Expr::Infer(_) => {}
             Expr::Array(array) => self.search_exprs(array.elems.iter())?,
             Expr::Assign(ExprAssign { left, right, .. })
-            | Expr::AssignOp(ExprAssignOp { left, right, .. })
             | Expr::Binary(ExprBinary { left, right, .. }) => {
                 self.search_expr(left)?;
                 self.search_expr(right)?;
@@ -226,9 +225,10 @@ impl<'b> PerModDiscoveries<'b> {
             Expr::Await(ExprAwait { base, .. }) | Expr::Field(ExprField { base, .. }) => {
                 self.search_expr(base)?
             }
-            Expr::Block(blck) => self.search_stmts(blck.block.stmts.iter())?,
-            Expr::Box(ExprBox { expr, .. })
-            | Expr::Break(ExprBreak {
+            Expr::Block(ExprBlock { block, .. }) | Expr::Const(ExprConst { block, .. }) => {
+                self.search_stmts(block.stmts.iter())?
+            }
+            Expr::Break(ExprBreak {
                 expr: Some(expr), ..
             })
             | Expr::Cast(ExprCast { expr, .. })
@@ -236,7 +236,6 @@ impl<'b> PerModDiscoveries<'b> {
             | Expr::Paren(ExprParen { expr, .. })
             | Expr::Reference(ExprReference { expr, .. })
             | Expr::Try(ExprTry { expr, .. })
-            | Expr::Type(ExprType { expr, .. })
             | Expr::Unary(ExprUnary { expr, .. }) => self.search_expr(expr)?,
             Expr::Call(exc) => {
                 self.search_expr(&exc.func)?;
@@ -281,8 +280,8 @@ impl<'b> PerModDiscoveries<'b> {
                 self.search_exprs(mtc.args.iter())?;
             }
             Expr::Range(exr) => {
-                self.search_option_expr(&exr.from)?;
-                self.search_option_expr(&exr.to)?;
+                self.search_option_expr(&exr.start)?;
+                self.search_option_expr(&exr.end)?;
             }
             Expr::Repeat(exr) => {
                 self.search_expr(&exr.expr)?;
@@ -334,7 +333,7 @@ impl<'b> PerModDiscoveries<'b> {
         impl_item: &ImplItem,
         receiver: Option<&RustPath>,
     ) -> Result<(), DiscoveryErr> {
-        if let ImplItem::Method(itm) = impl_item {
+        if let ImplItem::Fn(itm) = impl_item {
             if Self::has_attr(&itm.attrs, EXTERN_RUST_FUN) {
                 if self.mod_path.is_some() {
                     return Err(DiscoveryErr::FoundExternRustFunWithinMod);
@@ -363,10 +362,15 @@ impl<'b> PerModDiscoveries<'b> {
 
     fn search_pat(&mut self, pat: &Pat) -> Result<(), DiscoveryErr> {
         match pat {
-            Pat::Box(PatBox { pat, .. }) | Pat::Reference(PatReference { pat, .. }) => {
-                self.search_pat(pat)
+            Pat::Const(const_) => {
+                for stmt in &const_.block.stmts {
+                    self.search_stmt(stmt)?
+                }
+                Ok(())
             }
+            Pat::Reference(PatReference { pat, .. }) => self.search_pat(pat),
             Pat::Ident(_) | Pat::Lit(_) | Pat::Macro(_) | Pat::Range(_) | Pat::Rest(_) => Ok(()),
+            Pat::Paren(paren) => self.search_pat(&paren.pat),
             Pat::Or(pator) => {
                 for case in &pator.cases {
                     self.search_pat(case)?;
@@ -389,7 +393,7 @@ impl<'b> PerModDiscoveries<'b> {
             }
             Pat::TupleStruct(tps) => {
                 self.search_path(&tps.path)?;
-                for f in &tps.pat.elems {
+                for f in &tps.elems {
                     self.search_pat(f)?;
                 }
                 Ok(())
@@ -398,6 +402,7 @@ impl<'b> PerModDiscoveries<'b> {
                 self.search_pat(&pt.pat)?;
                 self.search_type(&pt.ty)
             }
+            Pat::Verbatim(_) | Pat::Wild(_) => Ok(()),
             _ => Ok(()),
         }
     }
@@ -438,7 +443,7 @@ impl<'b> PerModDiscoveries<'b> {
 
     fn search_type_param_bounds(
         &mut self,
-        bounds: &Punctuated<TypeParamBound, syn::token::Add>,
+        bounds: &Punctuated<TypeParamBound, syn::token::Plus>,
     ) -> Result<(), DiscoveryErr> {
         for b in bounds {
             if let syn::TypeParamBound::Trait(tpbt) = b {
@@ -467,13 +472,17 @@ impl<'b> PerModDiscoveries<'b> {
                     match arg {
                         syn::GenericArgument::Lifetime(_) => {}
                         syn::GenericArgument::Type(ty)
-                        | syn::GenericArgument::Binding(Binding { ty, .. }) => {
+                        | syn::GenericArgument::AssocType(AssocType { ty, .. }) => {
                             self.search_type(ty)?
                         }
                         syn::GenericArgument::Constraint(c) => {
                             self.search_type_param_bounds(&c.bounds)?
                         }
-                        syn::GenericArgument::Const(c) => self.search_expr(c)?,
+                        syn::GenericArgument::Const(value)
+                        | syn::GenericArgument::AssocConst(AssocConst { value, .. }) => {
+                            self.search_expr(value)?
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -489,12 +498,30 @@ impl<'b> PerModDiscoveries<'b> {
 
     fn has_attr(attrs: &[Attribute], attr_name: &str) -> bool {
         attrs.iter().any(|attr| {
-            attr.path
+            attr.path()
                 .segments
                 .last()
                 .map(|seg| seg.ident == attr_name)
                 .unwrap_or_default()
         })
+    }
+}
+
+struct SelfSubstituter<'a> {
+    self_ty: &'a Ident,
+}
+
+impl<'a> SelfSubstituter<'a> {
+    pub fn new(self_ty: &'a Ident) -> Self {
+        Self { self_ty }
+    }
+}
+
+impl VisitMut for SelfSubstituter<'_> {
+    fn visit_type_path_mut(&mut self, i: &mut syn::TypePath) {
+        if i.qself.is_none() && i.path.is_ident("Self") {
+            i.path = Path::from(self.self_ty.clone());
+        }
     }
 }
 
@@ -505,25 +532,19 @@ fn add_receiver(sig: &Signature, receiver: &Ident) -> Result<Signature, Discover
     let mut sig = sig.clone();
     match sig.inputs.iter_mut().next() {
         Some(first_arg) => match first_arg {
-            syn::FnArg::Receiver(Receiver {
-                reference: Some(_),
-                mutability: Some(_),
-                ..
-            }) => {
+            syn::FnArg::Receiver(rec_arg) => {
+                let mut substituted_type = rec_arg.ty.clone();
+                visit_type_mut(&mut SelfSubstituter::new(receiver), &mut substituted_type);
                 *first_arg = parse_quote! {
-                    self: &mut #receiver
+                        qelf: #substituted_type
+                };
+                if let syn::FnArg::Typed(ref mut pat_type) = *first_arg {
+                    if let syn::Pat::Ident(ref mut pat_ident) = *pat_type.pat {
+                        assert_eq!(pat_ident.ident.to_string(), "qelf");
+                        pat_ident.ident = Ident::new("self", pat_ident.ident.span());
+                    }
                 }
             }
-            syn::FnArg::Receiver(Receiver {
-                reference: Some(_),
-                mutability: None,
-                ..
-            }) => {
-                *first_arg = parse_quote! {
-                    self: &#receiver
-                }
-            }
-            syn::FnArg::Receiver(..) => return Err(DiscoveryErr::NonReferenceReceiver),
             syn::FnArg::Typed(_) => {}
         },
         None => return Err(DiscoveryErr::NoParameterOnMethod),
@@ -534,7 +555,7 @@ fn add_receiver(sig: &Signature, receiver: &Ident) -> Result<Signature, Discover
 #[cfg(test)]
 mod tests {
     use quote::{quote, ToTokens};
-    use syn::{parse_quote, ImplItemMethod};
+    use syn::{parse_quote, ImplItemFn};
 
     use crate::{ast_discoverer::add_receiver, types::make_ident};
 
@@ -651,7 +672,7 @@ mod tests {
             }
         };
         discoveries.search_item(&itm, None).unwrap();
-        assert!(discoveries.extern_rust_funs.get(0).unwrap().sig.ident == "bar");
+        assert!(discoveries.extern_rust_funs.first().unwrap().sig.ident == "bar");
     }
 
     #[test]
@@ -665,7 +686,7 @@ mod tests {
             }
         };
         discoveries.search_item(&itm, None).unwrap();
-        assert!(discoveries.extern_rust_funs.get(0).unwrap().sig.ident == "bar");
+        assert!(discoveries.extern_rust_funs.first().unwrap().sig.ident == "bar");
     }
 
     #[test]
@@ -681,7 +702,7 @@ mod tests {
         assert!(
             discoveries
                 .extern_rust_types
-                .get(0)
+                .first()
                 .unwrap()
                 .get_final_ident()
                 == "Bar"
@@ -690,7 +711,7 @@ mod tests {
 
     #[test]
     fn test_add_receiver() {
-        let meth: ImplItemMethod = parse_quote! {
+        let meth: ImplItemFn = parse_quote! {
             fn a(&self) {}
         };
         let a = make_ident("A");
@@ -702,7 +723,7 @@ mod tests {
             quote! { fn a(self: &A) }.to_string()
         );
 
-        let meth: ImplItemMethod = parse_quote! {
+        let meth: ImplItemFn = parse_quote! {
             fn a(&mut self, b: u32) -> Foo {}
         };
         assert_eq!(
@@ -713,12 +734,7 @@ mod tests {
             quote! { fn a(self: &mut A, b: u32) -> Foo }.to_string()
         );
 
-        let meth: ImplItemMethod = parse_quote! {
-            fn a(self) {}
-        };
-        assert!(add_receiver(&meth.sig, &a).is_err());
-
-        let meth: ImplItemMethod = parse_quote! {
+        let meth: ImplItemFn = parse_quote! {
             fn a() {}
         };
         assert!(add_receiver(&meth.sig, &a).is_err());

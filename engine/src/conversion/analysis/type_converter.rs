@@ -10,7 +10,8 @@ use crate::{
     conversion::{
         api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
         apivec::ApiVec,
-        codegen_cpp::type_to_cpp::type_to_cpp,
+        codegen_cpp::type_to_cpp::CppNameMap,
+        type_helpers::{unwrap_has_opaque, unwrap_has_unused_template_param, unwrap_reference},
         ConvertErrorFromCpp,
     },
     known_types::{known_types, CxxGenericType},
@@ -34,7 +35,7 @@ use super::tdef::TypedefAnalysis;
 pub(crate) enum TypeKind {
     Regular,
     Pointer,
-    SubclassHolder(Ident),
+    SubclassHolder(crate::minisyn::Ident),
     Reference,
     RValueReference,
     MutableReference,
@@ -42,6 +43,7 @@ pub(crate) enum TypeKind {
 
 /// Results of some type conversion, annotated with a list of every type encountered,
 /// and optionally any extra APIs we need in order to use this type.
+#[derive(Debug)]
 pub(crate) struct Annotated<T> {
     pub(crate) ty: T,
     pub(crate) types_encountered: HashSet<QualifiedName>,
@@ -74,14 +76,6 @@ impl<T> Annotated<T> {
     }
 }
 
-/// How to interpret a pointer which we encounter during type conversion.
-#[derive(Clone, Copy)]
-pub(crate) enum PointerTreatment {
-    Pointer,
-    Reference,
-    RValueReference,
-}
-
 /// Options when converting a type.
 /// It's possible we could add more policies here in future.
 /// For example, Rust in general allows type names containing
@@ -93,18 +87,10 @@ pub(crate) enum TypeConversionContext {
     WithinReference,
     WithinStructField { struct_type_params: HashSet<Ident> },
     WithinContainer,
-    OuterType { pointer_treatment: PointerTreatment },
+    OuterType,
 }
 
 impl TypeConversionContext {
-    fn pointer_treatment(&self) -> PointerTreatment {
-        match self {
-            Self::WithinReference | Self::WithinContainer | Self::WithinStructField { .. } => {
-                PointerTreatment::Pointer
-            }
-            Self::OuterType { pointer_treatment } => *pointer_treatment,
-        }
-    }
     fn allow_instantiation_of_forward_declaration(&self) -> bool {
         matches!(self, Self::WithinReference)
     }
@@ -130,6 +116,7 @@ pub(crate) struct TypeConverter<'a> {
     forward_declarations: HashSet<QualifiedName>,
     ignored_types: HashSet<QualifiedName>,
     config: &'a IncludeCppConfig,
+    original_name_map: CppNameMap,
 }
 
 impl<'a> TypeConverter<'a> {
@@ -144,6 +131,7 @@ impl<'a> TypeConverter<'a> {
             forward_declarations: Self::find_incomplete_types(apis),
             ignored_types: Self::find_ignored_types(apis),
             config,
+            original_name_map: CppNameMap::new_from_apis(apis),
         }
     }
 
@@ -163,35 +151,7 @@ impl<'a> TypeConverter<'a> {
         ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         let result = match ty {
-            Type::Path(p) => {
-                let newp = self.convert_type_path(p, ns, ctx)?;
-                if let Type::Path(newpp) = &newp.ty {
-                    let qn = QualifiedName::from_type_path(newpp);
-                    if !ctx.allow_instantiation_of_forward_declaration()
-                        && self.forward_declarations.contains(&qn)
-                    {
-                        return Err(ConvertErrorFromCpp::TypeContainingForwardDeclaration(qn));
-                    }
-                    // Special handling because rust_Str (as emitted by bindgen)
-                    // doesn't simply get renamed to a different type _identifier_.
-                    // This plain type-by-value (as far as bindgen is concerned)
-                    // is actually a &str.
-                    if known_types().should_dereference_in_cpp(&qn) {
-                        Annotated::new(
-                            Type::Reference(parse_quote! {
-                                &str
-                            }),
-                            newp.types_encountered,
-                            newp.extra_apis,
-                            TypeKind::Reference,
-                        )
-                    } else {
-                        newp
-                    }
-                } else {
-                    newp
-                }
-            }
+            Type::Path(p) => self.convert_type_path(p, ns, ctx)?,
             Type::Reference(mut r) => {
                 let innerty =
                     self.convert_boxed_type(r.elem, ns, &TypeConversionContext::WithinReference)?;
@@ -214,7 +174,7 @@ impl<'a> TypeConverter<'a> {
                     TypeKind::Regular,
                 )
             }
-            Type::Ptr(ptr) => self.convert_ptr(ptr, ns, ctx.pointer_treatment())?,
+            Type::Ptr(ptr) => self.convert_ptr(ptr, ns)?,
             _ => {
                 return Err(ConvertErrorFromCpp::UnknownType(
                     ty.to_token_stream().to_string(),
@@ -226,12 +186,100 @@ impl<'a> TypeConverter<'a> {
 
     fn convert_type_path(
         &mut self,
+        typ: TypePath,
+        ns: &Namespace,
+        ctx: &TypeConversionContext,
+    ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
+        // First we try to spot if these are the special marker paths that
+        // bindgen uses to denote references or other things.
+        // TODO the next two lines can be removed
+        if let Some(ty) = unwrap_has_unused_template_param(&typ) {
+            self.convert_type(ty.clone(), ns, ctx)
+        } else if let Some(ty) = unwrap_has_opaque(&typ) {
+            self.convert_type(ty.clone(), ns, ctx)
+        } else if let Some(ptr) = unwrap_reference(&typ, false) {
+            // LValue reference
+            let mutability = ptr.mutability;
+            let elem = self.convert_boxed_type(
+                ptr.elem.clone(),
+                ns,
+                &TypeConversionContext::WithinReference,
+            )?;
+            // TODO - in the future, we should check if this is a rust::Str and throw
+            // a wobbler if not. rust::Str should only be seen _by value_ in C++
+            // headers; it manifests as &str in Rust but on the C++ side it must
+            // be a plain value. We should detect and abort.
+            let mut outer = elem.map(|elem| match mutability {
+                Some(_) => Type::Path(parse_quote! {
+                    ::core::pin::Pin < & #mutability #elem >
+                }),
+                None => Type::Reference(parse_quote! {
+                    & #elem
+                }),
+            });
+            outer.kind = if mutability.is_some() {
+                TypeKind::MutableReference
+            } else {
+                TypeKind::Reference
+            };
+            Ok(outer)
+        } else if let Some(ptr) = unwrap_reference(&typ, true) {
+            // RValue reference
+            Self::ensure_pointee_is_valid(ptr)?;
+            let innerty = self.convert_boxed_type(
+                ptr.elem.clone(),
+                ns,
+                &TypeConversionContext::WithinReference,
+            )?;
+            let mut ptr = ptr.clone();
+            ptr.elem = innerty.ty;
+            Ok(Annotated::new(
+                Type::Ptr(ptr),
+                innerty.types_encountered,
+                innerty.extra_apis,
+                TypeKind::RValueReference,
+            ))
+        } else {
+            // An actual path
+            let newp = self.convert_type_path_which_is_not_a_reference(typ, ns, ctx)?;
+            if let Type::Path(newpp) = &newp.ty {
+                let qn = QualifiedName::from_type_path(newpp);
+                if !ctx.allow_instantiation_of_forward_declaration()
+                    && self.forward_declarations.contains(&qn)
+                {
+                    return Err(ConvertErrorFromCpp::TypeContainingForwardDeclaration(qn));
+                }
+                // Special handling because rust_Str (as emitted by bindgen)
+                // doesn't simply get renamed to a different type _identifier_.
+                // This plain type-by-value (as far as bindgen is concerned)
+                // is actually a &str.
+                if known_types().should_dereference_in_cpp(&qn) {
+                    Ok(Annotated::new(
+                        Type::Reference(parse_quote! {
+                            &str
+                        }),
+                        newp.types_encountered,
+                        newp.extra_apis,
+                        TypeKind::Reference,
+                    ))
+                } else {
+                    Ok(newp)
+                }
+            } else {
+                Ok(newp)
+            }
+        }
+    }
+
+    fn convert_type_path_which_is_not_a_reference(
+        &mut self,
         mut typ: TypePath,
         ns: &Namespace,
         ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
         // First, qualify any unqualified paths.
-        if typ.path.segments.iter().next().unwrap().ident != "root" {
+        let first_seg = &typ.path.segments.iter().next().unwrap().ident;
+        if first_seg != "root" && first_seg != "output" {
             let ty = QualifiedName::from_type_path(&typ);
             // If the type looks like it is unqualified, check we know it
             // already, and if not, qualify it according to the current
@@ -243,13 +291,13 @@ impl<'a> TypeConverter<'a> {
                     return Err(ConvertErrorFromCpp::UnsupportedBuiltInType(ty));
                 }
                 if !self.types_found.contains(&ty) {
-                    typ.path.segments = std::iter::once(&"root".to_string())
+                    typ.path.segments = std::iter::once("output")
                         .chain(ns.iter())
                         .map(|s| {
                             let i = make_ident(s);
                             parse_quote! { #i }
                         })
-                        .chain(typ.path.segments.into_iter())
+                        .chain(typ.path.segments)
                         .collect();
                 }
             }
@@ -267,7 +315,7 @@ impl<'a> TypeConverter<'a> {
         // Now convert this type itself.
         deps.insert(original_tn.clone());
         // First let's see if this is a typedef.
-        let (typ, tn) = match self.resolve_typedef(&original_tn)? {
+        let (mut typ, tn) = match self.resolve_typedef(&original_tn)? {
             None => (typ, original_tn),
             Some(Type::Path(resolved_tp)) => {
                 let resolved_tn = QualifiedName::from_type_path(resolved_tp);
@@ -304,7 +352,17 @@ impl<'a> TypeConverter<'a> {
                 }
                 substitute_type
             }
-            None => typ,
+            None => {
+                // Pass through as-is, but replacing `root` with `output`
+                // in the first path element. We don't just create a whole
+                // new `TypePath` because that would discard any generics.
+                if let Some(first_seg) = typ.path.segments.get_mut(0) {
+                    if first_seg.ident == "root" {
+                        first_seg.ident = make_ident("output").0;
+                    }
+                }
+                typ
+            }
         };
 
         let mut extra_apis = ApiVec::new();
@@ -370,7 +428,10 @@ impl<'a> TypeConverter<'a> {
                 }
                 let (new_tn, api) = self.get_templated_typename(&Type::Path(typ))?;
                 extra_apis.extend(api.into_iter());
-                deps.remove(&tn);
+                // Although it's tempting to remove the dep on the original type,
+                // this means we wouldn't spot cases where the original type can't
+                // be represented in C++, e.g. because it has an unused template parameter.
+                // So we keep the original dep too.
                 typ = new_tn.to_type_path();
                 deps.insert(new_tn);
             }
@@ -453,63 +514,27 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         mut ptr: TypePtr,
         ns: &Namespace,
-        pointer_treatment: PointerTreatment,
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
-        match pointer_treatment {
-            PointerTreatment::Pointer => {
-                Self::ensure_pointee_is_valid(&ptr)?;
-                let innerty =
-                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
-                ptr.elem = innerty.ty;
-                Ok(Annotated::new(
-                    Type::Ptr(ptr),
-                    innerty.types_encountered,
-                    innerty.extra_apis,
-                    TypeKind::Pointer,
-                ))
-            }
-            PointerTreatment::Reference => {
-                let mutability = ptr.mutability;
-                let elem =
-                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
-                // TODO - in the future, we should check if this is a rust::Str and throw
-                // a wobbler if not. rust::Str should only be seen _by value_ in C++
-                // headers; it manifests as &str in Rust but on the C++ side it must
-                // be a plain value. We should detect and abort.
-                let mut outer = elem.map(|elem| match mutability {
-                    Some(_) => Type::Path(parse_quote! {
-                        ::std::pin::Pin < & #mutability #elem >
-                    }),
-                    None => Type::Reference(parse_quote! {
-                        & #elem
-                    }),
-                });
-                outer.kind = if mutability.is_some() {
-                    TypeKind::MutableReference
-                } else {
-                    TypeKind::Reference
-                };
-                Ok(outer)
-            }
-            PointerTreatment::RValueReference => {
-                Self::ensure_pointee_is_valid(&ptr)?;
-                let innerty =
-                    self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
-                ptr.elem = innerty.ty;
-                Ok(Annotated::new(
-                    Type::Ptr(ptr),
-                    innerty.types_encountered,
-                    innerty.extra_apis,
-                    TypeKind::RValueReference,
-                ))
-            }
-        }
+        Self::ensure_pointee_is_valid(&ptr)?;
+        let innerty =
+            self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
+        ptr.elem = innerty.ty;
+        Ok(Annotated::new(
+            Type::Ptr(ptr),
+            innerty.types_encountered,
+            innerty.extra_apis,
+            TypeKind::Pointer,
+        ))
     }
 
     fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertErrorFromCpp> {
         match *ptr.elem {
             Type::Path(..) => Ok(()),
-            _ => Err(ConvertErrorFromCpp::InvalidPointee),
+            Type::Array(..) => Err(ConvertErrorFromCpp::InvalidArrayPointee),
+            Type::Ptr(..) => Err(ConvertErrorFromCpp::InvalidPointerPointee),
+            _ => Err(ConvertErrorFromCpp::InvalidPointee(
+                ptr.elem.to_token_stream().to_string(),
+            )),
         }
     }
 
@@ -521,7 +546,7 @@ impl<'a> TypeConverter<'a> {
         // We just use this as a hash key, essentially.
         // TODO: Once we've completed the TypeConverter refactoring (see #220),
         // pass in an actual original_name_map here.
-        let cpp_definition = type_to_cpp(rs_definition, &HashMap::new())?;
+        let cpp_definition = self.original_name_map.type_to_cpp(rs_definition)?;
         let e = self.concrete_templates.get(&cpp_definition);
         match e {
             Some(tn) => Ok((tn.clone(), None)),
@@ -545,12 +570,12 @@ impl<'a> TypeConverter<'a> {
                     .find(|s| s == &synthetic_ident)
                 {
                     None => synthetic_ident,
-                    Some(_) => format!("AutocxxConcrete{}", count),
+                    Some(_) => format!("AutocxxConcrete{count}"),
                 };
                 let api = UnanalyzedApi::ConcreteType {
-                    name: ApiName::new_in_root_namespace(make_ident(&synthetic_ident)),
+                    name: ApiName::new_in_root_namespace(make_ident(synthetic_ident)),
                     cpp_definition: cpp_definition.clone(),
-                    rs_definition: Some(Box::new(rs_definition.clone())),
+                    rs_definition: Some(Box::new(rs_definition.clone().into())),
                 };
                 self.concrete_templates
                     .insert(cpp_definition, api.name().clone());
@@ -713,7 +738,7 @@ impl TypedefTarget for TypedefAnalysis {
     fn get_target(&self) -> Option<&Type> {
         Some(match self.kind {
             TypedefKind::Type(ref ty) => &ty.ty,
-            TypedefKind::Use(_, ref ty) => ty,
+            TypedefKind::Use(ref ty) => ty,
         })
     }
 }

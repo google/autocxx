@@ -11,8 +11,8 @@
 mod depfile;
 
 use autocxx_engine::{
-    generate_rs_archive, generate_rs_single, parse_file, AutocxxgenHeaderNamer, CxxgenHeaderNamer,
-    RebuildDependencyRecorder,
+    generate_rs_archive, generate_rs_single, get_cxx_header_bytes, parse_file,
+    AutocxxgenHeaderNamer, CxxgenHeaderNamer, RebuildDependencyRecorder,
 };
 use clap::{crate_authors, crate_version, Arg, ArgGroup, Command};
 use depfile::Depfile;
@@ -132,7 +132,7 @@ fn main() -> miette::Result<()> {
         .arg(
             Arg::new("gen-rs-include")
                 .long("gen-rs-include")
-                .help("whether to generate Rust files for inclusion using autocxx_macro (suffix will be .include.rs)")
+                .help("whether to generate Rust files for inclusion using autocxx_macro")
         )
         .arg(
             Arg::new("gen-rs-archive")
@@ -156,7 +156,7 @@ fn main() -> miette::Result<()> {
         .arg(
             Arg::new("fix-rs-include-name")
                 .long("fix-rs-include-name")
-                .help("Make the name of the .rs file predictable. You must set AUTOCXX_RS_FILE during Rust build time to educate autocxx_macro about your choice.")
+                .help("Make the name of the .rs file predictable (suffix will be .include.rs). You must set AUTOCXX_RS_FILE during Rust build time to educate autocxx_macro about your choice.")
                 .requires("gen-rs-include")
         )
         .arg(
@@ -175,6 +175,11 @@ fn main() -> miette::Result<()> {
                 .value_name("ANNOTATION")
                 .help("prefix for symbols to be exported from C++ bindings, e.g. __attribute__ ((visibility (\"default\")))")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::new("generate-cxx-h")
+                .long("generate-cxx-h")
+                .help("whether to generate cxx.h header file. If you already knew where to find cxx.h, consider using --cxx-h-path")
         )
         .arg(
             Arg::new("cxx-h-path")
@@ -247,6 +252,10 @@ fn main() -> miette::Result<()> {
         autocxxgen_header_namer,
         cxxgen_header_namer,
     };
+    let codegen_options = autocxx_engine::CodegenOptions {
+        cpp_codegen_options,
+        ..Default::default()
+    };
     let depfile = match matches.value_of("depfile") {
         None => None,
         Some(depfile_path) => {
@@ -277,12 +286,20 @@ fn main() -> miette::Result<()> {
             incs.clone(),
             &extra_clang_args,
             dep_recorder,
-            &cpp_codegen_options,
+            &codegen_options,
         )?;
     }
 
     // Finally start to write the C++ and Rust out.
     let outdir: PathBuf = matches.value_of_os("outdir").unwrap().into();
+
+    if !outdir.exists() {
+        use miette::WrapErr as _;
+        std::fs::create_dir_all(&outdir)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to create `outdir` '{}'", outdir.display()))?;
+    }
+
     let mut writer = FileWriter {
         depfile: &depfile,
         outdir: &outdir,
@@ -290,14 +307,14 @@ fn main() -> miette::Result<()> {
     };
     if matches.is_present("gen-cpp") {
         let cpp = matches.value_of("cpp-extension").unwrap();
-        let name_cc_file = |counter| format!("gen{}.{}", counter, cpp);
+        let name_cc_file = |counter| format!("gen{counter}.{cpp}");
         let mut counter = 0usize;
         for include_cxx in parsed_files
             .iter()
             .flat_map(|file| file.get_cpp_buildables())
         {
             let generations = include_cxx
-                .generate_h_and_cxx(&cpp_codegen_options)
+                .generate_h_and_cxx(&codegen_options.cpp_codegen_options)
                 .expect("Unable to generate header and C++ code");
             for pair in generations.0 {
                 let cppname = name_cc_file(counter);
@@ -306,7 +323,7 @@ fn main() -> miette::Result<()> {
                 counter += 1;
             }
         }
-        drop(cpp_codegen_options);
+        drop(codegen_options);
         // Write placeholders to ensure we always make exactly 'n' of each file type.
         writer.write_placeholders(counter, desired_number, name_cc_file)?;
         writer.write_placeholders(
@@ -320,6 +337,14 @@ fn main() -> miette::Result<()> {
             name_autocxxgen_h,
         )?;
     }
+
+    if matches.is_present("generate-cxx-h") {
+        writer.write_to_file(
+            "cxx.h".to_string(),
+            &get_cxx_header_bytes(suppress_system_headers),
+        )?;
+    }
+
     if matches.is_present("gen-rs-include") {
         if !matches.is_present("fix-rs-include-name") && desired_number.is_some() {
             return Err(miette::Report::msg(
@@ -356,15 +381,15 @@ fn main() -> miette::Result<()> {
 }
 
 fn name_autocxxgen_h(counter: usize) -> String {
-    format!("autocxxgen{}.h", counter)
+    format!("autocxxgen{counter}.h")
 }
 
 fn name_cxxgen_h(counter: usize) -> String {
-    format!("gen{}.h", counter)
+    format!("gen{counter}.h")
 }
 
 fn name_include_rs(counter: usize) -> String {
-    format!("gen{}.include.rs", counter)
+    format!("gen{counter}.include.rs")
 }
 
 fn get_dependency_recorder(depfile: Rc<RefCell<Depfile>>) -> Box<dyn RebuildDependencyRecorder> {
@@ -382,7 +407,7 @@ struct FileWriter<'a> {
     written: IndexSet<String>,
 }
 
-impl<'a> FileWriter<'a> {
+impl FileWriter<'_> {
     fn write_placeholders<F: FnOnce(usize) -> String + Copy>(
         &mut self,
         mut counter: usize,
@@ -391,7 +416,7 @@ impl<'a> FileWriter<'a> {
     ) -> miette::Result<()> {
         if let Some(desired_number) = desired_number {
             if counter > desired_number {
-                return Err(miette::Report::msg("More files were generated than expected. Increase the value passed to --generate-exact or reduce the number of include_cpp! sections."));
+                return Err(miette::Report::msg(format!("{counter} files were generated. Increase the value passed to --generate-exact or reduce the number of include_cpp! sections.")));
             }
             while counter < desired_number {
                 let fname = filename(counter);
@@ -420,7 +445,7 @@ impl<'a> FileWriter<'a> {
         let mut f = File::create(&path).into_diagnostic()?;
         f.write_all(content).into_diagnostic()?;
         if self.written.contains(&filename) {
-            return Err(miette::Report::msg(format!("autocxx_gen would write two files entitled '{}' which would have conflicting contents. Consider using --generate-exact.", filename)));
+            return Err(miette::Report::msg(format!("autocxx_gen would write two files entitled '{filename}' which would have conflicting contents. Consider using --generate-exact.")));
         }
         self.written.insert(filename);
         Ok(())
