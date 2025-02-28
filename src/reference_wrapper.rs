@@ -8,8 +8,9 @@
 
 use core::{marker::PhantomData, ops::Deref, pin::Pin};
 
+use std::ops::DerefMut;
 #[cfg(nightly)]
-use std::{marker::Unsize, ops::DispatchFromDyn};
+use std::{marker::Unsize, ops::DispatchFromDyn, ops::Receiver};
 
 use cxx::{memory::UniquePtrTarget, UniquePtr};
 
@@ -36,25 +37,15 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// # Calling methods
 ///
 /// As noted, one of the main reasons for this type is to call methods.
-/// Unfortunately, that depends on unstable Rust features. If you can't
+/// Currently, that depends on unstable Rust features. If you can't
 /// call methods on one of these references, check you're using nightly
-/// and add `#![feature(arbitrary_self_types_pointers)]` to your crate.
+/// and add `#![feature(arbitrary_self_types)]` to your crate.
 ///
-/// # Lifetimes and cloneability
+/// # Lifetimes
 ///
-/// Although these references implement C++ aliasing semantics, they
-/// do attempt to give you Rust lifetime tracking. This means if a C++ object
-/// gives you a reference, you won't be able to use that reference after the
-/// C++ object is no longer around.
-///
-/// This is usually what you need, since a C++ object will typically give
-/// you a reference to part of _itself_ or something that it owns. But,
-/// if you know that the returned reference lasts longer than its vendor,
-/// you can use `lifetime_cast` to get a long-lived version.
-///
-/// On the other hand, these references do not give you Rust's exclusivity
-/// guarantees. These references can be freely cloned, and using [`CppRef::const_cast`]
-/// you can even make a mutable reference from an immutable reference.
+/// A `CppRef` is not associated with any Rust lifetime. Normally, for
+/// ergonomics, you actually may want a lifetime associated.
+/// [`CppLtRef`] gives you this.
 ///
 /// # Field access
 ///
@@ -67,14 +58,6 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// even be possible to create a use-after-free in pure Rust code (for instance,
 /// store a [`CppPin`] in a struct field, get a `CppRef` to its referent, then
 /// use a setter to reset that field of the struct.)
-///
-/// # Deref
-///
-/// This type implements [`Deref`] because that's the mechanism that the
-/// unstable Rust `arbitrary_self_types` features uses to determine callable
-/// methods. However, actually calling `Deref::deref` is not permitted and will
-/// result in a compilation failure. If you wish to create a Rust reference
-/// from the C++ reference, see [`CppRef::as_ref`].
 ///
 /// # Nullness
 ///
@@ -114,15 +97,12 @@ use cxx::{memory::UniquePtrTarget, UniquePtr};
 /// Internally, this is represented as a raw pointer in Rust. See the note above
 /// about Nullness for why we don't use [`core::ptr::NonNull`].
 #[repr(transparent)]
-pub struct CppRef<'a, T: ?Sized> {
-    ptr: *const T,
-    phantom: PhantomData<&'a T>,
-}
+pub struct CppRef<T: ?Sized>(*const T);
 
-impl<'a, T: ?Sized> CppRef<'a, T> {
+impl<T: ?Sized> CppRef<T> {
     /// Retrieve the underlying C++ pointer.
     pub fn as_ptr(&self) -> *const T {
-        self.ptr
+        self.0
     }
 
     /// Get a regular Rust reference out of this C++ reference.
@@ -142,10 +122,7 @@ impl<'a, T: ?Sized> CppRef<'a, T> {
 
     /// Create a C++ reference from a raw pointer.
     pub fn from_ptr(ptr: *const T) -> Self {
-        Self {
-            ptr,
-            phantom: PhantomData,
-        }
+        Self(ptr)
     }
 
     /// Create a mutable version of this reference, roughly equivalent
@@ -159,13 +136,56 @@ impl<'a, T: ?Sized> CppRef<'a, T> {
     /// Because we never dereference a `CppRef` in Rust, this cannot create
     /// undefined behavior _within Rust_ and is therefore not unsafe. It is
     /// however generally unwise, just as it is in C++. Use sparingly.
-    pub fn const_cast(&self) -> CppMutRef<'a, T> {
-        CppMutRef {
-            ptr: self.ptr as *mut T,
-            phantom: PhantomData,
+    pub fn const_cast(&self) -> CppMutRef<T> {
+        CppMutRef(self.0 as *mut T)
+    }
+}
+
+#[cfg(nightly)]
+impl<T: ?Sized> Receiver for CppRef<T> {
+    type Target = T;
+}
+
+impl<T: ?Sized> Clone for CppRef<T> {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
+impl<T: ?Sized> Copy for CppRef<T> {}
+
+#[cfg(nightly)]
+impl<T: ?Sized + Unsize<U>, U: ?Sized> DispatchFromDyn<CppRef<U>> for CppRef<T> {}
+
+/// A [`CppRef`] with an associated lifetime. This can be used in place of
+/// any `CppRef` due to a `Deref` implementation.
+#[repr(transparent)]
+pub struct CppLtRef<'a, T: ?Sized> {
+    ptr: CppRef<T>,
+    phantom: PhantomData<&'a T>,
+}
+
+impl<T: ?Sized> Deref for CppLtRef<'_, T> {
+    type Target = CppRef<T>;
+    fn deref(&self) -> &Self::Target {
+        // Safety: this type is transparent and contains a CppRef<T> as
+        // its only non-zero field.
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
+impl<T: ?Sized> Clone for CppLtRef<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            ptr: self.ptr.clone(),
+            phantom: self.phantom,
         }
     }
+}
 
+impl<T: ?Sized> Copy for CppLtRef<'_, T> {}
+
+impl<T: ?Sized> CppLtRef<'_, T> {
     /// Extend the lifetime of the returned reference beyond normal Rust
     /// borrow checker rules.
     ///
@@ -177,48 +197,26 @@ impl<'a, T: ?Sized> CppRef<'a, T> {
     /// # Usage
     ///
     /// When you're given a C++ reference and you know its referent is valid
-    /// for a long time, use this method. Store the resulting `PhantomReferent`
+    /// for a long time, use this method. Store the resulting `CppRef`
     /// somewhere in Rust with an equivalent lifetime.
-    /// That object can then vend longer-lived `CppRef`s using
-    /// [`AsCppRef::as_cpp_ref`].
     ///
     /// # Safety
     ///
     /// Because `CppRef`s are never dereferenced in Rust, misuse of this API
     /// cannot lead to undefined behavior _in Rust_ and is therefore not
     /// unsafe. Nevertheless this can lead to UB in C++, so use carefully.
-    pub fn lifetime_cast(&self) -> PhantomReferent<T> {
-        PhantomReferent(self.ptr)
+    pub fn lifetime_cast(&self) -> CppRef<T> {
+        CppRef(self.ptr.as_ptr())
     }
-}
 
-impl<T: ?Sized> Deref for CppRef<'_, T> {
-    type Target = *const T;
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        // With `inline_const` we can simplify this to:
-        // const { panic!("you shouldn't deref CppRef!") }
-        struct C<T: ?Sized>(T);
-        impl<T: ?Sized> C<T> {
-            const V: core::convert::Infallible = panic!(
-                "You cannot directly obtain a Rust reference from a CppRef. Use CppRef::as_ref."
-            );
-        }
-        match C::<T>::V {}
-    }
-}
-
-impl<T: ?Sized> Clone for CppRef<'_, T> {
-    fn clone(&self) -> Self {
+    /// Create a C++ reference from a raw pointer.
+    pub fn from_ptr(ptr: *const T) -> Self {
         Self {
-            ptr: self.ptr,
-            phantom: self.phantom,
+            ptr: CppRef::from_ptr(ptr),
+            phantom: PhantomData,
         }
     }
 }
-
-#[cfg(nightly)]
-impl<T: ?Sized + Unsize<U>, U: ?Sized> DispatchFromDyn<CppRef<'_, U>> for CppRef<'_, T> {}
 
 /// A C++ non-const reference. These are different from Rust's `&mut T` in that
 /// several C++ references can exist to the same underlying data ("aliasing")
@@ -228,15 +226,12 @@ impl<T: ?Sized + Unsize<U>, U: ?Sized> DispatchFromDyn<CppRef<'_, U>> for CppRef
 ///
 /// You can convert this to a [`CppRef`] using the [`std::convert::Into`] trait.
 #[repr(transparent)]
-pub struct CppMutRef<'a, T: ?Sized> {
-    ptr: *mut T,
-    phantom: PhantomData<&'a mut T>,
-}
+pub struct CppMutRef<T: ?Sized>(*mut T);
 
-impl<T: ?Sized> CppMutRef<'_, T> {
+impl<T: ?Sized> CppMutRef<T> {
     /// Retrieve the underlying C++ pointer.
     pub fn as_mut_ptr(&self) -> *mut T {
-        self.ptr
+        self.0
     }
 
     /// Get a regular Rust mutable reference out of this C++ reference.
@@ -256,53 +251,60 @@ impl<T: ?Sized> CppMutRef<'_, T> {
 
     /// Create a C++ reference from a raw pointer.
     pub fn from_ptr(ptr: *mut T) -> Self {
-        Self {
-            ptr,
-            phantom: PhantomData,
-        }
-    }
-
-    /// Extend the lifetime of the returned reference beyond normal Rust
-    /// borrow checker rules. See [`CppRef::lifetime_cast`].
-    pub fn lifetime_cast(&mut self) -> PhantomReferentMut<T> {
-        PhantomReferentMut(self.ptr)
+        Self(ptr)
     }
 }
 
-impl<T: ?Sized> Deref for CppMutRef<'_, T> {
-    type Target = *const T;
+/// We implement `Deref` for `CppMutRef` so that any non-mutable
+/// methods can be called on a `CppMutRef` instance.
+impl<T: ?Sized> Deref for CppMutRef<T> {
+    type Target = CppRef<T>;
     #[inline]
     fn deref(&self) -> &Self::Target {
-        // With `inline_const` we can simplify this to:
-        // const { panic!("you shouldn't deref CppRef!") }
-        struct C<T: ?Sized>(T);
-        impl<T: ?Sized> C<T> {
-            const V: core::convert::Infallible = panic!("You cannot directly obtain a Rust reference from a CppMutRef. Use CppMutRef::as_mut.");
-        }
-        match C::<T>::V {}
+        // Safety: `CppMutRef<T>` and `CppRef<T>` have the same
+        // layout.
+        unsafe { std::mem::transmute(self) }
     }
 }
 
-impl<T: ?Sized> Clone for CppMutRef<'_, T> {
+impl<T: ?Sized> Clone for CppMutRef<T> {
     fn clone(&self) -> Self {
-        Self {
-            ptr: self.ptr,
-            phantom: self.phantom,
-        }
+        Self(self.0)
     }
 }
 
-impl<'a, T> From<CppMutRef<'a, T>> for CppRef<'a, T> {
-    fn from(mutable: CppMutRef<'a, T>) -> Self {
+impl<T: ?Sized> Copy for CppMutRef<T> {}
+
+impl<T> From<CppMutRef<T>> for CppRef<T> {
+    fn from(mutable: CppMutRef<T>) -> Self {
+        Self(mutable.0)
+    }
+}
+
+#[repr(transparent)]
+pub struct CppMutLtRef<'a, T: ?Sized> {
+    ptr: CppMutRef<T>,
+    phantom: PhantomData<&'a mut T>,
+}
+
+impl<T: ?Sized> CppMutLtRef<'_, T> {
+    /// Extend the lifetime of the returned reference beyond normal Rust
+    /// borrow checker rules. See [`CppLtRef::lifetime_cast`].
+    pub fn lifetime_cast(&mut self) -> CppMutRef<T> {
+        CppMutRef(self.ptr.as_mut_ptr())
+    }
+
+    /// Create a C++ reference from a raw pointer.
+    pub fn from_ptr(ptr: *mut T) -> Self {
         Self {
-            ptr: mutable.ptr,
+            ptr: CppMutRef::from_ptr(ptr),
             phantom: PhantomData,
         }
     }
 }
 
 #[cfg(nightly)]
-impl<T: ?Sized + Unsize<U>, U: ?Sized> DispatchFromDyn<CppMutRef<'_, U>> for CppMutRef<'_, T> {}
+impl<T: ?Sized + Unsize<U>, U: ?Sized> DispatchFromDyn<CppMutRef<U>> for CppMutRef<T> {}
 
 /// Any type which can return a C++ reference to its contents.
 pub trait AsCppRef<T: ?Sized> {
@@ -316,9 +318,9 @@ pub trait AsCppMutRef<T: ?Sized>: AsCppRef<T> {
     fn as_cpp_mut_ref(&mut self) -> CppMutRef<T>;
 }
 
-impl<T: ?Sized> AsCppRef<T> for CppMutRef<'_, T> {
+impl<T: ?Sized> AsCppRef<T> for CppMutRef<T> {
     fn as_cpp_ref(&self) -> CppRef<T> {
-        CppRef::from_ptr(self.ptr)
+        CppRef::from_ptr(self.0 as *const T)
     }
 }
 
@@ -384,7 +386,9 @@ impl<T: ?Sized> CppPinContents<T> {
 ///
 /// See also [`CppUniquePtrPin`], which is equivalent for data which is in
 /// a [`cxx::UniquePtr`].
-pub struct CppPin<T: ?Sized>(Box<CppPinContents<T>>);
+// We also keep a `CppMutRef` to the contents for the sake of our `Deref`
+// implementation.
+pub struct CppPin<T: ?Sized>(Box<CppPinContents<T>>, CppMutRef<T>);
 
 impl<T: ?Sized> CppPin<T> {
     /// Imprison the Rust data within a `CppPin`. This eliminates any remaining
@@ -395,7 +399,9 @@ impl<T: ?Sized> CppPin<T> {
     where
         T: Sized,
     {
-        Self(Box::new(CppPinContents(item)))
+        let mut contents = Box::new(CppPinContents(item));
+        let ptr = contents.addr_of_mut();
+        Self(contents, CppMutRef(ptr))
     }
 
     /// Imprison the boxed Rust data within a `CppPin`. This eliminates any remaining
@@ -412,8 +418,9 @@ impl<T: ?Sized> CppPin<T> {
         // to
         //   Box<CppPinContents<T>>
         // is safe.
-        let contents = unsafe { std::mem::transmute::<Box<T>, Box<CppPinContents<T>>>(item) };
-        Self(contents)
+        let mut contents = unsafe { std::mem::transmute::<Box<T>, Box<CppPinContents<T>>>(item) };
+        let ptr = contents.addr_of_mut();
+        Self(contents, CppMutRef(ptr))
     }
 
     // Imprison the boxed Rust data within a `CppPin`.  This eliminates any remaining
@@ -493,6 +500,20 @@ impl<T: ?Sized> AsCppMutRef<T> for CppPin<T> {
     }
 }
 
+impl<T: ?Sized> Deref for CppPin<T> {
+    type Target = CppMutRef<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.1
+    }
+}
+
+impl<T: ?Sized> DerefMut for CppPin<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.1
+    }
+}
+
 /// Any newtype wrapper which causes the contained [`UniquePtr`] target to obey C++ reference
 /// semantics rather than Rust reference semantics. That is, multiple aliasing
 /// mutable C++ references may exist to the contents.
@@ -500,14 +521,15 @@ impl<T: ?Sized> AsCppMutRef<T> for CppPin<T> {
 /// C++ references are permitted to alias one another, and commonly do.
 /// Rust references must alias according only to the narrow rules of the
 /// borrow checker.
-pub struct CppUniquePtrPin<T: UniquePtrTarget>(UniquePtr<T>);
+pub struct CppUniquePtrPin<T: UniquePtrTarget>(UniquePtr<T>, CppMutRef<T>);
 
 impl<T: UniquePtrTarget> CppUniquePtrPin<T> {
     /// Imprison the type within a `CppPin`. This eliminates any remaining
     /// Rust references (since we take the item by value) and this object
     /// subsequently only vends C++ style references, not Rust references.
     pub fn new(item: UniquePtr<T>) -> Self {
-        Self(item)
+        let ptr = item.as_mut_ptr();
+        Self(item, CppMutRef::from_ptr(ptr))
     }
 
     /// Get an immutable pointer to the underlying object.
@@ -527,46 +549,26 @@ impl<T: UniquePtrTarget> AsCppRef<T> for CppUniquePtrPin<T> {
 
 impl<T: UniquePtrTarget> AsCppMutRef<T> for CppUniquePtrPin<T> {
     fn as_cpp_mut_ref(&mut self) -> CppMutRef<T> {
-        let pinnned_ref: Pin<&mut T> = self
-            .0
-            .as_mut()
-            .expect("UniquePtr was null; we can't make a C++ reference");
-        let ptr = unsafe { Pin::into_inner_unchecked(pinnned_ref) };
-        CppMutRef::from_ptr(ptr)
+        self.1.clone()
     }
 }
 
-/// A structure used to extend the lifetime of a returned C++ reference,
-/// to indicate to Rust that it's beyond the normal Rust lifetime rules.
-/// See [`CppRef::lifetime_cast`].
-#[repr(transparent)]
-pub struct PhantomReferent<T: ?Sized>(*const T);
+impl<T: UniquePtrTarget> Deref for CppUniquePtrPin<T> {
+    type Target = CppMutRef<T>;
 
-impl<T: ?Sized> AsCppRef<T> for PhantomReferent<T> {
+    fn deref(&self) -> &Self::Target {
+        &self.1
+    }
+}
+
+// It would be very nice to be able to impl Deref for UniquePtr
+impl<T: UniquePtrTarget> AsCppRef<T> for cxx::UniquePtr<T> {
     fn as_cpp_ref(&self) -> CppRef<T> {
-        CppRef::from_ptr(self.0)
+        CppRef::from_ptr(self.as_ptr())
     }
 }
 
-/// A structure used to extend the lifetime of a returned C++ mutable reference,
-/// to indicate to Rust that it's beyond the normal Rust lifetime rules.
-/// See [`CppRef::lifetime_cast`].
-#[repr(transparent)]
-pub struct PhantomReferentMut<T: ?Sized>(*mut T);
-
-impl<T: ?Sized> AsCppRef<T> for PhantomReferentMut<T> {
-    fn as_cpp_ref(&self) -> CppRef<T> {
-        CppRef::from_ptr(self.0)
-    }
-}
-
-impl<T: ?Sized> AsCppMutRef<T> for PhantomReferentMut<T> {
-    fn as_cpp_mut_ref(&mut self) -> CppMutRef<T> {
-        CppMutRef::from_ptr(self.0)
-    }
-}
-
-#[cfg(all(feature = "arbitrary_self_types_pointers", test))]
+#[cfg(all(feature = "arbitrary_self_types", test))]
 mod tests {
     use super::*;
 
