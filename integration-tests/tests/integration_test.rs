@@ -12437,6 +12437,7 @@ fn test_private_destructor() {
         &["A", "get_a"],
         &[],
     );
+}
  
 #[test]
 fn test_using_string_function() {
