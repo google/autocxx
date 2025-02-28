@@ -12465,7 +12465,7 @@ fn test_private_destructor() {
         &[],
     );
 }
- 
+
 #[test]
 fn test_using_string_function() {
     let hdr = indoc! {"

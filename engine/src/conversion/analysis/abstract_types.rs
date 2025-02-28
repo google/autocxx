@@ -17,12 +17,15 @@ use super::{
     },
     pod::PodAnalysis,
 };
-use crate::{conversion::{
-    analysis::{depth_first::fields_and_bases_first, fun::ReceiverMutability},
-    api::{ApiName, CppVisibility, FuncToConvert, TypeKind},
-    error_reporter::{convert_apis, convert_item_apis},
-    ConvertErrorFromCpp, CppEffectiveName,
-}, minisyn::FnArg};
+use crate::{
+    conversion::{
+        analysis::{depth_first::fields_and_bases_first, fun::ReceiverMutability},
+        api::{ApiName, CppVisibility, FuncToConvert, TypeKind},
+        error_reporter::{convert_apis, convert_item_apis},
+        ConvertErrorFromCpp, CppEffectiveName,
+    },
+    minisyn::FnArg,
+};
 use crate::{
     conversion::{api::Api, apivec::ApiVec},
     types::QualifiedName,
