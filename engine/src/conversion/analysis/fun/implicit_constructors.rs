@@ -12,12 +12,11 @@ use indexmap::{map::Entry, set::IndexSet as HashSet};
 
 use syn::{PatType, Type, TypeArray};
 
+use crate::conversion::analysis::type_converter::TypeKind;
 use crate::conversion::type_helpers::type_is_reference;
 use crate::{
     conversion::{
-        analysis::{
-            depth_first::fields_and_bases_first, pod::PodAnalysis, type_converter::TypeKind,
-        },
+        analysis::{depth_first::fields_and_bases_first, pod::PodAnalysis},
         api::{Api, ApiName, FuncToConvert},
         apivec::ApiVec,
         convert_error::ConvertErrorWithContext,
@@ -205,6 +204,11 @@ pub(super) fn find_constructors_present(
             name,
             analysis:
                 PodAnalysis {
+                    // Do not include TypeKind::Opaque here
+                    kind:
+                        crate::conversion::api::TypeKind::Abstract
+                        | crate::conversion::api::TypeKind::Pod
+                        | crate::conversion::api::TypeKind::NonPod,
                     bases,
                     field_info,
                     num_generics: 0usize,

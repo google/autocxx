@@ -382,6 +382,10 @@ impl IncludeCppEngine {
             }
         }
 
+        for item in &self.config.opaquelist {
+            builder = builder.opaque_type(item);
+        }
+
         // At this point it woul be great to use `Builder::opaque_type` for
         // everything which is on the allowlist but not on the POD list.
         // This would free us from a large proportion of bindgen bugs which

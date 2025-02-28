@@ -186,11 +186,41 @@ macro_rules! exclude_utilities {
 /// otherwise generated.
 /// This is 'greedy' in the sense that any functions/methods
 /// which take or return such a type will _also_ be blocked.
+/// See also [`opaque`].
 ///
 /// A directive to be included inside
 /// [include_cpp] - see [include_cpp] for general information.
 #[macro_export]
 macro_rules! block {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
+/// Instruct `bindgen` to generate a type as an opaque type -
+/// that is, without fields inside it. This should be used
+/// only when there's a need to workaround some `bindgen`
+/// issue where it's incorrectly generating the type.
+/// See the [bindgen documentation](https://rust-lang.github.io/rust-bindgen/opaque.html)
+/// for what exactly this means.
+///
+/// At first glance, this might seem to have no effect for
+/// types which are marked non-POD. However, it prevents
+/// autocxx from inferring whether the type has implicit
+/// constructors, and thus limits the options for even
+/// allocating the type. This should therefore only be used
+/// when trying to work around a bug.
+///
+/// The types which are generated when you use this are
+/// rather useless - it's hard to interact with them at all
+/// from within the generated Rust. Worse still, if they're
+/// included as members of any other type, those types are
+/// "infected" and also become useless (in the sense that
+/// we can't figure out what constructors those types might
+/// have). Use with caution and only when really needed.
+///
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+#[macro_export]
+macro_rules! opaque {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
