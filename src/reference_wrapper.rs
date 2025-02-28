@@ -148,7 +148,7 @@ impl<T: ?Sized> Receiver for CppRef<T> {
 
 impl<T: ?Sized> Clone for CppRef<T> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 
@@ -176,10 +176,7 @@ impl<T: ?Sized> Deref for CppLtRef<'_, T> {
 
 impl<T: ?Sized> Clone for CppLtRef<'_, T> {
     fn clone(&self) -> Self {
-        Self {
-            ptr: self.ptr.clone(),
-            phantom: self.phantom,
-        }
+        *self
     }
 }
 
@@ -269,7 +266,7 @@ impl<T: ?Sized> Deref for CppMutRef<T> {
 
 impl<T: ?Sized> Clone for CppMutRef<T> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 
@@ -549,7 +546,7 @@ impl<T: UniquePtrTarget> AsCppRef<T> for CppUniquePtrPin<T> {
 
 impl<T: UniquePtrTarget> AsCppMutRef<T> for CppUniquePtrPin<T> {
     fn as_cpp_mut_ref(&mut self) -> CppMutRef<T> {
-        self.1.clone()
+        self.1
     }
 }
 
