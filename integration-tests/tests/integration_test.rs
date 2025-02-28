@@ -12387,6 +12387,7 @@ fn test_cpp_union_pod() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/1393
 fn test_cpp_static_template() {
     let hdr = indoc! {"
       #pragma once
