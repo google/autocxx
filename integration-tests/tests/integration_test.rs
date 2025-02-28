@@ -10241,7 +10241,7 @@ fn test_issue486_multi_types() {
 
 #[test]
 #[ignore] // https://github.com/google/autocxx/issues/774
-fn test_virtual_methods() {
+fn test_virtual_methods_additional() {
     let hdr = indoc! {"
         #pragma once
 
