@@ -6058,6 +6058,7 @@ fn test_error_generated_for_pod_with_nontrivial_destructor() {
 }
 
 #[test]
+#[ignore] // https://github.com/google/autocxx/issues/1269
 fn test_error_generated_for_double_underscore() {
     // take_a is necessary here because cxx won't generate the required
     // static assertions unless the type is actually used in some context
