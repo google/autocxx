@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Credits - Rust ♡ Existing C++</title>
+        <title>Reporting bugs - Rust ♡ Existing C++</title>
 
 
         <!-- Custom HTML head -->
@@ -155,22 +155,72 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="credits"><a class="header" href="#credits">Credits</a></h1>
-<p>David Tolnay did much of the hard work here, by inventing the underlying cxx crate, and in fact nearly all of the parsing infrastructure on which this crate depends. <code>bindgen</code> is also awesome. This crate stands on the shoulders of giants!</p>
-<p>Miguel Young also did all the hard thinking about whether non-trivial C++ objects can safely exist on the Rust
-stack. They can! He also draws nifty cartoons.</p>
-<p>Thanks to all the other contributors to cxx, bindgen and autocxx.</p>
-<p>And thanks to <a href="https://www.chromium.org/Home/chromium-security/memory-safety/rust-and-c-interoperability/">all in the Chromium community for inspiring this tool</a>.</p>
+                        <h2 id="reporting-bugs"><a class="header" href="#reporting-bugs">Reporting bugs</a></h2>
+<p>If you've found a problem, and you're reading this, <em>thank you</em>! Your diligence
+in reporting the bug is much appreciated and will make <code>autocxx</code> better.</p>
+<p>However, we get a lot of incoming bugs, and we are limited by our ability
+to triage them. Please help us by making a good bug report.</p>
+<p>Much of this is about minimizing the size of your test case so it does not
+depend on your system's C++ headers or any copyrighted code. To minimize the
+test case, you can use <code>tools/reduce</code>, something like this:</p>
+<p><code>cd tools/reduce; cargo run -- file -d "safety!(unsafe_ffi)" -d 'generate_pod!("A")' -I ~/my-include-dir -h my-header.h -p problem-error-message -- --remove-pass pass_line_markers</code>
+This is a wrapper for the amazing <code>creduce</code> which will take thousands of lines
+of C++, preprocess it, and then identify the minimum required lines to
+reproduce the same problem. This can sometimes take <em>days</em> to run - that's
+normal - if this is a problem, try to minimize the test case manually, or
+do a combination.</p>
+<p>Once you have a minimal test case:</p>
+<ul>
+<li>First see if it triggers a problem when you're using pure <code>bindgen</code>.
+autocxx is very dependent on <code>bindgen</code> generating correct code.
+To do this, fetch the <a href="https://github.com/rust-lang/rust-bindgen"><code>bindgen</code> code</a>
+then run
+<code>cargo run -- XYZ.hpp --no-layout-tests --enable-cxx-namespaces --allowlist-type ABC-- -std=c++14</code>
+<code>XYZ.hpp</code> is your header (the extension is important) and <code>ABC</code> is the type
+you wish to generate. Assuming you minimized your test case in advance,
+this should generate just a few lines of Rust code and you can inspect it
+(or even build it) to see if it seems to be problematic.</li>
+<li>If the problem is in <code>bindgen</code>, report it to <code>bindgen</code>.</li>
+<li>If the problem is in <code>autocxx</code>, please report a bug to us. In order of preference:
+<ul>
+<li>Raise a pull request adding a new minimized failing integration test to
+<a href="https://github.com/google/autocxx/blob/main/integration-tests/tests/integration_test.rs"><code>integration_test.rs</code></a></li>
+<li>Simply raise an issue with the minimized code.</li>
+</ul>
+</li>
+</ul>
+<p>If you can't get minimization to work:</p>
+<ul>
+<li>Use the C++ preprocessor to give a single complete C++ file which demonstrates
+the problem, along with the <code>include_cpp!</code> directive you use.
+Alternatively, run your build using <code>AUTOCXX_REPRO_CASE=repro.json</code> which should
+put everything we need into <code>output.h</code>. If necessary, you can use the <code>CLANG_PATH</code>
+or <code>CXX</code> environment variables to specify the path to the Clang compiler to use.</li>
+<li>Failing all else, build using
+<code>cargo clean -p &lt;your package name&gt; &amp;&amp; RUST_LOG=autocxx_engine=info cargo build -vvv</code>
+and send the <em>entire</em> log to us. This will include two key bits of logging:
+the C++ bindings as distilled by <code>bindgen</code>, and then the version which
+we've converted and moulded to be suitable for use by <code>cxx</code>.</li>
+</ul>
+<h2 id="bugs-related-to-linking-problems"><a class="header" href="#bugs-related-to-linking-problems">Bugs related to linking problems</a></h2>
+<p>Unfortunately, <em>linking</em> C++ binaries is a complex area subject in itself, and
+we won't be able to debug your linking issues by means of an autocxx bug report.
+Assuming you're using autocxx's build.rs support, the actual C++ build and
+managed by the <a href="https://crates.io/crates/cc"><code>cc</code></a> crate. You can find
+many of its options on its <a href="https://docs.rs/cc/latest/cc/struct.Build.html"><code>Build</code> type</a>.
+If you need to bring in an external library, you may also need to emit certain
+<a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib">print statements from your <code>build.rs</code></a>
+to instruct cargo to link against that library.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="examples.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="credits.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="reporting_bugs.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="contributing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -180,11 +230,11 @@ stack. They can! He also draws nifty cartoons.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="examples.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="credits.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="reporting_bugs.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="contributing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

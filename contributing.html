@@ -198,8 +198,8 @@ a few other things.</li>
 to <code>cxx</code>.</p>
 <p>However, most of the actual code is in <code>engine/src/conversion/mod.rs</code>.</p>
 <p>At the moment we're using a slightly branched version of <code>bindgen</code> called <code>autocxx-bindgen</code>.
-It's hoped this is temporary; some of our changes are sufficiently weird that it would be
-presumptious to try to get them accepted upstream until we're sure <code>autocxx</code> has roughly the right approach.</p>
+It's hoped this is temporary (see <a href="https://github.com/google/autocxx/issues/124">here</a>
+for status.)</p>
 <h2 id="how-to-develop"><a class="header" href="#how-to-develop">How to develop</a></h2>
 <p>If you're making a change, here's what you need to do to get useful diagnostics etc.
 First of all, <code>cargo run</code> in the <code>demo</code> directory. If it breaks, you don't get much
@@ -216,48 +216,171 @@ the code paths related to generating both C++ and Rust side shims, you can set
 we also want to test the normal code paths. (In the future we might want to
 parameterize the test suite to do both.)</p>
 <h2 id="reporting-bugs"><a class="header" href="#reporting-bugs">Reporting bugs</a></h2>
-<p>If you've found a problem, and you're reading this, <em>thank you</em>! Your diligence
-in reporting the bug is much appreciated and will make <code>autocxx</code> better. In
-order of preference here's how we would like to hear about your problem:</p>
-<ul>
-<li>Raise a pull request adding a new failing integration test to
-<a href="https://github.com/google/autocxx/blob/main/integration-tests/tests/integration_test.rs"><code>integration_test.rs</code></a></li>
-<li>Minimize the test using <code>tools/reduce</code>, something like this:
-<code>target/debug/autocxx-reduce file -d "safety!(unsafe_ffi)" -d 'generate_pod!("A")' -I ~/my-include-dir -h my-header.h -p problem-error-message -- --remove-pass pass_line_markers</code>
-This is a wrapper for the amazing <code>creduce</code> which will take thousands of lines
-of C++, preprocess it, and then identify the minimum required lines to
-reproduce the same problem.</li>
-<li>Use the C++ preprocessor to give a single complete C++ file which demonstrates
-the problem, along with the <code>include_cpp!</code> directive you use.
-Alternatively, run your build using <code>AUTOCXX_REPRO_CASE=repro.json</code> which should
-put everything we need into <code>output.h</code>. If necessary, you can use the <code>CLANG_PATH</code>
-or <code>CXX</code> environment variables to specify the path to the Clang compiler to use.</li>
-<li>Failing all else, build using
-<code>cargo clean -p &lt;your package name&gt; &amp;&amp; RUST_LOG=autocxx_engine=info cargo build -vvv</code>
-and send the <em>entire</em> log to us. This will include two key bits of logging:
-the C++ bindings as distilled by <code>bindgen</code>, and then the version which
-we've converted and moulded to be suitable for use by <code>cxx</code>.</li>
-</ul>
-<h2 id="bugs-related-to-linking-problems"><a class="header" href="#bugs-related-to-linking-problems">Bugs related to linking problems</a></h2>
-<p>Unfortunately, <em>linking</em> C++ binaries is a complex area subject in itself, and
-we won't be able to debug your linking issues by means of an autocxx bug report.
-Assuming you're using autocxx's build.rs support, the actual C++ build and
-managed by the <a href="https://crates.io/crates/cc"><code>cc</code></a> crate. You can find
-many of its options on its <a href="https://docs.rs/cc/latest/cc/struct.Build.html"><code>Build</code> type</a>.
-If you need to bring in an external library, you may also need to emit certain
-<a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib">print statements from your <code>build.rs</code></a>
-to instruct cargo to link against that library.</p>
+<p>Moved to <a href="reporting_bugs.html">its own document</a>.</p>
 <h2 id="how-to-contribute-to-this-manual"><a class="header" href="#how-to-contribute-to-this-manual">How to contribute to this manual</a></h2>
 <p>More examples in this manual are <em>very</em> welcome!</p>
 <p>Because <code>autocxx</code> examples require both Rust and C++ code to be linked together,
 a custom preprocessor is used for this manual. See one of the existing examples
 such as in <code>index.md</code> to see how to do this.</p>
+<h2 id="maintenance-responsibilities"><a class="header" href="#maintenance-responsibilities">Maintenance responsibilities</a></h2>
+<p>autocxx is currently in maintenance mode. In future, it may undergo further
+feature development, but for now the job is just to keep it stable
+and functional.</p>
+<p>Events may occur which nonetheless require changes:</p>
+<ul>
+<li>Changes to Rust</li>
+<li>Changes to <code>bindgen</code></li>
+<li>Pull requests raised against autocxx</li>
+<li>Issues reported against autocxx</li>
+</ul>
+<p>Here's what to do. If issues are reported, encourage the reporter
+to raise a PR with a minimized test case by pointing them at the
+<a href="reporting_bugs.html">"reporting bugs"</a> page. This resolves all concerns about
+reproducibility. autocxx is quite sensitive to the environment in which it
+runs, e.g. standard library header files in use, and it's rare to be able
+to reproduce a reporter's bug without them raising a reproducible test case
+like this.</p>
+<p>If CI starts to fail due to a Rust change (or,
+if we <a href="https://github.com/google/autocxx/issues/124">manage to unfork bindgen, a bindgen change</a>)
+then raise a pull request to fix it. (Most commonly CI starts to fail
+because of more aggressive clippy lints).</p>
+<p>For user-contributed pull requests, merge them if you can! For reproducible
+bug reports, try to investigate them. A fair proportion of the bug reports
+boil down to certain key known areas of technical debt or limitations,
+described below, and you can mark them as a duplicate or similar.</p>
+<p>autocxx tends to make a release every month or two, dependent on what changes
+have been made. Ideally, autocxx would release after every single pull
+request but the process takes about 15 minutes (see below) so it's not
+that frequent.</p>
+<h2 id="release-process"><a class="header" href="#release-process">Release process</a></h2>
+<p>To make a new release of autocxx,</p>
+<ul>
+<li>First ensure there's green CI on github.</li>
+<li>Check out <code>main</code> locally and ensure it's up to date with <code>origin/main</code>.</li>
+<li>Make a new branch</li>
+<li>Run <code>tools/upgrade-version.sh OLD NEW</code> where <code>OLD</code> is the previous
+released version number, and <code>NEW</code> is the new version number.</li>
+<li>Commit that and make a PR; ensure it passes tests on github CI.</li>
+<li>If so, merge that PR, and update locally.</li>
+<li>Run <code>tools/publish-all.sh</code>. This will do the actual <code>cargo publish</code>
+for all the various crates.</li>
+<li>On <a href="https://github.com/google/autocxx/releases">github releases</a>,
+choose Draft a new release. Add a tag for <code>v0.X.Y</code>. Go through
+the process to automatically create release notes.</li>
+</ul>
+<h2 id="rolling-bindgen"><a class="header" href="#rolling-bindgen">Rolling bindgen</a></h2>
+<p>autocxx currently depends upon a fork of bindgen called <code>autocxx-bindgen</code>.
+<a href="https://github.com/google/autocxx/issues/124">This issue</a> is an attempt
+at entirely unforking bindgen. There are about 14 upstream PRs required;
+we should work hard to make required changes to get them accepted,
+because then this section becomes irrelevant and you'll never need to follow
+these steps.</p>
+<p>Otherwise, periodically, you'll need to merge bindgen into autocxx-bindgen.
+<a href="https://github.com/adetaylor/rust-bindgen"><code>autocxx-bindgen</code> is kept in this repository</a>
+in the <code>master</code> branch (which should be renamed eventually if we don't
+unfork bindgen).</p>
+<p>To update it,</p>
+<ul>
+<li>Check out the master branch of that repo</li>
+<li>Make a new branch</li>
+<li><code>git pull &lt;upstream repo&gt; main</code> (note that we use merge rather than
+rebase)</li>
+<li>Resolve conflicts and commit.</li>
+<li>Push this branch to <a href="https://github.com/adetaylor/rust-bindgen">the autocxx-bindgen repo</a></li>
+<li>Make a new branch of autocxx</li>
+<li>Amend <a href="https://github.com/google/autocxx/blob/main/engine/Cargo.toml#L34"><code>engine/Cargo.toml</code></a>
+to point to the new git branch of autocxx-bindgen instead of using
+a published version (see the commented-out line)</li>
+<li>Maybe <code>cd integration-tests; cargo test</code> to ensure things build and seem to
+work... but you won't really know until you push to github CI</li>
+<li>So, push your autocxx and make a pull request</li>
+<li>If everything passes on CI, bump the <code>autocxx-bindgen</code> version number.
+This needs to be done in <code>bindgen/Cargo.toml</code> and <code>Cargo.toml</code>. Commit that.</li>
+<li>Push directly onto the master branch of
+<a href="https://github.com/adetaylor/rust-bindgen">the autocxx-bindgen repo</a>.
+You can't raise this roll as a pull request because Google's CLA tooling
+will reject it.</li>
+<li><code>cargo publish</code> the new autocxx-bindgen version.</li>
+<li>Amend your <code>autocxx</code> PR to switch to the published <code>autocxx-bindgen</code> version,
+and push that.</li>
+<li>Ensure CI still passes.</li>
+<li>If so, merge your <code>autocxx</code> PR.</li>
+</ul>
+<h2 id="major-areas-of-tech-debt"><a class="header" href="#major-areas-of-tech-debt">Major areas of tech debt</a></h2>
+<p>The core of autocxx is the <code>Api</code> enum. That's solid. It's created by parsing
+bindgen output, and exists all the way through to Rust and C++ codegen.
+It is annotated by various analysis phases; it's parameterized by
+the analysis phase so it's literally impossible to access those annotations
+before they exist.</p>
+<p>Because this core is solid, most of the areas of tech debt are discrete and
+don't really overlap with each other. If you wish to tackle them, they
+can be tackled fairly independently.</p>
+<p>Without further ado, they are:</p>
+<ol>
+<li>
+<p><strong>Naming</strong>. autocxx deals with lots of names - the original C++ name,
+the name chosen by bindgen, the name we want to give to cxx, etc.
+When one kind of name is used for another purpose, certain invariants
+need to be applied, e.g. avoiding conflicting overloads, or avoiding
+built-in cxx names such as <code>UniquePtr</code>. So, these different kinds of
+names really need to be encapsulated in newtype wrappers which
+enforce these invariants. This has been <a href="https://github.com/google/autocxx/issues/520">started here</a>.
+The other tricky aspect here is that we deal with name conflicts in
+two different ways. What are name conflicts? bindgen gives us
+a hierarchical namespace which we have to map to a flat namespace to give
+to cxx. For types, we just reject any duplicate names. For funtions, though,
+we go to some efforts to rename them to be non-conflicting. We should
+become uniform here by abstracting the name deconfliction stuff from the
+function analysis.</p>
+</li>
+<li>
+<p><strong>Fork of bindgen</strong>. As noted under <a href="#rolling-bindgen">rolling bindgen, above</a>,
+we currently use a fork of bindgen called <code>autocxx-bindgen</code>. This carries
+a maintenance burden as we roll upstream. Also as noted above, we're
+making good progress on undoing this. Tracked
+<a href="https://github.com/google/autocxx/issues/124">here</a>.</p>
+</li>
+<li>
+<p><strong>Sensitivity to bindgen bugs caused by constructor calculations</strong>.
+<code>bindgen</code> isn't perfect. When it mis-generates a type, users can
+ask bindgen to mark that type as "opaque", in which case it's represented
+as just an array of bytes. This is especially useful for complex templated
+C++ types where bindgen still has a number of bugs. Unfortunately, users
+of autocxx don't get that luxury. In order to calculate whether types
+are movable, autocxx requires visibility into all the fields.
+That means that any types marked opaque by bindgen are pretty useless,
+and we never currently ask bindgen for opaque types.
+<code>bindgen</code> might be in a better place to request implicit constructors,
+then we can solve these problems. This is tracked
+<a href="https://github.com/google/autocxx/issues/1461">here</a>.</p>
+</li>
+<li>
+<p><strong><code>CppRef</code> and friends.</strong> <code>cxx</code> (and therefore <code>autocxx</code>) can be used
+to create multiple mutable references to the same Rust memory.
+This is UB. In cxx this problem applies only to types marked <code>Trivial</code>
+since others are zero-sized. In <code>autocxx</code>, we give all types a size
+so they can be allocated on the stack, and so the problem is worse.
+(This is explained more
+<a href="https://github.com/google/autocxx/blob/main/engine/src/conversion/codegen_rs/non_pod_struct.rs#L41">here</a>).
+The intended solution here is to cease to use Rust references to
+represent C++ references - instead using a newtype wrapper called
+<code>CppRef&lt;T&gt;</code>. <code>autocxx</code> can already work in this mode using
+<a href="https://docs.rs/autocxx/latest/autocxx/macro.safety.html"><code>unsafe_references_wrapped</code></a>
+but for now it works well only on nightly Rust, pending the merge of the
+<a href="https://github.com/rust-lang/rust/pull/135881">arbitrary self types v2 RFC</a>.
+Even then, this isn't quite perfect because <code>cxx</code> expects to use
+Rust references, and its key types (such as <code>cxx::UniquePtr</code>) provide
+<code>Deref</code> implementations which point in that direction. This isn't a
+huge problem but I mention it here because it's one of the very few
+occasions in which our dependence on <code>cxx</code> is limiting for us.</p>
+</li>
+</ol>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="credits.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="reporting_bugs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -271,7 +394,7 @@ such as in <code>index.md</code> to see how to do this.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="credits.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="reporting_bugs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
