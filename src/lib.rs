@@ -402,6 +402,12 @@ macro_rules! subclass {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// See [`subclass::subclass`].
+#[macro_export]
+macro_rules! throws {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 /// Indicates that a C++ type can definitely be instantiated. This has effect
 /// only in a very specific case:
 /// * the type is a typedef to something else
@@ -616,6 +622,11 @@ pub trait WithinUniquePtr {
     fn within_unique_ptr(self) -> cxx::UniquePtr<Self::Inner>;
 }
 
+pub trait TryWithinUniquePtr {
+    type Inner: UniquePtrTarget + MakeCppStorage;
+    fn try_within_unique_ptr(self) -> Result<cxx::UniquePtr<Self::Inner>, cxx::Exception>;
+}
+
 /// Provides utility functions to emplace any [`moveit::New`] into a
 /// [`Box`]. Automatically imported by the autocxx prelude
 /// and implemented by any (autocxx-related) [`moveit::New`].
@@ -629,6 +640,12 @@ pub trait WithinBox {
     /// want to own this option within Rust, but you want to create [`CppRef`]
     /// C++ references to it.
     fn within_cpp_pin(self) -> CppPin<Self::Inner>;
+}
+
+pub trait TryWithinBox {
+    type Inner;
+    fn try_within_box(self) -> Result<Pin<Box<Self::Inner>>, cxx::Exception>;
+    fn try_within_cpp_pin(self) -> Result<CppPin<Self::Inner>, cxx::Exception>;
 }
 
 use cxx::kind::Trivial;
@@ -657,6 +674,62 @@ where
     }
     fn within_cpp_pin(self) -> CppPin<Self::Inner> {
         CppPin::from_pinned_box(Box::emplace(self))
+    }
+}
+
+impl<N, T> TryWithinUniquePtr for N
+where
+    N: TryNew<Output = T, Error = cxx::Exception>,
+    T: UniquePtrTarget + MakeCppStorage,
+{
+    type Inner = T;
+    fn try_within_unique_ptr(self) -> Result<cxx::UniquePtr<T>, cxx::Exception> {
+        UniquePtr::try_emplace(self)
+    }
+}
+
+impl<N, T> TryWithinBox for N
+where
+    N: TryNew<Output = T, Error = cxx::Exception>,
+{
+    type Inner = T;
+
+    fn try_within_box(self) -> Result<Pin<Box<T>>, cxx::Exception> {
+        Box::try_emplace(self)
+    }
+
+    fn try_within_cpp_pin(self) -> Result<CppPin<T>, cxx::Exception> {
+        Box::try_emplace(self).map(CppPin::from_pinned_box)
+    }
+}
+
+pub trait TryWithinUniquePtrTrivial {
+    type Inner: UniquePtrTarget + Sized + Unpin;
+    fn try_within_unique_ptr(self) -> Result<cxx::UniquePtr<Self::Inner>, cxx::Exception>;
+}
+
+impl<T> TryWithinUniquePtrTrivial for Result<T, cxx::Exception>
+where
+    T: UniquePtrTarget + ExternType<Kind = Trivial> + Sized + Unpin,
+{
+    type Inner = T;
+    fn try_within_unique_ptr(self) -> Result<cxx::UniquePtr<Self::Inner>, cxx::Exception> {
+        self.map(UniquePtr::new)
+    }
+}
+
+pub trait TryWithinBoxTrivial {
+    type Inner: Sized + Unpin;
+    fn try_within_box(self) -> Result<Pin<Box<Self::Inner>>, cxx::Exception>;
+}
+
+impl<T> TryWithinBoxTrivial for Result<T, cxx::Exception>
+where
+    T: ExternType<Kind = Trivial> + Sized + Unpin,
+{
+    type Inner = T;
+    fn try_within_box(self) -> Result<Pin<Box<Self::Inner>>, cxx::Exception> {
+        self.map(Box::pin)
     }
 }
 
@@ -703,6 +776,7 @@ where
 use cxx::memory::UniquePtrTarget;
 use cxx::UniquePtr;
 use moveit::New;
+use moveit::TryNew;
 pub use rvalue_param::RValueParam;
 pub use rvalue_param::RValueParamHandler;
 pub use value_param::as_copy;
@@ -736,6 +810,10 @@ pub mod prelude {
     pub use crate::CppUniquePtrPin;
     pub use crate::PinMut;
     pub use crate::RValueParam;
+    pub use crate::TryWithinBox;
+    pub use crate::TryWithinBoxTrivial;
+    pub use crate::TryWithinUniquePtr;
+    pub use crate::TryWithinUniquePtrTrivial;
     pub use crate::ValueParam;
     pub use crate::WithinBox;
     pub use crate::WithinBoxTrivial;

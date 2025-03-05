@@ -117,6 +117,7 @@ pub(super) fn gen_function(
         param_details: &param_details,
         cxxbridge_name: &cxxbridge_name,
         rust_name,
+        throwable: analysis.throwable,
         unsafety: &analysis.requires_unsafe,
         always_unsafe_due_to_trait_definition,
         doc_attrs: &doc_attrs,
@@ -143,7 +144,8 @@ pub(super) fn gen_function(
                 ..
             } => {
                 // Constructor.
-                impl_entry = Some(fn_generator.generate_constructor_impl(impl_for));
+                impl_entry =
+                    Some(fn_generator.generate_constructor_impl(impl_for, analysis.throwable));
             }
             FnKind::Method {
                 ref impl_for,
@@ -191,6 +193,16 @@ pub(super) fn gen_function(
     // which the user has declared.
     let params = unqualify_params_minisyn(params);
     let ret_type = unqualify_ret_type(ret_type.into_owned());
+
+    let ret_type = if analysis.throwable {
+        match ret_type {
+            ReturnType::Default => parse_quote!(-> Result<()>),
+            ReturnType::Type(_, ty) => parse_quote!(-> Result< #ty >),
+        }
+    } else {
+        ret_type
+    };
+
     // And we need to make an attribute for the namespace that the function
     // itself is in.
     let namespace_attr = if name.get_namespace().is_empty() || wrapper_function_needed {
@@ -226,6 +238,7 @@ struct FnGenerator<'a> {
     param_details: &'a [ArgumentAnalysis],
     ret_conversion: &'a Option<TypeConversionPolicy>,
     ret_type: &'a ReturnType,
+    throwable: bool,
     cxxbridge_name: &'a Ident,
     rust_name: &'a str,
     unsafety: &'a UnsafetyNeeded,
@@ -286,8 +299,14 @@ impl<'a> FnGenerator<'a> {
                 }
                 RustParamConversion::ReturnValue { ty } => {
                     ptr_arg_name = Some(pd.name.to_token_stream());
-                    ret_type = Cow::Owned(parse_quote! {
-                        -> impl autocxx::moveit::new::New<Output = #ty>
+                    ret_type = Cow::Owned(if self.throwable {
+                        parse_quote! {
+                            -> impl autocxx::moveit::new::TryNew<Output = #ty, Error = cxx::Exception>
+                        }
+                    } else {
+                        parse_quote! {
+                            -> impl autocxx::moveit::new::New<Output = #ty>
+                        }
                     });
                     arg_list.push(pd.name.to_token_stream());
                 }
@@ -363,10 +382,18 @@ impl<'a> FnGenerator<'a> {
             ));
             closure_stmts.push(call_body);
             let closure_stmts = maybe_unsafes_to_tokens(closure_stmts, true);
-            vec![MaybeUnsafeStmt::needs_unsafe(parse_quote! {
-                autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
-                    #closure_stmts
-                })
+            vec![MaybeUnsafeStmt::needs_unsafe(if self.throwable {
+                parse_quote! {
+                    autocxx::moveit::new::try_by_raw(move |#ptr_arg_name| {
+                        #closure_stmts
+                    })
+                }
+            } else {
+                parse_quote! {
+                    autocxx::moveit::new::by_raw(move |#ptr_arg_name| {
+                        #closure_stmts
+                    })
+                }
             })]
         } else {
             let mut call_stmts = local_variables;
@@ -422,8 +449,13 @@ impl<'a> FnGenerator<'a> {
     fn generate_constructor_impl(
         &self,
         impl_block_type_name: &QualifiedName,
+        throwable: bool,
     ) -> Box<ImplBlockDetails> {
-        let ret_type: ReturnType = parse_quote! { -> impl autocxx::moveit::new::New<Output=Self> };
+        let ret_type: ReturnType = if throwable {
+            parse_quote! { -> impl autocxx::moveit::new::TryNew<Output=Self, Error = cxx::Exception> }
+        } else {
+            parse_quote! { -> impl autocxx::moveit::new::New<Output=Self> }
+        };
         let (lifetime_tokens, wrapper_params, ret_type, call_body) =
             self.common_parts(true, &None, Some(ret_type));
         let rust_name = make_ident(self.rust_name);
