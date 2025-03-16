@@ -17,10 +17,6 @@ use std::{
 
 use cxx::{memory::UniquePtrTarget, UniquePtr};
 
-/// Deprecated - use [`subclass`] instead.
-#[deprecated]
-pub use autocxx_macro::subclass as is_subclass;
-
 /// Declare a Rust subclass of a C++ class.
 /// You can use this in two ways:
 /// * As an attribute macro on a struct which is to be a subclass.
@@ -54,6 +50,10 @@ pub use autocxx_macro::subclass as is_subclass;
 /// multiple steps you need to take to be able to make Rust
 /// subclasses of a C++ class.
 pub use autocxx_macro::subclass;
+
+/// Deprecated - use [`subclass`] instead.
+#[deprecated]
+pub use autocxx_macro::subclass as is_subclass;
 
 /// A prelude containing all the traits and macros required to create
 /// Rust subclasses of C++ classes. It's recommended that you:
