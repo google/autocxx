@@ -184,8 +184,8 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 /// A subclass of a C++ type.
 ///
 /// To create a Rust subclass of a C++ class, you must do these things:
-/// * Create a `struct` to act as your subclass, and add the #[`macro@crate::subclass`] attribute.
-///   This adds a field to your struct for autocxx record-keeping. You can
+/// * Create a `struct` to act as your subclass, and add the [`#[subclass]`][subclass]
+///   attribute. This adds a field to your struct for autocxx record-keeping. You can
 ///   instead choose to implement [`CppSubclass`] a different way, in which case
 ///   you must provide the [`macro@crate::subclass`] inside your [`crate::include_cpp`]
 ///   macro. (`autocxx` will do the required codegen for your subclass
@@ -273,13 +273,13 @@ pub trait CppPeerConstructor<CppPeer: CppSubclassCppPeer>: Sized {
 ///   [see this issue](https://github.com/google/autocxx/issues/610).
 pub trait CppSubclass<CppPeer: CppSubclassCppPeer>: CppPeerConstructor<CppPeer> {
     /// Return the field which holds the C++ peer object. This is normally
-    /// implemented by the #[`is_subclass`] macro, but you're welcome to
-    /// implement it yourself if you prefer.
+    /// implemented by the [`#[subclass]`][subclass] macro, but you're welcome
+    /// to implement it yourself if you prefer.
     fn peer_holder(&self) -> &CppSubclassCppPeerHolder<CppPeer>;
 
     /// Return the field which holds the C++ peer object. This is normally
-    /// implemented by the #[`is_subclass`] macro, but you're welcome to
-    /// implement it yourself if you prefer.
+    /// implemented by the [`#[subclass]`][subclass] macro, but you're welcome
+    /// to implement it yourself if you prefer.
     fn peer_holder_mut(&mut self) -> &mut CppSubclassCppPeerHolder<CppPeer>;
 
     /// Return a reference to the C++ part of this object pair.
