@@ -69,31 +69,33 @@ pub(crate) fn type_is_reference(ty: &syn::Type, search_for_rvalue: bool) -> bool
     matches_bindgen_marker(ty, marker_for_reference(search_for_rvalue))
 }
 
-fn matches_bindgen_marker(ty: &syn::Type, marker_name: &str) -> bool {
+fn matches_bindgen_marker(ty: &syn::Type, type_name: &str) -> bool {
     matches!(&ty, Type::Path(TypePath {
                   path: Path { segments, .. },..
-               }) if segments.first().map(|seg| seg.ident == marker_name).unwrap_or_default())
+               }) if segments.first().map(|seg| seg.ident == type_name).unwrap_or_default())
 }
 
-fn unwrap_bindgen_marker<'a>(ty: &'a TypePath, marker_name: &str) -> Option<&'a syn::Type> {
-    ty.path
-        .segments
-        .first()
-        .filter(|seg| seg.ident == marker_name)
-        .and_then(|seg| match seg.arguments {
-            PathArguments::AngleBracketed(ref angle_bracketed_args) => {
-                angle_bracketed_args.args.first()
-            }
-            _ => None,
-        })
-        .and_then(|generic_argument| match generic_argument {
-            GenericArgument::Type(ty) => Some(ty),
-            _ => None,
-        })
+fn unwrap_newtype<'a>(seg: &'a PathSegment, marker_name: &str) -> Option<&'a syn::Type> {
+    if seg.ident != marker_name {
+        return None;
+    }
+
+    let PathArguments::AngleBracketed(ref angle_bracketed_args) = seg.arguments else {
+        return None;
+    };
+
+    if let GenericArgument::Type(ty) = angle_bracketed_args.args.first()? {
+        Some(ty)
+    } else {
+        None
+    }
 }
 
 pub(crate) fn unwrap_reference(ty: &TypePath, search_for_rvalue: bool) -> Option<&syn::TypePtr> {
-    match unwrap_bindgen_marker(ty, marker_for_reference(search_for_rvalue)) {
+    match unwrap_newtype(
+        ty.path.segments.first()?,
+        marker_for_reference(search_for_rvalue),
+    ) {
         // Our behavior here if we see __bindgen_marker_Reference <something that isn't a pointer>
         // is to ignore the type. This should never happen.
         Some(Type::Ptr(typ)) => Some(typ),
@@ -102,9 +104,12 @@ pub(crate) fn unwrap_reference(ty: &TypePath, search_for_rvalue: bool) -> Option
 }
 
 pub(crate) fn unwrap_has_unused_template_param(ty: &TypePath) -> Option<&syn::Type> {
-    unwrap_bindgen_marker(ty, "__bindgen_marker_UnusedTemplateParam")
+    unwrap_newtype(
+        ty.path.segments.first()?,
+        "__bindgen_marker_UnusedTemplateParam",
+    )
 }
 
 pub(crate) fn unwrap_has_opaque(ty: &TypePath) -> Option<&syn::Type> {
-    unwrap_bindgen_marker(ty, "__bindgen_marker_Opaque")
+    unwrap_newtype(ty.path.segments.first()?, "__bindgen_marker_Opaque")
 }
