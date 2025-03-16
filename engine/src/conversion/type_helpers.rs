@@ -113,3 +113,19 @@ pub(crate) fn unwrap_has_unused_template_param(ty: &TypePath) -> Option<&syn::Ty
 pub(crate) fn unwrap_has_opaque(ty: &TypePath) -> Option<&syn::Type> {
     unwrap_newtype(ty.path.segments.first()?, "__bindgen_marker_Opaque")
 }
+
+pub(crate) fn unwrap_bitfield(ty: &TypePath) -> Option<&syn::Type> {
+    let mut segs = ty.path.segments.iter();
+
+    if segs.next()?.ident != "root" {
+        return None;
+    }
+
+    let inner = unwrap_newtype(segs.next()?, "__BindgenBitfieldUnit");
+
+    if segs.next().is_some() {
+        return None;
+    }
+
+    inner
+}
