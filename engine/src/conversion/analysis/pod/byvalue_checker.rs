@@ -357,4 +357,19 @@ mod tests {
         bvc.ingest_struct(&t, &Namespace::new());
         assert!(bvc.satisfy_requests(vec![t_id]).is_err());
     }
+
+    #[test]
+    fn test_with_bitfield() {
+        let mut bvc = ByValueChecker::new();
+        let t: ItemStruct = parse_quote! {
+            struct Foo {
+                a: root::__BindgenBitfieldUnit<[u8; 4usize]>,
+                b: i64,
+            }
+        };
+        let t_id = ty_from_ident(&t.ident);
+        bvc.ingest_struct(&t, &Namespace::new());
+        bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
+        assert!(bvc.is_pod(&t_id));
+    }
 }
