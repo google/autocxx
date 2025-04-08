@@ -523,7 +523,9 @@ impl<'a> FnAnalyzer<'a> {
                     FuncToConvert {
                         special_member: Some(SpecialMemberKind::Destructor),
                         is_deleted: None | Some(Explicitness::Defaulted),
-                        cpp_vis: CppVisibility::Public,
+                        // Both public and protected destructors are accessible
+                        // from a subclass's default constructor.
+                        cpp_vis: CppVisibility::Public | CppVisibility::Protected,
                         ..
                     }
                 ) =>
