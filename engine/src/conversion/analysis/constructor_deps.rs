@@ -40,6 +40,7 @@ pub(crate) fn decorate_types_with_constructor_deps(apis: ApiVec<FnPrePhase2>) ->
         },
         Api::enum_unchanged,
         Api::typedef_unchanged,
+        Api::subclass_unchanged,
     );
     results
 }

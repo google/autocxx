@@ -219,6 +219,9 @@ pub(crate) struct PodAndConstructorAnalysis {
     pub(crate) constructors: PublicConstructors,
 }
 
+#[derive(std::fmt::Debug)]
+pub(crate) struct SubclassAnalysis {}
+
 /// An analysis phase where we've analyzed each function, but
 /// haven't yet determined which constructors/etc. belong to each type.
 #[derive(std::fmt::Debug)]
@@ -228,6 +231,7 @@ impl AnalysisPhase for FnPrePhase1 {
     type TypedefAnalysis = TypedefAnalysis;
     type StructAnalysis = PodAnalysis;
     type FunAnalysis = FnAnalysis;
+    type SubclassAnalysis = ();
 }
 
 /// An analysis phase where we've analyzed each function, and identified
@@ -239,6 +243,7 @@ impl AnalysisPhase for FnPrePhase2 {
     type TypedefAnalysis = TypedefAnalysis;
     type StructAnalysis = PodAndConstructorAnalysis;
     type FunAnalysis = FnAnalysis;
+    type SubclassAnalysis = SubclassAnalysis;
 }
 
 #[derive(Debug)]
@@ -273,6 +278,7 @@ impl AnalysisPhase for FnPhase {
     type TypedefAnalysis = TypedefAnalysis;
     type StructAnalysis = PodAndDepAnalysis;
     type FunAnalysis = FnAnalysis;
+    type SubclassAnalysis = SubclassAnalysis;
 }
 
 /// Whether to allow highly optimized calls because this is a simple Rust->C++ call,
@@ -332,6 +338,7 @@ impl<'a> FnAnalyzer<'a> {
             Api::struct_unchanged,
             Api::enum_unchanged,
             Api::typedef_unchanged,
+            Api::subclass_unchanged,
         );
         let mut results = me.add_constructors_present(results);
         me.add_subclass_constructors(&mut results);
@@ -2127,6 +2134,13 @@ impl<'a> FnAnalyzer<'a> {
             },
             Api::enum_unchanged,
             Api::typedef_unchanged,
+            |name, superclass, analysis| {
+                Ok(Box::new(std::iter::once(Api::Subclass {
+                    name,
+                    superclass,
+                    analysis: SubclassAnalysis {},
+                })))
+            },
         );
         results
     }

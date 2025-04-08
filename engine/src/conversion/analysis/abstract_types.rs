@@ -234,6 +234,7 @@ pub(crate) fn discard_ignored_functions(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase
         Api::struct_unchanged,
         Api::enum_unchanged,
         Api::typedef_unchanged,
+        Api::subclass_unchanged,
     );
     apis_new
 }

@@ -212,7 +212,9 @@ impl<'a> CppCodeGenerator<'a> {
 
         for api in deferred_apis.into_iter() {
             match api {
-                Api::Subclass { name, superclass } => self.generate_subclass(
+                Api::Subclass {
+                    name, superclass, ..
+                } => self.generate_subclass(
                     superclass,
                     name,
                     constructors_by_subclass.remove(name).unwrap_or_default(),
