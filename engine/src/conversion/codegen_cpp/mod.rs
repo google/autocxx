@@ -26,7 +26,7 @@ use super::{
     analysis::{
         fun::{
             function_wrapper::{CppFunction, CppFunctionBody},
-            FnPhase, PodAndDepAnalysis,
+            FnPhase, PodAndDepAnalysis, SubclassAnalysis,
         },
         pod::PodAnalysis,
     },
@@ -34,6 +34,7 @@ use super::{
     apivec::ApiVec,
     ConvertErrorFromCpp, CppEffectiveName,
 };
+use autocxx_bindgen::callbacks::Visibility as CppVisibility;
 
 static GENERATED_FILE_HEADER: &str =
     "// Generated using autocxx - do not edit directly.\n// @generated.\n\n";
@@ -213,9 +214,15 @@ impl<'a> CppCodeGenerator<'a> {
         for api in deferred_apis.into_iter() {
             match api {
                 Api::Subclass {
-                    name, superclass, ..
+                    name,
+                    superclass,
+                    analysis:
+                        SubclassAnalysis {
+                            superclass_destructor_visibility,
+                        },
                 } => self.generate_subclass(
                     superclass,
+                    superclass_destructor_visibility,
                     name,
                     constructors_by_subclass.remove(name).unwrap_or_default(),
                     methods_by_subclass.remove(name).unwrap_or_default(),
@@ -657,6 +664,7 @@ impl<'a> CppCodeGenerator<'a> {
     fn generate_subclass(
         &mut self,
         superclass: &QualifiedName,
+        superclass_destructor_visibility: &Option<CppVisibility>,
         subclass: &SubclassName,
         constructors: Vec<&CppFunction>,
         methods: Vec<SubclassFunction>,
@@ -711,13 +719,15 @@ impl<'a> CppCodeGenerator<'a> {
         method_decls.push(format!(
             "{super_name}& As_{super_name}_mut() {{ return *this; }}"
         ));
-        self.additional_functions.push(ExtraCpp {
-            declaration: Some(format!(
-                "inline std::unique_ptr<{}> {}_As_{}_UniquePtr(std::unique_ptr<{}> u) {{ return std::unique_ptr<{}>(u.release()); }}",
-                superclass.to_cpp_name(), subclass.cpp(), super_name, subclass.cpp(), superclass.to_cpp_name(),
-                )),
-                ..Default::default()
-        });
+        if let Some(CppVisibility::Public) = superclass_destructor_visibility {
+            self.additional_functions.push(ExtraCpp {
+                declaration: Some(format!(
+                    "inline std::unique_ptr<{}> {}_As_{}_UniquePtr(std::unique_ptr<{}> u) {{ return std::unique_ptr<{}>(u.release()); }}",
+                    superclass.to_cpp_name(), subclass.cpp(), super_name, subclass.cpp(), superclass.to_cpp_name(),
+                    )),
+                    ..Default::default()
+            });
+        }
         // And now constructors
         let mut constructor_decls: Vec<String> = Vec::new();
         for constructor in constructors {

@@ -42,7 +42,7 @@ use self::{
 
 use super::{
     analysis::{
-        fun::{FnPhase, PodAndDepAnalysis, ReceiverMutability},
+        fun::{FnPhase, PodAndDepAnalysis, ReceiverMutability, SubclassAnalysis},
         pod::PodAnalysis,
     },
     api::{AnalysisPhase, Api, SubclassName, TypeKind},
@@ -55,6 +55,7 @@ use super::{
     codegen_cpp::type_to_cpp::CppNameMap,
 };
 use super::{convert_error::ErrorContext, ConvertErrorFromCpp};
+use autocxx_bindgen::callbacks::Visibility as CppVisibility;
 use quote::quote;
 
 /// An entry which needs to go into an `impl` block for a given type.
@@ -512,7 +513,12 @@ impl<'a> RsCodeGenerator<'a> {
                 details, subclass, ..
             } => Self::generate_subclass_fn(id.into(), *details, subclass),
             Api::Subclass {
-                name, superclass, ..
+                name,
+                superclass,
+                analysis:
+                    SubclassAnalysis {
+                        superclass_destructor_visibility,
+                    },
             } => {
                 let methods = associated_methods.get(&superclass);
                 let generate_peer_constructor = subclasses_with_a_single_trivial_constructor.contains(&name.0.name) &&
@@ -520,7 +526,13 @@ impl<'a> RsCodeGenerator<'a> {
                     // constructor instead? Need to create unsafe versions of everything that uses
                     // it too.
                     matches!(self.unsafe_policy, UnsafePolicy::AllFunctionsSafe);
-                self.generate_subclass(name, &superclass, methods, generate_peer_constructor)
+                self.generate_subclass(
+                    name,
+                    &superclass,
+                    superclass_destructor_visibility,
+                    methods,
+                    generate_peer_constructor,
+                )
             }
             Api::ExternCppType {
                 details: ExternCppType { rust_path, .. },
@@ -539,6 +551,7 @@ impl<'a> RsCodeGenerator<'a> {
         &self,
         sub: SubclassName,
         superclass: &QualifiedName,
+        superclass_destructor_visibility: Option<CppVisibility>,
         methods: Option<&Vec<SuperclassMethod>>,
         generate_peer_constructor: bool,
     ) -> RsCodegenResult {
@@ -629,10 +642,6 @@ impl<'a> RsCodeGenerator<'a> {
         extern_c_mod_items.push(parse_quote! {
             fn #as_mut_id(self: Pin<&mut #cpp_id>) -> Pin<&mut #super_cxxxbridge_id>;
         });
-        let as_unique_ptr_id = make_ident(format!("{cpp_id}_As_{super_name}_UniquePtr"));
-        extern_c_mod_items.push(parse_quote! {
-            fn #as_unique_ptr_id(u: UniquePtr<#cpp_id>) -> UniquePtr<#super_cxxxbridge_id>;
-        });
         output_mod_items.push(parse_quote! {
             impl AsRef<#super_path> for super::#id {
                 fn as_ref(&self) -> &cxxbridge::#super_cxxxbridge_id {
@@ -650,14 +659,20 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             }
         });
-        let rs_as_unique_ptr_id = make_ident(format!("as_{super_name}_unique_ptr"));
-        output_mod_items.push(parse_quote! {
-            impl super::#id {
-                pub fn #rs_as_unique_ptr_id(u: cxx::UniquePtr<#cpp_id>) -> cxx::UniquePtr<cxxbridge::#super_cxxxbridge_id> {
-                    cxxbridge::#as_unique_ptr_id(u)
+        if let Some(CppVisibility::Public) = superclass_destructor_visibility {
+            let as_unique_ptr_id = make_ident(format!("{cpp_id}_As_{super_name}_UniquePtr"));
+            extern_c_mod_items.push(parse_quote! {
+                fn #as_unique_ptr_id(u: UniquePtr<#cpp_id>) -> UniquePtr<#super_cxxxbridge_id>;
+            });
+            let rs_as_unique_ptr_id = make_ident(format!("as_{super_name}_unique_ptr"));
+            output_mod_items.push(parse_quote! {
+                impl super::#id {
+                    pub fn #rs_as_unique_ptr_id(u: cxx::UniquePtr<#cpp_id>) -> cxx::UniquePtr<cxxbridge::#super_cxxxbridge_id> {
+                        cxxbridge::#as_unique_ptr_id(u)
+                    }
                 }
-            }
-        });
+            });
+        }
         let remove_ownership = sub.remove_ownership();
         global_items.push(parse_quote! {
             #[allow(non_snake_case)]
