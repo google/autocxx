@@ -402,6 +402,51 @@ macro_rules! subclass {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// Instruct the code generator to apply a specific enum-variation style to
+/// one or more C++ enums.
+///
+/// By default, C++ enums use the style set to `RustifiedEnum`.
+/// To override that on a per-enum basis, place `enum_style!` inside your
+/// [include_cpp] block.
+///
+/// The syntax is:
+///   enum_style!(BitfieldEnum, "FirstEnum", "SecondEnum");
+///   generate_pod!("ThirdEnum")
+///   enum_style!(RustifiedEnum, "ThirdEnum");
+///   generate_pod!("OtherEnum")
+///   generate_pod!("MyEnum")
+///
+/// Style variant must be one of:
+/// - NewtypeEnum
+///   Generate integer newtype representing the `enum` type and its variants
+///   will be represented as constants inside of this type's `impl` block.
+/// - BitfieldEnum
+///   Same as `NewtypeEnum` with bitwise ops (`&`, `|`)
+/// - RustifiedEnum 
+///   Generate a native Rust `enum` (unsafe if invalid discriminant)  
+/// - RustifiedNonExhaustiveEnum
+///   Same as `RustifiedEnum`, but annotated `#[non_exhaustive]`
+/// 
+/// Rust bindings generation
+/// - Enums styled via BitfieldEnum or NewtypeEnum must be emitted through
+/// [generate_pod].
+/// - Enums styled as RustifiedEnum or RustifiedNonExhaustiveEnum can be
+/// emitted via either [generate_pod] or the standard [generate] macro.
+/// - Since the default style is RustifiedEnum, enums can be
+/// emitted via [generate] or [generate_pod].
+/// 
+/// Notes
+/// - You can repeat [enum_style] to style multiple, disjoint sets of enums.
+/// - Styles not yet exposed (`NewtypeGlobalEnum`, `ConstifiedEnum`,
+/// `ConstifiedEnumModule`) are commented out in the code and unavailable.
+///
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+#[macro_export]
+macro_rules! enum_style {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 /// Indicates that a C++ type can definitely be instantiated. This has effect
 /// only in a very specific case:
 /// * the type is a typedef to something else

@@ -25,6 +25,7 @@ use syn::{
 use syn::{Ident, Result as ParseResult};
 use thiserror::Error;
 
+use crate::enum_style::EnumStyleMap;
 use crate::{directives::get_directives, RustPath};
 
 use quote::quote;
@@ -228,6 +229,7 @@ pub struct IncludeCppConfig {
     pub concretes: ConcretesMap,
     pub externs: ExternCppTypeMap,
     pub opaquelist: Vec<String>,
+    pub enum_styles: EnumStyleMap,
 }
 
 impl Parse for IncludeCppConfig {
@@ -382,6 +384,10 @@ impl IncludeCppConfig {
 
     pub fn is_on_constructor_blocklist(&self, cpp_name: &str) -> bool {
         self.constructor_blocklist.contains(&cpp_name.to_string())
+    }
+
+    pub fn get_enums(&self) -> HashSet<&String> {
+        self.enum_styles.get_enum_names()
     }
 
     pub fn get_blocklist(&self) -> impl Iterator<Item = &String> {
