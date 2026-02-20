@@ -11,6 +11,7 @@
 - [Built-in types](primitives.md)
 - [C++ type and function names](naming.md)
 - [C++ functions](cpp_functions.md)
+- [C++ exceptions](exceptions.md)
 - [Callbacks into Rust](rust_calls.md)
 - [Other C++ features](other_features.md)
 - [Safety](safety.md)
