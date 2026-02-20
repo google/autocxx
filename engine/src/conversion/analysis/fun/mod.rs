@@ -1285,11 +1285,16 @@ impl<'a> FnAnalyzer<'a> {
 
         // Check if this function is marked as potentially throwing C++ exceptions.
         // For methods, we also check with the class name prepended (e.g., "MyClass::method").
-        let may_throw = self.config.is_on_throws_list(&diagnostic_name.to_cpp_name())
+        let may_throw = self
+            .config
+            .is_on_throws_list(&diagnostic_name.to_cpp_name())
             || match &kind {
                 FnKind::Method { impl_for, .. } | FnKind::TraitMethod { impl_for, .. } => {
-                    let method_qualified_name =
-                        format!("{}::{}", impl_for.to_cpp_name(), diagnostic_name.get_final_item());
+                    let method_qualified_name = format!(
+                        "{}::{}",
+                        impl_for.to_cpp_name(),
+                        diagnostic_name.get_final_item()
+                    );
                     self.config.is_on_throws_list(&method_qualified_name)
                 }
                 FnKind::Function => false,
