@@ -1284,7 +1284,16 @@ impl<'a> FnAnalyzer<'a> {
             .unwrap_or_default();
 
         // Check if this function is marked as potentially throwing C++ exceptions.
-        let may_throw = self.config.is_on_throws_list(&diagnostic_name.to_cpp_name());
+        // For methods, we also check with the class name prepended (e.g., "MyClass::method").
+        let may_throw = self.config.is_on_throws_list(&diagnostic_name.to_cpp_name())
+            || match &kind {
+                FnKind::Method { impl_for, .. } | FnKind::TraitMethod { impl_for, .. } => {
+                    let method_qualified_name =
+                        format!("{}::{}", impl_for.to_cpp_name(), diagnostic_name.get_final_item());
+                    self.config.is_on_throws_list(&method_qualified_name)
+                }
+                FnKind::Function => false,
+            };
 
         // If possible, we'll put knowledge of the C++ API directly into the cxx::bridge
         // mod. However, there are various circumstances where cxx can't work with the existing

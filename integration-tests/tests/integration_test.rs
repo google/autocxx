@@ -12682,6 +12682,80 @@ fn test_throws_namespaced_function() {
 }
 
 #[test]
+fn test_throws_method() {
+    // Test that throws!("MyClass::do_something") works for class methods
+    let cxx = indoc! {"
+        #include <stdexcept>
+        void MyClass::do_something() {
+            throw std::runtime_error(\"method error\");
+        }
+    "};
+    let hdr = indoc! {"
+        class MyClass {
+        public:
+            MyClass() {}
+            void do_something();
+        };
+    "};
+    let rs = quote! {
+        let mut obj = ffi::MyClass::new().within_unique_ptr();
+        let result = obj.pin_mut().do_something();
+        assert!(result.is_err());
+    };
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        quote! {
+            generate!("MyClass")
+            throws!("MyClass::do_something")
+        },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_throws_namespaced_method() {
+    // Test that throws!("ns::MyClass::do_something") works for namespaced class methods
+    let cxx = indoc! {"
+        #include <stdexcept>
+        namespace ns {
+            void MyClass::do_something() {
+                throw std::runtime_error(\"namespaced method error\");
+            }
+        }
+    "};
+    let hdr = indoc! {"
+        namespace ns {
+            class MyClass {
+            public:
+                MyClass() {}
+                void do_something();
+            };
+        }
+    "};
+    let rs = quote! {
+        let mut obj = ffi::ns::MyClass::new().within_unique_ptr();
+        let result = obj.pin_mut().do_something();
+        assert!(result.is_err());
+    };
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        quote! {
+            generate!("ns::MyClass")
+            throws!("ns::MyClass::do_something")
+        },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
 fn test_throws_partial_match() {
     // Test that throws!("do_something") matches "foo::do_something"
     let cxx = indoc! {"
