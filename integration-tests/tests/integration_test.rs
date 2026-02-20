@@ -12586,3 +12586,131 @@ fn test_opaque_directive() {
 // Negative tests:
 // - Private methods
 // - Private fields
+
+// Exception handling tests
+#[test]
+fn test_throws_free_function() {
+    let cxx = indoc! {"
+        #include <stdexcept>
+        void do_something() {
+            throw std::runtime_error(\"error\");
+        }
+    "};
+    let hdr = indoc! {"
+        void do_something();
+    "};
+    let rs = quote! {
+        let result = ffi::do_something();
+        assert!(result.is_err());
+    };
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        quote! {
+            generate!("do_something")
+            throws!("do_something")
+        },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_throws_with_return_value() {
+    let cxx = indoc! {"
+        #include <stdexcept>
+        uint32_t maybe_throw(uint32_t x) {
+            if (x == 0) throw std::runtime_error(\"zero\");
+            return x * 2;
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        uint32_t maybe_throw(uint32_t x);
+    "};
+    let rs = quote! {
+        assert_eq!(ffi::maybe_throw(5).unwrap(), 10);
+        assert!(ffi::maybe_throw(0).is_err());
+    };
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        quote! {
+            generate!("maybe_throw")
+            throws!("maybe_throw")
+        },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_throws_namespaced_function() {
+    let cxx = indoc! {"
+        #include <stdexcept>
+        namespace my_namespace {
+            void do_something() {
+                throw std::runtime_error(\"error\");
+            }
+        }
+    "};
+    let hdr = indoc! {"
+        namespace my_namespace {
+            void do_something();
+        }
+    "};
+    let rs = quote! {
+        let result = ffi::my_namespace::do_something();
+        assert!(result.is_err());
+    };
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        quote! {
+            generate!("my_namespace::do_something")
+            throws!("my_namespace::do_something")
+        },
+        None,
+        None,
+        None,
+    );
+}
+
+#[test]
+fn test_throws_partial_match() {
+    // Test that throws!("do_something") matches "foo::do_something"
+    let cxx = indoc! {"
+        #include <stdexcept>
+        namespace foo {
+            void do_something() {
+                throw std::runtime_error(\"error\");
+            }
+        }
+    "};
+    let hdr = indoc! {"
+        namespace foo {
+            void do_something();
+        }
+    "};
+    let rs = quote! {
+        let result = ffi::foo::do_something();
+        assert!(result.is_err());
+    };
+    run_test_ex(
+        cxx,
+        hdr,
+        rs,
+        quote! {
+            generate!("foo::do_something")
+            throws!("do_something")
+        },
+        None,
+        None,
+        None,
+    );
+}

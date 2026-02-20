@@ -80,6 +80,13 @@ pub(crate) fn get_directives() -> &'static DirectivesMap {
             )),
         );
         need_exclamation.insert(
+            "throws".into(),
+            Box::new(StringList(
+                |config| &mut config.throws_list,
+                |config| &config.throws_list,
+            )),
+        );
+        need_exclamation.insert(
             "parse_only".into(),
             Box::new(BoolFlag(
                 |config| &mut config.parse_only,

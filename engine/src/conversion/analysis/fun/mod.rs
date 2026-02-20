@@ -177,6 +177,8 @@ pub(crate) struct FnAnalysis {
     pub(crate) externally_callable: bool,
     /// Whether we need to generate a Rust-side calling function
     pub(crate) rust_wrapper_needed: bool,
+    /// Whether this function may throw C++ exceptions
+    pub(crate) may_throw: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -1280,6 +1282,10 @@ impl<'a> FnAnalyzer<'a> {
         let cpp_name_incompatible_with_cxx = cpp_original_name
             .map(|n| validate_ident_ok_for_rust(n).is_err())
             .unwrap_or_default();
+
+        // Check if this function is marked as potentially throwing C++ exceptions.
+        let may_throw = self.config.is_on_throws_list(&diagnostic_name.to_cpp_name());
+
         // If possible, we'll put knowledge of the C++ API directly into the cxx::bridge
         // mod. However, there are various circumstances where cxx can't work with the existing
         // C++ API and we need to create a C++ wrapper function which is more cxx-compliant.
@@ -1456,6 +1462,7 @@ impl<'a> FnAnalyzer<'a> {
             ignore_reason,
             externally_callable,
             rust_wrapper_needed,
+            may_throw,
         };
         // For everything other than functions, the API name is immutable.
         // It would be nice to get to that point with functions, but at present

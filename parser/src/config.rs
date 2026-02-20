@@ -228,6 +228,7 @@ pub struct IncludeCppConfig {
     pub concretes: ConcretesMap,
     pub externs: ExternCppTypeMap,
     pub opaquelist: Vec<String>,
+    pub(crate) throws_list: Vec<String>,
 }
 
 impl Parse for IncludeCppConfig {
@@ -382,6 +383,12 @@ impl IncludeCppConfig {
 
     pub fn is_on_constructor_blocklist(&self, cpp_name: &str) -> bool {
         self.constructor_blocklist.contains(&cpp_name.to_string())
+    }
+
+    pub fn is_on_throws_list(&self, cpp_name: &str) -> bool {
+        self.throws_list
+            .iter()
+            .any(|entry| cpp_name == entry || cpp_name.ends_with(&format!("::{}", entry)))
     }
 
     pub fn get_blocklist(&self) -> impl Iterator<Item = &String> {
