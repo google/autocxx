@@ -4,6 +4,12 @@
 [![crates.io](https://img.shields.io/crates/d/autocxx)](https://crates.io/crates/autocxx)
 [![docs.rs](https://docs.rs/autocxx/badge.svg)](https://docs.rs/autocxx)
 
+> [!NOTE]
+Autocxx is looking for a new maintainer! Regular maintenance work involves occasionally merging upstream bindgen fixes into the autocxx-bindgen fork (or if you’re more ambitious, finish the work to unfork bindgen, which seems achievable and would greatly simplify everything) as well as keeping an eye on bug reports. If you use autocxx, please consider taking this on!
+
+> [!NOTE]
+As a new user, you might consider using [cxx](http://cxx.rs/) or [crubit](https://github.com/google/crubit) instead.
+
 This project is a tool for calling C++ from Rust in a heavily automated, but safe, fashion.
 
 The intention is that it has all the fluent safety from [cxx](https://cxx.rs) whilst generating interfaces automatically from existing C++ headers using a variant of [bindgen](https://docs.rs/bindgen/latest/bindgen/). Think of autocxx as glue which plugs bindgen into cxx.
