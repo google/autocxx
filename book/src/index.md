@@ -6,7 +6,7 @@
 Autocxx is looking for a new maintainer! Regular maintenance work involves occasionally merging upstream bindgen fixes into the autocxx-bindgen fork (or if you’re more ambitious, finish the work to unfork bindgen, which seems achievable and would greatly simplify everything) as well as keeping an eye on bug reports. If you use autocxx, please consider taking this on!
 
 > [!NOTE]
-As a new user, you might consider using [cxx](http://cxx.rs/) or [crubit](https://github.com/google/crubit) instead.
+As a new user, you might consider using [cxx](https://cxx.rs/) or [crubit](https://github.com/google/crubit) instead.
 
 # autocxx — automatic safe interop between Rust and C++
 
