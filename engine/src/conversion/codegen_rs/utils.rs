@@ -16,9 +16,11 @@ pub(super) fn generate_cxx_use_stmt(name: &QualifiedName, alias: Option<&Ident>)
         .chain(std::iter::once(name.get_final_ident()));
     Item::Use(match alias {
         None => parse_quote! {
+            #[allow(unused_imports)]
             pub use #(#segs)::*;
         },
         Some(alias) => parse_quote! {
+            #[allow(unused_imports)]
             pub use #(#segs)::* as #alias;
         },
     })
