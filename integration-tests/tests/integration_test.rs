@@ -1116,6 +1116,179 @@ fn test_enum_with_funcs() {
 }
 
 #[test]
+fn test_bitfield_enum() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        enum SomeFlags : int {
+            FLAG_A = 1 << 0,            // 0x1
+            FLAG_B = 1 << 2,            // 0x4
+            FLAG_C = FLAG_A | FLAG_B,   // 0x5
+        };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::prelude::*;
+        include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            enum_style!(BitfieldEnum, "SomeFlags")
+            generate_pod!("SomeFlags")
+        }
+
+        fn main() {
+            let a = ffi::SomeFlags::FLAG_A;
+            let b = ffi::SomeFlags::FLAG_B;
+            let c = ffi::SomeFlags::FLAG_C;
+            assert_eq!(a.0, 0x1);
+            assert_eq!(b.0, 0x4);
+            assert_eq!(c.0, 0x5);
+
+            let aob = ffi::SomeFlags::FLAG_A | ffi::SomeFlags::FLAG_B;
+            assert_eq!(aob.0, 0x5);
+            assert_eq!(aob.0, ffi::SomeFlags::FLAG_C.0);
+
+            let anb = ffi::SomeFlags::FLAG_A & ffi::SomeFlags::FLAG_B;
+            assert_eq!(anb.0, 0x0);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
+fn test_newtype_enum() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        enum SomeFlags : int {
+            FLAG_A = 1 << 0,            // 0x1
+            FLAG_B = 1 << 2,            // 0x4
+            FLAG_C = FLAG_A | FLAG_B,   // 0x5
+        };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::prelude::*;
+        include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            enum_style!(NewtypeEnum, "SomeFlags")
+            generate_pod!("SomeFlags")
+        }
+
+        fn main() {
+            let a = ffi::SomeFlags::FLAG_A;
+            let b = ffi::SomeFlags::FLAG_B;
+            let c = ffi::SomeFlags::FLAG_C;
+            assert_eq!(a.0, 0x1);
+            assert_eq!(b.0, 0x4);
+            assert_eq!(c.0, 0x5);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
+fn test_rustified_enum() {
+    let hdr = indoc! {"
+        enum Bob {
+            BOB_VALUE_1,
+            BOB_VALUE_2,
+        };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::prelude::*;
+        include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            enum_style!(RustifiedEnum, "Bob")
+            generate_pod!("Bob")
+        }
+
+        fn main() {
+            let a = ffi::Bob::BOB_VALUE_1;
+            let b = ffi::Bob::BOB_VALUE_2;
+            assert!(a != b);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
+fn test_rustified_nonexhaustive_enum() {
+    let hdr = indoc! {"
+        enum Bob {
+            BOB_VALUE_1,
+            BOB_VALUE_2,
+        };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::prelude::*;
+        include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            enum_style!(RustifiedEnum, "Bob")
+            generate_pod!("Bob")
+        }
+
+        fn main() {
+            let a = ffi::Bob::BOB_VALUE_1;
+            let b = ffi::Bob::BOB_VALUE_2;
+            assert!(a != b);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
+fn test_several_enums() {
+    let hdr = indoc! {"
+        enum First : int {
+            FIRST_A = 5,
+            FIRST_B = 6
+        };
+        enum Second {
+            SECOND_A,
+            SECOND_B
+        };
+        enum Default : int {
+            DEFAULT_A = 1 << 1,            
+            DEFAULT_B = 1 << 3
+        };
+        enum Newtype {
+            NEWTYPE_A,
+            NEWTYPE_B
+        };
+    "};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        use autocxx::prelude::*;
+        include_cpp! {
+            #hexathorpe include "input.h"
+            safety!(unsafe_ffi)
+            enum_style!(BitfieldEnum, "First", "Second")
+            enum_style!(NewtypeEnum, "Newtype")
+            generate_pod!("First")
+            generate_pod!("Second")
+            generate_pod!("Newtype")
+            generate!("Default")
+        }
+
+        fn main() {
+            let first_a = ffi::First::FIRST_A;
+            let first_b = ffi::First::FIRST_B;
+            assert_eq!((first_a & first_b).0, 0x4);
+            let second_a = ffi::Second::SECOND_A;
+            let second_b = ffi::Second::SECOND_B;
+            assert_eq!((second_a | second_b).0, 0x1);
+            assert!(ffi::Default::DEFAULT_A != ffi::Default::DEFAULT_B);
+            assert!(ffi::Newtype::NEWTYPE_A != ffi::Newtype::NEWTYPE_B);
+        }
+    };
+    do_run_test_manual("", hdr, rs, None, None).unwrap();
+}
+
+#[test]
 fn test_re_export() {
     let cxx = indoc! {"
         Bob give_bob() {
