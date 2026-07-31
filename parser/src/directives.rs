@@ -100,6 +100,13 @@ pub(crate) fn get_directives() -> &'static DirectivesMap {
                 |config| &config.exclude_utilities,
             )),
         );
+        need_exclamation.insert(
+            "pretty".into(),
+            Box::new(BoolFlag(
+                |config| &mut config.prettify,
+                |config| &config.prettify,
+            )),
+        );
         need_exclamation.insert("name".into(), Box::new(ModName));
         need_exclamation.insert("concrete".into(), Box::new(Concrete));
         need_exclamation.insert("rust_type".into(), Box::new(RustType { output: false }));

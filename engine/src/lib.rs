@@ -419,8 +419,8 @@ impl IncludeCppEngine {
             config: &self.config,
             rs: match &self.state {
                 State::NotGenerated => panic!("Generate first"),
-                State::Generated(gen_results) => gen_results.item_mod.to_token_stream(),
-                State::ParseOnly => TokenStream2::new(),
+                State::Generated(gen_results) => Some(&gen_results.item_mod),
+                State::ParseOnly => None,
             },
         }
     }

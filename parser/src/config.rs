@@ -215,6 +215,7 @@ pub struct IncludeCppConfig {
     pub unsafe_policy: UnsafePolicy,
     pub parse_only: bool,
     pub exclude_impls: bool,
+    pub prettify: bool,
     pub(crate) pod_requests: Vec<String>,
     pub allowlist: Allowlist,
     pub(crate) blocklist: Vec<String>,

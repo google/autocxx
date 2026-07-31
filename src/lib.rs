@@ -183,6 +183,12 @@ macro_rules! exclude_utilities {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// Prettify generated code.
+#[macro_export]
+macro_rules! pretty {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 /// Entirely block some type from appearing in the generated
 /// code. This can be useful if there is a type which is not
 /// understood by bindgen or autocxx, and incorrect code is
