@@ -104,6 +104,7 @@ pub(super) fn gen_function(
     let params = analysis.params;
     let vis = analysis.vis;
     let kind = analysis.kind;
+    let may_throw = analysis.may_throw;
     let doc_attrs = minisynize_vec(fun.doc_attrs);
 
     let mut cpp_name_attr = Vec::new();
@@ -123,6 +124,7 @@ pub(super) fn gen_function(
         non_pod_types,
         ret_type: &ret_type,
         ret_conversion: &ret_conversion,
+        may_throw,
     };
     // In rare occasions, we might need to give an explicit lifetime.
     let (lifetime_tokens, params, ret_type) = add_explicit_lifetime_if_necessary(
@@ -191,6 +193,18 @@ pub(super) fn gen_function(
     // which the user has declared.
     let params = unqualify_params_minisyn(params);
     let ret_type = unqualify_ret_type(ret_type.into_owned());
+
+    // For functions marked as throwing, wrap the return type in Result for the cxx bridge.
+    // cxx will catch C++ exceptions and convert them to cxx::Exception.
+    let bridge_ret_type = if may_throw {
+        match &ret_type {
+            ReturnType::Default => parse_quote! { -> Result<()> },
+            ReturnType::Type(arrow, ty) => parse_quote! { #arrow Result<#ty> },
+        }
+    } else {
+        ret_type.clone()
+    };
+
     // And we need to make an attribute for the namespace that the function
     // itself is in.
     let namespace_attr = if name.get_namespace().is_empty() || wrapper_function_needed {
@@ -209,7 +223,7 @@ pub(super) fn gen_function(
         #(#namespace_attr)*
         #(#cpp_name_attr)*
         #(#doc_attrs)*
-        #vis #bridge_unsafety fn #cxxbridge_name #lifetime_tokens ( #params ) #ret_type;
+        #vis #bridge_unsafety fn #cxxbridge_name #lifetime_tokens ( #params ) #bridge_ret_type;
     ));
     RsCodegenResult {
         extern_c_mod_items: vec![extern_c_mod_item],
@@ -232,6 +246,7 @@ struct FnGenerator<'a> {
     always_unsafe_due_to_trait_definition: bool,
     doc_attrs: &'a Vec<Attribute>,
     non_pod_types: &'a HashSet<QualifiedName>,
+    may_throw: bool,
 }
 
 impl<'a> FnGenerator<'a> {
@@ -305,10 +320,19 @@ impl<'a> FnGenerator<'a> {
         );
 
         let cxxbridge_name = self.cxxbridge_name;
-        let call_body = MaybeUnsafeStmt::maybe_unsafe(
+        // If the function may throw, the bridge returns Result<T>.
+        // Use ? to propagate errors when there's additional work to do.
+        let bridge_call = if self.may_throw {
+            quote! {
+                cxxbridge::#cxxbridge_name ( #(#arg_list),* )?
+            }
+        } else {
             quote! {
                 cxxbridge::#cxxbridge_name ( #(#arg_list),* )
-            },
+            }
+        };
+        let call_body = MaybeUnsafeStmt::maybe_unsafe(
+            bridge_call,
             any_conversion_requires_unsafe || matches!(self.unsafety, UnsafetyNeeded::JustBridge),
         );
         let context_is_unsafe = matches!(self.unsafety, UnsafetyNeeded::Always)
@@ -374,6 +398,21 @@ impl<'a> FnGenerator<'a> {
             call_stmts
         };
         let call_body = maybe_unsafes_to_tokens(call_stmts, context_is_unsafe);
+
+        // If the function may throw, wrap the call body in Ok() and the return type in Result
+        let (call_body, ret_type) = if self.may_throw {
+            let wrapped_body = quote! { Ok(#call_body) };
+            let wrapped_ret_type = match ret_type.as_ref() {
+                ReturnType::Default => Cow::Owned(parse_quote! { -> Result<(), cxx::Exception> }),
+                ReturnType::Type(arrow, ty) => {
+                    Cow::Owned(parse_quote! { #arrow Result<#ty, cxx::Exception> })
+                }
+            };
+            (wrapped_body, wrapped_ret_type)
+        } else {
+            (call_body, ret_type)
+        };
+
         (lifetime_tokens, wrapper_params, ret_type, call_body)
     }
 

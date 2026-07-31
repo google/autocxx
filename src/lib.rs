@@ -426,6 +426,26 @@ macro_rules! instantiable {
     ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
 }
 
+/// Indicates that a C++ function may throw exceptions. When a function
+/// is marked with this directive, its Rust binding will return
+/// `Result<T, cxx::Exception>` instead of `T`, allowing the caller
+/// to handle C++ exceptions that propagate across the FFI boundary.
+///
+/// The syntax is:
+/// `throws!("function_name")`
+///
+/// Qualified names are supported for namespaced functions and methods:
+/// * `throws!("do_something")` - matches any function named `do_something`
+/// * `throws!("MyClass::do_something")` - matches method `do_something` on `MyClass`
+/// * `throws!("my_namespace::do_something")` - matches `do_something` in `my_namespace`
+///
+/// A directive to be included inside
+/// [include_cpp] - see [include_cpp] for general information.
+#[macro_export]
+macro_rules! throws {
+    ($($tt:tt)*) => { $crate::usage!{$($tt)*} };
+}
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! usage {
