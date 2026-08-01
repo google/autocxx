@@ -367,6 +367,7 @@ impl IncludeCppEngine {
             .raw_line(raw_line)
             .every_module_raw_line(all_module_raw_line)
             .generate_private_functions(true)
+            .rust_target(bindgen::RustTarget::stable(77, 0).expect("Rust 1.77 is supported"))
             .layout_tests(false); // TODO revisit later
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
