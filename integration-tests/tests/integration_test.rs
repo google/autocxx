@@ -119,6 +119,225 @@ fn test_take_i32() {
 }
 
 #[test]
+fn test_exception_pod() {
+    let hdr = indoc! {r#"
+        #include <stdint.h>
+        #include <string>
+        #include <stdexcept>
+
+        struct B { uint32_t x; };
+
+        void do_nothing();
+        uint32_t get_integer();
+        uint32_t get_wrapped_integer();
+        B get_wrapped_struct();
+        uint32_t throw_exception();
+    "#};
+    let cxx = indoc! {r#"
+        void do_nothing() {
+        }
+
+        uint32_t get_integer() {
+            return 5;
+        }
+
+        uint32_t get_wrapped_integer() {
+            return 5;
+        }
+
+        B get_wrapped_struct() {
+            return B { 5 };
+        }
+
+        uint32_t throw_exception() {
+            throw std::invalid_argument("EXCEPTION");
+        }
+    "#};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        mod a {
+            use autocxx::prelude::*;
+            include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                pod!("B")
+                generate!("do_nothing")
+                generate!("get_integer")
+                generate!("get_wrapped_integer")
+                generate!("get_wrapped_struct")
+                generate!("throw_exception")
+                throws!("do_nothing")
+                throws!("get_wrapped_integer")
+                throws!("get_wrapped_struct")
+                throws!("throw_exception")
+            }
+            pub use ffi::*;
+        }
+        fn main() {
+            let maybe_nothing = a::do_nothing();
+            assert!(maybe_nothing.is_ok());
+            assert_eq!(maybe_nothing.unwrap(), ());
+
+            assert_eq!(a::get_integer(), 5);
+
+            let maybe_int = a::get_wrapped_integer();
+            assert!(maybe_int.is_ok());
+            assert_eq!(maybe_int.unwrap(), 5);
+
+            let maybe_b = a::get_wrapped_struct();
+            assert!(maybe_b.is_ok());
+            let b = maybe_b.unwrap();
+            assert_eq!(b.x, 5);
+
+            assert!(a::throw_exception().is_err());
+        }
+    };
+    do_run_test_manual(cxx, hdr, rs, None, None).unwrap();
+}
+
+#[test]
+fn test_exception_uniqueptr() {
+    let hdr = indoc! {r#"
+        #include <string>
+        #include <stdexcept>
+
+        std::string get_str();
+        std::string try_get_str();
+        std::string throw_exception();
+    "#};
+    let cxx = indoc! {r#"
+        std::string get_str() {
+            return std::string("foobar");
+        }
+
+        std::string try_get_str() {
+            return get_str();
+        }
+
+        std::string throw_exception() {
+            throw std::invalid_argument("EXCEPTION");
+        }
+    "#};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        mod a {
+            use autocxx::prelude::*;
+            include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                generate!("get_str")
+                generate!("try_get_str")
+                generate!("throw_exception")
+                throws!("try_get_str")
+                throws!("throw_exception")
+            }
+            pub use ffi::*;
+        }
+        fn main() {
+            assert!(a::try_get_str().is_ok());
+            assert!(a::throw_exception().is_err());
+        }
+    };
+    do_run_test_manual(cxx, hdr, rs, None, None).unwrap();
+}
+
+#[test]
+fn test_exception_moveit() {
+    let hdr = indoc! {r#"
+        #include <string>
+        #include <stdexcept>
+        class B {
+        public:
+            B() { throw std::invalid_argument("EXCEPTION"); }
+            B(std::string s) : s(s) {}
+        private:
+            std::string s;
+        };
+
+        B get_b();
+        B try_get_b();
+        B throw_exception();
+    "#};
+    let cxx = indoc! {r#"
+        B get_b() {
+            return B("foobar");
+        }
+
+        B try_get_b() {
+            return get_b();
+        }
+
+        B throw_exception() {
+            return B();
+        }
+    "#};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        mod a {
+            use autocxx::prelude::*;
+            include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                generate!("B")
+                generate!("get_b")
+                generate!("try_get_b")
+                generate!("throw_exception")
+                throws!("try_get_b")
+                throws!("throw_exception")
+            }
+            pub use ffi::*;
+        }
+        fn main() {
+            use autocxx::WithinBox;
+            use autocxx::TryWithinBox;
+            let _ = a::get_b().within_box();
+            let maybe_b = a::try_get_b().try_within_box();
+            assert!(maybe_b.is_ok());
+            let maybe_b = a::throw_exception().try_within_box();
+            assert!(maybe_b.is_err());
+        }
+    };
+    do_run_test_manual(cxx, hdr, rs, None, None).unwrap();
+}
+
+#[test]
+fn test_exception_constructor() {
+    let hdr = indoc! {r#"
+        #include <string>
+        #include <stdexcept>
+        class B {
+        public:
+            B() { throw std::invalid_argument("EXCEPTION"); }
+            B(std::string s) : s(s) {}
+        private:
+            std::string s;
+        };
+    "#};
+    let cxx = indoc! {""};
+    let hexathorpe = Token![#](Span::call_site());
+    let rs = quote! {
+        mod a {
+            use autocxx::prelude::*;
+            include_cpp! {
+                #hexathorpe include "input.h"
+                safety!(unsafe_ffi)
+                generate!("B")
+                throws!("B::B")
+            }
+            pub use ffi::*;
+        }
+        fn main() {
+            use autocxx::TryWithinBox;
+            let b = a::B::new().try_within_box();
+            assert!(b.is_err());
+            let b = a::B::new1("foobar").try_within_box();
+            assert!(b.is_ok());
+        }
+    };
+    do_run_test_manual(cxx, hdr, rs, None, None).unwrap();
+}
+
+#[test]
 fn test_nested_module() {
     let cxx = indoc! {"
         void do_nothing() {

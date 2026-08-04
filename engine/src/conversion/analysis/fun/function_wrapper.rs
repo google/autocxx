@@ -61,6 +61,7 @@ pub(crate) enum RustConversionType {
     FromRValueParamToPtr,
     FromReferenceWrapperToPointer, // unwrapped_type is always Type::Ptr
     FromPointerToReferenceWrapper, // unwrapped_type is always Type::Ptr
+    WrapResult(Box<RustConversionType>),
 }
 
 impl RustConversionType {
@@ -157,6 +158,14 @@ impl TypeConversionPolicy {
             // will be applied to the return value, and the Rust-side
             // shenanigans applies to the placement new *parameter*
             rust_conversion: RustConversionType::None,
+        }
+    }
+
+    pub(crate) fn wrap_result(self) -> Self {
+        let inner_conversion = Box::new(self.rust_conversion);
+        TypeConversionPolicy {
+            rust_conversion: RustConversionType::WrapResult(inner_conversion),
+            ..self
         }
     }
 
