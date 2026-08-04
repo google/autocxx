@@ -12578,6 +12578,94 @@ fn test_opaque_directive() {
     );
 }
 
+#[test]
+fn test_take_bitfield() {
+    let cxx = indoc! {"
+        bool take_bitfield(Bitfieldy x) {
+            return (
+                x.unsigned3 == 2 &&
+                x.signed3 == -3 &&
+                x.bool1 == false &&
+                x.separator == 424242 &&
+                x.unsigned12 == 3000 &&
+                x.signed4 == -1
+            );
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bitfieldy {
+            uint8_t unsigned3 : 3;
+            int8_t signed3 : 3;
+            bool bool1 : 1;
+
+            uint32_t separator;
+
+            uint32_t unsigned12 : 12;
+            int32_t signed4 : 4;
+        };
+        bool take_bitfield(Bitfieldy);
+    "};
+    let rs = quote! {
+        let mut bitfield = ffi::Bitfieldy {
+            _bitfield_1: ffi::Bitfieldy::new_bitfield_1(2, -3, false),
+            separator: 424242,
+            ..Default::default()
+        };
+
+        bitfield.set_unsigned12(3000);
+        bitfield.set_signed4(-1);
+
+        assert_eq!(ffi::take_bitfield(bitfield), true);
+    };
+    run_test(cxx, hdr, rs, &["take_bitfield"], &["Bitfieldy"]);
+}
+
+#[test]
+fn test_give_bitfield() {
+    let cxx = indoc! {"
+        Bitfieldy give_bitfield() {
+            return {
+                .unsigned3 = 2,
+                .signed3 = -3,
+                .bool1 = false,
+
+                .separator = 424242,
+
+                .unsigned12 = 3000,
+                .signed4 = -1,
+            };
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct Bitfieldy {
+            uint8_t unsigned3 : 3;
+            int8_t signed3 : 3;
+            bool bool1 : 1;
+
+            uint32_t separator;
+
+            uint32_t unsigned12 : 12;
+            int32_t signed4 : 4;
+        };
+        Bitfieldy give_bitfield();
+    "};
+    let rs = quote! {
+        let bitfield = ffi::give_bitfield();
+
+        assert_eq!(bitfield.unsigned3(), 2);
+        // FIXME: Disabled until https://github.com/rust-lang/rust-bindgen/issues/1160 is fixed
+        //assert_eq!(bitfield.signed3(), -3);
+        assert_eq!(bitfield.bool1(), false);
+        assert_eq!(bitfield.separator, 424242);
+        assert_eq!(bitfield.unsigned12(), 3000);
+        // FIXME: Disabled until https://github.com/rust-lang/rust-bindgen/issues/1160 is fixed
+        //assert_eq!(bitfield.signed4(), -1);
+    };
+    run_test(cxx, hdr, rs, &["give_bitfield"], &["Bitfieldy"]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
