@@ -108,6 +108,7 @@ impl<'a> ParseBindgen<'a> {
             .extend(self.config.subclasses.iter().map(|sc| Api::Subclass {
                 name: SubclassName::new(sc.subclass.clone().into()),
                 superclass: QualifiedName::new_from_cpp_name(&sc.superclass),
+                analysis: (),
             }));
         for fun in &self.config.extern_rust_funs {
             let id = fun.sig.ident.clone();

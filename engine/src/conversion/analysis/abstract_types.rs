@@ -11,7 +11,7 @@ use syn::{punctuated::Punctuated, token::Comma};
 
 use super::{
     fun::{
-        FnAnalysis, FnKind, FnPhase, FnPrePhase2, MethodKind, PodAndConstructorAnalysis,
+        FnAnalysis, FnKind, FnPhase, FnPrePhase3, MethodKind, PodAndConstructorAnalysis,
         TraitMethodKind,
     },
     pod::PodAnalysis,
@@ -63,7 +63,7 @@ impl Signature {
 }
 
 /// Spot types with pure virtual functions and mark them abstract.
-pub(crate) fn mark_types_abstract(apis: ApiVec<FnPrePhase2>) -> ApiVec<FnPrePhase2> {
+pub(crate) fn mark_types_abstract(apis: ApiVec<FnPrePhase3>) -> ApiVec<FnPrePhase3> {
     #[derive(Default, Debug, Clone)]
     struct ClassAbstractState {
         undefined: HashSet<Signature>,
@@ -234,6 +234,7 @@ pub(crate) fn discard_ignored_functions(apis: ApiVec<FnPhase>) -> ApiVec<FnPhase
         Api::struct_unchanged,
         Api::enum_unchanged,
         Api::typedef_unchanged,
+        Api::subclass_unchanged,
     );
     apis_new
 }
