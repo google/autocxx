@@ -8090,6 +8090,55 @@ fn test_subclass_with_std() {
 }
 
 #[test]
+fn test_subclass_pod_with_pointer_to_pointer_field() {
+    // https://github.com/google/autocxx/issues/1278
+    let hdr = indoc! {"
+    #include <cstdint>
+
+    class MyPod {
+    public:
+        int32_t foo;
+        float** data;
+    };
+
+    class Observer {
+    public:
+        Observer() {}
+        virtual void foo(MyPod&) const {}
+        virtual ~Observer() {}
+    };
+    "};
+    run_test_ex(
+        "",
+        hdr,
+        quote! {
+            let obs = MyObserver::new_rust_owned(MyObserver { a: 3, cpp_peer: Default::default() });
+            let mut pod = ffi::MyPod { foo: 42, data: std::ptr::null_mut() };
+            obs.borrow().foo(std::pin::Pin::new(&mut pod));
+        },
+        quote! {
+            generate_pod!("MyPod")
+            subclass!("Observer",MyObserver)
+        },
+        None,
+        None,
+        Some(quote! {
+            use autocxx::subclass::CppSubclass;
+            use ffi::Observer_methods;
+            #[autocxx::subclass::subclass]
+            pub struct MyObserver {
+                a: u32
+            }
+            impl Observer_methods for MyObserver {
+                fn foo(&self, pod: std::pin::Pin<&mut ffi::MyPod>) {
+                    assert_eq!(pod.foo, 42);
+                }
+            }
+        }),
+    );
+}
+
+#[test]
 fn test_two_subclasses() {
     let hdr = indoc! {"
     #include <cstdint>
