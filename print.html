@@ -25,28 +25,41 @@
         <link rel="stylesheet" href="fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="highlight.css">
-        <link rel="stylesheet" href="tomorrow-night.css">
-        <link rel="stylesheet" href="ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
-        <!-- Provide site root to javascript -->
+        <!-- Provide site root and default themes to javascript -->
         <script>
-            var path_to_root = "";
-            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
     </head>
     <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
     <div id="body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
-                var theme = localStorage.getItem('mdbook-theme');
-                var sidebar = localStorage.getItem('mdbook-sidebar');
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
 
                 if (theme.startsWith('"') && theme.endsWith('"')) {
                     localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
@@ -60,7 +73,8 @@
 
         <!-- Set the theme before any content is loaded, prevents flash -->
         <script>
-            var theme;
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             const html = document.documentElement;
@@ -73,17 +87,20 @@
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
-            var sidebar = null;
-            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -110,13 +127,14 @@
                             <i class="fa fa-paint-brush"></i>
                         </button>
                         <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
                             <i class="fa fa-search"></i>
                         </button>
                     </div>
@@ -136,7 +154,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -159,6 +182,9 @@
                         <p><a href="https://github.com/google/autocxx"><img src="https://img.shields.io/crates/l/autocxx" alt="GitHub" /></a>
 <a href="https://crates.io/crates/autocxx"><img src="https://img.shields.io/crates/d/autocxx" alt="crates.io" /></a>
 <a href="https://docs.rs/autocxx"><img src="https://docs.rs/autocxx/badge.svg" alt="docs.rs" /></a></p>
+<blockquote>
+<p><strong>Note:</strong> As a new user, you might consider using <a href="https://cxx.rs/">cxx</a> or <a href="https://github.com/google/crubit">crubit</a> instead.</p>
+</blockquote>
 <h1 id="autocxx--automatic-safe-interop-between-rust-and-c"><a class="header" href="#autocxx--automatic-safe-interop-between-rust-and-c">autocxx — automatic safe interop between Rust and C++</a></h1>
 <p>Welcome to <code>autocxx</code> and thank you for reading!</p>
 <p>Use <code>autocxx</code> if you have a large existing C++ codebase and you want to use its types and functions from Rust with maximal safety and minimal fuss.</p>
@@ -568,10 +594,7 @@ we synthesize a concrete Rust type, corresponding to a C++ typedef, for each
 concrete instantiation of the type. Such generated types are always opaque,
 and never have methods attached. That's therefore enough to pass them
 between return types and parameters of other functions within <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a>s
-but not really enough to do anything else with these types yet<sup class="footnote-reference"><a href="#templated">1</a></sup>.</p>
-<div class="footnote-definition" id="templated"><sup class="footnote-definition-label">1</sup>
-<p>Future improvements tracked <a href="https://github.com/google/autocxx/issues/349">here</a></p>
-</div>
+but not really enough to do anything else with these types yet<sup class="footnote-reference" id="fr-templated-1"><a href="#footnote-templated">1</a></sup>.</p>
 <p>To make them more useful, you might have to add extra C++ functions to extract
 data or otherwise deal with them.</p>
 <p>Usually, such concrete types are synthesized automatically because they're
@@ -649,40 +672,44 @@ the corresponding operations in C++, make sure the types of all bases and
 members are analyzed or implement it explicitly.</p>
 <p><code>autocxx</code> currently does not take member initializers (<code>const int x = 5</code>) into
 account when determining whether a default constructor
-exists<sup class="footnote-reference"><a href="#member-initializers">2</a></sup>. Explicitly declared default destructors still
+exists<sup class="footnote-reference" id="fr-member-initializers-1"><a href="#footnote-member-initializers">2</a></sup>. Explicitly declared default destructors still
 work though.</p>
 <p>Currently, <code>autocxx</code> assumes that an explicitly defaulted (<code>= default</code>) member
 function exists, although it is valid C++ for that to be
-deleted<sup class="footnote-reference"><a href="#explicitly-defaulted">3</a></sup>. Clang's
+deleted<sup class="footnote-reference" id="fr-explicitly-defaulted-1"><a href="#footnote-explicitly-defaulted">3</a></sup>. Clang's
 <a href="https://clang.llvm.org/docs/DiagnosticsReference.html#wdefaulted-function-deleted">-Wdefaulted-function-deleted</a>
 flag (enabled by default) will warn about types like this.</p>
 <p>A C++ type which can be instantiated but has an inaccessible constructor will
-be leaked by Rust<sup class="footnote-reference"><a href="#inaccessible-destructor">4</a></sup>. The object's memory itself will be
+be leaked by Rust<sup class="footnote-reference" id="fr-inaccessible-destructor-1"><a href="#footnote-inaccessible-destructor">4</a></sup>. The object's memory itself will be
 freed without calling any C++ destructor, which will leak any resources tracked
 by the C++ implementation.</p>
 <p>Many of the special members may be overloaded in C++. This generally means
 adding <code>const</code> or <code>volatile</code> qualifiers or extra arguments with defaults.
 <code>autocxx</code> avoids using any overloaded special members because choosing which
 one to call from Rust gets tricky.</p>
-<div class="footnote-definition" id="member-initializers"><sup class="footnote-definition-label">2</sup>
-<p>Handling of member initializers is tracked
-<a href="https://github.com/google/autocxx/issues/816">here</a>.</p>
-</div>
-<div class="footnote-definition" id="explicitly-defaulted"><sup class="footnote-definition-label">3</sup>
-<p>Fix for explicitly defaulted special member functions
-that are deleted is tracked <a href="https://github.com/google/autocxx/issues/815">here</a>.</p>
-</div>
-<div class="footnote-definition" id="inaccessible-destructor"><sup class="footnote-definition-label">4</sup>
-<p>Discussion around what to do about inaccessible or
-deleted destructors <a href="https://github.com/google/autocxx/issues/829">here</a>.</p>
-</div>
 <h2 id="abstract-types"><a class="header" href="#abstract-types">Abstract types</a></h2>
-<p><code>autocxx</code> does not allow instantiation of abstract types<sup class="footnote-reference"><a href="#abstract">5</a></sup> (aka types with pure virtual methods).</p>
-<div class="footnote-definition" id="abstract"><sup class="footnote-definition-label">5</sup>
+<p><code>autocxx</code> does not allow instantiation of abstract types<sup class="footnote-reference" id="fr-abstract-1"><a href="#footnote-abstract">5</a></sup> (aka types with pure virtual methods).</p>
+<hr>
+<ol class="footnote-definition"><li id="footnote-templated">
+<p>Future improvements tracked <a href="https://github.com/google/autocxx/issues/349">here</a> <a href="#fr-templated-1">↩</a></p>
+</li>
+<li id="footnote-member-initializers">
+<p>Handling of member initializers is tracked
+<a href="https://github.com/google/autocxx/issues/816">here</a>. <a href="#fr-member-initializers-1">↩</a></p>
+</li>
+<li id="footnote-explicitly-defaulted">
+<p>Fix for explicitly defaulted special member functions
+that are deleted is tracked <a href="https://github.com/google/autocxx/issues/815">here</a>. <a href="#fr-explicitly-defaulted-1">↩</a></p>
+</li>
+<li id="footnote-inaccessible-destructor">
+<p>Discussion around what to do about inaccessible or
+deleted destructors <a href="https://github.com/google/autocxx/issues/829">here</a>. <a href="#fr-inaccessible-destructor-1">↩</a></p>
+</li>
+<li id="footnote-abstract">
 <p><code>autocxx</code>'s determination of abstract types is a bit approximate and
-<a href="https://github.com/google/autocxx/issues/774">could be improved</a>.</p>
-</div>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="pointers-references-values"><a class="header" href="#pointers-references-values">Pointers, references, values</a></h1>
+<a href="https://github.com/google/autocxx/issues/774">could be improved</a>. <a href="#fr-abstract-1">↩</a></p>
+</li>
+</ol><div style="break-before: page; page-break-before: always;"></div><h1 id="pointers-references-values"><a class="header" href="#pointers-references-values">Pointers, references, values</a></h1>
 <p><code>autocxx</code> knows how to deal with C++ APIs which take C++ types:</p>
 <ul>
 <li>By value</li>
@@ -993,10 +1020,7 @@ fn main() {
 }
 </code></pre>
 <h2 id="default-parameters"><a class="header" href="#default-parameters">Default parameters</a></h2>
-<p>Are not yet supported<sup class="footnote-reference"><a href="#default">1</a></sup>.</p>
-<div class="footnote-definition" id="default"><sup class="footnote-definition-label">1</sup>
-<p>the work is <a href="https://github.com/google/autocxx/issues/563">planned here</a>.</p>
-</div>
+<p>Are not yet supported<sup class="footnote-reference" id="fr-default-1"><a href="#footnote-default">1</a></sup>.</p>
 <h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
 <p>Any C++ function which returns a <a href="cpp_types.html">non-POD</a> type to Rust in fact gives you an opaque
 object implementing <a href="https://docs.rs/moveit/latest/moveit/new/trait.New.html"><code>moveit::New</code></a>.
@@ -1102,7 +1126,11 @@ fn main() {
     sloth.pin_mut().unpeel_from_tree();
 }
 </code></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="callbacks-into-rust"><a class="header" href="#callbacks-into-rust">Callbacks into Rust</a></h1>
+<hr>
+<ol class="footnote-definition"><li id="footnote-default">
+<p>the work is <a href="https://github.com/google/autocxx/issues/563">planned here</a>. <a href="#fr-default-1">↩</a></p>
+</li>
+</ol><div style="break-before: page; page-break-before: always;"></div><h1 id="callbacks-into-rust"><a class="header" href="#callbacks-into-rust">Callbacks into Rust</a></h1>
 <p><code>autocxx</code> is primarily to allow calls from Rust to C++, but like <code>cxx</code> it also allows you to expose Rust APIs to C++.</p>
 <p>You can:</p>
 <ul>
@@ -1254,10 +1282,7 @@ exception support, so it would be possible to add them.</p>
 <h2 id="preprocessor-symbols"><a class="header" href="#preprocessor-symbols">Preprocessor symbols</a></h2>
 <p><code>#define</code> and other preprocessor symbols will appear as constants.
 At present there is no way to do compile-time disablement of code
-(equivalent of <code>#ifdef</code>)<sup class="footnote-reference"><a href="#ifdef">1</a></sup>.</p>
-<div class="footnote-definition" id="ifdef"><sup class="footnote-definition-label">1</sup>
-<p><a href="https://github.com/google/autocxx/issues/57">This feature</a> should add ifdef support.</p>
-</div>
+(equivalent of <code>#ifdef</code>)<sup class="footnote-reference" id="fr-ifdef-1"><a href="#footnote-ifdef">1</a></sup>.</p>
 <h2 id="string-constants"><a class="header" href="#string-constants">String constants</a></h2>
 <p>Whether from a preprocessor symbol or from a C++ <code>char*</code> constant,
 strings appear as <code>[u8]</code> with a null terminator. To get a Rust string,
@@ -1267,7 +1292,11 @@ do this:</p>
 <pre><code># mod ffi { pub static BOB: [u8; 6] = [72u8, 101u8, 108u8, 108u8, 111u8, 0u8]; }
 assert_eq!(std::str::from_utf8(&amp;ffi::BOB).unwrap().trim_end_matches(char::from(0)), "Hello");
 </code></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="safety"><a class="header" href="#safety">Safety</a></h1>
+<hr>
+<ol class="footnote-definition"><li id="footnote-ifdef">
+<p><a href="https://github.com/google/autocxx/issues/57">This feature</a> should add ifdef support. <a href="#fr-ifdef-1">↩</a></p>
+</li>
+</ol><div style="break-before: page; page-break-before: always;"></div><h1 id="safety"><a class="header" href="#safety">Safety</a></h1>
 <h2 id="unsafety-policies"><a class="header" href="#unsafety-policies">Unsafety policies</a></h2>
 <p>By default, every <code>autocxx</code> function is <code>unsafe</code>. That means you can only call C++ functions from <code>unsafe</code> blocks, and it's up to you to be sure that the C++ code upholds the invariants the Rust compiler expects.</p>
 <p>You can optionally specify:</p>
@@ -1784,6 +1813,7 @@ be found at <a href="https://opensource.google/conduct/">https://opensource.goog
             window.setTimeout(window.print, 100);
         });
         </script>
+
 
     </div>
     </body>
