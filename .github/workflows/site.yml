@@ -24,14 +24,19 @@ jobs:
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
-          mdbook-version: 'latest'
+          # Do NOT use 'latest'. mdBook 0.5 changed the preprocessor/renderer
+          # stdin JSON protocol incompatibly, which breaks both our in-tree
+          # autocxx preprocessor and mdbook-linkcheck (both built against
+          # mdbook 0.4). 0.4.52 is the last 0.4.x release.
+          mdbook-version: '0.4.52'
 
       - name: Install mdbook-linkcheck
-        run: cargo install mdbook-linkcheck
-    
+        run: cargo install mdbook-linkcheck --version 0.7.7 --locked
+
       - name: Install mdbook-mermaid
-        run: cargo install mdbook-mermaid
-    
+        # 0.17+ requires mdBook 0.5; 0.16.0 is the last mdbook 0.4 release.
+        run: cargo install mdbook-mermaid --version 0.16.0 --locked
+
       - run: mdbook build
         working-directory: book
 
