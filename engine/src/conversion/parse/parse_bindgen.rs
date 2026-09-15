@@ -44,7 +44,7 @@ pub(crate) struct ParseBindgen<'a> {
 
 fn api_name(ns: &Namespace, id: Ident, callback_results: &ParseCallbackResults) -> ApiName {
     let qn = QualifiedName::new(ns, minisyn::Ident(id.clone()));
-    // TODO FIXME squash reduncancy
+    // TODO FIXME squash redundancy
     ApiName::new_with_cpp_name(ns, id.into(), callback_results.get_original_name(&qn))
 }
 
@@ -222,7 +222,7 @@ impl<'a> ParseBindgen<'a> {
                 // cxx::bridge can't cope with type aliases to generic
                 // types at the moment.
                 let name = api_name_qualified(ns, s.ident.clone(), self.parse_callback_results)?;
-                if known_types().is_known_subtitute_type(&name.name) {
+                if known_types().is_known_substitute_type(&name.name) {
                     // This is one of the replacement types, e.g.
                     // root::Str replacing rust::Str or
                     // root::string replacing root::std::string

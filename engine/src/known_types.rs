@@ -270,7 +270,7 @@ impl TypeDatabase {
     }
 
     /// Whether this is the substitute type we made for some known type.
-    pub(crate) fn is_known_subtitute_type(&self, ty: &QualifiedName) -> bool {
+    pub(crate) fn is_known_substitute_type(&self, ty: &QualifiedName) -> bool {
         if ty.get_namespace().is_empty() {
             self.all_names()
                 .any(|n| n.get_final_item() == ty.get_final_item())
