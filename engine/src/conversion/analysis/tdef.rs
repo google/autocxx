@@ -40,6 +40,7 @@ impl AnalysisPhase for TypedefPhase {
     type TypedefAnalysis = TypedefAnalysis;
     type StructAnalysis = ();
     type FunAnalysis = ();
+    type SubclassAnalysis = ();
 }
 
 #[allow(clippy::needless_collect)] // we need the extra collect because the closure borrows extra_apis
@@ -78,6 +79,7 @@ pub(crate) fn convert_typedef_targets(
                 },
             })))
         },
+        Api::subclass_unchanged,
     );
     results.extend(extra_apis.into_iter().map(add_analysis));
     results

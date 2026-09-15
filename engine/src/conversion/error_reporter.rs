@@ -9,7 +9,7 @@
 use crate::minisyn::ItemEnum;
 
 use super::{
-    api::{AnalysisPhase, Api, ApiName, FuncToConvert, StructDetails, TypedefKind},
+    api::{AnalysisPhase, Api, ApiName, FuncToConvert, StructDetails, SubclassName, TypedefKind},
     apivec::ApiVec,
     convert_error::{ConvertErrorWithContext, ErrorContext},
     ConvertErrorFromCpp,
@@ -55,13 +55,14 @@ where
 /// Run some code which generates an API. Add that API, or if
 /// anything goes wrong, instead add a note of the problem in our
 /// output API such that users will see documentation for the problem.
-pub(crate) fn convert_apis<FF, SF, EF, TF, A, B>(
+pub(crate) fn convert_apis<FF, SF, EF, TF, SCF, A, B>(
     in_apis: ApiVec<A>,
     out_apis: &mut ApiVec<B>,
     mut func_conversion: FF,
     mut struct_conversion: SF,
     mut enum_conversion: EF,
     mut typedef_conversion: TF,
+    mut subclass_conversion: SCF,
 ) where
     A: AnalysisPhase,
     B: AnalysisPhase + 'static,
@@ -84,6 +85,11 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B>(
         TypedefKind,
         Option<QualifiedName>,
         A::TypedefAnalysis,
+    ) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext>,
+    SCF: FnMut(
+        SubclassName,
+        QualifiedName,
+        A::SubclassAnalysis,
     ) -> Result<Box<dyn Iterator<Item = Api<B>>>, ConvertErrorWithContext>,
 {
     out_apis.extend(in_apis.into_iter().flat_map(|api| {
@@ -142,10 +148,6 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B>(
                 subclass,
                 details,
             }))),
-            Api::Subclass { name, superclass } => Ok(Box::new(std::iter::once(Api::Subclass {
-                name,
-                superclass,
-            }))),
             Api::IgnoredItem { name, err, ctx } => {
                 Ok(Box::new(std::iter::once(Api::IgnoredItem {
                     name,
@@ -184,6 +186,11 @@ pub(crate) fn convert_apis<FF, SF, EF, TF, A, B>(
                 details,
                 analysis,
             } => struct_conversion(name, details, analysis),
+            Api::Subclass {
+                name,
+                superclass,
+                analysis,
+            } => subclass_conversion(name, superclass, analysis),
         };
         api_or_error(fullname, result)
     }))
