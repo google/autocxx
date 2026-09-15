@@ -12578,6 +12578,35 @@ fn test_opaque_directive() {
     );
 }
 
+#[test]
+fn test_templated_ref() {
+    let hdr = indoc! {"
+        template <class T>
+        class X;
+
+        class B {
+        public:
+            typedef X<void> F;
+            void foo(const F& x);
+        };
+    "};
+    let rs = quote! {
+        use autocxx::prelude::*;
+        let _ = ffi::Bar::new().within_unique_ptr().foo();
+    };
+    run_test_ex(
+        "",
+        hdr,
+        rs,
+        quote! {
+            generate!("B")
+        },
+        None,
+        None,
+        None,
+    );
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
