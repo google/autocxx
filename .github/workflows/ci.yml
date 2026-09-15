@@ -80,6 +80,20 @@ jobs:
         shell: bash
       - run: cargo test --workspace ${{steps.testsuite.outputs.exclude}}
 
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.77"
+      - uses: Swatinem/rust-cache@v1
+        with: { sharedKey: fullBuild }
+      - run: cargo +1.77 check --workspace --all-targets
+
   examples:
     name: Examples ${{matrix.name || format('Rust {0}', matrix.rust)}}
     runs-on: ${{matrix.os || 'ubuntu'}}-latest

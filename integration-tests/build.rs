@@ -7,6 +7,6 @@
 // except according to those terms.
 
 fn main() {
-    println!("cargo::rustc-check-cfg=cfg(skip_windows_gnu_failing_tests)");
-    println!("cargo::rustc-check-cfg=cfg(skip_windows_msvc_failing_tests)");
+    println!("cargo:rustc-check-cfg=cfg(skip_windows_gnu_failing_tests)");
+    println!("cargo:rustc-check-cfg=cfg(skip_windows_msvc_failing_tests)");
 }
