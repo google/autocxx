@@ -14,10 +14,12 @@ pub mod file_locations;
 mod multi_bindings;
 mod path;
 mod subclass_attrs;
+mod enum_style;
 
 pub use config::{
     AllowlistEntry, ExternCppType, IncludeCppConfig, RustFun, Subclass, UnsafePolicy,
 };
+pub use enum_style::EnumStyle;
 use file_locations::FileLocationStrategy;
 pub use multi_bindings::{MultiBindings, MultiBindingsErr};
 pub use path::RustPath;

@@ -381,6 +381,22 @@ impl IncludeCppEngine {
                     .allowlist_var(&a);
             }
         }
+        
+        for (style, enums) in &self.config.enum_styles.0 {
+            use autocxx_parser::EnumStyle::*;
+            let apply: fn(bindgen::Builder, &String) -> bindgen::Builder = match style {
+                BitfieldEnum => |b, e| b.bitfield_enum(e),
+                NewtypeEnum => |b, e| b.newtype_enum(e),
+                // NewtypeGlobalEnum => |b, e| b.newtype_global_enum(e),
+                RustifiedEnum => |b, e| b.rustified_enum(e),
+                RustifiedNonExhaustiveEnum => |b, e| b.rustified_non_exhaustive_enum(e),
+                // ConstifiedEnumModule => |b, e| b.constified_enum_module(e),
+                // ConstifiedEnum => |b, e| b.constified_enum(e),
+            };
+            for name in enums {
+                builder = apply(builder, name);
+            }
+        }
 
         for item in &self.config.opaquelist {
             builder = builder.opaque_type(item);

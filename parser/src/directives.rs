@@ -24,6 +24,7 @@ use crate::config::AllowlistErr;
 use crate::config::Allowlist;
 
 use crate::directive_names::{EXTERN_RUST_FUN, EXTERN_RUST_TYPE, SUBCLASS};
+use crate::enum_style::EnumStyleMap;
 use crate::{AllowlistEntry, IncludeCppConfig};
 use crate::{ParseResult, RustFun, RustPath};
 
@@ -113,6 +114,13 @@ pub(crate) fn get_directives() -> &'static DirectivesMap {
         need_exclamation.insert(
             "extern_cpp_opaque_type".into(),
             Box::new(ExternCppType { opaque: true }),
+        );
+        need_exclamation.insert(
+            "enum_style".into(),
+            Box::new(EnumStyle(
+                |config| &mut config.enum_styles,
+                |config| &config.enum_styles,
+            )),
         );
 
         DirectivesMap {
@@ -565,5 +573,53 @@ impl Directive for ExternCppType {
                     }
                 }),
         )
+    }
+}
+
+struct EnumStyle<SET, GET>(SET, GET)
+where
+    SET: Fn(&mut IncludeCppConfig) -> &mut EnumStyleMap,
+    GET: Fn(&IncludeCppConfig) -> &EnumStyleMap;
+
+impl<SET, GET> Directive for EnumStyle<SET, GET>
+where
+    SET: Fn(&mut IncludeCppConfig) -> &mut EnumStyleMap + Sync + Send,
+    GET: Fn(&IncludeCppConfig) -> &EnumStyleMap + Sync + Send,
+{
+    fn parse(
+        &self,
+        args: ParseStream,
+        config: &mut IncludeCppConfig,
+        _ident_span: &Span,
+    ) -> ParseResult<()> {
+        let style: crate::EnumStyle = args.parse()?;
+        args.parse::<syn::token::Comma>()?;
+        let litstrs: syn::punctuated::Punctuated<syn::LitStr, syn::token::Comma> =
+            syn::punctuated::Punctuated::parse_separated_nonempty(args)?;
+        let enums = litstrs.into_iter().map(|s| s.value());
+
+        config
+            .enum_styles
+            .0
+            .entry(style)
+            .or_insert_with(Vec::new)
+            .extend(enums);
+        Ok(())
+    }
+
+    #[cfg(feature = "reproduction_case")]
+    fn output<'a>(
+        &self,
+        config: &'a IncludeCppConfig,
+    ) -> Box<dyn Iterator<Item = TokenStream> + 'a> {
+        Box::new(config.enum_styles.0.iter().map(|(style, enums)| {
+            let lits: Vec<syn::LitStr> = enums
+                .iter()
+                .map(|s| syn::LitStr::new(s, Span::call_site()))
+                .collect();
+            quote! {
+                #(#lits),* , #style
+            }
+        }))
     }
 }

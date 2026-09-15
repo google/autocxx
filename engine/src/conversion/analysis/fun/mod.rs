@@ -2049,6 +2049,7 @@ impl<'a> FnAnalyzer<'a> {
     /// Also fills out the [`PodAndConstructorAnalysis::constructors`] fields with information useful
     /// for further analysis phases.
     fn add_constructors_present(&mut self, mut apis: ApiVec<FnPrePhase1>) -> ApiVec<FnPrePhase2> {
+        let enums = self.config.get_enums();
         let all_items_found = find_constructors_present(&apis);
         for (self_ty, items_found) in all_items_found.iter() {
             if self.config.exclude_impls {
@@ -2057,10 +2058,8 @@ impl<'a> FnAnalyzer<'a> {
                 // messy, see the comment on this function for why.
                 continue;
             }
-            if self
-                .config
-                .is_on_constructor_blocklist(&self_ty.to_cpp_name())
-            {
+            let cpp_name = self_ty.to_cpp_name();
+            if self.config.is_on_constructor_blocklist(&cpp_name) || enums.contains(&cpp_name) {
                 continue;
             }
             let path = self_ty.to_type_path();
