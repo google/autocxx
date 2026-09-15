@@ -367,7 +367,8 @@ impl IncludeCppEngine {
             .raw_line(raw_line)
             .every_module_raw_line(all_module_raw_line)
             .generate_private_functions(true)
-            .layout_tests(false); // TODO revisit later
+            .layout_tests(false) // TODO revisit later
+            .wrap_unsafe_ops(true);
 
         // 3. Passes allowlist and other options to the bindgen::Builder equivalent
         //    to --output-style=cxx --allowlist=<as passed in>
@@ -519,7 +520,6 @@ impl IncludeCppEngine {
             #[allow(dead_code)]
             #[allow(non_upper_case_globals)]
             #[allow(non_camel_case_types)]
-            #[allow(unsafe_op_in_unsafe_fn)]
             #[doc = "Generated using autocxx - do not edit directly"]
             #[doc = "@generated"]
             mod #mod_name {

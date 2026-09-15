@@ -109,16 +109,12 @@ pub(super) fn gen_function(
     let mut cpp_name_attr = Vec::new();
     let mut impl_entry = None;
     let mut trait_impl_entry = None;
-    let always_unsafe_due_to_trait_definition = match kind {
-        FnKind::TraitMethod { ref details, .. } => details.trait_call_is_unsafe,
-        _ => false,
-    };
+
     let fn_generator = FnGenerator {
         param_details: &param_details,
         cxxbridge_name: &cxxbridge_name,
         rust_name,
         unsafety: &analysis.requires_unsafe,
-        always_unsafe_due_to_trait_definition,
         doc_attrs: &doc_attrs,
         non_pod_types,
         ret_type: &ret_type,
@@ -229,7 +225,6 @@ struct FnGenerator<'a> {
     cxxbridge_name: &'a Ident,
     rust_name: &'a str,
     unsafety: &'a UnsafetyNeeded,
-    always_unsafe_due_to_trait_definition: bool,
     doc_attrs: &'a Vec<Attribute>,
     non_pod_types: &'a HashSet<QualifiedName>,
 }
@@ -309,10 +304,18 @@ impl<'a> FnGenerator<'a> {
             quote! {
                 cxxbridge::#cxxbridge_name ( #(#arg_list),* )
             },
-            any_conversion_requires_unsafe || matches!(self.unsafety, UnsafetyNeeded::JustBridge),
+            any_conversion_requires_unsafe
+                || matches!(
+                    self.unsafety,
+                    UnsafetyNeeded::JustBridge | UnsafetyNeeded::Always
+                ),
         );
-        let context_is_unsafe = matches!(self.unsafety, UnsafetyNeeded::Always)
-            || self.always_unsafe_due_to_trait_definition;
+
+        // Per RFC 2585 (https://rust-lang.github.io/rfcs/2585-unsafe-block-in-unsafe-fn.html),
+        // all calls to unsafe functions must be wrapped in an unsafe block, even within an unsafe function.
+        // Therefore, the outer context is always treated as "safe" (false), ensuring proper unsafe blocks
+        // are generated around unsafe operations.
+        let context_is_unsafe = false;
         let (call_body, ret_type) = match self.ret_conversion {
             Some(ret_conversion) if ret_conversion.rust_work_needed() => {
                 // There's a potential lurking bug below. If the return type conversion requires
