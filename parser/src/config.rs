@@ -219,6 +219,7 @@ pub struct IncludeCppConfig {
     pub allowlist: Allowlist,
     pub(crate) blocklist: Vec<String>,
     pub(crate) constructor_blocklist: Vec<String>,
+    pub(crate) throwlist: Vec<String>,
     pub instantiable: Vec<String>,
     pub(crate) exclude_utilities: bool,
     pub(crate) mod_name: Option<Ident>,
@@ -366,6 +367,7 @@ impl IncludeCppConfig {
             || self.is_rust_fun(cpp_name)
             || self.is_rust_type_name(cpp_name)
             || self.is_concrete_type(cpp_name)
+            || self.is_throwable(cpp_name)
             || match &self.allowlist {
                 Allowlist::Unspecified(_) => panic!("Eek no allowlist yet"),
                 Allowlist::All => true,
@@ -417,6 +419,10 @@ impl IncludeCppConfig {
     pub fn is_rust_type(&self, id: &Ident) -> bool {
         let id_string = id.to_string();
         self.is_rust_type_name(&id_string) || self.is_subclass_holder(&id_string)
+    }
+
+    pub fn is_throwable(&self, fun: &str) -> bool {
+        self.throwlist.iter().any(|f| f == fun)
     }
 
     fn is_rust_type_name(&self, possible_ty: &str) -> bool {
