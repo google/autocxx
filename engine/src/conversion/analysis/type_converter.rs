@@ -174,7 +174,7 @@ impl<'a> TypeConverter<'a> {
                     TypeKind::Regular,
                 )
             }
-            Type::Ptr(ptr) => self.convert_ptr(ptr, ns)?,
+            Type::Ptr(ptr) => self.convert_ptr(ptr, ns, ctx)?,
             _ => {
                 return Err(ConvertErrorFromCpp::UnknownType(
                     ty.to_token_stream().to_string(),
@@ -225,7 +225,7 @@ impl<'a> TypeConverter<'a> {
             Ok(outer)
         } else if let Some(ptr) = unwrap_reference(&typ, true) {
             // RValue reference
-            Self::ensure_pointee_is_valid(ptr)?;
+            Self::ensure_pointee_is_valid(ptr, ctx)?;
             let innerty = self.convert_boxed_type(
                 ptr.elem.clone(),
                 ns,
@@ -514,8 +514,9 @@ impl<'a> TypeConverter<'a> {
         &mut self,
         mut ptr: TypePtr,
         ns: &Namespace,
+        ctx: &TypeConversionContext,
     ) -> Result<Annotated<Type>, ConvertErrorFromCpp> {
-        Self::ensure_pointee_is_valid(&ptr)?;
+        Self::ensure_pointee_is_valid(&ptr, ctx)?;
         let innerty =
             self.convert_boxed_type(ptr.elem, ns, &TypeConversionContext::WithinReference)?;
         ptr.elem = innerty.ty;
@@ -527,10 +528,16 @@ impl<'a> TypeConverter<'a> {
         ))
     }
 
-    fn ensure_pointee_is_valid(ptr: &TypePtr) -> Result<(), ConvertErrorFromCpp> {
+    fn ensure_pointee_is_valid(
+        ptr: &TypePtr,
+        ctx: &TypeConversionContext,
+    ) -> Result<(), ConvertErrorFromCpp> {
         match *ptr.elem {
             Type::Path(..) => Ok(()),
             Type::Array(..) => Err(ConvertErrorFromCpp::InvalidArrayPointee),
+            Type::Ptr(..) if matches!(ctx, TypeConversionContext::WithinStructField { .. }) => {
+                Ok(())
+            }
             Type::Ptr(..) => Err(ConvertErrorFromCpp::InvalidPointerPointee),
             _ => Err(ConvertErrorFromCpp::InvalidPointee(
                 ptr.elem.to_token_stream().to_string(),
