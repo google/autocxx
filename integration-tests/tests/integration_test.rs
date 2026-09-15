@@ -1897,6 +1897,28 @@ fn test_pass_string_by_value() {
 }
 
 #[test]
+fn test_ns_pass_string_by_value() {
+    let cxx = indoc! {"
+        uint32_t A::measure_string(std::string z) {
+            return z.length();
+        }
+    "};
+    let hdr = indoc! {"
+        #include <cstdint>
+        #include <string>
+        namespace A {
+            uint32_t measure_string(std::string z);
+        }
+    "};
+    let rs = quote! {
+        use ffi::ToCppString;
+        let c = ffi::A::measure_string("hello".into_cpp());
+        assert_eq!(c, 5);
+    };
+    run_test(cxx, hdr, rs, &["A::measure_string"], &[]);
+}
+
+#[test]
 fn test_return_string_by_value() {
     let cxx = indoc! {"
         std::string get_msg() {
