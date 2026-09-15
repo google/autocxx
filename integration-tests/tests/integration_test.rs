@@ -12578,6 +12578,62 @@ fn test_opaque_directive() {
     );
 }
 
+#[test]
+fn test_generate_class() {
+    let cxx = "";
+    let hdr = indoc! {"
+    #ifndef MY_CLASS
+    #define MY_CLASS
+
+    #include <stddef.h>
+
+    class MyClass
+    {
+    public:
+        MyClass();
+        virtual ~MyClass();
+
+        static void* operator new( size_t size );
+    };
+
+    #endif // MY_CLASS
+    "};
+    let rs = quote! {};
+    let directives = quote! {
+        generate!("MyClass")
+    };
+    run_test_ex(cxx, hdr, rs, directives, None, None, None);
+}
+
+#[test]
+fn test_subclass_codegen() {
+    let cxx = "";
+    let hdr = indoc! {"
+    #ifndef MY_CLASS
+    #define MY_CLASS
+
+    #include <stddef.h>
+
+    class MyClass
+    {
+    public:
+        MyClass();
+        virtual ~MyClass();
+
+        static void* operator new( size_t size );
+    };
+
+    #endif // MY_CLASS
+    "};
+    let rs = quote! {
+        pub struct MySubclass {}
+    };
+    let directives = quote! {
+        subclass!("MyClass", MySubclass)
+    };
+    run_test_ex(cxx, hdr, rs, directives, None, None, None);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
