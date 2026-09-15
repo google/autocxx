@@ -358,7 +358,7 @@ impl<'a> RsCodeGenerator<'a> {
             let mut new_mod: ItemMod = parse_quote!(
                 pub mod #child_id {
                     #[allow(unused_imports)]
-                    use super::{cxxbridge, output, bindgen};
+                    use super::{cxxbridge, output, bindgen, ToCppString};
                 }
             );
             Self::append_child_output_namespace(
