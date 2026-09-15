@@ -324,6 +324,9 @@ impl<'a> FnAnalyzer<'a> {
             types_in_anonymous_namespace: Self::build_types_in_anonymous_namespace(&apis),
             force_wrapper_generation,
         };
+        // #1316 — reserve ideal/root names before overload renaming so a
+        // numeric suffix cannot steal an existing identifier (e.g. byteSwap2).
+        me.reserve_overload_root_names(&apis);
         let mut results = ApiVec::new();
         convert_apis(
             apis,
@@ -1521,7 +1524,46 @@ impl<'a> FnAnalyzer<'a> {
         })
     }
 
+    /// Pre-reserve every function/method's ideal Rust name so overload
+    /// suffixes cannot collide with a different real identifier (#1316).
+    fn reserve_overload_root_names(&mut self, apis: &ApiVec<PodPhase>) {
+        for api in apis.iter() {
+            let Api::Function { name, fun, .. } = api else {
+                continue;
+            };
+            let ns = name.name.get_namespace();
+            let ideal = Self::ideal_rust_name_for_overload_reserve(name, fun);
+            let tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
+            // Static methods carry `self_ty` on FuncToConvert. Instance methods
+            // discover the receiver later; their ideal names are still reserved
+            // as free-function roots which is harmless, and statics (the #1316
+            // case) get the precise per-type reservation they need.
+            if let Some(self_ty) = fun.self_ty.as_ref() {
+                tracker.reserve_method_name(self_ty.get_final_item(), ideal);
+            } else {
+                tracker.reserve_function_name(ideal);
+            }
+        }
+    }
+
+    fn ideal_rust_name_for_overload_reserve(name: &ApiName, fun: &FuncToConvert) -> String {
+        let initial_rust_name = fun.ident.to_string();
+        match name.cpp_name_if_present() {
+            None => initial_rust_name,
+            Some(cpp_original_name) => {
+                if initial_rust_name.ends_with('_') {
+                    initial_rust_name
+                } else if validate_ident_ok_for_rust(cpp_original_name).is_err() {
+                    format!("{}_", cpp_original_name.to_string_for_rust_name())
+                } else {
+                    cpp_original_name.to_string_for_rust_name()
+                }
+            }
+        }
+    }
+
     fn get_overload_name(&mut self, ns: &Namespace, type_ident: &str, rust_name: String) -> String {
+
         let overload_tracker = self.overload_trackers_by_mod.entry(ns.clone()).or_default();
         overload_tracker.get_method_real_name(type_ident, rust_name)
     }
