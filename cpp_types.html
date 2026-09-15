@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="header.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -178,7 +179,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="c-structs-enums-and-classes"><a class="header" href="#c-structs-enums-and-classes">C++ structs, enums and classes</a></h1>
+                        <div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="c-structs-enums-and-classes"><a class="header" href="#c-structs-enums-and-classes">C++ structs, enums and classes</a></h1>
 <p>If you add a C++ struct, class or enum to the <a href="allowlist.html">allowlist</a>, Rust bindings will be generated to that type and to any methods it has.
 Even if you don't add it to the allowlist, the type may be generated if it's required by some other function - but in this case
 all its methods won't be generated.</p>

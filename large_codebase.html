@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="header.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -178,7 +179,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="structuring-a-large-codebase"><a class="header" href="#structuring-a-large-codebase">Structuring a large codebase</a></h1>
+                        <div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="structuring-a-large-codebase"><a class="header" href="#structuring-a-large-codebase">Structuring a large codebase</a></h1>
 <p>If you have multiple modules, it may be inconvenient to generate all bindings in one <code>include_cpp!</code> invocation.
 There is <em>limited</em> support to refer from one set of bindings to another, using the <code>extern_cpp_type!</code> directive.</p>
 <h4 id="c-header"><a class="header" href="#c-header">C++ header:</a></h4>

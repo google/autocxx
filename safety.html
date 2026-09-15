@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="header.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -178,7 +179,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="safety"><a class="header" href="#safety">Safety</a></h1>
+                        <div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="safety"><a class="header" href="#safety">Safety</a></h1>
 <h2 id="unsafety-policies"><a class="header" href="#unsafety-policies">Unsafety policies</a></h2>
 <p>By default, every <code>autocxx</code> function is <code>unsafe</code>. That means you can only call C++ functions from <code>unsafe</code> blocks, and it's up to you to be sure that the C++ code upholds the invariants the Rust compiler expects.</p>
 <p>You can optionally specify:</p>

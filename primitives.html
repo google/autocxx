@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="header.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -178,7 +179,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="built-in-types"><a class="header" href="#built-in-types">Built-in types</a></h1>
+                        <div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="built-in-types"><a class="header" href="#built-in-types">Built-in types</a></h1>
 <p><code>autocxx</code> relies primarily on the <a href="https://cxx.rs/bindings.html">standard cxx types</a>.
 In particular you should become familiar with <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> and <a href="https://docs.rs/cxx/latest/cxx/struct.CxxString.html"><code>cxx::CxxString</code></a>.</p>
 <p>There are a few additional integer types, such as <a href="https://docs.rs/autocxx/latest/autocxx/struct.c_int.html"><code>c_int</code></a>,

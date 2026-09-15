@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="header.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -178,7 +179,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="storage---stack-and-heaps"><a class="header" href="#storage---stack-and-heaps">Storage - stack and heaps</a></h1>
+                        <div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="storage---stack-and-heaps"><a class="header" href="#storage---stack-and-heaps">Storage - stack and heaps</a></h1>
 <p>Ensure you understand the distinction between <a href="cpp_types.html">POD and non-POD types described in the C++ types section before proceeding</a>.</p>
 <h2 id="pod-types"><a class="header" href="#pod-types">POD types</a></h2>
 <p>POD types are just regular Rust types! Store them on the stack, heap, in a <code>Vec</code>, a <code>HashMap</code>, whatever you want.</p>

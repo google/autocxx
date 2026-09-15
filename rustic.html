@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="header.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -178,7 +179,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="using-the-generated-bindings"><a class="header" href="#using-the-generated-bindings">Using the generated bindings</a></h1>
+                        <div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="using-the-generated-bindings"><a class="header" href="#using-the-generated-bindings">Using the generated bindings</a></h1>
 <p>Congratulations, you've built some bindings using <code>autocxx</code>!</p>
 <p>But are they Rustic? How can you ensure that users of the bindings get Rust-like safety?</p>
 <p>The C++ API may have documented usage invariants. Your ideal is to encode as many as possible of those into compile-time checks in Rust.</p>

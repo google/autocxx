@@ -30,6 +30,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="header.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -179,7 +180,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <p><a href="https://github.com/google/autocxx"><img src="https://img.shields.io/crates/l/autocxx" alt="GitHub" /></a>
+                        <div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<p><a href="https://github.com/google/autocxx"><img src="https://img.shields.io/crates/l/autocxx" alt="GitHub" /></a>
 <a href="https://crates.io/crates/autocxx"><img src="https://img.shields.io/crates/d/autocxx" alt="crates.io" /></a>
 <a href="https://docs.rs/autocxx"><img src="https://docs.rs/autocxx/badge.svg" alt="docs.rs" /></a></p>
 <blockquote>
@@ -262,7 +266,10 @@ sometimes extra steps are required to handle cases like null pointers or convert
 <code>cxx</code> takes care of the fundamentals of lifetimes and destructors.</p>
 <h2 id="how-to-read-this-book"><a class="header" href="#how-to-read-this-book">How to read this book</a></h2>
 <p>We'd recommend starting with <a href="tutorial.html">tutorial</a> and then <a href="workflow.html">workflow</a>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="tutorial"><a class="header" href="#tutorial">Tutorial</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="tutorial"><a class="header" href="#tutorial">Tutorial</a></h1>
 <p>If you're here, you want to call some C++ from Rust, right? (If you want to do things the other way round, read the <a href="rust_calls.html">Rust calls</a> page.)</p>
 <p>Let's assume you're calling into some <em>existing</em> C++ code.</p>
 <p>You will need:</p>
@@ -313,7 +320,10 @@ include_cpp! {
 }</code></pre>
 <p>C++ types such as <code>std::string</code> and <code>std::unique_ptr</code> are represented using the types provided by the marvellous <a href="https://cxx.rs">cxx</a> library. This provides good ergonomics and safety norms, so unlike with normal <code>bindgen</code> bindings, you won't <em>normally</em> need to write <code>unsafe</code> code for every function call.</p>
 <p>Next, read the section about <a href="workflow.html">workflows</a>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="workflow"><a class="header" href="#workflow">Workflow</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="workflow"><a class="header" href="#workflow">Workflow</a></h1>
 <p>C++ is complex, and <code>autocxx</code> can't ingest everything.</p>
 <p>First tip - use an IDE. Type annotation and autocompletion is <em>incredibly</em> helpful in an <code>autocxx</code>
 context, where you may be dealing with <code>UniquePtr&lt;T&gt;</code> and <code>Option&lt;&amp;T&gt;</code> and <code>Pin&lt;&amp;mut T&gt;</code> very often.
@@ -411,7 +421,10 @@ and rarely bails out entirely.</p>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next steps</a></h2>
 <p>Now you've read what can go wrong with <code>autocxx</code>, and how to diagnose problems - the next step is to give it a try!
 Treat the rest of this manual as a reference.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="the-allowlist-and-include_cpp-syntax"><a class="header" href="#the-allowlist-and-include_cpp-syntax">The allowlist and <code>include_cpp</code> syntax</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="the-allowlist-and-include_cpp-syntax"><a class="header" href="#the-allowlist-and-include_cpp-syntax">The allowlist and <code>include_cpp</code> syntax</a></h1>
 <p>To include C++ in your Rust codebase using <code>autocxx</code>, you will need
 at least one <a href="https://docs.rs/autocxx/latest/autocxx/macro.include_cpp.html"><code>include_cpp</code> macro</a>.</p>
 <p>The simplest is:</p>
@@ -435,7 +448,10 @@ see the chapter on <a href="cpp_types.html">C++ types</a>.</li>
 <li>You'll probaly want to specify a <a href="safety.html"><code>safety!</code> policy</a></li>
 </ul>
 <p>See <a href="https://docs.rs/autocxx/latest/autocxx/">the docs.rs documentation for the full list</a>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="building"><a class="header" href="#building">Building</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="building"><a class="header" href="#building">Building</a></h1>
 <h2 id="building-if-youre-using-cargo"><a class="header" href="#building-if-youre-using-cargo">Building if you're using cargo</a></h2>
 <p>The basics of building in a <code>cargo</code> environment are explained in <a href="tutorial.html">the tutorial</a>.</p>
 <p>If your build depends on later editions of the C++ standard library, you will need to ensure that both <code>libclang</code> and the compiler are sent the appropriate flag, like this:</p>
@@ -494,7 +510,10 @@ for details on the naming of the generated files.</li>
 <li><em>Also</em> give similar directives to the C++ parsing which happens <em>within</em> autocxx (specifically, by autocxx's version of bindgen). To do that, use <a href="https://docs.rs/autocxx-engine/latest/autocxx_engine/struct.Builder.html#method.extra_clang_args"><code>Builder::extra_clang_args</code></a>.</li>
 </ul>
 <p>The same applies with the command-line <code>autocxx_gen</code> support - you'll need to pass such extra compiler options to <code>autocxx_gen</code> and also use them when building the generated C++ code.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="c-structs-enums-and-classes"><a class="header" href="#c-structs-enums-and-classes">C++ structs, enums and classes</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="c-structs-enums-and-classes"><a class="header" href="#c-structs-enums-and-classes">C++ structs, enums and classes</a></h1>
 <p>If you add a C++ struct, class or enum to the <a href="allowlist.html">allowlist</a>, Rust bindings will be generated to that type and to any methods it has.
 Even if you don't add it to the allowlist, the type may be generated if it's required by some other function - but in this case
 all its methods won't be generated.</p>
@@ -709,7 +728,10 @@ deleted destructors <a href="https://github.com/google/autocxx/issues/829">here<
 <p><code>autocxx</code>'s determination of abstract types is a bit approximate and
 <a href="https://github.com/google/autocxx/issues/774">could be improved</a>. <a href="#fr-abstract-1">↩</a></p>
 </li>
-</ol><div style="break-before: page; page-break-before: always;"></div><h1 id="pointers-references-values"><a class="header" href="#pointers-references-values">Pointers, references, values</a></h1>
+</ol><div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="pointers-references-values"><a class="header" href="#pointers-references-values">Pointers, references, values</a></h1>
 <p><code>autocxx</code> knows how to deal with C++ APIs which take C++ types:</p>
 <ul>
 <li>By value</li>
@@ -766,7 +788,10 @@ see <a href="cpp_functions.html">the example at the bottom of C++ functions</a>.
    unsafe { ffi::TakePointerToA(std::pin::Pin::&lt;&amp;mut ffi::A&gt;::into_inner_unchecked(a.pin_mut())) };</code></pre>
 This may be simplified in future.</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="storage---stack-and-heaps"><a class="header" href="#storage---stack-and-heaps">Storage - stack and heaps</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="storage---stack-and-heaps"><a class="header" href="#storage---stack-and-heaps">Storage - stack and heaps</a></h1>
 <p>Ensure you understand the distinction between <a href="cpp_types.html">POD and non-POD types described in the C++ types section before proceeding</a>.</p>
 <h2 id="pod-types"><a class="header" href="#pod-types">POD types</a></h2>
 <p>POD types are just regular Rust types! Store them on the stack, heap, in a <code>Vec</code>, a <code>HashMap</code>, whatever you want.</p>
@@ -782,7 +807,10 @@ advantage that there's no possibility that the object can be NULL.</li>
 <p>See <a href="cpp_types.html#construction-sounds-complicated-do-you-have-a-code-example">C++ types</a> for a code example showing a type existing on both the stack and the heap.</p>
 <h2 id="whose-heap-is-it-anyway"><a class="header" href="#whose-heap-is-it-anyway">Whose heap is it anyway?</a></h2>
 <p>Specifically <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> is a binding to <code>std::unique_ptr&lt;T,std::default_delete&lt;T&gt;&gt;</code> which means the object will be deleted using the C++ <code>delete</code> operator. This will respect any overridden <code>operator delete</code> on the type, and similarly, the functions which <code>autocxx</code> provides to <em>construct</em> types should respect overridden <code>operator new</code>. This means: if your C++ type has code to create itself in some special or unusual heap partition, that should work fine.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="built-in-types"><a class="header" href="#built-in-types">Built-in types</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="built-in-types"><a class="header" href="#built-in-types">Built-in types</a></h1>
 <p><code>autocxx</code> relies primarily on the <a href="https://cxx.rs/bindings.html">standard cxx types</a>.
 In particular you should become familiar with <a href="https://docs.rs/cxx/latest/cxx/struct.UniquePtr.html"><code>cxx::UniquePtr</code></a> and <a href="https://docs.rs/cxx/latest/cxx/struct.CxxString.html"><code>cxx::CxxString</code></a>.</p>
 <p>There are a few additional integer types, such as <a href="https://docs.rs/autocxx/latest/autocxx/struct.c_int.html"><code>c_int</code></a>,
@@ -845,7 +873,10 @@ pre-existing C++ API, call <code>ffi::make_string("")</code> which will return
 a blank <code>UniquePtr&lt;CxxString&gt;</code>.</p>
 <p>If all you need is a <em>reference</em> to a <code>CxxString</code>, you can alternatively use
 <a href="https://docs.rs/cxx/latest/cxx/macro.let_cxx_string.html"><code>cxx::let_cxx_string</code></a>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="naming"><a class="header" href="#naming">Naming</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="naming"><a class="header" href="#naming">Naming</a></h1>
 <h2 id="namespaces"><a class="header" href="#namespaces">Namespaces</a></h2>
 <p>The C++ namespace structure is reflected in mods within the generated
 ffi mod. However, at present there is an internal limitation that
@@ -908,7 +939,10 @@ fn main() {
 </code></pre>
 <h2 id="overloads"><a class="header" href="#overloads">Overloads</a></h2>
 <p>See <a href="cpp_functions.html">the chapter on C++ functions</a>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="c-functions"><a class="header" href="#c-functions">C++ functions</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="c-functions"><a class="header" href="#c-functions">C++ functions</a></h1>
 <p>Calling C++ functions is largly as you might expect.</p>
 <h2 id="value-and-rvalue-parameters"><a class="header" href="#value-and-rvalue-parameters">Value and rvalue parameters</a></h2>
 <p>Functions taking <a href="cpp_types.html">non-POD</a> value parameters can take a <code>cxx::UniquePtr&lt;T&gt;</code>
@@ -1130,7 +1164,10 @@ fn main() {
 <ol class="footnote-definition"><li id="footnote-default">
 <p>the work is <a href="https://github.com/google/autocxx/issues/563">planned here</a>. <a href="#fr-default-1">↩</a></p>
 </li>
-</ol><div style="break-before: page; page-break-before: always;"></div><h1 id="callbacks-into-rust"><a class="header" href="#callbacks-into-rust">Callbacks into Rust</a></h1>
+</ol><div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="callbacks-into-rust"><a class="header" href="#callbacks-into-rust">Callbacks into Rust</a></h1>
 <p><code>autocxx</code> is primarily to allow calls from Rust to C++, but like <code>cxx</code> it also allows you to expose Rust APIs to C++.</p>
 <p>You can:</p>
 <ul>
@@ -1272,7 +1309,10 @@ fn main() {
 </code></pre>
 <h2 id="subclass-casting"><a class="header" href="#subclass-casting">Subclass casting</a></h2>
 <p>Subclasses implement <code>AsRef</code> to enable casting to superclasses.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="other-c-features"><a class="header" href="#other-c-features">Other C++ features</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="other-c-features"><a class="header" href="#other-c-features">Other C++ features</a></h1>
 <p>You can make Rust subclasses of C++ classes - as these are mostly used to
 implement the Observer pattern, they're documented under <a href="rust_calls.html">calls from C++ to Rust</a>.</p>
 <h2 id="exceptions"><a class="header" href="#exceptions">Exceptions</a></h2>
@@ -1296,7 +1336,10 @@ assert_eq!(std::str::from_utf8(&amp;ffi::BOB).unwrap().trim_end_matches(char::fr
 <ol class="footnote-definition"><li id="footnote-ifdef">
 <p><a href="https://github.com/google/autocxx/issues/57">This feature</a> should add ifdef support. <a href="#fr-ifdef-1">↩</a></p>
 </li>
-</ol><div style="break-before: page; page-break-before: always;"></div><h1 id="safety"><a class="header" href="#safety">Safety</a></h1>
+</ol><div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="safety"><a class="header" href="#safety">Safety</a></h1>
 <h2 id="unsafety-policies"><a class="header" href="#unsafety-policies">Unsafety policies</a></h2>
 <p>By default, every <code>autocxx</code> function is <code>unsafe</code>. That means you can only call C++ functions from <code>unsafe</code> blocks, and it's up to you to be sure that the C++ code upholds the invariants the Rust compiler expects.</p>
 <p>You can optionally specify:</p>
@@ -1371,7 +1414,10 @@ reference:</p>
 <li>cxx may allow multiple conflicting Rust references to exist to 'trivial' data types ("plain old data" or POD in autocxx parlance), but they're rare. autocxx may allow conflicting Rust references to exist even to 'opaque' (non-POD) data, and they're more common. This difference exists because opaque data is zero-sized in cxx, and zero-sized references cannot conflict. (In autocxx, we tell Rust about the size in order that we can allocate such types on the stack.)</li>
 </ul>
 <p>There are preliminary explorations to avoid this problem by using a C++ reference wrapper type. See <code>examples/reference-wrappers</code>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="using-the-generated-bindings"><a class="header" href="#using-the-generated-bindings">Using the generated bindings</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="using-the-generated-bindings"><a class="header" href="#using-the-generated-bindings">Using the generated bindings</a></h1>
 <p>Congratulations, you've built some bindings using <code>autocxx</code>!</p>
 <p>But are they Rustic? How can you ensure that users of the bindings get Rust-like safety?</p>
 <p>The C++ API may have documented usage invariants. Your ideal is to encode as many as possible of those into compile-time checks in Rust.</p>
@@ -1381,7 +1427,10 @@ reference:</p>
 <li>Add extra <code>impl</code> blocks to add methods with a more Rustic API.</li>
 <li>Read <a href="https://cppfaq.rs">the C++ to Rust design FAQ</a>.</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="structuring-a-large-codebase"><a class="header" href="#structuring-a-large-codebase">Structuring a large codebase</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="structuring-a-large-codebase"><a class="header" href="#structuring-a-large-codebase">Structuring a large codebase</a></h1>
 <p>If you have multiple modules, it may be inconvenient to generate all bindings in one <code>include_cpp!</code> invocation.
 There is <em>limited</em> support to refer from one set of bindings to another, using the <code>extern_cpp_type!</code> directive.</p>
 <h4 id="c-header-18"><a class="header" href="#c-header-18">C++ header:</a></h4>
@@ -1428,7 +1477,10 @@ fn main() {
     dependent::handle_a(&amp;a);
 }
 </code></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="examples"><a class="header" href="#examples">Examples</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="examples"><a class="header" href="#examples">Examples</a></h1>
 <ul>
 <li><a href="https://github.com/google/autocxx/tree/main/demo">Demo</a> - simplest possible demo</li>
 <li><a href="https://github.com/google/autocxx/tree/main/examples/s2">S2 example</a> - example using S2 geometry library</li>
@@ -1441,13 +1493,19 @@ fn main() {
 </li>
 </ul>
 <p>Contributions of more examples to the <code>examples</code> directory are much appreciated!</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="credits"><a class="header" href="#credits">Credits</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="credits"><a class="header" href="#credits">Credits</a></h1>
 <p>David Tolnay did much of the hard work here, by inventing the underlying cxx crate, and in fact nearly all of the parsing infrastructure on which this crate depends. <code>bindgen</code> is also awesome. This crate stands on the shoulders of giants!</p>
 <p>Miguel Young also did all the hard thinking about whether non-trivial C++ objects can safely exist on the Rust
 stack. They can! He also draws nifty cartoons.</p>
 <p>Thanks to all the other contributors to cxx, bindgen and autocxx.</p>
 <p>And thanks to <a href="https://www.chromium.org/Home/chromium-security/memory-safety/rust-and-c-interoperability/">all in the Chromium community for inspiring this tool</a>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h2 id="reporting-bugs"><a class="header" href="#reporting-bugs">Reporting bugs</a></h2>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h2 id="reporting-bugs"><a class="header" href="#reporting-bugs">Reporting bugs</a></h2>
 <p>If you've found a problem, and you're reading this, <em>thank you</em>! Your diligence
 in reporting the bug is much appreciated and will make <code>autocxx</code> better.</p>
 <p>However, we get a lot of incoming bugs, and we are limited by our ability
@@ -1503,7 +1561,10 @@ many of its options on its <a href="https://docs.rs/cc/latest/cc/struct.Build.ht
 If you need to bring in an external library, you may also need to emit certain
 <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-lib">print statements from your <code>build.rs</code></a>
 to instruct cargo to link against that library.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-contribute"><a class="header" href="#how-to-contribute">How to Contribute</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="how-to-contribute"><a class="header" href="#how-to-contribute">How to Contribute</a></h1>
 <p>We'd love to accept your patches and contributions to this project. There are
 just a few small guidelines you need to follow.</p>
 <h2 id="contributor-license-agreement"><a class="header" href="#contributor-license-agreement">Contributor License Agreement</a></h2>
@@ -1723,7 +1784,10 @@ huge problem but I mention it here because it's one of the very few
 occasions in which our dependence on <code>cxx</code> is limiting for us.</p>
 </li>
 </ol>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="google-open-source-community-guidelines"><a class="header" href="#google-open-source-community-guidelines">Google Open Source Community Guidelines</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="google-open-source-community-guidelines"><a class="header" href="#google-open-source-community-guidelines">Google Open Source Community Guidelines</a></h1>
 <p>At Google, we recognize and celebrate the creativity and collaboration of open
 source contributors and the diversity of skills, experiences, cultures, and
 opinions they bring to the projects and communities they participate in.</p>

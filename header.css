@@ -1,0 +1,48 @@
+/* Styling for the site-wide warning banner that the autocxx mdbook
+   preprocessor injects at the top of every chapter from header.html.
+
+   The banner carries mdBook's own `warning` class so it matches warnings used
+   inside chapters; the rules below layer our banner layout on top of that.
+   Uses mdBook's CSS variables so it adapts to every built-in theme. */
+
+.site-header {
+    margin: 2rem 0 2rem;
+    padding: 0.75rem 1rem;
+    background-color: var(--quote-bg);
+    border-inline-start: 2px solid var(--warning-border);
+    border-radius: 4px;
+    font-size: 1em;
+}
+
+/* mdBook positions the .warning glyph absolutely as a 3rem square with a
+   var(--bg) backdrop, intended to straddle the edge of a tall block quote. On
+   a short banner that square overpaints the rounded corners and the middle of
+   the left border, so drop it back into normal inline flow instead.
+   \26A0 is the warning sign; \FE0E forces the monochrome text presentation so
+   it inherits var(--warning-border) rather than rendering as a colour emoji. */
+.site-header.warning:before {
+    content: "\26A0\FE0E";
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0 0.5rem 0 0;
+    background: none;
+    color: var(--warning-border);
+    font-size: 2rem;
+    vertical-align: -0.1em;
+}
+
+/* print.html concatenates every chapter, so it ends up with one banner per
+   chapter. Show only the first. Chapter pages have a single banner, so this
+   rule has no effect there. */
+.site-header ~ .site-header {
+    display: none;
+}
+
+/* The banner is site furniture rather than content, so leave it out of
+   printed output. */
+@media print {
+    .site-header {
+        display: none;
+    }
+}

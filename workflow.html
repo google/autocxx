@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="header.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -178,7 +179,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="workflow"><a class="header" href="#workflow">Workflow</a></h1>
+                        <div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="workflow"><a class="header" href="#workflow">Workflow</a></h1>
 <p>C++ is complex, and <code>autocxx</code> can't ingest everything.</p>
 <p>First tip - use an IDE. Type annotation and autocompletion is <em>incredibly</em> helpful in an <code>autocxx</code>
 context, where you may be dealing with <code>UniquePtr&lt;T&gt;</code> and <code>Option&lt;&amp;T&gt;</code> and <code>Pin&lt;&amp;mut T&gt;</code> very often.

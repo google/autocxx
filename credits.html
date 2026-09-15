@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="header.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -178,7 +179,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="credits"><a class="header" href="#credits">Credits</a></h1>
+                        <div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="credits"><a class="header" href="#credits">Credits</a></h1>
 <p>David Tolnay did much of the hard work here, by inventing the underlying cxx crate, and in fact nearly all of the parsing infrastructure on which this crate depends. <code>bindgen</code> is also awesome. This crate stands on the shoulders of giants!</p>
 <p>Miguel Young also did all the hard thinking about whether non-trivial C++ objects can safely exist on the Rust
 stack. They can! He also draws nifty cartoons.</p>

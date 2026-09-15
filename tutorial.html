@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="header.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -178,7 +179,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="tutorial"><a class="header" href="#tutorial">Tutorial</a></h1>
+                        <div class="site-header warning">
+  This documentation is from a repo that is <a href="https://github.com/google/autocxx">no longer actively maintained</a>.
+</div>
+<h1 id="tutorial"><a class="header" href="#tutorial">Tutorial</a></h1>
 <p>If you're here, you want to call some C++ from Rust, right? (If you want to do things the other way round, read the <a href="rust_calls.html">Rust calls</a> page.)</p>
 <p>Let's assume you're calling into some <em>existing</em> C++ code.</p>
 <p>You will need:</p>
