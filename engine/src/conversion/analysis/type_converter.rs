@@ -11,7 +11,9 @@ use crate::{
         api::{AnalysisPhase, Api, ApiName, NullPhase, TypedefKind, UnanalyzedApi},
         apivec::ApiVec,
         codegen_cpp::type_to_cpp::CppNameMap,
-        type_helpers::{unwrap_has_opaque, unwrap_has_unused_template_param, unwrap_reference},
+        type_helpers::{
+            unwrap_bitfield, unwrap_has_opaque, unwrap_has_unused_template_param, unwrap_reference,
+        },
         ConvertErrorFromCpp,
     },
     known_types::{known_types, CxxGenericType},
@@ -196,6 +198,11 @@ impl<'a> TypeConverter<'a> {
         if let Some(ty) = unwrap_has_unused_template_param(&typ) {
             self.convert_type(ty.clone(), ns, ctx)
         } else if let Some(ty) = unwrap_has_opaque(&typ) {
+            self.convert_type(ty.clone(), ns, ctx)
+        } else if let Some(ty) = unwrap_bitfield(&typ) {
+            // Bindgen bitfields are of type __BindgenBitfieldUnit, which is a convenience struct
+            // that's guaranteed to match the layout of the underlying bitfield. Pretend it's the
+            // underlying storage type to avoid referencing it in the cxx bridge.
             self.convert_type(ty.clone(), ns, ctx)
         } else if let Some(ptr) = unwrap_reference(&typ, false) {
             // LValue reference

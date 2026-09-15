@@ -345,6 +345,7 @@ impl IncludeCppEngine {
             .clang_args(make_clang_args(inc_dirs, extra_clang_args))
             .derive_copy(false)
             .derive_debug(false)
+            .derive_default(true) // Needed to safely construct POD structs with bitfields
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
             })

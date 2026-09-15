@@ -12,6 +12,7 @@ use crate::{
     conversion::{
         analysis::tdef::TypedefPhase,
         api::{Api, TypedefKind},
+        type_helpers::unwrap_bitfield,
     },
     types::{Namespace, QualifiedName},
 };
@@ -158,12 +159,6 @@ impl ByValueChecker {
                     ));
                     break;
                 }
-                None if ty_id.get_final_item() == "__BindgenBitfieldUnit" => {
-                    field_safety_problem = PodState::UnsafeToBePod(format!(
-                        "Type {tyname} could not be POD because it is a bitfield"
-                    ));
-                    break;
-                }
                 None => {
                     field_safety_problem = PodState::UnsafeToBePod(format!(
                         "Type {tyname} could not be POD because its dependent type {ty_id} isn't known"
@@ -258,6 +253,10 @@ impl ByValueChecker {
         for f in &def.fields {
             let fty = &f.ty;
             if let Type::Path(p) = fty {
+                if unwrap_bitfield(p).is_some() {
+                    // Bitfields are POD even though bindgen represents them as structs.
+                    continue;
+                }
                 results.push(QualifiedName::from_type_path(p));
             }
             // TODO handle anything else which bindgen might spit out, e.g. arrays?
@@ -357,5 +356,20 @@ mod tests {
         let t_id = ty_from_ident(&t.ident);
         bvc.ingest_struct(&t, &Namespace::new());
         assert!(bvc.satisfy_requests(vec![t_id]).is_err());
+    }
+
+    #[test]
+    fn test_with_bitfield() {
+        let mut bvc = ByValueChecker::new();
+        let t: ItemStruct = parse_quote! {
+            struct Foo {
+                a: root::__BindgenBitfieldUnit<[u8; 4usize]>,
+                b: i64,
+            }
+        };
+        let t_id = ty_from_ident(&t.ident);
+        bvc.ingest_struct(&t, &Namespace::new());
+        bvc.satisfy_requests(vec![t_id.clone()]).unwrap();
+        assert!(bvc.is_pod(&t_id));
     }
 }
