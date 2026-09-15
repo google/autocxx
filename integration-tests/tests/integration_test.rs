@@ -12578,6 +12578,39 @@ fn test_opaque_directive() {
     );
 }
 
+#[test]
+fn test_pod_type_alias() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        typedef struct _Bob {
+            uint32_t a;
+            uint32_t b;
+        } Bob;
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        let b = ffi::_Bob { a: 12, b:12 };
+    };
+    run_test("", hdr, rs, &[], &["_Bob", "Bob"]);
+}
+
+#[test]
+fn test_split_pod_type_alias() {
+    let hdr = indoc! {"
+        #include <cstdint>
+        struct _Bob {
+                    uint32_t a;
+                    uint32_t b;
+        };
+        typedef struct _Bob Bob;
+    "};
+    let rs = quote! {
+        let a = ffi::Bob { a: 12, b: 13 };
+        let b = ffi::_Bob { a: 12, b:12 };
+    };
+    run_test("", hdr, rs, &[], &["_Bob", "Bob"]);
+}
+
 // Yet to test:
 // - Ifdef
 // - Out param pointers
