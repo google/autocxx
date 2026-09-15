@@ -12,7 +12,7 @@ use std::{
     ffi::OsString,
     fmt::Display,
     io::{self, Read},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
 };
 
@@ -51,6 +51,10 @@ for subsequent preprocessors and renderers.
 ";
 
 static RUST_MDBOOK_SINGLE_TEST: &str = "RUST_MDBOOK_SINGLE_TEST";
+
+/// Optional file in the book root containing raw HTML which is inserted at the
+/// top of the content of every chapter. An absent file means no header.
+static HEADER_FILENAME: &str = "header.html";
 
 fn main() {
     let matches = Command::new("autocxx-mdbook-preprocessor")
@@ -94,11 +98,31 @@ fn calculate_cargo_dir() -> PathBuf {
     path.join("integration-tests")
 }
 
+/// Load the HTML to be placed at the top of every chapter, if any. It's not an
+/// error for the file to be missing; that simply means the book has no header.
+fn read_header(root: &Path) -> Result<Option<String>, Error> {
+    let path = root.join(HEADER_FILENAME);
+    match std::fs::read_to_string(&path) {
+        Ok(header) => {
+            // An empty file is treated the same as no file, rather than
+            // injecting a stray blank block into every chapter.
+            let header = header.trim();
+            Ok((!header.is_empty()).then(|| header.to_string()))
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) => {
+            Err(Error::new(err).context(format!("failed to read header {}", path.display())))
+        }
+    }
+}
+
 fn preprocess(args: &ArgMatches) -> Result<(), Error> {
-    let (_, mut book) = CmdPreprocessor::parse_input(io::stdin())?;
+    let (ctx, mut book) = CmdPreprocessor::parse_input(io::stdin())?;
 
     env_logger::builder().init();
     let mut test_cases = Vec::new();
+
+    let header = read_header(&ctx.root)?;
 
     Book::for_each_mut(&mut book, |sec| {
         if let mdbook::BookItem::Chapter(chapter) = sec {
@@ -109,6 +133,11 @@ fn preprocess(args: &ArgMatches) -> Result<(), Error> {
                 .unwrap_or_default()
                 .to_string();
             chapter.content = substitute_chapter(&chapter.content, &filename, &mut test_cases);
+            if let Some(header) = &header {
+                // A raw HTML block is terminated by the blank line, so the rest
+                // of the chapter is still parsed as ordinary markdown.
+                chapter.content = format!("{}\n\n{}", header, chapter.content);
+            }
         }
     });
 

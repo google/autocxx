@@ -20,6 +20,7 @@ command = "mdbook-mermaid"
 cname = "google.github.io/autocxx"
 git-repository-url = "https://github.com/google/autocxx"
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
+additional-css = ["header.css"]
 
 [output.linkcheck]
 warning-policy = "error"
